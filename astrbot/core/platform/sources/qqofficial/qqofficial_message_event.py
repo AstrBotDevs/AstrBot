@@ -21,7 +21,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_image_by_url, file_to_base64
+from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 
 # 导入分片上传模块
@@ -30,27 +30,23 @@ from .chunked_upload import (
     QQBotHttpClientManager,
     chunked_upload_c2c,
     chunked_upload_group,
-    MediaUploadResponse,
     ChunkedUploadProgress,
     UploadDailyLimitExceededError,
     ApiError as ChunkedApiError,
 )
+
 # 导入限流器
 from .rate_limiter import (
     MessageReplyLimiter,
-    ReplyLimitResult,
     check_message_reply_limit,
     record_message_reply,
 )
+
 # 导入文件工具
 from .file_utils import (
-    MediaFileType,
     format_file_size,
     get_max_upload_size,
     get_file_type_name,
-    is_image_file,
-    is_video_file,
-    is_audio_file,
 )
 
 
@@ -58,6 +54,7 @@ def _patch_qq_botpy_formdata() -> None:
     """Patch qq-botpy for aiohttp>=3.12 compatibility."""
     try:
         from botpy.http import _FormData
+
         if not hasattr(_FormData, "_is_processed"):
             setattr(_FormData, "_is_processed", False)
     except Exception:
@@ -72,48 +69,48 @@ TEXT_CHUNK_LIMIT = 2000  # QQ 单条消息文本限制
 TEXT_CHUNK_OVERLAP = 50  # 分块重叠字符数（避免句子被切断）
 
 
-def chunk_text(text: str, limit: int = TEXT_CHUNK_LIMIT, overlap: int = TEXT_CHUNK_OVERLAP) -> List[str]:
+def chunk_text(
+    text: str, limit: int = TEXT_CHUNK_LIMIT, overlap: int = TEXT_CHUNK_OVERLAP
+) -> List[str]:
     """
     将长文本分割为多个小块
-    
+
     Args:
         text: 原始文本
         limit: 单块最大字符数
         overlap: 块之间重叠字符数
-        
+
     Returns:
         文本块列表
     """
     if not text or len(text) <= limit:
         return [text] if text else []
-    
+
     chunks = []
     start = 0
-    
+
     while start < len(text):
         end = start + limit
-        
+
         if end >= len(text):
             # 最后一个块
             chunks.append(text[start:])
             break
-        
+
         # 尝试找到一个合适断点（换行符、句号、逗号等）
         breakpoint = end
         for bp in range(end - 1, max(start, end - 100), -1):
             char = text[bp]
-            if char in '\n。.，,；;！!？?':
+            if char in "\n。.，,；;！!？?":
                 breakpoint = bp + 1
                 break
-        
+
         chunk = text[start:breakpoint]
         chunks.append(chunk)
-        
+
         # 下一个块的起始位置（考虑重叠）
-        start = breakpoint - overlap if breakpoint > overlap else start
-        if start <= chunks[-1].find(text[breakpoint - 1] if breakpoint > 0 else ''):
-            start = breakpoint
-    
+        start = max(breakpoint - overlap, start + 1)
+
     return chunks
 
 
@@ -145,20 +142,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None
-        
+
         # 凭据配置
         self.appid = appid
         self.secret = secret
-        
+
         # 分片上传 HTTP 客户端（延迟初始化）
         self._http_client: Optional[QQBotHttpClient] = None
-        
+
         # 限流器实例
         self._rate_limiter = MessageReplyLimiter()
-        
+
         # 临时文件跟踪（用于清理）
         self._temp_files: list[str] = []
-        
+
         # 媒体上传失败的兜底 URL
         self._upload_failed_media: Dict[str, str] = {}
 
@@ -171,7 +168,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         """清理临时文件"""
         if not self._temp_files:
             return
-        
+
         cleaned = 0
         for temp_file in self._temp_files:
             try:
@@ -180,17 +177,21 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     cleaned += 1
                     logger.debug(f"[QQOfficial] Cleaned temp file: {temp_file}")
             except Exception as e:
-                logger.warning(f"[QQOfficial] Failed to clean temp file {temp_file}: {e}")
-        
+                logger.warning(
+                    f"[QQOfficial] Failed to clean temp file {temp_file}: {e}"
+                )
+
         if cleaned > 0:
-            logger.debug(f"[QQOfficial] Cleaned {cleaned}/{len(self._temp_files)} temp files")
-        
+            logger.debug(
+                f"[QQOfficial] Cleaned {cleaned}/{len(self._temp_files)} temp files"
+            )
+
         self._temp_files.clear()
 
     async def _get_http_client(self) -> QQBotHttpClient:
         """
         获取分片上传 HTTP 客户端
-        
+
         使用全局管理器按 appId 隔离客户端，实现多机器人共享 Token 缓存。
         同一 appId 的多个实例会共享同一个 HTTP 客户端和 Token。
         """
@@ -198,49 +199,53 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             if not self.appid or not self.secret:
                 raise RuntimeError("QQ Bot 凭据未配置 (缺少 appid 或 secret)")
             # 使用全局管理器获取客户端（按 appId 隔离）
-            self._http_client = await QQBotHttpClientManager.get_client(self.appid, self.secret)
+            self._http_client = await QQBotHttpClientManager.get_client(
+                self.appid, self.secret
+            )
         return self._http_client
-    
-    def _check_reply_limit(self, msg_id: str) -> Tuple[bool, Optional[str], Optional[str]]:
+
+    def _check_reply_limit(
+        self, msg_id: str
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         检查消息回复是否受到限流
-        
+
         Returns:
             Tuple[是否使用被动回复, 降级原因, 提示信息]
         """
         if not msg_id:
             return (False, "no_msg_id", "无消息ID，使用主动消息")
-        
+
         limit_check = check_message_reply_limit(msg_id)
-        
+
         if not limit_check.allowed:
             if limit_check.should_fallback_to_proactive:
                 return (False, limit_check.fallback_reason, limit_check.message)
-        
+
         return (True, None, None)
-    
+
     def _should_use_passive_reply(self, source) -> Tuple[bool, Optional[str]]:
         """
         判断是否应该使用被动回复
-        
+
         Args:
             source: 消息源对象
-            
+
         Returns:
             Tuple[是否使用被动回复, 降级原因]
         """
         msg_id = self.message_obj.message_id
-        
+
         # 频道消息和私信不支持被动回复
         if isinstance(source, (botpy.message.Message, botpy.message.DirectMessage)):
             return (False, "channel_dm_no_passive")
-        
+
         # 检查限流
         use_passive, reason, hint = self._check_reply_limit(msg_id)
-        
+
         if not use_passive and hint:
             logger.warning(f"[QQOfficial] {hint}")
-        
+
         return (use_passive, reason)
 
     async def send(self, message: MessageChain) -> None:
@@ -254,7 +259,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         last_edit_time = 0
         throttle_interval = 1
         ret = None
-        
+
         # 记录初始消息源类型（用于流式结束时的判断）
         original_source = self.message_obj.raw_message
         is_c2c_source = isinstance(original_source, botpy.message.C2CMessage)
@@ -278,7 +283,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         ret_id = self._extract_response_message_id(ret)
                         if ret_id is not None:
                             stream_payload["id"] = ret_id
-                    stream_payload = {"state": 1, "id": None, "index": 0, "reset": False}
+                    stream_payload = {
+                        "state": 1,
+                        "id": None,
+                        "index": 0,
+                        "reset": False,
+                    }
                     last_edit_time = 0
                     continue
 
@@ -316,7 +326,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         # 清理临时文件
         self._cleanup_temp_files()
-        
+
         return ret
 
     @staticmethod
@@ -348,7 +358,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         # ========== P0-2 & P0-3: 消息限流检查和自动降级 ==========
         msg_id = self.message_obj.message_id
         use_passive, fallback_reason = self._should_use_passive_reply(source)
-        
+
         if not use_passive:
             # 降级为主动消息，移除 msg_id
             effective_msg_id = None
@@ -367,7 +377,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送
-        if stream and image_source:
+        if stream and (
+            image_source or record_file_path or video_file_source or file_source
+        ):
             logger.debug("[QQOfficial] 检测到富媒体，降级为非流式发送。")
             stream = None
 
@@ -392,11 +404,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         # 检查是否需要分块
         needs_chunking = len(plain_text) > TEXT_CHUNK_LIMIT if plain_text else False
         text_chunks = []
-        
+
         if needs_chunking and not stream:
             text_chunks = chunk_text(plain_text)
-            logger.info(f"[QQOfficial] 文本长度 {len(plain_text)} 超过限制，将分 {len(text_chunks)} 块发送")
-        
+            logger.info(
+                f"[QQOfficial] 文本长度 {len(plain_text)} 超过限制，将分 {len(text_chunks)} 块发送"
+            )
+
         # 构建 payload（使用 effective_msg_id 而不是直接使用 message_id）
         payload: dict = {
             "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
@@ -413,9 +427,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         # 媒体上传失败标记
         media_upload_failed = False
         upload_error_hint = None
-        
-        # 记录原始文本（用于媒体上传失败时的兜底）
-        original_plain_text = plain_text
+
+
 
         match source:
             case botpy.message.GroupMessage():
@@ -508,7 +521,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     plain_text=plain_text,
                     stream=stream,
                 )
-                
+
                 # P0-2: 记录消息回复（如果使用了被动回复）
                 if use_passive and effective_msg_id:
                     record_message_reply(effective_msg_id)
@@ -596,7 +609,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         chunk_payload["markdown"] = MarkdownPayload(content=chunk_text)
                         chunk_payload["content"] = chunk_text
                         chunk_payload["msg_type"] = 2
-                        
+
                         try:
                             ret = await self._send_with_markdown_fallback(
                                 send_func=lambda p: self.post_c2c_message(
@@ -607,19 +620,21 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                                 plain_text=chunk_text,
                                 stream=None,
                             )
-                            logger.debug(f"[QQOfficial] 块 {i+1}/{len(text_chunks)} 发送成功")
-                            
+                            logger.debug(
+                                f"[QQOfficial] 块 {i + 1}/{len(text_chunks)} 发送成功"
+                            )
+
                             # 记录被动回复
                             if i == 0 and use_passive and effective_msg_id:
                                 record_message_reply(effective_msg_id)
-                            
+
                             # 避免发送过快
                             if i < len(text_chunks) - 1:
                                 await asyncio.sleep(0.5)
                         except Exception as e:
-                            logger.error(f"[QQOfficial] 块 {i+1} 发送失败: {e}")
+                            logger.error(f"[QQOfficial] 块 {i + 1} 发送失败: {e}")
                             # 继续发送其他块
-                    
+
                     self.send_buffer = None
                     return ret
                 elif stream:
@@ -645,11 +660,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         plain_text=plain_text,
                         stream=stream,
                     )
-                
+
                 # P0-2: 记录消息回复（如果使用了被动回复）
                 if use_passive and effective_msg_id:
                     record_message_reply(effective_msg_id)
-                
+
                 logger.debug(f"Message sent to C2C: {ret}")
 
             case botpy.message.Message():
@@ -685,10 +700,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         await super().send(self.send_buffer)
         self.send_buffer = None
-        
+
         # 清理临时文件
         self._cleanup_temp_files()
-        
+
         return ret
 
     async def _upload_image_enhanced(
@@ -705,7 +720,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         file_path = None
         file_size = 0
         download_error = None
-        
+
         try:
             if os.path.exists(image_source):
                 file_path = image_source
@@ -727,7 +742,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 try:
                     b64_data = image_source[9:]
                     temp_dir = get_astrbot_temp_path()
-                    temp_path = os.path.join(temp_dir, f"qqofficial_{uuid.uuid4().hex}.png")
+                    temp_path = os.path.join(
+                        temp_dir, f"qqofficial_{uuid.uuid4().hex}.png"
+                    )
                     with open(temp_path, "wb") as f:
                         f.write(base64.b64decode(b64_data))
                     file_path = temp_path
@@ -743,7 +760,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             # 如果下载失败但有 URL，记录用于兜底
             if download_error and image_source.startswith("http"):
                 self._upload_failed_media["image"] = image_source
-                logger.debug(f"[QQOfficial] 保存图片 URL 用于兜底: {image_source[:50]}...")
+                logger.debug(
+                    f"[QQOfficial] 保存图片 URL 用于兜底: {image_source[:50]}..."
+                )
         except Exception as e:
             logger.error(f"[QQOfficial] 处理图片文件时出错: {e}")
             return None
@@ -754,20 +773,25 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             type_name = get_file_type_name(file_type)
             size_mb = file_size / (1024 * 1024)
             limit_mb = max_size / (1024 * 1024)
-            logger.error(f"[QQOfficial] {type_name}过大（{size_mb:.1f}MB），超过{limit_mb:.0f}MB限制")
+            logger.error(
+                f"[QQOfficial] {type_name}过大（{size_mb:.1f}MB），超过{limit_mb:.0f}MB限制"
+            )
             return None
 
         # 始终使用分片上传（与 openclaw-qqbot 行为一致）
         # openclaw-qqbot 不使用 base64 上传，所有图片都通过分片上传
         if file_path and os.path.exists(file_path):
             return await self._chunked_upload(
-                file_path, file_type,
+                file_path,
+                file_type,
                 openid=kwargs.get("openid"),
                 group_openid=kwargs.get("group_openid"),
                 on_progress=kwargs.get("on_progress"),
             )
         else:
-            logger.error(f"[QQOfficial] 图片文件不存在: {image_source[:50] if image_source else 'None'}...")
+            logger.error(
+                f"[QQOfficial] 图片文件不存在: {image_source[:50] if image_source else 'None'}..."
+            )
             return None
 
     async def _upload_media_enhanced(
@@ -799,13 +823,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             type_name = get_file_type_name(file_type)
             size_mb = file_size / (1024 * 1024)
             limit_mb = max_size / (1024 * 1024)
-            logger.error(f"[QQOfficial] {type_name}过大（{size_mb:.1f}MB），超过{limit_mb:.0f}MB限制")
+            logger.error(
+                f"[QQOfficial] {type_name}过大（{size_mb:.1f}MB），超过{limit_mb:.0f}MB限制"
+            )
             return None
 
         # 始终使用分片上传（与 openclaw-qqbot 行为一致）
         if file_path:
             return await self._chunked_upload(
-                file_path, file_type,
+                file_path,
+                file_type,
                 openid=kwargs.get("openid"),
                 group_openid=kwargs.get("group_openid"),
                 on_progress=kwargs.get("on_progress"),
@@ -824,17 +851,18 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     ) -> Media | None:
         """
         分片上传（大文件）
-        
+
         Args:
             file_path: 文件路径
             file_type: 文件类型（1=图片, 2=视频, 3=语音, 4=文件）
             openid: 用户 openid（C2C 目标）
             group_openid: 群 openid（Group 目标）
             on_progress: 进度回调函数
-            
+
         Returns:
             Media 对象，失败返回 None
         """
+
         # 创建默认进度回调（类似 TypeScript 版本的日志）
         def default_progress_callback(progress: ChunkedUploadProgress) -> None:
             file_type_name = get_file_type_name(file_type)
@@ -843,16 +871,18 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 f"{progress.completed_parts}/{progress.total_parts} parts, "
                 f"{format_file_size(progress.uploaded_bytes)}/{format_file_size(progress.total_bytes)}"
             )
-        
+
         # 使用传入的回调或默认回调
-        progress_callback = on_progress if on_progress is not None else default_progress_callback
-        
+        progress_callback = (
+            on_progress if on_progress is not None else default_progress_callback
+        )
+
         try:
             http_client = await self._get_http_client()
             log_prefix = "[QQOfficial:chunked]"
             file_name = os.path.basename(file_path)
             file_size = os.path.getsize(file_path)
-            
+
             # 判断目标是 C2C 还是 Group
             if openid:
                 logger.info(
@@ -881,7 +911,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     log_prefix=log_prefix,
                 )
             else:
-                raise ValueError("Invalid upload parameters: must provide openid or group_openid")
+                raise ValueError(
+                    "Invalid upload parameters: must provide openid or group_openid"
+                )
 
             return Media(
                 file_uuid=result.file_uuid,
@@ -911,7 +943,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     ) -> Media | None:
         """
         Base64 直传（小文件）- 使用自定义 HTTP 客户端确保超时配置
-        
+
         使用 QQBotHttpClient 的 base64_upload 方法，该方法配置了 120 秒超时，
         相比 botpy 默认超时更适合文件上传场景。
         """
@@ -931,17 +963,19 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         else:
             logger.error(f"[QQOfficial] 不支持的图片来源: {file_source[:50]}...")
             return None
-        
+
         # 如果是 URL，降级到原有逻辑
         if file_data is None:
             payload = {"file_type": file_type, "srv_send_msg": srv_send_msg}
             if file_name:
                 payload["file_name"] = file_name
             payload["url"] = file_source
-            
+
             if "openid" in kwargs:
                 payload["openid"] = kwargs["openid"]
-                route = Route("POST", "/v2/users/{openid}/files", openid=kwargs["openid"])
+                route = Route(
+                    "POST", "/v2/users/{openid}/files", openid=kwargs["openid"]
+                )
             elif "group_openid" in kwargs:
                 payload["group_openid"] = kwargs["group_openid"]
                 route = Route(
@@ -951,7 +985,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 )
             else:
                 return None
-            
+
             try:
                 result = await self.bot.api._http.request(route, json=payload)
                 if result and isinstance(result, dict):
@@ -963,11 +997,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             except Exception as e:
                 logger.error(f"[QQOfficial] URL上传请求错误: {e}")
             return None
-        
+
         # 使用自定义 HTTP 客户端上传
         try:
             http_client = await self._get_http_client()
-            
+
             if "openid" in kwargs:
                 result = await http_client.base64_upload(
                     file_type=file_type,
@@ -988,7 +1022,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 )
             else:
                 return None
-            
+
             return Media(
                 file_uuid=result.file_uuid,
                 file_info=result.file_info,
@@ -998,7 +1032,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.error(f"[QQOfficial] Base64上传 API 错误: {e}")
         except Exception as e:
             logger.error(f"[QQOfficial] Base64上传失败: {e}", exc_info=True)
-        
+
         return None
 
     async def _send_with_markdown_fallback(
@@ -1058,19 +1092,19 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         **kwargs,
     ) -> botpy.types.message.Media:
         """兼容旧接口：上传图片
-        
+
         Args:
             send_helper: 发送辅助对象（包含 bot 属性）
             image_source: 图片来源，可以是文件路径、URL 或 base64:// 数据
         """
-        bot = getattr(send_helper, 'bot', send_helper)
+        bot = getattr(send_helper, "bot", send_helper)
         event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
         event.bot = bot
         event._http_client = None
         event._temp_files = []
         event._upload_failed_media = {}
-        appid = getattr(bot, '_appid', "") or getattr(bot, 'appid', "")
-        secret = getattr(bot, '_secret', "") or getattr(bot, 'secret', "")
+        appid = getattr(bot, "_appid", "") or getattr(bot, "appid", "")
+        secret = getattr(bot, "_secret", "") or getattr(bot, "secret", "")
         event.appid = appid
         event.secret = secret
         return await event._upload_image_enhanced(
@@ -1089,14 +1123,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         **kwargs,
     ) -> Media | None:
         """兼容旧接口：上传媒体"""
-        bot = getattr(send_helper, 'bot', send_helper)
+        bot = getattr(send_helper, "bot", send_helper)
         event = QQOfficialMessageEvent.__new__(QQOfficialMessageEvent)
         event.bot = bot
         event._http_client = None
         event._temp_files = []
         event._upload_failed_media = {}
-        appid = getattr(bot, '_appid', "") or getattr(bot, 'appid', "")
-        secret = getattr(bot, '_secret', "") or getattr(bot, 'secret', "")
+        appid = getattr(bot, "_appid", "") or getattr(bot, "appid", "")
+        secret = getattr(bot, "_secret", "") or getattr(bot, "secret", "")
         event.appid = appid
         event.secret = secret
         return await event._upload_media_enhanced(
@@ -1124,7 +1158,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         keyboard: message.Keyboard | None = None,
         stream: dict | None = None,
     ) -> message.Message:
-        bot = getattr(send_helper, 'bot', send_helper)
+        bot = getattr(send_helper, "bot", send_helper)
         payload = {
             "msg_type": msg_type,
             "content": content,
@@ -1176,7 +1210,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     # Base64 数据，保存为临时文件
                     b64_data = i.file[9:]
                     temp_dir = get_astrbot_temp_path()
-                    temp_path = os.path.join(temp_dir, f"qqofficial_{uuid.uuid4().hex}.png")
+                    temp_path = os.path.join(
+                        temp_dir, f"qqofficial_{uuid.uuid4().hex}.png"
+                    )
                     try:
                         with open(temp_path, "wb") as f:
                             f.write(base64.b64decode(b64_data))

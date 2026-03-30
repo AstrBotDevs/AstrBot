@@ -9,6 +9,7 @@ from typing import Optional
 
 # ============ 文件类型与大小限制 ============
 
+
 class MediaFileType:
     IMAGE = 1
     VIDEO = 2
@@ -18,10 +19,10 @@ class MediaFileType:
 
 # QQ Bot API 上传大小限制（字节）- 与 openclaw-qqbot 一致
 MAX_UPLOAD_SIZES = {
-    MediaFileType.IMAGE: 30 * 1024 * 1024,   # 30MB
+    MediaFileType.IMAGE: 30 * 1024 * 1024,  # 30MB
     MediaFileType.VIDEO: 100 * 1024 * 1024,  # 100MB
-    MediaFileType.VOICE: 20 * 1024 * 1024,   # 20MB
-    MediaFileType.FILE: 100 * 1024 * 1024,   # 100MB
+    MediaFileType.VOICE: 20 * 1024 * 1024,  # 20MB
+    MediaFileType.FILE: 100 * 1024 * 1024,  # 100MB
 }
 
 FILE_TYPE_NAMES = {
@@ -71,39 +72,36 @@ def is_image_file(file_path: str, mime_type: Optional[str] = None) -> bool:
     """判断是否为图片文件"""
     if mime_type and mime_type.startswith("image/"):
         return True
-    
-    
+
     ext = os.path.splitext(file_path)[1].lower()
-    return ext in {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'}
+    return ext in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
 
 
 def is_video_file(file_path: str, mime_type: Optional[str] = None) -> bool:
     """判断是否为视频文件"""
     if mime_type and mime_type.startswith("video/"):
         return True
-    
-    
+
     ext = os.path.splitext(file_path)[1].lower()
-    return ext in {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv'}
+    return ext in {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv"}
 
 
 def is_audio_file(file_path: str, mime_type: Optional[str] = None) -> bool:
     """判断是否为音频文件"""
     if mime_type and mime_type.startswith("audio/"):
         return True
-    
-    
+
     ext = os.path.splitext(file_path)[1].lower()
-    return ext in {'.mp3', '.wav', '.ogg', '.m4a', '.amr', '.silk', '.aac', '.flac'}
+    return ext in {".mp3", ".wav", ".ogg", ".m4a", ".amr", ".silk", ".aac", ".flac"}
 
 
 def get_file_extension(file_path: str) -> str:
     """
     获取文件扩展名（去除查询参数和 hash）
-    
+
     Args:
         file_path: 文件路径或 URL
-        
+
     Returns:
         文件扩展名（小写，包含点号）
     """

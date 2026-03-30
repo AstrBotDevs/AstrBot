@@ -237,8 +237,11 @@ class QQOfficialPlatformAdapter(Platform):
                     **payload,
                 )
             else:
-                if image_source and os.path.exists(image_source):
-                    payload["file_image"] = image_source
+                if image_source:
+                    if os.path.exists(image_source):
+                        payload["file_image"] = image_source
+                    elif image_source.startswith("http"):
+                        payload["image_url"] = image_source
                 ret = await self.client.api.post_message(
                     channel_id=session.session_id,
                     **payload,
