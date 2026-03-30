@@ -22,7 +22,7 @@
   },
   "table": {
     "headers": {
-      "title": "对话标题",
+      "title": "标题",
       "platform": "机器人 ID",
       "type": "消息类型",
       "cid": "对话 ID",
@@ -31,6 +31,10 @@
       "createdAt": "创建时间",
       "updatedAt": "更新时间",
       "actions": "操作"
+    },
+    "umoDisplay": {
+      "parsed": "解析后",
+      "raw": "UMO"
     }
   },
   "actions": {
@@ -97,6 +101,8 @@
     "batchDeletePartial": "删除完成：成功 {deleted} 个，失败 {failed} 个",
     "exportSuccess": "导出成功",
     "exportError": "导出失败",
-    "noItemSelectedForExport": "请先选择要导出的对话"
+    "noItemSelectedForExport": "请先选择要导出的对话",
+    "copySuccess": "复制成功",
+    "copyError": "复制失败"
   }
-} 
+}
