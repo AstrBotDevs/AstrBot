@@ -97,6 +97,8 @@ class botClient(Client):
                 self.platform.meta(),
                 abm.session_id,
                 self.platform.client,
+                appid=self.platform.appid,
+                secret=self.platform.secret,
             ),
         )
 
@@ -132,6 +134,8 @@ class QQOfficialPlatformAdapter(Platform):
             bot_log=False,
             timeout=20,
         )
+        self.client._appid = self.appid
+        self.client._secret = self.secret
 
         self.client.set_platform(self)
 
@@ -154,8 +158,7 @@ class QQOfficialPlatformAdapter(Platform):
     ) -> None:
         (
             plain_text,
-            image_base64,
-            image_path,
+            image_source,
             record_file_path,
             video_file_source,
             file_source,
@@ -163,8 +166,7 @@ class QQOfficialPlatformAdapter(Platform):
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_chain)
         if (
             not plain_text
-            and not image_path
-            and not image_base64
+            and not image_source
             and not record_file_path
             and not video_file_source
             and not file_source
@@ -187,15 +189,16 @@ class QQOfficialPlatformAdapter(Platform):
             scene = self._session_scene.get(session.session_id)
             if scene == "group":
                 payload["msg_seq"] = random.randint(1, 10000)
-                if image_base64:
+                if image_source:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
                         send_helper,  # type: ignore
-                        image_base64,
+                        image_source,
                         QQOfficialMessageEvent.IMAGE_FILE_TYPE,
                         group_openid=session.session_id,
                     )
-                    payload["media"] = media
-                    payload["msg_type"] = 7
+                    if media:
+                        payload["media"] = media
+                        payload["msg_type"] = 7
                 if record_file_path:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                         send_helper,  # type: ignore
@@ -234,8 +237,8 @@ class QQOfficialPlatformAdapter(Platform):
                     **payload,
                 )
             else:
-                if image_path:
-                    payload["file_image"] = image_path
+                if image_source and os.path.exists(image_source):
+                    payload["file_image"] = image_source
                 ret = await self.client.api.post_message(
                     channel_id=session.session_id,
                     **payload,
@@ -246,15 +249,16 @@ class QQOfficialPlatformAdapter(Platform):
             # msg_id 缺失时认为是主动推送，而似乎至少在私聊上主动推送是没有被限制的，这里直接移除 msg_id 可以避免越权或 msg_id 不可用的bug
             payload.pop("msg_id", None)
             payload["msg_seq"] = random.randint(1, 10000)
-            if image_base64:
+            if image_source:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
                     send_helper,  # type: ignore
-                    image_base64,
+                    image_source,
                     QQOfficialMessageEvent.IMAGE_FILE_TYPE,
                     openid=session.session_id,
                 )
-                payload["media"] = media
-                payload["msg_type"] = 7
+                if media:
+                    payload["media"] = media
+                    payload["msg_type"] = 7
             if record_file_path:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                     send_helper,  # type: ignore
