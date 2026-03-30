@@ -468,7 +468,6 @@ class ProviderGoogleGenAI(Provider):
         """处理内容部分并构建消息链"""
         if not candidate.content:
             logger.warning(f"收到的 candidate.content 为空: {candidate}")
-<<<<<<< HEAD
             raise EmptyModelOutputError(
                 "Gemini candidate content is empty. "
                 f"finish_reason={candidate.finish_reason}"
@@ -494,7 +493,6 @@ class ProviderGoogleGenAI(Provider):
 
         if not result_parts:
             logger.warning(f"收到的 candidate.content.parts 为空: {candidate}")
-<<<<<<< HEAD
             raise EmptyModelOutputError(
                 "Gemini candidate content parts are empty. "
                 f"finish_reason={candidate.finish_reason}"
