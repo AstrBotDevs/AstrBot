@@ -3917,7 +3917,8 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_ltm_settings.active_reply.enable": True,
                         },
-                        "provider_ltm_settings.active_reply_suffix_prompt": {
+                    },
+                    "provider_ltm_settings.active_reply_suffix_prompt": {
                         "description": "主动回复后缀提示词",
                         "type": "text",
                         "condition": {
