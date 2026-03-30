@@ -1,4 +1,5 @@
 """MCP tool wrapper."""
+from __future__ import annotations
 
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -10,8 +11,9 @@ except (ModuleNotFoundError, ImportError):
 
 from astrbot._internal.tools.base import FunctionTool
 
+from mcp.types import Tool as MCPTool_T
+
 if TYPE_CHECKING:
-    from mcp.types import Tool as MCPTool_T
     from astrbot._internal.protocols.mcp.client import McpClient
 
 

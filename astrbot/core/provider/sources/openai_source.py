@@ -699,7 +699,6 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = LLMResponse("assistant")
 
         if not completion.choices:
-<<<<<<< HEAD
             raise EmptyModelOutputError(
                 f"OpenAI completion has no choices. response_id={completion.id}"
             )
@@ -776,7 +775,6 @@ class ProviderOpenAIOfficial(Provider):
             raise Exception(
                 "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)｡",
             )
-<<<<<<< HEAD
         has_text_output = bool((llm_response.completion_text or "").strip())
         has_reasoning_output = bool(llm_response.reasoning_content.strip())
         if (
