@@ -1053,7 +1053,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "Tool execution interrupted before reading the next tool result."
                 )
 
-            next_result_task = asyncio.create_task(anext(executor))
+            async def _get_next():
+                return await anext(executor)
+            next_result_task = asyncio.create_task(_get_next())
             abort_task = asyncio.create_task(self._abort_signal.wait())
             self.tasks.add(next_result_task)
             self.tasks.add(abort_task)
