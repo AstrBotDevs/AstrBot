@@ -1075,7 +1075,7 @@
       },
       "rerank_api_base": {
         "description": "Rerank Model API Base URL",
-        "hint": "AstrBot appends /v1/rerank only when the API Base URL has no path; URLs with paths or a full rerank endpoint are preserved as-is."
+        "hint": "AstrBot appends /v1/rerank only when the API Base URL has no path; URLs with paths or a full rerank endpoint are preserved as-is. Include http:// or https:// when a path is provided."
       },
       "rerank_api_key": {
         "description": "API Key",

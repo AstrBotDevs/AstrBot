@@ -1077,7 +1077,7 @@
       },
       "rerank_api_base": {
         "description": "重排序模型 API Base URL",
-        "hint": "纯域名地址会自动补 /v1/rerank；带路径或完整 rerank 端点的地址保持原样。"
+        "hint": "纯域名地址会自动补 /v1/rerank；带路径或完整 rerank 端点的地址保持原样。带路径时请包含 http:// 或 https://。"
       },
       "rerank_api_key": {
         "description": "API Key",

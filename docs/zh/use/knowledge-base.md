@@ -23,7 +23,7 @@
 
 和嵌入模型的配置类似，打开服务提供商页面，点击新增服务提供商，选择重排序。有关重排序模型的更多信息请参考网络。
 
-如果使用 vLLM 或其他兼容 HTTP Rerank 接口的服务，当 `rerank api base` 只填写域名时，AstrBot 会自动补上 `/v1/rerank`；如果填写的是带路径的地址或完整的 rerank 端点，AstrBot 会保持原样。
+如果使用 vLLM 或其他兼容 HTTP Rerank 接口的服务，当 `rerank api base` 只填写域名时，AstrBot 会自动补上 `/v1/rerank`；如果填写的是带路径的地址或完整的 rerank 端点，AstrBot 会保持原样。填写带路径的地址时，请包含 `http://` 或 `https://`。
 
 ## 创建知识库
 

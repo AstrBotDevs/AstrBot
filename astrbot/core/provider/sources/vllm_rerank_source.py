@@ -23,7 +23,17 @@ class VLLMRerankProvider(RerankProvider):
         if normalized.endswith("/v1"):
             return f"{normalized}/rerank"
 
-        parsed = urlsplit(normalized if "://" in normalized else f"//{normalized}")
+        has_scheme = "://" in normalized
+        parsed = urlsplit(normalized if has_scheme else f"//{normalized}")
+        if not has_scheme:
+            if parsed.path not in ("", "/"):
+                raise ValueError(
+                    "VLLM Rerank API Base URL must include a scheme when a path is provided: "
+                    f"{base_url!r}"
+                )
+            normalized = f"http://{normalized}"
+            parsed = urlsplit(normalized)
+
         if not parsed.path or parsed.path == "/":
             return f"{normalized}/v1/rerank"
         return normalized
@@ -66,7 +76,6 @@ class VLLMRerankProvider(RerankProvider):
             self.endpoint_url,
             json=payload,
         ) as response:
-            response.raise_for_status()
             response_data = await response.json()
             if isinstance(response_data, dict) and "error" in response_data:
                 error = response_data["error"]
@@ -75,6 +84,12 @@ class VLLMRerankProvider(RerankProvider):
                     message = error.get("message", "Unknown rerank API error")
                     raise ValueError(f"Rerank API error {code}: {message}")
                 raise ValueError(f"Rerank API error: {error}")
+            response.raise_for_status()
+            if not isinstance(response_data, dict):
+                raise ValueError(
+                    "Unexpected rerank API response format: "
+                    f"{type(response_data).__name__}"
+                )
             results = response_data.get("results", [])
 
             if not results:

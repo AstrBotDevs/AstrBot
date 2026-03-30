@@ -22,7 +22,7 @@ A reranker model can improve the precision of final retrieval results to some ex
 
 Similar to configuring the embedding model, open the service provider page, click "Add Service Provider", and select Reranker. For more information about reranker models, please refer to online resources.
 
-For vLLM and other HTTP rerank services, when `rerank api base` only contains the host, AstrBot automatically appends `/v1/rerank`. If the URL already contains a path or is already a full rerank endpoint, AstrBot preserves it as-is.
+For vLLM and other HTTP rerank services, when `rerank api base` only contains the host, AstrBot automatically appends `/v1/rerank`. If the URL already contains a path or is already a full rerank endpoint, AstrBot preserves it as-is. When a path is provided, include `http://` or `https://`.
 
 ## Creating a Knowledge Base
 
