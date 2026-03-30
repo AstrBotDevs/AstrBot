@@ -1,4 +1,4 @@
-"""v4 原生插件基类。"""
+"""astrbot-sdk 原生插件基类。"""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class Star(PluginKVStoreMixin):
-    """v4 原生插件基类。"""
+    """astrbot-sdk 原生插件基类。"""
 
     __handlers__: tuple[str, ...] = ()
 

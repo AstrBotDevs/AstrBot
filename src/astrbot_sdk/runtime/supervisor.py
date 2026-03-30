@@ -193,7 +193,7 @@ class WorkerSession:
         transport = self._build_transport()
         self.peer = Peer(
             transport=transport,
-            peer_info=PeerInfo(name="astrbot-core", role="core", version="v4"),
+            peer_info=PeerInfo(name="astrbot-core", role="core", version="s5r"),
         )
         self.peer.set_initialize_handler(self._handle_initialize)
         self.peer.set_invoke_handler(self._handle_capability_invoke)
@@ -504,7 +504,7 @@ class WorkerSession:
 
     async def _handle_initialize(self, _message) -> InitializeOutput:
         return InitializeOutput(
-            peer=PeerInfo(name="astrbot-supervisor", role="core", version="v4"),
+            peer=PeerInfo(name="astrbot-supervisor", role="core", version="s5r"),
             capabilities=self.capability_router.all_descriptors(),
             metadata={
                 "worker_id": self.worker_id,
@@ -548,7 +548,7 @@ class SupervisorRuntime:
         self.capability_router = CapabilityRouter()
         self.peer = Peer(
             transport=self.transport,
-            peer_info=PeerInfo(name="astrbot-supervisor", role="plugin", version="v4"),
+            peer_info=PeerInfo(name="astrbot-supervisor", role="plugin", version="s5r"),
         )
         self.peer.set_invoke_handler(self._handle_upstream_invoke)
         self.peer.set_cancel_handler(self._handle_upstream_cancel)

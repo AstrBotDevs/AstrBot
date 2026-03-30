@@ -719,7 +719,7 @@ def _render_init_readme(*, plugin_name: str) -> str:
         f"""\
         # {plugin_name}
 
-        一个最小可运行的 AstrBot SDK v4 插件。
+        一个最小可运行的 AstrBot SDK 插件。
 
         ## 目录结构
 

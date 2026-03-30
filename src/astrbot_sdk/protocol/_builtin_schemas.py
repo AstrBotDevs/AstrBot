@@ -1,6 +1,6 @@
 """Builtin protocol schema constants.
 
-本模块定义了 AstrBot SDK v4 协议中所有内置能力的 JSON Schema。
+本模块定义了 AstrBot SDK s5r 协议中所有内置能力的 JSON Schema。
 这些 Schema 用于：
 1. 验证能力调用的输入参数是否符合预期格式
 2. 生成能力描述文档，供插件开发者参考

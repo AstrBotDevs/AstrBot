@@ -1,7 +1,7 @@
 """插件加载模块。
 
 定义插件发现、环境管理和加载的核心逻辑。
-仅支持 v4 新版 Star 组件。
+仅支持 astrbot-sdk 新版 Star 组件。
 
 核心概念：
     PluginSpec: 插件规范，描述插件的基本信息
@@ -741,7 +741,7 @@ def load_plugin_config(
 
 
 def _is_new_star_component(cls: type[Any]) -> bool:
-    """检查组件类是否为 v4 新版 Star。"""
+    """检查组件类是否为 astrbot-sdk 新版 Star。"""
     return bool(getattr(cls, "__astrbot_is_new_star__", False))
 
 
@@ -1102,7 +1102,7 @@ def _load_component_instance(
         raise ValueError(
             f"{_component_context(plugin, class_path=resolved_component.class_path, index=resolved_component.index)} "
             f"解析到的类 {component_cls.__module__}.{component_cls.__qualname__} "
-            "不是 v4 Star 组件。请继承 astrbot_sdk.Star。"
+            "不是 astrbot-sdk Star 组件。请继承 astrbot_sdk.Star。"
         )
     try:
         instance = component_cls()
@@ -1257,7 +1257,7 @@ def _collect_component_members(
 def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     """加载插件，返回处理器和能力列表。
 
-    仅支持 v4 新版 Star 组件（无参构造函数）。
+    仅支持 astrbot-sdk 新版 Star 组件（无参构造函数）。
     """
     with _PLUGIN_IMPORT_LOCK:
         logger.debug("Loading SDK plugin {} from {}", plugin.name, plugin.plugin_dir)

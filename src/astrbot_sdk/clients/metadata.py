@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from ._errors import wrap_client_exception
 from ._proxy import CapabilityProxy
 
 
@@ -69,17 +70,32 @@ class MetadataClient:
         self._plugin_id = plugin_id
 
     async def get_plugin(self, name: str) -> StarMetadata | None:
-        output = await self._proxy.call(
-            "metadata.get_plugin",
-            {"name": name},
-        )
+        try:
+            output = await self._proxy.call(
+                "metadata.get_plugin",
+                {"name": name},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MetadataClient",
+                method_name="get_plugin",
+                details=f"name={name!r}",
+                exc=exc,
+            ) from exc
         data = output.get("plugin")
         if data is None:
             return None
         return StarMetadata.from_dict(data)
 
     async def list_plugins(self) -> list[StarMetadata]:
-        output = await self._proxy.call("metadata.list_plugins", {})
+        try:
+            output = await self._proxy.call("metadata.list_plugins", {})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MetadataClient",
+                method_name="list_plugins",
+                exc=exc,
+            ) from exc
         items = output.get("plugins", [])
         return [
             StarMetadata.from_dict(item) for item in items if isinstance(item, dict)
@@ -95,19 +111,35 @@ class MetadataClient:
                 "get_plugin_config 只允许访问当前插件自己的配置，"
                 f"请求的插件 '{target}' 不是当前插件 '{self._plugin_id}'"
             )
-        output = await self._proxy.call(
-            "metadata.get_plugin_config",
-            {"name": target},
-        )
+        try:
+            output = await self._proxy.call(
+                "metadata.get_plugin_config",
+                {"name": target},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MetadataClient",
+                method_name="get_plugin_config",
+                details=f"name={target!r}",
+                exc=exc,
+            ) from exc
         config = output.get("config")
         return dict(config) if isinstance(config, dict) else None
 
     async def save_plugin_config(self, config: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(config, dict):
             raise TypeError("save_plugin_config requires a dict payload")
-        output = await self._proxy.call(
-            "metadata.save_plugin_config",
-            {"config": dict(config)},
-        )
+        try:
+            output = await self._proxy.call(
+                "metadata.save_plugin_config",
+                {"config": dict(config)},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="MetadataClient",
+                method_name="save_plugin_config",
+                details=f"keys={sorted(str(key) for key in config)!r}",
+                exc=exc,
+            ) from exc
         saved = output.get("config")
         return dict(saved) if isinstance(saved, dict) else {}

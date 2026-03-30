@@ -32,7 +32,7 @@ from typing import Any
 
 
 class ErrorCodes:
-    """AstrBot v4 的稳定错误码常量。
+    """AstrBot SDK 的稳定错误码常量。
 
     这些错误码在协议层稳定，不应随意更改。
     新增错误码应放在对应分类的末尾。

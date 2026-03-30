@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from ._errors import wrap_client_exception
 from ._proxy import CapabilityProxy
 
 
@@ -72,10 +73,18 @@ class RegistryClient:
         self,
         event_type: str,
     ) -> list[HandlerMetadata]:
-        output = await self._proxy.call(
-            "registry.get_handlers_by_event_type",
-            {"event_type": event_type},
-        )
+        try:
+            output = await self._proxy.call(
+                "registry.get_handlers_by_event_type",
+                {"event_type": event_type},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="RegistryClient",
+                method_name="get_handlers_by_event_type",
+                details=f"event_type={event_type!r}",
+                exc=exc,
+            ) from exc
         return [
             HandlerMetadata.from_dict(item)
             for item in output.get("handlers", [])
@@ -86,10 +95,18 @@ class RegistryClient:
         self,
         full_name: str,
     ) -> HandlerMetadata | None:
-        output = await self._proxy.call(
-            "registry.get_handler_by_full_name",
-            {"full_name": full_name},
-        )
+        try:
+            output = await self._proxy.call(
+                "registry.get_handler_by_full_name",
+                {"full_name": full_name},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="RegistryClient",
+                method_name="get_handler_by_full_name",
+                details=f"full_name={full_name!r}",
+                exc=exc,
+            ) from exc
         handler = output.get("handler")
         if not isinstance(handler, dict):
             return None
@@ -102,27 +119,49 @@ class RegistryClient:
         names = None
         if plugin_names is not None:
             names = sorted({str(item) for item in plugin_names if str(item).strip()})
-        output = await self._proxy.call(
-            "system.event.handler_whitelist.set",
-            {"plugin_names": names},
-        )
+        try:
+            output = await self._proxy.call(
+                "system.event.handler_whitelist.set",
+                {"plugin_names": names},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="RegistryClient",
+                method_name="set_handler_whitelist",
+                details=f"plugin_names={names!r}",
+                exc=exc,
+            ) from exc
         result = output.get("plugin_names")
         if not isinstance(result, list):
             return None
         return [str(item) for item in result]
 
     async def get_handler_whitelist(self) -> list[str] | None:
-        output = await self._proxy.call("system.event.handler_whitelist.get", {})
+        try:
+            output = await self._proxy.call("system.event.handler_whitelist.get", {})
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="RegistryClient",
+                method_name="get_handler_whitelist",
+                exc=exc,
+            ) from exc
         result = output.get("plugin_names")
         if not isinstance(result, list):
             return None
         return [str(item) for item in result]
 
     async def clear_handler_whitelist(self) -> None:
-        await self._proxy.call(
-            "system.event.handler_whitelist.set",
-            {"plugin_names": None},
-        )
+        try:
+            await self._proxy.call(
+                "system.event.handler_whitelist.set",
+                {"plugin_names": None},
+            )
+        except Exception as exc:
+            raise wrap_client_exception(
+                client_name="RegistryClient",
+                method_name="clear_handler_whitelist",
+                exc=exc,
+            ) from exc
 
 
 __all__ = ["HandlerMetadata", "RegistryClient"]
