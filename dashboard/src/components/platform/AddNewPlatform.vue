@@ -47,20 +47,28 @@
                     <v-list-item v-bind="itemProps">
                       <template #prepend>
                         <img
-                          v-if="getPlatformIcon(platformTemplates[item.raw]?.type || item.raw)"
-                          :src="getPlatformIcon(platformTemplates[item.raw]?.type || item.raw)"
-                          style="
-                            width: 32px;
-                            height: 32px;
-                            object-fit: contain;
-                            margin-right: 16px;
-                          "
+                          v-if="getPlatformOptionIcon(item)"
+                          :src="getPlatformOptionIcon(item)"
+                          class="platform-option-logo"
                         />
-                        <v-icon v-else :color="getPlatformColor(item.raw)">
-                          {{ getPlatformIconName(item.raw) }}
+                        <v-icon v-else class="mr-4" color="medium-emphasis">
+                          mdi-puzzle-outline
                         </v-icon>
                       </template>
                     </v-list-item>
+                  </template>
+                  <template #selection="{ item }">
+                    <div class="d-flex align-center ga-2">
+                      <img
+                        v-if="getPlatformOptionIcon(item)"
+                        :src="getPlatformOptionIcon(item)"
+                        class="platform-selection-logo"
+                      />
+                      <v-icon v-else color="medium-emphasis">
+                        mdi-puzzle-outline
+                      </v-icon>
+                      <span>{{ getPlatformOptionLabel(item) }}</span>
+                    </div>
                   </template>
                 </v-select>
                 <div v-if="selectedPlatformConfig" class="mt-3">
@@ -534,7 +542,7 @@ import axios from "@/utils/request";
 import { resolveApiUrl } from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
 import {
-  getPlatformIcon,
+  getPlatformIcon as getPlatformBuiltInIcon,
   getPlatformDescription,
   getTutorialLink,
 } from "@/utils/platformUtils";
@@ -789,61 +797,38 @@ export default {
     },
   },
   methods: {
-    getPlatformIcon(platformType) {
-      // Check for plugin-provided logo_token first
-      const template = this.platformTemplates?.[platformType];
+    getPlatformTemplateByName(platformName) {
+      if (!platformName) {
+        return null;
+      }
+      return this.platformTemplates?.[platformName] || null;
+    },
+    getPlatformOptionLabel(item) {
+      if (typeof item === "string") {
+        return item;
+      }
+      if (typeof item?.raw === "string") {
+        return item.raw;
+      }
+      if (typeof item?.value === "string") {
+        return item.value;
+      }
+      if (typeof item?.title === "string") {
+        return item.title;
+      }
+      return "";
+    },
+    getPlatformIcon(platformNameOrType) {
+      const template = this.getPlatformTemplateByName(platformNameOrType);
       if (template && template.logo_token) {
         return resolveApiUrl(`/api/file/${template.logo_token}`);
       }
-      return getPlatformIcon(platformType);
+      return getPlatformBuiltInIcon(template?.type || platformNameOrType);
+    },
+    getPlatformOptionIcon(item) {
+      return this.getPlatformIcon(this.getPlatformOptionLabel(item));
     },
     getPlatformDescription,
-    getPlatformIconName(name) {
-      const iconMap = {
-        aiocqhttp: "mdi-robot",
-        qq_official: "mdi-qqchat",
-        qq_official_webhook: "mdi-qqchat",
-        telegram: "mdi-telegram",
-        discord: "mdi-discord",
-        wecom: "mdi-microsoft-teams",
-        wecom_ai_bot: "mdi-microsoft-teams",
-        weixin_oc: "mdi-wechat",
-        weixin_official_account: "mdi-wechat",
-        lark: "mdi-feishu",
-        dingtalk: "mdi-bubble-outline",
-        slack: "mdi-slack",
-        kook: "mdi-controller",
-        vocechat: "mdi-message-text",
-        satori: "mdi-api",
-        misskey: "mdi-alpha",
-        line: "mdi-message",
-        webchat: "mdi-chat",
-      };
-      return iconMap[name] || "mdi-earth";
-    },
-    getPlatformColor(name) {
-      const colorMap = {
-        aiocqhttp: "#12c2e9",
-        qq_official: "#12c2e9",
-        qq_official_webhook: "#12c2e9",
-        telegram: "#26a5e4",
-        discord: "#5865f2",
-        wecom: "#07c160",
-        wecom_ai_bot: "#07c160",
-        weixin_oc: "#07c160",
-        weixin_official_account: "#07c160",
-        lark: "#4a90e2",
-        dingtalk: "#1677ff",
-        slack: "#4a154b",
-        kook: "#f47b20",
-        vocechat: "#7b68ee",
-        satori: "#9b59b6",
-        misskey: "#86b300",
-        line: "#00b900",
-        webchat: "#00acee",
-      };
-      return colorMap[name] || "grey";
-    },
     resetForm() {
       this.selectedPlatformType = null;
       this.selectedPlatformConfig = null;
@@ -1386,6 +1371,19 @@ export default {
 <style>
 .v-select__selection-text {
   font-size: 12px;
+}
+
+.platform-option-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  margin-right: 16px;
+}
+
+.platform-selection-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 .config-drawer-overlay {

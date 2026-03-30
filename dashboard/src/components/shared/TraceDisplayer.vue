@@ -213,19 +213,35 @@ function formatFields(fields) {
 
 <template>
   <div class="timeline-container">
-    <!-- Timeline header -->
-    <div class="timeline-header">
-      <div class="tl-title">追踪</div>
-      <div class="tl-subtitle">实时模型调用链</div>
-    </div>
-
-    <!-- Timeline body -->
     <div class="trace-timeline">
       <!-- Empty state -->
       <div v-if="events.length === 0" class="tl-empty">
         <div class="tl-empty-icon">⏳</div>
-        <div class="tl-empty-text">暂无追踪数据</div>
-        <div class="tl-empty-hint">发送消息后即可看到调用链路</div>
+        <div
+          class="tl-empty-text"
+          style="
+            color: var(--trace-title, #f4feff) !important;
+            -webkit-text-fill-color: var(--trace-title, #f4feff) !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+          "
+        >
+          暂无追踪数据
+        </div>
+        <div
+          class="tl-empty-hint"
+          style="
+            color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important;
+            -webkit-text-fill-color: var(
+              --trace-muted,
+              rgba(203, 213, 225, 0.76)
+            ) !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+          "
+        >
+          发送消息后即可看到调用链路
+        </div>
       </div>
 
       <!-- Timeline items -->
@@ -307,44 +323,16 @@ function formatFields(fields) {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(
-    --trace-page-bg,
-    linear-gradient(180deg, #06141d 0%, #04070b 100%)
-  );
   color: var(--trace-text, rgba(226, 232, 240, 0.92));
-  font-family:
-    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", "Consolas",
-    monospace;
+  font-family: inherit;
   overflow: hidden;
-}
-
-.timeline-header {
-  padding: 20px 32px 16px;
-  background: var(--trace-panel-bg, rgba(8, 14, 20, 0.94));
-  border-bottom: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18));
-  flex-shrink: 0;
-}
-
-.tl-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--trace-primary, #00f2ff);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-}
-
-.tl-subtitle {
-  font-size: 11px;
-  color: var(--trace-muted, rgba(203, 213, 225, 0.76));
-  margin-top: 4px;
-  letter-spacing: 0.5px;
 }
 
 .trace-timeline {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 32px 32px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
 }
@@ -355,22 +343,21 @@ function formatFields(fields) {
   align-items: center;
   justify-content: center;
   flex: 1;
-  min-height: 280px;
-  padding: 80px 24px;
+  min-height: 320px;
+  padding: 48px 24px;
   text-align: center;
   border: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
-  border-radius: 18px;
+  border-radius: 14px;
   background: var(--trace-empty-surface, rgba(7, 16, 24, 0.8));
-  box-shadow: var(--trace-shadow, 0 18px 48px rgba(0, 0, 0, 0.28));
 }
 
 .tl-empty-icon {
   display: grid;
   place-items: center;
-  width: 72px;
-  height: 72px;
-  margin-bottom: 18px;
-  font-size: 32px;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+  font-size: 24px;
   border-radius: 999px;
   background: var(--trace-empty-icon-bg, rgba(0, 242, 255, 0.12));
   box-shadow: inset 0 0 0 1px
@@ -378,18 +365,20 @@ function formatFields(fields) {
 }
 
 .tl-empty-text {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1.4;
-  color: var(--trace-title, #f4feff);
+  color: var(--trace-title, #f4feff) !important;
+  -webkit-text-fill-color: var(--trace-title, #f4feff);
   margin-bottom: 8px;
 }
 
 .tl-empty-hint {
-  max-width: 34ch;
-  font-size: 13px;
+  max-width: 38ch;
+  font-size: 14px;
   line-height: 1.6;
-  color: var(--trace-muted, rgba(203, 213, 225, 0.76));
+  color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76));
 }
 
 .tl-item {
@@ -455,7 +444,7 @@ function formatFields(fields) {
   margin-bottom: 16px;
   background: var(--trace-card-bg, rgba(10, 18, 25, 0.94));
   border: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
   transition:
     border-color 0.3s ease,
@@ -465,7 +454,7 @@ function formatFields(fields) {
 
 .tl-item-active .tl-card {
   border-color: var(--trace-border-active, rgba(0, 242, 255, 0.38));
-  box-shadow: var(--trace-shadow, 0 18px 48px rgba(0, 0, 0, 0.28));
+  box-shadow: var(--trace-shadow, 0 10px 24px rgba(15, 23, 42, 0.08));
 }
 
 .tl-item-expanded .tl-card {
@@ -473,7 +462,7 @@ function formatFields(fields) {
 }
 
 .tl-card-header {
-  padding: 12px 16px;
+  padding: 14px 16px;
   cursor: pointer;
   transition: background 0.2s ease;
 }
@@ -486,22 +475,25 @@ function formatFields(fields) {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .tl-event-id {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--trace-primary, #00f2ff);
   background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
   border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18));
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
 }
 
 .tl-umo {
   font-size: 11px;
-  color: var(--trace-muted, rgba(203, 213, 225, 0.76));
+  color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76));
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -510,8 +502,11 @@ function formatFields(fields) {
 
 .tl-time {
   font-size: 10px;
-  color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
+  color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
   flex-shrink: 0;
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
 }
 
 .tl-card-bottom {
@@ -521,9 +516,11 @@ function formatFields(fields) {
 }
 
 .tl-sender {
-  font-size: 12px;
-  color: var(--trace-text, rgba(226, 232, 240, 0.92));
-  max-width: 120px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--trace-text, rgba(226, 232, 240, 0.92)) !important;
+  -webkit-text-fill-color: var(--trace-text, rgba(226, 232, 240, 0.92));
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -531,38 +528,44 @@ function formatFields(fields) {
 
 .tl-outline {
   flex: 1;
-  font-size: 12px;
-  color: var(--trace-muted, rgba(203, 213, 225, 0.76));
+  font-size: 13px;
+  color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .tl-expand-btn {
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--trace-primary, #00f2ff);
   background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
   border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18));
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
   flex-shrink: 0;
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
 }
 
 /* Records */
 .tl-records {
   border-top: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
   background: var(--trace-record-bg, rgba(3, 10, 16, 0.52));
-  padding: 12px 16px;
+  padding: 14px 16px;
 }
 
 .tl-records-header {
-  font-size: 10px;
-  color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  font-size: 11px;
+  color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
+  letter-spacing: 0.04em;
   margin-bottom: 10px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
 }
 
 .tl-record {
@@ -581,26 +584,32 @@ function formatFields(fields) {
 
 .tl-record-left {
   flex-shrink: 0;
-  width: 180px;
+  width: 200px;
 }
 
 .tl-record-time {
   font-size: 10px;
-  color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
+  color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
   margin-bottom: 2px;
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
 }
 
 .tl-record-action {
   font-size: 11px;
   font-weight: 700;
   color: var(--trace-primary, #00f2ff);
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
 }
 
 .tl-record-fields {
   flex: 1;
   margin: 0;
-  font-size: 10px;
-  color: var(--trace-text, rgba(226, 232, 240, 0.92));
+  font-size: 11px;
+  color: var(--trace-text, rgba(226, 232, 240, 0.92)) !important;
+  -webkit-text-fill-color: var(--trace-text, rgba(226, 232, 240, 0.92));
   white-space: pre-wrap;
   word-break: break-word;
   font-family: inherit;
@@ -619,17 +628,22 @@ function formatFields(fields) {
   background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
   border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18));
   color: var(--trace-primary, #00f2ff);
-  padding: 4px 16px;
-  border-radius: 4px;
+  padding: 6px 14px;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 11px;
-  font-family: inherit;
+  font-family:
+    "JetBrains Mono", "Fira Code", "PingFang SC", "Microsoft YaHei", monospace;
   transition: all 0.2s ease;
 }
 
 .tl-records-more button:hover {
   background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
   border-color: var(--trace-border-active, rgba(0, 242, 255, 0.38));
+}
+
+.timeline-container :is(div, span, pre, button) {
+  mix-blend-mode: normal;
 }
 
 @media (max-width: 700px) {
@@ -652,12 +666,13 @@ function formatFields(fields) {
   }
 
   .trace-timeline,
-  .timeline-header {
+  .timeline-container {
     padding: 16px;
   }
 
   .tl-empty {
-    padding: 48px 20px;
+    min-height: 260px;
+    padding: 40px 20px;
   }
 }
 </style>
