@@ -282,7 +282,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 if isinstance(registered_tool, HandoffTool):
                     continue
                 if registered_tool.active:
-                    toolset.add_tool(registered_tool)
+                    toolset.add_tool(registered_tool)  # type: ignore[arg-type]
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
             return None if toolset.empty() else toolset
@@ -295,7 +295,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             if isinstance(tool_name_or_obj, str):
                 registered_tool = llm_tools.get_func(tool_name_or_obj)
                 if registered_tool and registered_tool.active:
-                    toolset.add_tool(registered_tool)
+                    toolset.add_tool(registered_tool)  # type: ignore[arg-type]
                     continue
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
                 if runtime_tool:
