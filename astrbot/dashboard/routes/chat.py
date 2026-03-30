@@ -26,6 +26,9 @@ from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 from .route import Response, Route, RouteContext
 
+# SSE heartbeat message to keep the connection alive during long-running operations
+SSE_HEARTBEAT = ": heartbeat\n\n"
+
 
 @asynccontextmanager
 async def track_conversation(convs: dict, conv_id: str):
@@ -371,7 +374,7 @@ class ChatRoute(Route):
                             # doesn't time out during slow backend ops like
                             # context compression with reasoning models (#6938).
                             if not client_disconnected:
-                                yield ": heartbeat\n\n"
+                                yield SSE_HEARTBEAT
                             continue
 
                         if (
