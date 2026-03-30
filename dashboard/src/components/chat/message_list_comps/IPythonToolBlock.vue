@@ -150,7 +150,7 @@ onMounted(async () => {
 }
 
 .code-fallback.dark-theme {
-    background-color: transparent;
+    background-color: #1e1e2e;
 }
 
 .result-section {
@@ -178,7 +178,7 @@ onMounted(async () => {
 }
 
 .result-content.dark-theme {
-    background-color: transparent;
+    background-color: #1e1e2e;
 }
 
 .animate-fade-in {

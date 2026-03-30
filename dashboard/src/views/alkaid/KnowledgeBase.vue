@@ -18,7 +18,7 @@
                     {{ tm('notInstalled.install') }}
                 </v-btn>
                 <ConsoleDisplayer v-show="installing"
-                    style="background-color: #fff; max-height: 300px; margin-top: 16px; max-width: 100%"
+                    style="max-height: 300px; margin-top: 16px; max-width: 100%"
                     :show-level-btns="false"></ConsoleDisplayer>
             </div>
             <div v-else-if="kbCollections.length == 0" class="d-flex align-center justify-center flex-column"
@@ -1216,6 +1216,10 @@ export default {
     background: linear-gradient(145deg, #f5f7fa 0%, #e4e8f0 100%);
 }
 
+.v-theme--PurpleThemeDark .book-content {
+    background: linear-gradient(145deg, #1a1a2e 0%, #16213e 100%);
+}
+
 .emoji-container {
     width: 80px;
     height: 80px;
@@ -1240,9 +1244,17 @@ export default {
     color: #333;
 }
 
+.v-theme--PurpleThemeDark .kb-name {
+    color: #ddd;
+}
+
 .kb-count {
     font-size: 14px;
     color: #666;
+}
+
+.v-theme--PurpleThemeDark .kb-count {
+    color: #aaa;
 }
 
 .emoji-picker {

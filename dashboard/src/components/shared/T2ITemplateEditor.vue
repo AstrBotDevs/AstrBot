@@ -535,6 +535,10 @@ defineExpose({
   position: relative;
 }
 
+.v-theme--PurpleThemeDark .preview-container {
+  background-color: #1e1e2e;
+}
+
 .preview-container::before {
   content: '';
   position: absolute;

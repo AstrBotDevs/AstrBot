@@ -997,6 +997,10 @@ export default {
   flex-grow: 1;
 }
 
+.v-theme--PurpleThemeDark #graph-container {
+  background-color: #1a1a2e;
+}
+
 #graph-control-panel {
   overflow-y: auto;
   /* 让控制面板可滚动而不是整个页面滚动 */
@@ -1019,6 +1023,10 @@ export default {
 
 .d3-graph {
   background-color: #f2f6f9;
+}
+
+.v-theme--PurpleThemeDark .d3-graph {
+  background-color: #1a1a2e;
 }
 
 /* 为连接线添加交互样式 */
@@ -1059,5 +1067,9 @@ export default {
   max-height: 150px;
   overflow: auto;
   font-size: 12px;
+}
+
+.v-theme--PurpleThemeDark .fact-detail-card :deep(pre) {
+  background-color: #1e1e2e;
 }
 </style>

@@ -858,6 +858,10 @@ const {
   background-color: #f5f5f5;
 }
 
+.v-theme--PurpleThemeDark .plugin-handler-item {
+  background-color: #2a2a2a;
+}
+
 .fab-button {
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
