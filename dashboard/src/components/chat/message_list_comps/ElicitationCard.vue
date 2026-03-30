@@ -65,10 +65,13 @@
                 <div v-if="field.description" class="field-description">
                     {{ field.description }}
                 </div>
+                <div v-if="getConstraintHint(field)" class="field-constraint-hint">
+                    {{ getConstraintHint(field) }}
+                </div>
 
                 <div v-if="field.enum && field.enum.length" class="field-options">
                     <v-btn
-                        v-for="option in field.enum"
+                        v-for="(option, idx) in field.enum"
                         :key="`${field.name}-${option}`"
                         size="small"
                         :variant="selectedOption[field.name] === option && !customInput[field.name]?.trim() ? 'tonal' : 'outlined'"
@@ -76,7 +79,7 @@
                         :disabled="!interactive || submitting || submitted"
                         @click="selectOption(field.name, option)"
                     >
-                        {{ option }}
+                        {{ getEnumLabel(field, idx) }}
                     </v-btn>
                 </div>
 
@@ -143,7 +146,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 
 import { useModuleI18n } from '@/i18n/composables';
 import { useToast } from '@/utils/toast';
@@ -172,6 +175,42 @@ const booleanInput = reactive<Record<string, boolean>>({});
 const submitting = ref(false);
 const submitted = ref(false);
 const statusText = ref('');
+
+onMounted(() => {
+    for (const field of props.payload.fields || []) {
+        if (field.default !== undefined && field.default !== null) {
+            if (field.type === 'boolean' && !(field.enum && field.enum.length)) {
+                booleanInput[field.name] = Boolean(field.default);
+            } else if (field.enum && field.enum.length && field.enum.includes(String(field.default))) {
+                selectedOption[field.name] = String(field.default);
+            } else {
+                customInput[field.name] = String(field.default);
+            }
+        }
+    }
+});
+
+function getEnumLabel(field: ElicitationField, idx: number): string {
+    if (field.enumNames && field.enumNames.length > idx) {
+        return field.enumNames[idx];
+    }
+    return field.enum?.[idx] ?? '';
+}
+
+function getConstraintHint(field: ElicitationField): string {
+    const parts: string[] = [];
+    if (field.format) {
+        parts.push(`Format: ${field.format}`);
+    }
+    if (field.minimum !== undefined && field.maximum !== undefined) {
+        parts.push(`Range: ${field.minimum} – ${field.maximum}`);
+    } else if (field.minimum !== undefined) {
+        parts.push(`Min: ${field.minimum}`);
+    } else if (field.maximum !== undefined) {
+        parts.push(`Max: ${field.maximum}`);
+    }
+    return parts.join(' · ');
+}
 
 function selectOption(fieldName: string, option: string) {
     selectedOption[fieldName] = option;
@@ -328,6 +367,13 @@ async function submitFormReply() {
     font-size: 13px;
     opacity: 0.76;
     white-space: pre-wrap;
+}
+
+.field-constraint-hint {
+    margin-top: 2px;
+    font-size: 12px;
+    opacity: 0.6;
+    font-style: italic;
 }
 
 .field-options {

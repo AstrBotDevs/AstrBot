@@ -937,10 +937,38 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
                 field_type = self._get_elicitation_field_type(schema)
                 desc = str(schema.get("description", "")).strip()
                 suffix = " required" if field_name in required_fields else " optional"
+                constraints: list[str] = []
+                if schema.get("format"):
+                    constraints.append(f"format={schema['format']}")
+                if schema.get("minimum") is not None:
+                    constraints.append(f"min={schema['minimum']}")
+                if schema.get("maximum") is not None:
+                    constraints.append(f"max={schema['maximum']}")
+                enum_values = schema.get("enum")
+                if isinstance(enum_values, list) and enum_values:
+                    enum_names = schema.get("enumNames")
+                    if isinstance(enum_names, list) and len(enum_names) == len(
+                        enum_values
+                    ):
+                        options = [
+                            f"{v}({n})"
+                            for v, n in zip(enum_values, enum_names, strict=False)
+                        ]
+                    else:
+                        options = [str(v) for v in enum_values]
+                    constraints.append(f"options=[{', '.join(options)}]")
+                default_value = schema.get("default")
+                if default_value is not None:
+                    constraints.append(f"default={default_value}")
+                constraint_str = f" [{', '.join(constraints)}]" if constraints else ""
                 if desc:
-                    lines.append(f"- {field_name} ({field_type},{suffix}): {desc}")
+                    lines.append(
+                        f"- {field_name} ({field_type},{suffix}{constraint_str}): {desc}"
+                    )
                 else:
-                    lines.append(f"- {field_name} ({field_type},{suffix})")
+                    lines.append(
+                        f"- {field_name} ({field_type},{suffix}{constraint_str})"
+                    )
         if len(properties) == 1:
             lines.append("Reply with plain text or JSON.")
         elif len(properties) > 1:
@@ -961,20 +989,32 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
         fields: list[dict[str, Any]] = []
         for field_name, schema in properties.items():
             enum_values = schema.get("enum")
-            fields.append(
-                {
-                    "name": field_name,
-                    "label": str(schema.get("title") or field_name),
-                    "description": str(schema.get("description", "")).strip(),
-                    "required": field_name in required_fields,
-                    "type": self._get_elicitation_field_type(schema),
-                    "enum": (
-                        [str(value) for value in enum_values]
-                        if isinstance(enum_values, list)
-                        else []
-                    ),
-                }
-            )
+            enum_names = schema.get("enumNames")
+            field_info: dict[str, Any] = {
+                "name": field_name,
+                "label": str(schema.get("title") or field_name),
+                "description": str(schema.get("description", "")).strip(),
+                "required": field_name in required_fields,
+                "type": self._get_elicitation_field_type(schema),
+                "enum": (
+                    [str(value) for value in enum_values]
+                    if isinstance(enum_values, list)
+                    else []
+                ),
+            }
+            if isinstance(enum_names, list) and len(enum_names) == len(
+                field_info["enum"]
+            ):
+                field_info["enumNames"] = [str(n) for n in enum_names]
+            if "default" in schema:
+                field_info["default"] = schema["default"]
+            if "format" in schema and isinstance(schema["format"], str):
+                field_info["format"] = schema["format"]
+            if "minimum" in schema:
+                field_info["minimum"] = schema["minimum"]
+            if "maximum" in schema:
+                field_info["maximum"] = schema["maximum"]
+            fields.append(field_info)
         return {
             "kind": "form",
             "server_name": self._server_name,
@@ -1190,6 +1230,19 @@ class MCPClientSubCapabilityBridge(Generic[TContext]):
             raise ElicitationValidationError(
                 f"Field `{field_name}` must be one of: {', '.join(map(str, enum_values))}."
             )
+
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            minimum = schema.get("minimum")
+            maximum = schema.get("maximum")
+            if minimum is not None and value < minimum:
+                raise ElicitationValidationError(
+                    f"Field `{field_name}` must be >= {minimum}."
+                )
+            if maximum is not None and value > maximum:
+                raise ElicitationValidationError(
+                    f"Field `{field_name}` must be <= {maximum}."
+                )
+
         return value
 
     @staticmethod

@@ -42,6 +42,11 @@ export interface ElicitationField {
     required: boolean;
     type: string;
     enum?: string[];
+    enumNames?: string[];
+    default?: string | number | boolean;
+    format?: string;
+    minimum?: number;
+    maximum?: number;
 }
 
 export interface ElicitationPayload {
