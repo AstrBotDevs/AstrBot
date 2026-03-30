@@ -1,13 +1,13 @@
 {
   "hero": {
     "title": "AstrBot",
-    "subtitle": "一個出於興趣與熱愛的開源專案 ❤️",
-    "starButton": "為這個專案給顆星 (Star)! 🌟",
+    "subtitle": "A project out of interests and loves ❤️",
+    "starButton": "畀粒 Star 呢個 Project! 🌟",
     "issueButton": "提交 Issue"
   },
   "contributors": {
     "title": "貢獻者",
-    "description": "這個專案由開源社群的許多開發者共同維護。感謝每一位貢獻者 (Contributor) 的幫忙！",
+    "description": "這個 Project 由開源社群的許多開發者共同維護。感謝每一位 Contributor 的幫忙！",
     "viewLink": "查看 AstrBot 的貢獻者"
   },
   "stats": {

@@ -70,7 +70,7 @@
     "systemConfig": "系統"
   },
   "search": {
-    "placeholder": "搜尋設定項目 (欄位名稱/描述/提示)",
+    "placeholder": "搜尋設定項目 (欄位名/描述/提示)",
     "noResult": "找不到符合的設定項目"
   },
   "configManagement": {

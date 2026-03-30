@@ -3,7 +3,7 @@
     "name": "AI 設定",
     "agent_runner": {
       "description": "Agent 執行方式",
-      "hint": "選擇 AI 對話的執行器，預設為 AstrBot 內置 Agent 執行器，可以使用 AstrBot 內的知識庫 (Knowledge Base)、人格與 Tool calling 功能。如果不打算連接 Dify、Coze、DeerFlow 這些第三方 Agent 執行器，則無須修改此部分。",
+      "hint": "選擇 AI 對話的執行器，預設為 AstrBot 內置 Agent 執行器，可以使用 AstrBot 內的知識庫 (Knowledge Base)、人格與 Tool calling 功能。如果不打算連接 Dify、Coze、DeerFlow 等第三方 Agent 執行器，則無須修改此部分。",
       "provider_settings": {
         "enable": {
           "description": "啟用",
@@ -150,11 +150,11 @@
     },
     "agent_computer_use": {
       "description": "使用電腦能力",
-      "hint": "讓 AstrBot 存取並使用你的電腦或獨立的沙盒 (Sandbox) 環境，來執行較複雜的任務。詳情請參閱：[沙盒模式](https://docs.astrbot.app/use/astrbot-agent-sandbox.html)、[技能 (Skills)](https://docs.astrbot.app/use/skills.html)。",
+      "hint": "讓 AstrBot 存取並使用你的電腦或獨立的沙盒 (Sandbox) 環境，來執行較複雜的任務。詳情請參閱：[沙盒模式](https://docs.astrbot.app/use/astrbot-agent-sandbox.html)、[Skills](https://docs.astrbot.app/use/skills.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "運行環境",
-          "hint": "sandbox 代表在沙盒環境中執行，local 代表在本機環境中執行，none 代表不啟用。如果上載了技能 (Skills)，選擇 none 會導致 Agent 無法使用它們。"
+          "hint": "sandbox 代表在沙盒環境中執行，local 代表在本機環境中執行，none 代表不啟用。如果上載了Skills，選擇 none 會導致 Agent 無法使用它們。"
         },
         "computer_use_require_admin": {
           "description": "需要 AstrBot 管理員權限",
@@ -229,7 +229,7 @@
             "按對話輪數截斷",
             "由 LLM 壓縮上下文"
           ],
-          "hint": "當按對話輪數截斷時，會根據上方「捨棄的對話輪數」的設定，捨棄最舊的 N 輪對話。當由 LLM 壓縮上下文時，會使用指定的模型進行上下文壓縮。"
+          "hint": "當按對話輪數截斷時，會根據上方\"捨棄的對話輪數\"的設定，捨棄最舊的 N 輪對話。當由 LLM 壓縮上下文時，會使用指定的模型進行上下文壓縮。"
         },
         "llm_compress_instruction": {
           "description": "上下文壓縮提示詞",
@@ -319,11 +319,11 @@
           ]
         },
         "streaming_response": {
-          "description": "串流 (Streaming) 輸出"
+          "description": "串流輸出"
         },
         "unsupported_streaming_strategy": {
           "description": "不支援串流的平台處理方式",
-          "hint": "選擇在不支援串流 (Streaming) 的平台上如何處理。即時分段回覆會在系統收到串流回應時，偵測到如標點符號等分段點，即時發送已收到的內容",
+          "hint": "選擇在不支援串流的平台上如何處理。即時分段回覆會在系統收到串流回應時，偵測到如標點符號等分段點，即時發送已收到的內容",
           "labels":[
             "即時分段回覆",
             "關閉串流回覆"
@@ -786,7 +786,7 @@
         "baidu_aip": {
           "enable": {
             "description": "使用百度內容安全審核",
-            "hint": "你需要手動安裝 (Install) baidu-aip 函式庫。"
+            "hint": "你需要手動安裝 baidu-aip 函式庫。"
           },
           "app_id": {
             "description": "App ID"
@@ -1006,15 +1006,15 @@
         "hint": "用於限制 data/temp 目錄總大小，單位為 MB。系統每 10 分鐘檢查一次，超過限制會依檔案修改時間由舊到新刪除，釋放約 30% 目前大小。"
       },
       "trace_log_enable": {
-        "description": "啟用追蹤檔案日誌",
-        "hint": "將追蹤事件 (Trace Event) 寫入獨立檔案中（不影響終端機輸出）。"
+        "description": "啟用 Trace 檔案日誌",
+        "hint": "將 Trace Event 寫入獨立檔案中（不影響終端機輸出）。"
       },
       "trace_log_path": {
-        "description": "追蹤日誌檔案路徑",
+        "description": "Trace 日誌檔案路徑",
         "hint": "相對路徑以 data 目錄為基準，例如 logs/astrbot.trace.log；支援絕對路徑。"
       },
       "trace_log_max_mb": {
-        "description": "追蹤日誌大小上限 (MB)",
+        "description": "Trace 日誌大小上限 (MB)",
         "hint": "超過大小限制會自動輪替 (Rotate)，預設為 20MB。"
       },
       "pip_install_arg": {

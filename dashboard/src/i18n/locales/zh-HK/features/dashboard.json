@@ -21,7 +21,7 @@
     },
     "runningTime": {
       "title": "運行時間",
-      "subtitle": "系統已運行多久",
+      "subtitle": "系統已運行時長",
       "format": "{hours} 小時 {minutes} 分鐘 {seconds} 秒"
     },
     "memoryUsage": {

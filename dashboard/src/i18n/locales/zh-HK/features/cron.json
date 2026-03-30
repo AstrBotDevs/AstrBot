@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "未來任務管理",
-    "beta": "實驗性功能",
+    "beta": "實驗性",
     "subtitle": "查看為 AstrBot 設定的未來任務。AstrBot 會自動喚醒執行任務，完成後會通知設定該任務的用戶。需要先在設定檔中啟用「主動型能力」。",
     "proactive": {
       "supported": "主動傳送結果僅支援以下你已設定的平台：{platforms}",

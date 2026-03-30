@@ -69,7 +69,7 @@
     "personaNotFound": "找不到此人格的詳細資訊",
     "systemPromptLabel": "系統提示詞",
     "toolsLabel": "工具",
-    "skillsLabel": "技能",
+    "skillsLabel": "技能（Skills）",
     "originLabel": "來源",
     "originNameLabel": "來源名稱",
     "toolInactive": "已停用",
@@ -77,9 +77,9 @@
     "allTools": "可使用所有工具",
     "allToolsWithCount": "可使用所有工具（{count}）",
     "noTools": "未設定工具",
-    "allSkills": "可使用所有技能",
-    "allSkillsWithCount": "可使用所有技能（{count}）",
-    "noSkills": "未設定技能"
+    "allSkills": "全部 Skills 可用",
+    "allSkillsWithCount": "全部 Skills 可用（{count}）",
+    "noSkills": "未設定 Skills"
   },
   "t2iTemplateEditor": {
     "buttonText": "自訂 T2I 模板",

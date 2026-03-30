@@ -12,7 +12,7 @@
     "installed": "AstrBot 插件",
     "market": "插件市場",
     "mcp": "MCP",
-    "skills": "技能",
+    "skills": "Skills",
     "components": "管理行為"
   },
   "config": "設定檔",
@@ -28,7 +28,7 @@
   "settings": "設定",
   "changelog": "更新日誌",
   "documentation": "官方文件",
-  "faq": "常見問題",
+  "faq": "FAQ",
   "github": "GitHub",
   "drag": "拖曳",
   "groups": {

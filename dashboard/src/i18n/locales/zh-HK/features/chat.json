@@ -83,8 +83,8 @@
     }
   },
   "streaming": {
-    "enabled": "已啟用串流回應 (Streaming)",
-    "disabled": "已停用串流回應 (Streaming)",
+    "enabled": "已啟用串流回應",
+    "disabled": "已停用串流回應",
     "on": "串流",
     "off": "一般"
   },

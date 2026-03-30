@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "SubAgent 編排",
-    "beta": "實驗性功能",
+    "beta": "實驗性",
     "subtitle": "Main LLM 可以直接使用自己的工具，也可以透過 handoff 分派給各個 SubAgent。"
   },
   "actions": {
