@@ -167,6 +167,10 @@ def test_tool_capability_strategy_hard_fail_raises(
         provider_settings={},
     )
 
+    # Capture initial tool and context state to ensure they are not mutated
+    original_func_tool = req.func_tool
+    original_contexts = list(req.contexts)
+
     monkeypatch.setitem(LLM_METADATAS, "deepseek-r1:7b", _make_metadata(False))
 
     with pytest.raises(UnsupportedToolCapabilityError):
@@ -176,3 +180,7 @@ def test_tool_capability_strategy_hard_fail_raises(
             plugin_context=plugin_context,
             config=config,
         )
+
+    # Hard-fail strategy should not mutate tool or context state
+    assert req.func_tool is original_func_tool
+    assert req.contexts == original_contexts
