@@ -1,4 +1,4 @@
-"""v4 原生运行时上下文。
+"""astrbot-sdk 原生运行时上下文。
 
 `Context` 是插件与 AstrBot Core 交互的主要入口，
 负责组合所有 capability 客户端并提供统一的访问接口。

@@ -1,6 +1,6 @@
-"""v4 原生事件对象。
+"""astrbot-sdk 原生事件对象。
 
-顶层 ``MessageEvent`` 保持精简，只承载 v4 运行时真正需要的基础能力。
+顶层 ``MessageEvent`` 保持精简，只承载 astrbot-sdk 运行时真正需要的基础能力。
 迁移期扩展事件能力放在独立模块中，而不是继续塞回顶层事件类型。
 
 MessageEvent 是 handler 接收的主要事件类型，封装了：

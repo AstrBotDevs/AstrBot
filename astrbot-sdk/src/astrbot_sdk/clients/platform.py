@@ -1,6 +1,6 @@
 """平台客户端模块。
 
-提供 v4 原生的平台能力调用。
+提供 astrbot-sdk 原生的平台能力调用。
 
 设计边界：
     - `PlatformClient` 只负责直接的平台 capability

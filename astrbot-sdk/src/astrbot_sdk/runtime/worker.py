@@ -196,7 +196,7 @@ class GroupWorkerRuntime:
         self.transport = transport
         self.peer = Peer(
             transport=self.transport,
-            peer_info=PeerInfo(name=self.worker_id, role="plugin", version="v4"),
+            peer_info=PeerInfo(name=self.worker_id, role="plugin", version="s5r"),
         )
         self.skipped_plugins: dict[str, str] = {}
         self.issues: list[PluginDiscoveryIssue] = []
@@ -426,7 +426,7 @@ class PluginWorkerRuntime:
         self.loaded_plugin = load_plugin(self.plugin)
         self.peer = Peer(
             transport=self.transport,
-            peer_info=PeerInfo(name=self.worker_id, role="plugin", version="v4"),
+            peer_info=PeerInfo(name=self.worker_id, role="plugin", version="s5r"),
         )
         self.dispatcher = HandlerDispatcher(
             plugin_id=self.plugin.name,

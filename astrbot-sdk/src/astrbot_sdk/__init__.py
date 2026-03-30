@@ -1,12 +1,12 @@
 """AstrBot SDK 的顶层公共 API。
 
-这里仅重新导出 v4 推荐直接导入的稳定入口。
+这里仅重新导出 astrbot-sdk 推荐直接导入的稳定入口。
 
 新插件应直接使用此模块的导出：
     from astrbot_sdk import Star, Context, MessageEvent
     from astrbot_sdk.decorators import on_command, on_message
 
-迁移期适配入口位于独立模块；此处只暴露 v4 原生主入口。
+迁移期适配入口位于独立模块；此处只暴露 astrbot-sdk 原生主入口。
 """
 
 from .clients.managers import (

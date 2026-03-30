@@ -54,7 +54,7 @@
     - 入站任务在收到 CancelMessage 时被取消
     - 早到取消：在任务执行前检查 cancel_token，避免竞态条件
 
-`Peer` 把 `Transport` 和 v4 协议消息模型接起来，负责：
+`Peer` 把 `Transport` 和 s5r 协议消息模型接起来，负责：
 
 - 握手与远端元数据缓存
 - 请求 ID 关联

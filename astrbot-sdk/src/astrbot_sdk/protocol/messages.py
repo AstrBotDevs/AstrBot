@@ -1,4 +1,4 @@
-"""v4 协议消息模型。
+"""s5r 协议消息模型。
 
 这些模型描述的是 `Peer` 与 `Peer` 之间的线协议。握手阶段通过
 `InitializeMessage` 发起，再由 `ResultMessage(kind="initialize_result")`

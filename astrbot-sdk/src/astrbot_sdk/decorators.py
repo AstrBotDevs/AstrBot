@@ -1,4 +1,4 @@
-"""v4 原生装饰器。
+"""astrbot-sdk 原生装饰器。
 
 提供声明式的方法来注册 handler 和 capability。
 装饰器会在方法上附加元数据，由 Star.__init_subclass__ 自动收集。
