@@ -222,10 +222,13 @@ export default defineConfig({
             ],
           },
           {
-            text: "开源之夏",
-            base: "/ospp",
-            collapsed: true,
-            items: [{ text: "OSPP 2025", link: "/2025" }],
+            text: "社区活动",
+            base: "/community-events",
+            collapsed: false,
+            items: [
+              { text: "开源之夏 2025", link: "/ospp-2025" },
+              { text: "桐谷霁屿 x AstrBot 插件奖励活动", link: "/tonggujiyu-astrbot-plugin-reward-program" },
+            ],
           },
         ],
         outline: {
