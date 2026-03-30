@@ -8,6 +8,7 @@ from typing import cast
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
+from telegram.error import Forbidden, InvalidToken
 from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
 from telegram.ext import MessageHandler as TelegramMessageHandler
 
@@ -93,6 +94,26 @@ class TelegramPlatformAdapter(Platform):
         logger.debug(f"Telegram base url: {self.client.base_url}")
 
         self.scheduler = AsyncIOScheduler()
+        self._terminating = False
+        raw_delay = self.config.get("telegram_polling_restart_delay", 5.0)
+        try:
+            delay = float(raw_delay)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid 'telegram_polling_restart_delay' value %r in config, "
+                "falling back to default 5.0s",
+                raw_delay,
+            )
+            delay = 5.0
+
+        if delay < 0.1:
+            logger.warning(
+                "Configured 'telegram_polling_restart_delay' (%s) is too small; "
+                "enforcing minimum of 0.1s to avoid tight restart loops",
+                delay,
+            )
+            delay = 0.1
+        self._polling_restart_delay = delay
 
         # Media group handling
         # Cache structure: {media_group_id: {"created_at": datetime, "items": [(update, context), ...]}}
@@ -145,9 +166,43 @@ class TelegramPlatformAdapter(Platform):
             logger.error("Telegram Updater is not initialized. Cannot start polling.")
             return
 
-        queue = self.application.updater.start_polling()
-        logger.info("Telegram Platform Adapter is running.")
-        await queue
+        while not self._terminating:
+            try:
+                logger.info("Starting Telegram polling...")
+                await self.application.updater.start_polling(
+                    error_callback=self._on_polling_error
+                )
+                logger.info("Telegram Platform Adapter is running.")
+                while self.application.updater.running and not self._terminating:  # noqa: ASYNC110
+                    await asyncio.sleep(1)
+
+                if not self._terminating:
+                    logger.warning(
+                        "Telegram polling loop exited unexpectedly, "
+                        f"retrying in {self._polling_restart_delay}s."
+                    )
+            except asyncio.CancelledError:
+                raise
+            except (Forbidden, InvalidToken) as e:
+                logger.error(
+                    f"Telegram token is invalid or unauthorized: {e}. Polling stopped."
+                )
+                break
+            except Exception as e:
+                logger.exception(
+                    "Telegram polling crashed with exception: "
+                    f"{type(e).__name__}: {e!s}. "
+                    f"Retrying in {self._polling_restart_delay}s.",
+                )
+
+            if not self._terminating:
+                await asyncio.sleep(self._polling_restart_delay)
+
+    def _on_polling_error(self, error: Exception) -> None:
+        logger.error(
+            f"Telegram polling request failed: {type(error).__name__}: {error!s}",
+            exc_info=error,
+        )
 
     async def register_commands(self) -> None:
         """收集所有注册的指令并注册到 Telegram"""
@@ -280,6 +335,18 @@ class TelegramPlatformAdapter(Platform):
             logger.warning("Received an update without a message.")
             return None
 
+        def _apply_caption() -> None:
+            if update.message.caption:
+                message.message_str = update.message.caption
+                message.message.append(Comp.Plain(message.message_str))
+            if update.message.caption and update.message.caption_entities:
+                for entity in update.message.caption_entities:
+                    if entity.type == "mention":
+                        name = update.message.caption[
+                            entity.offset + 1 : entity.offset + entity.length
+                        ]
+                        message.message.append(Comp.At(qq=name, name=name))
+
         message = AstrBotMessage()
         message.session_id = str(update.message.chat.id)
 
@@ -391,24 +458,15 @@ class TelegramPlatformAdapter(Platform):
             )
             path_wav = await convert_audio_to_wav(temp_path, path_wav)
 
-            message.message = [
-                Comp.Record(file=path_wav, url=path_wav),
-            ]
+            record = Comp.Record(file=path_wav, url=path_wav)
+            record.path = path_wav
+            message.message = [record]
 
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo
             file = await photo.get_file()
             message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
-            if update.message.caption:
-                message.message_str = update.message.caption
-                message.message.append(Comp.Plain(message.message_str))
-            if update.message.caption_entities:
-                for entity in update.message.caption_entities:
-                    if entity.type == "mention":
-                        name = message.message_str[
-                            entity.offset + 1 : entity.offset + entity.length
-                        ]
-                        message.message.append(Comp.At(qq=name, name=name))
+            _apply_caption()
 
         elif update.message.sticker:
             # 将sticker当作图片处理
@@ -431,6 +489,7 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(
                     Comp.File(file=file_path, name=file_name, url=file_path)
                 )
+                _apply_caption()
 
         elif update.message.video:
             file = await update.message.video.get_file()
@@ -442,6 +501,7 @@ class TelegramPlatformAdapter(Platform):
                 )
             else:
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
+                _apply_caption()
 
         return message
 
@@ -567,6 +627,7 @@ class TelegramPlatformAdapter(Platform):
 
     async def terminate(self) -> None:
         try:
+            self._terminating = True
             if self.scheduler.running:
                 self.scheduler.shutdown()
 

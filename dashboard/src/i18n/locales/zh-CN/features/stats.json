@@ -1,0 +1,104 @@
+{
+  "header": {
+    "eyebrow": "Dashboard",
+    "title": "系统统计",
+    "subtitle": "平台、消息与模型调用的统一视图。",
+    "notUpdated": "尚未更新"
+  },
+  "ranges": {
+    "oneDay": "1 天",
+    "threeDays": "3 天",
+    "oneWeek": "1 周"
+  },
+  "rangeLabels": {
+    "oneDay": "最近 1 天",
+    "threeDays": "最近 3 天",
+    "oneWeek": "最近 1 周"
+  },
+  "overviewCards": {
+    "platformCount": {
+      "label": "平台实例数",
+      "note": "当前配置并已运行的平台实例"
+    },
+    "messageCount": {
+      "label": "消息总数",
+      "note": "累计消息量"
+    },
+    "todayModelCalls": {
+      "label": "今日模型调用",
+      "note": "词元（Tokens）"
+    },
+    "cpu": {
+      "label": "CPU",
+      "note": "程序 CPU 占用"
+    },
+    "memory": {
+      "label": "进程内存",
+      "note": "系统内存 {systemMemory}"
+    },
+    "uptime": {
+      "label": "运行时间",
+      "note": "启动于 {startTime}"
+    }
+  },
+  "messageOverview": {
+    "title": "消息概览",
+    "subtitle": "机器人消息数据统计"
+  },
+  "messageTrend": {
+    "title": "消息趋势",
+    "subtitle": "{range}按小时聚合",
+    "totalMessages": "总消息数"
+  },
+  "platformRanking": {
+    "title": "平台消息排名",
+    "subtitle": "{range}按聚合消息总量排序"
+  },
+  "modelCalls": {
+    "title": "模型调用",
+    "subtitle": "模型调用数据统计"
+  },
+  "modelTrend": {
+    "title": "模型调用趋势",
+    "subtitle": "模型调用词元（Tokens）趋势统计"
+  },
+  "modelTotal": {
+    "title": "{range}模型调用总量",
+    "callCount": "共 {count} 次调用",
+    "avgTtft": "平均首字延迟（TTFT）",
+    "avgDuration": "平均响应时间",
+    "avgTpm": "平均每分钟词元数（TPM）",
+    "successRate": "调用成功率"
+  },
+  "modelRanking": {
+    "title": "{range}模型调用排名",
+    "subtitle": "模型调用词元（Tokens）排名"
+  },
+  "sessionRanking": {
+    "title": "{range}会话词元（Tokens）Top 10",
+    "subtitle": "词元（Tokens）用量最大的会话排名"
+  },
+  "empty": {
+    "platformStats": "当前没有平台消息统计数据。",
+    "modelCalls": "{range}还没有模型调用数据。",
+    "sessionCalls": "{range}还没有会话调用数据。"
+  },
+  "chart": {
+    "messages": "消息",
+    "others": "其他"
+  },
+  "units": {
+    "tokens": "词元（Tokens）",
+    "tpm": "TPM",
+    "gb": "GB",
+    "mb": "MB",
+    "ms": "ms",
+    "hoursShort": "h",
+    "minutesShort": "m",
+    "secondsShort": "s"
+  },
+  "errors": {
+    "loadFailed": "统计数据加载失败，请稍后重试。",
+    "rangeFailed": "统计范围切换失败，请稍后重试。"
+  }
+}

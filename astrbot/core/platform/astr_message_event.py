@@ -1,6 +1,7 @@
 import abc
 import asyncio
 import hashlib
+import os
 import re
 import uuid
 from collections.abc import AsyncGenerator
@@ -88,6 +89,8 @@ class AstrMessageEvent(abc.ABC):
         """在此次事件中是否有过至少一次发送消息的操作"""
         self.call_llm = False
         """是否在此消息事件中禁止默认的 LLM 请求"""
+        self._temporary_local_files: list[str] = []
+        """Temporary local files created during this event and safe to delete when it finishes."""
 
         self.plugins_name: list[str] | None = None
         """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
@@ -228,6 +231,24 @@ class AstrMessageEvent(abc.ABC):
         logger.info(f"清除 {self.get_platform_name()} 的额外信息: {self._extras}")
         self._extras.clear()
 
+    def track_temporary_local_file(self, path: str) -> None:
+        if path and path not in self._temporary_local_files:
+            self._temporary_local_files.append(path)
+
+    def cleanup_temporary_local_files(self) -> None:
+        paths = list(self._temporary_local_files)
+        self._temporary_local_files.clear()
+        for path in paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError as e:
+                logger.warning(
+                    "Failed to remove temporary local file %s: %s",
+                    path,
+                    e,
+                )
+
     def is_private_chat(self) -> bool:
         """是否是私聊。"""
         return self.get_message_type() == MessageType.FRIEND_MESSAGE
@@ -268,6 +289,12 @@ class AstrMessageEvent(abc.ABC):
 
     async def send_typing(self) -> None:
         """发送输入中状态。
+
+        默认实现为空，由具体平台按需重写。
+        """
+
+    async def stop_typing(self) -> None:
+        """停止输入中状态。
 
         默认实现为空，由具体平台按需重写。
         """

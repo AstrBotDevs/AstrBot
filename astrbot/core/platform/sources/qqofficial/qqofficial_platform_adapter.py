@@ -5,6 +5,8 @@ import logging
 import os
 import random
 import time
+import uuid
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -24,6 +26,8 @@ from astrbot.api.platform import (
 )
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.io import download_file
 
 from ...register import register_platform_adapter
 from .qqofficial_message_event import QQOfficialMessageEvent
@@ -42,7 +46,7 @@ class botClient(Client):
     async def on_group_at_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
         )
@@ -53,7 +57,7 @@ class botClient(Client):
 
     # 收到频道消息
     async def on_at_message_create(self, message: botpy.message.Message) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
         )
@@ -66,7 +70,7 @@ class botClient(Client):
     async def on_direct_message_create(
         self, message: botpy.message.DirectMessage
     ) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
         )
@@ -76,7 +80,7 @@ class botClient(Client):
 
     # 收到 C2C 消息
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
         )
@@ -238,6 +242,9 @@ class QQOfficialPlatformAdapter(Platform):
                 )
 
         elif session.message_type == MessageType.FRIEND_MESSAGE:
+            # 参考 https://bot.q.qq.com/wiki/develop/pythonsdk/api/message/post_message.html
+            # msg_id 缺失时认为是主动推送，而似乎至少在私聊上主动推送是没有被限制的，这里直接移除 msg_id 可以避免越权或 msg_id 不可用的bug
+            payload.pop("msg_id", None)
             payload["msg_seq"] = random.randint(1, 10000)
             if image_base64:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
@@ -268,9 +275,6 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
-                    # QQ API rejects msg_id for media (video/file) messages sent
-                    # via the proactive tool-call path; remove it to avoid 越权 error.
-                    payload.pop("msg_id", None)
             if file_source:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                     send_helper,  # type: ignore
@@ -282,7 +286,6 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
-                    payload.pop("msg_id", None)
 
             ret = await QQOfficialMessageEvent.post_c2c_message(
                 send_helper,  # type: ignore
@@ -337,7 +340,22 @@ class QQOfficialPlatformAdapter(Platform):
         return f"https://{url}"
 
     @staticmethod
-    def _append_attachments(
+    async def _prepare_audio_attachment(
+        url: str,
+        filename: str,
+    ) -> Record:
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        ext = Path(filename).suffix.lower()
+        source_ext = ext or ".audio"
+        source_path = temp_dir / f"qqofficial_{uuid.uuid4().hex}{source_ext}"
+        await download_file(url, str(source_path))
+
+        return Record(file=str(source_path), url=str(source_path))
+
+    @staticmethod
+    async def _append_attachments(
         msg: list[BaseMessageComponent],
         attachments: list | None,
     ) -> None:
@@ -364,7 +382,7 @@ class QQOfficialPlatformAdapter(Platform):
                     or getattr(attachment, "name", None)
                     or "attachment",
                 )
-                ext = os.path.splitext(filename)[1].lower()
+                ext = Path(filename).suffix.lower()
                 image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
                 audio_exts = {
                     ".mp3",
@@ -382,8 +400,21 @@ class QQOfficialPlatformAdapter(Platform):
                     ".webm",
                 }
 
-                if content_type.startswith("audio") or ext in audio_exts:
-                    msg.append(Record.fromURL(url))
+                if content_type.startswith("voice") or ext in audio_exts:
+                    try:
+                        msg.append(
+                            await QQOfficialPlatformAdapter._prepare_audio_attachment(
+                                url,
+                                filename,
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "[QQOfficial] Failed to prepare audio attachment %s: %s",
+                            url,
+                            e,
+                        )
+                        msg.append(Record.fromURL(url))
                 elif content_type.startswith("video") or ext in video_exts:
                     msg.append(Video.fromURL(url))
                 elif content_type.startswith("image") or ext in image_exts:
@@ -433,13 +464,13 @@ class QQOfficialPlatformAdapter(Platform):
         return re.sub(r"<faceType=\d+[^>]*>", replace_face, content)
 
     @staticmethod
-    def _parse_from_qqofficial(
+    async def _parse_from_qqofficial(
         message: botpy.message.Message
         | botpy.message.GroupMessage
         | botpy.message.DirectMessage
         | botpy.message.C2CMessage,
         message_type: MessageType,
-    ):
+    ) -> AstrBotMessage:
         abm = AstrBotMessage()
         abm.type = message_type
         abm.timestamp = int(time.time())
@@ -464,7 +495,9 @@ class QQOfficialPlatformAdapter(Platform):
             abm.self_id = "unknown_selfid"
             msg.append(At(qq="qq_official"))
             msg.append(Plain(abm.message_str))
-            QQOfficialPlatformAdapter._append_attachments(msg, message.attachments)
+            await QQOfficialPlatformAdapter._append_attachments(
+                msg, message.attachments
+            )
             abm.message = msg
 
         elif isinstance(message, botpy.message.Message) or isinstance(
@@ -483,7 +516,9 @@ class QQOfficialPlatformAdapter(Platform):
                 ).strip()
             )
 
-            QQOfficialPlatformAdapter._append_attachments(msg, message.attachments)
+            await QQOfficialPlatformAdapter._append_attachments(
+                msg, message.attachments
+            )
             abm.message = msg
             abm.message_str = plain_content
             abm.sender = MessageMember(

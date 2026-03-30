@@ -5,8 +5,40 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.20.1"
+VERSION = "4.22.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+PERSONAL_WECHAT_CONFIG_METADATA = {
+    "weixin_oc_base_url": {
+        "description": "Base URL",
+        "type": "string",
+        "hint": "默认值: https://ilinkai.weixin.qq.com",
+    },
+    "weixin_oc_bot_type": {
+        "description": "扫码参数 bot_type",
+        "type": "string",
+        "hint": "默认值: 3",
+    },
+    "weixin_oc_qr_poll_interval": {
+        "description": "二维码状态轮询间隔（秒）",
+        "type": "int",
+        "hint": "每隔多少秒轮询一次二维码状态。",
+    },
+    "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates 长轮询超时时间（毫秒）",
+        "type": "int",
+        "hint": "会话消息拉取接口超时参数。",
+    },
+    "weixin_oc_api_timeout_ms": {
+        "description": "HTTP 请求超时（毫秒）",
+        "type": "int",
+        "hint": "通用 API 请求超时参数。",
+    },
+    "weixin_oc_token": {
+        "description": "登录后 token（可留空）",
+        "type": "string",
+        "hint": "扫码登录成功后会自动写入；高级场景可手动填写。",
+    },
+}
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
     "qq_official_webhook",
@@ -117,7 +149,7 @@ DEFAULT_CONFIG = {
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
         "max_agent_step": 30,
-        "tool_call_timeout": 60,
+        "tool_call_timeout": 120,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
@@ -141,6 +173,11 @@ DEFAULT_CONFIG = {
             "shipyard_neo_access_token": "",
             "shipyard_neo_profile": "python-default",
             "shipyard_neo_ttl": 3600,
+        },
+        "image_compress_enabled": True,
+        "image_compress_options": {
+            "max_size": 1280,
+            "quality": 95,
         },
     },
     # SubAgent orchestrator mode:
@@ -364,6 +401,16 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6198,
                     },
+                    "个人微信": {
+                        "id": "weixin_personal",
+                        "type": "weixin_oc",
+                        "enable": False,
+                        "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
+                        "weixin_oc_bot_type": "3",
+                        "weixin_oc_qr_poll_interval": 1,
+                        "weixin_oc_long_poll_timeout_ms": 35_000,
+                        "weixin_oc_api_timeout_ms": 15_000,
+                    },
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
@@ -396,6 +443,7 @@ CONFIG_METADATA_2 = {
                         "telegram_command_register": True,
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
+                        "telegram_polling_restart_delay": 5.0,
                     },
                     "Discord": {
                         "id": "discord",
@@ -686,6 +734,11 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "Telegram 命令自动刷新间隔，单位为秒。",
                     },
+                    "telegram_polling_restart_delay": {
+                        "description": "Telegram 轮询重启延迟",
+                        "type": "float",
+                        "hint": "当轮询意外结束尝试自动重启时的延迟时间，理论上越短恢复越快，但过短（<0.1s）可能导致死循环针对 API 服务器的请求阻断。单位为秒。默认为 5s。",
+                    },
                     "id": {
                         "description": "机器人名称",
                         "type": "string",
@@ -863,6 +916,7 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
                     },
+                    **PERSONAL_WECHAT_CONFIG_METADATA,
                     "webhook_uuid": {
                         "invisible": True,
                         "description": "Webhook UUID",
@@ -1068,7 +1122,7 @@ CONFIG_METADATA_2 = {
                 "type": "list",
                 # provider sources templates
                 "config_template": {
-                    "OpenAI": {
+                    "OpenAI Compatible": {
                         "id": "openai",
                         "provider": "openai",
                         "type": "openai_chat_completion",
@@ -1112,6 +1166,20 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.anthropic.com/v1",
                         "timeout": 120,
                         "proxy": "",
+                        "custom_headers": {},
+                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
+                    },
+                    "Kimi Coding Plan": {
+                        "id": "kimi-code",
+                        "provider": "kimi-code",
+                        "type": "kimi_code_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.kimi.com/coding/",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Moonshot": {
@@ -1234,6 +1302,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "http://127.0.0.1:11434/v1",
                         "proxy": "",
                         "custom_headers": {},
+                        "ollama_disable_thinking": False,
                     },
                     "LM Studio": {
                         "id": "lm_studio",
@@ -1554,10 +1623,14 @@ CONFIG_METADATA_2 = {
                         "type": "gsvi_tts_api",
                         "provider": "gpt_sovits_inference",
                         "provider_type": "text_to_speech",
-                        "api_base": "http://127.0.0.1:5000",
-                        "character": "",
-                        "emotion": "default",
                         "enable": False,
+                        "api_key": "",
+                        "api_base": "http://127.0.0.1:8000",
+                        "version": "v4",
+                        "character": "",
+                        "prompt_text_lang": "中文",
+                        "emotion": "默认",
+                        "text_lang": "中文",
                         "timeout": 20,
                     },
                     "FishAudio TTS(API)": {
@@ -1793,6 +1866,11 @@ CONFIG_METADATA_2 = {
                         "type": "dict",
                         "items": {},
                         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。",
+                    },
+                    "ollama_disable_thinking": {
+                        "description": "关闭思考模式",
+                        "type": "bool",
+                        "hint": "关闭 Ollama 思考模式。",
                     },
                     "custom_extra_body": {
                         "description": "自定义请求体参数",
@@ -3383,14 +3461,39 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
                     },
+                    "provider_settings.image_compress_enabled": {
+                        "description": "启用图片压缩",
+                        "type": "bool",
+                        "hint": "启用后，发送给多模态模型前会先压缩本地大图片。",
+                    },
+                    "provider_settings.image_compress_options.max_size": {
+                        "description": "最大边长",
+                        "type": "int",
+                        "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 256, "max": 4096, "step": 64},
+                    },
+                    "provider_settings.image_compress_options.quality": {
+                        "description": "压缩质量",
+                        "type": "int",
+                        "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 1, "max": 100, "step": 1},
+                    },
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
+                        "collapsed": True,
                     },
                     "provider_settings.reachability_check": {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
+                        "collapsed": True,
                     },
                     "provider_settings.max_quoted_fallback_images": {
                         "description": "引用图片回退解析上限",
@@ -3399,6 +3502,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_component_chain_depth": {
                         "description": "引用解析组件链深度",
@@ -3407,6 +3511,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_forward_node_depth": {
                         "description": "引用解析转发节点深度",
@@ -3415,6 +3520,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_forward_fetch": {
                         "description": "引用解析转发拉取上限",
@@ -3423,6 +3529,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.warn_on_action_failure": {
                         "description": "引用解析 action 失败告警",
@@ -3431,6 +3538,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                 },
                 "condition": {

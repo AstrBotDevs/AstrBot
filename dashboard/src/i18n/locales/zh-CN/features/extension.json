@@ -9,7 +9,8 @@
     "handlersOperation": "管理行为"
   },
   "titles": {
-    "installedAstrBotPlugins": "已安装的 AstrBot 插件"
+    "installedAstrBotPlugins": "已安装的 AstrBot 插件",
+    "pinnedPlugins": "置顶插件"
   },
   "failedPlugins": {
     "title": "加载失败插件（{count}）",
@@ -53,6 +54,8 @@
     "refresh": "刷新",
     "updateAll": "更新全部插件",
     "deleteSource": "删除源",
+    "pin": "置顶",
+    "unpin": "取消置顶",
     "reshuffle": "随机一发"
   },
   "status": {
@@ -96,6 +99,16 @@
   "market": {
     "recommended": "🥳 推荐",
     "allPlugins": "📦 全部插件",
+    "category": "分类",
+    "categories": {
+      "all": "全部",
+      "ai_tools": "AI 增强",
+      "entertainment": "娱乐",
+      "productivity": "效率",
+      "integrations": "外部集成",
+      "utilities": "生活实用",
+      "other": "其他"
+    },
     "showFullName": "完整名称",
     "devDocs": "插件开发文档",
     "submitRepo": "提交插件仓库",
@@ -232,7 +245,7 @@
     "emptyHint": "请上传 Skills 压缩包",
     "uploadDialogTitle": "上传 Skills",
     "uploadHint": "支持批量上传 zip 技能包，也支持拖拽批量上传 zip 技能包。系统会自动校验目录结构，并给出逐个文件的结果。",
-    "structureRequirement": "常见失败原因是压缩包结构不正确。每个 zip 必须只包含一个顶层目录，例如 `skillname/`，且该目录下必须存在 `SKILL.md`。",
+    "structureRequirement": "支持压缩包内含多个 skills 文件夹。",
     "abilityMultiple": "支持一次上传多个zip文件",
     "abilityValidate": "自动校验 `SKILL.md`",
     "abilitySkip": "自动跳过重复文件",

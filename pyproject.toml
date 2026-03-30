@@ -1,11 +1,12 @@
 [project]
 name = "AstrBot"
-version = "4.20.1"
+version = "4.22.2"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
+license = { text = "AGPL-3.0-or-later" }
 requires-python = ">=3.12"
 
-keywords = ["Astrbot", "Astrbot Module", "Astrbot Plugin"]
+keywords = ["AstrBot", "Agent", "Chatbot", "IM"]
 
 dependencies = [
   "aiocqhttp>=1.4.4",
@@ -27,6 +28,7 @@ dependencies = [
   "faiss-cpu>=1.12.0",
   "filelock>=3.18.0",
   "google-genai>=1.56.0",
+  "httpx[socks]>=0.28.1",
   "lark-oapi>=1.4.15",
   "lxml-html-clean>=0.4.2",
   "mcp>=1.8.0",
@@ -39,6 +41,7 @@ dependencies = [
   "pydantic>=2.12.5",
   "pydub>=0.25.1",
   "pyjwt>=2.10.1",
+  "qrcode>=8.2",
   "python-telegram-bot>=22.6",
   "qq-botpy>=1.2.1",
   "quart>=0.20.0",
@@ -77,6 +80,9 @@ dev = [
 
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
+
+[project.urls]
+Repository = "https://github.com/AstrBotDevs/AstrBot"
 
 [tool.ruff]
 exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]

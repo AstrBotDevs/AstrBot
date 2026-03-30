@@ -259,7 +259,7 @@
       <v-card-text class="py-4">
         <p>{{ tm('dialog.securityWarning.aiocqhttpTokenMissing') }}</p>
         <span><a
-            href="https://docs.astrbot.app/deploy/platform/aiocqhttp/napcat.html#%E9%99%84%E5%BD%95-%E5%A2%9E%E5%BC%BA%E8%BF%9E%E6%8E%A5%E5%AE%89%E5%85%A8%E6%80%A7"
+            href="https://docs.astrbot.app/platform/aiocqhttp.html"
             target="_blank">{{ tm('dialog.securityWarning.learnMore') }}</a></span>
       </v-card-text>
       <v-card-actions class="px-4 pb-4">
