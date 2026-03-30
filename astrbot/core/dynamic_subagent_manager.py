@@ -31,11 +31,15 @@ class DynamicSubAgentConfig:
 
 @dataclass
 class SubAgentExecutionResult:
+    task_id: str  # 任务唯一标识符
     agent_name: str
     success: bool
-    result: str
+    result: str | None = None
     error: str | None = None
     execution_time: float = 0.0
+    created_at: float = 0.0
+    completed_at: float = 0.0
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -52,6 +56,10 @@ class DynamicSubAgentSession:
     agent_histories: dict = field(default_factory=dict)  # 存储每个子代理的历史上下文
     shared_context: list = field(default_factory=list)  # 公共上下文列表
     shared_context_enabled: bool = False  # 是否启用公共上下文
+    # SubAgent 结果存储: {agent_name: {task_id: SubAgentExecutionResult}}
+    subagent_results: dict = field(default_factory=dict)
+    # 任务计数器: {agent_name: next_task_id}
+    _task_counters: dict = field(default_factory=dict)
 
 
 class DynamicSubAgentManager:
@@ -140,13 +148,18 @@ create_dynamic_subagent(
   Working directory: By default, it is consistent with the main Agent's directory.
 
 ### 2. Allocate available Tools and Skills
-
-Available tools and Skills depend on the system's configuration. You should check and list tools and skills, and assign tools and skills when creating sub-agents that need specialized capabilities.
+Before you create a sub-agent, consider first: If you were the sub-agent, what tools and skills would you need to use to complete the task? Tools and skills must be allocated; otherwise, this sub-agent should not be created.
+Available tools and Skills depend on the system's configuration. You should check and list your tools and skills first, and assign tools and skills to sub-agents that need specialized capabilities.
 
 ## Sub-agent Lifecycle
 
 Sub-agents are valid during single round conversation with the user, but they will be cleaned up automatically after you send the final answer to user.
 If you wish to prevent a certain sub-agent from being automatically cleaned up, use `protect_subagent` tool. Also, you can use the `unprotect_subagent` tool to remove protection.
+
+## Background Task and Result Waiting
+
+When delegating a task that may take time, use `transfer_to_{{name}}(..., background_task=True)` to run it in background.
+When you need the result of a background task, use `wait_for_subagent(subagent_name, timeout=300)` to wait for and retrieve the result.
 """.strip()
 
     @classmethod
@@ -473,6 +486,97 @@ These may be messages sent to you by other subagents, messages you send to other
         return "\n".join(lines)
 
     @classmethod
+    def build_shared_context_prompt_v2(
+        cls, session_id: str, agent_name: str = None
+    ) -> str:
+        """分块构建公共上下文，按类型和优先级分组注入
+        1. 区分不同类型的消息并分别标注
+        2. 按优先级和相关性分组
+        3. 减少 Agent 的解析负担
+        """
+        session = cls.get_session(session_id)
+        if (
+            not session
+            or not session.shared_context_enabled
+            or not session.shared_context
+        ):
+            return ""
+
+        lines = []
+
+        # === 1. 固定格式说明 ===
+        lines.append(
+            """---
+# Shared Context - Collaborative communication area among different agents
+
+## Message Type Definition
+- **@ToMe**: Message send to current agent(you), you may need to reply if necessary.
+- **@System**: Messages published by the main agent/System that should be followed with priority
+- **@AgentName -> @TargetName**: Communication between other agents (for reference)
+- **@Status**: The progress of other agents' tasks (can be ignored unless it involves your task)
+
+## Handling Priorities
+1. @System messages (highest priority) > @ToMe messages > @Status > others
+2. Messages of the same type: In chronological order, with new messages taking precedence
+""".strip()
+        )
+
+        # === 2. System 消息 ===
+        system_msgs = [m for m in session.shared_context if m["type"] == "system"]
+        if system_msgs:
+            lines.append("\n## @System - System Announcements")
+            for msg in system_msgs:
+                ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
+                content_text = msg["content"]
+                lines.append(f"[{ts}] System: {content_text}")
+
+        # === 3. 发送给当前 Agent 的消息 ===
+        if agent_name:
+            to_me_msgs = [
+                m
+                for m in session.shared_context
+                if m["type"] == "message" and m["target"] == agent_name
+            ]
+            if to_me_msgs:
+                lines.append(f"\n## @ToMe - Messages sent to @{agent_name}")
+                lines.append(
+                    " **These messages are addressed to you. If needed, please reply using `send_shared_context`"
+                )
+                for msg in to_me_msgs:
+                    ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
+                    lines.append(
+                        f"[{ts}] @{msg['sender']} -> @{agent_name}: {msg['content']}"
+                    )
+
+        # === 4. 其他 Agent 之间的交互（仅显示摘要）===
+        inter_agent_msgs = [
+            m
+            for m in session.shared_context
+            if m["type"] == "message"
+            and m["target"] != agent_name
+            and m["target"] != "all"
+            and m["sender"] != agent_name
+        ]
+        if inter_agent_msgs:
+            lines.append("\n## @OtherAgents - Communication among Other Agents")
+            for msg in inter_agent_msgs[-5:]:
+                ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
+                content_text = msg["content"]
+                lines.append(
+                    f"[{ts}] {msg['sender']} -> {msg['target']}: {content_text}"
+                )
+
+        # === 5. Status 更新 ===
+        status_msgs = [m for m in session.shared_context if m["type"] == "status"]
+        if status_msgs:
+            lines.append("\n## @Status - Task progress of each agent")
+            for msg in status_msgs[-10:]:
+                ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
+                lines.append(f"[{ts}] {msg['sender']}: {msg['content']}")
+        lines.append("---")
+        return "\n".join(lines)
+
+    @classmethod
     def cleanup_shared_context_by_agent(cls, session_id: str, agent_name: str) -> None:
         """Remove all messages from/to a specific agent from shared context"""
         session = cls.get_session(session_id)
@@ -600,6 +704,7 @@ These may be messages sent to you by other subagents, messages you send to other
             session.handoff_tools.clear()
             session.agent_histories.clear()
             session.shared_context.clear()
+            session.subagent_results.clear()
             return "__SUBAGENT_REMOVED__"
         else:
             if agent_name not in session.agents:
@@ -608,6 +713,7 @@ These may be messages sent to you by other subagents, messages you send to other
                 session.agents.pop(agent_name, None)
                 session.handoff_tools.pop(agent_name, None)
                 session.agent_histories.pop(agent_name, None)
+                session.subagent_results.pop(agent_name, None)
                 # 清理公共上下文中包含该Agent的内容
                 cls.cleanup_shared_context_by_agent(session_id, agent_name)
                 SubAgentLogger.info(
@@ -624,6 +730,275 @@ These may be messages sent to you by other subagents, messages you send to other
         if not session:
             return []
         return list(session.handoff_tools.values())
+
+    # ==================== SubAgent 结果管理 ====================
+
+    @classmethod
+    def create_pending_subagent_task(cls, session_id: str, agent_name: str) -> str:
+        """为 SubAgent 创建一个 pending 任务，返回 task_id
+
+        Args:
+            session_id: Session ID
+            agent_name: SubAgent 名称
+
+        Returns:
+            task_id: 任务ID，格式为简单的递增数字字符串
+        """
+        session = cls.get_or_create_session(session_id)
+
+        # 初始化
+        if agent_name not in session.subagent_results:
+            session.subagent_results[agent_name] = {}
+        if agent_name not in session._task_counters:
+            session._task_counters[agent_name] = 0
+
+        # 生成递增的任务ID
+        session._task_counters[agent_name] += 1
+        task_id = str(session._task_counters[agent_name])
+
+        # 创建 pending 占位
+        session.subagent_results[agent_name][task_id] = SubAgentExecutionResult(
+            task_id=task_id,
+            agent_name=agent_name,
+            success=False,
+            result="",
+            created_at=time.time(),
+            metadata={},
+        )
+
+        SubAgentLogger.info(
+            session_id,
+            "DynamicSubAgentManager:task",
+            f"Created pending task {task_id} for {agent_name}",
+        )
+
+        return task_id
+
+    @classmethod
+    def get_pending_subagent_tasks(cls, session_id: str, agent_name: str) -> list[str]:
+        """获取 SubAgent 的所有 pending 任务 ID 列表（按创建时间排序）"""
+        session = cls.get_session(session_id)
+        if not session or agent_name not in session.subagent_results:
+            return []
+
+        # 按 created_at 排序
+        pending = [
+            task_id
+            for task_id, result in session.subagent_results[agent_name].items()
+            if result.result == "" and result.completed_at == 0.0
+        ]
+        return sorted(
+            pending,
+            key=lambda tid: session.subagent_results[agent_name][tid].created_at,
+        )
+
+    @classmethod
+    def get_latest_task_id(cls, session_id: str, agent_name: str) -> str | None:
+        """获取 SubAgent 的最新任务 ID"""
+        session = cls.get_session(session_id)
+        if not session or agent_name not in session.subagent_results:
+            return None
+
+        # 按 created_at 排序取最新的
+        sorted_tasks = sorted(
+            session.subagent_results[agent_name].items(),
+            key=lambda x: x[1].created_at,
+            reverse=True,
+        )
+        return sorted_tasks[0][0] if sorted_tasks else None
+
+    @classmethod
+    def store_subagent_result(
+        cls,
+        session_id: str,
+        agent_name: str,
+        success: bool,
+        result: str,
+        task_id: str | None = None,
+        error: str | None = None,
+        execution_time: float = 0.0,
+        metadata: dict | None = None,
+    ) -> None:
+        """存储 SubAgent 的执行结果
+
+        Args:
+            session_id: Session ID
+            agent_name: SubAgent 名称
+            success: 是否成功
+            result: 执行结果
+            task_id: 任务ID，如果为None则存储到最新的pending任务
+            error: 错误信息
+            execution_time: 执行耗时
+            metadata: 额外元数据
+        """
+        session = cls.get_or_create_session(session_id)
+
+        if agent_name not in session.subagent_results:
+            session.subagent_results[agent_name] = {}
+
+        if task_id is None:
+            # 如果没有指定task_id，尝试找最新的pending任务
+            pending = cls.get_pending_subagent_tasks(session_id, agent_name)
+            if pending:
+                task_id = pending[-1]  # 取最新的
+            else:
+                logger.warning(
+                    f"[SubAgentResult] No task_id and no pending tasks for {agent_name}"
+                )
+                return
+
+        if task_id not in session.subagent_results[agent_name]:
+            # 如果任务不存在，先创建一个占位
+            session.subagent_results[agent_name][task_id] = SubAgentExecutionResult(
+                task_id=task_id,
+                agent_name=agent_name,
+                success=False,
+                result="",
+                created_at=time.time(),
+                metadata=metadata or {},
+            )
+
+        # 更新结果
+        session.subagent_results[agent_name][task_id].success = success
+        session.subagent_results[agent_name][task_id].result = result
+        session.subagent_results[agent_name][task_id].error = error
+        session.subagent_results[agent_name][task_id].execution_time = execution_time
+        session.subagent_results[agent_name][task_id].completed_at = time.time()
+        if metadata:
+            session.subagent_results[agent_name][task_id].metadata.update(metadata)
+
+    @classmethod
+    def get_subagent_result(
+        cls, session_id: str, agent_name: str, task_id: str | None = None
+    ) -> SubAgentExecutionResult | None:
+        """获取 SubAgent 的执行结果
+
+        Args:
+            session_id: Session ID
+            agent_name: SubAgent 名称
+            task_id: 任务ID，如果为None则获取最新的任务结果
+
+        Returns:
+            SubAgentExecutionResult 或 None
+        """
+        session = cls.get_session(session_id)
+        if not session or agent_name not in session.subagent_results:
+            return None
+
+        if task_id is None:
+            # 获取最新的已完成任务
+            completed = [
+                (tid, r)
+                for tid, r in session.subagent_results[agent_name].items()
+                if r.result != "" or r.completed_at > 0
+            ]
+            if not completed:
+                return None
+            # 按创建时间排序，取最新的
+            completed.sort(key=lambda x: x[1].created_at, reverse=True)
+            return completed[0][1]
+
+        return session.subagent_results[agent_name].get(task_id)
+
+    @classmethod
+    def has_subagent_result(
+        cls, session_id: str, agent_name: str, task_id: str | None = None
+    ) -> bool:
+        """检查 SubAgent 是否有结果
+
+        Args:
+            session_id: Session ID
+            agent_name: SubAgent 名称
+            task_id: 任务ID，如果为None则检查是否有任何已完成的任务
+        """
+        session = cls.get_session(session_id)
+        if not session or agent_name not in session.subagent_results:
+            return False
+
+        if task_id is None:
+            # 检查是否有任何已完成的任务
+            return any(
+                r.result != "" or r.completed_at > 0
+                for r in session.subagent_results[agent_name].values()
+            )
+
+        if task_id not in session.subagent_results[agent_name]:
+            return False
+        result = session.subagent_results[agent_name][task_id]
+        return result.result != "" or result.completed_at > 0
+
+    @classmethod
+    def clear_subagent_result(
+        cls, session_id: str, agent_name: str, task_id: str | None = None
+    ) -> None:
+        """清除 SubAgent 的执行结果
+
+        Args:
+            session_id: Session ID
+            agent_name: SubAgent 名称
+            task_id: 任务ID，如果为None则清除该Agent所有任务
+        """
+        session = cls.get_session(session_id)
+        if not session or agent_name not in session.subagent_results:
+            return
+
+        if task_id is None:
+            # 清除所有任务
+            session.subagent_results.pop(agent_name, None)
+            session._task_counters.pop(agent_name, None)
+        else:
+            # 清除特定任务
+            session.subagent_results[agent_name].pop(task_id, None)
+
+    @classmethod
+    def get_subagent_status(
+        cls, session_id: str, agent_name: str, task_id: str | None = None
+    ) -> str:
+        """获取 SubAgent 的状态: running, completed, not_found
+
+        Args:
+            session_id: Session ID
+            agent_name: SubAgent 名称
+            task_id: 任务ID，如果为None则检查是否有任何pending或已完成的任务
+        """
+        session = cls.get_session(session_id)
+        if not session or agent_name not in session.agents:
+            return "not_found"
+
+        if (
+            agent_name not in session.subagent_results
+            or not session.subagent_results[agent_name]
+        ):
+            return "running"
+
+        if task_id is None:
+            # 检查是否有 pending 任务
+            pending = cls.get_pending_subagent_tasks(session_id, agent_name)
+            if pending:
+                return "running"
+            # 检查是否有已完成任务
+            if cls.has_subagent_result(session_id, agent_name):
+                return "completed"
+            return "running"
+
+        # 检查特定任务
+        if task_id not in session.subagent_results[agent_name]:
+            return "not_found"
+
+        result = session.subagent_results[agent_name][task_id]
+        if result.result != "" or result.completed_at > 0:
+            return "completed"
+        return "running"
+
+    @classmethod
+    def get_all_subagent_status(cls, session_id: str) -> dict:
+        """获取所有 SubAgent 的状态"""
+        session = cls.get_session(session_id)
+        if not session:
+            return {}
+        return {
+            name: cls.get_subagent_status(session_id, name) for name in session.agents
+        }
 
 
 @dataclass
@@ -735,21 +1110,36 @@ class RemoveDynamicSubagentTool(FunctionTool):
 @dataclass
 class ListDynamicSubagentsTool(FunctionTool):
     name: str = "list_dynamic_subagents"
-    description: str = "List dynamic subagents."
+    description: str = "List dynamic subagents with their status."
     parameters: dict = field(
-        default_factory=lambda: {"type": "object", "properties": {}}
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "include_status": {
+                    "type": "boolean",
+                    "description": "Include status",
+                    "default": True,
+                }
+            },
+        }
     )
 
     async def call(self, context, **kwargs) -> str:
+        include_status = kwargs.get("include_status", True)
         session_id = context.context.event.unified_msg_origin
         session = DynamicSubAgentManager.get_session(session_id)
         if not session or not session.agents:
             return "No subagents"
-        lines = []
+
+        lines = ["Subagents:"]
         for name in session.agents.keys():
-            protected = "(protected)" if name in session.protected_agents else ""
-            lines.append(f"  - {name} {protected}")
-        return "Subagents:\n" + "\n".join(lines)
+            protected = " (protected)" if name in session.protected_agents else ""
+            if include_status:
+                status = DynamicSubAgentManager.get_subagent_status(session_id, name)
+                lines.append(f" {name}{protected} [{status}]")
+            else:
+                lines.append(f" - {name}{protected}")
+        return "\n".join(lines)
 
 
 @dataclass
@@ -967,6 +1357,118 @@ inter-agent messages, and system announcements."""
         return "\n".join(lines)
 
 
+@dataclass
+class WaitForSubagentTool(FunctionTool):
+    """等待 SubAgent 结果的工具"""
+
+    name: str = "wait_for_subagent"
+    description: str = """Waiting for the execution result of the specified SubAgent.
+Usage scenario:
+- After assigning a background task to SubAgent, you need to wait for its result before proceeding to the next step.
+  CAUTION: Whenever you have a task that does not depend on the output of a subagent, please execute THAT TASK FIRST instead of waiting.
+- Avoids repeatedly executing tasks that have already been completed by SubAgent
+parameter
+- subagent_name: The name of the SubAgent to wait for
+- task_id: Task ID (optional). If not filled in, the latest task result of the Agent will be obtained.
+- timeout: Maximum waiting time (in seconds), default 300
+- poll_interval: polling interval (in seconds), default 5
+"""
+
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "subagent_name": {
+                    "type": "string",
+                    "description": "The name of the SubAgent to wait for",
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Maximum waiting time (seconds)",
+                    "default": 300,
+                },
+                "poll_interval": {
+                    "type": "number",
+                    "description": "Poll interval (seconds)",
+                    "default": 5,
+                },
+                "task_id": {
+                    "type": "string",
+                    "description": "Task ID (optional; if not filled in, the latest task result will be obtained)",
+                },
+            },
+            "required": ["subagent_name"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> str:
+        subagent_name = kwargs.get("subagent_name")
+        if not subagent_name:
+            return "Error: subagent_name is required"
+
+        task_id = kwargs.get("task_id")  # 可选，不填则获取最新的
+        timeout = kwargs.get("timeout", 300)
+        poll_interval = kwargs.get("poll_interval", 5)
+
+        session_id = context.context.event.unified_msg_origin
+        session = DynamicSubAgentManager.get_session(session_id)
+
+        if not session:
+            return "Error: No session found"
+        if subagent_name not in session.agents:
+            return f"Error: SubAgent '{subagent_name}' not found. Available: {list(session.agents.keys())}"
+
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            session = DynamicSubAgentManager.get_session(session_id)
+            if not session:
+                return "Error: Session Not Found"
+
+            # 检查是否有结果
+            result = DynamicSubAgentManager.get_subagent_result(
+                session_id, subagent_name, task_id
+            )
+            if result and (result.result != "" or result.completed_at > 0):
+                return self._format_result(result)
+
+            # 如果指定了task_id，检查该任务是否存在
+            if task_id:
+                status = DynamicSubAgentManager.get_subagent_status(
+                    session_id, subagent_name, task_id
+                )
+                if status == "not_found":
+                    return f"Error: Task '{task_id}' not found for SubAgent '{subagent_name}'"
+                if status == "running":
+                    pass
+                    # elapsed = time.time() - start_time
+                    # return f" SubAgent '{subagent_name}' task {task_id} is running...\n Waited for: {elapsed:.0f}s / {timeout}s\n"
+            else:
+                # 未指定task_id，检查是否有pending任务
+                pending = DynamicSubAgentManager.get_pending_subagent_tasks(
+                    session_id, subagent_name
+                )
+                if not pending:
+                    # 没有pending任务，看看有没有已完成但未取走的结果
+                    return f" SubAgent '{subagent_name}' has no ongoing tasks...\n"
+                else:
+                    pass
+                    # elapsed = time.time() - start_time
+                    # return f" SubAgent '{subagent_name}' is in progress with {len(pending)} pending tasks...\n Waited for: {elapsed:.0f}s / {timeout}s\n"
+
+            await asyncio.sleep(poll_interval)
+
+        target = f"Task {task_id}" if task_id else "Latest task"
+        return f" Timeout! \nSubAgent '{subagent_name}' has not finished '{target}' in {timeout}s. The task may be still running, use `wait_for_subagent` again or complete other things that can be done in parallel."
+
+    @staticmethod
+    def _format_result(result: SubAgentExecutionResult) -> str:
+        output = f" SubAgent '{result.agent_name}' execution completed\n Status: {'Success' if result.success else 'Failed'}\n Task id: {result.task_id}\n Execution time: {result.execution_time:.1f}s\n--- Result ---\n{result.result}\n"
+        if result.error:
+            output += f"\n Error: {result.error}"
+        return output
+
+
 # Tool instances
 CREATE_DYNAMIC_SUBAGENT_TOOL = CreateDynamicSubAgentTool()
 REMOVE_DYNAMIC_SUBAGENT_TOOL = RemoveDynamicSubagentTool()
@@ -977,3 +1479,4 @@ UNPROTECT_SUBAGENT_TOOL = UnprotectSubagentTool()
 SEND_SHARED_CONTEXT_TOOL = SendSharedContextTool()
 SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT = SendSharedContextToolForMainAgent()
 VIEW_SHARED_CONTEXT_TOOL = ViewSharedContextTool()
+WAIT_FOR_SUBAGENT_TOOL = WaitForSubagentTool()

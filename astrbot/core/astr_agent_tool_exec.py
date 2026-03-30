@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import inspect
 import json
+import time
 import traceback
 import typing as T
 import uuid
@@ -366,7 +367,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
                 # 注入公共上下文
                 shared_context_prompt = (
-                    DynamicSubAgentManager.build_shared_context_prompt(umo, agent_name)
+                    DynamicSubAgentManager.build_shared_context_prompt_v2(
+                        umo, agent_name
+                    )
                 )
                 if shared_context_prompt:
                     subagent_system_prompt += f"\n{shared_context_prompt}"
@@ -430,38 +433,75 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ):
         """Execute a handoff as a background task.
 
-        Immediately yields a success response with a task_id, then runs
-        the subagent asynchronously.  When the subagent finishes, a
-        ``CronMessageEvent`` is created so the main LLM can inform the
-        user of the result – the same pattern used by
-        ``_execute_background`` for regular background tasks.
+        当启用增强SubAgent时，会在 DynamicSubAgentManager 中创建 pending 任务，
+        并返回 task_id 给主 Agent，以便后续通过 wait_for_subagent 获取结果。
         """
-        task_id = uuid.uuid4().hex
+        event = run_context.context.event
+        umo = event.unified_msg_origin
+        agent_name = getattr(tool.agent, "name", None)
+
+        # 生成 subagent_task_id（用于 DynamicSubAgentManager）
+        subagent_task_id = None
+
+        # 检查是否启用增强版 SubAgent
+        try:
+            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+            if agent_name:
+                session = DynamicSubAgentManager.get_session(umo)
+                if session and agent_name in session.agents:
+                    # 增强版：在 DynamicSubAgentManager 中创建 pending 任务
+                    subagent_task_id = (
+                        DynamicSubAgentManager.create_pending_subagent_task(
+                            session_id=umo, agent_name=agent_name
+                        )
+                    )
+                    logger.info(
+                        f"[EnhancedSubAgent] Created pending task {subagent_task_id} for {agent_name}"
+                    )
+        except Exception as e:
+            logger.debug(f"[EnhancedSubAgent] Failed to create pending task: {e}")
+
+        # 生成原始的 task_id（用于唤醒机制等）
+        original_task_id = uuid.uuid4().hex
 
         async def _run_handoff_in_background() -> None:
             try:
                 await cls._do_handoff_background(
                     tool=tool,
                     run_context=run_context,
-                    task_id=task_id,
+                    task_id=original_task_id,
+                    subagent_task_id=subagent_task_id,
                     **tool_args,
                 )
+
             except Exception as e:  # noqa: BLE001
                 logger.error(
-                    f"Background handoff {task_id} ({tool.name}) failed: {e!s}",
+                    f"Background handoff {original_task_id} ({tool.name}) failed: {e!s}",
                     exc_info=True,
                 )
 
         asyncio.create_task(_run_handoff_in_background())
 
-        text_content = mcp.types.TextContent(
-            type="text",
-            text=(
-                f"Background task dedicated to subagent '{tool.agent.name}' submitted. task_id={task_id}. "
-                f"The subagent '{tool.agent.name}' is working on the task on hehalf you. "
-                f"You will be notified when it finishes."
-            ),
-        )
+        # 构建返回消息
+        if subagent_task_id:
+            text_content = mcp.types.TextContent(
+                type="text",
+                text=(
+                    f"Background task submitted. subagent_task_id={subagent_task_id}. "
+                    f"SubAgent '{agent_name}' is working on the task. "
+                    f"Use wait_for_subagent(subagent_name='{agent_name}', task_id='{subagent_task_id}') to get the result."
+                ),
+            )
+        else:
+            text_content = mcp.types.TextContent(
+                type="text",
+                text=(
+                    f"Background task submitted. task_id={original_task_id}. "
+                    f"SubAgent '{agent_name}' is working on the task. "
+                    f"You will be notified when it finishes."
+                ),
+            )
         yield mcp.types.CallToolResult(content=[text_content])
 
     @classmethod
@@ -472,13 +512,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         task_id: str,
         **tool_args,
     ) -> None:
-        """Run the subagent handoff and, on completion, wake the main agent."""
+        """Run the subagent handoff.
+        当增强版 SubAgent 启用时，结果存储到 DynamicSubAgentManager，主 Agent 可通过 wait_for_subagent 获取。
+        否则使用原有的 _wake_main_agent_for_background_result 流程。
+        """
+
+        start_time = time.time()
         result_text = ""
+        error_text = None
         tool_args = dict(tool_args)
         tool_args["image_urls"] = await cls._collect_handoff_image_urls(
             run_context,
             tool_args.get("image_urls"),
         )
+
+        event = run_context.context.event
+        umo = event.unified_msg_origin
+        agent_name = getattr(tool.agent, "name", None)
+
         try:
             async for r in cls._execute_handoff(
                 tool,
@@ -490,26 +541,106 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     for content in r.content:
                         if isinstance(content, mcp.types.TextContent):
                             result_text += content.text + "\n"
+
         except Exception as e:
+            error_text = str(e)
             result_text = (
                 f"error: Background task execution failed, internal error: {e!s}"
             )
 
-        event = run_context.context.event
+        execution_time = time.time() - start_time
+        success = error_text is None
 
-        await cls._wake_main_agent_for_background_result(
-            run_context=run_context,
-            task_id=task_id,
-            tool_name=tool.name,
-            result_text=result_text,
-            tool_args=tool_args,
-            note=(
-                event.get_extra("background_note")
-                or f"Background task for subagent '{tool.agent.name}' finished."
-            ),
-            summary_name=f"Dedicated to subagent `{tool.agent.name}`",
-            extra_result_fields={"subagent_name": tool.agent.name},
-        )
+        # 检查是否是增强版 SubAgent
+        enhanced_enabled = False
+        try:
+            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+            session = DynamicSubAgentManager.get_session(umo)
+            if session and agent_name:
+                # 检查是否是动态创建的 SubAgent
+                if agent_name in session.agents:
+                    enhanced_enabled = True
+        except Exception:
+            pass
+
+        subagent_task_id = tool_args.get("subagent_task_id", None)
+
+        if enhanced_enabled and agent_name and subagent_task_id:
+            # 增强版：存储结果到 DynamicSubAgentManager
+            try:
+                from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+                # 存储结果（使用 subagent_task_id）
+                DynamicSubAgentManager.store_subagent_result(
+                    session_id=umo,
+                    agent_name=agent_name,
+                    task_id=subagent_task_id,
+                    success=success,
+                    result=result_text.strip() if result_text else "",
+                    error=error_text,
+                    execution_time=execution_time,
+                )
+
+                # 如果启用了 shared_context，发布完成状态
+                if session.shared_context_enabled:
+                    status_content = (
+                        f" SubAgent '{agent_name}' 任务完成，耗时 {execution_time:.1f}s"
+                    )
+                    if error_text:
+                        status_content = (
+                            f" SubAgent '{agent_name}' 任务失败: {error_text}"
+                        )
+
+                    DynamicSubAgentManager.add_shared_context(
+                        session_id=umo,
+                        sender=agent_name,
+                        context_type="status",
+                        content=status_content,
+                        target="all",
+                    )
+
+                logger.info(
+                    f"[EnhancedSubAgent] Stored result for {agent_name} task {subagent_task_id}: "
+                    f"success={success}, time={execution_time:.1f}s"
+                )
+
+            except Exception as e:
+                logger.error(
+                    f"[EnhancedSubAgent] Failed to store result for {agent_name}: {e}"
+                )
+                # 存储失败时，回退到原有的唤醒机制
+                await cls._wake_main_agent_for_background_result(
+                    run_context=run_context,
+                    task_id=task_id,
+                    tool_name=tool.name,
+                    result_text=result_text,
+                    tool_args=tool_args,
+                    note=(
+                        event.get_extra("background_note")
+                        or f"Background task for subagent '{agent_name}' finished."
+                    ),
+                    summary_name=f"Dedicated to subagent `{agent_name}`",
+                    extra_result_fields={
+                        "subagent_name": agent_name,
+                        "subagent_task_id": subagent_task_id,
+                    },
+                )
+        else:
+            # 非增强版：使用原有的唤醒机制
+            await cls._wake_main_agent_for_background_result(
+                run_context=run_context,
+                task_id=task_id,
+                tool_name=tool.name,
+                result_text=result_text,
+                tool_args=tool_args,
+                note=(
+                    event.get_extra("background_note")
+                    or f"Background task for subagent '{agent_name}' finished."
+                ),
+                summary_name=f"Dedicated to subagent `{agent_name}`",
+                extra_result_fields={"subagent_name": agent_name},
+            )
 
     @classmethod
     async def _execute_background(
