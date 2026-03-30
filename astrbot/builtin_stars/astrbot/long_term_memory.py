@@ -43,6 +43,7 @@ class LongTermMemory:
         ar_possibility = active_reply["possibility_reply"]
         ar_prompt = active_reply.get("prompt", "")
         ar_whitelist = active_reply.get("whitelist", [])
+        unique_session = cfg.get("platform_settings", {}).get("unique_session", False)
         ret = {
             "max_cnt": max_cnt,
             "image_caption": image_caption,
@@ -53,6 +54,7 @@ class LongTermMemory:
             "ar_possibility": ar_possibility,
             "ar_prompt": ar_prompt,
             "ar_whitelist": ar_whitelist,
+            "unique_session": unique_session,
         }
         return ret
 
@@ -156,7 +158,6 @@ class LongTermMemory:
         chats_str = "\n---\n".join(self.session_chats[event.unified_msg_origin])
 
         cfg = self.cfg(event)
-        unique_session = cfg.get("platform_settings", {}).get("unique_session", False)
         if cfg["enable_active_reply"]:
             prompt = req.prompt
             req.prompt = (
@@ -165,7 +166,7 @@ class LongTermMemory:
                 "Please react to it. Only output your response and do not output any other information. "
                 "You MUST use the SAME language as the chatroom is using."
             )
-            if not unique_session:
+            if not cfg["unique_session"]:
                 req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
         else:
             req.system_prompt += (
