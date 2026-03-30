@@ -3,9 +3,10 @@ name = "AstrBot"
 version = "4.23.0"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
-requires-python = ">=3.12,<3.14"
+license = { text = "AGPL-3.0-or-later" }
+requires-python = ">=3.12"
 
-keywords = ["Astrbot", "Astrbot Module", "Astrbot Plugin"]
+keywords = ["AstrBot", "Agent", "Chatbot", "IM"]
 
 dependencies = [
   "aiocqhttp>=1.4.4",
@@ -86,6 +87,9 @@ dev = [
 
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
+
+[project.urls]
+Repository = "https://github.com/AstrBotDevs/AstrBot"
 
 [tool.ruff]
 exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]
