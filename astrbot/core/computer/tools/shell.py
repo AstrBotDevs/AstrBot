@@ -1,3 +1,18 @@
+"""
+ExecuteShellTool - shell execution via ComputerBooter system.
+
+This module provides shell execution functionality by delegating to the
+ComputerBooter system, which supports both local and remote execution modes.
+
+Behavior:
+- When is_local=True, uses LocalBooter with optional local_working_dir.
+- When is_local=False, uses remote SandBoxBooter via get_booter.
+- Shell execution is handled by the ComputerBooter's shell implementation.
+- Returns JSON string describing result to match existing tool contract.
+"""
+
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass, field
 
@@ -12,6 +27,13 @@ from .permissions import check_admin_permission
 
 @dataclass
 class ExecuteShellTool(FunctionTool):
+    """
+    Shell execution tool using ComputerBooter system.
+
+    Delegates shell execution to ComputerBooter which provides a unified
+    interface for both local and remote shell operations.
+    """
+
     name: str = "astrbot_execute_shell"
     description: str = "Execute a command in the shell."
     parameters: dict = field(
@@ -47,6 +69,18 @@ class ExecuteShellTool(FunctionTool):
         background: bool = False,
         env: dict = {},
     ) -> ToolExecResult:
+        """
+        Execute a shell command via ComputerBooter.
+
+        Args:
+            context: The agent context wrapper containing event and session info.
+            command: The shell command to execute.
+            background: Whether to run the command in background mode.
+            env: Optional environment variables to set for the execution.
+
+        Returns:
+            ToolExecResult containing JSON string with execution result.
+        """
         if permission_error := check_admin_permission(context, "Shell execution"):
             return permission_error
 
