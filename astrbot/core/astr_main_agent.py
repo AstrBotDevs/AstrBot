@@ -337,7 +337,7 @@ async def _ensure_persona_and_skills(
     if not req.func_tool:
         req.func_tool = persona_toolset  # type: ignore[assignment]
     else:
-        req.func_tool.merge(persona_toolset)
+        req.func_tool.merge(persona_toolset)  # type: ignore[arg-type]
 
     # sub agents integration
     orch_cfg = plugin_context.get_config().get("subagent_orchestrator", {})
