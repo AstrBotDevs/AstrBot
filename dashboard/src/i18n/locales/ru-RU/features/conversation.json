@@ -31,6 +31,10 @@
             "createdAt": "Создан",
             "updatedAt": "Обновлен",
             "actions": "Действия"
+        },
+        "umoDisplay": {
+            "parsed": "Разобрано",
+            "raw": "UMO"
         }
     },
     "actions": {
@@ -97,6 +101,8 @@
         "batchDeletePartial": "Удаление завершено: успешно {deleted}, ошибок {failed}",
         "exportSuccess": "Экспорт завершен",
         "exportError": "Ошибка экспорта",
-        "noItemSelectedForExport": "Сначала выберите диалоги для экспорта"
+        "noItemSelectedForExport": "Сначала выберите диалоги для экспорта",
+        "copySuccess": "Скопировано",
+        "copyError": "Не удалось скопировать"
     }
 }

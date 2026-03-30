@@ -1,10 +1,14 @@
 {
+  "header": {
+    "eyebrow": "Automation",
+    "live": "Live Sync"
+  },
   "page": {
     "title": "Future Task Management",
     "beta": "Experimental",
     "subtitle": "See scheduled tasks for AstrBot. AstrBot will wake up, run them, and deliver the results.",
     "proactive": {
-      "supported": "Proactive delivery is available on: {platforms}",
+      "supported": "Proactive delivery is available only on the configured platforms below",
       "unsupported": "No proactive messaging platforms enabled. Turn them on in Platform settings."
     }
   },
@@ -15,8 +19,41 @@
     "cancel": "Cancel",
     "submit": "Create"
   },
+  "overview": {
+    "totalTasks": "Total Tasks",
+    "totalTasksNote": "Registered future tasks",
+    "enabledTasks": "Enabled Tasks",
+    "enabledTasksNote": "Tasks ready to wake and run",
+    "oneOffTasks": "One-off Tasks",
+    "recurringTasksNote": "{count} recurring tasks",
+    "proactivePlatforms": "Proactive Platforms",
+    "proactivePlatformsNote": "Platforms able to deliver results proactively"
+  },
+  "section": {
+    "registered": {
+      "title": "Task List",
+      "subtitle": "Review the registered tasks, execution timing, and current state"
+    },
+    "delivery": {
+      "title": "Delivery Status",
+      "subtitle": "After a task runs, results are proactively sent back through supported platforms",
+      "support": "Proactive delivery",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "enabledPlatforms": "Enabled platforms"
+    },
+    "quickCreate": {
+      "title": "Quick Create",
+      "runMode": "Task mode",
+      "target": "Targeting"
+    },
+    "platforms": {
+      "title": "Supported Platforms"
+    }
+  },
   "table": {
     "title": "Registered Tasks",
+    "subtitle": "Track cron setup, session target, last run history, and enabled state",
     "empty": "No tasks yet.",
     "headers": {
       "name": "Name",
