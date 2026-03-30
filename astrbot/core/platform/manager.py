@@ -268,7 +268,7 @@ class PlatformManager:
                 # Remove the exact adapter instance so reload remains safe
                 # even when client_self_id changes during the adapter lifecycle.
                 self.platform_insts.remove(inst)
-            except Exception:
+            except ValueError:
                 logger.warning(f"可能未完全移除 {platform_id} 平台适配器")
 
             await self._terminate_inst_and_tasks(inst)
