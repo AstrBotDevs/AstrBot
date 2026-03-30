@@ -33,7 +33,7 @@ class botClient(Client):
     async def on_group_at_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
         )
@@ -44,7 +44,7 @@ class botClient(Client):
 
     # 收到频道消息
     async def on_at_message_create(self, message: botpy.message.Message) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
         )
@@ -57,7 +57,7 @@ class botClient(Client):
     async def on_direct_message_create(
         self, message: botpy.message.DirectMessage
     ) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
         )
@@ -67,7 +67,7 @@ class botClient(Client):
 
     # 收到 C2C 消息
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
-        abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
         )

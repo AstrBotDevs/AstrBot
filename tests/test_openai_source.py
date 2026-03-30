@@ -4,6 +4,7 @@ import pytest
 from openai.types.chat.chat_completion import ChatCompletion
 from PIL import Image as PILImage
 
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 
@@ -1156,5 +1157,41 @@ async def test_prepare_chat_payload_strips_non_json_serializable_kwargs():
         )
         assert "abort_signal" not in payloads
         assert payloads.get("max_tokens") == 1024
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_parse_openai_completion_raises_empty_model_output_error():
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_validate(
+            {
+                "id": "chatcmpl-empty",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "refusal": None,
+                            "tool_calls": None,
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 0,
+                    "total_tokens": 1,
+                },
+            }
+        )
+
+        with pytest.raises(EmptyModelOutputError):
+            await provider._parse_openai_completion(completion, tools=None)
     finally:
         await provider.terminate()

@@ -906,7 +906,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
 
     def _build_tool_requery_context(
-        self, tool_names: list[str]
+        self, tool_names: list[str], extra_instruction: str | None = None
     ) -> list[dict[str, Any]]:
         """Build contexts for re-querying LLM with param-only tool schemas."""
         contexts: list[dict[str, Any]] = []
@@ -921,6 +921,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             + ". Now call the tool(s) with required arguments using the tool schema, "
             "and follow the existing tool-use rules."
         )
+        if extra_instruction:
+            instruction = f"{instruction}\n{extra_instruction}"
         if contexts and contexts[0].get("role") == "system":
             content = contexts[0].get("content") or ""
             contexts[0]["content"] = f"{content}\n{instruction}"

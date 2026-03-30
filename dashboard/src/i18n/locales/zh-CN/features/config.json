@@ -45,7 +45,8 @@
     "advanced": "高级设置",
     "security": "安全设置",
     "appearance": "外观设置",
-    "notification": "通知设置"
+    "notification": "通知设置",
+    "moreConfig": "更多配置"
   },
   "general": {
     "botName": "机器人名称",
@@ -80,13 +81,16 @@
     "title": "配置文件管理",
     "description": "AstrBot 支持针对不同机器人分别设置配置文件。默认会使用 `default` 配置。",
     "newConfig": "新建配置文件",
+    "copyConfig": "复制配置文件",
     "editConfig": "编辑配置文件",
     "manageConfigs": "管理配置文件...",
     "configName": "名称",
     "fillConfigName": "填写配置文件名称",
     "confirmDelete": "确定要删除配置文件 \"{name}\" 吗?此操作不可恢复。",
     "pleaseEnterName": "请填写配置名称",
+    "nameExists": "配置文件名称已存在，请使用其他名称",
     "createFailed": "新配置文件创建失败",
+    "copyFailed": "复制配置文件失败",
     "deleteFailed": "删除配置文件失败",
     "updateFailed": "更新配置文件失败"
   },

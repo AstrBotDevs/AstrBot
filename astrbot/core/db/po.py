@@ -38,6 +38,30 @@ class PlatformStat(SQLModel, table=True):
     )
 
 
+class ProviderStat(TimestampMixin, SQLModel, table=True):
+    """Per-response provider stats for internal agent runs."""
+
+    __tablename__: str = "provider_stats"
+
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    agent_type: str = Field(default="internal", nullable=False, index=True)
+    status: str = Field(default="completed", nullable=False, index=True)
+    umo: str = Field(nullable=False, index=True)
+    conversation_id: str | None = Field(default=None, index=True)
+    provider_id: str = Field(nullable=False, index=True)
+    provider_model: str | None = Field(default=None, index=True)
+    token_input_other: int = Field(default=0, nullable=False)
+    token_input_cached: int = Field(default=0, nullable=False)
+    token_output: int = Field(default=0, nullable=False)
+    start_time: float = Field(default=0.0, nullable=False)
+    end_time: float = Field(default=0.0, nullable=False)
+    time_to_first_token: float = Field(default=0.0, nullable=False)
+
+
 class ConversationV2(TimestampMixin, SQLModel, table=True):
     __tablename__: str = "conversations"
 
