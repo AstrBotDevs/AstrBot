@@ -333,7 +333,7 @@ async def _ensure_persona_and_skills(
             for tool_name in persona["tools"]:
                 tool = tmgr.get_func(tool_name)
                 if tool and tool.active:
-                    persona_toolset.add_tool(tool)
+                    persona_toolset.add_tool(tool)  # type: ignore[arg-type]
     if not req.func_tool:
         req.func_tool = persona_toolset
     else:
