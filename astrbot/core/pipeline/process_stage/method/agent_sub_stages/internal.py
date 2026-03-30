@@ -208,6 +208,20 @@ class InternalAgentSubStage(Stage):
             except Exception:
                 logger.warning("send_typing failed", exc_info=True)
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
+            sdk_plugin_bridge = getattr(
+                self.ctx.plugin_manager.context, "sdk_plugin_bridge", None
+            )
+            if sdk_plugin_bridge is not None:
+                try:
+                    await sdk_plugin_bridge.dispatch_message_event(
+                        "waiting_llm_request",
+                        event,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "SDK waiting_llm_request dispatch failed: %s",
+                        exc,
+                    )
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
@@ -253,6 +267,19 @@ class InternalAgentSubStage(Stage):
                         if reset_coro:
                             reset_coro.close()
                         return
+                    if sdk_plugin_bridge is not None:
+                        try:
+                            await sdk_plugin_bridge.dispatch_message_event(
+                                "llm_request",
+                                event,
+                                {
+                                    "prompt": req.prompt,
+                                    "provider_id": provider.meta().id,
+                                },
+                                provider_request=req,
+                            )
+                        except Exception as exc:
+                            logger.warning("SDK llm_request dispatch failed: %s", exc)
 
                     # apply reset
                     if reset_coro:
@@ -500,46 +527,3 @@ class InternalAgentSubStage(Stage):
 # these hosts are base64 encoded
 BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}
 decoded_blocked = [base64.b64decode(b).decode("utf-8") for b in BLOCKED]
-
-
-async def _record_internal_agent_stats(
-    event: AstrMessageEvent,
-    req: ProviderRequest | None,
-    agent_runner: AgentRunner | None,
-    final_resp: LLMResponse | None,
-) -> None:
-    """Persist internal agent stats without affecting the user response flow."""
-    if agent_runner is None:
-        return
-
-    provider = agent_runner.provider
-    stats = agent_runner.stats
-    if provider is None or stats is None:
-        return
-
-    try:
-        provider_config = getattr(provider, "provider_config", {}) or {}
-        conversation_id = (
-            req.conversation.cid
-            if req is not None and req.conversation is not None
-            else None
-        )
-
-        if agent_runner.was_aborted():
-            status = "aborted"
-        elif final_resp is not None and final_resp.role == "err":
-            status = "error"
-        else:
-            status = "completed"
-
-        await db_helper.insert_provider_stat(
-            umo=event.unified_msg_origin,
-            conversation_id=conversation_id,
-            provider_id=provider_config.get("id", "") or provider.meta().id,
-            provider_model=provider.get_model(),
-            status=status,
-            stats=stats.to_dict(),
-            agent_type="internal",
-        )
-    except Exception as e:
-        logger.warning("Persist provider stats failed: %s", e, exc_info=True)

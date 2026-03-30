@@ -1,11 +1,11 @@
-<script setup>
-import { ref, shallowRef, onMounted, onUnmounted, watch } from 'vue';
-import { useCustomizerStore } from '../../../stores/customizer';
-import { useI18n } from '@/i18n/composables';
-import sidebarItems from './sidebarItem';
-import NavItem from './NavItem.vue';
-import { applySidebarCustomization } from '@/utils/sidebarCustomization';
-import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
+<script setup lang="ts">
+import { ref, shallowRef, onMounted, onUnmounted, watch } from "vue";
+import { useCustomizerStore } from "../../../stores/customizer";
+import { useI18n } from "@/i18n/composables";
+import sidebarItems from "./sidebarItem";
+import NavItem from "./NavItem.vue";
+import { applySidebarCustomization } from "@/utils/sidebarCustomization";
+import ChangelogDialog from "@/components/shared/ChangelogDialog.vue";
 
 const { t, locale } = useI18n();
 
@@ -27,12 +27,16 @@ function sanitizeOpenedItems(items, menuItems) {
   }
 
   const groupValues = collectGroupValues(menuItems);
-  return items.filter((item) => typeof item === 'string' && groupValues.has(item));
+  return items.filter(
+    (item) => typeof item === "string" && groupValues.has(item),
+  );
 }
 
 function getInitialOpenedItems(menuItems) {
   try {
-    const stored = JSON.parse(localStorage.getItem('sidebar_openedItems') || '[]');
+    const stored = JSON.parse(
+      localStorage.getItem("sidebar_openedItems") || "[]",
+    );
     return sanitizeOpenedItems(stored, menuItems);
   } catch {
     return [];
@@ -43,9 +47,16 @@ const sidebarMenu = shallowRef(applySidebarCustomization(sidebarItems));
 
 // 侧边栏分组展开状态持久化
 const openedItems = ref(getInitialOpenedItems(sidebarMenu.value));
-watch(openedItems, (val) => {
-  localStorage.setItem('sidebar_openedItems', JSON.stringify(sanitizeOpenedItems(val, sidebarMenu.value)));
-}, { deep: true });
+watch(
+  openedItems,
+  (val) => {
+    localStorage.setItem(
+      "sidebar_openedItems",
+      JSON.stringify(sanitizeOpenedItems(val, sidebarMenu.value)),
+    );
+  },
+  { deep: true },
+);
 
 function refreshSidebarMenu() {
   sidebarMenu.value = applySidebarCustomization(sidebarItems);
@@ -54,7 +65,7 @@ function refreshSidebarMenu() {
 
 // Apply customization on mount and listen for storage changes
 const handleStorageChange = (e) => {
-  if (e.key === 'astrbot_sidebar_customization') {
+  if (e.key === "astrbot_sidebar_customization") {
     refreshSidebarMenu();
   }
 };
@@ -64,13 +75,16 @@ const handleCustomEvent = () => {
 };
 
 onMounted(() => {
-  window.addEventListener('storage', handleStorageChange);
-  window.addEventListener('sidebar-customization-changed', handleCustomEvent);
+  window.addEventListener("storage", handleStorageChange);
+  window.addEventListener("sidebar-customization-changed", handleCustomEvent);
 });
 
 onUnmounted(() => {
-  window.removeEventListener('storage', handleStorageChange);
-  window.removeEventListener('sidebar-customization-changed', handleCustomEvent);
+  window.removeEventListener("storage", handleStorageChange);
+  window.removeEventListener(
+    "sidebar-customization-changed",
+    handleCustomEvent,
+  );
 });
 
 const showIframe = ref(false);
@@ -85,51 +99,51 @@ const maxSidebarWidth = 300;
 const isResizing = ref(false);
 
 const iframeStyle = ref({
-  position: 'fixed',
-  bottom: '16px',
-  right: '16px',
-  width: '490px',
-  height: '640px',
-  minWidth: '300px',
-  minHeight: '200px',
-  background: 'white',
-  resize: 'both',
-  overflow: 'auto',
-  zIndex: '10000000',
-  borderRadius: '12px',
-  boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
+  position: "fixed",
+  bottom: "16px",
+  right: "16px",
+  width: "490px",
+  height: "640px",
+  minWidth: "300px",
+  minHeight: "200px",
+  background: "white",
+  resize: "both",
+  overflow: "auto",
+  zIndex: "10000000",
+  borderRadius: "12px",
+  boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.1)",
 });
 
 if (window.innerWidth < 768) {
   iframeStyle.value = {
-    position: 'fixed',
-    top: '10%',
-    left: '0%',
-    width: '100%',
-    height: '80%',
-    minWidth: '300px',
-    minHeight: '200px',
-    background: 'white',
-    resize: 'both',
-    overflow: 'auto',
-    zIndex: '1002',
-    borderRadius: '12px',
-    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
+    position: "fixed",
+    top: "10%",
+    left: "0%",
+    width: "100%",
+    height: "80%",
+    minWidth: "300px",
+    minHeight: "200px",
+    background: "white",
+    resize: "both",
+    overflow: "auto",
+    zIndex: "1002",
+    borderRadius: "12px",
+    boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.1)",
   };
   customizer.Sidebar_drawer = false;
 }
 
 const dragHeaderStyle = {
-  width: '100%',
-  padding: '8px',
-  background: '#f0f0f0',
-  borderBottom: '1px solid #ccc',
-  borderTopLeftRadius: '8px',
-  borderTopRightRadius: '8px',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  cursor: 'move'
+  width: "100%",
+  padding: "8px",
+  background: "#f0f0f0",
+  borderBottom: "1px solid #ccc",
+  borderTopLeftRadius: "8px",
+  borderTopRightRadius: "8px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  cursor: "move",
 };
 
 function toggleIframe() {
@@ -137,16 +151,17 @@ function toggleIframe() {
 }
 
 function openIframeLink(url) {
-  if (typeof window !== 'undefined') {
-    let url_ = url || "https://astrbot.app";
+  if (typeof window !== "undefined") {
+    const url_ = url || "https://astrbot.app";
     window.open(url_, "_blank");
   }
 }
 
 function openFaqLink() {
-  const faqUrl = locale.value === 'en-US'
-    ? 'https://docs.astrbot.app/en/faq.html'
-    : 'https://docs.astrbot.app/faq.html';
+  const faqUrl =
+    locale.value === "en-US"
+      ? "https://docs.astrbot.app/en/faq.html"
+      : "https://docs.astrbot.app/faq.html";
   openIframeLink(faqUrl);
 }
 
@@ -160,15 +175,15 @@ function clamp(value, min, max) {
 
 function startDrag(clientX, clientY) {
   isDragging = true;
-  const dm = document.getElementById('draggable-iframe');
+  const dm = document.getElementById("draggable-iframe");
   const rect = dm.getBoundingClientRect();
   offsetX = clientX - rect.left;
   offsetY = clientY - rect.top;
-  document.body.style.userSelect = 'none';
-  document.addEventListener('mousemove', onMouseMove);
-  document.addEventListener('mouseup', onMouseUp);
-  document.addEventListener('touchmove', onTouchMove, { passive: false });
-  document.addEventListener('touchend', onTouchEnd);
+  document.body.style.userSelect = "none";
+  document.addEventListener("mousemove", onMouseMove);
+  document.addEventListener("mouseup", onMouseUp);
+  document.addEventListener("touchmove", onTouchMove, { passive: false });
+  document.addEventListener("touchend", onTouchEnd);
 }
 
 function onMouseDown(event) {
@@ -205,65 +220,78 @@ function onTouchEnd() {
 }
 
 function moveAt(clientX, clientY) {
-  const dm = document.getElementById('draggable-iframe');
-  const newLeft = clamp(clientX - offsetX, 0, window.innerWidth - dm.offsetWidth);
-  const newTop = clamp(clientY - offsetY, 0, window.innerHeight - dm.offsetHeight);
+  const dm = document.getElementById("draggable-iframe");
+  const newLeft = clamp(
+    clientX - offsetX,
+    0,
+    window.innerWidth - dm.offsetWidth,
+  );
+  const newTop = clamp(
+    clientY - offsetY,
+    0,
+    window.innerHeight - dm.offsetHeight,
+  );
   // 将拖拽后的位置同步到响应式样式变量中
-  iframeStyle.value.left = newLeft + 'px';
-  iframeStyle.value.top = newTop + 'px';
+  iframeStyle.value.left = newLeft + "px";
+  iframeStyle.value.top = newTop + "px";
 }
 
 function endDrag() {
   isDragging = false;
-  document.body.style.userSelect = '';
-  document.removeEventListener('mousemove', onMouseMove);
-  document.removeEventListener('mouseup', onMouseUp);
-  document.removeEventListener('touchmove', onTouchMove);
-  document.removeEventListener('touchend', onTouchEnd);
+  document.body.style.userSelect = "";
+  document.removeEventListener("mousemove", onMouseMove);
+  document.removeEventListener("mouseup", onMouseUp);
+  document.removeEventListener("touchmove", onTouchMove);
+  document.removeEventListener("touchend", onTouchEnd);
 }
 
 function startSidebarResize(event) {
   isResizing.value = true;
-  document.body.style.userSelect = 'none';
-  document.body.style.cursor = 'ew-resize';
-  
+  document.body.style.userSelect = "none";
+  document.body.style.cursor = "ew-resize";
+
   const startX = event.clientX;
   const startWidth = sidebarWidth.value;
-  
+
   function onMouseMoveResize(event) {
     if (!isResizing.value) return;
-    
+
     const deltaX = event.clientX - startX;
-    const newWidth = Math.max(minSidebarWidth, Math.min(maxSidebarWidth, startWidth + deltaX));
+    const newWidth = Math.max(
+      minSidebarWidth,
+      Math.min(maxSidebarWidth, startWidth + deltaX),
+    );
     sidebarWidth.value = newWidth;
   }
-  
+
   function onMouseUpResize() {
     isResizing.value = false;
-    document.body.style.userSelect = '';
-    document.body.style.cursor = '';
-    document.removeEventListener('mousemove', onMouseMoveResize);
-    document.removeEventListener('mouseup', onMouseUpResize);
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+    document.removeEventListener("mousemove", onMouseMoveResize);
+    document.removeEventListener("mouseup", onMouseUpResize);
   }
-  
-  document.addEventListener('mousemove', onMouseMoveResize);
-  document.addEventListener('mouseup', onMouseUpResize);
+
+  document.addEventListener("mousemove", onMouseMoveResize);
+  document.addEventListener("mouseup", onMouseUpResize);
 }
 
 function formatNumber(num) {
-  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 async function fetchStarCount() {
   try {
-    const response = await fetch('https://cloud.astrbot.app/api/v1/github/repo-info');
+    const response = await fetch(
+      "https://cloud.astrbot.app/api/v1/github/repo-info",
+    );
     const data = await response.json();
     if (data.data && data.data.stargazers_count) {
       starCount.value = data.data.stargazers_count;
-      console.debug('Fetched star count:', starCount.value);
+      console.debug("Fetched star count:", starCount.value);
     }
   } catch (error) {
-    console.debug('Failed to fetch star count:', error);
+    console.debug("Failed to fetch star count:", error);
   }
 }
 
@@ -273,7 +301,6 @@ fetchStarCount();
 function openChangelogDialog() {
   changelogDialog.value = true;
 }
-
 </script>
 
 <template>
@@ -290,23 +317,22 @@ function openChangelogDialog() {
     <div class="sidebar-container">
       <v-list
         v-model:opened="openedItems"
-        :class="['pa-4', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': customizer.mini_sidebar }]"
+        :class="[
+          'pa-4',
+          'listitem',
+          'flex-grow-1',
+          { 'hidden-scrollbar': customizer.mini_sidebar },
+        ]"
         :open-strategy="'multiple'"
       >
         <template
           v-for="(item, i) in sidebarMenu"
           :key="item.title || item.to || `sidebar-item-${i}`"
         >
-          <NavItem
-            :item="item"
-            class="leftPadding"
-          />
+          <NavItem :item="item" class="leftPadding" />
         </template>
       </v-list>
-      <div
-        v-if="!customizer.mini_sidebar"
-        class="sidebar-footer"
-      >
+      <div v-if="!customizer.mini_sidebar" class="sidebar-footer">
         <v-btn
           class="sidebar-footer-btn"
           size="small"
@@ -315,7 +341,7 @@ function openChangelogDialog() {
           to="/settings"
           prepend-icon="mdi-cog"
         >
-          {{ t('core.navigation.settings') }}
+          {{ t("core.navigation.settings") }}
         </v-btn>
         <v-btn
           class="sidebar-footer-btn"
@@ -324,7 +350,7 @@ function openChangelogDialog() {
           prepend-icon="mdi-note-text-outline"
           @click="openChangelogDialog"
         >
-          {{ t('core.navigation.changelog') }}
+          {{ t("core.navigation.changelog") }}
         </v-btn>
         <v-btn
           class="sidebar-footer-btn"
@@ -333,7 +359,7 @@ function openChangelogDialog() {
           prepend-icon="mdi-book-open-variant"
           @click="toggleIframe"
         >
-          {{ t('core.navigation.documentation') }}
+          {{ t("core.navigation.documentation") }}
         </v-btn>
         <v-btn
           class="sidebar-footer-btn"
@@ -342,7 +368,7 @@ function openChangelogDialog() {
           prepend-icon="mdi-frequently-asked-questions"
           @click="openFaqLink"
         >
-          {{ t('core.navigation.faq') }}
+          {{ t("core.navigation.faq") }}
         </v-btn>
         <v-btn
           class="sidebar-footer-btn"
@@ -351,46 +377,42 @@ function openChangelogDialog() {
           prepend-icon="mdi-github"
           @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')"
         >
-          {{ t('core.navigation.github') }}
+          {{ t("core.navigation.github") }}
           <v-chip
             v-if="starCount"
             size="x-small"
             variant="outlined"
             class="ml-2"
-            style="font-weight: normal;"
+            style="font-weight: normal"
           >
             {{ formatNumber(starCount) }}
           </v-chip>
         </v-btn>
       </div>
     </div>
-    
-    <div 
+
+    <div
       v-if="!customizer.mini_sidebar && customizer.Sidebar_drawer"
       class="sidebar-resize-handle"
-      :class="{ 'resizing': isResizing }"
+      :class="{ resizing: isResizing }"
       @mousedown="startSidebarResize"
     />
   </v-navigation-drawer>
-  
-  <div
-    v-if="showIframe"
-    id="draggable-iframe"
-    :style="iframeStyle"
-  >
+
+  <div v-if="showIframe" id="draggable-iframe" :style="iframeStyle">
     <div
       :style="dragHeaderStyle"
       @mousedown="onMouseDown"
       @touchstart="onTouchStart"
     >
-      <div style="display: flex; align-items: center;">
+      <div style="display: flex; align-items: center">
         <v-icon icon="mdi-cursor-move" />
-        <span style="margin-left: 8px;">{{ t('core.navigation.drag') }}</span>
+        <span style="margin-left: 8px">{{ t("core.navigation.drag") }}</span>
       </div>
-      <div style="display: flex; gap: 8px;">
+      <div style="display: flex; gap: 8px">
         <v-btn
           icon
-          style="border-radius: 8px; border: 1px solid #ccc;"
+          style="border-radius: 8px; border: 1px solid #ccc"
           @click.stop="openIframeLink('https://astrbot.app')"
           @mousedown.stop
         >
@@ -398,7 +420,7 @@ function openChangelogDialog() {
         </v-btn>
         <v-btn
           icon
-          style="border-radius: 8px; border: 1px solid #ccc;"
+          style="border-radius: 8px; border: 1px solid #ccc"
           @click.stop="toggleIframe"
           @mousedown.stop
         >
@@ -408,7 +430,13 @@ function openChangelogDialog() {
     </div>
     <iframe
       src="https://astrbot.app"
-      style="width: 100%; height: calc(100% - 66px); border: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;"
+      style="
+        width: 100%;
+        height: calc(100% - 66px);
+        border: none;
+        border-bottom-left-radius: 12px;
+        border-bottom-right-radius: 12px;
+      "
     />
   </div>
 
@@ -436,7 +464,7 @@ function openChangelogDialog() {
 }
 
 .sidebar-resize-handle::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;

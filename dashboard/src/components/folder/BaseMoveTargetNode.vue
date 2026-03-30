@@ -19,15 +19,20 @@
           @click.stop="toggleExpand"
         >
           <v-icon size="16">
-            {{ isExpanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+            {{ isExpanded ? "mdi-chevron-down" : "mdi-chevron-right" }}
           </v-icon>
         </v-btn>
-        <div
-          v-else
-          class="expand-placeholder"
-        />
-        <v-icon :color="isDisabled ? 'grey' : (selectedFolderId === folder.folder_id ? 'primary' : '')">
-          {{ isExpanded ? 'mdi-folder-open' : 'mdi-folder' }}
+        <div v-else class="expand-placeholder" />
+        <v-icon
+          :color="
+            isDisabled
+              ? 'grey'
+              : selectedFolderId === folder.folder_id
+                ? 'primary'
+                : ''
+          "
+        >
+          {{ isExpanded ? "mdi-folder-open" : "mdi-folder" }}
         </v-icon>
       </template>
       <v-list-item-title class="text-truncate">
@@ -53,66 +58,66 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, type PropType } from 'vue';
-import type { FolderTreeNode } from './types';
+import { defineComponent, type PropType } from "vue";
+import type { FolderTreeNode } from "./types";
 
 export default defineComponent({
-    name: 'BaseMoveTargetNode',
-    props: {
-        folder: {
-            type: Object as PropType<FolderTreeNode>,
-            required: true
-        },
-        depth: {
-            type: Number,
-            default: 0
-        },
-        selectedFolderId: {
-            type: String as PropType<string | null>,
-            default: null
-        },
-        disabledFolderIds: {
-            type: Array as PropType<string[]>,
-            default: () => []
-        }
+  name: "BaseMoveTargetNode",
+  props: {
+    folder: {
+      type: Object as PropType<FolderTreeNode>,
+      required: true,
     },
-    emits: ['select'],
-    data() {
-        return {
-            isExpanded: true
-        };
+    depth: {
+      type: Number,
+      default: 0,
     },
-    computed: {
-        hasChildren(): boolean {
-            return this.folder.children && this.folder.children.length > 0;
-        },
-        isDisabled(): boolean {
-            return this.disabledFolderIds.includes(this.folder.folder_id);
-        }
+    selectedFolderId: {
+      type: String as PropType<string | null>,
+      default: null,
     },
-    methods: {
-        toggleExpand() {
-            this.isExpanded = !this.isExpanded;
-        }
-    }
+    disabledFolderIds: {
+      type: Array as PropType<string[]>,
+      default: () => [],
+    },
+  },
+  emits: ["select"],
+  data() {
+    return {
+      isExpanded: true,
+    };
+  },
+  computed: {
+    hasChildren(): boolean {
+      return this.folder.children && this.folder.children.length > 0;
+    },
+    isDisabled(): boolean {
+      return this.disabledFolderIds.includes(this.folder.folder_id);
+    },
+  },
+  methods: {
+    toggleExpand() {
+      this.isExpanded = !this.isExpanded;
+    },
+  },
 });
 </script>
 
 <style scoped>
 .base-move-target-node {
-    width: 100%;
+  width: 100%;
 }
 
 .folder-item {
-    min-height: 36px;
+  min-height: 36px;
 }
 
 .expand-btn {
-    margin-right: 4px;
+  margin-right: 4px;
 }
 
 .expand-placeholder {
-    width: 28px;
-    flex-shrink: 0;
+  width: 28px;
+  flex-shrink: 0;
 }
 </style>

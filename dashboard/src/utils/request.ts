@@ -123,8 +123,10 @@ export function resolveApiUrl(
 export function resolvePublicUrl(path: string): string {
   const base = import.meta.env.BASE_URL || "/";
   const cleanBase = base.endsWith("/") ? base : `${base}/`;
-  return new URL(path.replace(/^\/+/, ""), window.location.origin + cleanBase)
-    .toString();
+  return new URL(
+    path.replace(/^\/+/, ""),
+    window.location.origin + cleanBase,
+  ).toString();
 }
 
 export function resolveWebSocketUrl(
@@ -155,7 +157,9 @@ const service = axios.create({
 });
 
 service.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const normalizedBaseUrl = normalizeBaseUrl(config.baseURL ?? service.defaults.baseURL);
+  const normalizedBaseUrl = normalizeBaseUrl(
+    config.baseURL ?? service.defaults.baseURL,
+  );
 
   if (typeof config.url === "string") {
     config.url = normalizePathForBase(config.url, normalizedBaseUrl);

@@ -117,10 +117,11 @@ class Provider(AbstractProvider):
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
             tools: tool set
+<<<<<<< HEAD
+            contexts: 上下文,和 prompt 二选一使用
+            tool_calls_result: 回传给 LLM 的工具调用结果｡参考: https://platform.openai.com/docs/guides/function-calling
             tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
-            contexts: 上下文，和 prompt 二选一使用
-            tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
-            extra_user_content_parts: 额外的内容块列表，用于在用户消息后添加额外的文本块（如系统提醒、指令等）
+            extra_user_content_parts: 额外的内容块列表,用于在用户消息后添加额外的文本块(如系统提醒｡指令等)
             kwargs: 其他参数
 
         Notes:
@@ -150,9 +151,10 @@ class Provider(AbstractProvider):
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
             tools: tool set
+<<<<<<< HEAD
+            contexts: 上下文,和 prompt 二选一使用
+            tool_calls_result: 回传给 LLM 的工具调用结果｡参考: https://platform.openai.com/docs/guides/function-calling
             tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
-            contexts: 上下文，和 prompt 二选一使用
-            tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
             kwargs: 其他参数
 
         Notes:

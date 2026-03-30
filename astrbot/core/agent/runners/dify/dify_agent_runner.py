@@ -11,11 +11,13 @@ from astrbot.core.agent.response import AgentResponseData
 from astrbot.core.agent.run_context import ContextWrapper, TContext
 from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgentRunner
 from astrbot.core.agent.runners.dify.dify_api_client import DifyAPIClient
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 
@@ -31,19 +33,32 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
         self,
+        provider: Provider,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
+        tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
-        provider_config: dict,
+        streaming: bool = False,
+        enforce_max_turns: int = -1,
+        llm_compress_instruction: str | None = None,
+        llm_compress_keep_recent: int = 0,
+        llm_compress_provider: Provider | None = None,
+        truncate_turns: int = 1,
+        custom_token_counter: Any = None,
+        custom_compressor: Any = None,
+        tool_schema_mode: str | None = "full",
+        fallback_providers: list[Provider] | None = None,
+        provider_config: dict | None = None,
         **kwargs: Any,
     ) -> None:
         self.req = request
-        self.streaming = kwargs.get("streaming", False)
+        self.streaming = streaming
         self.final_llm_resp = None
         self._state = AgentState.IDLE
         self.agent_hooks = agent_hooks
         self.run_context = run_context
 
+        provider_config = provider_config or {}
         self.api_key = provider_config.get("dify_api_key", "")
         self.api_base = provider_config.get("dify_api_base", "https://api.dify.ai/v1")
         self.api_type = provider_config.get("dify_api_type", "chat")
@@ -99,9 +114,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             await self.api_client.close()
 
     @override
-    async def step_until_done(
-        self, max_step: int = 3
-    ) -> AsyncGenerator[AgentResponse, None]:
+    async def step_until_done(self, max_step: int):
         while not self.done():
             async for resp in self.step():
                 yield resp
@@ -159,7 +172,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             key="session_variables",
             default={},
         )
-        payload_vars.update(session_var)
+        payload_vars.update(session_var)  # type: ignore[arg-type]
         payload_vars["system_prompt"] = system_prompt
 
         # 处理不同的 API 类型
@@ -174,7 +187,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     },
                     query=prompt,
                     user=session_id,
-                    conversation_id=conversation_id,
+                    conversation_id=conversation_id or "",
                     files=files_payload,
                     request_timeout=self.timeout,
                 ):

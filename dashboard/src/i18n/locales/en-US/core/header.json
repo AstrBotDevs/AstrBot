@@ -4,6 +4,7 @@
     "hasNewVersion": "AstrBot has a new version!",
     "dashboardHasNewVersion": "WebUI has a new version!"
   },
+  "updateAvailable": "New version available",
   "buttons": {
     "update": "Update",
     "account": "Account",
@@ -81,7 +82,7 @@
   },
   "accountDialog": {
     "title": "Modify Account",
-    "securityWarning": "Security Reminder: Please change the default password to ensure account security",
+    "securityWarning": "Security Reminder: Use `astrbot conf admin` to change your password for account security",
     "form": {
       "currentPassword": "Current Password",
       "newPassword": "New Password",
@@ -89,8 +90,7 @@
       "newUsername": "New Username (Optional)",
       "passwordHint": "Password must be at least 8 characters",
       "confirmPasswordHint": "Please enter new password again to confirm",
-      "usernameHint": "Leave blank to keep current username",
-      "defaultCredentials": "Default username and password are both astrbot"
+      "usernameHint": "Leave blank to keep current username"
     },
     "validation": {
       "passwordRequired": "Please enter password",

@@ -6,12 +6,11 @@ from typing import Any
 
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook, call_handler
+from astrbot.core.pipeline.process_stage.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
-
-from ...context import PipelineContext, call_event_hook, call_handler
-from ..stage import Stage
 
 
 class StarRequestSubStage(Stage):
@@ -60,6 +59,23 @@ class StarRequestSubStage(Stage):
                     e,
                     traceback_text,
                 )
+                sdk_plugin_bridge = getattr(
+                    self.ctx.plugin_manager.context, "sdk_plugin_bridge", None
+                )
+                if sdk_plugin_bridge is not None:
+                    try:
+                        await sdk_plugin_bridge.dispatch_message_event(
+                            "plugin_error",
+                            event,
+                            {
+                                "plugin_name": md.name,
+                                "handler_name": handler.handler_name,
+                                "error": str(e),
+                                "traceback": traceback_text,
+                            },
+                        )
+                    except Exception as exc:
+                        logger.warning("SDK plugin_error dispatch failed: %s", exc)
 
                 if not event.is_stopped() and event.is_at_or_wake_command:
                     ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常:{e}"

@@ -3,7 +3,7 @@ import base64
 import os
 import random
 import uuid
-from typing import cast
+from typing import Any, cast
 
 import aiofiles
 import anyio
@@ -35,7 +35,7 @@ def _patch_qq_botpy_formdata() -> None:
     """
 
     try:
-        from botpy.http import _FormData  # type: ignore
+        from botpy.http import _FormData
 
         if not hasattr(_FormData, "_is_processed"):
             setattr(_FormData, "_is_processed", False)
@@ -75,7 +75,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         # 先标记事件层“已执行发送操作”,避免异常路径遗漏
         await super().send_streaming(generator, use_fallback)
         # QQ C2C 流式协议:开始/中间分片使用 state=1,结束分片使用 state=10
-        stream_payload = {"state": 1, "id": None, "index": 0, "reset": False}
+        stream_payload: dict[str, Any] = {
+            "state": 1,
+            "id": None,
+            "index": 0,
+            "reset": False,
+        }
         last_edit_time = 0  # 上次发送分片的时间
         throttle_interval = 1  # 分片间最短间隔 (秒)
         ret = None
@@ -276,7 +281,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload["content"] = plain_text or None
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
-                        group_openid=source.group_openid,  # type: ignore
+                        group_openid=source.group_openid,
                         **retry_payload,
                     ),
                     payload=payload,
@@ -489,7 +494,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     ) -> Media | None:
         """上传媒体文件"""
         # 构建基础payload
-        payload = {"file_type": file_type, "srv_send_msg": srv_send_msg}
+        payload: dict[str, Any] = {"file_type": file_type, "srv_send_msg": srv_send_msg}
         if file_name:
             payload["file_name"] = file_name
 
@@ -572,7 +577,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None
 
-        return message.Message(**result)
+        return message.Message(**cast(dict[str, Any], result))
 
     @staticmethod
     async def _parse_to_qqofficial(message: MessageChain):

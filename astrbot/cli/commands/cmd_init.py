@@ -3,6 +3,7 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Any, cast
 
 import click
 from filelock import FileLock, Timeout
@@ -112,7 +113,7 @@ async def initialize_astrbot(
     effective_admin_username = (
         admin_username.strip()
         if admin_username
-        else str(DEFAULT_CONFIG["dashboard"]["username"])
+        else str(cast(dict[str, Any], DEFAULT_CONFIG)["dashboard"]["username"])
     )
     if admin_username:
         config = ensure_config_file()
@@ -138,11 +139,7 @@ async def initialize_astrbot(
             default=True,
         )
     ):
-        # 避免在 systemd 模式下因等待输入而阻塞
-        if os.environ.get("ASTRBOT_SYSTEMD") == "1":
-            click.echo("Systemd detected: Skipping dashboard check.")
-        else:
-            await DashboardManager().ensure_installed(astrbot_root)
+        await DashboardManager().ensure_installed(astrbot_root)
     else:
         click.echo("你可以使用在线面版(需支持配置后端)来控制｡")
 

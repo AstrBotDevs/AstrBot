@@ -15,6 +15,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tool_session_manager import ToolSessionManager
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
@@ -332,11 +333,11 @@ async def _ensure_persona_and_skills(
             for tool_name in persona["tools"]:
                 tool = tmgr.get_func(tool_name)
                 if tool and tool.active:
-                    persona_toolset.add_tool(tool)
+                    persona_toolset.add_tool(tool)  # type: ignore[arg-type]
     if not req.func_tool:
-        req.func_tool = persona_toolset
+        req.func_tool = persona_toolset  # type: ignore[assignment]
     else:
-        req.func_tool.merge(persona_toolset)
+        req.func_tool.merge(persona_toolset)  # type: ignore[arg-type]
 
     # sub agents integration
     orch_cfg = plugin_context.get_config().get("subagent_orchestrator", {})
@@ -499,8 +500,11 @@ def _get_image_compress_args(
     if not isinstance(enabled, bool):
         enabled = True
 
-    raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
+    raw_options: Any = provider_settings.get("image_compress_options", {})
+    if isinstance(raw_options, dict):
+        options = dict(raw_options)
+    else:
+        options: dict[str, Any] = {}
 
     max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
     if not isinstance(max_size, int):
@@ -539,8 +543,11 @@ def _get_image_compress_args(
     if not isinstance(enabled, bool):
         enabled = True
 
-    raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
+    raw_options: Any = provider_settings.get("image_compress_options", {})
+    if isinstance(raw_options, dict):
+        options = dict(raw_options)
+    else:
+        options: dict[str, Any] = {}
 
     max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
     if not isinstance(max_size, int):
@@ -590,8 +597,11 @@ def _get_image_compress_args(
     if not isinstance(enabled, bool):
         enabled = True
 
-    raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
+    raw_options: Any = provider_settings.get("image_compress_options", {})
+    if isinstance(raw_options, dict):
+        options = dict(raw_options)
+    else:
+        options: dict[str, Any] = {}
 
     max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
     if not isinstance(max_size, int):
@@ -698,13 +708,10 @@ async def _process_quote_message(
         except BaseException as exc:
             logger.error("处理引用图片失败: %s", exc)
         finally:
-            if (
-                compress_path
-                and compress_path != path
-                and os.path.exists(compress_path)
-            ):
+            if compress_path and compress_path != path:
                 try:
-                    os.remove(compress_path)
+                    if await asyncio.to_thread(os.path.exists, compress_path):
+                        await asyncio.to_thread(os.remove, compress_path)
                 except Exception as exc:
                     logger.warning("Fail to remove temporary compressed image: %s", exc)
 
@@ -1259,7 +1266,7 @@ async def build_main_agent(
         # Internal tools (source='internal') bypass this check — they are
         # not user-togglable in the WebUI, so legacy entries must not block them.
         _inactivated: set[str] = set(
-            sp.get("inactivated_llm_tools", [], scope="global", scope_id="global")
+            str(sp.get("inactivated_llm_tools", [], scope="global", scope_id="global"))
         )
         for _tp in config.tool_providers:
             _tp_tools = _tp.get_tools(_provider_ctx)
@@ -1328,6 +1335,7 @@ async def build_main_agent(
         run_context=AgentContextWrapper(
             context=astr_agent_ctx,
             tool_call_timeout=config.tool_call_timeout,
+            session_manager=ToolSessionManager(),
         ),
         tool_executor=FunctionToolExecutor(),
         agent_hooks=MAIN_AGENT_HOOKS,

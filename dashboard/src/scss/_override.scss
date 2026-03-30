@@ -1,3 +1,25 @@
+// V-main background (let the reactor bg show through)
+.v-main {
+  background: transparent !important;
+}
+
+/* === Color picker preview swatch === */
+.color-preview {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  flex-shrink: 0;
+}
+
+/* === Settings page card layout === */
+.settings-page {
+  .v-card {
+    border: 1px solid rgba(var(--v-theme-borderLight), 0.15) !important;
+    border-radius: 12px !important;
+  }
+}
+
 html {
   .bg-success {
     color: white !important;
@@ -44,5 +66,1116 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Helvetica Neue", monospace;
   color: var(--astrbot-code-color);
 }
+
+/* ============================================================
+   REACTOR FORM CONTROLS — Dark mode industrial overrides
+   ============================================================ */
+
+// Global dark mode — forces visible text on dark bubbles
+.v-theme--bluebusinessdarktheme {
+  /* === App bar / header glassmorphism === */
+  .v-app-bar {
+    background: rgba(15, 15, 18, 0.8) !important;
+    backdrop-filter: blur(20px) saturate(1.3) !important;
+    border-bottom: 1px solid rgba(0, 242, 255, 0.08) !important;
+    box-shadow: none !important;
+  }
+
+  .user-bubble,
+  .user-bubble pre,
+  .user-bubble span,
+  .user-bubble p {
+    color: rgba(228, 225, 230, 0.9) !important;
+  }
+  .bot-bubble,
+  .bot-bubble pre,
+  .bot-bubble span,
+  .bot-bubble p {
+    color: rgba(228, 225, 230, 0.85) !important;
+  }
+}
+
+.v-theme--bluebusinessdarktheme {
+  /* === Switch: MD3 rectangle with Cherenkov glow === */
+  .v-switch {
+    .v-switch__track {
+      border-radius: 4px !important;
+      opacity: 1 !important;
+    }
+    &.v-switch--inset .v-switch__track {
+      height: 20px !important;
+      width: 36px !important;
+    }
+  }
+
+  .v-switch--inset .v-switch__thumb {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  /* === Text fields: transparent glass === */
+  .v-field--variant-outlined {
+    .v-field__outline__start,
+    .v-field__outline__end {
+      border-color: rgba(0, 242, 255, 0.12) !important;
+    }
+    .v-field__outline__start {
+      border-radius: 8px 0 0 8px !important;
+    }
+    .v-field__outline__end {
+      border-radius: 0 8px 8px 0 !important;
+    }
+    &:hover .v-field__outline__start,
+    &:hover .v-field__outline__end,
+    &.v-field--focused .v-field__outline__start,
+    &.v-field--focused .v-field__outline__end {
+      border-color: rgba(0, 242, 255, 0.4) !important;
+    }
+    .v-field--focused .v-field__outline__start,
+    .v-field--focused .v-field__outline__end {
+      border-color: #00F2FF !important;
+      box-shadow: 0 0 8px rgba(0, 242, 255, 0.25) !important;
+    }
+  }
+
+  /* === Search field: dark glass (replaces white solo-filled) === */
+  .v-text-field--variant-solo-filled {
+    background: rgba(15, 15, 22, 0.5) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(0, 242, 255, 0.08) !important;
+    border-radius: 8px !important;
+    .v-field {
+      background: transparent !important;
+    }
+    &:focus-within {
+      border-color: rgba(0, 242, 255, 0.3) !important;
+      box-shadow: 0 0 12px rgba(0, 242, 255, 0.1) !important;
+    }
+  }
+
+  /* === Select / combobox: glass with bottom line === */
+  .v-select__selection-text,
+  .v-combobox .v-field__input {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 13px;
+  }
+
+  /* === Config tabs: reactor styling === */
+  .config-tabs {
+    .v-tab {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: rgba(228, 225, 230, 0.5) !important;
+      border-bottom: 2px solid transparent;
+      transition: all 0.25s ease;
+      &:hover {
+        color: rgba(0, 242, 255, 0.7) !important;
+        background: rgba(0, 242, 255, 0.04);
+      }
+      &.v-tab--selected {
+        color: #00F2FF !important;
+        border-bottom-color: #00F2FF;
+        box-shadow: 0 2px 8px rgba(0, 242, 255, 0.3);
+      }
+    }
+    .v-tabs__content {
+      background: transparent;
+    }
+  }
+
+  /* === Config section dividers === */
+  .config-tabs-window {
+    background: transparent !important;
+  }
+
+  /* === Checkbox: hollow rectangle with cyan check === */
+  .v-checkbox .v-selection-control {
+    .v-icon {
+      color: rgba(0, 242, 255, 0.3) !important;
+      border: 1px solid rgba(0, 242, 255, 0.25);
+      border-radius: 3px;
+    }
+    &.mdi-checkbox-blank-outline .v-icon {
+      color: transparent !important;
+    }
+  }
+
+  /* === Slider: thin track with cyan thumb === */
+  .v-slider .v-slider-thumb {
+    &::before {
+      box-shadow: 0 0 10px rgba(0, 242, 255, 0.6) !important;
+    }
+  }
+  .v-slider .v-slider-track__fill {
+    background: #00F2FF !important;
+  }
+
+  /* ============================================================
+     PLUGIN TABLE — Industrial dark glass overrides
+     ============================================================ */
+
+  /* === Table card: dark glass container === */
+  .plugin-list-table {
+    background: rgba(15, 15, 22, 0.4) !important;
+    backdrop-filter: blur(16px) saturate(1.2) !important;
+    border: 1px solid rgba(0, 242, 255, 0.08) !important;
+    border-radius: 16px !important;
+    overflow: hidden;
+
+    .v-data-table__thead {
+      background: rgba(15, 15, 22, 0.6) !important;
+      th {
+        color: rgba(228, 225, 230, 0.6) !important;
+        font-family: "JetBrains Mono", monospace !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.5px !important;
+        text-transform: uppercase !important;
+        border-bottom: 1px solid rgba(0, 242, 255, 0.1) !important;
+      }
+    }
+
+    .v-data-table__tbody tr {
+      background: transparent !important;
+      &:hover > td {
+        background: rgba(0, 242, 255, 0.04) !important;
+      }
+    }
+
+    td {
+      background: transparent !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+      color: rgba(228, 225, 230, 0.85) !important;
+      font-size: 13px !important;
+    }
+
+    .v-data-table__td--grow {
+      max-width: 320px !important;
+    }
+  }
+
+  /* === Enable/disable buttons: industrial outlined (no cheap pills) === */
+  .table-action-btn {
+    min-height: 30px !important;
+    font-size: 11px !important;
+    font-family: "JetBrains Mono", monospace !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.3px !important;
+    border-radius: 6px !important;
+    border: 1px solid rgba(0, 242, 255, 0.2) !important;
+    background: rgba(0, 242, 255, 0.05) !important;
+    color: rgba(0, 242, 255, 0.7) !important;
+    transition: all 0.2s ease !important;
+    &:hover {
+      background: rgba(0, 242, 255, 0.12) !important;
+      border-color: rgba(0, 242, 255, 0.4) !important;
+      color: #00F2FF !important;
+      box-shadow: 0 0 8px rgba(0, 242, 255, 0.2) !important;
+    }
+    &.bg-error,
+    &.color-error {
+      border-color: rgba(255, 59, 48, 0.2) !important;
+      background: rgba(255, 59, 48, 0.05) !important;
+      color: rgba(255, 59, 48, 0.8) !important;
+      &:hover {
+        background: rgba(255, 59, 48, 0.12) !important;
+        border-color: rgba(255, 59, 48, 0.4) !important;
+        color: #FF3B30 !important;
+        box-shadow: 0 0 8px rgba(255, 59, 48, 0.2) !important;
+      }
+    }
+  }
+
+  /* === Table action row icon buttons: thin-line industrial === */
+  .table-action-row .v-btn--icon {
+    border: 1px solid rgba(0, 242, 255, 0.15) !important;
+    background: rgba(0, 242, 255, 0.04) !important;
+    color: rgba(0, 242, 255, 0.5) !important;
+    &:hover {
+      background: rgba(0, 242, 255, 0.1) !important;
+      border-color: rgba(0, 242, 255, 0.35) !important;
+      color: #00F2FF !important;
+      box-shadow: 0 0 8px rgba(0, 242, 255, 0.25) !important;
+    }
+  }
+
+  /* === Status chips: hollow outlined industrial === */
+  .v-chip {
+    font-family: "JetBrains Mono", monospace !important;
+    font-size: 10px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.3px !important;
+    border-radius: 4px !important;
+    border: 1px solid !important;
+    &.bg-success,
+    &.color-success {
+      background: transparent !important;
+      border-color: rgba(0, 199, 190, 0.3) !important;
+      color: rgba(0, 199, 190, 0.8) !important;
+    }
+    &.bg-error,
+    &.color-error {
+      background: transparent !important;
+      border-color: rgba(255, 59, 48, 0.3) !important;
+      color: rgba(255, 59, 48, 0.9) !important;
+    }
+    &.bg-warning,
+    &.color-warning {
+      background: transparent !important;
+      border-color: rgba(255, 149, 0, 0.3) !important;
+      color: rgba(255, 149, 0, 0.9) !important;
+    }
+    &.bg-info,
+    &.color-info {
+      background: transparent !important;
+      border-color: rgba(0, 242, 255, 0.3) !important;
+      color: rgba(0, 242, 255, 0.8) !important;
+    }
+  }
+
+  /* === Plugin name: monospace === */
+  .plugin-list-table .text-h5 {
+    font-family: "JetBrains Mono", "Fira Code", monospace !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: rgba(228, 225, 230, 0.9) !important;
+  }
+
+  /* === Installed toolbar: glass panel === */
+  .installed-toolbar {
+    background: rgba(15, 15, 22, 0.3) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(0, 242, 255, 0.06) !important;
+    border-radius: 12px !important;
+    padding: 12px !important;
+  }
+
+  /* === Installed status toggle: outlined pills === */
+  .installed-status-toggle ::v-deep(.v-btn) {
+    min-height: 32px !important;
+    font-family: "JetBrains Mono", monospace !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    border-radius: 6px !important;
+    border: 1px solid rgba(0, 242, 255, 0.15) !important;
+    background: rgba(0, 242, 255, 0.04) !important;
+    color: rgba(228, 225, 230, 0.5) !important;
+    text-transform: none !important;
+    &:hover {
+      background: rgba(0, 242, 255, 0.1) !important;
+      color: rgba(0, 242, 255, 0.8) !important;
+    }
+    &.v-btn--active {
+      background: rgba(0, 242, 255, 0.12) !important;
+      border-color: rgba(0, 242, 255, 0.35) !important;
+      color: #00F2FF !important;
+    }
+  }
+
+  /* === Pinned plugin card: glass === */
+  .installed-toolbar + .v-row .v-card {
+    background: rgba(15, 15, 22, 0.4) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(0, 242, 255, 0.08) !important;
+    border-radius: 12px !important;
+  }
+
+  /* === ChatUI chat-page-card: dark glass === */
+  .chat-page-card {
+    background: rgba(10, 10, 15, 0.6) !important;
+    backdrop-filter: blur(16px) saturate(1.2) !important;
+    border: 1px solid rgba(0, 242, 255, 0.06) !important;
+  }
+
+  /* === ChatUI message-list-wrapper: dark === */
+  .message-list-wrapper {
+    background: transparent !important;
+  }
+
+  /* === ConversationSidebar in ChatUI === */
+  .conversation-sidebar,
+  .chat-conversation-list {
+    background: rgba(10, 10, 15, 0.4) !important;
+  }
+
+  /* === ChatInput panel === */
+  .chat-input-panel,
+  .chat-input-container {
+    background: rgba(10, 10, 15, 0.6) !important;
+    border-top: 1px solid rgba(0, 242, 255, 0.08) !important;
+  }
+
+  /* === Settings / v-list items: opaque dark glass (fixes switch track bleed-through) === */
+  .v-theme--bluebusinessdarktheme {
+    .v-list-item {
+      background: rgba(15, 15, 22, 0.3) !important;
+      &:hover {
+        background: rgba(15, 15, 22, 0.5) !important;
+      }
+    }
+    .v-list {
+      background: transparent !important;
+    }
+    .v-list-subheader {
+      background: transparent !important;
+      color: rgba(0, 242, 255, 0.4) !important;
+      font-family: "JetBrains Mono", monospace !important;
+      font-size: 11px !important;
+      letter-spacing: 0.5px !important;
+      text-transform: uppercase !important;
+    }
+    .v-card-text {
+      background: transparent !important;
+    }
+    // Ensure btn-toggle covers switch track
+    .v-btn-toggle {
+      background: rgba(15, 15, 22, 0.8) !important;
+      border: 1px solid rgba(0, 242, 255, 0.1) !important;
+      border-radius: 8px !important;
+    }
+    .v-btn-toggle .v-btn {
+      background: transparent !important;
+      color: rgba(228, 225, 230, 0.5) !important;
+      &.v-btn--active {
+        background: rgba(0, 242, 255, 0.12) !important;
+        color: #00F2FF !important;
+      }
+    }
+  }
+
+  /* === Welcome page: glass cards (no solid gray blocks) === */
+  .welcome-card {
+    background: rgba(15, 15, 22, 0.4) !important;
+    backdrop-filter: blur(20px) saturate(1.2) !important;
+    border: 1px solid rgba(0, 242, 255, 0.08) !important;
+    box-shadow: none !important;
+    // L-shaped corner markers (industrial precision)
+    position: relative;
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-color: rgba(0, 242, 255, 0.4) !important;
+      border-style: solid;
+      pointer-events: none;
+    }
+    &::before {
+      top: 6px;
+      left: 6px;
+      border-width: 1px 0 0 1px;
+    }
+    &::after {
+      top: 6px;
+      right: 6px;
+      border-width: 1px 1px 0 0;
+    }
+    .v-card {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+  }
+
+  /* === Welcome resource cards: glass + industrial === */
+  .welcome-card {
+    // Use :deep() to pierce into nested v-card components
+    :deep(.v-card) {
+      background: rgba(15, 15, 22, 0.5) !important;
+      backdrop-filter: blur(16px) saturate(1.2) !important;
+      border: 1px solid rgba(0, 242, 255, 0.08) !important;
+      border-radius: 12px !important;
+      transition: all 0.25s ease !important;
+      box-shadow: none !important;
+      &:hover {
+        background: rgba(15, 15, 22, 0.65) !important;
+        border-color: rgba(0, 242, 255, 0.2) !important;
+        box-shadow: 0 0 16px rgba(0, 242, 255, 0.1) !important;
+      }
+      .v-icon {
+        color: rgba(0, 242, 255, 0.7) !important;
+      }
+      .v-card-title {
+        color: rgba(228, 225, 230, 0.9) !important;
+        font-family: "JetBrains Mono", monospace !important;
+        font-size: 0.9rem !important;
+      }
+      .text-medium-emphasis {
+        color: rgba(228, 225, 230, 0.5) !important;
+      }
+    }
+  }
+
+  /* === Sidebar icons: Cherenkov glow === */
+  .leftSidebar {
+    .v-list-item .v-icon,
+    .nav-icon {
+      filter: drop-shadow(0 0 4px rgba(0, 242, 255, 0.4)) !important;
+      color: rgba(0, 242, 255, 0.6) !important;
+      transition: filter 0.2s ease !important;
+    }
+    .v-list-item:hover .v-icon,
+    .v-list-item:hover .nav-icon {
+      filter: drop-shadow(0 0 6px rgba(0, 242, 255, 0.7)) !important;
+      color: #00F2FF !important;
+    }
+  }
+
+  /* === Timeline in welcome page === */
+  .welcome-timeline {
+    .v-timeline-item__dot {
+      background: rgba(0, 242, 255, 0.15) !important;
+      border: 1px solid rgba(0, 242, 255, 0.3) !important;
+      box-shadow: 0 0 8px rgba(0, 242, 255, 0.2) !important;
+    }
+    .v-timeline-item__body {
+      color: rgba(228, 225, 230, 0.8) !important;
+    }
+  }
+
+  /* === Provider Sources Panel: glass dark === */
+  .provider-sources-panel {
+    background: rgba(15, 15, 22, 0.4) !important;
+    backdrop-filter: blur(16px) saturate(1.2) !important;
+    border: 1px solid rgba(0, 242, 255, 0.08) !important;
+  }
+
+  /* === Provider source list item: active = cyan accent === */
+  .provider-source-list-item--active {
+    background: rgba(0, 242, 255, 0.1) !important;
+    border: 1px solid rgba(0, 242, 255, 0.2) !important;
+  }
+
+  /* === Provider config card: glass dark === */
+  .provider-config-card {
+    background: rgba(15, 15, 22, 0.4) !important;
+    backdrop-filter: blur(16px) saturate(1.2) !important;
+    border: 1px solid rgba(0, 242, 255, 0.08) !important;
+    .v-card-title {
+      color: rgba(228, 225, 230, 0.9) !important;
+      font-family: "JetBrains Mono", monospace !important;
+      border-bottom: 1px solid rgba(0, 242, 255, 0.06) !important;
+    }
+    .v-card-text {
+      color: rgba(228, 225, 230, 0.8) !important;
+    }
+    // "请选择一个提供商" placeholder
+    .text-grey {
+      color: rgba(228, 225, 230, 0.4) !important;
+    }
+    .text-grey-lighten-1 {
+      color: rgba(228, 225, 230, 0.3) !important;
+    }
+  }
+
+  /* === Provider models panel: search field === */
+  .provider-models-panel,
+  .mt-4:has(.text-h5) {
+    .v-text-field--variant-solo-filled {
+      background: rgba(15, 15, 22, 0.5) !important;
+      backdrop-filter: blur(12px) !important;
+      border: 1px solid rgba(0, 242, 255, 0.08) !important;
+    }
+  }
+
+  /* === Provider page: btn-tonal industrial === */
+  .provider-config-card {
+    .v-btn--variant-tonal {
+      background: rgba(0, 242, 255, 0.05) !important;
+      border: 1px solid rgba(0, 242, 255, 0.15) !important;
+      color: rgba(0, 242, 255, 0.7) !important;
+      border-radius: 6px !important;
+      &:hover {
+        background: rgba(0, 242, 255, 0.12) !important;
+        border-color: rgba(0, 242, 255, 0.35) !important;
+        color: #00F2FF !important;
+      }
+    }
+  }
+
+  /* === Config dialog: glass dark === */
+  .v-dialog > .v-card {
+    background: rgba(15, 15, 22, 0.6) !important;
+    backdrop-filter: blur(24px) saturate(1.2) !important;
+    border: 1px solid rgba(0, 242, 255, 0.08) !important;
+    .v-card-title {
+      color: rgba(228, 225, 230, 0.9) !important;
+      font-family: "JetBrains Mono", monospace !important;
+    }
+    .v-card-text {
+      color: rgba(228, 225, 230, 0.8) !important;
+    }
+  }
+
+  /* === AstrBotConfig reactor card === */
+  .config-reactor-card {
+    background: rgba(15, 15, 22, 0.4) !important;
+    backdrop-filter: blur(20px) saturate(1.2) !important;
+    border: 1px solid rgba(0, 242, 255, 0.08) !important;
+  }
+}
+
+/* ============================================================
+   BLUEPRINT FORM CONTROLS — Light mode industrial overrides
+   Deep indigo (#1A2B3C) replaces Cherenkov blue (#00F2FF)
+   ============================================================ */
+
+.v-theme--bluebusinesstheme {
+  /* === App-bar: pure white === */
+  .v-app-bar {
+    background: #FFFFFF !important;
+    border-bottom: 1px solid rgba(0, 49, 83, 0.1) !important;
+    box-shadow: 0 1px 4px rgba(26, 46, 60, 0.04) !important;
+  }
+
+  /* === Navigation drawer / sidebar: pure white === */
+  .v-navigation-drawer {
+    background: #FFFFFF !important;
+    border-right: 1px solid rgba(0, 49, 83, 0.1) !important;
+    box-shadow: none !important;
+  }
+
+  /* === Sidebar container: white === */
+  .sidebar-container {
+    background: #FFFFFF !important;
+  }
+
+  /* === Sidebar list items: readable dark text === */
+  .sidebar-container .v-list-item {
+    color: rgba(26, 46, 80, 0.8) !important;
+    &:hover {
+      background: rgba(0, 49, 83, 0.04) !important;
+    }
+    &.v-list-item--active {
+      background: rgba(0, 49, 83, 0.08) !important;
+      color: #003153 !important;
+    }
+  }
+
+  /* === Sidebar icons: deep indigo === */
+  .sidebar-container .v-list-item .v-icon {
+    color: rgba(0, 49, 83, 0.5) !important;
+  }
+  .sidebar-container .v-list-item:hover .v-icon,
+  .sidebar-container .v-list-item.v-list-item--active .v-icon {
+    color: #003153 !important;
+  }
+
+  /* === Sidebar footer === */
+  .sidebar-footer {
+    background: #FFFFFF !important;
+    border-top: 1px solid rgba(0, 49, 83, 0.08) !important;
+  }
+  .sidebar-footer-btn {
+    color: rgba(26, 46, 80, 0.7) !important;
+  }
+
+  /* === Switch: indigo rectangle === */
+  .v-switch {
+    .v-switch__track {
+      border-radius: 4px !important;
+      opacity: 1 !important;
+      background: rgba(26, 46, 80, 0.2) !important;
+      border: 1px solid rgba(26, 46, 80, 0.25) !important;
+    }
+    &.v-switch--inset .v-switch__track {
+      height: 20px !important;
+      width: 36px !important;
+    }
+  }
+
+  .v-switch--inset .v-switch__thumb {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  /* === Text fields: blueprint glass === */
+  .v-field--variant-outlined {
+    .v-field__outline__start,
+    .v-field__outline__end {
+      border-color: rgba(26, 46, 80, 0.15) !important;
+    }
+    .v-field__outline__start {
+      border-radius: 8px 0 0 8px !important;
+    }
+    .v-field__outline__end {
+      border-radius: 0 8px 8px 0 !important;
+    }
+    &:hover .v-field__outline__start,
+    &:hover .v-field__outline__end,
+    &.v-field--focused .v-field__outline__start,
+    &.v-field--focused .v-field__outline__end {
+      border-color: rgba(26, 46, 80, 0.4) !important;
+    }
+    .v-field--focused .v-field__outline__start,
+    .v-field--focused .v-field__outline__end {
+      border-color: #1A2B3C !important;
+      box-shadow: 0 0 8px rgba(26, 46, 80, 0.15) !important;
+    }
+  }
+
+  /* === Select / combobox === */
+  .v-select__selection-text,
+  .v-combobox .v-field__input {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 13px;
+  }
+
+  /* === Config tabs: blueprint styling === */
+  .config-tabs {
+    .v-tab {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: rgba(26, 46, 80, 0.5) !important;
+      border-bottom: 2px solid transparent;
+      transition: all 0.25s ease;
+      &:hover {
+        color: rgba(26, 46, 80, 0.8) !important;
+        background: rgba(26, 46, 80, 0.04);
+      }
+      &.v-tab--selected {
+        color: #1A2B3C !important;
+        border-bottom-color: #1A2B3C;
+        box-shadow: 0 2px 8px rgba(26, 46, 80, 0.15);
+      }
+    }
+    .v-tabs__content {
+      background: transparent;
+    }
+  }
+
+  /* === Config section dividers === */
+  .config-tabs-window {
+    background: transparent !important;
+  }
+
+  /* === Welcome page cards: pure white === */
+  .welcome-card {
+    background: #FFFFFF !important;
+    border: 1px solid rgba(0, 49, 83, 0.1) !important;
+    box-shadow: 0 1px 6px rgba(26, 46, 60, 0.04) !important;
+    .v-card {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+    }
+  }
+
+  /* === Welcome resource cards: white with indigo icon === */
+  .welcome-card :deep(.v-card) {
+    background: #FFFFFF !important;
+    border: 1px solid rgba(0, 49, 83, 0.1) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 4px rgba(26, 46, 60, 0.04) !important;
+    transition: all 0.25s ease !important;
+    &:hover {
+      border-color: rgba(0, 49, 83, 0.2) !important;
+      box-shadow: 0 2px 12px rgba(26, 46, 60, 0.08) !important;
+    }
+    .v-icon {
+      color: #003153 !important;
+    }
+    .v-card-title {
+      color: #1A2B3C !important;
+      font-family: "JetBrains Mono", monospace !important;
+    }
+    .text-medium-emphasis {
+      color: rgba(26, 46, 80, 0.6) !important;
+    }
+  }
+
+  /* === Welcome hero text === */
+  .welcome-page .text-h1 {
+    font-family: "JetBrains Mono", "Fira Code", monospace !important;
+    font-size: clamp(1.8rem, 4vw, 3rem) !important;
+    font-weight: 700 !important;
+    color: #1A2B3C !important;
+    letter-spacing: 0.5px;
+    position: relative;
+    padding-left: 16px;
+    &::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 50%; transform: translateY(-50%);
+      width: 2px; height: 55%;
+      background: rgba(0, 49, 83, 0.35);
+      border-radius: 1px;
+    }
+  }
+
+  /* === Global text colors: deep indigo for readability === */
+  .v-theme--bluebusinesstheme {
+    color: #1A2B3C !important;
+  }
+
+  /* === Force dark text in all components === */
+  .v-theme--bluebusinesstheme {
+    .v-list-item {
+      color: #1A2B3C !important;
+    }
+    .v-list-item__title,
+    .v-list-item__subtitle {
+      color: #1A2B3C !important;
+    }
+    .text-h1, .text-h2, .text-h3, .text-h4,
+    .text-h5, .text-h6 {
+      color: #1A2B3C !important;
+    }
+    .text-body-1, .text-body-2 {
+      color: rgba(26, 46, 60, 0.85) !important;
+    }
+    .text-medium-emphasis {
+      color: rgba(26, 46, 60, 0.6) !important;
+    }
+    .text-disabled {
+      color: rgba(26, 46, 60, 0.35) !important;
+    }
+  }
+
+  /* === Checkbox: indigo rectangle === */
+  .v-checkbox .v-selection-control {
+    .v-icon {
+      color: rgba(26, 46, 80, 0.3) !important;
+      border: 1px solid rgba(26, 46, 80, 0.25) !important;
+      border-radius: 3px;
+    }
+    &.mdi-checkbox-blank-outline .v-icon {
+      color: transparent !important;
+    }
+  }
+
+  /* === Slider: indigo track === */
+  .v-slider .v-slider-thumb {
+    &::before {
+      box-shadow: 0 0 8px rgba(26, 46, 80, 0.4) !important;
+    }
+  }
+  .v-slider .v-slider-track__fill {
+    background: #1A2B3C !important;
+  }
+
+  /* ============================================================
+     PLUGIN TABLE & CARDS — Blueprint light glass overrides
+     ============================================================ */
+
+  /* === Search field: white === */
+  .v-text-field--variant-solo-filled {
+    background: rgba(242, 244, 248, 0.6) !important;
+    border: 1px solid rgba(0, 49, 83, 0.1) !important;
+    border-radius: 8px !important;
+    .v-field {
+      background: transparent !important;
+    }
+    &:focus-within {
+      border-color: rgba(0, 49, 83, 0.3) !important;
+      box-shadow: 0 0 8px rgba(0, 49, 83, 0.06) !important;
+    }
+  }
+
+  /* === Table card: pure white container === */
+  .plugin-list-table {
+    background: #FFFFFF !important;
+    border: 1px solid rgba(0, 49, 83, 0.1) !important;
+    border-radius: 12px !important;
+    overflow: hidden;
+
+    .v-data-table__thead {
+      background: rgba(242, 244, 248, 0.5) !important;
+      th {
+        color: rgba(26, 46, 80, 0.6) !important;
+        font-family: "JetBrains Mono", monospace !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.5px !important;
+        text-transform: uppercase !important;
+        border-bottom: 1px solid rgba(26, 46, 80, 0.12) !important;
+      }
+    }
+
+    .v-data-table__tbody tr {
+      background: transparent !important;
+      &:hover > td {
+        background: rgba(26, 46, 80, 0.04) !important;
+      }
+    }
+
+    td {
+      background: transparent !important;
+      border-bottom: 1px solid rgba(26, 46, 80, 0.06) !important;
+      color: rgba(26, 46, 80, 0.8) !important;
+      font-size: 13px !important;
+    }
+  }
+
+  /* === Enable/disable buttons: industrial outlined (no cheap pills) === */
+  .table-action-btn {
+    min-height: 30px !important;
+    font-size: 11px !important;
+    font-family: "JetBrains Mono", monospace !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.3px !important;
+    border-radius: 6px !important;
+    border: 1px solid rgba(26, 46, 80, 0.2) !important;
+    background: rgba(26, 46, 80, 0.04) !important;
+    color: rgba(26, 46, 80, 0.7) !important;
+    transition: all 0.2s ease !important;
+    &:hover {
+      background: rgba(26, 46, 80, 0.1) !important;
+      border-color: rgba(26, 46, 80, 0.4) !important;
+      color: #1A2B3C !important;
+      box-shadow: 0 0 8px rgba(26, 46, 80, 0.1) !important;
+    }
+    &.bg-error,
+    &.color-error {
+      border-color: rgba(186, 26, 26, 0.2) !important;
+      background: rgba(186, 26, 26, 0.04) !important;
+      color: rgba(186, 26, 26, 0.7) !important;
+      &:hover {
+        background: rgba(186, 26, 26, 0.08) !important;
+        border-color: rgba(186, 26, 26, 0.4) !important;
+        color: #BA1A1A !important;
+        box-shadow: 0 0 8px rgba(186, 26, 26, 0.1) !important;
+      }
+    }
+  }
+
+  /* === Table action row icon buttons: thin-line industrial === */
+  .table-action-row .v-btn--icon {
+    border: 1px solid rgba(26, 46, 80, 0.15) !important;
+    background: rgba(26, 46, 80, 0.04) !important;
+    color: rgba(26, 46, 80, 0.5) !important;
+    &:hover {
+      background: rgba(26, 46, 80, 0.08) !important;
+      border-color: rgba(26, 46, 80, 0.3) !important;
+      color: #1A2B3C !important;
+      box-shadow: 0 0 8px rgba(26, 46, 80, 0.1) !important;
+    }
+  }
+
+  /* === Status chips: hollow outlined industrial === */
+  .v-chip {
+    font-family: "JetBrains Mono", monospace !important;
+    font-size: 10px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.3px !important;
+    border-radius: 4px !important;
+    border: 1px solid !important;
+    &.bg-success,
+    &.color-success {
+      background: transparent !important;
+      border-color: rgba(0, 199, 190, 0.3) !important;
+      color: rgba(0, 150, 140, 0.9) !important;
+    }
+    &.bg-error,
+    &.color-error {
+      background: transparent !important;
+      border-color: rgba(139, 0, 0, 0.3) !important;
+      color: rgba(139, 0, 0, 0.9) !important;
+    }
+    &.bg-warning,
+    &.color-warning {
+      background: transparent !important;
+      border-color: rgba(255, 149, 0, 0.3) !important;
+      color: rgba(180, 105, 0, 0.9) !important;
+    }
+    &.bg-info,
+    &.color-info {
+      background: transparent !important;
+      border-color: rgba(0, 107, 156, 0.3) !important;
+      color: rgba(0, 107, 156, 0.9) !important;
+    }
+  }
+
+  /* === Plugin name: monospace === */
+  .plugin-list-table .text-h5 {
+    font-family: "JetBrains Mono", "Fira Code", monospace !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: rgba(26, 46, 80, 0.9) !important;
+  }
+
+  /* === Installed toolbar: pure white === */
+  .installed-toolbar {
+    background: #FFFFFF !important;
+    border: 1px solid rgba(0, 49, 83, 0.1) !important;
+    border-radius: 12px !important;
+    padding: 12px !important;
+  }
+
+  /* === Installed status toggle: outlined pills === */
+  .installed-status-toggle ::v-deep(.v-btn) {
+    min-height: 32px !important;
+    font-family: "JetBrains Mono", monospace !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    border-radius: 6px !important;
+    border: 1px solid rgba(26, 46, 80, 0.15) !important;
+    background: rgba(26, 46, 80, 0.04) !important;
+    color: rgba(26, 46, 80, 0.5) !important;
+    text-transform: none !important;
+    &:hover {
+      background: rgba(26, 46, 80, 0.08) !important;
+      color: rgba(26, 46, 80, 0.8) !important;
+    }
+    &.v-btn--active {
+      background: rgba(26, 46, 80, 0.1) !important;
+      border-color: rgba(26, 46, 80, 0.3) !important;
+      color: #1A2B3C !important;
+    }
+  }
+
+  /* === Pinned plugin card: blueprint glass === */
+  .installed-toolbar + .v-row .v-card {
+    background: rgba(228, 233, 242, 0.5) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(26, 46, 80, 0.1) !important;
+    border-radius: 12px !important;
+  }
+
+  /* === Extension cards: blueprint glass === */
+  .mcpCardBg,
+  [style*="mcpCardBg"] {
+    background: rgba(228, 233, 242, 0.5) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(26, 46, 80, 0.1) !important;
+    border-radius: 12px !important;
+  }
+
+  /* === VCard base: pure white === */
+  .v-card {
+    background: #FFFFFF !important;
+    border: 1px solid rgba(0, 49, 83, 0.1) !important;
+    box-shadow: 0 1px 4px rgba(26, 46, 60, 0.04) !important;
+  }
+
+  /* === Market plugin cards: blueprint glass === */
+  .market-plugin-card,
+  .extension-card {
+    background: rgba(228, 233, 242, 0.5) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(26, 46, 80, 0.1) !important;
+    border-radius: 12px !important;
+  }
+
+  /* === V-btn tonal in light: subtle outline === */
+  .v-btn--variant-tonal {
+    background: rgba(26, 46, 80, 0.05) !important;
+    border: 1px solid rgba(26, 46, 80, 0.15) !important;
+    color: rgba(26, 46, 80, 0.7) !important;
+    &:hover {
+      background: rgba(26, 46, 80, 0.1) !important;
+      border-color: rgba(26, 46, 80, 0.3) !important;
+      color: #1A2B3C !important;
+    }
+  }
+
+  /* === VDataTable footer / pagination: white === */
+  .v-data-table-footer {
+    background: rgba(242, 244, 248, 0.5) !important;
+    border-top: 1px solid rgba(0, 49, 83, 0.08) !important;
+    padding: 8px 16px !important;
+  }
+
+  .v-data-table__td--footer {
+    background: rgba(242, 244, 248, 0.5) !important;
+    border-top: 1px solid rgba(0, 49, 83, 0.08) !important;
+  }
+
+  /* === Pagination: indigo industrial === */
+  .v-pagination {
+    .v-pagination__item {
+      font-family: "JetBrains Mono", monospace !important;
+      font-size: 12px !important;
+      border: 1px solid rgba(26, 46, 80, 0.15) !important;
+      background: rgba(26, 46, 80, 0.04) !important;
+      color: rgba(26, 46, 80, 0.6) !important;
+      &:hover {
+        background: rgba(26, 46, 80, 0.1) !important;
+        border-color: rgba(26, 46, 80, 0.3) !important;
+        color: #1A2B3C !important;
+      }
+      &.v-pagination__item--is-active {
+        background: rgba(26, 46, 80, 0.12) !important;
+        border-color: #1A2B3C !important;
+        color: #1A2B3C !important;
+        font-weight: 600 !important;
+      }
+    }
+    .v-pagination__prev,
+    .v-pagination__next {
+      border: 1px solid rgba(26, 46, 80, 0.15) !important;
+      background: rgba(26, 46, 80, 0.04) !important;
+      color: rgba(26, 46, 80, 0.5) !important;
+      &:hover {
+        background: rgba(26, 46, 80, 0.1) !important;
+        color: #1A2B3C !important;
+      }
+      &.v-pagination__btn--disabled {
+        opacity: 0.35 !important;
+      }
+    }
+  }
+
+  /* === V-select in table footer === */
+  .v-data-table-footer .v-select {
+    .v-field {
+      background: rgba(26, 46, 80, 0.05) !important;
+      border: 1px solid rgba(26, 46, 80, 0.12) !important;
+      border-radius: 6px !important;
+    }
+  }
+
+  /* === ChatUI chat-page-card: pure white === */
+  .chat-page-card {
+    background: #FFFFFF !important;
+    border: 1px solid rgba(0, 49, 83, 0.1) !important;
+    box-shadow: 0 1px 6px rgba(26, 46, 60, 0.05) !important;
+  }
+
+  /* === ChatUI message-list-wrapper: pure white === */
+  .message-list-wrapper {
+    background: #FFFFFF !important;
+  }
+
+  /* === ConversationSidebar in ChatUI: pure white === */
+  .conversation-sidebar,
+  .chat-conversation-list {
+    background: #FFFFFF !important;
+    border-right: 1px solid rgba(0, 49, 83, 0.1) !important;
+  }
+
+  /* === ChatInput panel: pure white === */
+  .chat-input-panel,
+  .input-container {
+    background: #FFFFFF !important;
+    border-top: 1px solid rgba(0, 49, 83, 0.1) !important;
+  }
+
+  /* === ChatInput placeholder: readable gray === */
+  .chat-textarea::placeholder {
+    color: rgba(26, 46, 80, 0.35) !important;
+  }
+
+  /* === ChatUI session list items === */
+  .v-list-item {
+    &.conversation-item,
+    .conversation-item {
+      color: rgba(26, 46, 80, 0.8) !important;
+      &:hover {
+        background: rgba(0, 49, 83, 0.04) !important;
+      }
+      &.v-list-item--active {
+        background: rgba(0, 49, 83, 0.08) !important;
+        color: #003153 !important;
+      }
+    }
+  }
+}
+
 
 

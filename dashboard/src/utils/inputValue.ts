@@ -1,2 +1,2 @@
 export const normalizeTextInput = (value: unknown): string =>
-  typeof value === 'string' ? value : '';
+  typeof value === "string" ? value : "";

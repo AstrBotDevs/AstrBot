@@ -1,4 +1,8 @@
-"""AstrBot TUI Application - Main chat interface."""
+"""AstrBot TUI Application - Main chat interface (sync version for testing).
+
+This module provides a basic TUI application without network connectivity,
+useful for testing the UI components and as a reference implementation.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,7 @@ import curses
 from dataclasses import dataclass, field
 from enum import Enum
 
+from astrbot.tui.i18n import TUITranslations, t
 from astrbot.tui.screen import Screen
 
 
@@ -13,6 +18,27 @@ class MessageSender(Enum):
     USER = "user"
     BOT = "bot"
     SYSTEM = "system"
+    TOOL = "tool"
+    REASONING = "reasoning"
+
+
+# Translation accessor for templates
+tr = TUITranslations()
+
+
+# Mapping from sender to translation key
+_SENDER_TO_KEY = {
+    MessageSender.USER: "indicator_user",
+    MessageSender.BOT: "indicator_bot",
+    MessageSender.SYSTEM: "indicator_system",
+    MessageSender.TOOL: "indicator_tool",
+    MessageSender.REASONING: "indicator_reasoning",
+}
+
+
+def get_indicator(sender: MessageSender) -> str:
+    """Get the localized indicator string for a message sender."""
+    return t(_SENDER_TO_KEY.get(sender, "indicator_system"))
 
 
 @dataclass
@@ -27,13 +53,13 @@ class TUIState:
     messages: list[Message] = field(default_factory=list)
     input_buffer: str = ""
     cursor_x: int = 0
-    status: str = "Ready"
+    status: str = field(default_factory=lambda: t("status_ready"))
     running: bool = True
     connected: bool = False
 
 
 class AstrBotTUI:
-    """Main TUI application for AstrBot."""
+    """Main TUI application for AstrBot (local/testing version)."""
 
     def __init__(self, screen: Screen):
         self.screen = screen
@@ -45,7 +71,6 @@ class AstrBotTUI:
     def add_message(self, sender: MessageSender, text: str) -> None:
         """Add a message to the chat log."""
         self.state.messages.append(Message(sender=sender, text=text))
-        # Keep only last 1000 messages to prevent memory issues
         if len(self.state.messages) > 1000:
             self.state.messages = self.state.messages[-1000:]
 
@@ -106,7 +131,7 @@ class AstrBotTUI:
                 self._history_index += 1
                 self.state.input_buffer = self._input_history[self._history_index]
                 self.state.cursor_x = len(self.state.input_buffer)
-        elif key == key == curses.KEY_DOWN:
+        elif key == curses.KEY_DOWN:
             if self._history_index > 0:
                 self._history_index -= 1
                 self.state.input_buffer = self._input_history[self._history_index]
@@ -152,18 +177,15 @@ class AstrBotTUI:
         self.state.input_buffer = ""
         self.state.cursor_x = 0
 
-        # Process the message (placeholder for actual bot interaction)
+        # Process the message (echo back for testing)
         self._process_user_message(text)
 
     def _process_user_message(self, text: str) -> None:
-        """Process user message and generate bot response."""
-        # This is a placeholder - actual implementation would connect to the bot
-        self.add_system_message(f"Message sent: {text}")
-        self.state.status = "Message sent, awaiting response..."
+        """Process user message and generate bot response (echo for testing)."""
+        self.add_message(MessageSender.BOT, f"Echo: {text}")
 
     def render(self) -> None:
         """Render the current state to the screen."""
-        # Convert messages to the format expected by screen
         lines = [(msg.sender.value, msg.text) for msg in self.state.messages]
 
         self.screen.draw_all(
@@ -180,9 +202,9 @@ class AstrBotTUI:
         self.screen.layout_windows()
 
         # Welcome message
-        self.add_system_message("Welcome to AstrBot TUI!")
-        self.add_system_message("Type your message and press Enter to send.")
-        self.add_system_message("Press ESC or Ctrl+C to exit.")
+        self.add_system_message(t("welcome_title"))
+        self.add_system_message(t("welcome_local_mode"))
+        self.add_system_message(t("welcome_instructions"))
 
         # Initial render
         self.render()

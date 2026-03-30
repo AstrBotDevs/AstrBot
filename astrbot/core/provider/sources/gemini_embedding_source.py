@@ -5,10 +5,9 @@ from google.genai import types
 from google.genai.errors import APIError
 
 from astrbot import logger
-
-from ..entities import ProviderType
-from ..provider import EmbeddingProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import EmbeddingProvider
+from astrbot.core.provider.register import register_provider_adapter
 
 
 @register_provider_adapter(

@@ -13,7 +13,7 @@ from astrbot.core.utils.shared_preferences import SharedPreferences
 _VT = TypeVar("_VT")
 
 
-class ConfInfo(TypedDict):
+class ConfInfo(TypedDict, total=False):
     """Configuration information for a specific session or platform."""
 
     id: str  # UUID of the configuration or "default"
@@ -42,7 +42,7 @@ class AstrBotConfigManager:
         self.confs: dict[str, AstrBotConfig] = {}
         """uuid / "default" -> AstrBotConfig"""
         self.confs["default"] = default_config
-        self.abconf_data = None
+        self.abconf_data: dict | None = None
         self._load_all_configs()
 
     def _get_abconf_data(self) -> dict:
@@ -54,7 +54,7 @@ class AstrBotConfigManager:
                 scope="global",
                 scope_id="global",
             )
-        return self.abconf_data
+        return self.abconf_data  # type: ignore[return-value]
 
     def _load_all_configs(self) -> None:
         """Load all configurations from the shared preferences."""
@@ -114,7 +114,7 @@ class AstrBotConfigManager:
             scope_id="global",
         )
         random_word = abconf_name or uuid.uuid4().hex[:8]
-        abconf_data[abconf_id] = {
+        abconf_data[abconf_id] = {  # type: ignore[index]
             "path": abconf_path,
             "name": random_word,
         }
@@ -191,11 +191,14 @@ class AstrBotConfigManager:
             raise ValueError("不能删除默认配置文件")
 
         # 从映射中移除
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
+        abconf_data = (
+            self.sp.get(
+                "abconf_mapping",
+                {},
+                scope="global",
+                scope_id="global",
+            )
+            or {}
         )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
@@ -242,11 +245,14 @@ class AstrBotConfigManager:
         if conf_id == "default":
             raise ValueError("不能更新默认配置文件的信息")
 
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
+        abconf_data = (
+            self.sp.get(
+                "abconf_mapping",
+                {},
+                scope="global",
+                scope_id="global",
+            )
+            or {}
         )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
@@ -266,8 +272,8 @@ class AstrBotConfigManager:
         self,
         umo: str | None = None,
         key: str | None = None,
-        default: _VT = None,
-    ) -> _VT:
+        default: _VT | None = None,
+    ) -> _VT | None:
         """获取配置项｡umo 为 None 时使用默认配置"""
         if umo is None:
             return self.confs["default"].get(key, default)

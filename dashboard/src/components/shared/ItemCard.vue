@@ -1,14 +1,9 @@
 <template>
-  <v-card
-    class="item-card hover-elevation"
-    style="padding: 4px;"
-    elevation="0"
-  >
+  <v-card class="item-card hover-elevation" style="padding: 4px" elevation="0">
     <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
-      <span
-        class="text-h2 text-truncate"
-        :title="getItemTitle()"
-      >{{ getItemTitle() }}</span>
+      <span class="text-h2 text-truncate" :title="getItemTitle()">{{
+        getItemTitle()
+      }}</span>
       <v-tooltip location="top">
         <template #activator="{ props }">
           <v-switch
@@ -22,18 +17,19 @@
             @update:model-value="toggleEnabled"
           />
         </template>
-        <span>{{ getItemEnabled() ? t('core.common.itemCard.enabled') : t('core.common.itemCard.disabled') }}</span>
+        <span>{{
+          getItemEnabled()
+            ? t("core.common.itemCard.enabled")
+            : t("core.common.itemCard.disabled")
+        }}</span>
       </v-tooltip>
     </v-card-title>
 
     <v-card-text>
-      <slot
-        name="item-details"
-        :item="item"
-      />
+      <slot name="item-details" :item="item" />
     </v-card-text>
 
-    <v-card-actions style="margin: 8px;">
+    <v-card-actions style="margin: 8px">
       <v-btn
         variant="outlined"
         color="error"
@@ -42,7 +38,7 @@
         :disabled="loading || disableDelete"
         @click="$emit('delete', item)"
       >
-        {{ t('core.common.itemCard.delete') }}
+        {{ t("core.common.itemCard.delete") }}
       </v-btn>
       <v-btn
         v-if="showEditButton"
@@ -53,7 +49,7 @@
         :disabled="loading"
         @click="$emit('edit', item)"
       >
-        {{ t('core.common.itemCard.edit') }}
+        {{ t("core.common.itemCard.edit") }}
       </v-btn>
       <v-btn
         v-if="showCopyButton"
@@ -64,74 +60,66 @@
         :disabled="loading"
         @click="$emit('copy', item)"
       >
-        {{ t('core.common.itemCard.copy') }}
+        {{ t("core.common.itemCard.copy") }}
       </v-btn>
-      <slot
-        name="actions"
-        :item="item"
-      />
+      <slot name="actions" :item="item" />
       <v-spacer />
     </v-card-actions>
 
     <div
       v-if="bglogo"
       class="d-flex justify-end align-center"
-      style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2;"
+      style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2"
     >
-      <v-img
-        :src="bglogo"
-        contain
-        width="120"
-        height="120"
-      />
+      <v-img :src="bglogo" contain width="120" height="120" />
     </div>
   </v-card>
 </template>
 
-<script>
-import { useI18n } from '@/i18n/composables';
+<script lang="ts">
+import { useI18n } from "@/i18n/composables";
 
 export default {
-  name: 'ItemCard',
+  name: "ItemCard",
   props: {
     item: {
       type: Object,
-      required: true
+      required: true,
     },
     titleField: {
       type: String,
-      default: 'id'
+      default: "id",
     },
     enabledField: {
       type: String,
-      default: 'enable'
+      default: "enable",
     },
     bglogo: {
       type: String,
-      default: null
+      default: null,
     },
     loading: {
       type: Boolean,
-      default: false
+      default: false,
     },
     showCopyButton: {
       type: Boolean,
-      default: false
+      default: false,
     },
     showEditButton: {
       type: Boolean,
-      default: true
+      default: true,
     },
     disableToggle: {
       type: Boolean,
-      default: false
+      default: false,
     },
     disableDelete: {
       type: Boolean,
-      default: false
-    }
+      default: false,
+    },
   },
-  emits: ['toggle-enabled', 'delete', 'edit', 'copy'],
+  emits: ["toggle-enabled", "delete", "edit", "copy"],
   setup() {
     const { t } = useI18n();
     return { t };
@@ -144,10 +132,10 @@ export default {
       return this.item[this.enabledField];
     },
     toggleEnabled() {
-      this.$emit('toggle-enabled', this.item);
-    }
-  }
-}
+      this.$emit("toggle-enabled", this.item);
+    },
+  },
+};
 </script>
 
 <style scoped>

@@ -555,7 +555,7 @@ class WeixinOCAdapter(Platform):
         item_type: int,
         file_name: str,
     ) -> dict[str, Any]:
-        raw_bytes = media_path.read_bytes()
+        raw_bytes = await asyncio.to_thread(media_path.read_bytes)
         raw_size = len(raw_bytes)
         raw_md5 = hashlib.md5(raw_bytes).hexdigest()
         file_key = uuid.uuid4().hex
@@ -761,7 +761,9 @@ class WeixinOCAdapter(Platform):
         if not path:
             return None
         media_path = Path(path)
-        if not media_path.exists() or not media_path.is_file():
+        path_exists = await asyncio.to_thread(media_path.exists)
+        path_is_file = await asyncio.to_thread(media_path.is_file)
+        if not path_exists or not path_is_file:
             return None
         return media_path
 

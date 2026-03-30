@@ -3,7 +3,8 @@ import inspect
 import json
 import traceback
 import uuid
-from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence, Set
+from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
+from collections.abc import Set as AbstractSet
 from typing import Any
 
 import mcp
@@ -47,7 +48,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if isinstance(image_urls_raw, str):
             return [image_urls_raw]
 
-        if isinstance(image_urls_raw, (Sequence, Set)) and not isinstance(
+        if isinstance(image_urls_raw, (Sequence, AbstractSet)) and not isinstance(
             image_urls_raw, (str, bytes, bytearray)
         ):
             return [item for item in image_urls_raw if isinstance(item, str)]
@@ -113,11 +114,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return sanitized
 
     @classmethod
-    async def execute(cls, tool, run_context, **tool_args):
+    async def execute(cls, tool, run_context, session_manager=None, **tool_args):
         """执行函数调用｡
 
         Args:
-            event (AstrMessageEvent): 事件对象, 当 origin 为 local 时必须提供｡
+            tool: The tool to execute.
+            run_context: The run context.
+            session_manager: Optional ToolSessionManager for stateful tool execution.
+            **tool_args: Tool-specific arguments.
             **kwargs: 函数调用的参数｡
 
         Returns:
@@ -278,7 +282,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 if isinstance(registered_tool, HandoffTool):
                     continue
                 if registered_tool.active:
-                    toolset.add_tool(registered_tool)
+                    toolset.add_tool(registered_tool)  # type: ignore[arg-type]
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
             return None if toolset.empty() else toolset
@@ -291,7 +295,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             if isinstance(tool_name_or_obj, str):
                 registered_tool = llm_tools.get_func(tool_name_or_obj)
                 if registered_tool and registered_tool.active:
-                    toolset.add_tool(registered_tool)
+                    toolset.add_tool(registered_tool)  # type: ignore[arg-type]
                     continue
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
                 if runtime_tool:
@@ -643,6 +647,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             method_name = "run"
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
+
+        sdk_plugin_bridge = getattr(
+            run_context.context.context, "sdk_plugin_bridge", None
+        )
+        if sdk_plugin_bridge is not None:
+            try:
+                await sdk_plugin_bridge.dispatch_message_event(
+                    "calling_func_tool",
+                    event,
+                    {
+                        "tool_name": tool.name,
+                        "tool_args": json.loads(
+                            json.dumps(tool_args, ensure_ascii=False, default=str)
+                        ),
+                    },
+                )
+            except Exception as exc:
+                logger.warning("SDK calling_func_tool dispatch failed: %s", exc)
 
         wrapper = call_local_llm_tool(
             context=run_context,

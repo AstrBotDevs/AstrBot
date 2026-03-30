@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.23.0"
+version = "4.25.0"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 license = { text = "AGPL-3.0-or-later" }
@@ -28,7 +28,6 @@ dependencies = [
   "faiss-cpu>=1.12.0",
   "filelock>=3.18.0",
   "google-genai>=1.56.0",
-  "httpx[socks]>=0.28.1",
   "lark-oapi>=1.4.15",
   "lxml-html-clean>=0.4.2",
   "mcp>=1.8.0",
@@ -39,12 +38,11 @@ dependencies = [
   "psutil>=5.8.0,<7.2.0",
   "py-cord>=2.6.1",
   "pydantic>=2.12.5",
-  "pydub>=0.25.1",
+  "quart>=0.19.0,<0.20.0",
   "pyjwt>=2.10.1",
   "qrcode>=8.2",
   "python-telegram-bot>=22.6",
   "qq-botpy>=1.2.1",
-  "quart>=0.20.0",
   "readability-lxml>=0.8.4.1",
   "silk-python>=0.2.6",
   "slack-sdk>=3.35.0",
@@ -71,8 +69,12 @@ dependencies = [
   "anyio>=4.12.1",
   "argon2-cffi>=23.1.0",
   "plumbum>=1.10.0",
-  "textual>=8.1.1",
+  "openai-agents>=0.12.5",
+  "fastapi>=0.135.1",
 ]
+[project.scripts]
+astrbot = "astrbot:cli"
+astrbot-rs = "astrbot:cli_rs"
 
 [dependency-groups]
 dev = [
@@ -85,14 +87,28 @@ dev = [
   "textual-dev>=1.8.0",
 ]
 
-[project.scripts]
-astrbot = "astrbot.cli.__main__:cli"
+
 
 [project.urls]
 Repository = "https://github.com/AstrBotDevs/AstrBot"
 
 [tool.ruff]
-exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]
+exclude = [
+    "astrbot/core/utils/t2i/local_strategy.py",
+    "astrbot/api/all.py",
+    "astrbot/api/message_components.py",
+    "astrbot/api/platform/__init__.py",
+    "astrbot/api/star/__init__.py",
+    "astrbot/core/config/__init__.py",
+    "astrbot/core/provider/func_tool_manager.py",
+    "astrbot/core/skills/__init__.py",
+    "astrbot/core/tools/__init__.py",
+    "tests",
+    "tests/**",
+    "rust",
+    "examples",
+    "**/tests/**",
+]
 line-length = 88
 target-version = "py310"
 
@@ -111,7 +127,6 @@ select = [
   "PT",    # flake8-pytest-style
   "Q",     # flake8-quotes
   "TID",   # flake8-tidy-imports
-  "RUF",   # Ruff-specific rules
 ]
 ignore = [
   "E501",
@@ -123,19 +138,18 @@ pythonVersion = "3.10"
 reportMissingTypeStubs = false
 reportMissingImports = false
 include = ["astrbot"]
-exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
+exclude = ["dashboard", "node_modules", "dist", "data", "tests", "tests/**", "**/tests/**"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
-# Include bundled dashboard dist even though it is not tracked by VCS.
-[tool.hatch.build.targets.wheel]
-artifacts = ["astrbot/dashboard/dist/**"]
-
-# Custom build hook: builds the Vue dashboard and copies dist into the package.
-[tool.hatch.build.hooks.custom]
-path = "scripts/hatch_build.py"
+# AstrBot Core Rust extension
+#:schema strict = false
+[tool.maturin]
+manifest-path = "rust/Cargo.toml"
+module-name = "astrbot.rust._core"
+build-hook = "buildHooks.custom:pre_build_hook"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.12.0"]
+build-backend = "maturin"

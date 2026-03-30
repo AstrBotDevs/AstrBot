@@ -7,6 +7,7 @@
 
 import asyncio
 import traceback
+from typing import cast
 
 from astrbot.core import LogBroker, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -27,20 +28,28 @@ class InitialLoader:
         core_lifecycle = AstrBotCoreLifecycle(self.log_broker, self.db)
 
         try:
-            await core_lifecycle.initialize()
+            await core_lifecycle.initialize_core()
         except Exception as e:
             logger.critical(traceback.format_exc())
             logger.critical(f"😭 初始化 AstrBot 失败:{e} !!!")
             return
 
+        core_lifecycle.runtime_bootstrap_task = asyncio.create_task(
+            core_lifecycle.bootstrap_runtime(),
+        )
+
         core_task = core_lifecycle.start()
+        shutdown_event = core_lifecycle.dashboard_shutdown_event
+        if shutdown_event is None:
+            raise RuntimeError("initialize_core must set dashboard_shutdown_event")
+        shutdown_event = cast(asyncio.Event, shutdown_event)
 
         webui_dir = self.webui_dir
 
         self.dashboard_server = AstrBotDashboard(
             core_lifecycle,
             self.db,
-            core_lifecycle.dashboard_shutdown_event,
+            shutdown_event,
             webui_dir,
         )
 
@@ -55,3 +64,6 @@ class InitialLoader:
         except asyncio.CancelledError:
             logger.info("🌈 正在关闭 AstrBot...")
             await core_lifecycle.stop()
+        except Exception:
+            await core_lifecycle.stop()
+            raise

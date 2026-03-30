@@ -19,7 +19,13 @@ from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 from .api_key import ALL_OPEN_API_SCOPES
 from .chat import ChatRoute
-from .route import Response, Route, RouteContext
+from .route import (
+    Response,
+    Route,
+    RouteContext,
+    get_runtime_guard_message,
+    is_runtime_request_ready,
+)
 
 
 class OpenApiRoute(Route):
@@ -144,9 +150,9 @@ class OpenApiRoute(Route):
             post_data.get("username")
         )
         if username_err:
-            return Response().error(username_err).__dict__
+            return Response().error(username_err).to_json()
         if not effective_username:
-            return Response().error("Invalid username").__dict__
+            return Response().error("Invalid username").to_json()
 
         raw_session_id = post_data.get("session_id", post_data.get("conversation_id"))
         session_id = str(raw_session_id).strip() if raw_session_id is not None else ""
@@ -158,11 +164,11 @@ class OpenApiRoute(Route):
             session_id,
         )
         if ensure_session_err:
-            return Response().error(ensure_session_err).__dict__
+            return Response().error(ensure_session_err).to_json()
 
         config_id, resolve_err = self._resolve_chat_config_id(post_data)
         if resolve_err:
-            return Response().error(resolve_err).__dict__
+            return Response().error(resolve_err).to_json()
 
         original_username = g.get("username", "guest")
         g.username = effective_username
@@ -185,8 +191,7 @@ class OpenApiRoute(Route):
                 )
                 return (
                     Response()
-                    .error(f"Failed to update chat config route: {e}")
-                    .__dict__
+                    .error(f"Failed to update chat config route: {e}").to_json()
                 )
         try:
             return await self.chat_route.chat(post_data=post_data)
@@ -243,6 +248,14 @@ class OpenApiRoute(Route):
                 "data": message,
             }
         )
+
+    async def _ensure_runtime_ready(self) -> bool:
+        if is_runtime_request_ready(self.core_lifecycle):
+            return True
+        message = get_runtime_guard_message(self.core_lifecycle)
+        await self._send_chat_ws_error(message, "RUNTIME_NOT_READY")
+        await websocket.close(1013, message)
+        return False
 
     async def _update_session_config_route(
         self,
@@ -370,10 +383,15 @@ class OpenApiRoute(Route):
             agent_stats = {}
             refs = {}
             while True:
+                if not await self._ensure_runtime_ready():
+                    return
                 try:
                     result = await asyncio.wait_for(back_queue.get(), timeout=1)
                 except asyncio.TimeoutError:
                     continue
+
+                if not await self._ensure_runtime_ready():
+                    return
 
                 if not result:
                     continue
@@ -525,9 +543,16 @@ class OpenApiRoute(Route):
             await websocket.close(1008, auth_err or "Unauthorized")
             return
 
+        if not await self._ensure_runtime_ready():
+            return
+
         try:
             while True:
+                if not await self._ensure_runtime_ready():
+                    return
                 message = await websocket.receive_json()
+                if not await self._ensure_runtime_ready():
+                    return
                 if not isinstance(message, dict):
                     await self._send_chat_ws_error(
                         "message must be an object",
@@ -561,7 +586,7 @@ class OpenApiRoute(Route):
             request.args.get("username")
         )
         if username_err:
-            return Response().error(username_err).__dict__
+            return Response().error(username_err).to_json()
 
         assert username is not None  # for type checker
 
@@ -569,7 +594,7 @@ class OpenApiRoute(Route):
             page = int(request.args.get("page", 1))
             page_size = int(request.args.get("page_size", 20))
         except ValueError:
-            return Response().error("page and page_size must be integers").__dict__
+            return Response().error("page and page_size must be integers").to_json()
 
         if page < 1:
             page = 1
@@ -615,13 +640,12 @@ class OpenApiRoute(Route):
                     "page_size": page_size,
                     "total": total,
                 }
-            )
-            .__dict__
+            ).to_json()
         )
 
     async def get_chat_configs(self):
         conf_list = self._get_chat_config_list()
-        return Response().ok(data={"configs": conf_list}).__dict__
+        return Response().ok(data={"configs": conf_list}).to_json()
 
     async def _build_message_chain_from_payload(
         self,
@@ -639,14 +663,14 @@ class OpenApiRoute(Route):
         umo = post_data.get("umo")
 
         if message_payload is None:
-            return Response().error("Missing key: message").__dict__
+            return Response().error("Missing key: message").to_json()
         if not umo:
-            return Response().error("Missing key: umo").__dict__
+            return Response().error("Missing key: umo").to_json()
 
         try:
             session = MessageSesion.from_str(str(umo))
         except Exception as e:
-            return Response().error(f"Invalid umo: {e}").__dict__
+            return Response().error(f"Invalid umo: {e}").to_json()
 
         platform_id = session.platform_name
         platform_inst = next(
@@ -660,8 +684,7 @@ class OpenApiRoute(Route):
         if not platform_inst:
             return (
                 Response()
-                .error(f"Bot not found or not running for platform: {platform_id}")
-                .__dict__
+                .error(f"Bot not found or not running for platform: {platform_id}").to_json()
             )
 
         try:
@@ -669,12 +692,12 @@ class OpenApiRoute(Route):
                 message_payload
             )
             await platform_inst.send_by_session(session, message_chain)
-            return Response().ok().__dict__
+            return Response().ok().to_json()
         except ValueError as e:
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
         except Exception as e:
             logger.error(f"Open API send_message failed: {e}", exc_info=True)
-            return Response().error(f"Failed to send message: {e}").__dict__
+            return Response().error(f"Failed to send message: {e}").to_json()
 
     async def get_bots(self):
         bot_ids = []
@@ -686,4 +709,4 @@ class OpenApiRoute(Route):
                 and platform_id not in bot_ids
             ):
                 bot_ids.append(platform_id)
-        return Response().ok(data={"bot_ids": bot_ids}).__dict__
+        return Response().ok(data={"bot_ids": bot_ids}).to_json()

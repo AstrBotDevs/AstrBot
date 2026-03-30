@@ -6,6 +6,8 @@ import curses
 from collections.abc import Callable
 from enum import Enum
 
+from astrbot.tui.i18n import t
+
 
 class ColorPair(Enum):
     WHITE = 1
@@ -24,6 +26,8 @@ class ColorPair(Enum):
     INPUT_BG = 14
     STATUS_BG = 15
     BORDER = 16
+    TOOL_MSG = 17
+    REASONING_MSG = 18
 
 
 _COLOR_MAP = {
@@ -42,6 +46,8 @@ _COLOR_MAP = {
     ColorPair.INPUT_BG: curses.COLOR_BLACK,
     ColorPair.STATUS_BG: curses.COLOR_BLUE,
     ColorPair.BORDER: curses.COLOR_CYAN,
+    ColorPair.TOOL_MSG: curses.COLOR_MAGENTA,
+    ColorPair.REASONING_MSG: curses.COLOR_BLUE,
 }
 
 # Box drawing characters
@@ -152,7 +158,7 @@ class Screen:
         if not self._header_win:
             return
         self._header_win.clear()
-        title = " AstrBot TUI "
+        title = f" {t('welcome_title')} "
 
         try:
             self._header_win.bkgdset(curses.color_pair(ColorPair.HEADER_FG.value))
@@ -197,14 +203,25 @@ class Screen:
             if y >= max_y:
                 break
 
+            # Get localized indicator
+            indicator_map = {
+                "user": t("indicator_user"),
+                "bot": t("indicator_bot"),
+                "tool": t("indicator_tool"),
+                "reasoning": t("indicator_reasoning"),
+                "system": t("indicator_system"),
+            }
+            indicator = indicator_map.get(sender, t("indicator_system"))
+
             if sender == "user":
-                indicator = ">"
                 color = self.get_color(ColorPair.USER_MSG)
             elif sender == "bot":
-                indicator = "✦"
                 color = self.get_color(ColorPair.BOT_MSG)
+            elif sender == "tool":
+                color = self.get_color(ColorPair.TOOL_MSG)
+            elif sender == "reasoning":
+                color = self.get_color(ColorPair.REASONING_MSG)
             else:
-                indicator = "●"
                 color = self.get_color(ColorPair.SYSTEM_MSG)
 
             max_text_width = self.width - 4
@@ -250,8 +267,8 @@ class Screen:
             return
         self._input_win.clear()
 
-        prompt = "> "
-        prompt_len = 2
+        prompt = t("input_prompt")
+        prompt_len = len(prompt)
         max_input_width = self.width - 2
 
         try:

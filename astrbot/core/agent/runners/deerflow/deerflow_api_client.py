@@ -1,9 +1,11 @@
 import codecs
 import json
+import types
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout
+from typing_extensions import Self
 
 from astrbot.core import logger
 
@@ -128,14 +130,14 @@ class DeerFlowAPIClient:
             self._session = ClientSession(trust_env=True)
         return self._session
 
-    async def __aenter__(self) -> "DeerFlowAPIClient":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
-        tb: object | None,
+        tb: types.TracebackType | None,
     ) -> None:
         await self.close()
 

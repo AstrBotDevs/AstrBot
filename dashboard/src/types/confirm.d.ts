@@ -1,11 +1,11 @@
-import 'vue'
+import "vue";
 
-import type { ConfirmDialogHandler } from '@/utils/confirmDialog'
+import type { ConfirmDialogHandler } from "@/utils/confirmDialog";
 
-declare module 'vue' {
+declare module "vue" {
   interface ComponentCustomProperties {
-    $confirm?: ConfirmDialogHandler
+    $confirm?: ConfirmDialogHandler;
   }
 }
 
-export {}
+export {};

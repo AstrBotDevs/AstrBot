@@ -1,15 +1,19 @@
 """企业微信智能机器人事件处理模块,处理消息事件的发送和接收"""
 
+from __future__ import annotations
+
 import asyncio
 from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, Image, Plain
 
-from .wecomai_api import WecomAIBotAPIClient
-from .wecomai_queue_mgr import WecomAIQueueMgr
-from .wecomai_webhook import WecomAIBotWebhookClient
+if TYPE_CHECKING:
+    from .wecomai_api import WecomAIBotAPIClient
+    from .wecomai_queue_mgr import WecomAIQueueMgr
+    from .wecomai_webhook import WecomAIBotWebhookClient
 
 
 class WecomAIBotMessageEvent(AstrMessageEvent):

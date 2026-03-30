@@ -13,7 +13,7 @@ from .route import Response, Route, RouteContext
 
 
 def _format_log_sse(log: dict, ts: float) -> str:
-    """辅助函数:格式化 SSE 消息"""
+    """辅助函数：格式化 SSE 消息"""
     payload = {
         "type": "log",
         **log,
@@ -45,7 +45,7 @@ class LogRoute(Route):
     async def _replay_cached_logs(
         self, last_event_id: str
     ) -> AsyncGenerator[str, None]:
-        """辅助生成器:重放缓存的日志"""
+        """辅助生成器：重放缓存的日志"""
         try:
             last_ts = float(last_event_id)
             cached_logs = list(self.log_broker.log_cache)
@@ -97,7 +97,7 @@ class LogRoute(Route):
                 },
             ),
         )
-        setattr(response, "timeout", None)
+        response.timeout = None  # type: ignore
         return response
 
     async def log_history(self):
@@ -110,35 +110,34 @@ class LogRoute(Route):
                     data={
                         "logs": logs,
                     },
-                )
-                .__dict__
+                ).to_json()
             )
         except Exception as e:
             logger.error(f"获取日志历史失败: {e}")
-            return Response().error(f"获取日志历史失败: {e}").__dict__
+            return Response().error(f"获取日志历史失败: {e}").to_json()
 
     async def get_trace_settings(self):
         """获取 Trace 设置"""
         try:
             trace_enable = self.config.get("trace_enable", True)
-            return Response().ok(data={"trace_enable": trace_enable}).__dict__
+            return Response().ok(data={"trace_enable": trace_enable}).to_json()
         except Exception as e:
             logger.error(f"获取 Trace 设置失败: {e}")
-            return Response().error(f"获取 Trace 设置失败: {e}").__dict__
+            return Response().error(f"获取 Trace 设置失败: {e}").to_json()
 
     async def update_trace_settings(self):
         """更新 Trace 设置"""
         try:
             data = await request.json
             if data is None:
-                return Response().error("请求数据为空").__dict__
+                return Response().error("请求数据为空").to_json()
 
             trace_enable = data.get("trace_enable")
             if trace_enable is not None:
                 self.config["trace_enable"] = bool(trace_enable)
                 self.config.save_config()
 
-            return Response().ok(message="Trace 设置已更新").__dict__
+            return Response().ok(message="Trace 设置已更新").to_json()
         except Exception as e:
             logger.error(f"更新 Trace 设置失败: {e}")
-            return Response().error(f"更新 Trace 设置失败: {e}").__dict__
+            return Response().error(f"更新 Trace 设置失败: {e}").to_json()

@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import telegramify_markdown
 from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
@@ -39,7 +39,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     # Telegram 的最大消息长度限制
     MAX_MESSAGE_LENGTH = 4096
 
-    SPLIT_PATTERNS = {
+    SPLIT_PATTERNS: ClassVar[dict[str, re.Pattern[str]]] = {
         "paragraph": re.compile(r"\n\n"),
         "line": re.compile(r"\n"),
         "sentence": re.compile(r"[.!?｡!?]"),
@@ -61,7 +61,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         return cls._next_draft_id
 
     # 消息类型到 chat action 的映射,用于优先级判断
-    ACTION_BY_TYPE: dict[type, str] = {
+    ACTION_BY_TYPE: ClassVar[dict[type, str]] = {
         Record: ChatAction.UPLOAD_VOICE,
         Video: ChatAction.UPLOAD_VIDEO,
         File: ChatAction.UPLOAD_DOCUMENT,
@@ -307,7 +307,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 else:
                     send_coro = client.send_photo
                     media_kwarg = {"photo": image_path}
-                await send_coro(**media_kwarg, **cast(Any, payload))
+                await send_coro(**cast(Any, media_kwarg), **cast(Any, payload))
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)

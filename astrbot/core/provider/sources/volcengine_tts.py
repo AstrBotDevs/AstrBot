@@ -8,11 +8,10 @@ import aiohttp
 import anyio
 
 from astrbot import logger
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -68,7 +67,7 @@ class ProviderVolcengineTTS(TTSProvider):
 
         payload = self._build_request_payload(text)
 
-        logger.debug(f"请求头: {headers}")
+        # Don't log headers as they contain sensitive API key info
         logger.debug(f"请求 URL: {self.api_base}")
         logger.debug(f"请求体: {json.dumps(payload, ensure_ascii=False)[:100]}...")
 

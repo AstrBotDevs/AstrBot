@@ -51,6 +51,7 @@ class TelegramPlatformAdapter(Platform):
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
+        self.sdk_plugin_bridge = None
 
         base_url = self.config.get(
             "telegram_api_base_url",
@@ -173,8 +174,11 @@ class TelegramPlatformAdapter(Platform):
                     error_callback=self._on_polling_error
                 )
                 logger.info("Telegram Platform Adapter is running.")
-                while self.application.updater.running and not self._terminating:  # noqa: ASYNC110
-                    await asyncio.sleep(1)
+                # Wait for termination or polling to stop.
+                _termination_event = asyncio.Event()
+                if self._terminating:
+                    _termination_event.set()
+                await _termination_event.wait()
 
                 if not self._terminating:
                     logger.warning(
@@ -247,6 +251,31 @@ class TelegramPlatformAdapter(Platform):
                                 f"'{command_dict[cmd_name]}'"
                             )
                         command_dict.setdefault(cmd_name, description)
+
+        sdk_bridge = getattr(self, "sdk_plugin_bridge", None)
+        if sdk_bridge is not None:
+            for item in sdk_bridge.list_native_command_candidates("telegram"):
+                cmd_name = str(item.get("name", "")).strip()
+                if not cmd_name or cmd_name in skip_commands:
+                    continue
+                if not re.match(r"^[a-z0-9_]+$", cmd_name) or len(cmd_name) > 32:
+                    continue
+
+                description = str(item.get("description") or "").strip()
+                if not description:
+                    if item.get("is_group"):
+                        description = f"Command group: {cmd_name}"
+                    else:
+                        description = f"Command: {cmd_name}"
+                if len(description) > 30:
+                    description = description[:30] + "..."
+
+                if cmd_name in command_dict:
+                    logger.warning(
+                        f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
+                        f"'{command_dict[cmd_name]}'"
+                    )
+                command_dict.setdefault(cmd_name, description)
 
         commands_a = sorted(command_dict.keys())
         return [BotCommand(cmd, command_dict[cmd]) for cmd in commands_a]
@@ -335,33 +364,36 @@ class TelegramPlatformAdapter(Platform):
             logger.warning("Received an update without a message.")
             return None
 
+        # Assign to local variable so type checker can infer non-None
+        msg = update.message
+
         def _apply_caption() -> None:
-            if update.message.caption:
-                message.message_str = update.message.caption
+            if msg.caption:
+                message.message_str = msg.caption
                 message.message.append(Comp.Plain(message.message_str))
-            if update.message.caption and update.message.caption_entities:
-                for entity in update.message.caption_entities:
+            if msg.caption and msg.caption_entities:
+                for entity in msg.caption_entities:
                     if entity.type == "mention":
-                        name = update.message.caption[
+                        name = msg.caption[
                             entity.offset + 1 : entity.offset + entity.length
                         ]
                         message.message.append(Comp.At(qq=name, name=name))
 
         message = AstrBotMessage()
-        message.session_id = str(update.message.chat.id)
+        message.session_id = str(msg.chat.id)
 
         # 获得是群聊还是私聊
-        if update.message.chat.type == ChatType.PRIVATE:
+        if msg.chat.type == ChatType.PRIVATE:
             message.type = MessageType.FRIEND_MESSAGE
         else:
             message.type = MessageType.GROUP_MESSAGE
-            message.group_id = str(update.message.chat.id)
-            if update.message.is_topic_message and update.message.message_thread_id:
+            message.group_id = str(msg.chat.id)
+            if msg.is_topic_message and msg.message_thread_id:
                 # Telegram Topic Group: include thread id to isolate per-topic sessions.
-                message.group_id += "#" + str(update.message.message_thread_id)
+                message.group_id += "#" + str(msg.message_thread_id)
                 message.session_id = message.group_id
-        message.message_id = str(update.message.message_id)
-        _from_user = update.message.from_user
+        message.message_id = str(msg.message_id)
+        _from_user = msg.from_user
         if not _from_user:
             logger.warning("[Telegram] Received a message without a from_user.")
             return None

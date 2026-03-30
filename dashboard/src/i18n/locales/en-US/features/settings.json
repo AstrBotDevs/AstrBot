@@ -39,9 +39,11 @@
     "subtitle": "Customize theme primary and secondary colors. Changes apply immediately and are stored locally in your browser.",
     "customize": {
       "title": "Theme Colors",
+      "preset": "Color Scheme",
       "primary": "Primary Color",
       "secondary": "Secondary Color",
-      "reset": "Reset to Default"
+      "reset": "Reset to Default",
+      "presetApplied": "Theme applied"
     }
   },
   "style": {
@@ -221,6 +223,13 @@
       "90days": "90 days",
       "180days": "180 days",
       "365days": "365 days",
+      "permanent": "Permanent"
+    },
+    "expiryOptions": {
+      "day1": "1 day",
+      "day7": "7 days",
+      "day30": "30 days",
+      "day90": "90 days",
       "permanent": "Permanent"
     },
     "permanentWarning": "Permanent API keys are high risk. Store them securely and use only when necessary.",

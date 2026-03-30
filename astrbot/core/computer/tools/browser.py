@@ -6,8 +6,8 @@ from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.computer.computer_client import get_booter
 
-from ..computer_client import get_booter
 from .permissions import check_admin_permission
 
 
@@ -62,12 +62,13 @@ class BrowserExecTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        cmd: str,
+        cmd: str = "",
         timeout: int = 30,
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
         include_trace: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Using browser tools"):
             return err
@@ -124,13 +125,14 @@ class BrowserBatchExecTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        commands: list[str],
+        commands: list[str] | None = None,
         timeout: int = 60,
         stop_on_error: bool = True,
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
         include_trace: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Using browser tools"):
             return err
@@ -172,12 +174,13 @@ class RunBrowserSkillTool(FunctionTool):
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        skill_key: str,
+        skill_key: str = "",
         timeout: int = 60,
         stop_on_error: bool = True,
         include_trace: bool = False,
         description: str | None = None,
         tags: str | None = None,
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Using browser tools"):
             return err

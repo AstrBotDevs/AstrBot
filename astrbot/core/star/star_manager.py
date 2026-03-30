@@ -108,8 +108,9 @@ async def _temporary_filtered_requirements_file(
         try:
             yield filtered_requirements_path
         finally:
-            if filtered_requirements_path and os.path.exists(
+            if (
                 filtered_requirements_path
+                and await anyio.Path(filtered_requirements_path).exists()
             ):
                 try:
                     await to_thread.run_sync(os.remove, filtered_requirements_path)
@@ -742,6 +743,24 @@ class PluginManager:
 
             return result
 
+    async def cleanup_loaded_plugins(self) -> None:
+        """Terminate and unbind all currently loaded plugins without reloading."""
+        async with self._pm_lock:
+            for smd in list(star_registry):
+                try:
+                    await self._terminate_plugin(smd)
+                except Exception as e:
+                    logger.warning(traceback.format_exc())
+                    logger.warning(
+                        f"插件 {smd.name} 未被正常终止: {e!s}, 可能会导致该插件运行不正常｡",
+                    )
+                if smd.name and smd.module_path:
+                    await self._unbind_plugin(smd.name, smd.module_path)
+
+            star_handlers_registry.clear()
+            star_map.clear()
+            star_registry.clear()
+
     async def load(
         self,
         specified_module_path=None,
@@ -761,9 +780,9 @@ class PluginManager:
                 - error_message (str|None): 错误信息,成功时为 None
 
         """
-        inactivated_plugins = await sp.global_get("inactivated_plugins", [])
-        inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
-        alter_cmd = await sp.global_get("alter_cmd", {})
+        inactivated_plugins = await sp.global_get("inactivated_plugins", []) or []
+        inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", []) or []
+        alter_cmd = await sp.global_get("alter_cmd", {}) or {}
 
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
@@ -1084,6 +1103,19 @@ class PluginManager:
                         await handler.handler(metadata)
                     except Exception:
                         logger.error(traceback.format_exc())
+                sdk_plugin_bridge = getattr(self.context, "sdk_plugin_bridge", None)
+                if sdk_plugin_bridge is not None:
+                    try:
+                        await sdk_plugin_bridge.dispatch_system_event(
+                            "plugin_loaded",
+                            {
+                                "plugin_name": metadata.name,
+                                "display_name": metadata.display_name or metadata.name,
+                                "version": metadata.version,
+                            },
+                        )
+                    except Exception as exc:
+                        logger.warning("SDK plugin_loaded dispatch failed: %s", exc)
 
             except BaseException as e:
                 logger.error(f"----- 插件 {root_dir_name} 载入失败 -----")
@@ -1627,6 +1659,24 @@ class PluginManager:
                 await handler.handler(star_metadata)
             except Exception:
                 logger.error(traceback.format_exc())
+        sdk_plugin_bridge = (
+            getattr(star_metadata.star_cls.context, "sdk_plugin_bridge", None)
+            if getattr(star_metadata, "star_cls", None)
+            else None
+        )
+        if sdk_plugin_bridge is not None:
+            try:
+                await sdk_plugin_bridge.dispatch_system_event(
+                    "plugin_unloaded",
+                    {
+                        "plugin_name": star_metadata.name,
+                        "display_name": star_metadata.display_name
+                        or star_metadata.name,
+                        "version": star_metadata.version,
+                    },
+                )
+            except Exception as exc:
+                logger.warning("SDK plugin_unloaded dispatch failed: %s", exc)
 
     async def turn_on_plugin(self, plugin_name: str) -> None:
         plugin = self.context.get_registered_star(plugin_name)

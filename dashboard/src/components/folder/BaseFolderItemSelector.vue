@@ -136,21 +136,24 @@
                       :class="{ 'breadcrumb-link': !(item as any).disabled }"
                       @click="
                         !(item as any).disabled &&
-                          navigateToFolder((item as any).folderId)
+                        navigateToFolder((item as any).folderId)
                       "
                     >
                       <v-icon
                         v-if="(item as any).isRoot"
                         size="small"
                         class="mr-1"
-                        >mdi-home</v-icon
                       >
+                        mdi-home
+                      </v-icon>
                       {{ item.title }}
                     </v-breadcrumbs-item>
                   </template>
 
                   <template #divider>
-                    <v-icon size="small" color="grey">mdi-chevron-right</v-icon>
+                    <v-icon size="small" color="grey">
+                      mdi-chevron-right
+                    </v-icon>
                   </template>
                 </v-breadcrumbs>
               </div>
@@ -191,9 +194,9 @@
                           color="amber-lighten-4"
                           class="mr-3"
                         >
-                          <v-icon color="amber-darken-2" size="20"
-                            >mdi-folder</v-icon
-                          >
+                          <v-icon color="amber-darken-2" size="20">
+                            mdi-folder
+                          </v-icon>
                         </v-avatar>
                       </template>
 
@@ -202,9 +205,9 @@
                       </v-list-item-title>
 
                       <template #append>
-                        <v-icon size="20" color="grey"
-                          >mdi-chevron-right</v-icon
-                        >
+                        <v-icon size="20" color="grey">
+                          mdi-chevron-right
+                        </v-icon>
                       </template>
                     </v-list-item>
                   </template>
@@ -226,8 +229,8 @@
                       :class="{
                         'selected-item': selectedItemId === getItemId(item),
                       }"
-                      @click="selectItem(item)"
                       :active="selectedItemId === getItemId(item)"
+                      @click="selectItem(item)"
                     >
                       <template #prepend>
                         <v-avatar
@@ -270,8 +273,8 @@
                             icon="mdi-pencil"
                             size="small"
                             variant="text"
-                            @click.stop="handleEditItem(item)"
                             :title="labels.editButton || 'Edit'"
+                            @click.stop="handleEditItem(item)"
                           />
                           <v-icon
                             v-if="selectedItemId === getItemId(item)"
@@ -292,9 +295,9 @@
                     "
                     class="empty-state text-center py-12"
                   >
-                    <v-icon size="64" color="grey-lighten-2"
-                      >mdi-folder-open-outline</v-icon
-                    >
+                    <v-icon size="64" color="grey-lighten-2">
+                      mdi-folder-open-outline
+                    </v-icon>
                     <p class="text-grey mt-4 text-body-2">
                       {{
                         labels.emptyFolder || labels.noItems || "此文件夹为空"
@@ -326,8 +329,8 @@
 
           <v-btn
             color="primary"
-            @click="confirmSelection"
             :disabled="!selectedItemId"
+            @click="confirmSelection"
           >
             {{ labels.confirmButton || "确认" }}
           </v-btn>
@@ -722,7 +725,7 @@ export default defineComponent({
     overflow-x: auto;
   }
 
-  .breadcrumb-bar :deep(.v-breadcrumbs) {
+  .breadcrumb-bar ::v-deep(.v-breadcrumbs) {
     flex-wrap: nowrap;
     min-width: max-content;
   }

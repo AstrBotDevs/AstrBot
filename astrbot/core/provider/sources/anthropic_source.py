@@ -16,13 +16,12 @@ from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
     is_connection_error,
     log_connection_failure,
 )
-
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(

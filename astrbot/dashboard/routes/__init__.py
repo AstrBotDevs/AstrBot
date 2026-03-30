@@ -23,6 +23,7 @@ from .static_file import StaticFileRoute
 from .subagent import SubAgentRoute
 from .t2i import T2iRoute
 from .tools import ToolsRoute
+from .tui_chat import TUIChatRoute
 from .update import UpdateRoute
 
 __all__ = [
@@ -51,6 +52,7 @@ __all__ = [
     "StaticFileRoute",
     "SubAgentRoute",
     "T2iRoute",
+    "TUIChatRoute",
     "ToolsRoute",
     "UpdateRoute",
 ]

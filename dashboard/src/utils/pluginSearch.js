@@ -36,9 +36,7 @@ const getLooseText = memoizeStringFn((text) =>
 );
 
 export const toPinyinText = memoizeStringFn((text) =>
-  pinyin(text, { toneType: "none" })
-    .toLowerCase()
-    .replace(/\s+/g, ""),
+  pinyin(text, { toneType: "none" }).toLowerCase().replace(/\s+/g, ""),
 );
 
 export const toInitials = memoizeStringFn((text) =>

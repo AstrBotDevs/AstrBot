@@ -1,11 +1,10 @@
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
-
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
 
 
 @register_stage

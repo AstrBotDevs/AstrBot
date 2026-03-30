@@ -23,11 +23,14 @@ class SessionPluginManager:
 
         """
         # 获取会话插件配置
-        session_plugin_config = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_plugin_config",
-            default={},
+        session_plugin_config = (
+            await sp.get_async(
+                scope="umo",
+                scope_id=session_id,
+                key="session_plugin_config",
+                default={},
+            )
+            or {}
         )
         session_config = session_plugin_config.get(session_id, {})
 
@@ -65,11 +68,14 @@ class SessionPluginManager:
         session_id = event.unified_msg_origin
         filtered_handlers = []
 
-        session_plugin_config = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_plugin_config",
-            default={},
+        session_plugin_config = (
+            await sp.get_async(
+                scope="umo",
+                scope_id=session_id,
+                key="session_plugin_config",
+                default={},
+            )
+            or {}
         )
         session_config = session_plugin_config.get(session_id, {})
         disabled_plugins = session_config.get("disabled_plugins", [])

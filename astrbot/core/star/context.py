@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 from asyncio import Queue
-from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Protocol
+from collections.abc import Awaitable, Callable, Coroutine
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from deprecated import deprecated
 
@@ -46,6 +46,7 @@ from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
+    from astrbot.core.astr_agent_context import AstrAgentContext
     from astrbot.core.cron.manager import CronJobManager
 
 
@@ -65,7 +66,7 @@ class Context:
     registered_web_apis: list | None = None
 
     # 向后兼容的变量
-    _register_tasks: list[Awaitable[Any]] | None = None
+    _register_tasks: list[Coroutine[Any, Any, Any]] | None = None
     _star_manager: StarManagerProtocol | None = None
 
     def __init__(
@@ -83,6 +84,8 @@ class Context:
         cron_manager: CronJobManager,
         subagent_orchestrator: SubAgentOrchestrator | None = None,
     ) -> None:
+        self.registered_web_apis = []
+        self._register_tasks = []
         self._event_queue = event_queue
         """事件队列｡消息平台通过事件队列传递消息事件｡"""
         self._config = config
@@ -108,9 +111,15 @@ class Context:
         self.subagent_orchestrator = subagent_orchestrator
 
         # Register built-in tools so they appear in WebUI and can be
-        # assigned to subagents.  Done here (not at module-import time)
+        # assigned to subagents. Done here (not at module-import time)
         # to avoid circular imports.
         self.provider_manager.llm_tools.register_internal_tools()
+
+    def reset_runtime_registrations(self) -> None:
+        if self.registered_web_apis is not None:
+            self.registered_web_apis.clear()
+        if self._register_tasks is not None:
+            self._register_tasks.clear()
 
     async def llm_generate(
         self,
@@ -165,6 +174,9 @@ class Context:
         contexts: list[Message] | None = None,
         max_steps: int = 30,
         tool_call_timeout: int = 120,
+        stream: bool = False,
+        agent_hooks: BaseAgentRunHooks[AstrAgentContext] | None = None,
+        agent_context: AstrAgentContext | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.
@@ -193,6 +205,7 @@ class Context:
             Exception: For other errors during LLM generation
         """
         # Import here to avoid circular imports
+        from astrbot.core.agent.tool_session_manager import ToolSessionManager
         from astrbot.core.astr_agent_context import (
             AgentContextWrapper,
             AstrAgentContext,
@@ -233,6 +246,7 @@ class Context:
             run_context=AgentContextWrapper(
                 context=agent_context,
                 tool_call_timeout=tool_call_timeout,
+                session_manager=ToolSessionManager(),
             ),
             tool_executor=tool_executor,
             agent_hooks=agent_hooks,
@@ -383,7 +397,7 @@ class Context:
         )
         if prov and not isinstance(prov, TTSProvider):
             raise ValueError("返回的 Provider 不是 TTSProvider 类型")
-        return prov
+        return cast(TTSProvider | None, prov)
 
     def get_using_stt_provider(self, umo: str | None = None) -> STTProvider | None:
         """获取当前使用的用于 STT 任务的 Provider｡
@@ -403,7 +417,7 @@ class Context:
         )
         if prov and not isinstance(prov, STTProvider):
             raise ValueError("返回的 Provider 不是 STTProvider 类型")
-        return prov
+        return cast(STTProvider | None, prov)
 
     def get_config(self, umo: str | None = None) -> AstrBotConfig:
         """获取 AstrBot 的配置｡
@@ -605,9 +619,11 @@ class Context:
         """
         md = StarHandlerMetadata(
             event_type=EventType.OnLLMRequestEvent,
-            handler_full_name=func_obj.__module__ + "_" + func_obj.__name__,
-            handler_name=func_obj.__name__,
-            handler_module_path=func_obj.__module__,
+            handler_full_name=getattr(func_obj, "__module__", "")
+            + "_"
+            + getattr(func_obj, "__name__", ""),
+            handler_name=getattr(func_obj, "__name__", ""),
+            handler_module_path=getattr(func_obj, "__module__", ""),
             handler=func_obj,
             event_filters=[],
             desc=desc,
@@ -653,9 +669,11 @@ class Context:
         """
         md = StarHandlerMetadata(
             event_type=EventType.AdapterMessageEvent,
-            handler_full_name=awaitable.__module__ + "_" + awaitable.__name__,
-            handler_name=awaitable.__name__,
-            handler_module_path=awaitable.__module__,
+            handler_full_name=getattr(awaitable, "__module__", "")
+            + "_"
+            + getattr(awaitable, "__name__", ""),
+            handler_name=getattr(awaitable, "__name__", ""),
+            handler_module_path=getattr(awaitable, "__module__", ""),
             handler=awaitable,
             event_filters=[],
             desc=desc,
@@ -668,7 +686,7 @@ class Context:
             )
         star_handlers_registry.append(md)
 
-    def register_task(self, task: Awaitable[Any], desc: str) -> None:
+    def register_task(self, task: Coroutine[Any, Any, Any], desc: str) -> None:
         """[DEPRECATED]注册一个异步任务｡
 
         Args:

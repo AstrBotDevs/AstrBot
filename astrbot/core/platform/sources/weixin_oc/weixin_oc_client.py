@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -123,7 +124,7 @@ class WeixinOCClient:
                 "CDN upload URL missing (need upload_full_url or upload_param)"
             )
 
-        raw_data = media_path.read_bytes()
+        raw_data = await asyncio.to_thread(media_path.read_bytes)
         logger.debug(
             "weixin_oc(%s): prepare CDN upload file=%s size=%s md5=%s filekey=%s",
             self.adapter_id,

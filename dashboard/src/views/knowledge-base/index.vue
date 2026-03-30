@@ -1,14 +1,8 @@
 <template>
   <div class="kb-container">
     <router-view v-slot="{ Component }">
-      <transition
-        name="kb-fade"
-        mode="out-in"
-      >
-        <component
-          :is="Component"
-          :key="$route.fullPath"
-        />
+      <transition name="kb-fade" mode="out-in">
+        <component :is="Component" :key="$route.fullPath" />
       </transition>
     </router-view>
   </div>
@@ -28,7 +22,9 @@
 /* 页面切换动画 */
 .kb-fade-enter-active,
 .kb-fade-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
 }
 
 .kb-fade-enter-from {

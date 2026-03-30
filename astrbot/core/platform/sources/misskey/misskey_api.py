@@ -954,12 +954,14 @@ class MisskeyAPI:
 
         if message_type == "note":
             # 发帖使用 fileIds (复数)
-            note_kwargs = {
+            note_kwargs: dict[str, Any] = {
                 "text": text,
                 "file_ids": file_ids or None,
             }
-            # 合并其他参数
-            note_kwargs.update(kwargs)
+            # 合并其他参数，但排除 text 键以避免类型冲突
+            for k, v in kwargs.items():
+                if k != "text":
+                    note_kwargs[k] = v
             return await self.create_note(**note_kwargs)
 
         raise APIError(f"不支持的消息类型: {message_type}")

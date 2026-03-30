@@ -1,7 +1,13 @@
 import json
 from typing import Protocol, runtime_checkable
 
-from ..message import AudioURLPart, ImageURLPart, Message, TextPart, ThinkPart
+from astrbot.core.agent.message import (
+    AudioURLPart,
+    ImageURLPart,
+    Message,
+    TextPart,
+    ThinkPart,
+)
 
 
 @runtime_checkable

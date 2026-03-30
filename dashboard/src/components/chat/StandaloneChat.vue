@@ -1,9 +1,5 @@
 <template>
-  <v-card
-    class="standalone-chat-card"
-    elevation="0"
-    rounded="0"
-  >
+  <v-card class="standalone-chat-card" elevation="0" rounded="0">
     <v-card-text class="standalone-chat-container">
       <div class="chat-layout">
         <!-- 聊天内容区域 -->
@@ -17,10 +13,7 @@
             :submit-elicitation="handleSubmitElicitation"
             @openImagePreview="openImagePreview"
           />
-          <div
-            v-else
-            class="welcome-container fade-in"
-          >
+          <div v-else class="welcome-container fade-in">
             <div class="welcome-title">
               <span>Hello, I'm</span>
               <span class="bot-name">AstrBot ⭐</span>
@@ -59,15 +52,8 @@
   </v-card>
 
   <!-- 图片预览对话框 -->
-  <v-dialog
-    v-model="imagePreviewDialog"
-    max-width="90vw"
-    max-height="90vh"
-  >
-    <v-card
-      class="image-preview-card"
-      elevation="8"
-    >
+  <v-dialog v-model="imagePreviewDialog" max-width="90vw" max-height="90vh">
+    <v-card class="image-preview-card" elevation="8">
       <v-card-title class="d-flex justify-space-between align-center pa-4">
         <span>{{ t("core.common.imagePreview") }}</span>
         <v-btn
@@ -77,10 +63,7 @@
         />
       </v-card-title>
       <v-card-text class="text-center pa-4">
-        <img
-          :src="previewImageUrl"
-          class="preview-image-large"
-        >
+        <img :src="previewImageUrl" class="preview-image-large" />
       </v-card-text>
     </v-card>
   </v-dialog>

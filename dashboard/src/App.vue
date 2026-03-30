@@ -13,27 +13,19 @@
     close-on-back
   >
     {{ toastStore.current.message }}
-    <template
-      v-if="toastStore.current.closable"
-      #actions
-    >
-      <v-btn
-        variant="text"
-        @click="snackbarShow = false"
-      >
-        关闭
-      </v-btn>
+    <template v-if="toastStore.current.closable" #actions>
+      <v-btn variant="text" @click="snackbarShow = false"> 关闭 </v-btn>
     </template>
   </v-snackbar>
 </template>
 
-<script setup>
-import { RouterView } from 'vue-router';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+<script setup lang="ts">
+import { RouterView } from "vue-router";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useTheme } from "vuetify";
-import { useToastStore } from '@/stores/toast';
-import { useCustomizerStore } from '@/stores/customizer';
-import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
+import { useToastStore } from "@/stores/toast";
+import { useCustomizerStore } from "@/stores/customizer";
+import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
 
 const toastStore = useToastStore();
 const theme = useTheme();
@@ -44,36 +36,40 @@ let disposeTrayRestartListener = null;
 const snackbarShow = computed({
   get: () => !!toastStore.current,
   set: (val) => {
-    if (!val) toastStore.shift()
-  }
+    if (!val) toastStore.shift();
+  },
 });
 
 // 统一监听 uiTheme 变化并同步到 Vuetify
-watch(() => customizer.uiTheme, (newTheme) => {
-  if (newTheme) {
-    theme.global.name.value = newTheme;
-  }
-}, { immediate: true });
+watch(
+  () => customizer.uiTheme,
+  (newTheme) => {
+    if (newTheme) {
+      theme.change(newTheme);
+    }
+  },
+  { immediate: true },
+);
 
 onMounted(() => {
-  const desktopBridge = window.astrbotDesktop
+  const desktopBridge = window.astrbotDesktop;
   if (!desktopBridge?.onTrayRestartBackend) {
-    return
+    return;
   }
   disposeTrayRestartListener = desktopBridge.onTrayRestartBackend(async () => {
     try {
-      await globalWaitingRef.value?.check?.()
+      await globalWaitingRef.value?.check?.();
     } catch (error) {
-      globalWaitingRef.value?.stop?.()
-      console.error('Tray restart backend failed:', error)
+      globalWaitingRef.value?.stop?.();
+      console.error("Tray restart backend failed:", error);
     }
-  })
-})
+  });
+});
 
 onBeforeUnmount(() => {
   if (disposeTrayRestartListener) {
-    disposeTrayRestartListener()
-    disposeTrayRestartListener = null
+    disposeTrayRestartListener();
+    disposeTrayRestartListener = null;
   }
-})
+});
 </script>

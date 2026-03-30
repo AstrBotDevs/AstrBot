@@ -61,7 +61,7 @@ class SubAgentOrchestrator:
             provider_id = item.get("provider_id")
             if provider_id is not None:
                 provider_id = str(provider_id).strip() or None
-            tools: list[str | FunctionTool] | None = item.get("tools", [])
+            tools: list[str | FunctionTool] | None = item.get("tools")
             begin_dialogs = None
 
             if persona_data:
@@ -74,6 +74,10 @@ class SubAgentOrchestrator:
                 persona_tools = persona_data.get("tools")
                 if isinstance(persona_tools, list):
                     tools = [str(t).strip() for t in persona_tools if str(t).strip()]
+                elif persona_tools is None:
+                    # persona exists but explicitly has tools=None -> use None
+                    # This preserves the case where persona has no tools
+                    tools = None
                 else:
                     tools = None
                 if public_description == "" and prompt:

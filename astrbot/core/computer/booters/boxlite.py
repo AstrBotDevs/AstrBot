@@ -17,7 +17,12 @@ from astrbot.api import logger
 if TYPE_CHECKING:
     from astrbot.core.agent.tool import FunctionTool
 
-from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
+from astrbot.core.computer.olayer import (
+    FileSystemComponent,
+    PythonComponent,
+    ShellComponent,
+)
+
 from .base import ComputerBooter
 
 
@@ -173,7 +178,7 @@ class BoxliteBooter(ComputerBooter):
             session_id,
         )
         random_port = random.randint(20000, 30000)
-        self.box = boxlite.SimpleBox(
+        self.box = boxlite.SimpleBox(  # type: ignore[attr-defined]
             image="soulter/shipyard-ship",
             memory_mib=512,
             cpus=1,
@@ -194,17 +199,17 @@ class BoxliteBooter(ComputerBooter):
             sb_url=f"http://127.0.0.1:{random_port}"
         )
         self._fs = ShipyardFileSystemComponent(
-            client=self.mocked,  # type: ignore
+            client=self.mocked,
             ship_id=self.box.id,
             session_id=session_id,
         )
         self._python = ShipyardPythonComponent(
-            client=self.mocked,  # type: ignore
+            client=self.mocked,
             ship_id=self.box.id,
             session_id=session_id,
         )
         self._shell = ShipyardShellComponent(
-            client=self.mocked,  # type: ignore
+            client=self.mocked,
             ship_id=self.box.id,
             session_id=session_id,
         )

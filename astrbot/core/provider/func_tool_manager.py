@@ -1,3 +1,10 @@
+"""
+FunctionToolManager - Central registry for all function tools.
+
+This module re-exports from _internal package for backward compatibility.
+The canonical implementation is in astrbot._internal.tools.registry.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -131,7 +138,7 @@ SUPPORTED_TYPES = [
     "object",
     "array",
     "boolean",
-]  # json schema 支持的数据类型
+]
 
 PY_TO_JSON_TYPE = {
     "int": "number",
@@ -143,7 +150,8 @@ PY_TO_JSON_TYPE = {
     "tuple": "array",
     "set": "array",
 }
-# alias
+
+# Backward compatibility alias
 FuncTool = FunctionTool
 
 
@@ -999,3 +1007,4 @@ class FunctionToolManager:
 
 # alias
 FuncCall = FunctionToolManager
+

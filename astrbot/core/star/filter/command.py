@@ -93,7 +93,7 @@ class CommandFilter(HandlerFilter):
     def validate_and_convert_params(
         self,
         params: list[Any],
-        param_type: dict[str, type],
+        param_type: dict[str, type | Any],
     ) -> dict[str, Any]:
         """将参数列表 params 根据 param_type 转换为参数字典｡"""
         result = {}
@@ -136,7 +136,7 @@ class CommandFilter(HandlerFilter):
                     elif isinstance(param_type_or_default_val, str):
                         # 如果 param_type_or_default_val 是字符串,直接赋值
                         result[param_name] = params[i]
-                    elif isinstance(param_type_or_default_val, bool):
+                    elif param_type_or_default_val is bool:
                         # 处理布尔类型
                         lower_param = str(params[i]).lower()
                         if lower_param in ["true", "yes", "1"]:
@@ -166,10 +166,13 @@ class CommandFilter(HandlerFilter):
                                 result[param_name] = params[i]
                         else:
                             result[param_name] = param_type_or_default_val(params[i])
-                except ValueError:
+                except ValueError as e:
+                    # Re-raise if we raised it ourselves with a custom message
+                    if str(e).startswith("参数"):
+                        raise
                     raise ValueError(
                         f"参数 {param_name} 类型错误｡完整参数: {self.print_types()}",
-                    )
+                    ) from e
         return result
 
     def get_complete_command_names(self):

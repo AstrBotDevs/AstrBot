@@ -10,12 +10,7 @@
       class="loading-overlay"
       :class="{ 'is-dark': isDark }"
     >
-      <v-progress-circular
-        indeterminate
-        size="48"
-        width="4"
-        color="primary"
-      />
+      <v-progress-circular indeterminate size="48" width="4" color="primary" />
     </div>
     <!-- 聊天消息列表 -->
     <div
@@ -29,14 +24,14 @@
         class="message-item fade-in"
       >
         <!-- 用户消息 -->
-        <div
-          v-if="msg.content.type == 'user'"
-          class="user-message"
-        >
+        <div v-if="msg.content.type == 'user'" class="user-message">
           <div
             class="message-bubble user-bubble"
             :class="{ 'has-audio': hasAudio(msg.content.message) }"
-            :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }"
+            :style="{
+              backgroundColor: 'var(--v-theme-chatMessageBubble)',
+              color: '#E2E2E7 !important',
+            }"
           >
             <!-- 遍历 message parts -->
             <template
@@ -49,10 +44,7 @@
                 class="reply-quote"
                 @click="scrollToMessage(part.message_id)"
               >
-                <v-icon
-                  size="small"
-                  class="reply-quote-icon"
-                >
+                <v-icon size="small" class="reply-quote-icon">
                   mdi-reply
                 </v-icon>
                 <span class="reply-quote-text">{{
@@ -63,12 +55,9 @@
               <!-- 纯文本 -->
               <pre
                 v-else-if="part.type === 'plain' && part.text"
-                style="
-                  font-family: inherit;
-                  white-space: pre-wrap;
-                  word-wrap: break-word;
-                "
-              >{{ part.text }}</pre>
+                class="bubble-text"
+                >{{ part.text }}</pre
+              >
 
               <!-- 图片附件 -->
               <div
@@ -80,7 +69,7 @@
                     :src="part.embedded_url"
                     class="attached-image"
                     @click="openImagePreview(part.embedded_url)"
-                  >
+                  />
                 </div>
               </div>
 
@@ -89,14 +78,8 @@
                 v-else-if="part.type === 'record' && part.embedded_url"
                 class="audio-attachment"
               >
-                <audio
-                  controls
-                  class="audio-player"
-                >
-                  <source
-                    :src="part.embedded_url"
-                    type="audio/wav"
-                  >
+                <audio controls class="audio-player">
+                  <source :src="part.embedded_url" type="audio/wav" />
                   {{ t("messages.errors.browser.audioNotSupported") }}
                 </audio>
               </div>
@@ -116,10 +99,10 @@
                     :style="
                       isDark
                         ? {
-                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                          borderColor: 'rgba(255, 255, 255, 0.1)',
-                          color: 'var(--v-theme-secondary)',
-                        }
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            color: 'var(--v-theme-secondary)',
+                          }
                         : {}
                     "
                   >
@@ -129,7 +112,8 @@
                       :style="
                         isDark ? { color: 'var(--v-theme-secondary)' } : {}
                       "
-                    >mdi-file-document-outline</v-icon>
+                      >mdi-file-document-outline</v-icon
+                    >
                     <span class="file-name">{{
                       part.embedded_file.filename
                     }}</span>
@@ -141,10 +125,10 @@
                     :style="
                       isDark
                         ? {
-                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                          borderColor: 'rgba(255, 255, 255, 0.1)',
-                          color: 'var(--v-theme-secondary)',
-                        }
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            color: 'var(--v-theme-secondary)',
+                          }
                         : {}
                     "
                     @click="downloadFile(part.embedded_file)"
@@ -155,7 +139,8 @@
                       :style="
                         isDark ? { color: 'var(--v-theme-secondary)' } : {}
                       "
-                    >mdi-file-document-outline</v-icon>
+                      >mdi-file-document-outline</v-icon
+                    >
                     <span class="file-name">{{
                       part.embedded_file.filename
                     }}</span>
@@ -165,12 +150,11 @@
                       "
                       size="small"
                       class="download-icon"
-                    >mdi-loading mdi-spin</v-icon>
-                    <v-icon
-                      v-else
-                      size="small"
-                      class="download-icon"
-                    >mdi-download</v-icon>
+                      >mdi-loading mdi-spin</v-icon
+                    >
+                    <v-icon v-else size="small" class="download-icon"
+                      >mdi-download</v-icon
+                    >
                   </a>
                 </div>
               </div>
@@ -179,14 +163,8 @@
         </div>
 
         <!-- Bot Messages -->
-        <div
-          v-else
-          class="bot-message"
-        >
-          <v-avatar
-            class="bot-avatar"
-            size="36"
-          >
+        <div v-else class="bot-message">
+          <v-avatar class="bot-avatar" size="36">
             <v-progress-circular
               v-if="isStreaming && index === messages.length - 1"
               :index="index"
@@ -203,12 +181,15 @@
             </v-icon>
           </v-avatar>
           <div class="bot-message-content">
-            <div class="message-bubble bot-bubble">
+            <div
+              class="message-bubble bot-bubble"
+              :style="{
+                backgroundColor: 'var(--v-theme-chatAssistantBubble)',
+                color: '#E2E2E7 !important',
+              }"
+            >
               <!-- Loading state -->
-              <div
-                v-if="msg.content.isLoading"
-                class="loading-container"
-              >
+              <div v-if="msg.content.isLoading" class="loading-container">
                 <span class="loading-text">{{ tm("message.loading") }}</span>
               </div>
 
@@ -238,10 +219,7 @@
               v-if="!msg.content.isLoading || index === messages.length - 1"
               class="message-actions"
             >
-              <span
-                v-if="msg.created_at"
-                class="message-time"
-              >{{
+              <span v-if="msg.created_at" class="message-time">{{
                 formatMessageTime(msg.created_at)
               }}</span>
               <!-- Agent Stats Menu -->
@@ -252,11 +230,7 @@
                 :close-on-content-click="false"
               >
                 <template #activator="{ props }">
-                  <v-icon
-                    v-bind="props"
-                    size="x-small"
-                    class="stats-info-icon"
-                  >
+                  <v-icon v-bind="props" size="x-small" class="stats-info-icon">
                     mdi-information-outline
                   </v-icon>
                 </template>
@@ -364,12 +338,7 @@
         :class="{ 'dark-mode': isDark }"
         @click="handleQuoteSelected"
       >
-        <v-icon
-          left
-          small
-        >
-          mdi-reply
-        </v-icon>
+        <v-icon left small> mdi-reply </v-icon>
         引用
       </v-btn>
     </div>
@@ -381,20 +350,17 @@
     class="image-preview-overlay"
     @click="closeImagePreview"
   >
-    <div
-      class="image-preview-container"
-      @click.stop
-    >
+    <div class="image-preview-container" @click.stop>
       <img
         :src="imagePreview.url"
         class="preview-image"
         @click="closeImagePreview"
-      >
+      />
     </div>
   </v-overlay>
 </template>
 
-<script>
+<script lang="ts">
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import {
   enableKatex,
@@ -491,6 +457,7 @@ export default {
       },
       // Web search results mapping: { 'uuid.idx': { url, title, snippet } }
       webSearchResults: {},
+      isUnmounted: false,
     };
   },
   async mounted() {
@@ -502,6 +469,7 @@ export default {
     this.extractWebSearchResults();
   },
   updated() {
+    if (this.isUnmounted) return;
     this.initCodeCopyButtons();
     this.initImageClickEvents();
     if (this.isUserNearBottom) {
@@ -933,6 +901,7 @@ export default {
     // 初始化代码块复制按钮
     initCodeCopyButtons() {
       this.$nextTick(() => {
+        if (this.isUnmounted) return;
         const codeBlocks =
           this.$refs.messageContainer?.querySelectorAll("pre code") || [];
         codeBlocks.forEach((codeBlock, index) => {
@@ -972,6 +941,7 @@ export default {
 
     initImageClickEvents() {
       this.$nextTick(() => {
+        if (this.isUnmounted) return;
         // 查找所有动态生成的图片（在markdown-content中）
         const images = document.querySelectorAll(".markdown-content img");
         images.forEach((img) => {
@@ -986,6 +956,7 @@ export default {
 
     scrollToBottom() {
       this.$nextTick(() => {
+        if (this.isUnmounted) return;
         const container = this.$refs.messageContainer;
         if (container) {
           container.scrollTop = container.scrollHeight;
@@ -1026,6 +997,7 @@ export default {
 
     // 组件销毁时移除监听器
     beforeUnmount() {
+      this.isUnmounted = true;
       const container = this.$refs.messageContainer;
       if (container) {
         container.removeEventListener("scroll", this.throttledHandleScroll);
@@ -1192,43 +1164,43 @@ export default {
 </script>
 
 <style scoped>
-:deep(.hr-node) {
+::v-deep(.hr-node) {
   margin-top: 1.25rem;
   margin-bottom: 1.25rem;
   opacity: 0.5;
   border-top-width: 0.3px;
 }
 
-:deep(.paragraph-node) {
+::v-deep(.paragraph-node) {
   margin: 0.5rem 0;
   line-height: 1.7;
   margin-block: 1rem;
 }
 
-:deep(.list-node) {
+::v-deep(.list-node) {
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
-:deep(.mermaid-block-header) {
+::v-deep(.mermaid-block-header) {
   gap: 8px;
 }
 
-:deep(code.bg-secondary) {
+::v-deep(code.bg-secondary) {
   background-color: #ececec !important;
   color: #0d0d0d !important;
 }
 
-:deep(code.rounded) {
+::v-deep(code.rounded) {
   border-radius: 6px !important;
 }
 
-.messages-container.is-dark :deep(code.bg-secondary) {
+.messages-container.is-dark ::v-deep(code.bg-secondary) {
   background-color: #424242 !important;
   color: #ffffff !important;
 }
 
-.messages-container.is-dark :deep(.code-block-container) {
+.messages-container.is-dark ::v-deep(.code-block-container) {
   background-color: #1f1f1f !important;
 }
 
@@ -1297,7 +1269,7 @@ export default {
 
 .loading-text {
   font-size: 14px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -1401,7 +1373,7 @@ export default {
 
 .message-time {
   font-size: 12px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.7;
   white-space: nowrap;
 }
@@ -1409,7 +1381,7 @@ export default {
 /* Agent Stats Info Icon */
 .stats-info-icon {
   margin-left: 6px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   opacity: 0.6;
   cursor: pointer;
   transition: opacity 0.2s ease;
@@ -1490,7 +1462,7 @@ export default {
 
 .reply-quote-text {
   font-size: 13px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1512,7 +1484,7 @@ export default {
 }
 
 .user-bubble {
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
   padding: 12px 18px;
   font-size: 15px;
   max-width: 60%;
@@ -1521,7 +1493,7 @@ export default {
 
 .bot-bubble {
   border: 1px solid var(--v-theme-border);
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
   font-size: 16px;
   max-width: 100%;
   padding-left: 12px;
@@ -1667,6 +1639,11 @@ export default {
   line-height: 1.6;
 }
 
+/* Bubble text: hardcoded for debugging - #E2E2E7 = BlueBusinessDark primaryText */
+.bubble-text {
+  color: #E2E2E7 !important;
+}
+
 /* Stats Menu 样式 */
 .stats-menu-card {
   border-radius: 8px !important;
@@ -1689,14 +1666,14 @@ export default {
 
 .stats-menu-label {
   font-size: 13px;
-  color: var(--v-theme-secondaryText);
+  color: var(--v-theme-on-surface-variant);
 }
 
 .stats-menu-value {
   font-size: 13px;
   font-weight: 600;
   font-family: "Fira Code", "Consolas", monospace;
-  color: var(--v-theme-primaryText);
+  color: var(--v-theme-on-surface);
 }
 
 /* 图片预览样式 */

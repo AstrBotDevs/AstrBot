@@ -1,10 +1,5 @@
 <template>
-  <v-dialog
-    v-model="dialog"
-    max-width="1400px"
-    persistent
-    scrollable
-  >
+  <v-dialog v-model="dialog" max-width="1400px" persistent scrollable>
     <template #activator="{ props }">
       <v-btn
         v-bind="props"
@@ -13,18 +8,15 @@
         size="small"
         :loading="loading"
       >
-        {{ tm('t2iTemplateEditor.buttonText') }}
+        {{ tm("t2iTemplateEditor.buttonText") }}
       </v-btn>
     </template>
-    
+
     <v-card>
       <v-card-title class="d-flex align-center justify-space-between">
-        <span>{{ tm('t2iTemplateEditor.dialogTitle') }}</span>
+        <span>{{ tm("t2iTemplateEditor.dialogTitle") }}</span>
         <v-spacer />
-        <div
-          class="d-flex align-center gap-2"
-          style="width: 60%"
-        >
+        <div class="d-flex align-center gap-2" style="width: 60%">
           <v-text-field
             v-if="isCreatingNew"
             v-model="editingName"
@@ -34,7 +26,7 @@
             variant="outlined"
             class="flex-grow-1"
             autofocus
-            :rules="[v => !!v || tm('t2iTemplateEditor.nameRequired')]"
+            :rules="[(v) => !!v || tm('t2iTemplateEditor.nameRequired')]"
           />
           <v-select
             v-else
@@ -50,10 +42,7 @@
             :loading="loading"
           >
             <template #item="{ props, item }">
-              <v-list-item
-                v-bind="props"
-                :title="item.raw.name"
-              >
+              <v-list-item v-bind="props" :title="item.raw.name">
                 <template #append>
                   <v-chip
                     v-if="item.raw.name === activeTemplate"
@@ -62,7 +51,7 @@
                     size="small"
                     class="ml-2"
                   >
-                    {{ tm('t2iTemplateEditor.applied') }}
+                    {{ tm("t2iTemplateEditor.applied") }}
                   </v-chip>
                   <v-btn
                     v-else
@@ -73,43 +62,30 @@
                     :loading="applyLoading"
                     @click.stop="setActiveTemplate(item.raw.name)"
                   >
-                    {{ tm('t2iTemplateEditor.apply') }}
+                    {{ tm("t2iTemplateEditor.apply") }}
                   </v-btn>
                 </template>
               </v-list-item>
             </template>
           </v-select>
-          <v-btn
-            variant="text"
-            icon
-            @click="closeDialog"
-          >
+          <v-btn variant="text" icon @click="closeDialog">
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </div>
       </v-card-title>
 
       <v-card-text class="pa-0">
-        <v-row
-          no-gutters
-          style="height: 70vh;"
-        >
+        <v-row no-gutters style="height: 70vh">
           <!-- 左侧编辑器 -->
-          <v-col
-            cols="6"
-            class="d-flex flex-column"
-          >
-            <v-toolbar
-              density="compact"
-              color="surface-variant"
-            >
+          <v-col cols="6" class="d-flex flex-column">
+            <v-toolbar density="compact" color="surface-variant">
               <v-toolbar-title class="text-subtitle-2">
-                {{ tm('t2iTemplateEditor.templateEditor') }}
+                {{ tm("t2iTemplateEditor.templateEditor") }}
               </v-toolbar-title>
               <v-spacer />
               <div
                 class="d-flex align-center pa-1"
-                style="border: 1px solid rgba(0,0,0,0.1); border-radius: 8px;"
+                style="border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 8px"
               >
                 <v-btn
                   variant="text"
@@ -117,15 +93,10 @@
                   color="success"
                   @click="newTemplate"
                 >
-                  <v-icon left>
-                    mdi-plus
-                  </v-icon>
-                  {{ tm('t2iTemplateEditor.new') }}
+                  <v-icon left> mdi-plus </v-icon>
+                  {{ tm("t2iTemplateEditor.new") }}
                 </v-btn>
-                <v-divider
-                  vertical
-                  class="mx-1"
-                />
+                <v-divider vertical class="mx-1" />
                 <v-btn
                   variant="text"
                   size="small"
@@ -133,58 +104,56 @@
                   color="warning"
                   @click="resetToDefault"
                 >
-                  {{ tm('t2iTemplateEditor.resetBase') }}
+                  {{ tm("t2iTemplateEditor.resetBase") }}
                 </v-btn>
                 <v-btn
                   variant="text"
                   size="small"
                   color="error"
-                  :disabled="isCreatingNew || selectedTemplate === 'base' || !selectedTemplate"
+                  :disabled="
+                    isCreatingNew ||
+                    selectedTemplate === 'base' ||
+                    !selectedTemplate
+                  "
                   @click="promptDelete"
                 >
-                  {{ tm('t2iTemplateEditor.delete') }}
+                  {{ tm("t2iTemplateEditor.delete") }}
                 </v-btn>
-                <v-divider
-                  vertical
-                  class="mx-1"
-                />
+                <v-divider vertical class="mx-1" />
                 <v-btn
                   variant="text"
                   size="small"
                   :loading="saveLoading"
                   color="primary"
-                  :disabled="(isCreatingNew && !editingName) || (!isCreatingNew && !selectedTemplate)"
+                  :disabled="
+                    (isCreatingNew && !editingName) ||
+                    (!isCreatingNew && !selectedTemplate)
+                  "
                   @click="saveTemplate"
                 >
-                  {{ tm('t2iTemplateEditor.save') }}
+                  {{ tm("t2iTemplateEditor.save") }}
                 </v-btn>
               </div>
             </v-toolbar>
             <div
               class="flex-grow-1"
-              style="border-right: 1px solid rgba(0,0,0,0.1);"
+              style="border-right: 1px solid rgba(0, 0, 0, 0.1)"
             >
               <VueMonacoEditor
                 v-model:value="templateContent"
                 :theme="editorTheme"
                 language="html"
                 :options="editorOptions"
-                style="height: 100%;"
+                style="height: 100%"
               />
             </div>
           </v-col>
 
           <!-- 右侧预览 -->
-          <v-col
-            cols="6"
-            class="d-flex flex-column"
-          >
-            <v-toolbar
-              density="compact"
-              color="surface-variant"
-            >
+          <v-col cols="6" class="d-flex flex-column">
+            <v-toolbar density="compact" color="surface-variant">
               <v-toolbar-title class="text-subtitle-2">
-                {{ tm('t2iTemplateEditor.livePreview') }}
+                {{ tm("t2iTemplateEditor.livePreview") }}
               </v-toolbar-title>
               <v-spacer />
               <v-btn
@@ -193,14 +162,14 @@
                 :loading="previewLoading"
                 @click="refreshPreview"
               >
-                {{ tm('t2iTemplateEditor.refreshPreview') }}
+                {{ tm("t2iTemplateEditor.refreshPreview") }}
               </v-btn>
             </v-toolbar>
             <div class="flex-grow-1 preview-container">
               <iframe
                 ref="previewFrame"
                 :srcdoc="previewContent"
-                style="width: 100%; height: 100%; border: none; zoom: 0.6;"
+                style="width: 100%; height: 100%; border: none; zoom: 0.6"
               />
             </div>
           </v-col>
@@ -208,27 +177,16 @@
       </v-card-text>
 
       <v-card-actions class="px-6 py-4">
-        <v-row
-          no-gutters
-          class="align-center"
-        >
+        <v-row no-gutters class="align-center">
           <v-col>
             <div class="text-caption text-grey">
-              <v-icon
-                size="16"
-                class="mr-1"
-              >
-                mdi-information
-              </v-icon>
-              {{ tm('t2iTemplateEditor.syntaxHint') }}
+              <v-icon size="16" class="mr-1"> mdi-information </v-icon>
+              {{ tm("t2iTemplateEditor.syntaxHint") }}
             </div>
           </v-col>
           <v-col cols="auto">
-            <v-btn
-              variant="text"
-              @click="closeDialog"
-            >
-              {{ t('core.common.cancel') }}
+            <v-btn variant="text" @click="closeDialog">
+              {{ t("core.common.cancel") }}
             </v-btn>
             <v-btn
               color="primary"
@@ -236,7 +194,7 @@
               :disabled="isCreatingNew || !selectedTemplate"
               @click="promptApplyAndClose"
             >
-              {{ tm('t2iTemplateEditor.saveAndApply') }}
+              {{ tm("t2iTemplateEditor.saveAndApply") }}
             </v-btn>
           </v-col>
         </v-row>
@@ -244,87 +202,69 @@
     </v-card>
 
     <!-- 确认重置对话框 -->
-    <v-dialog
-      v-model="resetDialog"
-      max-width="400px"
-    >
+    <v-dialog v-model="resetDialog" max-width="400px">
       <v-card>
-        <v-card-title>{{ tm('t2iTemplateEditor.confirmReset') }}</v-card-title>
+        <v-card-title>{{ tm("t2iTemplateEditor.confirmReset") }}</v-card-title>
         <v-card-text>
-          {{ tm('t2iTemplateEditor.confirmResetMessage') }}
+          {{ tm("t2iTemplateEditor.confirmResetMessage") }}
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn
-            text
-            @click="resetDialog = false"
-          >
-            {{ t('core.common.cancel') }}
+          <v-btn text @click="resetDialog = false">
+            {{ t("core.common.cancel") }}
           </v-btn>
-          <v-btn
-            color="warning"
-            :loading="resetLoading"
-            @click="confirmReset"
-          >
-            {{ tm('t2iTemplateEditor.confirmResetButton') }}
+          <v-btn color="warning" :loading="resetLoading" @click="confirmReset">
+            {{ tm("t2iTemplateEditor.confirmResetButton") }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- 删除确认对话框 -->
-    <v-dialog
-      v-model="deleteDialog"
-      max-width="400px"
-    >
+    <v-dialog v-model="deleteDialog" max-width="400px">
       <v-card>
-        <v-card-title>{{ tm('t2iTemplateEditor.confirmDelete') }}</v-card-title>
+        <v-card-title>{{ tm("t2iTemplateEditor.confirmDelete") }}</v-card-title>
         <v-card-text>
-          {{ tm('t2iTemplateEditor.confirmDeleteMessage', { name: selectedTemplate }) }}
+          {{
+            tm("t2iTemplateEditor.confirmDeleteMessage", {
+              name: selectedTemplate,
+            })
+          }}
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn
-            text
-            @click="deleteDialog = false"
-          >
-            {{ t('core.common.cancel') }}
+          <v-btn text @click="deleteDialog = false">
+            {{ t("core.common.cancel") }}
           </v-btn>
-          <v-btn
-            color="error"
-            :loading="saveLoading"
-            @click="confirmDelete"
-          >
-            {{ tm('t2iTemplateEditor.confirmDeleteButton') }}
+          <v-btn color="error" :loading="saveLoading" @click="confirmDelete">
+            {{ tm("t2iTemplateEditor.confirmDeleteButton") }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- 保存并应用确认对话框 -->
-    <v-dialog
-      v-model="applyAndCloseDialog"
-      max-width="500px"
-    >
+    <v-dialog v-model="applyAndCloseDialog" max-width="500px">
       <v-card>
-        <v-card-title>{{ tm('t2iTemplateEditor.confirmAction') }}</v-card-title>
+        <v-card-title>{{ tm("t2iTemplateEditor.confirmAction") }}</v-card-title>
         <v-card-text>
-          {{ tm('t2iTemplateEditor.confirmApplyMessage', { name: selectedTemplate }) }}
+          {{
+            tm("t2iTemplateEditor.confirmApplyMessage", {
+              name: selectedTemplate,
+            })
+          }}
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn
-            text
-            @click="applyAndCloseDialog = false"
-          >
-            {{ t('core.common.cancel') }}
+          <v-btn text @click="applyAndCloseDialog = false">
+            {{ t("core.common.cancel") }}
           </v-btn>
           <v-btn
             color="primary"
             :loading="saveLoading"
             @click="confirmApplyAndClose"
           >
-            {{ t('core.common.confirm') }}
+            {{ t("core.common.confirm") }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -332,218 +272,227 @@
   </v-dialog>
 </template>
 
-<script setup>
-import { ref, computed, nextTick, watch } from 'vue'
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import { useI18n, useModuleI18n } from '@/i18n/composables'
-import axios from '@/utils/request'
+<script setup lang="ts">
+import { ref, computed, nextTick, watch } from "vue";
+import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
-const { t } = useI18n()
-const { tm } = useModuleI18n('core.shared')
+const { t } = useI18n();
+const { tm } = useModuleI18n("core.shared");
 
 // --- 响应式数据 ---
-const dialog = ref(false)
-const loading = ref(false) // 用于加载模板列表
-const saveLoading = ref(false)
-const resetLoading = ref(false)
-const previewLoading = ref(false)
-const applyLoading = ref(false)
+const dialog = ref(false);
+const loading = ref(false); // 用于加载模板列表
+const saveLoading = ref(false);
+const resetLoading = ref(false);
+const previewLoading = ref(false);
+const applyLoading = ref(false);
 
 // 模板管理
-const templates = ref([])
-const activeTemplate = ref('base')
-const selectedTemplate = ref(null)
-const editingName = ref('') // 用于新建模式下的名称输入
-const templateContent = ref('')
-const isCreatingNew = ref(false)
+const templates = ref([]);
+const activeTemplate = ref("base");
+const selectedTemplate = ref(null);
+const editingName = ref(""); // 用于新建模式下的名称输入
+const templateContent = ref("");
+const isCreatingNew = ref(false);
 
 // 对话框状态
-const resetDialog = ref(false)
-const deleteDialog = ref(false)
-const applyAndCloseDialog = ref(false)
+const resetDialog = ref(false);
+const deleteDialog = ref(false);
+const applyAndCloseDialog = ref(false);
 
-const previewFrame = ref(null)
+const previewFrame = ref(null);
 
 // --- 编辑器配置 ---
-const editorTheme = computed(() => 'vs-light')
+const editorTheme = computed(() => "vs-light");
 const editorOptions = {
   automaticLayout: true,
   fontSize: 12,
-  lineNumbers: 'on',
-  wordWrap: 'on',
+  lineNumbers: "on",
+  wordWrap: "on",
   minimap: { enabled: false },
   scrollBeyondLastLine: false,
-}
+};
 
 // --- 预览逻辑 ---
-const previewVersion = ref('v4.0.0')
+const previewVersion = ref("v4.0.0");
 const syncPreviewVersion = async () => {
   try {
-    const res = await axios.get('/api/stat/version')
-    const rawVersion = res?.data?.data?.version || res?.data?.version
+    const res = await axios.get("/api/stat/version");
+    const rawVersion = res?.data?.data?.version || res?.data?.version;
     if (rawVersion) {
-      previewVersion.value = rawVersion.startsWith('v') ? rawVersion : `v${rawVersion}`
+      previewVersion.value = rawVersion.startsWith("v")
+        ? rawVersion
+        : `v${rawVersion}`;
     }
   } catch (error) {
-    console.warn('Failed to fetch version:', error)
+    console.warn("Failed to fetch version:", error);
   }
-}
+};
 
 const previewData = computed(() => ({
-  text: tm('t2iTemplateEditor.previewText') || '这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。',
-  version: previewVersion.value 
-}))
+  text:
+    tm("t2iTemplateEditor.previewText") ||
+    "这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。",
+  version: previewVersion.value,
+}));
 
 const previewContent = computed(() => {
   try {
-    let content = templateContent.value
-    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, previewData.value.text)
-    content = content.replace(/\{\{\s*version\s*\}\}/g, previewData.value.version)
-    return content
+    let content = templateContent.value;
+    content = content.replace(
+      /\{\{\s*text\s*\|\s*safe\s*\}\}/g,
+      previewData.value.text,
+    );
+    content = content.replace(
+      /\{\{\s*version\s*\}\}/g,
+      previewData.value.version,
+    );
+    return content;
   } catch (error) {
-    return `<div style="color: red; padding: 20px;">模板渲染错误: ${error.message}</div>`
+    return `<div style="color: red; padding: 20px;">模板渲染错误: ${error.message}</div>`;
   }
-})
+});
 
 // --- API 调用方法 ---
 const loadInitialData = async () => {
-  loading.value = true
+  loading.value = true;
   try {
     const [listRes, activeRes] = await Promise.all([
-      axios.get('/api/t2i/templates'),
-      axios.get('/api/t2i/templates/active')
-    ])
+      axios.get("/api/t2i/templates"),
+      axios.get("/api/t2i/templates/active"),
+    ]);
 
-    if (listRes.data.status === 'ok') {
-      templates.value = listRes.data.data
+    if (listRes.data.status === "ok") {
+      templates.value = listRes.data.data;
     } else {
-      console.error('加载模板列表失败:', listRes.data.message)
+      console.error("加载模板列表失败:", listRes.data.message);
     }
 
-    if (activeRes.data.status === 'ok') {
-      activeTemplate.value = activeRes.data.data.active_template
+    if (activeRes.data.status === "ok") {
+      activeTemplate.value = activeRes.data.data.active_template;
     } else {
-      console.error('加载活动模板失败:', activeRes.data.message)
+      console.error("加载活动模板失败:", activeRes.data.message);
     }
 
     // 设置初始选中的模板
     if (templates.value.length > 0) {
-      selectedTemplate.value = activeTemplate.value
+      selectedTemplate.value = activeTemplate.value;
     }
-
   } catch (error) {
-    console.error('加载初始数据失败:', error)
+    console.error("加载初始数据失败:", error);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 const loadTemplateContent = async (name) => {
-  if (!name) return
-  previewLoading.value = true
+  if (!name) return;
+  previewLoading.value = true;
   try {
-    const response = await axios.get(`/api/t2i/templates/${name}`)
-    if (response.data.status === 'ok') {
-      templateContent.value = response.data.data.content
+    const response = await axios.get(`/api/t2i/templates/${name}`);
+    if (response.data.status === "ok") {
+      templateContent.value = response.data.data.content;
     } else {
-      console.error(`加载模板 '${name}' 失败:`, response.data.message)
+      console.error(`加载模板 '${name}' 失败:`, response.data.message);
     }
   } catch (error) {
-    console.error(`加载模板 '${name}' 失败:`, error)
+    console.error(`加载模板 '${name}' 失败:`, error);
   } finally {
-    previewLoading.value = false
+    previewLoading.value = false;
   }
-}
+};
 
 const saveTemplate = async () => {
-  saveLoading.value = true
+  saveLoading.value = true;
   try {
     if (isCreatingNew.value) {
       // --- 创建新模板 ---
-      if (!editingName.value) return
-      const response = await axios.post('/api/t2i/templates/create', {
+      if (!editingName.value) return;
+      const response = await axios.post("/api/t2i/templates/create", {
         name: editingName.value,
-        content: templateContent.value
-      })
-      await loadInitialData() // 重新加载所有数据
-      selectedTemplate.value = response.data.data.name
-      isCreatingNew.value = false
+        content: templateContent.value,
+      });
+      await loadInitialData(); // 重新加载所有数据
+      selectedTemplate.value = response.data.data.name;
+      isCreatingNew.value = false;
     } else {
       // --- 更新现有模板 ---
-      if (!selectedTemplate.value) return
+      if (!selectedTemplate.value) return;
       await axios.put(`/api/t2i/templates/${selectedTemplate.value}`, {
-        content: templateContent.value
-      })
+        content: templateContent.value,
+      });
     }
   } catch (error) {
-    console.error('保存模板失败:', error)
+    console.error("保存模板失败:", error);
     // 可以在此添加错误提示
   } finally {
-    saveLoading.value = false
+    saveLoading.value = false;
   }
-}
+};
 
 const setActiveTemplate = async (name) => {
-  applyLoading.value = true
+  applyLoading.value = true;
   try {
-    await axios.post('/api/t2i/templates/set_active', { name })
-    activeTemplate.value = name
+    await axios.post("/api/t2i/templates/set_active", { name });
+    activeTemplate.value = name;
   } catch (error) {
-    console.error(`应用模板 '${name}' 失败:`, error)
+    console.error(`应用模板 '${name}' 失败:`, error);
   } finally {
-    applyLoading.value = false
+    applyLoading.value = false;
   }
-}
+};
 
 const confirmDelete = async () => {
-  if (!selectedTemplate.value || selectedTemplate.value === 'base') return
-  saveLoading.value = true
+  if (!selectedTemplate.value || selectedTemplate.value === "base") return;
+  saveLoading.value = true;
   try {
-    const nameToDelete = selectedTemplate.value
-    await axios.delete(`/api/t2i/templates/${nameToDelete}`)
-    deleteDialog.value = false
+    const nameToDelete = selectedTemplate.value;
+    await axios.delete(`/api/t2i/templates/${nameToDelete}`);
+    deleteDialog.value = false;
 
     // 如果删除的是当前活动模板，则将活动模板重置为base
     if (activeTemplate.value === nameToDelete) {
-        await setActiveTemplate('base')
+      await setActiveTemplate("base");
     }
-    await loadInitialData()
-    selectedTemplate.value = 'base'
+    await loadInitialData();
+    selectedTemplate.value = "base";
   } catch (error) {
-    console.error(`删除模板 '${selectedTemplate.value}' 失败:`, error)
+    console.error(`删除模板 '${selectedTemplate.value}' 失败:`, error);
   } finally {
-    saveLoading.value = false
+    saveLoading.value = false;
   }
-}
+};
 
 const confirmReset = async () => {
-  resetLoading.value = true
+  resetLoading.value = true;
   try {
-    await axios.post('/api/t2i/templates/reset_default')
-    resetDialog.value = false
-    if (selectedTemplate.value === 'base') {
-      await loadTemplateContent('base')
+    await axios.post("/api/t2i/templates/reset_default");
+    resetDialog.value = false;
+    if (selectedTemplate.value === "base") {
+      await loadTemplateContent("base");
     }
-    if (activeTemplate.value !== 'base') {
-        await setActiveTemplate('base')
+    if (activeTemplate.value !== "base") {
+      await setActiveTemplate("base");
     }
   } catch (error) {
-    console.error('重置模板失败:', error)
+    console.error("重置模板失败:", error);
   } finally {
-    resetLoading.value = false
+    resetLoading.value = false;
   }
-}
+};
 
 // --- UI 交互方法 ---
 
 const resetToDefault = () => {
-  resetDialog.value = true
-}
+  resetDialog.value = true;
+};
 
 const newTemplate = () => {
-  isCreatingNew.value = true
-  selectedTemplate.value = null
-  editingName.value = ''
+  isCreatingNew.value = true;
+  selectedTemplate.value = null;
+  editingName.value = "";
   templateContent.value = `<!doctype html>
 <html>
 <head>
@@ -555,71 +504,71 @@ const newTemplate = () => {
   <article>{{ text | safe }}</article>
 </body>
 </html>
-`
-}
+`;
+};
 
 const promptDelete = () => {
-  if (selectedTemplate.value && selectedTemplate.value !== 'base') {
-    deleteDialog.value = true
+  if (selectedTemplate.value && selectedTemplate.value !== "base") {
+    deleteDialog.value = true;
   }
-}
+};
 
 const promptApplyAndClose = () => {
   if (!isCreatingNew.value && selectedTemplate.value) {
-    applyAndCloseDialog.value = true
+    applyAndCloseDialog.value = true;
   }
-}
+};
 
 const confirmApplyAndClose = async () => {
-  if (isCreatingNew.value) return
-  
-  await saveTemplate()
-  await setActiveTemplate(selectedTemplate.value)
-  applyAndCloseDialog.value = false
-  closeDialog()
-}
+  if (isCreatingNew.value) return;
+
+  await saveTemplate();
+  await setActiveTemplate(selectedTemplate.value);
+  applyAndCloseDialog.value = false;
+  closeDialog();
+};
 
 const refreshPreview = () => {
-  previewLoading.value = true
-  syncPreviewVersion()
+  previewLoading.value = true;
+  syncPreviewVersion();
   nextTick(() => {
     if (previewFrame.value) {
-      previewFrame.value.contentWindow.location.reload()
+      previewFrame.value.contentWindow.location.reload();
     }
-    setTimeout(() => previewLoading.value = false, 500)
-  })
-}
+    setTimeout(() => (previewLoading.value = false), 500);
+  });
+};
 
 const closeDialog = () => {
-  dialog.value = false
-}
+  dialog.value = false;
+};
 
 // --- 监听器和生命周期 ---
 
 watch(dialog, (newVal) => {
   if (newVal) {
-    syncPreviewVersion()
-    loadInitialData()
+    syncPreviewVersion();
+    loadInitialData();
   } else {
     // 关闭时重置状态
-    selectedTemplate.value = null
-    templateContent.value = ''
-    isCreatingNew.value = false
+    selectedTemplate.value = null;
+    templateContent.value = "";
+    isCreatingNew.value = false;
   }
-})
+});
 
 watch(selectedTemplate, (newName) => {
   if (newName) {
-    isCreatingNew.value = false
-    loadTemplateContent(newName)
+    isCreatingNew.value = false;
+    loadTemplateContent(newName);
   }
-})
+});
 
 defineExpose({
   openDialog: () => {
-    dialog.value = true
-  }
-})
+    dialog.value = true;
+  },
+});
 </script>
 
 <style scoped>
@@ -629,25 +578,29 @@ defineExpose({
 }
 
 .preview-container::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: 
-    linear-gradient(45deg, #ccc 25%, transparent 25%), 
-    linear-gradient(-45deg, #ccc 25%, transparent 25%), 
-    linear-gradient(45deg, transparent 75%, #ccc 75%), 
+  background-image:
+    linear-gradient(45deg, #ccc 25%, transparent 25%),
+    linear-gradient(-45deg, #ccc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ccc 75%),
     linear-gradient(-45deg, transparent 75%, #ccc 75%);
   background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  background-position:
+    0 0,
+    0 10px,
+    10px -10px,
+    -10px 0px;
   opacity: 0.1;
   pointer-events: none;
 }
 
 code {
-  background-color: rgba(0,0,0,0.05);
+  background-color: rgba(0, 0, 0, 0.05);
   padding: 2px 4px;
   border-radius: 3px;
   font-size: 0.875em;

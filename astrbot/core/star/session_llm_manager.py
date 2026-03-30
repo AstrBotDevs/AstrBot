@@ -23,11 +23,14 @@ class SessionServiceManager:
 
         """
         # 获取会话服务配置
-        session_services = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_service_config",
-            default={},
+        session_services = (
+            await sp.get_async(
+                scope="umo",
+                scope_id=session_id,
+                key="session_service_config",
+                default={},
+            )
+            or {}
         )
 
         # 如果配置了该会话的LLM状态,返回该状态
@@ -94,11 +97,14 @@ class SessionServiceManager:
 
         """
         # 获取会话服务配置
-        session_services = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_service_config",
-            default={},
+        session_services = (
+            await sp.get_async(
+                scope="umo",
+                scope_id=session_id,
+                key="session_service_config",
+                default={},
+            )
+            or {}
         )
 
         # 如果配置了该会话的TTS状态,返回该状态
@@ -169,11 +175,14 @@ class SessionServiceManager:
 
         """
         # 获取会话服务配置
-        session_services = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_service_config",
-            default={},
+        session_services = (
+            await sp.get_async(
+                scope="umo",
+                scope_id=session_id,
+                key="session_service_config",
+                default={},
+            )
+            or {}
         )
 
         # 如果配置了该会话的整体状态,返回该状态

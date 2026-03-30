@@ -22,6 +22,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core import sp
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import (
@@ -31,19 +32,11 @@ from astrbot.core.utils.media_utils import (
     get_media_duration,
 )
 
-from ...register import register_platform_adapter
 from .dingtalk_event import DingtalkMessageEvent
 
 
 class MyEventHandler(dingtalk_stream.EventHandler):
     async def process(self, event: dingtalk_stream.EventMessage):
-        print(
-            "2",
-            event.headers.event_type,
-            event.headers.event_id,
-            event.headers.event_born_time,
-            event.data,
-        )
         return AckMessage.STATUS_OK, "OK"
 
 

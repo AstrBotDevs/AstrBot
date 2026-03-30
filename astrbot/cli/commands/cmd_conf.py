@@ -20,6 +20,7 @@ import argon2.exceptions as argon2_exceptions
 import click
 from argon2 import PasswordHasher
 
+from astrbot.cli.i18n import t
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
 
@@ -59,6 +60,7 @@ def verify_dashboard_password(value: str, stored_hash: str) -> bool:
     Supported format:
     - Argon2 encoded string: $argon2id$...
     - PBKDF2 encoded string: pbkdf2_sha256$...
+    - Legacy SHA-256 (64 hex chars) and MD5 (32 hex chars) for backward compatibility.
     """
     if not stored_hash:
         return False
@@ -96,12 +98,17 @@ def is_dashboard_password_hash(value: str) -> bool:
 
 def is_legacy_dashboard_password_hash(value: str) -> bool:
     """
-    Return True when `value` looks like an old dashboard password hash format.
+    Heuristic: return True if `value` looks like a legacy password hash format.
+    Legacy formats are plain SHA-256 (64 hex chars) or MD5 (32 hex chars) digests.
     """
     if not isinstance(value, str) or not value:
         return False
-    value_l = value.lower()
-    return len(value_l) in {32, 64} and all(ch in "0123456789abcdef" for ch in value_l)
+    # Legacy plain hex digests: SHA-256 (64 hex chars) or MD5 (32 hex chars)
+    if len(value) == 64 and all(ch in "0123456789abcdef" for ch in value.lower()):
+        return True
+    if len(value) == 32 and all(ch in "0123456789abcdef" for ch in value.lower()):
+        return True
+    return False
 
 
 # --- Validators for CLI configuration items ---
@@ -111,9 +118,7 @@ def _validate_log_level(value: str) -> str:
     value_up = value.upper()
     allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
     if value_up not in allowed:
-        raise click.ClickException(
-            "Log level must be one of DEBUG/INFO/WARNING/ERROR/CRITICAL"
-        )
+        raise click.ClickException(t("config_log_level_invalid"))
     return value_up
 
 
@@ -121,21 +126,21 @@ def _validate_dashboard_port(value: str) -> int:
     try:
         port = int(value)
     except ValueError:
-        raise click.ClickException("Port must be a number")
+        raise click.ClickException(t("config_port_must_be_number"))
     if port < 1 or port > 65535:
-        raise click.ClickException("Port must be in range 1-65535")
+        raise click.ClickException(t("config_port_range_invalid"))
     return port
 
 
 def _validate_dashboard_username(value: str) -> str:
     if value is None or value.strip() == "":
-        raise click.ClickException("Username cannot be empty")
+        raise click.ClickException(t("config_username_empty"))
     return value.strip()
 
 
 def _validate_dashboard_password(value: str) -> str:
     if value is None or value == "":
-        raise click.ClickException("Password cannot be empty")
+        raise click.ClickException(t("config_password_empty"))
     # Return the canonical stored representation.
     return hash_dashboard_password_secure(value)
 
@@ -144,17 +149,13 @@ def _validate_timezone(value: str) -> str:
     try:
         zoneinfo.ZoneInfo(value)
     except Exception:
-        raise click.ClickException(
-            f"Invalid timezone: {value}. Please use a valid IANA timezone name"
-        )
+        raise click.ClickException(t("config_timezone_invalid", value=value))
     return value
 
 
 def _validate_callback_api_base(value: str) -> str:
     if not (value.startswith("http://") or value.startswith("https://")):
-        raise click.ClickException(
-            "Callback API base must start with http:// or https://"
-        )
+        raise click.ClickException(t("config_callback_invalid"))
     return value
 
 
@@ -300,12 +301,8 @@ def set_config(key: str, value: str) -> None:
         _save_config(config)
 
         click.echo(f"Config updated: {key}")
-        if key == "dashboard.password":
-            click.echo("  Old value: ********")
-            click.echo("  New value: ********")
-        else:
-            click.echo(f"  Old value: {old_value}")
-            click.echo(f"  New value: {validated_value}")
+        click.echo(f"  Old value: {old_value}")
+        click.echo(f"  New value: {validated_value}")
     except KeyError:
         raise click.ClickException(f"Unknown config key: {key}")
     except click.ClickException:

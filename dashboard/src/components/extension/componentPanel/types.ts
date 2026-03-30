@@ -4,6 +4,7 @@
 
 /** 指令项接口 */
 export interface CommandItem {
+  command_key: string;
   handler_full_name: string;
   handler_name: string;
   plugin: string;
@@ -22,14 +23,18 @@ export interface CommandItem {
   is_group: boolean;
   has_conflict: boolean;
   reserved: boolean;
+  runtime_kind?: "legacy" | "sdk";
+  supports_toggle?: boolean;
+  supports_rename?: boolean;
+  supports_permission?: boolean;
   sub_commands: CommandItem[];
 }
 
 /** 指令类型 */
-export type CommandType = 'command' | 'group' | 'sub_command';
+export type CommandType = "command" | "group" | "sub_command";
 
 /** 权限类型 */
-export type PermissionType = 'admin' | 'everyone' | 'member';
+export type PermissionType = "admin" | "everyone" | "member";
 
 /** 指令摘要统计 */
 export interface CommandSummary {
@@ -80,7 +85,7 @@ export interface TypeInfo {
 export interface StatusInfo {
   text: string;
   color: string;
-  variant: 'flat' | 'outlined' | 'text' | 'elevated' | 'tonal' | 'plain';
+  variant: "flat" | "outlined" | "text" | "elevated" | "tonal" | "plain";
 }
 
 /** MCP/函数工具参数定义 */
@@ -91,6 +96,7 @@ export interface ToolParameter {
 
 /** MCP/函数工具对象 */
 export interface ToolItem {
+  tool_key: string;
   name: string;
   description: string;
   active: boolean;
@@ -99,6 +105,7 @@ export interface ToolItem {
   };
   origin?: string;
   origin_name?: string;
+  runtime_kind?: "legacy" | "sdk";
+  plugin_id?: string | null;
   source?: string;
 }
-

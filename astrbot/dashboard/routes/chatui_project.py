@@ -35,7 +35,7 @@ class ChatUIProjectRoute(Route):
         description = post_data.get("description")
 
         if not title:
-            return Response().error("Missing key: title").__dict__
+            return Response().error("Missing key: title").to_json()
 
         project = await self.db.create_chatui_project(
             creator=username,
@@ -55,8 +55,7 @@ class ChatUIProjectRoute(Route):
                     "created_at": to_utc_isoformat(project.created_at),
                     "updated_at": to_utc_isoformat(project.updated_at),
                 }
-            )
-            .__dict__
+            ).to_json()
         )
 
     async def list_projects(self):
@@ -77,23 +76,23 @@ class ChatUIProjectRoute(Route):
             for project in projects
         ]
 
-        return Response().ok(data=projects_data).__dict__
+        return Response().ok(data=projects_data).to_json()
 
     async def get_project(self):
         """Get a specific ChatUI project."""
         project_id = request.args.get("project_id")
         if not project_id:
-            return Response().error("Missing key: project_id").__dict__
+            return Response().error("Missing key: project_id").to_json()
 
         username = g.get("username", "guest")
 
         project = await self.db.get_chatui_project_by_id(project_id)
         if not project:
-            return Response().error(f"Project {project_id} not found").__dict__
+            return Response().error(f"Project {project_id} not found").to_json()
 
         # Verify ownership
         if project.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error("Permission denied").to_json()
 
         return (
             Response()
@@ -106,8 +105,7 @@ class ChatUIProjectRoute(Route):
                     "created_at": to_utc_isoformat(project.created_at),
                     "updated_at": to_utc_isoformat(project.updated_at),
                 }
-            )
-            .__dict__
+            ).to_json()
         )
 
     async def update_chatui_project(self):
@@ -120,16 +118,16 @@ class ChatUIProjectRoute(Route):
         description = post_data.get("description")
 
         if not project_id:
-            return Response().error("Missing key: project_id").__dict__
+            return Response().error("Missing key: project_id").to_json()
 
         username = g.get("username", "guest")
 
         # Verify ownership
         project = await self.db.get_chatui_project_by_id(project_id)
         if not project:
-            return Response().error(f"Project {project_id} not found").__dict__
+            return Response().error(f"Project {project_id} not found").to_json()
         if project.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error("Permission denied").to_json()
 
         await self.db.update_chatui_project(
             project_id=project_id,
@@ -138,26 +136,26 @@ class ChatUIProjectRoute(Route):
             description=description,
         )
 
-        return Response().ok().__dict__
+        return Response().ok().to_json()
 
     async def delete_project(self):
         """Delete a ChatUI project."""
         project_id = request.args.get("project_id")
         if not project_id:
-            return Response().error("Missing key: project_id").__dict__
+            return Response().error("Missing key: project_id").to_json()
 
         username = g.get("username", "guest")
 
         # Verify ownership
         project = await self.db.get_chatui_project_by_id(project_id)
         if not project:
-            return Response().error(f"Project {project_id} not found").__dict__
+            return Response().error(f"Project {project_id} not found").to_json()
         if project.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error("Permission denied").to_json()
 
         await self.db.delete_chatui_project(project_id)
 
-        return Response().ok().__dict__
+        return Response().ok().to_json()
 
     async def add_session_to_project(self):
         """Add a session to a project."""
@@ -167,29 +165,29 @@ class ChatUIProjectRoute(Route):
         project_id = post_data.get("project_id")
 
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error("Missing key: session_id").to_json()
         if not project_id:
-            return Response().error("Missing key: project_id").__dict__
+            return Response().error("Missing key: project_id").to_json()
 
         username = g.get("username", "guest")
 
         # Verify project ownership
         project = await self.db.get_chatui_project_by_id(project_id)
         if not project:
-            return Response().error(f"Project {project_id} not found").__dict__
+            return Response().error(f"Project {project_id} not found").to_json()
         if project.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error("Permission denied").to_json()
 
         # Verify session ownership
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(f"Session {session_id} not found").to_json()
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error("Permission denied").to_json()
 
         await self.db.add_session_to_project(session_id, project_id)
 
-        return Response().ok().__dict__
+        return Response().ok().to_json()
 
     async def remove_session_from_project(self):
         """Remove a session from its project."""
@@ -198,35 +196,35 @@ class ChatUIProjectRoute(Route):
         session_id = post_data.get("session_id")
 
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error("Missing key: session_id").to_json()
 
         username = g.get("username", "guest")
 
         # Verify session ownership
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(f"Session {session_id} not found").to_json()
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error("Permission denied").to_json()
 
         await self.db.remove_session_from_project(session_id)
 
-        return Response().ok().__dict__
+        return Response().ok().to_json()
 
     async def get_project_sessions(self):
         """Get all sessions in a project."""
         project_id = request.args.get("project_id")
         if not project_id:
-            return Response().error("Missing key: project_id").__dict__
+            return Response().error("Missing key: project_id").to_json()
 
         username = g.get("username", "guest")
 
         # Verify project ownership
         project = await self.db.get_chatui_project_by_id(project_id)
         if not project:
-            return Response().error(f"Project {project_id} not found").__dict__
+            return Response().error(f"Project {project_id} not found").to_json()
         if project.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error("Permission denied").to_json()
 
         sessions = await self.db.get_project_sessions(project_id)
 
@@ -243,4 +241,4 @@ class ChatUIProjectRoute(Route):
             for session in sessions
         ]
 
-        return Response().ok(data=sessions_data).__dict__
+        return Response().ok(data=sessions_data).to_json()

@@ -389,19 +389,22 @@ async def compress_image(
         if len(data) < min_file_size_bytes:
             return url_or_path
     else:
-        local_path = Path(url_or_path)
-        if not local_path.exists():
-            return url_or_path
-        if local_path.stat().st_size < min_file_size_bytes:
-            return url_or_path
-        with local_path.open("rb") as f:
-            data = f.read()
 
-    if not data:
-        return url_or_path
+        def _read_local_path():
+            lp = Path(url_or_path)
+            if not lp.exists():
+                return None
+            if lp.stat().st_size < min_file_size_bytes:
+                return None
+            with lp.open("rb") as f:
+                return f.read()
+
+        data = await asyncio.to_thread(_read_local_path)
+        if not data:
+            return url_or_path
 
     temp_dir = Path(get_astrbot_temp_path())
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
 
     # Offload the blocking image processing task to a thread.
     return await asyncio.to_thread(

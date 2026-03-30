@@ -1,17 +1,10 @@
 <template>
-  <h5>{{ tm('network.proxySelector.title') }}</h5>
-  <v-radio-group
-    v-model="radioValue"
-    class="mt-2"
-    hide-details="true"
-  >
-    <v-radio
-      :label="tm('network.proxySelector.noProxy')"
-      value="0"
-    />
+  <h5>{{ tm("network.proxySelector.title") }}</h5>
+  <v-radio-group v-model="radioValue" class="mt-2" hide-details="true">
+    <v-radio :label="tm('network.proxySelector.noProxy')" value="0" />
     <v-radio value="1">
       <template #label>
-        <span>{{ tm('network.proxySelector.useProxy') }}</span>
+        <span>{{ tm("network.proxySelector.useProxy") }}</span>
         <v-btn
           v-if="radioValue === '1'"
           class="ml-2"
@@ -20,16 +13,13 @@
           :loading="loadingTestingConnection"
           @click="testAllProxies"
         >
-          {{ tm('network.proxySelector.testConnection') }}
+          {{ tm("network.proxySelector.testConnection") }}
         </v-btn>
       </template>
     </v-radio>
   </v-radio-group>
   <v-expand-transition>
-    <div
-      v-if="radioValue === '1'"
-      style="margin-left: 16px;"
-    >
+    <div v-if="radioValue === '1'" style="margin-left: 16px">
       <v-radio-group
         v-model="githubProxyRadioControl"
         class="mt-2"
@@ -50,7 +40,11 @@
                   size="x-small"
                   class="mr-1"
                 >
-                  {{ proxyStatus[idx].available ? tm('network.proxySelector.available') : tm('network.proxySelector.unavailable') }}
+                  {{
+                    proxyStatus[idx].available
+                      ? tm("network.proxySelector.available")
+                      : tm("network.proxySelector.unavailable")
+                  }}
                 </v-chip>
                 <v-chip
                   v-if="proxyStatus[idx].available"
@@ -68,15 +62,12 @@
           value="-1"
           :label="tm('network.proxySelector.custom')"
         >
-          <template
-            v-if="String(githubProxyRadioControl) === '-1'"
-            #label
-          >
+          <template v-if="String(githubProxyRadioControl) === '-1'" #label>
             <v-text-field
               v-model="selectedGitHubProxy"
               density="compact"
               variant="outlined"
-              style="width: 100vw;"
+              style="width: 100vw"
               :placeholder="tm('network.proxySelector.custom')"
               hide-details="true"
             />
@@ -87,150 +78,153 @@
   </v-expand-transition>
 </template>
 
-
-<script>
-import axios from '@/utils/request';
-import { useModuleI18n } from '@/i18n/composables';
+<script lang="ts">
+import axios from "@/utils/request";
+import { useModuleI18n } from "@/i18n/composables";
 
 export default {
-    setup() {
-        const { tm } = useModuleI18n('features/settings');
-        return { tm };
+  setup() {
+    const { tm } = useModuleI18n("features/settings");
+    return { tm };
+  },
+  data() {
+    return {
+      githubProxies: [
+        "https://edgeone.gh-proxy.com",
+        "https://hk.gh-proxy.com/",
+        "https://gh-proxy.com/",
+        "https://gh.llkk.cc",
+      ],
+      githubProxyRadioControl: "0", // the index of the selected proxy
+      selectedGitHubProxy: "",
+      radioValue: "0", // 0: 不使用, 1: 使用
+      loadingTestingConnection: false,
+      testingProxies: {},
+      proxyStatus: {},
+      initializing: true,
+    };
+  },
+  watch: {
+    selectedGitHubProxy: function (newVal, oldVal) {
+      if (this.initializing) {
+        return;
+      }
+      if (!newVal) {
+        newVal = "";
+      }
+      localStorage.setItem("selectedGitHubProxy", newVal);
     },
-    data() {
-        return {
-            githubProxies: [
-                "https://edgeone.gh-proxy.com",
-                "https://hk.gh-proxy.com/",
-                "https://gh-proxy.com/",
-                "https://gh.llkk.cc",
-            ],
-            githubProxyRadioControl: "0", // the index of the selected proxy
-            selectedGitHubProxy: "",
-            radioValue: "0", // 0: 不使用, 1: 使用
-            loadingTestingConnection: false,
-            testingProxies: {},
-            proxyStatus: {},
-            initializing: true,
-        }
+    radioValue: function (newVal) {
+      if (this.initializing) {
+        return;
+      }
+      localStorage.setItem("githubProxyRadioValue", newVal);
+      if (String(newVal) === "0") {
+        this.selectedGitHubProxy = "";
+      } else if (String(this.githubProxyRadioControl) !== "-1") {
+        this.selectedGitHubProxy = this.getProxyByControl(
+          this.githubProxyRadioControl,
+        );
+      }
     },
-    watch: {
-        selectedGitHubProxy: function (newVal, oldVal) {
-            if (this.initializing) {
-                return;
-            }
-            if (!newVal) {
-                newVal = ""
-            }
-            localStorage.setItem('selectedGitHubProxy', newVal);
-        },
-        radioValue: function (newVal) {
-            if (this.initializing) {
-                return;
-            }
-            localStorage.setItem('githubProxyRadioValue', newVal);
-            if (String(newVal) === "0") {
-                this.selectedGitHubProxy = "";
-            } else if (String(this.githubProxyRadioControl) !== "-1") {
-                this.selectedGitHubProxy = this.getProxyByControl(this.githubProxyRadioControl);
-            }
-        },
-        githubProxyRadioControl: function (newVal) {
-            if (this.initializing) {
-                return;
-            }
-            const normalizedVal = String(newVal);
-            localStorage.setItem('githubProxyRadioControl', normalizedVal);
-            if (String(this.radioValue) !== "1") {
-                this.selectedGitHubProxy = "";
-                return;
-            }
-            if (normalizedVal !== "-1") {
-                this.selectedGitHubProxy = this.getProxyByControl(normalizedVal);
-            }
-        }
+    githubProxyRadioControl: function (newVal) {
+      if (this.initializing) {
+        return;
+      }
+      const normalizedVal = String(newVal);
+      localStorage.setItem("githubProxyRadioControl", normalizedVal);
+      if (String(this.radioValue) !== "1") {
+        this.selectedGitHubProxy = "";
+        return;
+      }
+      if (normalizedVal !== "-1") {
+        this.selectedGitHubProxy = this.getProxyByControl(normalizedVal);
+      }
     },
-    mounted() {
-        this.initializing = true;
+  },
+  mounted() {
+    this.initializing = true;
 
-        const savedProxy = localStorage.getItem('selectedGitHubProxy') || "";
-        const savedRadio = localStorage.getItem('githubProxyRadioValue') || "0";
-        const savedControl = String(localStorage.getItem('githubProxyRadioControl') || "0");
+    const savedProxy = localStorage.getItem("selectedGitHubProxy") || "";
+    const savedRadio = localStorage.getItem("githubProxyRadioValue") || "0";
+    const savedControl = String(
+      localStorage.getItem("githubProxyRadioControl") || "0",
+    );
 
-        this.radioValue = savedRadio;
-        this.githubProxyRadioControl = savedControl;
+    this.radioValue = savedRadio;
+    this.githubProxyRadioControl = savedControl;
 
-        if (savedRadio === "1") {
-            if (savedControl !== "-1") {
-                this.selectedGitHubProxy = this.getProxyByControl(savedControl);
-            } else {
-                this.selectedGitHubProxy = savedProxy;
-            }
-        } else {
-            this.selectedGitHubProxy = "";
-        }
-
-        this.initializing = false;
-    },
-    methods: {
-        getProxyByControl(control) {
-            const normalizedControl = String(control);
-            if (normalizedControl === "-1") {
-                return "";
-            }
-            const index = Number.parseInt(normalizedControl, 10);
-            if (Number.isNaN(index)) {
-                return "";
-            }
-            return this.githubProxies[index] || "";
-        },
-        async testSingleProxy(idx) {
-            this.testingProxies[idx] = true;
-            
-            const proxy = this.githubProxies[idx];
-            
-            try {
-                const response = await axios.post('/api/stat/test-ghproxy-connection', {
-                    proxy_url: proxy
-                });
-                console.log(response.data);
-                if (response.status === 200) {
-                    this.proxyStatus[idx] = {
-                        available: true,
-                        latency: Math.round(response.data.data.latency)
-                    };
-                } else {
-                    this.proxyStatus[idx] = {
-                        available: false,
-                        latency: 0
-                    };
-                }
-            } catch (error) {
-                this.proxyStatus[idx] = {
-                    available: false,
-                    latency: 0
-                };
-            } finally {
-                this.testingProxies[idx] = false;
-            }
-        },
-        
-        async testAllProxies() {
-            this.loadingTestingConnection = true;
-            
-            const promises = this.githubProxies.map((proxy, idx) => 
-                this.testSingleProxy(idx)
-            );
-            
-            await Promise.all(promises);
-            this.loadingTestingConnection = false;
-        },
+    if (savedRadio === "1") {
+      if (savedControl !== "-1") {
+        this.selectedGitHubProxy = this.getProxyByControl(savedControl);
+      } else {
+        this.selectedGitHubProxy = savedProxy;
+      }
+    } else {
+      this.selectedGitHubProxy = "";
     }
-}
+
+    this.initializing = false;
+  },
+  methods: {
+    getProxyByControl(control) {
+      const normalizedControl = String(control);
+      if (normalizedControl === "-1") {
+        return "";
+      }
+      const index = Number.parseInt(normalizedControl, 10);
+      if (Number.isNaN(index)) {
+        return "";
+      }
+      return this.githubProxies[index] || "";
+    },
+    async testSingleProxy(idx) {
+      this.testingProxies[idx] = true;
+
+      const proxy = this.githubProxies[idx];
+
+      try {
+        const response = await axios.post("/api/stat/test-ghproxy-connection", {
+          proxy_url: proxy,
+        });
+        console.log(response.data);
+        if (response.status === 200) {
+          this.proxyStatus[idx] = {
+            available: true,
+            latency: Math.round(response.data.data.latency),
+          };
+        } else {
+          this.proxyStatus[idx] = {
+            available: false,
+            latency: 0,
+          };
+        }
+      } catch (error) {
+        this.proxyStatus[idx] = {
+          available: false,
+          latency: 0,
+        };
+      } finally {
+        this.testingProxies[idx] = false;
+      }
+    },
+
+    async testAllProxies() {
+      this.loadingTestingConnection = true;
+
+      const promises = this.githubProxies.map((proxy, idx) =>
+        this.testSingleProxy(idx),
+      );
+
+      await Promise.all(promises);
+      this.loadingTestingConnection = false;
+    },
+  },
+};
 </script>
 
 <style>
 .v-label {
-    font-size: 0.875rem;
+  font-size: 0.875rem;
 }
 </style>

@@ -1,22 +1,17 @@
 <template>
-  <v-card style="height: 100%; width: 100%;">
-    <v-card-text
-      class="pa-4"
-      style="height: 100%;"
-    >
-      <v-container
-        fluid
-        class="d-flex flex-column"
-        style="height: 100%;"
-      >
-        <div style="margin-bottom: 32px;">
+  <v-card style="height: 100%; width: 100%">
+    <v-card-text class="pa-4" style="height: 100%">
+      <v-container fluid class="d-flex flex-column" style="height: 100%">
+        <div style="margin-bottom: 32px">
           <h1 class="gradient-text">
-            {{ tm('page.title') }}
+            {{ tm("page.title") }}
           </h1>
-          <small style="color: #a3a3a3;">{{ tm('page.subtitle') }}</small>
+          <small style="color: #a3a3a3">{{ tm("page.subtitle") }}</small>
         </div>
 
-        <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+        <div
+          style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap"
+        >
           <v-btn
             size="large"
             :variant="isActive('knowledge-base') ? 'flat' : 'tonal'"
@@ -24,10 +19,8 @@
             rounded="lg"
             @click="navigateTo('knowledge-base')"
           >
-            <v-icon start>
-              mdi-text-box-search
-            </v-icon>
-            {{ tm('page.navigation.knowledgeBase') }}
+            <v-icon start> mdi-text-box-search </v-icon>
+            {{ tm("page.navigation.knowledgeBase") }}
           </v-btn>
           <v-btn
             size="large"
@@ -36,10 +29,8 @@
             rounded="lg"
             @click="navigateTo('long-term-memory')"
           >
-            <v-icon start>
-              mdi-dots-hexagon
-            </v-icon>
-            {{ tm('page.navigation.longTermMemory') }}
+            <v-icon start> mdi-dots-hexagon </v-icon>
+            {{ tm("page.navigation.longTermMemory") }}
           </v-btn>
           <v-btn
             size="large"
@@ -48,18 +39,12 @@
             rounded="lg"
             @click="navigateTo('other')"
           >
-            <v-icon start>
-              mdi-tools
-            </v-icon>
-            {{ tm('page.navigation.other') }}
+            <v-icon start> mdi-tools </v-icon>
+            {{ tm("page.navigation.other") }}
           </v-btn>
         </div>
 
-        <div
-          id="sub-view"
-          class="flex-grow-1"
-          style="max-height: 100%;"
-        >
+        <div id="sub-view" class="flex-grow-1" style="max-height: 100%">
           <router-view />
         </div>
       </v-container>
@@ -67,50 +52,56 @@
   </v-card>
 </template>
 
-<script>
-import { useModuleI18n } from '@/i18n/composables';
+<script lang="ts">
+import { useModuleI18n } from "@/i18n/composables";
 
 export default {
-  name: 'AlkaidPage',
+  name: "AlkaidPage",
   components: {},
   setup() {
-    const { tm } = useModuleI18n('features/alkaid/index');
+    const { tm } = useModuleI18n("features/alkaid/index");
     return { tm };
   },
   data() {
-    return {}
+    return {};
   },
   mounted() {
     // 如果在根路径 /alkaid，默认跳转到知识库页面
-    if (this.$route.path === '/alkaid') {
-      this.navigateTo('knowledge-base');
+    if (this.$route.path === "/alkaid") {
+      this.navigateTo("knowledge-base");
     }
   },
   methods: {
     navigateTo(tab) {
       try {
-        if (this.$router && typeof this.$router.push === 'function') {
+        if (this.$router && typeof this.$router.push === "function") {
           this.$router.push(`/alkaid/${tab}`);
         }
       } catch (error) {
-        console.warn('Navigation error:', error);
+        console.warn("Navigation error:", error);
       }
     },
     isActive(tab) {
       try {
         return this.$route && this.$route.path.includes(`/alkaid/${tab}`);
       } catch (error) {
-        console.warn('Route check error:', error);
+        console.warn("Route check error:", error);
         return false;
       }
-    }
-  }
-}
+    },
+  },
+};
 </script>
 
 <style scoped>
 .gradient-text {
-  background: linear-gradient(74deg, #2abfe1 0, #9b72cb 25%, #b55908 50%, #d93025 100%);
+  background: linear-gradient(
+    74deg,
+    #2abfe1 0,
+    #9b72cb 25%,
+    #b55908 50%,
+    #d93025 100%
+  );
 
   -webkit-background-clip: text;
   background-clip: text;

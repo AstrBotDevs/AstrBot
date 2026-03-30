@@ -92,5 +92,9 @@ class PipelineScheduler:
 
             logger.debug("pipeline 执行完毕｡")
         finally:
-            event.cleanup_temporary_local_files()
+            sdk_plugin_bridge = getattr(
+                self.ctx.plugin_manager.context, "sdk_plugin_bridge", None
+            )
+            if sdk_plugin_bridge is not None:
+                sdk_plugin_bridge.close_request_overlay_for_event(event)
             active_event_registry.unregister(event)

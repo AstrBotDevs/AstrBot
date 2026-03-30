@@ -9,10 +9,10 @@ from astrbot.api.event import MessageChain
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.message.components import File
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
-from ..computer_client import get_booter
 from .permissions import check_admin_permission
 
 # @dataclass
@@ -109,7 +109,7 @@ class FileUploadTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         local_path: str,
-    ) -> str | None:
+    ) -> str:
         if permission_error := check_admin_permission(context, "File upload/download"):
             return permission_error
         sb = await get_booter(

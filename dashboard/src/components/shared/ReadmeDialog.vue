@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref, watch, computed, onUnmounted } from "vue";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
@@ -35,7 +35,8 @@ const props = defineProps({
   mode: {
     type: String,
     default: "readme",
-    validator: (value) => ["readme", "changelog", "first-notice"].includes(value),
+    validator: (value) =>
+      ["readme", "changelog", "first-notice"].includes(value),
   },
 });
 
@@ -320,11 +321,16 @@ function tryFallbackCopy(text, btn) {
       opacity: "0",
       zIndex: "-1",
     });
-    btn.parentNode.appendChild(textArea);
-    textArea.select();
-    const success = document.execCommand("copy");
-    btn.parentNode.removeChild(textArea);
-    showCopyFeedback(btn, success);
+    const parent = btn.parentNode;
+    if (parent) {
+      parent.appendChild(textArea);
+      textArea.select();
+      const success = document.execCommand("copy");
+      parent.removeChild(textArea);
+      showCopyFeedback(btn, success);
+    } else {
+      showCopyFeedback(btn, false);
+    }
   } catch (err) {
     showCopyFeedback(btn, false);
   }
@@ -364,29 +370,16 @@ const showActionArea = computed(() => {
 </script>
 
 <template>
-  <v-dialog
-    v-model="_show"
-    width="800"
-  >
+  <v-dialog v-model="_show" width="800">
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h2 pa-2">{{ modeConfig.title }}</span>
-        <v-btn
-          icon
-          variant="text"
-          @click="_show = false"
-        >
+        <v-btn icon variant="text" @click="_show = false">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
-      <v-card-text
-        ref="scrollContainer"
-        style="overflow-y: auto"
-      >
-        <div
-          v-if="showActionArea"
-          class="d-flex justify-space-between mb-4"
-        >
+      <v-card-text ref="scrollContainer" style="overflow-y: auto">
+        <div v-if="showActionArea" class="d-flex justify-space-between mb-4">
           <v-btn
             v-if="modeConfig.showGithubButton && repoUrl"
             color="primary"
@@ -433,11 +426,7 @@ const showActionArea = computed(() => {
           class="d-flex flex-column align-center justify-center"
           style="height: 100%"
         >
-          <v-icon
-            size="64"
-            color="error"
-            class="mb-4"
-          >
+          <v-icon size="64" color="error" class="mb-4">
             mdi-alert-circle-outline
           </v-icon>
           <p class="text-body-1 text-center mb-2">
@@ -453,11 +442,7 @@ const showActionArea = computed(() => {
           class="d-flex flex-column align-center justify-center"
           style="height: 100%"
         >
-          <v-icon
-            size="64"
-            color="warning"
-            class="mb-4"
-          >
+          <v-icon size="64" color="warning" class="mb-4">
             mdi-file-question-outline
           </v-icon>
           <p class="text-body-1 text-center mb-2">
@@ -470,11 +455,7 @@ const showActionArea = computed(() => {
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn
-          color="primary"
-          variant="tonal"
-          @click="_show = false"
-        >
+        <v-btn color="primary" variant="tonal" @click="_show = false">
           {{ t("core.common.close") }}
         </v-btn>
       </v-card-actions>
@@ -483,28 +464,28 @@ const showActionArea = computed(() => {
 </template>
 
 <style scoped>
-:deep(.markdown-body) {
+::v-deep(.markdown-body) {
   --markdown-border: rgba(128, 128, 128, 0.3);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   line-height: 1.6;
   padding: 8px 0;
   color: var(--v-theme-secondaryText);
 }
 
-:deep(.markdown-body [align="center"]) {
+::v-deep(.markdown-body [align="center"]) {
   text-align: center;
 }
-:deep(.markdown-body [align="right"]) {
+::v-deep(.markdown-body [align="right"]) {
   text-align: right;
 }
 
-:deep(.markdown-body h1),
-:deep(.markdown-body h2),
-:deep(.markdown-body h3),
-:deep(.markdown-body h4),
-:deep(.markdown-body h5),
-:deep(.markdown-body h6) {
+::v-deep(.markdown-body h1),
+::v-deep(.markdown-body h2),
+::v-deep(.markdown-body h3),
+::v-deep(.markdown-body h4),
+::v-deep(.markdown-body h5),
+::v-deep(.markdown-body h6) {
   margin-top: 24px;
   margin-bottom: 16px;
   font-weight: 600;
@@ -512,26 +493,26 @@ const showActionArea = computed(() => {
   scroll-margin-top: 12px;
 }
 
-:deep(.markdown-body h1) {
+::v-deep(.markdown-body h1) {
   font-size: 2em;
   border-bottom: 1px solid var(--v-theme-border);
   padding-bottom: 0.3em;
 }
-:deep(.markdown-body h2) {
+::v-deep(.markdown-body h2) {
   font-size: 1.5em;
   border-bottom: 1px solid var(--v-theme-border);
   padding-bottom: 0.3em;
 }
-:deep(.markdown-body p) {
+::v-deep(.markdown-body p) {
   margin-top: 0;
   margin-bottom: 16px;
 }
 
-:deep(.markdown-body .code-block-wrapper) {
+::v-deep(.markdown-body .code-block-wrapper) {
   position: relative;
   margin-bottom: 16px;
 }
-:deep(.markdown-body .code-lang-label) {
+::v-deep(.markdown-body .code-lang-label) {
   position: absolute;
   top: 8px;
   left: 12px;
@@ -542,7 +523,7 @@ const showActionArea = computed(() => {
   z-index: 1;
 }
 
-:deep(.markdown-body .copy-code-btn) {
+::v-deep(.markdown-body .copy-code-btn) {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -561,12 +542,12 @@ const showActionArea = computed(() => {
   z-index: 1;
 }
 
-:deep(.markdown-body .copy-code-btn:hover) {
+::v-deep(.markdown-body .copy-code-btn:hover) {
   background: rgba(110, 118, 129, 0.6);
   color: #fff;
 }
 
-:deep(.markdown-body code) {
+::v-deep(.markdown-body code) {
   padding: 0.2em 0.4em;
   margin: 0;
   background-color: rgba(110, 118, 129, 0.2);
@@ -575,7 +556,7 @@ const showActionArea = computed(() => {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
-:deep(.markdown-body pre.hljs) {
+::v-deep(.markdown-body pre.hljs) {
   padding: 16px;
   padding-top: 32px;
   overflow: auto;
@@ -586,19 +567,19 @@ const showActionArea = computed(() => {
   margin: 0;
 }
 
-:deep(.markdown-body pre.hljs code) {
+::v-deep(.markdown-body pre.hljs code) {
   background-color: transparent;
   padding: 0;
   border-radius: 0;
   color: #c9d1d9;
 }
-:deep(.markdown-body ul),
-:deep(.markdown-body ol) {
+::v-deep(.markdown-body ul),
+::v-deep(.markdown-body ol) {
   padding-left: 2em;
   margin-bottom: 16px;
 }
 
-:deep(.markdown-body img) {
+::v-deep(.markdown-body img) {
   max-width: 100%;
   margin: 8px 0;
   box-sizing: border-box;
@@ -606,8 +587,8 @@ const showActionArea = computed(() => {
   border-radius: 3px;
 }
 
-:deep(.markdown-body img[src*="shields.io"]),
-:deep(.markdown-body img[src*="badge"]) {
+::v-deep(.markdown-body img[src*="shields.io"]),
+::v-deep(.markdown-body img[src*="badge"]) {
   display: inline-block;
   vertical-align: middle;
   height: auto;
@@ -615,29 +596,29 @@ const showActionArea = computed(() => {
   background-color: transparent;
 }
 
-:deep(.markdown-body blockquote) {
+::v-deep(.markdown-body blockquote) {
   padding: 0 1em;
   color: var(--v-theme-secondaryText);
   border-left: 0.25em solid var(--v-theme-border);
   margin-bottom: 16px;
 }
 
-:deep(.markdown-body a) {
+::v-deep(.markdown-body a) {
   color: var(--v-theme-primary);
   text-decoration: none;
 }
-:deep(.markdown-body a:hover) {
+::v-deep(.markdown-body a:hover) {
   text-decoration: underline;
 }
 
-:deep(.markdown-body table) {
+::v-deep(.markdown-body table) {
   border-spacing: 0;
   border-collapse: collapse;
   width: 100%;
   margin-bottom: 0;
   border: 1px solid var(--markdown-border);
 }
-:deep(.markdown-body .table-container) {
+::v-deep(.markdown-body .table-container) {
   width: 100%;
   overflow-x: auto;
   margin-bottom: 16px;
@@ -645,23 +626,23 @@ const showActionArea = computed(() => {
   border-radius: 6px;
 }
 
-:deep(.markdown-body table th),
-:deep(.markdown-body table td) {
+::v-deep(.markdown-body table th),
+::v-deep(.markdown-body table td) {
   padding: 6px 13px;
   border: 1px solid var(--markdown-border);
 }
-:deep(.markdown-body table th) {
+::v-deep(.markdown-body table th) {
   font-weight: 600;
   background-color: rgba(128, 128, 128, 0.1);
 }
-:deep(.markdown-body table tr) {
+::v-deep(.markdown-body table tr) {
   background-color: transparent;
 }
-:deep(.markdown-body table tr:nth-child(2n)) {
+::v-deep(.markdown-body table tr:nth-child(2n)) {
   background-color: rgba(128, 128, 128, 0.05);
 }
 
-:deep(.markdown-body hr) {
+::v-deep(.markdown-body hr) {
   height: 0.25em;
   padding: 0;
   margin: 24px 0;
@@ -669,7 +650,7 @@ const showActionArea = computed(() => {
   border: 0;
 }
 
-:deep(.markdown-body details) {
+::v-deep(.markdown-body details) {
   margin-bottom: 16px;
   border: 1px solid var(--v-theme-border);
   border-radius: 6px;
@@ -677,10 +658,10 @@ const showActionArea = computed(() => {
   background-color: var(--v-theme-surface);
 }
 
-:deep(.markdown-body details[open]) {
+::v-deep(.markdown-body details[open]) {
   padding-bottom: 12px;
 }
-:deep(.markdown-body summary) {
+::v-deep(.markdown-body summary) {
   cursor: pointer;
   font-weight: 600;
   padding: 4px 0;
@@ -690,28 +671,28 @@ const showActionArea = computed(() => {
   gap: 6px;
 }
 
-:deep(.markdown-body summary::before) {
+::v-deep(.markdown-body summary::before) {
   content: "▶";
   font-size: 0.75em;
   transition: transform 0.2s ease;
 }
-:deep(.markdown-body details[open] summary::before) {
+::v-deep(.markdown-body details[open] summary::before) {
   transform: rotate(90deg);
 }
-:deep(.markdown-body summary::-webkit-details-marker) {
+::v-deep(.markdown-body summary::-webkit-details-marker) {
   display: none;
 }
-:deep(.markdown-body details > *:not(summary)) {
+::v-deep(.markdown-body details > *:not(summary)) {
   margin-top: 12px;
 }
 
-:deep(.markdown-body .hljs-keyword),
-:deep(.markdown-body .hljs-selector-tag),
-:deep(.markdown-body .hljs-title),
-:deep(.markdown-body .hljs-section),
-:deep(.markdown-body .hljs-doctag),
-:deep(.markdown-body .hljs-name),
-:deep(.markdown-body .hljs-strong) {
+::v-deep(.markdown-body .hljs-keyword),
+::v-deep(.markdown-body .hljs-selector-tag),
+::v-deep(.markdown-body .hljs-title),
+::v-deep(.markdown-body .hljs-section),
+::v-deep(.markdown-body .hljs-doctag),
+::v-deep(.markdown-body .hljs-name),
+::v-deep(.markdown-body .hljs-strong) {
   font-weight: bold;
 }
 </style>

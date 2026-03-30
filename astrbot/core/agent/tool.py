@@ -1,5 +1,6 @@
 import copy
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from dataclasses import field
 from typing import Any, Generic
 
 import jsonschema
@@ -68,11 +69,34 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     Origin of this tool: 'plugin' (from star plugins), 'internal' (AstrBot built-in),
     or 'mcp' (from MCP servers). Used by WebUI for display grouping.
     """
+    is_stateful: bool = False
+    """
+    Declare this tool as stateful. Stateful tools maintain state
+    across conversation turns within the same session (UMO).
+    When True, the tool can use get_session_state(umo) to access
+    per-session state that persists across tool calls.
+    """
+    _session_state: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
+    """
+    Internal: per-UMO session state storage for stateful tools.
+    Managed by ToolSessionManager; use get_session_state(umo) instead.
+    """
+
+    def get_session_state(self, umo: str) -> dict[str, Any]:
+        """Get or create session state for the given UMO.
+
+        Only valid when is_stateful=True. Otherwise returns empty dict.
+        """
+        if umo not in self._session_state:
+            self._session_state[umo] = {}
+        return self._session_state[umo]
 
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
-    async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
+    async def call(
+        self, context: ContextWrapper[TContext], **kwargs: Any
+    ) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
             "FunctionTool.call() must be implemented by subclasses or set a handler."
@@ -145,8 +169,8 @@ class ToolSet:
             light_tools.append(
                 FunctionTool(
                     name=tool.name,
-                    parameters=light_params,
                     description=tool.description,
+                    parameters=light_params,
                     handler=None,
                 )
             )
@@ -166,8 +190,8 @@ class ToolSet:
             param_tools.append(
                 FunctionTool(
                     name=tool.name,
-                    parameters=params,
                     description="",
+                    parameters=params,
                     handler=None,
                 )
             )
@@ -214,20 +238,26 @@ class ToolSet:
         """Get the list of function tools."""
         return self.tools
 
+    def list_tools(self) -> list[FunctionTool]:
+        """Get the list of function tools (alias for func_list)."""
+        return self.tools
+
     def openai_schema(self, omit_empty_parameter_field: bool = False) -> list[dict]:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
         for tool in self.tools:
-            func_def = {"type": "function", "function": {"name": tool.name}}
+            function_dict: dict[str, Any] = {"name": tool.name}
             if tool.description:
-                func_def["function"]["description"] = tool.description
-
+                function_dict["description"] = tool.description
             if tool.parameters is not None:
                 if (
                     tool.parameters and tool.parameters.get("properties")
                 ) or not omit_empty_parameter_field:
-                    func_def["function"]["parameters"] = tool.parameters
-
+                    function_dict["parameters"] = tool.parameters
+            func_def: dict[str, Any] = {
+                "type": "function",
+                "function": function_dict,
+            }
             result.append(func_def)
         return result
 

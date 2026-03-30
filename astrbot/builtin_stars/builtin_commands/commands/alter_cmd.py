@@ -18,7 +18,7 @@ class AlterCmdCommands(CommandParserMixin):
         """更新reset命令在特定场景下的权限设置"""
         from astrbot.api import sp
 
-        alter_cmd_cfg = await sp.global_get("alter_cmd", {})
+        alter_cmd_cfg = await sp.global_get("alter_cmd", {}) or {}
         plugin_cfg = alter_cmd_cfg.get("astrbot", {})
         reset_cfg = plugin_cfg.get("reset", {})
         reset_cfg[scene_key] = perm_type
@@ -47,7 +47,7 @@ class AlterCmdCommands(CommandParserMixin):
         if cmd_name == "reset" and cmd_type == "config":
             from astrbot.api import sp
 
-            alter_cmd_cfg = await sp.global_get("alter_cmd", {})
+            alter_cmd_cfg = await sp.global_get("alter_cmd", {}) or {}
             plugin_ = alter_cmd_cfg.get("astrbot", {})
             reset_cfg = plugin_.get("reset", {})
 
@@ -131,7 +131,7 @@ class AlterCmdCommands(CommandParserMixin):
 
         from astrbot.api import sp
 
-        alter_cmd_cfg = await sp.global_get("alter_cmd", {})
+        alter_cmd_cfg = await sp.global_get("alter_cmd", {}) or {}
         plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
         cfg = plugin_.get(found_command.handler_name, {})
         cfg["permission"] = cmd_type

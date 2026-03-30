@@ -1,10 +1,27 @@
+"""
+MCP client - DEPRECATED
+
+.. deprecated::
+    This module has been moved to :mod:`astrbot._internal.mcp`.
+    Please update your imports accordingly.
+
+    Old import (deprecated):
+        from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+
+    New import:
+        from astrbot._internal.mcp import MCPClient, MCPTool
+
+This file exists solely for backward compatibility and will be removed in a future version.
+"""
+
 import asyncio
 import logging
 import os
 import sys
+import warnings
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Generic
+from typing import Any, Generic, cast
 
 from tenacity import (
     before_sleep_log,
@@ -28,6 +45,14 @@ from .mcp_subcapability_bridge import (
 )
 from .tool import FunctionTool
 
+logger = logging.getLogger("astrbot")
+
+warnings.warn(
+    "astrbot.core.agent.mcp_client has been moved to astrbot._internal.mcp. "
+    "Please update your imports.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 try:
     import anyio
     import mcp
@@ -43,6 +68,26 @@ except (ModuleNotFoundError, ImportError):
     logger.warning(
         "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
     )
+
+
+class TenacityLogger:
+    """Wraps a logging.Logger to satisfy tenacity's LoggerProtocol."""
+
+    __slots__ = ("_logger",)
+    _logger: logging.Logger
+
+    def __init__(self, logger: logging.Logger) -> None:
+        self._logger = logger
+
+    def log(
+        self,
+        level: int,
+        msg: str,
+        /,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        self._logger.log(level, msg, *args, **kwargs)
 
 
 def _prepare_config(config: dict) -> dict:
@@ -153,6 +198,7 @@ class MCPClient(Generic[TContext]):
         self.resource_bridge_tool_names: list[str] = []
         self.server_errlogs: list[str] = []
         self.running_event = asyncio.Event()
+        self.process_pid: int | None = None
 
         # Store connection config for reconnection
         self._mcp_server_config: dict | None = None
@@ -174,6 +220,24 @@ class MCPClient(Generic[TContext]):
         )
         logger.debug("已启动 MCP elicitation 后台清理任务")
 
+    @staticmethod
+    def _extract_stdio_process_pid(streams_context: object) -> int | None:
+        """Best-effort extraction for stdio subprocess PID used by lease cleanup.
+
+        TODO(refactor): replace this async-generator frame introspection with a
+        stable MCP library hook once the upstream transport exposes process PID.
+        """
+        generator = getattr(streams_context, "gen", None)
+        frame = getattr(generator, "ag_frame", None)
+        if frame is None:
+            return None
+        process = frame.f_locals.get("process")
+        pid = getattr(process, "pid", None)
+        try:
+            return int(pid) if pid is not None else None
+        except (TypeError, ValueError):
+            return None
+
     async def connect_to_server(self, mcp_server_config: dict, name: str) -> None:
         """Connect to MCP server
 
@@ -191,6 +255,7 @@ class MCPClient(Generic[TContext]):
         self._server_name = name
         self.subcapability_bridge.set_server_name(name)
         self.subcapability_bridge.configure_from_server_config(mcp_server_config)
+        self.process_pid = None
 
         cfg = _prepare_config(mcp_server_config.copy())
 
@@ -233,7 +298,7 @@ class MCPClient(Generic[TContext]):
                     mcp.ClientSession(
                         *streams,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
+                        logging_callback=logging_callback,  # type: ignore[arg-type]
                         sampling_callback=(
                             self.subcapability_bridge.handle_sampling
                             if self.subcapability_bridge.sampling_enabled
@@ -275,7 +340,7 @@ class MCPClient(Generic[TContext]):
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
+                        logging_callback=logging_callback,  # type: ignore[arg-type]
                         sampling_callback=(
                             self.subcapability_bridge.handle_sampling
                             if self.subcapability_bridge.sampling_enabled
@@ -317,14 +382,18 @@ class MCPClient(Generic[TContext]):
             stdio_transport = await self.exit_stack.enter_async_context(
                 tolerant_stdio_client(
                     server_params,
-                    errlog=LogPipe(
-                        level=logging.INFO,
-                        logger=logger,
-                        identifier=f"MCPServer-{name}",
-                        callback=callback,
-                    ),  # type: ignore
+                    errlog=cast(
+                        Any,
+                        LogPipe(
+                            level=logging.INFO,
+                            logger=logger,
+                            identifier=f"MCPServer-{name}",
+                            callback=callback,
+                        ),
+                    ),
                 ),
             )
+            self.process_pid = self._extract_stdio_process_pid(self._streams_context)
 
             # Create a new client session
             self.session = await self.exit_stack.enter_async_context(
@@ -565,7 +634,7 @@ class MCPClient(Generic[TContext]):
             retry=retry_if_exception_type(anyio.ClosedResourceError),
             stop=stop_after_attempt(2),
             wait=wait_exponential(multiplier=1, min=1, max=3),
-            before_sleep=before_sleep_log(logger, logging.WARNING),
+            before_sleep=before_sleep_log(TenacityLogger(logger), logging.WARNING),
             reraise=True,
         )
         async def _call_with_retry():
@@ -686,6 +755,7 @@ class MCPClient(Generic[TContext]):
 
         # Set running_event first to unblock any waiting tasks
         self.running_event.set()
+        self.process_pid = None
 
 
 class MCPTool(FunctionTool, Generic[TContext]):

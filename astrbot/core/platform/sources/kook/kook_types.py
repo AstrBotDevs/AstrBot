@@ -84,7 +84,7 @@ class KookBaseDataClass(BaseModel):
 
     def to_dict(
         self,
-        mode: Literal["json", "python"] | str = "python",
+        mode: Literal["json", "python"] = "python",
         by_alias=True,
         exclude_none=True,
         exclude_unset=False,

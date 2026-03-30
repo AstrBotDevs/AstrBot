@@ -1,7 +1,8 @@
 from collections.abc import MutableMapping
 from typing import cast
 
-from ..register import register_provider_adapter
+from astrbot.core.provider.register import register_provider_adapter
+
 from .openai_source import ProviderOpenAIOfficial
 
 

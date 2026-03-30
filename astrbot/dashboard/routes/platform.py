@@ -56,7 +56,7 @@ class PlatformRoute(Route):
 
         if not platform_adapter:
             logger.warning(f"未找到 webhook_uuid 为 {webhook_uuid} 的平台")
-            return Response().error("未找到对应平台").__dict__, 404
+            return Response().error("未找到对应平台").to_json(), 404
 
         # 调用平台适配器的 webhook_callback 方法
         try:
@@ -66,10 +66,10 @@ class PlatformRoute(Route):
             logger.error(
                 f"平台 {platform_adapter.meta().name} 未实现 webhook_callback 方法"
             )
-            return Response().error("平台未支持统一 Webhook 模式").__dict__, 500
+            return Response().error("平台未支持统一 Webhook 模式").to_json(), 500
         except Exception as e:
             logger.error(f"处理 webhook 回调时发生错误: {e}", exc_info=True)
-            return Response().error("处理回调失败").__dict__, 500
+            return Response().error("处理回调失败").to_json(), 500
 
     def _find_platform_by_uuid(self, webhook_uuid: str) -> Platform | None:
         """根据 webhook_uuid 查找对应的平台适配器
@@ -94,7 +94,7 @@ class PlatformRoute(Route):
         """
         try:
             stats = self.platform_manager.get_all_stats()
-            return Response().ok(stats).__dict__
+            return Response().ok(stats).to_json()
         except Exception as e:
             logger.error(f"获取平台统计信息失败: {e}", exc_info=True)
-            return Response().error(f"获取统计信息失败: {e}").__dict__, 500
+            return Response().error(f"获取统计信息失败: {e}").to_json(), 500
