@@ -128,31 +128,52 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 _EMPTY_MCP_ARGUMENT = object()
 
 
-def _sanitize_mcp_arguments(value: Any) -> Any:
+def _sanitize_mcp_arguments(
+    value: Any,
+    schema: dict[str, Any] | None = None,
+    *,
+    required: bool = False,
+) -> Any:
     """Remove empty optional payload values before sending to MCP tools."""
     if value is None:
-        return _EMPTY_MCP_ARGUMENT
+        return value if required else _EMPTY_MCP_ARGUMENT
 
     if isinstance(value, str):
-        return value if value != "" else _EMPTY_MCP_ARGUMENT
+        return value if value != "" or required else _EMPTY_MCP_ARGUMENT
 
     if isinstance(value, list):
+        if not value:
+            return value if required else _EMPTY_MCP_ARGUMENT
         cleaned_items = []
+        item_schema = schema.get("items") if isinstance(schema, dict) else None
         for item in value:
-            cleaned_item = _sanitize_mcp_arguments(item)
+            cleaned_item = _sanitize_mcp_arguments(item, item_schema)
+            # Preserve list positions. If sanitizing an item would remove it,
+            # keep the original item instead of reindexing the payload.
             if cleaned_item is _EMPTY_MCP_ARGUMENT:
-                continue
-            cleaned_items.append(cleaned_item)
-        return cleaned_items if cleaned_items else _EMPTY_MCP_ARGUMENT
+                cleaned_items.append(item)
+            else:
+                cleaned_items.append(cleaned_item)
+        return cleaned_items
 
     if isinstance(value, dict):
+        if not value:
+            return value if required else _EMPTY_MCP_ARGUMENT
+
         cleaned_dict = {}
+        properties = schema.get("properties", {}) if isinstance(schema, dict) else {}
+        required_keys = set(schema.get("required", [])) if isinstance(schema, dict) else set()
         for key, item in value.items():
-            cleaned_item = _sanitize_mcp_arguments(item)
+            child_schema = properties.get(key) if isinstance(properties, dict) else None
+            cleaned_item = _sanitize_mcp_arguments(
+                item,
+                child_schema,
+                required=key in required_keys,
+            )
             if cleaned_item is _EMPTY_MCP_ARGUMENT:
                 continue
             cleaned_dict[key] = cleaned_item
-        return cleaned_dict if cleaned_dict else _EMPTY_MCP_ARGUMENT
+        return cleaned_dict if cleaned_dict or required else _EMPTY_MCP_ARGUMENT
 
     return value
 
@@ -379,7 +400,11 @@ class MCPClient:
             anyio.ClosedResourceError: raised after reconnection failure
         """
 
-        sanitized_arguments = _sanitize_mcp_arguments(arguments)
+        tool_schema = next(
+            (tool.inputSchema for tool in self.tools if tool.name == tool_name),
+            None,
+        )
+        sanitized_arguments = _sanitize_mcp_arguments(arguments, tool_schema)
         if sanitized_arguments is _EMPTY_MCP_ARGUMENT:
             sanitized_arguments = {}
         if sanitized_arguments != arguments:
