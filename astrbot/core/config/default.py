@@ -1531,6 +1531,18 @@ CONFIG_METADATA_2 = {
                         "stt_model": "iic/SenseVoiceSmall",
                         "is_emotion": False,
                     },
+                    "火山引擎 STT": {
+                        "id": "volcengine_stt",
+                        "type": "volcengine_stt",
+                        "provider": "volcengine",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "access_key": "",
+                        "secret_key": "",
+                        "appid": "",
+                        "volcengine_cluster": "volc.seedasr.auc",
+                        "timeout": "30",
+                    },
                     "OpenAI TTS(API)": {
                         "id": "openai_tts",
                         "type": "openai_tts_api",
