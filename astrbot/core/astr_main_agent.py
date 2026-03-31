@@ -483,15 +483,13 @@ _PRE_CAPTION_RESULT_KEY = "_pre_caption_result"
 async def pre_caption_images(
     event: AstrMessageEvent,
     plugin_context: Context,
+    cfg: dict,
 ) -> None:
     """在 session lock 外提前完成图片描述，结果写入 event extra。
 
     由 pipeline 在获取 session lock 之前调用，避免图片描述慢速 LLM
     调用占用 session lock，阻塞后续消息处理。
     """
-    cfg = plugin_context.get_config(umo=event.unified_msg_origin).get(
-        "provider_settings", {}
-    )
     img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
     if not img_cap_prov_id:
         return
@@ -519,7 +517,7 @@ async def pre_caption_images(
         )
         event.set_extra(_PRE_CAPTION_RESULT_KEY, caption or "")
     except Exception as exc:  # noqa: BLE001
-        logger.error("预处理图片描述失败: %s", exc)
+        logger.error("预处理图片描述失败: %s", exc, exc_info=True)
         event.set_extra(_PRE_CAPTION_RESULT_KEY, None)
 
 
@@ -530,12 +528,14 @@ async def _ensure_img_caption(
     plugin_context: Context,
     image_caption_provider: str,
 ) -> None:
+    if event.get_extra("_skip_img_caption"):
+        return
+
     pre_caption = event.get_extra(_PRE_CAPTION_RESULT_KEY)
-    if pre_caption is not None:
-        if pre_caption:
-            req.extra_user_content_parts.append(
-                TextPart(text=f"<image_caption>{pre_caption}</image_caption>")
-            )
+    if pre_caption:
+        req.extra_user_content_parts.append(
+            TextPart(text=f"<image_caption>{pre_caption}</image_caption>")
+        )
         req.image_urls = []
         return
 

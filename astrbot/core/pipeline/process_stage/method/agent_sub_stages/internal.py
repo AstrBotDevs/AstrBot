@@ -189,11 +189,13 @@ class InternalAgentSubStage(Stage):
 
             if not event.get_extra("provider_request"):
                 plugin_context = self.ctx.plugin_manager.context
-                cfg = plugin_context.get_config(
-                    umo=event.unified_msg_origin
-                ).get("provider_settings", {})
+                cfg = plugin_context.get_config(umo=event.unified_msg_origin).get(
+                    "provider_settings", {}
+                )
                 if cfg.get("image_caption_wait_for_context_order", True):
-                    await pre_caption_images(event, plugin_context)
+                    await pre_caption_images(event, plugin_context, cfg)
+                else:
+                    event.set_extra("_skip_img_caption", True)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
