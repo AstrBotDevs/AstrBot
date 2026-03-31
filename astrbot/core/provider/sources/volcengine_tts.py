@@ -34,11 +34,11 @@ class ProviderVolcengineTTS(TTSProvider):
         self.timeout = provider_config.get("timeout", 20)
 
     @staticmethod
-    def _build_loggable_payload(payload: dict[str, object]) -> dict[str, object]:
-        app_payload = payload.get("app")
-        user_payload = payload.get("user")
-        audio_payload = payload.get("audio")
-        request_payload = payload.get("request")
+    def _build_loggable_payload(payload: dict[str, Any]) -> dict[str, object]:
+        app_payload: dict[str, Any] | None = payload.get("app")
+        user_payload: dict[str, Any] | None = payload.get("user")
+        audio_payload: dict[str, Any] | None = payload.get("audio")
+        request_payload: dict[str, Any] | None = payload.get("request")
 
         safe_app: dict[str, Any] = {}
         if isinstance(app_payload, dict):
