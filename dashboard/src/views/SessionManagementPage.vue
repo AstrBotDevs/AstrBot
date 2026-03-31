@@ -1,5 +1,5 @@
 ﻿<template>
-  <div class="session-management-page">
+  <div class="session-page">
     <v-container fluid class="pa-0">
       <v-card flat>
         <v-card-title class="d-flex align-center py-3 px-4">
