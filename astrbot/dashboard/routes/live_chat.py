@@ -557,7 +557,7 @@ class LiveChatRoute(Route):
             accumulated_reasoning = ""
             tool_calls = {}
             agent_stats = {}
-            refs = {}
+            refs: dict[str, Any] = {}
 
             while True:
                 if not await self._ensure_runtime_ready():

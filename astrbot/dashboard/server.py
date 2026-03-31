@@ -12,7 +12,6 @@ from datetime import datetime
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
 
-import anyio
 import jwt
 import psutil
 import werkzeug.exceptions
@@ -575,23 +574,6 @@ class AstrBotDashboard:
             return f"获取进程信息失败: {e!s}"
         return "未知进程"
 
-    async def run(self) -> None:
-        """Run dashboard server (blocking)"""
-        if self._webui_fallback:
-            logger.warning(
-                "前端未内置或未初始化, 回退到仅启动后端. 请访问在线面板: dash.astrbot.men"
-            )
-        elif not self.enable_webui:
-            logger.warning("前端已禁用, 请访问在线面板: dash.astrbot.men")
-
-        dashboard_config = self.config.get("dashboard", {})
-        host_value = os.environ.get("ASTRBOT_HOST") or dashboard_config.get(
-            "host", "0.0.0.0"
-        )
-        host = _resolve_dashboard_value(host_value, field_name="host")
-        if not isinstance(host, str) or not host:
-            raise ValueError("Dashboard host must be a non-empty string")
-
     @staticmethod
     def _resolve_dashboard_ssl_config(
         ssl_config: dict,
@@ -599,16 +581,19 @@ class AstrBotDashboard:
         cert_file = (
             os.environ.get("DASHBOARD_SSL_CERT")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_CERT")
+            or os.environ.get("ASTRBOT_SSL_CERT")
             or ssl_config.get("cert_file", "")
         )
         key_file = (
             os.environ.get("DASHBOARD_SSL_KEY")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_KEY")
+            or os.environ.get("ASTRBOT_SSL_KEY")
             or ssl_config.get("key_file", "")
         )
         ca_certs = (
             os.environ.get("DASHBOARD_SSL_CA_CERTS")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_CA_CERTS")
+            or os.environ.get("ASTRBOT_SSL_CA_CERTS")
             or ssl_config.get("ca_certs", "")
         )
 
@@ -647,20 +632,25 @@ class AstrBotDashboard:
 
         return True, resolved_ssl_config
 
-    async def run(self):
-        ip_addr = []
+    async def run(self) -> None:
+        if self._webui_fallback:
+            logger.warning(
+                "前端未内置或未初始化, 回退到仅启动后端. 请访问在线面板: dash.astrbot.men"
+            )
+        elif not self.enable_webui:
+            logger.warning("前端已禁用, 请访问在线面板: dash.astrbot.men")
+
         dashboard_config = self.core_lifecycle.astrbot_config.get("dashboard", {})
-        port = (
-            os.environ.get("DASHBOARD_PORT")
-            or os.environ.get("ASTRBOT_DASHBOARD_PORT")
-            or dashboard_config.get("port", 6185)
-        )
-        host = (
+        host_value = (
             os.environ.get("DASHBOARD_HOST")
             or os.environ.get("ASTRBOT_DASHBOARD_HOST")
+            or os.environ.get("ASTRBOT_HOST")
             or dashboard_config.get("host", "0.0.0.0")
         )
-        enable = dashboard_config.get("enable", True)
+        host = _resolve_dashboard_value(host_value, field_name="host")
+        if not isinstance(host, str) or not host:
+            raise ValueError("Dashboard host must be a non-empty string")
+
         ssl_config = dashboard_config.get("ssl", {})
         if not isinstance(ssl_config, dict):
             ssl_config = {}
@@ -674,15 +664,19 @@ class AstrBotDashboard:
             ssl_enable, resolved_ssl_config = self._resolve_dashboard_ssl_config(
                 ssl_config,
             )
-        scheme = "https" if ssl_enable else "http"
 
-        # Port priority: ASTRBOT_PORT env var > cmd_config.json dashboard.port > default 6185
-        env_port = os.environ.get("ASTRBOT_PORT")
+        # Port priority: explicit dashboard env vars > shared ASTRBOT_PORT > config > default.
+        env_port = (
+            os.environ.get("DASHBOARD_PORT")
+            or os.environ.get("ASTRBOT_DASHBOARD_PORT")
+            or os.environ.get("ASTRBOT_PORT")
+        )
         json_port = dashboard_config.get("port")
+        port_value: str | int | None
         if env_port is not None:
             port_value = env_port
             logger.info(
-                "[Dashboard] Using port from ASTRBOT_PORT environment variable: %s",
+                "[Dashboard] Using port from environment variable: %s",
                 env_port,
             )
         elif json_port is not None:
@@ -695,11 +689,16 @@ class AstrBotDashboard:
         if resolved_port is None:
             raise ValueError("Port configuration is missing")
         port = int(resolved_port)
-        ssl_config = dashboard_config.get("ssl", {})
         ssl_enable = _parse_env_bool(
-            os.environ.get("ASTRBOT_SSL_ENABLE"),
-            ssl_config.get("enable", False),
+            os.environ.get("DASHBOARD_SSL_ENABLE")
+            or os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE")
+            or os.environ.get("ASTRBOT_SSL_ENABLE"),
+            bool(ssl_config.get("enable", False)),
         )
+        if ssl_enable and not resolved_ssl_config:
+            ssl_enable, resolved_ssl_config = self._resolve_dashboard_ssl_config(
+                ssl_config,
+            )
 
         scheme = "https" if ssl_enable else "http"
         binds: list[str] = [self._build_bind(host, port)]
@@ -732,35 +731,10 @@ class AstrBotDashboard:
         config.bind = binds
 
         if ssl_enable:
-            cert_file = os.environ.get("ASTRBOT_SSL_CERT") or ssl_config.get(
-                "cert_file", ""
-            )
-            cert_file = _resolve_dashboard_value(cert_file, field_name="ssl.cert_file")
-            key_file = os.environ.get("ASTRBOT_SSL_KEY") or ssl_config.get(
-                "key_file", ""
-            )
-            key_file = _resolve_dashboard_value(key_file, field_name="ssl.key_file")
-            ca_certs = os.environ.get("ASTRBOT_SSL_CA_CERTS") or ssl_config.get(
-                "ca_certs", ""
-            )
-            ca_certs = _resolve_dashboard_value(ca_certs, field_name="ssl.ca_certs")
-
-            if cert_file and key_file:
-                cert_path = await anyio.Path(str(cert_file)).expanduser()
-                key_path = await anyio.Path(str(key_file)).expanduser()
-                if not await cert_path.is_file():
-                    raise ValueError(f"SSL 证书文件不存在: {cert_path}")
-                if not await key_path.is_file():
-                    raise ValueError(f"SSL 私钥文件不存在: {key_path}")
-
-                config.certfile = str(await cert_path.resolve())
-                config.keyfile = str(await key_path.resolve())
-
-            if ca_certs:
-                ca_path = await anyio.Path(str(ca_certs)).expanduser()
-                if not await ca_path.is_file():
-                    raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
-                config.ca_certs = str(await ca_path.resolve())
+            config.certfile = resolved_ssl_config["certfile"]
+            config.keyfile = resolved_ssl_config["keyfile"]
+            if ca_certs := resolved_ssl_config.get("ca_certs"):
+                config.ca_certs = ca_certs
 
         # 根据配置决定是否禁用访问日志
         disable_access_log = dashboard_config.get("disable_access_log", True)

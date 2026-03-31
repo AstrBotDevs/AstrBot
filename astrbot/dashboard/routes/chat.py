@@ -15,6 +15,7 @@ from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
     create_attachment_part_from_existing_file,
@@ -63,6 +64,8 @@ def _resolve_path(path: str) -> Path:
 
 
 class ChatRoute(Route):
+    platform_history_mgr: PlatformMessageHistoryManager
+
     def __init__(
         self,
         context: RouteContext,
@@ -94,8 +97,9 @@ class ChatRoute(Route):
 
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
         self.conv_mgr = core_lifecycle.conversation_manager
-        self.platform_history_mgr = core_lifecycle.platform_message_history_manager
-        assert self.platform_history_mgr
+        mgr = core_lifecycle.platform_message_history_manager
+        assert mgr is not None
+        self.platform_history_mgr = mgr
         self.db = db
         self.umop_config_router = core_lifecycle.umop_config_router
         assert self.umop_config_router

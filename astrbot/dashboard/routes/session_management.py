@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from quart import request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -68,9 +70,8 @@ class SessionManagementRoute(Route):
         Returns:
             tuple[dict, int]: (umo_rules, total) - 分页后的 umo 规则和总数
         """
-        umo_rules = {}
+        umo_rules: dict[str, Any] = {}
         async with self.db_helper.get_db() as session:
-            session: AsyncSession
             result = await session.execute(
                 select(Preference).where(
                     col(Preference.scope) == "umo",
@@ -837,9 +838,9 @@ class SessionManagementRoute(Route):
 
     # ==================== 分组管理 API ====================
 
-    def _get_groups(self) -> dict:
+    def _get_groups(self) -> dict[str, Any]:
         """获取所有分组"""
-        return sp.get("session_groups", {})
+        return cast(dict[str, Any], sp.get("session_groups", {}))
 
     def _save_groups(self, groups: dict) -> None:
         """保存分组"""

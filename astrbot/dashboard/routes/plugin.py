@@ -7,6 +7,7 @@ import traceback
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import aiohttp
 import anyio
@@ -97,7 +98,7 @@ class PluginRoute(Route):
             EventType.OnPluginErrorEvent: "插件报错时",
         }
 
-        self._logo_cache = {}
+        self._logo_cache: dict[str, Any] = {}
 
     async def check_plugin_compatibility(self):
         try:

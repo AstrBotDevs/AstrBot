@@ -1,4 +1,5 @@
 import traceback
+from typing import Any
 
 from quart import request
 
@@ -9,7 +10,7 @@ from astrbot.core.star import star_map
 
 from .route import Response, Route, RouteContext
 
-DEFAULT_MCP_CONFIG = {"mcpServers": {}}
+DEFAULT_MCP_CONFIG: dict[str, Any] = {"mcpServers": {}}
 
 
 class EmptyMcpServersError(ValueError):

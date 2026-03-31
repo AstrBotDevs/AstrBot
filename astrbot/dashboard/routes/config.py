@@ -105,7 +105,7 @@ def _validate_template_list(value, meta, path_key, errors, validate_fn) -> None:
 
 
 def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
-    errors = []
+    errors: list[str] = []
 
     def validate(data: dict, metadata: dict = schema, path="") -> None:
         for key, value in data.items():
@@ -345,7 +345,7 @@ class ConfigRoute(Route):
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
         self.config: AstrBotConfig = core_lifecycle.astrbot_config
-        self._logo_token_cache = {}  # 缓存logo token,避免重复注册
+        self._logo_token_cache: dict[str, Any] = {}  # 缓存logo token,避免重复注册
         self.acm = core_lifecycle.astrbot_config_mgr
         self.ucr = core_lifecycle.umop_config_router
         self.routes = {

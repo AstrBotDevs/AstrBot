@@ -21,6 +21,17 @@ def _format_log_sse(log: dict, ts: float) -> str:
     return f"id: {ts}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def _coerce_log_timestamp(value: object) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
 class LogRoute(Route):
     def __init__(self, context: RouteContext, log_broker: LogBroker) -> None:
         super().__init__(context)
@@ -51,7 +62,9 @@ class LogRoute(Route):
             cached_logs = list(self.log_broker.log_cache)
 
             for log_item in cached_logs:
-                log_ts = float(log_item.get("time", 0))
+                log_ts = _coerce_log_timestamp(log_item.get("time"))
+                if log_ts is None:
+                    continue
 
                 if log_ts > last_ts:
                     yield _format_log_sse(log_item, log_ts)
@@ -74,7 +87,9 @@ class LogRoute(Route):
                 queue = self.log_broker.register()
                 while True:
                     message = await queue.get()
-                    current_ts = message.get("time", time.time())
+                    current_ts = _coerce_log_timestamp(message.get("time"))
+                    if current_ts is None:
+                        current_ts = time.time()
                     yield _format_log_sse(message, current_ts)
 
             except asyncio.CancelledError:
@@ -97,7 +112,7 @@ class LogRoute(Route):
                 },
             ),
         )
-        response.timeout = None  # type: ignore
+        response.timeout = None
         return response
 
     async def log_history(self):

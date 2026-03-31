@@ -37,8 +37,12 @@ class KnowledgeBaseRoute(Route):
         self.kb_db = None
         self.session_config_db = None  # 会话配置数据库
         self.retrieval_manager = None
-        self.upload_progress = {}  # 存储上传进度 {task_id: {status, file_index, file_total, stage, current, total}}
-        self.upload_tasks = {}  # 存储后台上传任务 {task_id: {"status", "result", "error"}}
+        self.upload_progress: dict[
+            str, Any
+        ] = {}  # 存储上传进度 {task_id: {status, file_index, file_total, stage, current, total}}
+        self.upload_tasks: dict[
+            str, Any
+        ] = {}  # 存储后台上传任务 {task_id: {"status", "result", "error"}}
 
         # 注册路由
         self.routes = {
