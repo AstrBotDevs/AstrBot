@@ -4,7 +4,7 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
-from typing import cast
+from typing import Literal, cast
 
 from google import genai
 from google.genai import types
@@ -14,6 +14,7 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
@@ -131,6 +132,7 @@ class ProviderGoogleGenAI(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None = None,
+        tool_choice: Literal["auto", "required"] = "auto",
         system_instruction: str | None = None,
         modalities: list[str] | None = None,
         temperature: float = 0.7,
@@ -207,6 +209,18 @@ class ProviderGoogleGenAI(Provider):
                 types.Tool(function_declarations=func_desc["function_declarations"]),
             ]
 
+        tool_config = None
+        if tools and tool_list:
+            tool_config = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode=(
+                        types.FunctionCallingConfigMode.ANY
+                        if tool_choice == "required"
+                        else types.FunctionCallingConfigMode.AUTO
+                    )
+                )
+            )
+
         # oper thinking config
         thinking_config = None
         if model_name in [
@@ -272,6 +286,7 @@ class ProviderGoogleGenAI(Provider):
             seed=payloads.get("seed"),
             response_modalities=modalities,
             tools=cast(types.ToolListUnion | None, tool_list),
+            tool_config=tool_config,
             safety_settings=self.safety_settings if self.safety_settings else None,
             thinking_config=thinking_config,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
@@ -430,6 +445,23 @@ class ProviderGoogleGenAI(Provider):
             output=usage_metadata.candidates_token_count or 0,
         )
 
+    @staticmethod
+    def _ensure_usable_response(
+        llm_response: LLMResponse,
+        *,
+        response_id: str | None = None,
+        finish_reason: str | None = None,
+    ) -> None:
+        has_text_output = bool((llm_response.completion_text or "").strip())
+        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        has_tool_output = bool(llm_response.tools_call_args)
+        if has_text_output or has_reasoning_output or has_tool_output:
+            return
+        raise EmptyModelOutputError(
+            "Gemini completion has no usable output. "
+            f"response_id={response_id}, finish_reason={finish_reason}"
+        )
+
     def _process_content_parts(
         self,
         candidate: types.Candidate,
@@ -438,7 +470,10 @@ class ProviderGoogleGenAI(Provider):
         """处理内容部分并构建消息链"""
         if not candidate.content:
             logger.warning(f"收到的 candidate.content 为空: {candidate}")
-            raise Exception("API 返回的 candidate.content 为空。")
+            raise EmptyModelOutputError(
+                "Gemini candidate content is empty. "
+                f"finish_reason={candidate.finish_reason}"
+            )
 
         finish_reason = candidate.finish_reason
         result_parts: list[types.Part] | None = candidate.content.parts
@@ -460,7 +495,10 @@ class ProviderGoogleGenAI(Provider):
 
         if not result_parts:
             logger.warning(f"收到的 candidate.content.parts 为空: {candidate}")
-            raise Exception("API 返回的 candidate.content.parts 为空。")
+            raise EmptyModelOutputError(
+                "Gemini candidate content parts are empty. "
+                f"finish_reason={candidate.finish_reason}"
+            )
 
         # 提取 reasoning content
         reasoning = self._extract_reasoning_content(candidate)
@@ -511,7 +549,14 @@ class ProviderGoogleGenAI(Provider):
             if ts := part.thought_signature:
                 # only keep the last thinking signature
                 llm_response.reasoning_signature = base64.b64encode(ts).decode("utf-8")
-        return MessageChain(chain=chain)
+        chain_result = MessageChain(chain=chain)
+        llm_response.result_chain = chain_result
+        self._ensure_usable_response(
+            llm_response,
+            response_id=None,
+            finish_reason=str(finish_reason) if finish_reason is not None else None,
+        )
+        return chain_result
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         """非流式请求 Gemini API"""
@@ -535,6 +580,7 @@ class ProviderGoogleGenAI(Provider):
                 config = await self._prepare_query_config(
                     payloads,
                     tools,
+                    payloads.get("tool_choice", "auto"),
                     system_instruction,
                     modalities,
                     temperature,
@@ -616,6 +662,7 @@ class ProviderGoogleGenAI(Provider):
                 config = await self._prepare_query_config(
                     payloads,
                     tools,
+                    payloads.get("tool_choice", "auto"),
                     system_instruction,
                 )
                 result = await self.client.models.generate_content_stream(
@@ -711,9 +758,12 @@ class ProviderGoogleGenAI(Provider):
             final_response.result_chain = MessageChain(
                 chain=[Comp.Plain(accumulated_text)],
             )
-        elif not final_response.result_chain:
-            # If no text was accumulated and no final response was set, provide empty space
-            final_response.result_chain = MessageChain(chain=[Comp.Plain(" ")])
+
+        self._ensure_usable_response(
+            final_response,
+            response_id=getattr(final_response, "id", None),
+            finish_reason=None,
+        )
 
         yield final_response
 
@@ -728,6 +778,7 @@ class ProviderGoogleGenAI(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -758,6 +809,8 @@ class ProviderGoogleGenAI(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         retry = 10
         keys = self.api_keys.copy()
@@ -783,6 +836,7 @@ class ProviderGoogleGenAI(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
@@ -813,6 +867,8 @@ class ProviderGoogleGenAI(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         retry = 10
         keys = self.api_keys.copy()

@@ -17,6 +17,11 @@ html {
   flex: unset;
 }
 
+.v-overlay.v-snackbar {
+  --v-layout-left: 0px !important;
+  --v-layout-right: 0px !important;
+}
+
 .customizer-btn .icon {
   animation: progress-circular-rotate 1.4s linear infinite;
   transform-origin: center center;
@@ -34,3 +39,10 @@ html {
     transform: rotate(270deg);
   }
 }
+
+pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Helvetica Neue", monospace;
+  color: var(--astrbot-code-color);
+}
+
+

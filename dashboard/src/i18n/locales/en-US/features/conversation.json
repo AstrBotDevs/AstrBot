@@ -31,6 +31,10 @@
       "createdAt": "Created At",
       "updatedAt": "Updated At",
       "actions": "Actions"
+    },
+    "umoDisplay": {
+      "parsed": "Parsed",
+      "raw": "UMO"
     }
   },
   "actions": {
@@ -97,6 +101,8 @@
     "batchDeletePartial": "Delete completed: {deleted} successful, {failed} failed",
     "exportSuccess": "Export successful",
     "exportError": "Export failed",
-    "noItemSelectedForExport": "Please select conversations to export first"
+    "noItemSelectedForExport": "Please select conversations to export first",
+    "copySuccess": "Copied",
+    "copyError": "Copy failed"
   }
 } 

@@ -92,6 +92,7 @@ export default defineConfig({
               { text: "企微应用", link: "/wecom" },
               { text: "企微智能机器人", link: "/wecom_ai_bot" },
               { text: "微信公众号", link: "/weixin-official-account" },
+              { text: "个人微信", link: "/weixin_oc" },
               { text: "飞书", link: "/lark" },
               { text: "钉钉", link: "/dingtalk" },
               { text: "Telegram", link: "/telegram" },
@@ -221,10 +222,13 @@ export default defineConfig({
             ],
           },
           {
-            text: "开源之夏",
-            base: "/ospp",
-            collapsed: true,
-            items: [{ text: "OSPP 2025", link: "/2025" }],
+            text: "社区活动",
+            base: "/community-events",
+            collapsed: false,
+            items: [
+              { text: "开源之夏 2025", link: "/ospp-2025" },
+              { text: "桐谷霁屿 x AstrBot 插件奖励活动", link: "/tonggujiyu-astrbot-plugin-reward-program" },
+            ],
           },
         ],
         outline: {
@@ -326,6 +330,7 @@ export default defineConfig({
               { text: "WeCom Application", link: "/wecom" },
               { text: "WeCom AI Bot", link: "/wecom_ai_bot" },
               { text: "WeChat Official Account", link: "/weixin-official-account" },
+              { text: "Personal WeChat", link: "/weixin_oc" },
               { text: "Lark", link: "/lark" },
               { text: "DingTalk", link: "/dingtalk" },
               { text: "Telegram", link: "/telegram" },
