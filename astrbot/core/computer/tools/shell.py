@@ -51,7 +51,7 @@ class ExecuteShellTool(FunctionTool):
                 },
                 "env": {
                     "type": "object",
-                    "description": "Optional environment variables to set for the file creation process.",
+                    "description": "Optional environment variables to set for the shell execution.",
                     "additionalProperties": {"type": "string"},
                     "default": {},
                 },

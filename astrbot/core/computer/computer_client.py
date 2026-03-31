@@ -524,9 +524,10 @@ def get_local_booter(work_dir: str = "") -> ComputerBooter:
     """
     # Normalize work_dir to absolute path for consistent caching
     abs_work_dir = os.path.abspath(work_dir) if work_dir else ""
-    key = abs_work_dir or "__default__"
-    if key not in _local_booters:
-        booter = LocalBooter(work_dir=work_dir)
-        # Use the normalized path from the booter for cache key consistency
-        _local_booters[booter.work_dir or "__default__"] = booter
-    return _local_booters[key]
+    cache_key = abs_work_dir if abs_work_dir else "__default__"
+    if cache_key not in _local_booters:
+        booter = LocalBooter(work_dir=abs_work_dir)
+        # Use the booter's work_dir (which may be get_astrbot_root() if empty) as cache key
+        final_key = booter.work_dir if booter.work_dir else "__default__"
+        _local_booters[final_key] = booter
+    return _local_booters[cache_key]
