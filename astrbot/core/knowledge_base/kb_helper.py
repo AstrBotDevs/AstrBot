@@ -140,8 +140,7 @@ class KBHelper:
             self.kb.embedding_provider_id,
         )  # type: ignore
         if not ep:
-            logger.error(f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider,使用站位编码器")
-
+            logger.error(f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider,使用站位Embedding Provider")
             class TempEmbeddingProvider(EmbeddingProvider):
                 def __init__(self, provider_config: dict, provider_settings: dict) -> None:
                     super().__init__(provider_config, provider_settings)
@@ -154,9 +153,7 @@ class KBHelper:
 
                 def get_dim(self) -> int:
                     return 1024
-
             ep: EmbeddingProvider = TempEmbeddingProvider({},{})
-            # raise ValueError(f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider")
         return ep
 
     async def get_rp(self) -> RerankProvider | None:
@@ -166,9 +163,14 @@ class KBHelper:
             self.kb.rerank_provider_id,
         )  # type: ignore
         if not rp:
-            raise ValueError(
-                f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider",
-            )
+            logger.error(f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider,使用站位Rerank Provider")
+            class TempRerankProvider(RerankProvider):
+                def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+                    super().__init__(provider_config, provider_settings)
+
+                async def rerank(self,query: str,documents: list[str],top_n: int | None = None,):
+                    return []
+            rp: RerankProvider = TempRerankProvider({},{})
         return rp
 
     async def _ensure_vec_db(self) -> FaissVecDB:
