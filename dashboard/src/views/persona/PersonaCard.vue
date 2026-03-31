@@ -227,6 +227,10 @@ export default defineComponent({
   transform: translateY(-2px);
 }
 
+.persona-card:hover {
+    transform: translateY(-2px);
+}
+
 .system-prompt-preview {
   font-size: 14px;
   line-height: 1.4;

@@ -208,6 +208,8 @@
                   :is-dark="isDark"
                   :current-time="currentTime"
                   :downloading-files="downloadingFiles"
+                  :interactive-elicitation="isActiveElicitationMessage(index, msg)"
+                  :submit-elicitation="submitElicitation"
                   @open-image-preview="openImagePreview"
                   @download-file="downloadFile"
                 />
@@ -414,6 +416,10 @@ export default {
       type: Boolean,
       default: false,
     },
+    submitElicitation: {
+      type: Function,
+      default: null,
+    },
   },
   emits: ["openImagePreview", "replyMessage", "replyWithText", "openRefs"],
   setup() {
@@ -606,6 +612,18 @@ export default {
       if (!Array.isArray(messageParts)) return false;
       return messageParts.some(
         (part) => part.type === "record" && part.embedded_url,
+      );
+    },
+
+    isActiveElicitationMessage(index, msg) {
+      if (!this.isStreaming || index !== this.messages.length - 1) {
+        return false;
+      }
+      return (
+        Array.isArray(msg?.content?.message) &&
+        msg.content.message.some(
+          (part) => part.type === "elicitation" && part.payload,
+        )
       );
     },
 

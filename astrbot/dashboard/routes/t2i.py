@@ -19,7 +19,7 @@ class T2iRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.manager = TemplateManager()
-        # 使用列表保证路由注册顺序,避免 /<name> 路由优先匹配 /reset_default
+        # 使用列表保证路由注册顺序，避免 /<name> 路由优先匹配 /reset_default
         self.routes = [
             ("/t2i/templates", ("GET", self.list_templates)),
             ("/t2i/templates/active", ("GET", self.get_active_template)),
@@ -148,7 +148,7 @@ class T2iRoute(Route):
 
             self.manager.update_template(name, content)
 
-            # 检查更新的是否为当前激活的模板,如果是,则热重载
+            # 检查更新的是否为当前激活的模板，如果是，则热重载
             active_template = self.config.get("t2i_active_template", "base")
             if name == active_template:
                 await self._reload_all_pipeline_schedulers()
@@ -193,7 +193,7 @@ class T2iRoute(Route):
             data = await request.json
             name = data.get("name")
             if not name:
-                response = jsonify(asdict(Response().error("模板名称(name)不能为空｡")))
+                response = jsonify(asdict(Response().error("模板名称(name)不能为空。")))
                 response.status_code = 400
                 return response
 
@@ -203,11 +203,11 @@ class T2iRoute(Route):
             # 更新所有配置并热重载以应用更改
             await self._sync_active_template_to_all_configs(name)
 
-            return jsonify(asdict(Response().ok(message=f"模板 '{name}' 已成功应用｡")))
+            return jsonify(asdict(Response().ok(message=f"模板 '{name}' 已成功应用。")))
 
         except FileNotFoundError:
             response = jsonify(
-                asdict(Response().error(f"模板 '{name}' 不存在,无法应用｡")),
+                asdict(Response().error(f"模板 '{name}' 不存在，无法应用。")),
             )
             response.status_code = 404
             return response

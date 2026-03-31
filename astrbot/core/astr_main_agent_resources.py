@@ -369,8 +369,7 @@ async def retrieve_knowledge_base(
         logger.debug("所配置的所有知识库全为空, 跳过检索过程")
         return
 
-    logger.debug(f"[知识库] 开始检索知识库,数量: {len(kb_names)}, top_k={top_k}")
-
+    logger.debug(f"[知识库] 开始检索知识库，数量: {len(kb_names)}, top_k={top_k}")
     kb_context = await kb_mgr.retrieve(
         query=query,
         kb_names=kb_names,

@@ -1,6 +1,10 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
+import binascii
+import hashlib
 import os
+import secrets
+from importlib import metadata
 from typing import Any, TypedDict
 
 from astrbot.builtin_stars.web_searcher.provider_constants import (
@@ -9,7 +13,20 @@ from astrbot.builtin_stars.web_searcher.provider_constants import (
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.25.0"
+
+def _generate_random_dashboard_password_hash() -> str:
+    iterations = 200_000
+    salt = secrets.token_bytes(16)
+    secret = secrets.token_bytes(32)
+    dk = hashlib.pbkdf2_hmac("sha256", secret, salt, iterations)
+    return f"pbkdf2_sha256${iterations}${binascii.hexlify(salt).decode()}${dk.hex()}"
+
+
+try:
+    __version__ = metadata.version("AstrBot")
+except metadata.PackageNotFoundError:
+    __version__ = "unknown"
+VERSION = __version__
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -3492,6 +3509,7 @@ CONFIG_METADATA_3 = {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
+                        "collapsed": True,
                     },
                     "provider_settings.max_quoted_fallback_images": {
                         "description": "引用图片回退解析上限",

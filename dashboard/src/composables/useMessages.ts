@@ -35,14 +35,38 @@ export interface FileInfo {
   attachment_id?: string; // 用于按需下载
 }
 
+export interface ElicitationField {
+    name: string;
+    label: string;
+    description?: string;
+    required: boolean;
+    type: string;
+    enum?: string[];
+    enumNames?: string[];
+    default?: string | number | boolean;
+    format?: string;
+    minimum?: number;
+    maximum?: number;
+}
+
+export interface ElicitationPayload {
+    kind: 'form' | 'url';
+    server_name: string;
+    message: string;
+    prompt: string;
+    url?: string;
+    fields?: ElicitationField[];
+}
+
 // 消息部分的类型定义
 export interface MessagePart {
-  type: "plain" | "image" | "record" | "file" | "video" | "reply" | "tool_call";
+  type: "plain" | "image" | "record" | "file" | "video" | "reply" | "tool_call" | "elicitation";
   text?: string; // for plain
   attachment_id?: string; // for image, record, file, video
   filename?: string; // for file (filename from backend)
   message_id?: number; // for reply (PlatformSessionHistoryMessage.id)
   tool_calls?: ToolCall[]; // for tool_call
+  payload?: ElicitationPayload; // for elicitation
   // embedded fields - 加载后填充
   embedded_url?: string; // blob URL for image, record
   embedded_file?: FileInfo; // for file (保留 attachment_id 用于按需下载)
@@ -84,6 +108,35 @@ type StreamChunk = {
   ct?: string;
   [key: string]: any;
 };
+
+function normalizeElicitationPayload(payload: any): ElicitationPayload | null {
+    if (!payload || typeof payload !== 'object') {
+        return null;
+    }
+
+    const kind = payload.kind === 'url' ? 'url' : 'form';
+    const fields = Array.isArray(payload.fields)
+        ? payload.fields
+            .filter((field: any) => field && typeof field === 'object' && typeof field.name === 'string')
+            .map((field: any) => ({
+                name: String(field.name),
+                label: String(field.label || field.name),
+                description: String(field.description || ''),
+                required: Boolean(field.required),
+                type: String(field.type || 'string'),
+                enum: Array.isArray(field.enum) ? field.enum.map((value: any) => String(value)) : []
+            }))
+        : [];
+
+    return {
+        kind,
+        server_name: String(payload.server_name || ''),
+        message: String(payload.message || ''),
+        prompt: String(payload.prompt || ''),
+        url: typeof payload.url === 'string' ? payload.url : undefined,
+        fields
+    };
+}
 
 type WsStreamContext = {
   handleChunk: (payload: StreamChunk) => Promise<void>;
@@ -157,13 +210,291 @@ export function useMessages(
     );
   }
 
-  function setTransportMode(mode: ChatTransportMode) {
-    transportMode.value = mode;
-    localStorage.setItem(TRANSPORT_MODE_STORAGE_KEY, mode);
-    if (mode === "websocket") {
-      if (currSessionId.value) {
-        void bindSessionToWebSocket(currSessionId.value).catch((err) => {
-          console.error("建立 WebSocket 连接失败:", err);
+    function setTransportMode(mode: ChatTransportMode) {
+        transportMode.value = mode;
+        localStorage.setItem(TRANSPORT_MODE_STORAGE_KEY, mode);
+        if (mode === 'websocket') {
+            if (currSessionId.value) {
+                void bindSessionToWebSocket(currSessionId.value).catch((err) => {
+                    console.error('建立 WebSocket 连接失败:', err);
+                });
+            }
+        } else {
+            closeChatWebSocket();
+        }
+    }
+
+    function generateMessageId(): string {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID();
+        }
+        return `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+
+    function buildWebSocketUrl(): string {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Missing authentication token');
+        }
+        return resolveWebSocketUrl('/api/unified_chat/ws', { token });
+    }
+
+    function closeChatWebSocket() {
+        if (currentWebSocket.value) {
+            try {
+                currentWebSocket.value.close();
+            } catch {
+                // ignore websocket close errors
+            }
+            currentWebSocket.value = null;
+        }
+        webSocketConnectPromise.value = null;
+        currentBoundSessionId.value = '';
+    }
+
+    async function bindSessionToWebSocket(sessionId: string) {
+        if (!sessionId || transportMode.value !== 'websocket') {
+            return;
+        }
+        const ws = await ensureChatWebSocket();
+        if (ws.readyState !== WebSocket.OPEN) {
+            return;
+        }
+        if (currentBoundSessionId.value === sessionId) {
+            return;
+        }
+
+        ws.send(JSON.stringify({
+            ct: 'chat',
+            t: 'bind',
+            session_id: sessionId
+        }));
+        currentBoundSessionId.value = sessionId;
+    }
+
+    async function handlePassiveWebSocketChunk(payload: StreamChunk) {
+        if (!payload.type) {
+            return;
+        }
+
+        if (payload.type === 'elicitation') {
+            const normalizedPayload = normalizeElicitationPayload(payload.data);
+            if (!normalizedPayload) {
+                return;
+            }
+
+            messages.value.push({
+                content: {
+                    type: 'bot',
+                    message: [{
+                        type: 'elicitation',
+                        payload: normalizedPayload
+                    }]
+                }
+            });
+            return;
+        }
+
+        if (payload.type === 'plain') {
+            const chainType = payload.chain_type || 'normal';
+            if (chainType === 'reasoning') {
+                messages.value.push({
+                    content: {
+                        type: 'bot',
+                        message: [],
+                        reasoning: String(payload.data || '')
+                    }
+                });
+                return;
+            }
+
+            messages.value.push({
+                content: {
+                    type: 'bot',
+                    message: [{
+                        type: 'plain',
+                        text: String(payload.data || '')
+                    }]
+                }
+            });
+            return;
+        }
+
+        if (payload.type === 'image') {
+            const img = String(payload.data || '').replace('[IMAGE]', '');
+            const imageUrl = await getMediaFile(img);
+            messages.value.push({
+                content: {
+                    type: 'bot',
+                    message: [{ type: 'image', embedded_url: imageUrl }]
+                }
+            });
+            return;
+        }
+
+        if (payload.type === 'record') {
+            const audio = String(payload.data || '').replace('[RECORD]', '');
+            const audioUrl = await getMediaFile(audio);
+            messages.value.push({
+                content: {
+                    type: 'bot',
+                    message: [{ type: 'record', embedded_url: audioUrl }]
+                }
+            });
+            return;
+        }
+
+        if (payload.type === 'file') {
+            const fileData = String(payload.data || '').replace('[FILE]', '');
+            const [filename, originalName] = fileData.includes('|')
+                ? fileData.split('|', 2)
+                : [fileData, fileData];
+            const fileUrl = await getMediaFile(filename);
+            messages.value.push({
+                content: {
+                    type: 'bot',
+                    message: [{
+                        type: 'file',
+                        embedded_file: { url: fileUrl, filename: originalName }
+                    }]
+                }
+            });
+        }
+    }
+
+    async function dispatchWebSocketMessage(event: MessageEvent) {
+        let payload: StreamChunk;
+        try {
+            payload = JSON.parse(event.data);
+        } catch (err) {
+            console.warn('WebSocket JSON parse failed:', err);
+            return;
+        }
+
+        if (payload.ct && payload.ct !== 'chat') {
+            return;
+        }
+
+        if (payload.type === 'session_bound') {
+            if (typeof payload.session_id === 'string') {
+                currentBoundSessionId.value = payload.session_id;
+            }
+            return;
+        }
+
+        if (payload.t === 'error') {
+            const targetMessageId = payload.message_id || currentWsMessageId.value;
+            if (!targetMessageId) {
+                console.warn('WebSocket chat error:', payload);
+                return;
+            }
+            const ctx = wsContexts.get(targetMessageId);
+            if (!ctx) {
+                console.warn('WebSocket chat error (no ctx):', payload);
+                return;
+            }
+
+            if (userStopRequested.value || payload.code === 'INTERRUPTED') {
+                ctx.finish();
+            } else {
+                ctx.finish(new Error(payload.data || 'WebSocket chat error'));
+            }
+            return;
+        }
+
+        const targetMessageId = payload.message_id || currentWsMessageId.value;
+        if (!targetMessageId) {
+            return;
+        }
+
+        const ctx = wsContexts.get(targetMessageId);
+        if (!ctx) {
+            await handlePassiveWebSocketChunk(payload);
+            return;
+        }
+
+        try {
+            await ctx.handleChunk(payload);
+        } catch (err) {
+            ctx.finish(err);
+            return;
+        }
+
+        if (payload.type === 'end') {
+            ctx.finish();
+        }
+    }
+
+    function ensureChatWebSocket(): Promise<WebSocket> {
+        if (currentWebSocket.value?.readyState === WebSocket.OPEN) {
+            return Promise.resolve(currentWebSocket.value);
+        }
+
+        if (webSocketConnectPromise.value) {
+            return webSocketConnectPromise.value;
+        }
+
+        const connectPromise = new Promise<WebSocket>((resolve, reject) => {
+            let settled = false;
+            let ws: WebSocket;
+
+            try {
+                ws = new WebSocket(buildWebSocketUrl());
+            } catch (err) {
+                reject(err);
+                return;
+            }
+
+            const timeoutId = window.setTimeout(() => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                webSocketConnectPromise.value = null;
+                try {
+                    ws.close();
+                } catch {
+                    // ignore close errors
+                }
+                reject(new Error('WebSocket connection timeout'));
+            }, 5000);
+
+            ws.onopen = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                window.clearTimeout(timeoutId);
+                currentWebSocket.value = ws;
+                resolve(ws);
+            };
+
+            ws.onerror = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                window.clearTimeout(timeoutId);
+                webSocketConnectPromise.value = null;
+                reject(new Error('WebSocket connection failed'));
+            };
+
+            ws.onmessage = (event) => {
+                void dispatchWebSocketMessage(event);
+            };
+
+            ws.onclose = () => {
+                currentWebSocket.value = null;
+                webSocketConnectPromise.value = null;
+                const pending = Array.from(wsContexts.values());
+                for (const ctx of pending) {
+                    if (userStopRequested.value) {
+                        ctx.finish();
+                    } else {
+                        ctx.finish(new Error('WebSocket closed'));
+                    }
+                }
+            };
         });
       }
     } else {
@@ -171,10 +502,395 @@ export function useMessages(
     }
   }
 
-  function generateMessageId(): string {
-    if (
-      typeof crypto !== "undefined" &&
-      typeof crypto.randomUUID === "function"
+    function createStreamChunkProcessor() {
+        let inStreaming = false;
+        let messageObj: MessageContent | null = null;
+
+        return async (chunkJson: StreamChunk) => {
+            if (!chunkJson || typeof chunkJson !== 'object') {
+                return;
+            }
+
+            if (chunkJson.type === 'session_id') {
+                return;
+            }
+
+            if (!chunkJson.type) {
+                return;
+            }
+
+            const lastMsg = messages.value[messages.value.length - 1];
+            if (lastMsg?.content?.isLoading) {
+                messages.value.pop();
+            }
+
+            if (chunkJson.type === 'error') {
+                console.error('Error received:', chunkJson.data);
+                return;
+            }
+
+            if (chunkJson.type === 'elicitation') {
+                const normalizedPayload = normalizeElicitationPayload(chunkJson.data);
+                if (!normalizedPayload) {
+                    return;
+                }
+
+                messages.value.push({
+                    content: {
+                        type: 'bot',
+                        message: [{
+                            type: 'elicitation',
+                            payload: normalizedPayload
+                        }]
+                    }
+                });
+                return;
+            }
+
+            if (chunkJson.type === 'image') {
+                const img = String(chunkJson.data || '').replace('[IMAGE]', '');
+                const imageUrl = await getMediaFile(img);
+                const botResp: MessageContent = {
+                    type: 'bot',
+                    message: [{
+                        type: 'image',
+                        embedded_url: imageUrl
+                    }]
+                };
+                messages.value.push({ content: botResp });
+            } else if (chunkJson.type === 'record') {
+                const audio = String(chunkJson.data || '').replace('[RECORD]', '');
+                const audioUrl = await getMediaFile(audio);
+                const botResp: MessageContent = {
+                    type: 'bot',
+                    message: [{
+                        type: 'record',
+                        embedded_url: audioUrl
+                    }]
+                };
+                messages.value.push({ content: botResp });
+            } else if (chunkJson.type === 'file') {
+                const fileData = String(chunkJson.data || '').replace('[FILE]', '');
+                const [filename, originalName] = fileData.includes('|')
+                    ? fileData.split('|', 2)
+                    : [fileData, fileData];
+                const fileUrl = await getMediaFile(filename);
+                const botResp: MessageContent = {
+                    type: 'bot',
+                    message: [{
+                        type: 'file',
+                        embedded_file: {
+                            url: fileUrl,
+                            filename: originalName
+                        }
+                    }]
+                };
+                messages.value.push({ content: botResp });
+            } else if (chunkJson.type === 'plain') {
+                const chainType = chunkJson.chain_type || 'normal';
+
+                if (chainType === 'tool_call') {
+                    let toolCallData: any;
+                    try {
+                        toolCallData = JSON.parse(String(chunkJson.data || '{}'));
+                    } catch {
+                        return;
+                    }
+                    if (isHiddenToolCall(toolCallData)) {
+                        return;
+                    }
+
+                    const toolCall: ToolCall = {
+                        id: toolCallData.id,
+                        name: toolCallData.name,
+                        args: toolCallData.args,
+                        ts: toolCallData.ts
+                    };
+
+                    if (!inStreaming) {
+                        messageObj = reactive<MessageContent>({
+                            type: 'bot',
+                            message: [{
+                                type: 'tool_call',
+                                tool_calls: [toolCall]
+                            }]
+                        });
+                        messages.value.push({ content: messageObj });
+                        inStreaming = true;
+                    } else {
+                        const lastPart = messageObj!.message[messageObj!.message.length - 1];
+                        if (lastPart?.type === 'tool_call') {
+                            const existingIndex = lastPart.tool_calls!.findIndex((tc: ToolCall) => tc.id === toolCall.id);
+                            if (existingIndex === -1) {
+                                lastPart.tool_calls!.push(toolCall);
+                            }
+                        } else {
+                            messageObj!.message.push({
+                                type: 'tool_call',
+                                tool_calls: [toolCall]
+                            });
+                        }
+                    }
+                } else if (chainType === 'tool_call_result') {
+                    let resultData: any;
+                    try {
+                        resultData = JSON.parse(String(chunkJson.data || '{}'));
+                    } catch {
+                        return;
+                    }
+                    if (isHiddenToolCall(resultData)) {
+                        return;
+                    }
+
+                    if (messageObj) {
+                        for (const part of messageObj.message) {
+                            if (part.type === 'tool_call' && part.tool_calls) {
+                                const toolCall = part.tool_calls.find((tc: ToolCall) => tc.id === resultData.id);
+                                if (toolCall) {
+                                    toolCall.result = resultData.result;
+                                    toolCall.finished_ts = resultData.ts;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } else if (chainType === 'reasoning') {
+                    if (!inStreaming) {
+                        messageObj = reactive<MessageContent>({
+                            type: 'bot',
+                            message: [],
+                            reasoning: String(chunkJson.data || '')
+                        });
+                        messages.value.push({ content: messageObj });
+                        inStreaming = true;
+                    } else {
+                        messageObj!.reasoning = (messageObj!.reasoning || '') + String(chunkJson.data || '');
+                    }
+                } else {
+                    if (!inStreaming) {
+                        messageObj = reactive<MessageContent>({
+                            type: 'bot',
+                            message: [{
+                                type: 'plain',
+                                text: String(chunkJson.data || '')
+                            }]
+                        });
+                        messages.value.push({ content: messageObj });
+                        inStreaming = true;
+                    } else {
+                        const lastPart = messageObj!.message[messageObj!.message.length - 1];
+                        if (lastPart?.type === 'plain') {
+                            lastPart.text = (lastPart.text || '') + String(chunkJson.data || '');
+                        } else {
+                            messageObj!.message.push({
+                                type: 'plain',
+                                text: String(chunkJson.data || '')
+                            });
+                        }
+                    }
+                }
+            } else if (chunkJson.type === 'update_title') {
+                if (chunkJson.session_id) {
+                    updateSessionTitle(chunkJson.session_id, chunkJson.data);
+                }
+            } else if (chunkJson.type === 'message_saved') {
+                const lastBotMsg = messages.value[messages.value.length - 1];
+                if (lastBotMsg && lastBotMsg.content?.type === 'bot') {
+                    lastBotMsg.id = chunkJson.data?.id;
+                    lastBotMsg.created_at = chunkJson.data?.created_at;
+                }
+            } else if (chunkJson.type === 'agent_stats') {
+                if (messageObj) {
+                    messageObj.agentStats = chunkJson.data;
+                }
+            }
+
+            if (typeof chunkJson.streaming === 'boolean') {
+                if ((chunkJson.type === 'break' && chunkJson.streaming) || !chunkJson.streaming) {
+                    inStreaming = false;
+                    if (!chunkJson.streaming) {
+                        isStreaming.value = false;
+                    }
+                }
+            }
+        };
+    }
+
+    // 获取 attachment 文件并返回 blob URL
+    async function getAttachment(attachmentId: string): Promise<string> {
+        if (attachmentCache.has(attachmentId)) {
+            return attachmentCache.get(attachmentId)!;
+        }
+        try {
+            const response = await axios.get(`/api/chat/get_attachment?attachment_id=${attachmentId}`, {
+                responseType: 'blob'
+            });
+            const blobUrl = URL.createObjectURL(response.data);
+            attachmentCache.set(attachmentId, blobUrl);
+            return blobUrl;
+        } catch (err) {
+            console.error('Failed to get attachment:', attachmentId, err);
+            return '';
+        }
+    }
+
+    // 解析消息内容，填充 embedded 字段 (保持原始顺序)
+    async function parseMessageContent(content: any): Promise<void> {
+        const message = content.message;
+
+        // 如果 message 是字符串 (旧格式)，转换为数组格式
+        if (typeof message === 'string') {
+            const parts: MessagePart[] = [];
+            const text = message;
+
+            // 处理旧格式的特殊标记
+            if (text.startsWith('[IMAGE]')) {
+                const img = text.replace('[IMAGE]', '');
+                const imageUrl = await getMediaFile(img);
+                parts.push({
+                    type: 'image',
+                    embedded_url: imageUrl
+                });
+            } else if (text.startsWith('[RECORD]')) {
+                const audio = text.replace('[RECORD]', '');
+                const audioUrl = await getMediaFile(audio);
+                parts.push({
+                    type: 'record',
+                    embedded_url: audioUrl
+                });
+            } else if (text) {
+                parts.push({
+                    type: 'plain',
+                    text: text
+                });
+            }
+
+            content.message = parts;
+            return;
+        }
+
+        // 如果 message 是数组 (新格式)，遍历并填充 embedded 字段
+        if (Array.isArray(message)) {
+            const filteredMessage: MessagePart[] = [];
+            for (const part of message as MessagePart[]) {
+                if (part.type === 'tool_call' && Array.isArray(part.tool_calls)) {
+                    const visibleToolCalls = part.tool_calls.filter(
+                        (toolCall) => !isHiddenToolCall(toolCall),
+                    );
+                    if (!visibleToolCalls.length) {
+                        continue;
+                    }
+                    part.tool_calls = visibleToolCalls;
+                }
+
+                if (part.type === 'image' && part.attachment_id) {
+                    part.embedded_url = await getAttachment(part.attachment_id);
+                } else if (part.type === 'record' && part.attachment_id) {
+                    part.embedded_url = await getAttachment(part.attachment_id);
+                } else if (part.type === 'file' && part.attachment_id) {
+                    // file 类型不预加载，保留 attachment_id 以便点击时下载
+                    part.embedded_file = {
+                        attachment_id: part.attachment_id,
+                        filename: part.filename || 'file'
+                    };
+                }
+                // plain, reply, tool_call, video 保持原样
+                if (part.type === 'elicitation') {
+                    part.payload = normalizeElicitationPayload(part.payload) || undefined;
+                }
+                filteredMessage.push(part);
+            }
+            content.message = filteredMessage;
+        }
+
+        // 处理 agent_stats (snake_case -> camelCase)
+        if (content.agent_stats) {
+            content.agentStats = content.agent_stats;
+            delete content.agent_stats;
+        }
+    }
+
+    async function getSessionMessages(sessionId: string) {
+        if (!sessionId) return;
+
+        try {
+            if (transportMode.value === 'websocket') {
+                try {
+                    await bindSessionToWebSocket(sessionId);
+                } catch (err) {
+                    console.error('进入会话时建立 WebSocket 连接失败:', err);
+                }
+            }
+
+            const response = await axios.get('/api/chat/get_session?session_id=' + sessionId);
+            isConvRunning.value = response.data.data.is_running || false;
+            const history = response.data.data.history;
+
+            // 保存项目信息（如果存在）
+            currentSessionProject.value = response.data.data.project || null;
+
+            if (isConvRunning.value) {
+                if (!isToastedRunningInfo.value) {
+                    useToast().info('该会话正在运行中。', { timeout: 5000 });
+                    isToastedRunningInfo.value = true;
+                }
+
+                // 如果会话还在运行，3秒后重新获取消息
+                setTimeout(() => {
+                    getSessionMessages(currSessionId.value);
+                }, 3000);
+            }
+
+            // 处理历史消息
+            for (let i = 0; i < history.length; i++) {
+                const content = history[i].content;
+                await parseMessageContent(content);
+            }
+
+            messages.value = history;
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function buildBackendMessageParts(
+        prompt: string,
+        stagedFiles: { attachment_id: string; url: string; original_name: string; type: string }[],
+        replyTo: ReplyInfo | null
+    ): MessagePart[] {
+        const parts: MessagePart[] = [];
+
+        if (replyTo) {
+            parts.push({
+                type: 'reply',
+                message_id: replyTo.messageId,
+                selected_text: replyTo.selectedText
+            });
+        }
+
+        if (prompt) {
+            parts.push({
+                type: 'plain',
+                text: prompt
+            });
+        }
+
+        for (const f of stagedFiles) {
+            const partType = f.type === 'image' ? 'image' :
+                f.type === 'record' ? 'record' : 'file';
+            parts.push({
+                type: partType ,
+                attachment_id: f.attachment_id
+            });
+        }
+
+        return parts;
+    }
+
+    async function sendMessageViaSSE(
+        messageToSend: string | MessagePart[],
+        selectedProviderId: string,
+        selectedModelName: string
     ) {
       return crypto.randomUUID();
     }
@@ -1014,16 +1730,109 @@ export function useMessages(
       });
     }
 
-    if (audioName) {
-      userMessageParts.push({
-        type: "record",
-        embedded_url: audioName,
-      });
+    async function submitElicitationResponse(
+        sessionId: string,
+        replyText: string,
+        displayText: string
+    ) {
+        const normalizedSessionId = sessionId.trim();
+        const normalizedReplyText = replyText.trim();
+        const normalizedDisplayText = (displayText || replyText).trim();
+        if (!normalizedSessionId || !normalizedReplyText) {
+            throw new Error('Missing elicitation reply payload');
+        }
+
+        const response = await axios.post('/api/chat/respond_elicitation', {
+            session_id: normalizedSessionId,
+            reply_text: normalizedReplyText,
+            display_text: normalizedDisplayText
+        });
+        if (response.data?.status !== 'ok') {
+            throw new Error(response.data?.message || 'Failed to submit elicitation reply');
+        }
+
+        const savedMessage = response.data?.data?.saved_message;
+        if (savedMessage?.content) {
+            await parseMessageContent(savedMessage.content);
+            messages.value.push({
+                id: savedMessage.id,
+                created_at: savedMessage.created_at,
+                content: savedMessage.content
+            });
+            return savedMessage;
+        }
+
+        const fallbackMessage: MessageContent = {
+            type: 'user',
+            message: [{
+                type: 'plain',
+                text: normalizedDisplayText
+            }]
+        };
+        messages.value.push({ content: fallbackMessage });
+        return null;
     }
 
-    const userMessage: MessageContent = {
-      type: "user",
-      message: userMessageParts,
+    async function stopMessage() {
+        const sessionId = currentRunningSessionId.value || currSessionId.value;
+        if (!sessionId) {
+            return;
+        }
+
+        userStopRequested.value = true;
+
+        try {
+            await axios.post('/api/chat/stop', {
+                session_id: sessionId
+            });
+        } catch (err) {
+            console.error('停止会话失败:', err);
+        }
+
+        if (transportMode.value === 'websocket' && currentWebSocket.value?.readyState === WebSocket.OPEN) {
+            try {
+                currentWebSocket.value.send(JSON.stringify({
+                    ct: 'chat',
+                    t: 'interrupt',
+                    session_id: sessionId,
+                    message_id: currentWsMessageId.value || undefined
+                }));
+            } catch (err) {
+                console.error('发送 websocket interrupt 失败:', err);
+            }
+        }
+
+        try {
+            await currentReader.value?.cancel();
+        } catch {
+            // ignore reader cancel failures
+        }
+        currentReader.value = null;
+        currentRequestController.value?.abort();
+        currentRequestController.value = null;
+
+        isStreaming.value = false;
+    }
+
+    function cleanupTransport() {
+        closeChatWebSocket();
+    }
+
+    return {
+        messages,
+        isStreaming,
+        isConvRunning,
+        enableStreaming,
+        transportMode,
+        currentSessionProject,
+        getSessionMessages,
+        sendMessage,
+        submitElicitationResponse,
+        stopMessage,
+        toggleStreaming,
+        setTransportMode,
+        cleanupTransport,
+        getAttachment
     };
 
     messages.value.push({ content: userMessage });

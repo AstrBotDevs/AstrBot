@@ -10,6 +10,7 @@
             :messages="messages"
             :is-dark="isDark"
             :is-streaming="isStreaming || isConvRunning"
+            :submit-elicitation="handleSubmitElicitation"
             @openImagePreview="openImagePreview"
           />
           <div v-else class="welcome-container fade-in">
@@ -168,6 +169,7 @@ const {
   enableStreaming,
   getSessionMessages: getSessionMsg,
   sendMessage: sendMsg,
+  submitElicitationResponse,
   stopMessage: stopMsg,
   toggleStreaming,
 } = useMessages(currSessionId, getMediaFile, updateSessionTitle, getSessions);
@@ -255,6 +257,17 @@ async function handleSendMessage() {
 
 async function handleStopMessage() {
   await stopMsg();
+}
+
+async function handleSubmitElicitation(replyText: string, displayText: string) {
+  if (!currSessionId.value) {
+    return;
+  }
+
+  await submitElicitationResponse(currSessionId.value, replyText, displayText);
+  nextTick(() => {
+    messageList.value?.scrollToBottom();
+  });
 }
 
 onMounted(async () => {

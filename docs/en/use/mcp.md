@@ -96,6 +96,100 @@ Configure it in the AstrBot WebUI:
 
 That's it.
 
+## MCP Client Sub-Capabilities
+
+AstrBot now supports enabling MCP client sub-capabilities per server. The first integrated sub-capability is `sampling`, which allows an MCP server to send `sampling/createMessage` requests during a tool call and reuse the current bot's chat provider, persona context, and session origin.
+
+AstrBot also supports per-server `elicitation`. When enabled, an MCP server can ask the current user for missing input or require an external confirmation step while the current MCP tool call is still in progress.
+
+AstrBot also supports per-server `roots`. When enabled, an MCP server can call `roots/list` to learn which local file roots AstrBot is explicitly exposing to it.
+
+You can add the following to an MCP server configuration:
+
+```json
+{
+    "url": "https://example.com/mcp",
+    "transport": "sse",
+    "client_capabilities": {
+        "elicitation": {
+            "enabled": true,
+            "timeout_seconds": 300
+        },
+        "sampling": {
+            "enabled": true
+        },
+        "roots": {
+            "enabled": true,
+            "paths": ["data", "temp"]
+        }
+    }
+}
+```
+
+Current limitations:
+
+- `elicitation` is disabled by default and is only advertised for servers that explicitly set `enabled: true`.
+- `elicitation.timeout_seconds` bounds the total time AstrBot waits for the user's reply; timeouts are returned as `cancel`.
+- `elicitation` is only available while the MCP server is actively serving the current bot tool call; requests outside the active interaction context are rejected.
+- `elicitation` currently uses plain chat messages instead of a dedicated form UI.
+- Form-mode elicitation currently supports flat top-level fields with simple types: `string`, `integer`, `number`, `boolean`, and `array[string]`.
+- For single-field form elicitation, the user can reply with plain text. For multi-field form elicitation, AstrBot accepts JSON or `field: value` lines.
+- URL-mode elicitation currently sends the URL and instructions to the user, then waits for a chat reply such as `done`, `decline`, or `cancel`.
+- Enabling `elicitation` only affects the configured MCP server and does not change other MCP servers or standard chat flows.
+- `sampling` is disabled by default and is only advertised for servers that explicitly set `enabled: true`.
+- `roots` is disabled by default and is only advertised for servers that explicitly set `enabled: true`.
+- `roots.paths` can contain built-in aliases such as `data`, `temp`, `config`, `skills`, `plugins`, `plugin_data`, `knowledge_base`, `backups`, and `root`, as well as absolute paths or paths relative to AstrBot root.
+- If `roots.enabled` is `true` and `paths` is omitted, AstrBot currently exposes `data` and `temp` as the default safe roots.
+- `sampling` is only available while the MCP server is actively serving the current bot tool call; requests outside the active interaction context are rejected.
+- The initial implementation only returns text sampling results.
+- Tool-assisted sampling and multimodal sampling inputs such as image or audio are not supported yet.
+- Enabling `sampling` only affects the configured MCP server and does not change other MCP servers or standard chat flows.
+- Enabling `roots` only affects the configured MCP server and does not change other MCP servers or standard chat flows.
+
+## Notes for stdio servers
+
+When using an MCP server over stdio, the server should reserve stdout for JSON-RPC protocol messages and write logs to stderr.
+
+AstrBot now tolerates blank lines and common launcher banners such as `npm run` output to reduce noise during local testing, but that behavior is only a compatibility fallback. The robust setup is still to keep stdout protocol-only.
+
+## MCP Resources Bridge
+
+If an MCP server advertises the `resources` capability during initialization, AstrBot now registers a small set of bridge tools so the bot can interact with those resources through the existing tool loop.
+
+The first iteration exposes these server-scoped tools:
+
+- `mcp_<server>_list_resources`
+- `mcp_<server>_read_resource`
+- `mcp_<server>_list_resource_templates` (only when the server supports listing resource templates)
+
+This lets the bot discover available resources and read a specific resource URI without changing the normal chat flow or provider integration.
+
+Current limitations:
+
+- The bridge is read-only and does not support `resources/subscribe` push updates yet.
+- AstrBot does not auto-inject MCP resources into prompt context; the bot still needs to read them explicitly through tools.
+- A single text resource is returned as text.
+- A single image blob resource is returned as an image-style tool result.
+- Multi-part resources, mixed results, and non-image binary blobs are summarized into text in the first iteration.
+
+## MCP Prompts Bridge
+
+If an MCP server advertises the `prompts` capability during initialization, AstrBot also registers a small set of bridge tools so the bot can discover and fetch MCP prompts through the existing tool loop.
+
+The first iteration exposes these server-scoped tools:
+
+- `mcp_<server>_list_prompts`
+- `mcp_<server>_get_prompt`
+
+This lets the bot inspect available prompt templates and resolve a specific prompt by name with optional arguments, without changing the normal chat flow or provider integration.
+
+Current limitations:
+
+- AstrBot does not auto-inject MCP prompts into the active chat context; the bot still needs to fetch them explicitly through tools.
+- `get_prompt` results are currently summarized into text, preserving descriptions, message roles, and text blocks.
+- Non-text prompt blocks such as images, audio, and embedded resources are summarized into text in the first iteration instead of being converted into multimodal context.
+- The bridge does not support `prompts/list_changed` push updates yet, and it does not use MCP completions to auto-complete prompt arguments.
+
 Reference links:
 
 1. Learn how to use MCP here: [Model Context Protocol](https://modelcontextprotocol.io/introduction)

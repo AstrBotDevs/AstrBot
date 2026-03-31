@@ -64,6 +64,17 @@
       </transition-group>
     </div>
 
+    <ElicitationCard
+      v-else-if="
+        renderPart.type === 'part' &&
+        renderPart.part?.type === 'elicitation' && renderPart.part?.payload
+      "
+      :payload="renderPart.part.payload"
+      :is-dark="isDark"
+      :interactive="interactiveElicitation"
+      :submit-elicitation="submitElicitation"
+    />
+
     <!-- Text (Markdown) -->
     <div
       v-else-if="
@@ -81,25 +92,6 @@
         :typewriter="false"
         :is-dark="isDark"
         :monaco-options="{ theme: isDark ? 'vs-dark' : 'vs-light' }"
-      />
-    </div>
-
-    <!-- Text (Markdown) -->
-    <div
-      v-else-if="
-        renderPart.type === 'part' &&
-        renderPart.part?.type === 'plain' &&
-        renderPart.part?.text?.trim()
-      "
-      :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"
-      class="markdown-content"
-    >
-      <MarkdownRender
-        custom-id="message-list"
-        :custom-html-tags="['ref']"
-        :content="renderPart.part?.text"
-        :typewriter="false"
-        :is-dark="isDark"
       />
     </div>
 
@@ -213,6 +205,7 @@
 <script setup lang="ts">
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { MarkdownRender } from "markstream-vue";
+import ElicitationCard from "./ElicitationCard.vue";
 import IPythonToolBlock from "./IPythonToolBlock.vue";
 import ToolCallItem from "./ToolCallItem.vue";
 
@@ -232,6 +225,14 @@ const props = defineProps({
   downloadingFiles: {
     type: Object,
     default: () => new Set(),
+  },
+  interactiveElicitation: {
+    type: Boolean,
+    default: false,
+  },
+  submitElicitation: {
+    type: Function,
+    default: null,
   },
 });
 
