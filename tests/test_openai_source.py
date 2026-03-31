@@ -1,4 +1,6 @@
 from types import SimpleNamespace
+from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 import pytest
 from openai.types.chat.chat_completion import ChatCompletion
@@ -888,9 +890,8 @@ async def test_prepare_chat_payload_materializes_context_file_uri_image_urls(tmp
 async def test_file_uri_to_path_preserves_windows_drive_letter():
     provider = _make_provider()
     try:
-        assert provider._file_uri_to_path("file:///C:/tmp/quoted-image.png") == (
-            "C:/tmp/quoted-image.png"
-        )
+        resolved = provider._file_uri_to_path("file:///C:/tmp/quoted-image.png")
+        assert Path(resolved) == Path("C:/tmp/quoted-image.png")
     finally:
         await provider.terminate()
 
@@ -899,9 +900,8 @@ async def test_file_uri_to_path_preserves_windows_drive_letter():
 async def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
     provider = _make_provider()
     try:
-        assert provider._file_uri_to_path("file://C:/tmp/quoted-image.png") == (
-            "C:/tmp/quoted-image.png"
-        )
+        resolved = provider._file_uri_to_path("file://C:/tmp/quoted-image.png")
+        assert Path(resolved) == Path("C:/tmp/quoted-image.png")
     finally:
         await provider.terminate()
 
@@ -910,9 +910,8 @@ async def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
 async def test_file_uri_to_path_preserves_remote_netloc_as_unc_path():
     provider = _make_provider()
     try:
-        assert provider._file_uri_to_path("file://server/share/quoted-image.png") == (
-            "//server/share/quoted-image.png"
-        )
+        resolved = provider._file_uri_to_path("file://server/share/quoted-image.png")
+        assert Path(resolved) == Path("//server/share/quoted-image.png")
     finally:
         await provider.terminate()
 
@@ -1083,7 +1082,10 @@ async def test_prepare_chat_payload_materializes_context_localhost_file_uri_imag
         image_path = tmp_path / "quoted-image.png"
         PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_path)
 
-        localhost_uri = f"file://localhost{image_path.as_posix()}"
+        parsed_local_uri = urlparse(image_path.as_uri())
+        localhost_uri = urlunparse(
+            ("file", "localhost", parsed_local_uri.path, "", "", "")
+        )
         payloads, _ = await provider._prepare_chat_payload(
             prompt=None,
             contexts=[
