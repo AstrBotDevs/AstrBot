@@ -112,21 +112,20 @@ class Provider(AbstractProvider):
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果｡会使用当前的模型进行对话｡
 
-                Args:
-                    prompt: 提示词,和 contexts 二选一使用,如果都指定,则会将 prompt(以及可能的 image_urls) 作为最新的一条记录添加到 contexts 中
-                    session_id: 会话 ID(此属性已经被废弃)
-                    image_urls: 图片 URL 列表
-                    tools: tool set
-        <<<<<<< HEAD
-                    contexts: 上下文,和 prompt 二选一使用
-                    tool_calls_result: 回传给 LLM 的工具调用结果｡参考: https://platform.openai.com/docs/guides/function-calling
-                    tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
-                    extra_user_content_parts: 额外的内容块列表,用于在用户消息后添加额外的文本块(如系统提醒｡指令等)
-                    kwargs: 其他参数
+        Args:
+            prompt: 提示词,和 contexts 二选一使用,如果都指定,则会将 prompt(以及可能的 image_urls) 作为最新的一条记录添加到 contexts 中
+            session_id: 会话 ID(此属性已经被废弃)
+            image_urls: 图片 URL 列表
+            tools: tool set
+            contexts: 上下文,和 prompt 二选一使用
+            tool_calls_result: 回传给 LLM 的工具调用结果｡参考: https://platform.openai.com/docs/guides/function-calling
+            tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
+            extra_user_content_parts: 额外的内容块列表,用于在用户消息后添加额外的文本块(如系统提醒｡指令等)
+            kwargs: 其他参数
 
-                Notes:
-                    - 如果传入了 image_urls,将会在对话时附上图片｡如果模型不支持图片输入,将会抛出错误｡
-                    - 如果传入了 tools,将会使用 tools 进行 Function-calling｡如果模型不支持 Function-calling,将会抛出错误｡
+        Notes:
+            - 如果传入了 image_urls,将会在对话时附上图片｡如果模型不支持图片输入,将会抛出错误｡
+            - 如果传入了 tools,将会使用 tools 进行 Function-calling｡如果模型不支持 Function-calling,将会抛出错误｡
 
         """
         ...
@@ -141,25 +140,26 @@ class Provider(AbstractProvider):
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果｡会使用当前的模型进行对话｡在生成的最后会返回一次完整的结果｡
 
-                Args:
-                    prompt: 提示词,和 contexts 二选一使用,如果都指定,则会将 prompt(以及可能的 image_urls) 作为最新的一条记录添加到 contexts 中
-                    session_id: 会话 ID(此属性已经被废弃)
-                    image_urls: 图片 URL 列表
-                    tools: tool set
-        <<<<<<< HEAD
-                    contexts: 上下文,和 prompt 二选一使用
-                    tool_calls_result: 回传给 LLM 的工具调用结果｡参考: https://platform.openai.com/docs/guides/function-calling
-                    tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
-                    kwargs: 其他参数
+        Args:
+            prompt: 提示词,和 contexts 二选一使用,如果都指定,则会将 prompt(以及可能的 image_urls) 作为最新的一条记录添加到 contexts 中
+            session_id: 会话 ID(此属性已经被废弃)
+            image_urls: 图片 URL 列表
+            tools: tool set
+            contexts: 上下文,和 prompt 二选一使用
+            tool_calls_result: 回传给 LLM 的工具调用结果｡参考: https://platform.openai.com/docs/guides/function-calling
+            tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
+            extra_user_content_parts: 额外的内容块列表,用于在用户消息后添加额外的文本块(如系统提醒｡指令等)
+            kwargs: 其他参数
 
-                Notes:
-                    - 如果传入了 image_urls,将会在对话时附上图片｡如果模型不支持图片输入,将会抛出错误｡
-                    - 如果传入了 tools,将会使用 tools 进行 Function-calling｡如果模型不支持 Function-calling,将会抛出错误｡
+        Notes:
+            - 如果传入了 image_urls,将会在对话时附上图片｡如果模型不支持图片输入,将会抛出错误｡
+            - 如果传入了 tools,将会使用 tools 进行 Function-calling｡如果模型不支持 Function-calling,将会抛出错误｡
 
         """
         if False:  # pragma: no cover - make this an async generator for typing

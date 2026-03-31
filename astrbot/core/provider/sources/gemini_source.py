@@ -14,10 +14,10 @@ from google.genai.errors import APIError
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
+from astrbot.core.agent.message import ContentPart, ImageURLPart, Message, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse, TokenUsage
+from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.io import download_image_by_url
@@ -128,7 +128,7 @@ class ProviderGoogleGenAI(Provider):
 
         raise e
 
-    async def _prepare_query_config(  # type: ignore[invalid-method-override]
+    async def _prepare_query_config(
         self,
         payloads: dict,
         tools: ToolSet | None = None,
@@ -147,8 +147,9 @@ class ProviderGoogleGenAI(Provider):
             logger.warning("流式输出不支持图片模态,已自动降级为文本模态")
             modalities = ["TEXT"]
 
-        tool_list: list[types.Tool] | None = []
-        model_name = cast(str, payloads.get("model", self.get_model()))
+        tool_list: list[types.Tool] = []
+        model_value = payloads.get("model", self.get_model())
+        model_name = model_value if isinstance(model_value, str) else self.get_model()
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
         url_context = self.provider_config.get("gm_url_context", False)
@@ -179,8 +180,6 @@ class ProviderGoogleGenAI(Provider):
                 logger.warning(
                     "gemini-2.0-lite 不支持代码执行､搜索工具和URL上下文,将忽略这些设置",
                 )
-            tool_list = None
-
         else:
             if native_coderunner:
                 tool_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
@@ -196,9 +195,6 @@ class ProviderGoogleGenAI(Provider):
                     logger.warning(
                         "当前 SDK 版本不支持 URL 上下文工具,已忽略该设置,请升级 google-genai 包",
                     )
-
-        if not tool_list:
-            tool_list = None
 
         if tools and tool_list:
             logger.warning("已启用原生工具,函数工具将被忽略")
@@ -503,7 +499,7 @@ class ProviderGoogleGenAI(Provider):
         if reasoning:
             llm_response.reasoning_content = reasoning
 
-        chain = []
+        chain: list[Comp.BaseMessageComponent] = []
         part: types.Part
 
         # 暂时这样Fallback
@@ -642,7 +638,7 @@ class ProviderGoogleGenAI(Provider):
             llm_response.usage = self._extract_usage(result.usage_metadata)
         return llm_response
 
-    async def _query_stream(  # type: ignore[invalid-method-override]
+    async def _query_stream(
         self,
         payloads: dict,
         tools: ToolSet | None,
@@ -767,19 +763,19 @@ class ProviderGoogleGenAI(Provider):
 
         yield final_response
 
-    async def text_chat(  # type: ignore[invalid-method-override]
+    async def text_chat(
         self,
-        prompt=None,
-        session_id=None,
-        image_urls=None,
-        func_tool=None,
-        contexts=None,
-        system_prompt=None,
-        tool_calls_result=None,
-        model=None,
-        extra_user_content_parts=None,
+        prompt: str | None = None,
+        session_id: str | None = None,
+        image_urls: list[str] | None = None,
+        func_tool: ToolSet | None = None,
+        contexts: list[Message] | list[dict] | None = None,
+        system_prompt: str | None = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
+        model: str | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
-        **kwargs,
+        **kwargs: object,
     ) -> LLMResponse:
         if contexts is None:
             contexts = []
@@ -825,19 +821,19 @@ class ProviderGoogleGenAI(Provider):
 
         raise Exception("请求失败｡")
 
-    async def text_chat_stream(  # type: ignore[invalid-method-override]
+    async def text_chat_stream(
         self,
-        prompt=None,
-        session_id=None,
-        image_urls=None,
-        func_tool=None,
-        contexts=None,
-        system_prompt=None,
-        tool_calls_result=None,
-        model=None,
-        extra_user_content_parts=None,
+        prompt: str | None = None,
+        session_id: str | None = None,
+        image_urls: list[str] | None = None,
+        func_tool: ToolSet | None = None,
+        contexts: list[Message] | list[dict] | None = None,
+        system_prompt: str | None = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
+        model: str | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
-        **kwargs,
+        **kwargs: object,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
             contexts = []
@@ -906,7 +902,7 @@ class ProviderGoogleGenAI(Provider):
         self.chosen_api_key = key
         self._init_client()
 
-    async def assemble_context(  # type: ignore[invalid-method-override]
+    async def assemble_context(
         self,
         text: str,
         image_urls: list[str] | None = None,

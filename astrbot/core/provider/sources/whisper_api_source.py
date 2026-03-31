@@ -49,7 +49,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         amr_header = b"#!AMR"
 
         try:
-            async with anyio.open_file(file_path, "rb") as f:
+            async with await anyio.open_file(file_path, "rb") as f:
                 file_header = await f.read(8)
         except FileNotFoundError:
             return None

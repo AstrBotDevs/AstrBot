@@ -123,8 +123,8 @@ class AzureNativeProvider(TTSProvider):
             f"https://{self.region}.tts.speech.microsoft.com/cognitiveservices/v1"
         )
         self._client: AsyncClient | None = None
-        self.token = None
-        self.token_expire = 0
+        self.token: str | None = None
+        self.token_expire: float = 0.0
         self.voice_params = {
             "voice": provider_config.get("azure_tts_voice", "zh-CN-YunxiaNeural"),
             "style": provider_config.get("azure_tts_style", "cheerful"),

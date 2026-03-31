@@ -1,7 +1,7 @@
 import base64
 import json
 from collections.abc import AsyncGenerator
-from typing import Literal
+from typing import Literal, TypedDict
 
 import aiofiles
 import anthropic
@@ -30,6 +30,17 @@ from astrbot.core.utils.network_utils import (
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
+    class _ToolUseBufferEntry(TypedDict, total=False):
+        id: str
+        name: str
+        input: dict[str, object]
+        input_json: str
+
+    class _FinalToolCall(TypedDict):
+        id: str
+        name: str
+        input: dict[str, object]
+
     @staticmethod
     def _ensure_usable_response(
         llm_response: LLMResponse,
@@ -356,7 +367,7 @@ class ProviderAnthropic(Provider):
         )
         return llm_response
 
-    async def _query_stream(  # type: ignore[invalid-method-override]
+    async def _query_stream(
         self,
         payloads: dict,
         tools: ToolSet | None,
@@ -371,10 +382,10 @@ class ProviderAnthropic(Provider):
                 }
 
         # 用于累积工具调用信息
-        tool_use_buffer = {}
+        tool_use_buffer: dict[int, ProviderAnthropic._ToolUseBufferEntry] = {}
         # 用于累积最终结果
         final_text = ""
-        final_tool_calls = []
+        final_tool_calls: list[ProviderAnthropic._FinalToolCall] = []
         id = None
         usage = TokenUsage()
         extra_body = self.provider_config.get("custom_extra_body", {})
@@ -444,8 +455,14 @@ class ProviderAnthropic(Provider):
                             # 累积 JSON 输入
                             if "input_json" not in tool_use_buffer[event.index]:
                                 tool_use_buffer[event.index]["input_json"] = ""
+                            partial_json = event.delta.partial_json
+                            partial_json_chunk = (
+                                partial_json
+                                if isinstance(partial_json, str)
+                                else "".join(partial_json)
+                            )
                             tool_use_buffer[event.index]["input_json"] += (
-                                event.delta.partial_json
+                                partial_json_chunk
                             )
 
                 elif event.type == "content_block_stop":
@@ -512,7 +529,7 @@ class ProviderAnthropic(Provider):
         )
         yield final_response
 
-    async def text_chat(  # type: ignore[invalid-method-override]
+    async def text_chat(
         self,
         prompt=None,
         session_id=None,
@@ -572,7 +589,7 @@ class ProviderAnthropic(Provider):
 
         return llm_response
 
-    async def text_chat_stream(  # type: ignore[invalid-method-override]
+    async def text_chat_stream(
         self,
         prompt=None,
         session_id=None,
@@ -638,7 +655,7 @@ class ProviderAnthropic(Provider):
             return "image/webp"
         return "image/jpeg"
 
-    async def assemble_context(  # type: ignore[invalid-method-override]
+    async def assemble_context(
         self,
         text: str,
         image_urls: list[str] | None = None,
@@ -738,12 +755,13 @@ class ProviderAnthropic(Provider):
         return self.chosen_api_key
 
     async def get_models(self) -> list[str]:
-        models_str = []
-        models = await self.client.models.list()
-        models = sorted(models.data, key=lambda x: x.id)
-        for model in models:
-            models_str.append(model.id)
-        return models_str
+        model_ids: list[str] = []
+        models_page = await self.client.models.list()
+        for model_info in models_page.data:
+            model_id = getattr(model_info, "id", None)
+            if isinstance(model_id, str):
+                model_ids.append(model_id)
+        return sorted(model_ids)
 
     def set_key(self, key: str) -> None:
         self.chosen_api_key = key

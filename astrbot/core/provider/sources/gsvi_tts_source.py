@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from pathlib import Path
 
@@ -59,8 +60,8 @@ class ProviderGSVITTS(TTSProvider):
                         raise Exception(f"GSVI TTS API 合成失败: {msg}")
                     async with session.get(audio_url) as audio_response:
                         if audio_response.status == 200:
-                            with open(path, "wb") as f:
-                                f.write(await audio_response.read())
+                            audio_bytes = await audio_response.read()
+                            await asyncio.to_thread(path.write_bytes, audio_bytes)
                         else:
                             error_text = await audio_response.text()
                             raise Exception(

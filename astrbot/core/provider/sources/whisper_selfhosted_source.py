@@ -1,7 +1,7 @@
 import asyncio
 import os
 import uuid
-from typing import cast
+from typing import Protocol
 
 import anyio
 import whisper
@@ -13,6 +13,10 @@ from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
+
+
+class WhisperModel(Protocol):
+    def transcribe(self, audio_path: str) -> dict[str, object]: ...
 
 
 @register_provider_adapter(
@@ -28,7 +32,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.set_model(provider_config["model"])
-        self.model = None
+        self.model: WhisperModel | None = None
 
     async def initialize(self) -> None:
         loop = asyncio.get_running_loop()
@@ -42,7 +46,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
 
     async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
-        async with anyio.open_file(file_path, "rb") as f:
+        async with await anyio.open_file(file_path, "rb") as f:
             file_header = await f.read(8)
 
         if silk_header in file_header:
@@ -81,8 +85,12 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
                 await tencent_silk_to_wav(audio_url, output_path)
                 audio_url = output_path
 
-        if not self.model:
+        model = self.model
+        if model is None:
             raise RuntimeError("Whisper 模型未初始化")
 
-        result = await loop.run_in_executor(None, self.model.transcribe, audio_url)
-        return cast(str, result["text"])
+        result = await loop.run_in_executor(None, model.transcribe, audio_url)
+        text = result.get("text")
+        if isinstance(text, str):
+            return text
+        raise RuntimeError("Whisper 返回结果缺少 text 字段")

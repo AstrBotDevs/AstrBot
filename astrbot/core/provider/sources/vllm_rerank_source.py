@@ -25,7 +25,7 @@ class VLLMRerankProvider(RerankProvider):
         h = {}
         if self.auth_key:
             h["Authorization"] = f"Bearer {self.auth_key}"
-        self.client = aiohttp.ClientSession(
+        self.client: aiohttp.ClientSession | None = aiohttp.ClientSession(
             headers=h,
             timeout=aiohttp.ClientTimeout(total=self.timeout),
         )

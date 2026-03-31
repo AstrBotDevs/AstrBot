@@ -367,6 +367,7 @@ class ProviderOpenAIOfficial(Provider):
             for key in self.custom_headers:
                 self.custom_headers[key] = str(self.custom_headers[key])
 
+        self.client: AsyncAzureOpenAI | AsyncOpenAI
         if "api_version" in provider_config:
             # Using Azure OpenAI API
             self.client = AsyncAzureOpenAI(

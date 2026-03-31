@@ -2,7 +2,7 @@ import base64
 import json
 import traceback
 import uuid
-from pathlib import Path
+from typing import Any
 
 import aiohttp
 import anyio
@@ -34,17 +34,53 @@ class ProviderVolcengineTTS(TTSProvider):
         self.timeout = provider_config.get("timeout", 20)
 
     @staticmethod
-    def _build_loggable_payload(payload: dict) -> dict:
-        loggable_payload = {
-            "app": dict(payload.get("app", {})),
-            "user": dict(payload.get("user", {})),
-            "audio": dict(payload.get("audio", {})),
-            "request": dict(payload.get("request", {})),
+    def _build_loggable_payload(payload: dict[str, object]) -> dict[str, object]:
+        app_payload = payload.get("app")
+        user_payload = payload.get("user")
+        audio_payload = payload.get("audio")
+        request_payload = payload.get("request")
+
+        safe_app: dict[str, Any] = {}
+        if isinstance(app_payload, dict):
+            appid = app_payload.get("appid")
+            if isinstance(appid, str) and appid:
+                safe_app["appid"] = appid
+            cluster = app_payload.get("cluster")
+            if isinstance(cluster, str) and cluster:
+                safe_app["cluster"] = cluster
+
+        safe_user: dict[str, Any] = {}
+        if isinstance(user_payload, dict):
+            uid = user_payload.get("uid")
+            if isinstance(uid, str) and uid:
+                safe_user["uid"] = uid
+
+        safe_audio: dict[str, Any] = (
+            dict(audio_payload) if isinstance(audio_payload, dict) else {}
+        )
+
+        safe_request: dict[str, Any] = {}
+        if isinstance(request_payload, dict):
+            for key in (
+                "reqid",
+                "text_type",
+                "operation",
+                "with_frontend",
+                "frontend_type",
+            ):
+                value = request_payload.get(key)
+                if value is not None:
+                    safe_request[key] = value
+            text = request_payload.get("text")
+            if isinstance(text, str):
+                safe_request["text_length"] = len(text)
+
+        return {
+            "app": safe_app,
+            "user": safe_user,
+            "audio": safe_audio,
+            "request": safe_request,
         }
-        app_payload = loggable_payload.get("app")
-        if isinstance(app_payload, dict) and app_payload.get("token"):
-            app_payload["token"] = "***"
-        return loggable_payload
 
     def _build_request_payload(self, text: str) -> dict:
         return {
@@ -108,8 +144,8 @@ class ProviderVolcengineTTS(TTSProvider):
                     if "data" in resp_data:
                         audio_data = base64.b64decode(resp_data["data"])
 
-                        temp_dir = Path(get_astrbot_temp_path())
-                        temp_dir.mkdir(parents=True, exist_ok=True)
+                        temp_dir = anyio.Path(get_astrbot_temp_path())
+                        await temp_dir.mkdir(parents=True, exist_ok=True)
                         file_path = temp_dir / f"volcengine_tts_{uuid.uuid4()}.mp3"
 
                         async with await anyio.open_file(file_path, "wb") as audio_file:

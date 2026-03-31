@@ -62,7 +62,7 @@ class BailianRerankProvider(RerankProvider):
             "Content-Type": "application/json",
         }
 
-        self.client = aiohttp.ClientSession(
+        self.client: aiohttp.ClientSession | None = aiohttp.ClientSession(
             headers=headers, timeout=aiohttp.ClientTimeout(total=self.timeout)
         )
 

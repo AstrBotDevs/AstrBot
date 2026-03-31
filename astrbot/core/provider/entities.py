@@ -168,10 +168,10 @@ class ProviderRequest:
 
         return "\n".join(result_parts)
 
-    async def assemble_context(self) -> dict:
+    async def assemble_context(self) -> dict[str, str | list[dict[str, object]]]:
         """将请求(prompt 和 image_urls)包装成 OpenAI 的消息格式｡"""
         # 构建内容块列表
-        content_blocks = []
+        content_blocks: list[dict[str, object]] = []
 
         # 1. 用户原始发言(OpenAI 建议:用户发言在前)
         if self.prompt and self.prompt.strip():
@@ -183,7 +183,8 @@ class ProviderRequest:
         # 2. 额外的内容块(系统提醒､指令等)
         if self.extra_user_content_parts:
             for part in self.extra_user_content_parts:
-                content_blocks.append(part.model_dump())
+                part_payload = part.model_dump()
+                content_blocks.append(dict(part_payload))
 
         # 3. 图片内容
         if self.image_urls:
@@ -206,11 +207,14 @@ class ProviderRequest:
         # 只有当只有一个来自 prompt 的文本块且没有额外内容块时,才降级为简单格式以保持向后兼容
         if (
             len(content_blocks) == 1
-            and content_blocks[0]["type"] == "text"
             and not self.extra_user_content_parts
             and not self.image_urls
         ):
-            return {"role": "user", "content": content_blocks[0]["text"]}
+            first_block = content_blocks[0]
+            if first_block.get("type") == "text":
+                text_content = first_block.get("text")
+                if isinstance(text_content, str):
+                    return {"role": "user", "content": text_content}
 
         # 否则返回多模态格式
         return {"role": "user", "content": content_blocks}

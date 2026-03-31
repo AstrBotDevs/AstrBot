@@ -6,7 +6,7 @@ LastEditTime: 2025-02-25 14:06:30
 import asyncio
 import re
 from datetime import datetime
-from typing import cast
+from typing import Protocol
 
 import anyio
 from funasr_onnx import SenseVoiceSmall
@@ -19,6 +19,16 @@ from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
+
+
+class SenseVoiceModel(Protocol):
+    def __call__(
+        self,
+        audio_path: str,
+        *,
+        language: str,
+        use_itn: bool,
+    ) -> list[str]: ...
 
 
 @register_provider_adapter(
@@ -34,7 +44,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.set_model(provider_config["stt_model"])
-        self.model = None
+        self.model: SenseVoiceModel | None = None
         self.is_emotion = provider_config.get("is_emotion", False)
 
     async def initialize(self) -> None:
@@ -56,7 +66,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
 
     async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
-        async with anyio.open_file(file_path, "rb") as f:
+        async with await anyio.open_file(file_path, "rb") as f:
             file_header = await f.read(8)
 
         if silk_header in file_header:
@@ -87,11 +97,12 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
 
             # 使用 run_in_executor 来调用模型进行识别
             loop = asyncio.get_running_loop()
+            model = self.model
+            if model is None:
+                raise RuntimeError("SenseVoice 模型未初始化")
             res = await loop.run_in_executor(
-                None,  # 使用默认的线程池
-                lambda: cast(SenseVoiceSmall, self.model)(
-                    audio_url, language="auto", use_itn=True
-                ),
+                None,
+                lambda: model(audio_url, language="auto", use_itn=True),
             )
 
             # res = self.model(audio_url, language="auto", use_itn=True)
