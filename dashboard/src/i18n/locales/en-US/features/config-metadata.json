@@ -158,6 +158,11 @@
           "description": "Require AstrBot Admin Permission",
           "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
         },
+        "local_working_dir": {
+          "description": "Local Working Directory",
+          "type": "string",
+          "hint": "Leave empty to use AstrBot root directory. When configured, Shell/Python commands will execute in this directory. Only effective when Computer Use Runtime is set to 'local'."
+        },
         "sandbox": {
           "booter": {
             "description": "Sandbox Environment Driver"
