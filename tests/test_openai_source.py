@@ -245,6 +245,50 @@ async def test_openai_payload_keeps_reasoning_content_in_assistant_history():
 
 
 @pytest.mark.asyncio
+async def test_pop_record_removes_assistant_tool_calls_with_following_tools_atomically():
+    provider = _make_provider()
+    try:
+        context = [
+            {"role": "system", "content": "system"},
+            {"role": "assistant", "tool_calls": [{"id": "call_1"}], "content": None},
+            {"role": "tool", "tool_call_id": "call_1", "content": "result"},
+            {"role": "user", "content": "keep me"},
+        ]
+
+        await provider.pop_record(context)
+
+        assert context == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "keep me"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pop_record_removes_leading_orphan_tool_messages():
+    provider = _make_provider()
+    try:
+        context = [
+            {"role": "system", "content": "system"},
+            {"role": "tool", "tool_call_id": "call_1", "content": "orphan"},
+            {"role": "user", "content": "old user"},
+            {"role": "assistant", "content": "old assistant"},
+            {"role": "user", "content": "new user"},
+        ]
+
+        await provider.pop_record(context)
+
+        assert context == [
+            {"role": "system", "content": "system"},
+            {"role": "assistant", "content": "old assistant"},
+            {"role": "user", "content": "new user"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_groq_payload_drops_reasoning_content_from_assistant_history():
     provider = _make_groq_provider()
     try:
