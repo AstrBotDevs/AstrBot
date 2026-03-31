@@ -575,8 +575,8 @@ const loadApiKeys = async () => {
         "error",
       );
     } else {
-      console.error("An unexpected error occurred while restarting AstrBot:", e);
-      showToast(tm("apiKey.messages.restartFailed"), "error");
+      console.error("An unexpected error occurred while loading API keys:", e);
+      showToast(tm("apiKey.messages.loadFailed"), "error");
     }
   }
 };
@@ -679,8 +679,8 @@ const createApiKey = async () => {
         "error",
       );
     } else {
-      console.error("An unexpected error occurred while restarting AstrBot:", e);
-      showToast(tm("apiKey.messages.restartFailed"), "error");
+      console.error("An unexpected error occurred while creating API key:", e);
+      showToast(tm("apiKey.messages.createFailed"), "error");
     }
   } finally {
     apiKeyCreating.value = false;
@@ -709,8 +709,8 @@ const revokeApiKey = async (keyId: string) => {
         "error",
       );
     } else {
-      console.error("An unexpected error occurred while restarting AstrBot:", e);
-      showToast(tm("apiKey.messages.restartFailed"), "error");
+      console.error("An unexpected error occurred while revoking API key:", e);
+      showToast(tm("apiKey.messages.revokeFailed"), "error");
     }
   }
 };
@@ -737,8 +737,8 @@ const deleteApiKey = async (keyId: string) => {
         "error",
       );
     } else {
-      console.error("An unexpected error occurred while restarting AstrBot:", e);
-      showToast(tm("apiKey.messages.restartFailed"), "error");
+      console.error("An unexpected error occurred while deleting API key:", e);
+      showToast(tm("apiKey.messages.deleteFailed"), "error");
     }
   }
 };
