@@ -1,5 +1,3 @@
-from collections.abc import AsyncGenerator
-
 from astrbot.core import logger
 from astrbot.core.pipeline.context import PipelineContext
 from astrbot.core.pipeline.stage import Stage, register_stage
@@ -30,7 +28,7 @@ class WhitelistCheckStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         if not self.enable_whitelist_check:
             # 白名单检查未启用
             return

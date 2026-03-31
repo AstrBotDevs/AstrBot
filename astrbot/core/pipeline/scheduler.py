@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from astrbot.core import logger
 from astrbot.core.platform import AstrMessageEvent
@@ -23,7 +24,7 @@ class PipelineScheduler:
             key=lambda x: STAGES_ORDER.index(x.__name__),
         )  # 按照顺序排序
         self.ctx = context  # 上下文对象
-        self.stages = []  # 存储阶段实例
+        self.stages: list[Any] = []  # 存储阶段实例
 
     async def initialize(self) -> None:
         """初始化管道调度器时, 初始化所有阶段"""

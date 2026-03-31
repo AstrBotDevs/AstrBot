@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import Callable
 
 from astrbot import logger
 from astrbot.core.message.components import At, AtAll, Reply
@@ -75,7 +75,7 @@ class WakingCheckStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         # apply unique session
         if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
             sid = build_unique_session_id(event)

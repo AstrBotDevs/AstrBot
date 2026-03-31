@@ -1,7 +1,6 @@
 import asyncio
 import random
 import traceback
-from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record
@@ -23,7 +22,7 @@ class PreProcessStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         """在处理事件之前的预处理"""
         # 平台特异配置:platform_specific.<platform>.pre_ack_emoji
         supported = {"telegram", "lark", "discord"}

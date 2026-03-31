@@ -181,7 +181,7 @@ class ThirdPartyAgentSubStage(Stage):
             source="Third-party runner config",
         )
 
-    async def _resolve_persona_custom_error_message(  # type: ignore[invalid-method-override]
+    async def _resolve_persona_custom_error_message(
         self, event: AstrMessageEvent
     ) -> str | None:
         try:
@@ -199,7 +199,7 @@ class ThirdPartyAgentSubStage(Stage):
             logger.debug("Failed to resolve persona custom error message: %s", e)
             return None
 
-    async def _handle_streaming_response(  # type: ignore[invalid-method-override]
+    async def _handle_streaming_response(
         self,
         *,
         runner: "BaseAgentRunner",
@@ -232,7 +232,7 @@ class ThirdPartyAgentSubStage(Stage):
             .set_result_content_type(ResultContentType.STREAMING_RESULT)
             .set_async_stream(_stream_runner_chain()),
         )
-        yield
+        yield None
 
         if runner.done():
             final_chain, is_runner_error = aggregator.finalize(
@@ -246,7 +246,7 @@ class ThirdPartyAgentSubStage(Stage):
                 ),
             )
 
-    async def _handle_non_streaming_response(  # type: ignore[invalid-method-override]
+    async def _handle_non_streaming_response(
         self,
         *,
         runner: "BaseAgentRunner",
@@ -279,12 +279,12 @@ class ThirdPartyAgentSubStage(Stage):
             ),
         )
         # Second yield keeps scheduler progress consistent after final result update.
-        yield
+        yield None
 
-    async def process(  # type: ignore[invalid-method-override]
+    async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
         if self.provider_wake_prefix and not event.message_str.startswith(
@@ -345,7 +345,9 @@ class ThirdPartyAgentSubStage(Stage):
                 DifyAgentRunner,
             )
 
-            runner = DifyAgentRunner[AstrAgentContext]()
+            runner: BaseAgentRunner[AstrAgentContext] = DifyAgentRunner[
+                AstrAgentContext
+            ]()
         elif self.runner_type == "coze":
             from astrbot.core.agent.runners.coze.coze_agent_runner import (
                 CozeAgentRunner,
@@ -402,13 +404,25 @@ class ThirdPartyAgentSubStage(Stage):
                 stream_watchdog_task.cancel()
 
         try:
+            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+
+            provider = self.ctx.plugin_manager.context.get_using_provider(
+                umo=event.unified_msg_origin,
+            )
+            if provider is None:
+                raise ValueError(
+                    "No active provider is available for third-party runner"
+                )
+
             await runner.reset(
+                provider=provider,
                 request=req,
                 run_context=AgentContextWrapper(
                     context=astr_agent_ctx,
                     tool_call_timeout=120,
                     session_manager=ToolSessionManager(),
                 ),
+                tool_executor=FunctionToolExecutor(),
                 agent_hooks=MAIN_AGENT_HOOKS,
                 provider_config=self.prov_cfg,
                 streaming=streaming_response,
@@ -427,7 +441,7 @@ class ThirdPartyAgentSubStage(Stage):
                     close_runner_once=close_runner_once,
                     mark_stream_consumed=mark_stream_consumed,
                 ):
-                    yield
+                    yield None
             else:
                 async for _ in self._handle_non_streaming_response(
                     runner=runner,
@@ -435,7 +449,7 @@ class ThirdPartyAgentSubStage(Stage):
                     stream_to_general=stream_to_general,
                     custom_error_message=custom_error_message,
                 ):
-                    yield
+                    yield None
         finally:
             if (
                 stream_watchdog_task

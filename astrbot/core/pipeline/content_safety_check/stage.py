@@ -20,14 +20,20 @@ class ContentSafetyCheckStage(Stage):
         config = ctx.astrbot_config["content_safety"]
         self.strategy_selector = StrategySelector(config)
 
-    async def process(  # type: ignore[invalid-method-override]
+    async def process(
         self,
         event: AstrMessageEvent,
-        check_text: str | None = None,
+    ) -> AsyncGenerator[None, None]:
+        async for item in self.process_text(event, event.get_message_str()):
+            yield item
+
+    async def process_text(
+        self,
+        event: AstrMessageEvent,
+        check_text: str,
     ) -> AsyncGenerator[None, None]:
         """检查内容安全"""
-        text = check_text if check_text else event.get_message_str()
-        ok, info = self.strategy_selector.check(text)
+        ok, info = self.strategy_selector.check(check_text)
         if not ok:
             if event.is_at_or_wake_command:
                 event.set_result(
@@ -35,7 +41,7 @@ class ContentSafetyCheckStage(Stage):
                         "你的消息或者大模型的响应中包含不适当的内容,已被屏蔽｡",
                     ),
                 )
-                yield
+                yield None
             event.stop_event()
             logger.info(f"内容安全检查不通过,原因:{info}")
             return

@@ -25,15 +25,14 @@ class AgentRequestSubStage(Stage):
                 self.prov_wake_prefix = self.prov_wake_prefix[len(bwp) :]
 
         agent_runner_type = self.config["provider_settings"]["agent_runner_type"]
+        self.agent_sub_stage: InternalAgentSubStage | ThirdPartyAgentSubStage
         if agent_runner_type == "local":
             self.agent_sub_stage = InternalAgentSubStage()
         else:
             self.agent_sub_stage = ThirdPartyAgentSubStage()
         await self.agent_sub_stage.initialize(ctx)
 
-    async def process(  # type: ignore[invalid-method-override]
-        self, event: AstrMessageEvent
-    ) -> AsyncGenerator[None, None]:
+    async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
             logger.debug(
                 "This pipeline does not enable AI capability, skip processing."
@@ -46,5 +45,5 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        async for resp in self.agent_sub_stage.process(event):
-            yield resp
+        async for _ in self.agent_sub_stage.process(event):
+            yield None

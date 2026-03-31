@@ -1,8 +1,6 @@
 import asyncio
 import math
 import random
-from collections.abc import AsyncGenerator
-from typing import ClassVar
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger
@@ -17,38 +15,46 @@ from astrbot.core.utils.path_util import path_Mapping
 
 @register_stage
 class RespondStage(Stage):
-    # 组件类型到其非空判断函数的映射
-    _component_validators: ClassVar[dict[type, lambda comp: bool]] = {
-        Comp.Plain: lambda comp: bool(
-            comp.text and comp.text.strip(),
-        ),  # 纯文本消息需要strip
-        Comp.Face: lambda comp: comp.id is not None,  # QQ表情
-        Comp.Record: lambda comp: bool(comp.file),  # 语音
-        Comp.Video: lambda comp: bool(comp.file),  # 视频
-        Comp.At: lambda comp: bool(comp.qq) or bool(comp.name),  # @
-        Comp.Image: lambda comp: bool(comp.file),  # 图片
-        Comp.Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
-        Comp.Poke: lambda comp: comp.target_id() is not None,  # 戳一戳
-        Comp.Node: lambda comp: bool(comp.content),  # 转发节点
-        Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
-        Comp.File: lambda comp: bool(comp.file_ or comp.url),
-        Comp.WechatEmoji: lambda comp: comp.md5 is not None,  # 微信表情
-        Comp.Json: lambda comp: bool(comp.data),  # Json 卡片
-        Comp.Share: lambda comp: bool(comp.url) or bool(comp.title),
-        Comp.Music: lambda comp: (
-            (comp.id and comp._type and comp._type != "custom")
-            or (comp._type == "custom" and comp.url and comp.audio and comp.title)
-        ),  # 音乐分享
-        Comp.Forward: lambda comp: bool(comp.id),  # 合并转发
-        Comp.Location: lambda comp: bool(
-            comp.lat is not None and comp.lon is not None
-        ),  # 位置
-        Comp.Contact: lambda comp: bool(comp._type and comp.id),  # 推荐好友 or 群
-        Comp.Shake: lambda _: True,  # 窗口抖动(戳一戳)
-        Comp.Dice: lambda _: True,  # 掷骰子魔法表情
-        Comp.RPS: lambda _: True,  # 猜拳魔法表情
-        Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
-    }
+    @staticmethod
+    def _has_meaningful_content(comp: BaseMessageComponent) -> bool:
+        if isinstance(comp, Comp.Plain | Comp.Unknown):
+            return bool(comp.text.strip())
+        if isinstance(comp, Comp.Face):
+            return comp.id is not None
+        if isinstance(comp, Comp.Record | Comp.Video | Comp.Image):
+            return bool(comp.file)
+        if isinstance(comp, Comp.At):
+            return bool(comp.qq) or bool(comp.name)
+        if isinstance(comp, Comp.Reply):
+            return bool(comp.id) and comp.sender_id is not None
+        if isinstance(comp, Comp.Poke):
+            return comp.target_id() is not None
+        if isinstance(comp, Comp.Node):
+            return bool(comp.content)
+        if isinstance(comp, Comp.Nodes):
+            return bool(comp.nodes)
+        if isinstance(comp, Comp.File):
+            return bool(comp.file_ or comp.url)
+        if isinstance(comp, Comp.WechatEmoji):
+            return comp.md5 is not None
+        if isinstance(comp, Comp.Json):
+            return bool(comp.data)
+        if isinstance(comp, Comp.Share):
+            return bool(comp.url) or bool(comp.title)
+        if isinstance(comp, Comp.Music):
+            return bool(
+                (comp.id and comp._type and comp._type != "custom")
+                or (comp._type == "custom" and comp.url and comp.audio and comp.title)
+            )
+        if isinstance(comp, Comp.Forward):
+            return bool(comp.id)
+        if isinstance(comp, Comp.Location):
+            return comp.lat is not None and comp.lon is not None
+        if isinstance(comp, Comp.Contact):
+            return bool(comp._type and comp.id)
+        if isinstance(comp, Comp.Shake | Comp.Dice | Comp.RPS):
+            return True
+        return False
 
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -118,12 +124,8 @@ class RespondStage(Stage):
             return True
 
         for comp in chain:
-            comp_type = type(comp)
-
-            # 检查组件类型是否在字典中
-            if comp_type in self._component_validators:
-                if self._component_validators[comp_type](comp):
-                    return False
+            if self._has_meaningful_content(comp):
+                return False
 
         # 如果所有组件都为空
         return True
@@ -170,7 +172,7 @@ class RespondStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         result = event.get_result()
         if result is None:
             return

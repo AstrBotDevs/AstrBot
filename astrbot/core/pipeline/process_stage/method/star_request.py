@@ -19,7 +19,7 @@ class StarRequestSubStage(Stage):
         self.identifier = ctx.astrbot_config["provider_settings"]["identifier"]
         self.ctx = ctx
 
-    async def process(  # type: ignore[invalid-method-override]
+    async def process(
         self,
         event: AstrMessageEvent,
     ) -> AsyncGenerator[Any, None]:
@@ -80,7 +80,7 @@ class StarRequestSubStage(Stage):
                 if not event.is_stopped() and event.is_at_or_wake_command:
                     ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常:{e}"
                     event.set_result(MessageEventResult().message(ret))
-                    yield
+                    yield None
                     event.clear_result()
 
                 event.stop_event()

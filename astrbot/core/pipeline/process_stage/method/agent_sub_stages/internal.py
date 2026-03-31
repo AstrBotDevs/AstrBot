@@ -151,10 +151,10 @@ class InternalAgentSubStage(Stage):
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
-    async def process(  # type: ignore[invalid-method-override]
+    async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[None, None]:
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
@@ -325,7 +325,7 @@ class InternalAgentSubStage(Stage):
                                 ),
                             ),
                         )
-                        yield
+                        yield None
 
                         # 保存历史记录
                         if agent_runner.done() and (
@@ -355,7 +355,7 @@ class InternalAgentSubStage(Stage):
                                 ),
                             ),
                         )
-                        yield
+                        yield None
                         if agent_runner.done():
                             if final_llm_resp := agent_runner.get_final_llm_resp():
                                 if final_llm_resp.completion_text:
@@ -383,7 +383,7 @@ class InternalAgentSubStage(Stage):
                             stream_to_general,
                             show_reasoning=self.show_reasoning,
                         ):
-                            yield
+                            yield None
 
                     final_resp = agent_runner.get_final_llm_resp()
 
@@ -450,7 +450,7 @@ class InternalAgentSubStage(Stage):
                     consumed_marked=follow_up_consumed_marked,
                 )
 
-    async def _save_to_history(  # type: ignore[invalid-method-override]
+    async def _save_to_history(
         self,
         event: AstrMessageEvent,
         req: ProviderRequest,
@@ -512,6 +512,36 @@ class InternalAgentSubStage(Stage):
             history=message_to_save,
             token_usage=token_usage,
         )
+
+
+async def _record_internal_agent_stats(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    agent_runner: AgentRunner,
+    llm_response: LLMResponse | None,
+) -> None:
+    from astrbot.core import db_helper
+
+    status = "aborted" if agent_runner.was_aborted() else "completed"
+    if llm_response is None and not agent_runner.was_aborted():
+        status = "error"
+
+    provider_id = str(agent_runner.provider.provider_config.get("id", "") or "unknown")
+    provider_model = agent_runner.provider.get_model() or None
+    conversation_id = req.conversation.cid if req.conversation else None
+
+    try:
+        await db_helper.insert_provider_stat(
+            agent_type="internal",
+            status=status,
+            umo=event.unified_msg_origin,
+            conversation_id=conversation_id,
+            provider_id=provider_id,
+            provider_model=provider_model,
+            stats=agent_runner.stats.to_dict(),
+        )
+    except Exception:
+        logger.warning("record internal agent stats failed", exc_info=True)
 
 
 # we prevent astrbot from connecting to known malicious hosts

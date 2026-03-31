@@ -28,10 +28,10 @@ class ProcessStage(Stage):
         self.star_request_sub_stage = StarRequestSubStage()
         await self.star_request_sub_stage.initialize(ctx)
 
-    async def process(  # type: ignore[invalid-method-override]
+    async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[None, None]:
         """处理事件"""
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers",
@@ -46,16 +46,16 @@ class ProcessStage(Stage):
                     _t = False
                     async for _ in self.agent_sub_stage.process(event):
                         _t = True
-                        yield
+                        yield None
                     if not _t:
-                        yield
+                        yield None
                 else:
-                    yield
+                    yield None
 
         if self.sdk_plugin_bridge is not None and not event.is_stopped():
             sdk_result = await self.sdk_plugin_bridge.dispatch_message(event)
             if sdk_result.sent_message or sdk_result.stopped:
-                yield
+                yield None
 
         # 调用 LLM 相关请求
         if not self.ctx.astrbot_config["provider_settings"].get("enable", True):
@@ -77,4 +77,4 @@ class ProcessStage(Stage):
             # 是否有过发送操作 and 是否是被 @ 或者通过唤醒前缀
             if (effective_result and not event.is_stopped()) or not effective_result:
                 async for _ in self.agent_sub_stage.process(event):
-                    yield
+                    yield None
