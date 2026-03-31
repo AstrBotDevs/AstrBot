@@ -839,6 +839,9 @@ class ProviderOpenAIOfficial(Provider):
 
     def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
+        model = payloads.get("model", "").lower()
+        is_gemini = "gemini" in model
+
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
@@ -854,6 +857,18 @@ class ProviderOpenAIOfficial(Provider):
                 # reasoning key is "reasoning_content"
                 if reasoning_content:
                     message["reasoning_content"] = reasoning_content
+
+            # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
+            # 纯文本会触发 400 Invalid argument，需要包一层 JSON。
+            if is_gemini and message.get("role") == "tool":
+                content = message.get("content", "")
+                if isinstance(content, str):
+                    try:
+                        json.loads(content)
+                    except (json.JSONDecodeError, ValueError):
+                        message["content"] = json.dumps(
+                            {"result": content}, ensure_ascii=False
+                        )
 
     async def _handle_api_error(
         self,
