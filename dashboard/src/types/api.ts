@@ -27,9 +27,7 @@ export interface ApiKeyListResponse {
 
 export interface ApiKeyCreateResponse {
   status: "ok" | "error";
-  data?: {
-    api_key: string;
-  };
+  data?: ApiKey & { api_key: string }; // Include the full API key in the response
   message?: string;
 }
 
