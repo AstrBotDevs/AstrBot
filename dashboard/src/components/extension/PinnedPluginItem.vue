@@ -65,18 +65,26 @@ const authorDisplay = computed(() => {
   >
     <v-menu offset-y>
       <template #activator="{ props: menuProps }">
-        <v-avatar
-          v-bind="menuProps"
-          size="72"
-          class="pinned-avatar activator-avatar"
-          :title="plugin.display_name || plugin.name"
-        >
-          <img
-            :src="(typeof plugin.logo === 'string' && plugin.logo.trim()) ? plugin.logo : defaultPluginIcon"
-            :alt="plugin.name"
-            @error="handlePinnedImgError"
-          />
-        </v-avatar>
+        <div class="d-flex flex-column align-center" style="cursor: pointer; width: 80px;">
+          <v-avatar
+            v-bind="menuProps"
+            size="72"
+            class="pinned-avatar activator-avatar mb-1"
+            :title="plugin.display_name || plugin.name"
+          >
+            <img
+              :src="(typeof plugin.logo === 'string' && plugin.logo.trim()) ? plugin.logo : defaultPluginIcon"
+              :alt="plugin.name"
+              @error="handlePinnedImgError"
+            />
+          </v-avatar>
+          <span 
+            class="text-caption text-center text-truncate" 
+            style="width: 100%; font-size: 0.75rem; opacity: 0.9; line-height: 1.2;"
+          >
+            {{ plugin.display_name || plugin.name }}
+          </span>
+        </div>
       </template>
 
       <v-card>
