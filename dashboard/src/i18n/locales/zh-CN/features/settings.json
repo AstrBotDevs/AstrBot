@@ -44,21 +44,11 @@
       "primary": "主色",
       "secondary": "辅助色",
       "reset": "恢复默认",
-      "presetApplied": "主题已应用"
-    }
-  },
-  "style": {
-    "title": "主题",
-    "color": {
-      "title": "主题颜色",
-      "subtitle": "自定义主题主色与辅助色。修改后立即生效，并保存在浏览器本地。",
-      "primary": "主色",
-      "secondary": "辅助色"
-    },
-    "autoSync": {
-      "title": "自动切换深色主题",
-      "subtitle": "根据您的浏览器外观设置自动切换主题",
-      "label": "启用自动切换"
+      "presetApplied": "主题已应用",
+      "light": "浅色",
+      "dark": "深色",
+      "auto": "系统",
+      "autoSwitchDesc": "应用系统主题后，主题将根据您的浏览器外观设置自动切换"
     }
   },
   "reset": {
