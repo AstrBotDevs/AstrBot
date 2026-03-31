@@ -1094,6 +1094,24 @@
         "description": "自定义排序任务类型说明",
         "hint": "仅在使用 qwen3-rerank 模型时生效。建议使用英文撰写。"
       },
+      "nvidia_rerank_api_base": {
+          "description": "API Base URL"
+      },
+      "nvidia_rerank_api_key": {
+          "description": "API Key"
+      },
+      "nvidia_rerank_model": {
+          "description": "重排序模型名称",
+          "hint": "请参照NVIDIA Docs中模型名称填写。"
+      },
+      "nvidia_rerank_model_endpoint": {
+          "description": "自定义模型端点",
+          "hint": "自定义URL末尾端点，默认为 /reranking"
+      },
+      "nvidia_rerank_truncate": {
+          "description": "文本截断策略",
+          "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。"
+      },
       "launch_model_if_not_running": {
         "description": "模型未运行时自动启动",
         "hint": "如果模型当前未在 Xinference 服务中运行，是否尝试自动启动它。在生产环境中建议关闭。"

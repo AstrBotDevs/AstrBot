@@ -1789,6 +1789,19 @@ CONFIG_METADATA_2 = {
                         "return_documents": False,
                         "instruct": "",
                     },
+                    "Nvidia Rerank": {
+                        "id": "nvidia_rerank",
+                        "type": "nvidia_rerank",
+                        "provider": "nvidia",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "nvidia_rerank_api_key": "",
+                        "nvidia_rerank_api_base": "https://ai.api.nvidia.com/v1/retrieval",
+                        "nvidia_rerank_model": "nv-rerank-qa-mistral-4b:1",
+                        "nvidia_rerank_model_endpoint": "/reranking",
+                        "timeout": 20,
+                        "nvidia_rerank_truncate": "",
+                    },
                     "Xinference STT": {
                         "id": "xinference_stt",
                         "type": "xinference_stt",
@@ -1851,6 +1864,34 @@ CONFIG_METADATA_2 = {
                         "description": "模型未运行时自动启动",
                         "type": "bool",
                         "hint": "如果模型当前未在 Xinference 服务中运行，是否尝试自动启动它。在生产环境中建议关闭。",
+                    },
+                    "nvidia_rerank_api_base": {
+                        "description": "API Base URL",
+                        "type": "string",
+                    },
+                    "nvidia_rerank_api_key": {
+                        "description": "API Key",
+                        "type": "string",
+                    },
+                    "nvidia_rerank_model": {
+                        "description": "重排序模型名称",
+                        "type": "string",
+                        "hint": "请参照NVIDIA Docs中模型名称填写。",
+                    },
+                    "nvidia_rerank_model_endpoint": {
+                        "description": "自定义模型端点",
+                        "type": "string",
+                        "hint": "自定义URL末尾端点，默认为 /reranking",
+                    },
+                    "nvidia_rerank_truncate": {
+                        "description": "文本截断策略",
+                        "type": "string",
+                        "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。",
+                        "options": [
+                            "",
+                            "NONE",
+                            "END",
+                        ],
                     },
                     "modalities": {
                         "description": "模型能力",
