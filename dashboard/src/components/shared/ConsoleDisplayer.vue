@@ -329,7 +329,7 @@ export default {
 }
 
 .fullscreen-btn {
-  color: #666 !important; /* 强制固定为深灰色，无论深浅模式 */
+    color: rgba(255, 255, 255, 0.7) !important; /* 提高在深色背景下的对比度 */
 }
 
 :deep(.console-log-line) {

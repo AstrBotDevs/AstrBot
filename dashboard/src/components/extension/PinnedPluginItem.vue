@@ -190,8 +190,7 @@ const authorDisplay = computed(() => {
 .pinned-card-wrapper {
   position: relative;
   display: inline-block;
-  width: 72px;
-  height: 72px;
+  width: 80px;
 }
 
 .pinned-item {
