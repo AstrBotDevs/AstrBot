@@ -89,6 +89,7 @@ class BailianRerankProvider(RerankProvider):
         normalized_top_n = top_n if top_n is not None and top_n > 0 else None
 
         is_compatible_api = "compatible-api" in self.base_url
+
         if normalized_model == self.QWEN3_RERANK_MODEL and is_compatible_api:
             payload = {
                 "model": self.model,
@@ -106,36 +107,21 @@ class BailianRerankProvider(RerankProvider):
                 )
             return payload
 
-        if is_compatible_api:
-            base = {
-                "model": self.model,
-                "query": query,
-                "documents": documents,
-            }
-            params = {
-                k: v
-                for k, v in [
-                    ("top_n", normalized_top_n),
-                    ("return_documents", True if self.return_documents else None),
-                ]
-                if v is not None
-            }
-        else:
-            base = {
-                "model": self.model,
-                "input": {"query": query, "documents": documents},
-            }
-            params = {
-                k: v
-                for k, v in [
-                    ("top_n", normalized_top_n),
-                    ("return_documents", True if self.return_documents else None),
-                ]
-                if v is not None
-            }
+        params = {
+            k: v
+            for k, v in [
+                ("top_n", normalized_top_n),
+                ("return_documents", True if self.return_documents else None),
+            ]
+            if v is not None
+        }
 
-        if params:
-            base["parameters"] = params
+        if is_compatible_api:
+            base = {"model": self.model, "query": query, "documents": documents}
+        else:
+            base = {"model": self.model, "input": {"query": query, "documents": documents}}
+            if params:
+                base["parameters"] = params
 
         return base
 
@@ -155,17 +141,23 @@ class BailianRerankProvider(RerankProvider):
         is_compatible_api = "compatible-api" in self.base_url
 
         if is_compatible_api:
-            if data.get("code"):
+            code = data.get("code")
+            if code:
                 raise BailianAPIError(
-                    f"百炼 API 错误: {data.get('code')} – {data.get('message', '')}"
+                    f"百炼 API 错误: {code} – {data.get('message', '')}"
                 )
             results = data.get("results", [])
         else:
-            if data.get("code", "200") != "200":
+            code = data.get("code", "200")
+            if code != "200":
                 raise BailianAPIError(
-                    f"百炼 API 错误: {data.get('code')} – {data.get('message', '')}"
+                    f"百炼 API 错误: {code} – {data.get('message', '')}"
                 )
             results = data.get("output", {}).get("results", [])
+
+        if not results:
+            logger.warning(f"百炼 Rerank 返回空结果: {data}")
+            return []
 
         # 转换为RerankResult对象，使用.get()避免KeyError
         rerank_results = []
