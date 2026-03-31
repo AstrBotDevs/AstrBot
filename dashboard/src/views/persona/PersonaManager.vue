@@ -370,11 +370,53 @@
       @error="showError"
     />
 
+    <!-- 克隆人格对话框 -->
+    <v-dialog v-model="showCloneDialog" max-width="450px">
+      <v-card>
+        <v-card-title>{{ tm("cloneDialog.title") }}</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            {{
+              tm("cloneDialog.description", {
+                name: cloningPersona?.persona_id ?? "",
+              })
+            }}
+          </p>
+          <v-text-field
+            v-model="cloneNewPersonaId"
+            :label="tm('cloneDialog.newPersonaId')"
+            :hint="tm('cloneDialog.newPersonaIdHint')"
+            persistent-hint
+            variant="outlined"
+            density="comfortable"
+            autofocus
+            :rules="[(v) => !!v || tm('cloneDialog.validation.required')]"
+            @keyup.enter="submitClonePersona"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showCloneDialog = false">
+            {{ tm("buttons.cancel") }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="cloneLoading"
+            :disabled="!cloneNewPersonaId"
+            @click="submitClonePersona"
+          >
+            {{ tm("buttons.clone") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 删除文件夹确认对话框 -->
     <v-dialog v-model="showDeleteFolderDialog" max-width="450px">
       <v-card>
         <v-card-title class="text-error">
-          <v-icon class="mr-2" color="error">mdi-alert</v-icon>
+          <v-icon class="mr-2" color="error"> mdi-alert </v-icon>
           {{ tm("folder.deleteDialog.title") }}
         </v-card-title>
         <v-card-text>
@@ -386,7 +428,7 @@
             }}
           </p>
           <p class="text-warning mt-2">
-            <v-icon size="small" class="mr-1">mdi-information</v-icon>
+            <v-icon size="small" class="mr-1"> mdi-information </v-icon>
             {{ tm("folder.deleteDialog.warning") }}
           </p>
         </v-card-text>
@@ -398,8 +440,8 @@
           <v-btn
             color="error"
             variant="flat"
-            @click="submitDeleteFolder"
             :loading="deleteLoading"
+            @click="submitDeleteFolder"
           >
             {{ tm("buttons.delete") }}
           </v-btn>
@@ -409,493 +451,15 @@
 
     <!-- 消息提示 -->
     <v-snackbar
+      v-model="showMessage"
       :timeout="3000"
       elevation="24"
       :color="messageType"
-      v-model="showMessage"
       location="top"
     >
       {{ message }}
     </v-snackbar>
   </div>
-
-  <div class="manager-layout">
-    <!-- 左侧边栏 - 仅桌面端显示 -->
-    <div class="sidebar d-none d-md-block">
-      <div
-        class="sidebar-header d-flex justify-space-between align-center mb-3"
-      >
-        <h3 class="text-h6">
-          {{ tm("folder.sidebarTitle") }}
-        </h3>
-        <v-btn
-          icon="mdi-folder-plus"
-          variant="text"
-          size="small"
-          :title="tm('folder.createButton')"
-          @click="showCreateFolderDialog = true"
-        />
-      </div>
-      <FolderTree
-        @move-folder="openMoveFolderDialog"
-        @success="showSuccess"
-        @error="showError"
-        @persona-dropped="handlePersonaDropped"
-      />
-    </div>
-
-    <!-- 主内容区 -->
-    <div class="main-content">
-      <!-- 顶部工具栏 -->
-      <div
-        class="toolbar d-flex flex-wrap justify-space-between align-center mb-4 ga-2"
-      >
-        <!-- 面包屑 - 仅桌面端显示 -->
-        <div class="d-none d-md-block">
-          <FolderBreadcrumb />
-        </div>
-
-        <!-- 操作按钮组 -->
-        <div class="d-flex ga-2">
-          <v-btn
-            color="primary"
-            variant="tonal"
-            prepend-icon="mdi-plus"
-            rounded="lg"
-            @click="openCreatePersonaDialog"
-          >
-            {{ tm("buttons.create") }}
-          </v-btn>
-          <v-btn
-            variant="outlined"
-            prepend-icon="mdi-folder-plus"
-            rounded="lg"
-            @click="showCreateFolderDialog = true"
-          >
-            {{ tm("folder.createButton") }}
-          </v-btn>
-        </div>
-      </div>
-
-      <!-- 加载状态 - 只有加载超过阈值才显示骨架屏 -->
-      <v-fade-transition>
-        <div v-if="showSkeleton" class="loading-container">
-          <v-row>
-            <v-col v-for="n in 6" :key="n" cols="12" sm="6" lg="4" xl="3">
-              <v-skeleton-loader type="card" rounded="lg" />
-            </v-col>
-          </v-row>
-        </div>
-      </v-fade-transition>
-
-      <!-- 内容区域 -->
-      <div v-if="!loading">
-        <!-- 子文件夹区域 -->
-        <div v-if="currentFolders.length > 0" class="folders-section mb-6">
-          <h3 class="text-subtitle-1 font-weight-medium mb-3">
-            <v-icon size="small" class="mr-1"> mdi-folder </v-icon>
-            {{ tm("folder.foldersTitle") }} ({{ currentFolders.length }})
-          </h3>
-          <v-row>
-            <v-col
-              v-for="folder in currentFolders"
-              :key="folder.folder_id"
-              cols="12"
-              sm="6"
-              lg="4"
-              xl="3"
-            >
-              <FolderCard
-                :folder="folder"
-                @click="navigateToFolder(folder.folder_id)"
-                @open="navigateToFolder(folder.folder_id)"
-                @rename="openRenameFolderDialog(folder)"
-                @move="openMoveFolderDialog(folder)"
-                @delete="confirmDeleteFolder(folder)"
-                @persona-dropped="handlePersonaDropped"
-              />
-            </v-col>
-          </v-row>
-        </div>
-
-        <!-- Persona 区域 -->
-        <div v-if="currentPersonas.length > 0" class="personas-section">
-          <h3 class="text-subtitle-1 font-weight-medium mb-3">
-            <v-icon size="small" class="mr-1"> mdi-account-heart </v-icon>
-            {{ tm("persona.personasTitle") }} ({{ currentPersonas.length }})
-          </h3>
-          <v-row>
-            <v-col
-              v-for="persona in currentPersonas"
-              :key="persona.persona_id"
-              cols="12"
-              sm="6"
-              lg="4"
-              xl="3"
-            >
-              <PersonaCard
-                :persona="persona"
-                @view="viewPersona(persona)"
-                @edit="editPersona(persona)"
-                @clone="openClonePersonaDialog(persona)"
-                @move="openMovePersonaDialog(persona)"
-                @delete="confirmDeletePersona(persona)"
-              />
-            </v-col>
-          </v-row>
-        </div>
-
-        <!-- 空状态 -->
-        <div
-          v-if="currentFolders.length === 0 && currentPersonas.length === 0"
-          class="empty-state"
-        >
-          <v-card class="text-center pa-8" elevation="0">
-            <v-icon size="64" color="grey-lighten-1" class="mb-4">
-              mdi-folder-open-outline
-            </v-icon>
-            <h3 class="text-h5 mb-2">
-              {{ tm("empty.folderEmpty") }}
-            </h3>
-            <p class="text-body-1 text-medium-emphasis mb-4">
-              {{ tm("empty.folderEmptyDescription") }}
-            </p>
-            <div class="d-flex justify-center ga-2">
-              <v-btn
-                color="primary"
-                variant="tonal"
-                prepend-icon="mdi-plus"
-                @click="openCreatePersonaDialog"
-              >
-                {{ tm("buttons.create") }}
-              </v-btn>
-              <v-btn
-                variant="outlined"
-                prepend-icon="mdi-folder-plus"
-                @click="showCreateFolderDialog = true"
-              >
-                {{ tm("folder.createButton") }}
-              </v-btn>
-            </div>
-          </v-card>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 创建/编辑 Persona 对话框 -->
-  <PersonaForm
-    v-model="showPersonaDialog"
-    :editing-persona="editingPersona ?? undefined"
-    :current-folder-id="currentFolderId ?? undefined"
-    :current-folder-name="currentFolderName ?? undefined"
-    @saved="handlePersonaSaved"
-    @deleted="handlePersonaDeleted"
-    @error="showError"
-  />
-
-  <!-- 查看 Persona 详情对话框 -->
-  <v-dialog v-model="showViewDialog" max-width="700px">
-    <v-card v-if="viewingPersona">
-      <v-card-title class="d-flex justify-space-between align-center">
-        <span class="text-h5">{{ viewingPersona.persona_id }}</span>
-        <div class="d-flex align-center ga-1">
-          <v-btn
-            color="primary"
-            variant="tonal"
-            size="small"
-            prepend-icon="mdi-pencil"
-            @click="openEditFromViewDialog"
-          >
-            {{ tm("buttons.edit") }}
-          </v-btn>
-          <v-btn
-            icon="mdi-close"
-            variant="text"
-            @click="showViewDialog = false"
-          />
-        </div>
-      </v-card-title>
-
-      <v-card-text>
-        <div class="mb-4">
-          <h4 class="text-h6 mb-2">
-            {{ tm("form.systemPrompt") }}
-          </h4>
-          <pre class="system-prompt-content">{{
-            viewingPersona.system_prompt
-          }}</pre>
-        </div>
-
-        <div v-if="viewingPersona.custom_error_message" class="mb-4">
-          <h4 class="text-h6 mb-2">
-            {{ tm("form.customErrorMessage") }}
-          </h4>
-          <pre class="system-prompt-content">{{
-            viewingPersona.custom_error_message
-          }}</pre>
-        </div>
-
-        <div
-          v-if="
-            viewingPersona.begin_dialogs &&
-            viewingPersona.begin_dialogs.length > 0
-          "
-          class="mb-4"
-        >
-          <h4 class="text-h6 mb-2">
-            {{ tm("form.presetDialogs") }}
-          </h4>
-          <div
-            v-for="(dialog, index) in viewingPersona.begin_dialogs"
-            :key="index"
-            class="mb-2"
-          >
-            <v-chip
-              :color="index % 2 === 0 ? 'primary' : 'secondary'"
-              variant="tonal"
-              size="small"
-              class="mb-1"
-            >
-              {{
-                index % 2 === 0
-                  ? tm("form.userMessage")
-                  : tm("form.assistantMessage")
-              }}
-            </v-chip>
-            <div class="dialog-content ml-2">
-              {{ dialog }}
-            </div>
-          </div>
-        </div>
-
-        <div class="mb-4">
-          <h4 class="text-h6 mb-2">
-            {{ tm("form.tools") }}
-          </h4>
-          <div
-            v-if="viewingPersona.tools === null"
-            class="text-body-2 text-medium-emphasis"
-          >
-            <v-chip
-              size="small"
-              color="success"
-              variant="tonal"
-              prepend-icon="mdi-check-all"
-            >
-              {{ tm("form.allToolsAvailable") }}
-            </v-chip>
-          </div>
-          <div
-            v-else-if="viewingPersona.tools && viewingPersona.tools.length > 0"
-            class="d-flex flex-wrap ga-1"
-          >
-            <v-chip
-              v-for="toolName in viewingPersona.tools"
-              :key="toolName"
-              size="small"
-              color="primary"
-              variant="tonal"
-            >
-              {{ toolName }}
-            </v-chip>
-          </div>
-          <div v-else class="text-body-2 text-medium-emphasis">
-            {{ tm("form.noToolsSelected") }}
-          </div>
-        </div>
-
-        <div class="mb-4">
-          <h4 class="text-h6 mb-2">
-            {{ tm("form.skills") }}
-          </h4>
-          <div
-            v-if="viewingPersona.skills === null"
-            class="text-body-2 text-medium-emphasis"
-          >
-            <v-chip
-              size="small"
-              color="success"
-              variant="tonal"
-              prepend-icon="mdi-check-all"
-            >
-              {{ tm("form.allSkillsAvailable") }}
-            </v-chip>
-          </div>
-          <div
-            v-else-if="
-              viewingPersona.skills && viewingPersona.skills.length > 0
-            "
-            class="d-flex flex-wrap ga-1"
-          >
-            <v-chip
-              v-for="skillName in viewingPersona.skills"
-              :key="skillName"
-              size="small"
-              color="primary"
-              variant="tonal"
-            >
-              {{ skillName }}
-            </v-chip>
-          </div>
-          <div v-else class="text-body-2 text-medium-emphasis">
-            {{ tm("form.noSkillsSelected") }}
-          </div>
-        </div>
-
-        <div class="text-caption text-medium-emphasis">
-          <div>
-            {{ tm("labels.createdAt") }}:
-            {{ formatDate(viewingPersona.created_at) }}
-          </div>
-          <div v-if="viewingPersona.updated_at">
-            {{ tm("labels.updatedAt") }}:
-            {{ formatDate(viewingPersona.updated_at) }}
-          </div>
-        </div>
-      </v-card-text>
-    </v-card>
-  </v-dialog>
-
-  <!-- 创建文件夹对话框 -->
-  <CreateFolderDialog
-    v-model="showCreateFolderDialog"
-    :parent-folder-id="currentFolderId"
-    @created="showSuccess"
-    @error="showError"
-  />
-
-  <!-- 重命名文件夹对话框 -->
-  <v-dialog v-model="showRenameFolderDialog" max-width="400px">
-    <v-card>
-      <v-card-title>{{ tm("folder.renameDialog.title") }}</v-card-title>
-      <v-card-text>
-        <v-text-field
-          v-model="renameFolderData.name"
-          :label="tm('folder.form.name')"
-          :rules="[(v) => !!v || tm('folder.validation.nameRequired')]"
-          variant="outlined"
-          density="comfortable"
-          autofocus
-          @keyup.enter="submitRenameFolder"
-        />
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="showRenameFolderDialog = false">
-          {{ tm("buttons.cancel") }}
-        </v-btn>
-        <v-btn
-          color="primary"
-          variant="flat"
-          :loading="renameLoading"
-          :disabled="!renameFolderData.name"
-          @click="submitRenameFolder"
-        >
-          {{ tm("buttons.save") }}
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-  <!-- 移动对话框 -->
-  <MoveToFolderDialog
-    v-model="showMoveDialog"
-    :item-type="moveDialogType"
-    :item="moveDialogItem"
-    @moved="showSuccess"
-    @error="showError"
-  />
-
-  <!-- 克隆人格对话框 -->
-  <v-dialog v-model="showCloneDialog" max-width="450px">
-    <v-card>
-      <v-card-title>{{ tm("cloneDialog.title") }}</v-card-title>
-      <v-card-text>
-        <p class="text-body-2 text-medium-emphasis mb-4">
-          {{
-            tm("cloneDialog.description", {
-              name: cloningPersona?.persona_id ?? "",
-            })
-          }}
-        </p>
-        <v-text-field
-          v-model="cloneNewPersonaId"
-          :label="tm('cloneDialog.newPersonaId')"
-          :hint="tm('cloneDialog.newPersonaIdHint')"
-          persistent-hint
-          variant="outlined"
-          density="comfortable"
-          autofocus
-          :rules="[(v) => !!v || tm('cloneDialog.validation.required')]"
-          @keyup.enter="submitClonePersona"
-        />
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="showCloneDialog = false">
-          {{ tm("buttons.cancel") }}
-        </v-btn>
-        <v-btn
-          color="primary"
-          variant="flat"
-          :loading="cloneLoading"
-          :disabled="!cloneNewPersonaId"
-          @click="submitClonePersona"
-        >
-          {{ tm("buttons.clone") }}
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-  <!-- 删除文件夹确认对话框 -->
-  <v-dialog v-model="showDeleteFolderDialog" max-width="450px">
-    <v-card>
-      <v-card-title class="text-error">
-        <v-icon class="mr-2" color="error"> mdi-alert </v-icon>
-        {{ tm("folder.deleteDialog.title") }}
-      </v-card-title>
-      <v-card-text>
-        <p>
-          {{
-            tm("folder.deleteDialog.message", {
-              name: deleteFolderData?.name ?? "",
-            })
-          }}
-        </p>
-        <p class="text-warning mt-2">
-          <v-icon size="small" class="mr-1"> mdi-information </v-icon>
-          {{ tm("folder.deleteDialog.warning") }}
-        </p>
-      </v-card-text>
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" @click="showDeleteFolderDialog = false">
-          {{ tm("buttons.cancel") }}
-        </v-btn>
-        <v-btn
-          color="error"
-          variant="flat"
-          :loading="deleteLoading"
-          @click="submitDeleteFolder"
-        >
-          {{ tm("buttons.delete") }}
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-  <!-- 消息提示 -->
-  <v-snackbar
-    v-model="showMessage"
-    :timeout="3000"
-    elevation="24"
-    :color="messageType"
-    location="top"
-  >
-    {{ message }}
-  </v-snackbar>
 </template>
 
 <script lang="ts">
