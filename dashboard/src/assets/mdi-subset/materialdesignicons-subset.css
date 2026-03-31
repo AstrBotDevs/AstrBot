@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 256 icons */
+/* Auto-generated MDI subset – 255 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -130,10 +130,6 @@
 
 .mdi-calendar-blank-outline::before {
   content: "\F0B66";
-}
-
-.mdi-calendar-clock-outline::before {
-  content: "\F16E1";
 }
 
 .mdi-calendar-edit::before {
@@ -294,6 +290,10 @@
 
 .mdi-content-save::before {
   content: "\F0193";
+}
+
+.mdi-content-save-outline::before {
+  content: "\F0818";
 }
 
 .mdi-creation::before {
@@ -842,10 +842,6 @@
 
 .mdi-send::before {
   content: "\F048A";
-}
-
-.mdi-send-clock-outline::before {
-  content: "\F1164";
 }
 
 .mdi-server::before {
