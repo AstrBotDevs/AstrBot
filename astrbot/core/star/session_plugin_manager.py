@@ -1,7 +1,41 @@
 """会话插件管理器 - 负责管理每个会话的插件启停状态"""
 
+from typing import TypedDict
+
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
+
+class SessionPluginSettings(TypedDict, total=False):
+    enabled_plugins: list[str]
+    disabled_plugins: list[str]
+
+
+def _normalize_session_plugin_config(value: object) -> dict[str, SessionPluginSettings]:
+    if not isinstance(value, dict):
+        return {}
+
+    config: dict[str, SessionPluginSettings] = {}
+    for session_id, raw_settings in value.items():
+        if not isinstance(session_id, str) or not isinstance(raw_settings, dict):
+            continue
+
+        settings: SessionPluginSettings = {}
+        enabled_plugins = raw_settings.get("enabled_plugins")
+        if isinstance(enabled_plugins, list) and all(
+            isinstance(plugin_name, str) for plugin_name in enabled_plugins
+        ):
+            settings["enabled_plugins"] = enabled_plugins
+
+        disabled_plugins = raw_settings.get("disabled_plugins")
+        if isinstance(disabled_plugins, list) and all(
+            isinstance(plugin_name, str) for plugin_name in disabled_plugins
+        ):
+            settings["disabled_plugins"] = disabled_plugins
+
+        config[session_id] = settings
+
+    return config
 
 
 class SessionPluginManager:
@@ -23,14 +57,13 @@ class SessionPluginManager:
 
         """
         # 获取会话插件配置
-        session_plugin_config = (
+        session_plugin_config = _normalize_session_plugin_config(
             await sp.get_async(
                 scope="umo",
                 scope_id=session_id,
                 key="session_plugin_config",
                 default={},
             )
-            or {}
         )
         session_config = session_plugin_config.get(session_id, {})
 
@@ -68,14 +101,13 @@ class SessionPluginManager:
         session_id = event.unified_msg_origin
         filtered_handlers = []
 
-        session_plugin_config = (
+        session_plugin_config = _normalize_session_plugin_config(
             await sp.get_async(
                 scope="umo",
                 scope_id=session_id,
                 key="session_plugin_config",
                 default={},
             )
-            or {}
         )
         session_config = session_plugin_config.get(session_id, {})
         disabled_plugins = session_config.get("disabled_plugins", [])

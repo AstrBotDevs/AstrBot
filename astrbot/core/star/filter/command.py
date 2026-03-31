@@ -96,7 +96,7 @@ class CommandFilter(HandlerFilter):
         param_type: dict[str, type | Any],
     ) -> dict[str, Any]:
         """将参数列表 params 根据 param_type 转换为参数字典｡"""
-        result = {}
+        result: dict[str, Any] = {}
         param_items = list(param_type.items())
         for i, (param_name, param_type_or_default_val) in enumerate(param_items):
             is_greedy = param_type_or_default_val is GreedyStr

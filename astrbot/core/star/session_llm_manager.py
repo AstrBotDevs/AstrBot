@@ -1,7 +1,35 @@
 """会话服务管理器 - 负责管理每个会话的LLM､TTS等服务的启停状态"""
 
+from typing import TypedDict
+
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
+
+class SessionServiceConfig(TypedDict, total=False):
+    llm_enabled: bool
+    tts_enabled: bool
+    session_enabled: bool
+
+
+def _normalize_session_service_config(value: object) -> SessionServiceConfig:
+    if not isinstance(value, dict):
+        return {}
+
+    config: SessionServiceConfig = {}
+    llm_enabled = value.get("llm_enabled")
+    if isinstance(llm_enabled, bool):
+        config["llm_enabled"] = llm_enabled
+
+    tts_enabled = value.get("tts_enabled")
+    if isinstance(tts_enabled, bool):
+        config["tts_enabled"] = tts_enabled
+
+    session_enabled = value.get("session_enabled")
+    if isinstance(session_enabled, bool):
+        config["session_enabled"] = session_enabled
+
+    return config
 
 
 class SessionServiceManager:
@@ -23,14 +51,13 @@ class SessionServiceManager:
 
         """
         # 获取会话服务配置
-        session_services = (
+        session_services = _normalize_session_service_config(
             await sp.get_async(
                 scope="umo",
                 scope_id=session_id,
                 key="session_service_config",
                 default={},
             )
-            or {}
         )
 
         # 如果配置了该会话的LLM状态,返回该状态
@@ -50,14 +77,13 @@ class SessionServiceManager:
             enabled: True表示启用,False表示禁用
 
         """
-        session_config = (
+        session_config = _normalize_session_service_config(
             await sp.get_async(
                 scope="umo",
                 scope_id=session_id,
                 key="session_service_config",
                 default={},
             )
-            or {}
         )
         session_config["llm_enabled"] = enabled
         await sp.put_async(
@@ -97,14 +123,13 @@ class SessionServiceManager:
 
         """
         # 获取会话服务配置
-        session_services = (
+        session_services = _normalize_session_service_config(
             await sp.get_async(
                 scope="umo",
                 scope_id=session_id,
                 key="session_service_config",
                 default={},
             )
-            or {}
         )
 
         # 如果配置了该会话的TTS状态,返回该状态
@@ -124,14 +149,13 @@ class SessionServiceManager:
             enabled: True表示启用,False表示禁用
 
         """
-        session_config = (
+        session_config = _normalize_session_service_config(
             await sp.get_async(
                 scope="umo",
                 scope_id=session_id,
                 key="session_service_config",
                 default={},
             )
-            or {}
         )
         session_config["tts_enabled"] = enabled
         await sp.put_async(
@@ -175,14 +199,13 @@ class SessionServiceManager:
 
         """
         # 获取会话服务配置
-        session_services = (
+        session_services = _normalize_session_service_config(
             await sp.get_async(
                 scope="umo",
                 scope_id=session_id,
                 key="session_service_config",
                 default={},
             )
-            or {}
         )
 
         # 如果配置了该会话的整体状态,返回该状态

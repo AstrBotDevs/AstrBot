@@ -40,7 +40,7 @@ from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
-from .star import StarMetadata, star_map, star_registry
+from .star import StarMetadata, star_registry
 from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 
 logger = logging.getLogger("astrbot")
@@ -303,7 +303,7 @@ class Context:
         Note:
             注册的工具默认是激活状态｡
         """
-        return self.provider_manager.llm_tools.activate_llm_tool(name, star_map)
+        return self.provider_manager.llm_tools.activate_llm_tool(name)
 
     def deactivate_llm_tool(self, name: str) -> bool:
         """停用一个已经注册的函数调用工具｡
@@ -564,6 +564,7 @@ class Context:
                 and ADAPTER_NAME_2_TYPE[name] & platform_type
             ):
                 return platform
+        return None
 
     def get_platform_inst(self, platform_id: str) -> Platform | None:
         """获取指定 ID 的平台适配器实例｡
@@ -580,6 +581,7 @@ class Context:
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == platform_id:
                 return platform
+        return None
 
     def get_db(self) -> BaseDatabase:
         """获取 AstrBot 数据库｡

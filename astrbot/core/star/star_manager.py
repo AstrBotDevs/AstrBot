@@ -12,6 +12,7 @@ import sys
 import tempfile
 import traceback
 from types import ModuleType
+from typing import Any, cast
 
 import anyio
 import yaml
@@ -193,7 +194,7 @@ class PluginManager:
         self._pm_lock = asyncio.Lock()
         """StarManager操作互斥锁"""
 
-        self.failed_plugin_dict = {}
+        self.failed_plugin_dict: dict[str, Any] = {}
         """加载失败插件的信息,用于后续可能的热重载"""
 
         self.failed_plugin_info = ""
@@ -398,7 +399,7 @@ class PluginManager:
                 os.path.join(plugin_path, "metadata.yaml"),
                 encoding="utf-8",
             ) as f:
-                metadata = yaml.safe_load(f)
+                metadata = cast(dict[str, Any], yaml.safe_load(f))
         elif plugin_obj and hasattr(plugin_obj, "info"):
             # 使用 info() 函数
             metadata = plugin_obj.info()
@@ -463,7 +464,7 @@ class PluginManager:
             raise Exception("未找到 metadata.yaml,无法获取插件目录名｡")
 
         with open(metadata_path, encoding="utf-8") as f:
-            metadata = yaml.safe_load(f)
+            metadata = cast(dict[str, Any], yaml.safe_load(f))
 
         if not isinstance(metadata, dict):
             raise Exception("metadata.yaml 格式错误｡")
@@ -780,9 +781,13 @@ class PluginManager:
                 - error_message (str|None): 错误信息,成功时为 None
 
         """
-        inactivated_plugins = await sp.global_get("inactivated_plugins", []) or []
-        inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", []) or []
-        alter_cmd = await sp.global_get("alter_cmd", {}) or {}
+        inactivated_plugins: list[Any] = (
+            await sp.global_get("inactivated_plugins", []) or []
+        )
+        inactivated_llm_tools: list[Any] = (
+            await sp.global_get("inactivated_llm_tools", []) or []
+        )
+        alter_cmd: dict[str, Any] = await sp.global_get("alter_cmd", {}) or {}
 
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
@@ -1587,12 +1592,14 @@ class PluginManager:
             await self._terminate_plugin(plugin)
 
             # 加入到 shared_preferences 中
-            inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
+            inactivated_plugins: list[Any] = (
+                await sp.global_get("inactivated_plugins", []) or []
+            )
             if plugin.module_path not in inactivated_plugins:
                 inactivated_plugins.append(plugin.module_path)
 
-            inactivated_llm_tools: list = list(
-                set(await sp.global_get("inactivated_llm_tools", [])),
+            inactivated_llm_tools: list[Any] = list(
+                set(await sp.global_get("inactivated_llm_tools", []) or []),
             )  # 后向兼容
 
             # 禁用插件启用的 llm_tool
@@ -1682,8 +1689,12 @@ class PluginManager:
         plugin = self.context.get_registered_star(plugin_name)
         if plugin is None:
             raise Exception(f"插件 {plugin_name} 不存在｡")
-        inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
-        inactivated_llm_tools: list = await sp.global_get("inactivated_llm_tools", [])
+        inactivated_plugins: list[Any] = (
+            await sp.global_get("inactivated_plugins", []) or []
+        )
+        inactivated_llm_tools: list[Any] = (
+            await sp.global_get("inactivated_llm_tools", []) or []
+        )
         if plugin.module_path in inactivated_plugins:
             inactivated_plugins.remove(plugin.module_path)
         await sp.global_put("inactivated_plugins", inactivated_plugins)
