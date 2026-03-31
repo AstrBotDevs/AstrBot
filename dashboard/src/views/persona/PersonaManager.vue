@@ -1,24 +1,10 @@
 <template>
   <div class="persona-manager">
-    <!-- 移动端顶部导航 -->
-    <div class="mobile-nav d-md-none mb-4">
-      <FolderBreadcrumb />
-    </div>
-
     <div class="manager-layout">
       <!-- 左侧边栏 - 仅桌面端显示 -->
       <div class="sidebar d-none d-md-block">
-        <div
-          class="sidebar-header d-flex justify-space-between align-center mb-3"
-        >
+        <div class="sidebar-header mb-3">
           <h3 class="text-h6">{{ tm("folder.sidebarTitle") }}</h3>
-          <v-btn
-            icon="mdi-folder-plus"
-            variant="text"
-            size="small"
-            @click="showCreateFolderDialog = true"
-            :title="tm('folder.createButton')"
-          />
         </div>
         <FolderTree
           @move-folder="openMoveFolderDialog"
@@ -30,17 +16,21 @@
 
       <!-- 主内容区 -->
       <div class="main-content">
-        <!-- 顶部工具栏 -->
+        <!-- 页面标题与主要操作 -->
         <div
-          class="toolbar d-flex flex-wrap justify-space-between align-center mb-4 ga-2"
+          class="page-header d-flex flex-wrap justify-space-between align-start mb-4 ga-3"
         >
-          <!-- 面包屑 - 仅桌面端显示 -->
-          <div class="d-none d-md-block">
-            <FolderBreadcrumb />
+          <div>
+            <h1 class="text-h1 font-weight-bold mb-2 d-flex align-center">
+              <v-icon color="primary" class="me-2">mdi-heart</v-icon>
+              {{ t("core.navigation.persona") }}
+            </h1>
+            <p class="text-subtitle-1 text-medium-emphasis mb-0">
+              {{ tm("page.description") }}
+            </p>
           </div>
 
-          <!-- 操作按钮组 -->
-          <div class="d-flex ga-2">
+          <div class="d-flex flex-wrap ga-2">
             <v-btn
               color="primary"
               variant="tonal"
@@ -68,6 +58,8 @@
             </v-btn>
           </div>
         </div>
+
+        <FolderBreadcrumb class="mb-4" />
 
         <!-- 加载状态 - 只有加载超过阈值才显示骨架屏 -->
         <v-fade-transition>
@@ -734,11 +726,6 @@ export default defineComponent({
     // 导出人格数据
     async handleExportPersona(persona: Persona) {
       try {
-        console.log(
-          this.tm("persona.messages.exportStart"),
-          persona.persona_id,
-        );
-
         // 转换为新格式
         const exportData = {
           version: "1.0",
@@ -998,6 +985,11 @@ export default defineComponent({
 .main-content {
   flex: 1;
   min-width: 0;
+}
+
+.page-header {
+  position: relative;
+  z-index: 1;
 }
 
 .system-prompt-content {
