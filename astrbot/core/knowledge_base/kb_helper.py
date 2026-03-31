@@ -150,13 +150,14 @@ class KBHelper:
     async def get_rp(self) -> RerankProvider | None:
         if not self.kb.rerank_provider_id:
             return None
-        rp: RerankProvider = await self.prov_mgr.get_provider_by_id(
+        rp: RerankProvider | None = await self.prov_mgr.get_provider_by_id(
             self.kb.rerank_provider_id,
         )  # type: ignore
         if not rp:
-            raise ValueError(
-                f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider",
+            logger.warning(
+                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 的 Rerank Provider({self.kb.rerank_provider_id}) 不可用，将跳过重排序。",
             )
+            return None
         return rp
 
     async def _ensure_vec_db(self) -> FaissVecDB:
@@ -164,7 +165,13 @@ class KBHelper:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
         ep = await self.get_ep()
-        rp = await self.get_rp()
+        rp: RerankProvider | None = None
+        try:
+            rp = await self.get_rp()
+        except Exception as e:
+            logger.warning(
+                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+            )
 
         vec_db = FaissVecDB(
             doc_store_path=str(self.kb_dir / "doc.db"),
