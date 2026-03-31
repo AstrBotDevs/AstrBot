@@ -19,8 +19,8 @@ class SessionController:
     """控制一个 Session 是否已经结束"""
 
     def __init__(self) -> None:
-        self.tasks = set()
-        self.future = asyncio.Future()
+        self.tasks: set[asyncio.Task[None]] = set()
+        self.future: asyncio.Future[None] = asyncio.Future()
         self.current_event: asyncio.Event | None = None
         """当前正在等待的所用的异步事件"""
         self.ts: float | None = None
