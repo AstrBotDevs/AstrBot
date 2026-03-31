@@ -589,7 +589,10 @@ class ProviderOpenAIOfficial(Provider):
     def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
         ptd = getattr(usage, "prompt_tokens_details", None)
         cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
-        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+        cached = (
+            cached if isinstance(cached, int) else 0
+        )  # ptd.cached_tokens 可能为None
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0  # 安全
         completion_tokens = getattr(usage, "completion_tokens", 0) or 0
         cached = cached or 0
         prompt_tokens = prompt_tokens or 0

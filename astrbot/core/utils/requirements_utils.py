@@ -394,7 +394,6 @@ def find_missing_requirements(requirements_path: str) -> set[str] | None:
 def find_missing_requirements_from_lines(
     requirement_lines: Sequence[str],
 ) -> set[str] | None:
-
     required = list(iter_requirements(lines=requirement_lines))
     if not required:
         return set()
