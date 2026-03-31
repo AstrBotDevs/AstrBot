@@ -135,6 +135,7 @@ class KBHelper:
 
     async def get_ep(self) -> EmbeddingProvider:
         if not self.kb.embedding_provider_id:
+            self.kb.embedding_provider_id = "Embedding_Provider"
             logger.error(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
         ep: EmbeddingProvider = await self.prov_mgr.get_provider_by_id(
             self.kb.embedding_provider_id,
@@ -208,6 +209,7 @@ class KBHelper:
 
     async def _ensure_vec_db(self) -> FaissVecDB:
         if not self.kb.embedding_provider_id:
+            self.kb.embedding_provider_id = "Embedding_Provider"
             logger.error(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
             # raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
