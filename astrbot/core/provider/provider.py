@@ -162,7 +162,7 @@ class Provider(AbstractProvider):
         raise NotImplementedError()
 
     async def pop_record(self, context: list) -> None:
-        """Pop earliest non-system records while preserving tool-call pairing."""
+        """弹出最早的非 system 记录，同时保持 tool_calls 与 tool 配对完整。"""
 
         def _has_tool_calls(message: dict) -> bool:
             return bool(message.get("tool_calls"))
@@ -199,8 +199,35 @@ class Provider(AbstractProvider):
             del context[start_idx : end_idx + 1]
             return removed_count
 
+        def _peek_earliest_unit_count() -> int:
+            start_idx = _first_non_system_index()
+            if start_idx is None:
+                return 0
+
+            record = context[start_idx]
+            role = record.get("role")
+            end_idx = start_idx
+            if role == "assistant" and _has_tool_calls(record):
+                while end_idx + 1 < len(context) and (
+                    context[end_idx + 1].get("role") == "tool"
+                ):
+                    end_idx += 1
+            elif role == "tool":
+                while end_idx + 1 < len(context) and (
+                    context[end_idx + 1].get("role") == "tool"
+                ):
+                    end_idx += 1
+            return end_idx - start_idx + 1
+
         removed = 0
         while removed < 2:
+            next_unit_count = _peek_earliest_unit_count()
+            if next_unit_count == 0:
+                break
+            # Keep behavior close to the old "pop around 2 records" strategy,
+            # while still preserving tool-call atomicity.
+            if removed > 0 and removed + next_unit_count > 3:
+                break
             removed_now = _pop_earliest_unit()
             if removed_now == 0:
                 break

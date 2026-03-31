@@ -289,6 +289,68 @@ async def test_pop_record_removes_leading_orphan_tool_messages():
 
 
 @pytest.mark.asyncio
+async def test_pop_record_normal_messages_no_regression():
+    provider = _make_provider()
+    try:
+        context = [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "user1"},
+            {"role": "assistant", "content": "assistant1"},
+            {"role": "user", "content": "user2"},
+            {"role": "assistant", "content": "assistant2"},
+        ]
+
+        await provider.pop_record(context)
+
+        assert context == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "user2"},
+            {"role": "assistant", "content": "assistant2"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pop_record_assistant_with_multiple_tool_calls():
+    provider = _make_provider()
+    try:
+        context = [
+            {"role": "system", "content": "system"},
+            {
+                "role": "assistant",
+                "tool_calls": [{"id": "call_1"}, {"id": "call_2"}],
+                "content": None,
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "result1"},
+            {"role": "tool", "tool_call_id": "call_2", "content": "result2"},
+            {"role": "user", "content": "keep me"},
+        ]
+
+        await provider.pop_record(context)
+
+        assert context == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "keep me"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_pop_record_only_system_messages():
+    provider = _make_provider()
+    try:
+        context = [{"role": "system", "content": "system"}]
+
+        await provider.pop_record(context)
+
+        assert context == [{"role": "system", "content": "system"}]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_groq_payload_drops_reasoning_content_from_assistant_history():
     provider = _make_groq_provider()
     try:
