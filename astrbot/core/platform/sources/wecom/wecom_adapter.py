@@ -7,7 +7,6 @@ from typing import Any, cast
 
 import aiofiles
 import quart
-from requests import Response
 from wechatpy.enterprise import WeChatClient, parse_message
 from wechatpy.enterprise.crypto import WeChatCrypto
 from wechatpy.enterprise.messages import ImageMessage, TextMessage, VoiceMessage
@@ -340,7 +339,7 @@ class WecomPlatformAdapter(Platform):
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         elif isinstance(msg, VoiceMessage):
-            resp: Response = await asyncio.get_running_loop().run_in_executor(
+            resp = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.client.media.download,
                 msg.media_id,
@@ -396,7 +395,7 @@ class WecomPlatformAdapter(Platform):
             abm.message_str = text
         elif msgtype == "image":
             media_id = msg.get("image", {}).get("media_id", "")
-            resp: Response = await asyncio.get_running_loop().run_in_executor(
+            resp = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.client.media.download,
                 media_id,
@@ -408,7 +407,7 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Image(file=path, url=path)]
         elif msgtype == "voice":
             media_id = msg.get("voice", {}).get("media_id", "")
-            resp: Response = await asyncio.get_running_loop().run_in_executor(
+            resp = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.client.media.download,
                 media_id,

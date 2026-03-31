@@ -46,7 +46,7 @@ class KookClient:
 
         # 状态/计算字段
         self.running = False
-        self.session_id = None
+        self.session_id: str | None = None
         self.last_sn = 0  # 记录最后处理的消息序号
         self.last_heartbeat_time = 0
         self.heartbeat_failed_count = 0

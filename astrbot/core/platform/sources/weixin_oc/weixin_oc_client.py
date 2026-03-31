@@ -95,17 +95,18 @@ class WeixinOCClient:
     def _build_media_cipher(key: bytes):
         # Weixin OC CDN media transport only exchanges an `aeskey`; no IV is
         # negotiated by the upstream API, so ECB is required for compatibility.
-        # codeql[py/weak-cryptographic-algorithm]
+        # This is a known limitation of the WeChat API design.
+        # nosec[ECB]
         return AES.new(key, AES.MODE_ECB)
 
     @classmethod
     def encrypt_cdn_payload(cls, data: bytes, key: bytes) -> bytes:
-        cipher = cls._build_media_cipher(key)
+        cipher = cls._build_media_cipher(key)  # nosec[ECB]
         return cipher.encrypt(cls.pkcs7_pad(data))
 
     @classmethod
     def decrypt_cdn_payload(cls, encrypted: bytes, key: bytes) -> bytes:
-        cipher = cls._build_media_cipher(key)
+        cipher = cls._build_media_cipher(key)  # nosec[ECB]
         return cls.pkcs7_unpad(cipher.decrypt(encrypted))
 
     @staticmethod

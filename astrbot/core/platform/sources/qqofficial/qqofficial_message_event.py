@@ -281,7 +281,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload["content"] = plain_text or None
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
-                        group_openid=source.group_openid,
+                        group_openid=source.group_openid or "",
                         **retry_payload,
                     ),
                     payload=payload,
@@ -577,7 +577,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None
 
-        return message.Message(**cast(dict[str, Any], result))
+        return message.Message(**cast(dict[str, Any], result))  # type: ignore[typeddict-item]
 
     @staticmethod
     async def _parse_to_qqofficial(message: MessageChain):

@@ -228,7 +228,7 @@ class TelegramPlatformAdapter(Platform):
 
     def collect_commands(self) -> list[BotCommand]:
         """从注册的处理器中收集所有指令"""
-        command_dict = {}
+        command_dict: dict[str, BotCommand] = {}
         skip_commands = {"start"}
 
         for handler_md in star_handlers_registry:

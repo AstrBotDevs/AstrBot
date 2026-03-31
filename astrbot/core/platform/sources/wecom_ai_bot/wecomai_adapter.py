@@ -179,7 +179,7 @@ class WecomAIBotAdapter(Platform):
         except Exception as e:
             logger.error(f"处理队列消息时发生异常: {e}")
 
-    async def _process_message(  # type: ignore[invalid-method-override]
+    async def _process_message(
         self,
         message_data: dict[str, Any],
         callback_params: dict[str, str],
@@ -356,7 +356,7 @@ class WecomAIBotAdapter(Platform):
                     logger.error("处理欢迎消息时发生异常: %s", e)
                     return None
 
-    async def _process_long_connection_payload(  # type: ignore[invalid-method-override]
+    async def _process_long_connection_payload(
         self,
         payload: dict[str, Any],
     ) -> None:
@@ -425,7 +425,7 @@ class WecomAIBotAdapter(Platform):
             },
         )
 
-    async def _send_long_connection_respond_msg(  # type: ignore[invalid-method-override]
+    async def _send_long_connection_respond_msg(
         self,
         req_id: str,
         body: dict[str, Any],
@@ -451,7 +451,7 @@ class WecomAIBotAdapter(Platform):
             user_id = message_data.get("from", {}).get("userid", "default_user")
             return format_session_id("wecomai", user_id)
 
-    async def _enqueue_message(  # type: ignore[invalid-method-override]
+    async def _enqueue_message(
         self,
         message_data: dict[str, Any],
         callback_params: dict[str, str],
@@ -482,7 +482,7 @@ class WecomAIBotAdapter(Platform):
         image_base64 = []
 
         _img_url_to_process: list[tuple[str, str | None]] = []
-        msg_items = []
+        msg_items: list[dict[str, Any]] = []
 
         if msgtype == WecomAIBotConstants.MSG_TYPE_TEXT:
             content = WecomAIBotMessageParser.parse_text_message(message_data)
@@ -561,7 +561,7 @@ class WecomAIBotAdapter(Platform):
         logger.debug(f"WecomAIAdapter: {abm.message}")
         return abm
 
-    async def send_by_session(  # type: ignore[invalid-method-override]
+    async def send_by_session(
         self,
         session: MessageSesion,
         message_chain: MessageChain,
@@ -585,9 +585,9 @@ class WecomAIBotAdapter(Platform):
             )
         await super().send_by_session(session, message_chain)
 
-    def run(  # type: ignore[invalid-method-override]
+    def run(
         self,
-    ) -> Awaitable[Any]:
+    ) -> Coroutine[Any, Any, None]:
         """运行适配器,同时启动HTTP服务器和队列监听器"""
 
         async def run_both() -> None:

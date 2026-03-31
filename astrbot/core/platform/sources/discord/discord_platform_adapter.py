@@ -51,7 +51,7 @@ class DiscordPlatformAdapter(Platform):
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
         self.client_self_id: str | None = None
-        self.registered_handlers = []
+        self.registered_handlers: list[Any] = []
         self.sdk_plugin_bridge = None
         # 指令注册相关
         self.enable_command_register = self.config.get("discord_command_register", True)
@@ -230,7 +230,7 @@ class DiscordPlatformAdapter(Platform):
             user_id=str(message.author.id),
             nickname=message.author.display_name,
         )
-        message_chain = []
+        message_chain: list[Any] = []
         # 如果机器人被 @,在 message_chain 开头添加 At 组件
         if self.client and self.client.user and bot_was_mentioned:
             message_chain.insert(

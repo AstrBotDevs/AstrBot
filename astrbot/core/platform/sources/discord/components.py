@@ -1,13 +1,13 @@
 import discord
 
-from astrbot.api.message_components import BaseMessageComponent
+from astrbot.api.message_components import BaseMessageComponent, ComponentType
 
 
 # Discord专用组件
 class DiscordEmbed(BaseMessageComponent):
     """Discord Embed消息组件"""
 
-    type: str = "discord_embed"
+    type: ComponentType = ComponentType.DiscordEmbed
 
     def __init__(
         self,
@@ -61,7 +61,7 @@ class DiscordEmbed(BaseMessageComponent):
 class DiscordButton(BaseMessageComponent):
     """Discord按钮组件"""
 
-    type: str = "discord_button"
+    type: ComponentType = ComponentType.DiscordButton
 
     def __init__(
         self,
@@ -83,7 +83,7 @@ class DiscordButton(BaseMessageComponent):
 class DiscordReference(BaseMessageComponent):
     """Discord引用组件"""
 
-    type: str = "discord_reference"
+    type: ComponentType = ComponentType.DiscordReference
 
     def __init__(self, message_id: str, channel_id: str) -> None:
         self.message_id = message_id
@@ -93,7 +93,7 @@ class DiscordReference(BaseMessageComponent):
 class DiscordView(BaseMessageComponent):
     """Discord视图组件,包含按钮和选择菜单"""
 
-    type: str = "discord_view"
+    type: ComponentType = ComponentType.DiscordView
 
     def __init__(
         self,
@@ -117,7 +117,7 @@ class DiscordView(BaseMessageComponent):
 
                 if component.url:
                     # URL按钮
-                    button = discord.ui.Button(
+                    button: discord.ui.Button[discord.ui.View] = discord.ui.Button(
                         label=component.label,
                         style=discord.ButtonStyle.link,
                         url=component.url,

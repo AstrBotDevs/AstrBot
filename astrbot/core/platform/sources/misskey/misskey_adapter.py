@@ -96,7 +96,7 @@ class MisskeyPlatformAdapter(Platform):
         self._running = False
         self.client_self_id = ""
         self._bot_username = ""
-        self._user_cache = {}
+        self._user_cache: dict[str, Any] = {}
 
     def meta(self) -> PlatformMetadata:
         default_config = {
@@ -200,8 +200,7 @@ class MisskeyPlatformAdapter(Platform):
         try:
             if not isinstance(message.raw_message, dict):
                 message.raw_message = {}
-            raw_msg: dict[str, Any] = message.raw_message
-            raw_msg["poll"] = poll
+            message.raw_message["poll"] = poll
             message.__setattr__("poll", poll)
         except Exception:
             pass
@@ -579,7 +578,7 @@ class MisskeyPlatformAdapter(Platform):
                     if fallback_urls:
                         appended = "\n" + "\n".join(fallback_urls)
                         text = (text or "") + appended
-                    payload: dict[str, Any] = {"toUserId": user_id, "text": text}
+                    payload = {"toUserId": user_id, "text": text}
                     if file_ids:
                         # 聊天消息只支持单个文件,使用 fileId 而不是 fileIds
                         payload["fileId"] = file_ids[0]

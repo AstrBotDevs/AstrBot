@@ -162,7 +162,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         try:
-            content_parts = []
+            content_parts: list[str] = []
 
             async for chain in generator:
                 if isinstance(chain, MessageChain):

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+from typing import Any
 from xml.etree import ElementTree as ET
 
 import websockets
@@ -64,7 +65,7 @@ class SatoriPlatformAdapter(Platform):
         self.ws: ClientConnection | None = None
         self.session: ClientSession | None = None
         self.sequence = 0
-        self.logins = []
+        self.logins: list[Any] = []
         self.running = False
         self.heartbeat_task: asyncio.Task | None = None
         self.ready_received = False
@@ -188,7 +189,7 @@ class SatoriPlatformAdapter(Platform):
         if self._is_websocket_closed(self.ws):
             raise Exception("WebSocket连接已关闭")
 
-        identify_payload = {
+        identify_payload: dict[str, Any] = {
             "op": 3,  # IDENTIFY
             "body": {
                 "token": str(self.token) if self.token else "",  # 字符串
@@ -591,7 +592,7 @@ class SatoriPlatformAdapter(Platform):
 
     async def parse_satori_elements(self, content: str) -> list:
         """解析 Satori 消息元素"""
-        elements = []
+        elements: list[Any] = []
 
         if not content:
             return elements

@@ -237,9 +237,7 @@ class LarkMessageEvent(AstrMessageEvent):
                         def _open_image():
                             return open(file_path, "rb")
 
-                        image_file = await asyncio.to_thread(
-                            lambda: open(file_path, "rb")
-                        )
+                        image_file = await asyncio.to_thread(_open_image)
                     except Exception as e:
                         logger.error(f"[Lark] 无法打开图片文件: {e}")
                         continue

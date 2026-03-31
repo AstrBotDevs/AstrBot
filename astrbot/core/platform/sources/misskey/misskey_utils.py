@@ -379,7 +379,7 @@ def process_at_mention(
     client_self_id: str,
 ) -> tuple[list[str], str]:
     """处理@提及逻辑,返回消息部分列表和处理后的文本"""
-    message_parts = []
+    message_parts: list[str] = []
 
     if not raw_text:
         return message_parts, ""

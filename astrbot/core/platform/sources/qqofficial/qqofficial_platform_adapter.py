@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
+import anyio
 import botpy
 import botpy.message
 from botpy import Client
@@ -344,8 +345,8 @@ class QQOfficialPlatformAdapter(Platform):
         url: str,
         filename: str,
     ) -> Record:
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = anyio.Path(get_astrbot_temp_path())
+        await temp_dir.mkdir(parents=True, exist_ok=True)
 
         ext = Path(filename).suffix.lower()
         source_ext = ext or ".audio"
