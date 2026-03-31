@@ -88,9 +88,8 @@ class BailianRerankProvider(RerankProvider):
         normalized_model = self.model.strip().lower()
         normalized_top_n = top_n if top_n is not None and top_n > 0 else None
 
-        # qwen3-rerank follows a model-specific payload:
-        # query/documents/top_n/instruct should be at the top level.
-        if normalized_model == self.QWEN3_RERANK_MODEL:
+        is_compatible_api = "compatible-api" in self.base_url
+        if normalized_model == self.QWEN3_RERANK_MODEL and is_compatible_api:
             payload = {
                 "model": self.model,
                 "query": query,
@@ -107,16 +106,33 @@ class BailianRerankProvider(RerankProvider):
                 )
             return payload
 
-        base = {"model": self.model, "input": {"query": query, "documents": documents}}
-
-        params = {
-            k: v
-            for k, v in [
-                ("top_n", normalized_top_n),
-                ("return_documents", True if self.return_documents else None),
-            ]
-            if v is not None
-        }
+        if is_compatible_api:
+            base = {
+                "model": self.model,
+                "query": query,
+                "documents": documents,
+            }
+            params = {
+                k: v
+                for k, v in [
+                    ("top_n", normalized_top_n),
+                    ("return_documents", True if self.return_documents else None),
+                ]
+                if v is not None
+            }
+        else:
+            base = {
+                "model": self.model,
+                "input": {"query": query, "documents": documents},
+            }
+            params = {
+                k: v
+                for k, v in [
+                    ("top_n", normalized_top_n),
+                    ("return_documents", True if self.return_documents else None),
+                ]
+                if v is not None
+            }
 
         if params:
             base["parameters"] = params
@@ -136,16 +152,20 @@ class BailianRerankProvider(RerankProvider):
             BailianAPIError: API返回错误
             KeyError: 结果缺少必要字段
         """
-        # 检查响应状态
-        if data.get("code", "200") != "200":
-            raise BailianAPIError(
-                f"百炼 API 错误: {data.get('code')} – {data.get('message', '')}"
-            )
+        is_compatible_api = "compatible-api" in self.base_url
 
-        results = data.get("output", {}).get("results", [])
-        if not results:
-            logger.warning(f"百炼 Rerank 返回空结果: {data}")
-            return []
+        if is_compatible_api:
+            if data.get("code"):
+                raise BailianAPIError(
+                    f"百炼 API 错误: {data.get('code')} – {data.get('message', '')}"
+                )
+            results = data.get("results", [])
+        else:
+            if data.get("code", "200") != "200":
+                raise BailianAPIError(
+                    f"百炼 API 错误: {data.get('code')} – {data.get('message', '')}"
+                )
+            results = data.get("output", {}).get("results", [])
 
         # 转换为RerankResult对象，使用.get()避免KeyError
         rerank_results = []
