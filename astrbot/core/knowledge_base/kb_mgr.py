@@ -76,7 +76,12 @@ class KnowledgeBaseManager:
                 kb_root_dir=FILES_PATH,
                 chunker=CHUNKER,
             )
-            await kb_helper.initialize()
+            try:
+                await kb_helper.initialize()
+            except Exception as e:
+                kb_helper.init_error = str(e)
+                logger.error(f"知识库 {record.kb_name}({record.kb_id}) 初始化失败: {e}")
+                logger.error(traceback.format_exc())
             self.kb_insts[record.kb_id] = kb_helper
 
     async def create_kb(
@@ -203,6 +208,15 @@ class KnowledgeBaseManager:
             await session.commit()
             await session.refresh(kb)
 
+        # re-initialize to pick up provider changes
+        try:
+            await kb_helper.initialize()
+            kb_helper.init_error = None
+        except Exception as e:
+            kb_helper.init_error = str(e)
+            logger.error(f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败: {e}")
+            logger.error(traceback.format_exc())
+
         return kb_helper
 
     async def retrieve(
@@ -217,6 +231,11 @@ class KnowledgeBaseManager:
         kb_id_helper_map = {}
         for kb_name in kb_names:
             if kb_helper := await self.get_kb_by_name(kb_name):
+                if kb_helper.init_error:
+                    logger.warning(
+                        f"跳过初始化失败的知识库 {kb_name}: {kb_helper.init_error}"
+                    )
+                    continue
                 kb_ids.append(kb_helper.kb.kb_id)
                 kb_id_helper_map[kb_helper.kb.kb_id] = kb_helper
 

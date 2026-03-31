@@ -108,6 +108,7 @@ Text chunk to process:
 class KBHelper:
     vec_db: BaseVecDB
     kb: KnowledgeBase
+    init_error: str | None
 
     def __init__(
         self,
@@ -122,6 +123,7 @@ class KBHelper:
         self.prov_mgr = provider_manager
         self.kb_root_dir = kb_root_dir
         self.chunker = chunker
+        self.init_error = None
 
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
         self.kb_medias_dir = Path(self.kb_dir) / "medias" / self.kb.kb_id
@@ -183,7 +185,7 @@ class KBHelper:
             shutil.rmtree(self.kb_dir)
 
     async def terminate(self) -> None:
-        if self.vec_db:
+        if hasattr(self, "vec_db") and self.vec_db:
             await self.vec_db.close()
 
     async def upload_document(
