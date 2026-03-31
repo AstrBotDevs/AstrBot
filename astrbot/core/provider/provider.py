@@ -172,6 +172,48 @@ class Provider(AbstractProvider):
         for idx in reversed(indexs_to_pop):
             context.pop(idx)
 
+        context[:] = self._fix_tool_call_pairs_in_dict_context(context)
+
+    @staticmethod
+    def _fix_tool_call_pairs_in_dict_context(context: list[dict]) -> list[dict]:
+        """Remove orphaned tool call chains from dict-based message history."""
+        if not context:
+            return context
+
+        fixed_context: list[dict] = []
+        pending_assistant: dict | None = None
+        pending_tools: list[dict] = []
+
+        def flush_pending_if_valid() -> None:
+            nonlocal pending_assistant, pending_tools
+            if pending_assistant is not None and pending_tools:
+                fixed_context.append(pending_assistant)
+                fixed_context.extend(pending_tools)
+            pending_assistant = None
+            pending_tools = []
+
+        for message in context:
+            role = message.get("role")
+            if role == "tool":
+                if pending_assistant is not None:
+                    pending_tools.append(message)
+                continue
+
+            if (
+                role == "assistant"
+                and message.get("tool_calls") is not None
+                and len(message.get("tool_calls")) > 0
+            ):
+                flush_pending_if_valid()
+                pending_assistant = message
+                continue
+
+            flush_pending_if_valid()
+            fixed_context.append(message)
+
+        flush_pending_if_valid()
+        return fixed_context
+
     def _ensure_message_to_dicts(
         self,
         messages: list[dict] | list[Message] | None,

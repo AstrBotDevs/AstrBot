@@ -166,6 +166,87 @@ async def test_handle_api_error_model_not_vlm_after_fallback_raises():
 
 
 @pytest.mark.asyncio
+async def test_handle_api_error_context_length_removes_orphaned_tool_messages():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "Run tool"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "search", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "content": "Tool result", "tool_call_id": "call_1"},
+                {"role": "assistant", "content": "Final answer"},
+            ]
+        }
+        context_query = payloads["messages"]
+
+        success, *_rest = await provider._handle_api_error(
+            Exception("maximum context length exceeded"),
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        assert payloads["messages"] == [
+            {"role": "system", "content": "system"},
+            {"role": "assistant", "content": "Final answer"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_handle_api_error_context_length_preserves_remaining_valid_messages():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "old question"},
+                {"role": "assistant", "content": "old answer"},
+                {"role": "user", "content": "new question"},
+                {"role": "assistant", "content": "new answer"},
+            ]
+        }
+        context_query = payloads["messages"]
+
+        success, *_rest = await provider._handle_api_error(
+            Exception("maximum context length exceeded"),
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        assert payloads["messages"] == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "new question"},
+            {"role": "assistant", "content": "new answer"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_handle_api_error_content_moderated_with_unserializable_body():
     provider = _make_provider({"image_moderation_error_patterns": ["blocked"]})
     try:
