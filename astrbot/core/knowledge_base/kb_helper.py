@@ -201,7 +201,7 @@ class KBHelper:
                     top_n: int | None = None,
                 ):
                     raise ValueError(
-                        f"无法找到 ID 为 {self.rerank_provider_id} 的 Embedding Provider"
+                        f"无法找到 ID 为 {self.rerank_provider_id} 的 Rerank Provider"
                     )
 
             rp: RerankProvider = TempRerankProvider({}, {}, self.kb.rerank_provider_id)
