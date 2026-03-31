@@ -21,7 +21,7 @@ import sys
 import warnings
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Any, Generic, cast
+from typing import Any, Generic, TextIO
 
 from tenacity import (
     before_sleep_log,
@@ -226,14 +226,13 @@ class MCPClient:
 
         cfg = _prepare_config(mcp_server_config.copy())
 
-        def logging_callback(
-            msg: str | mcp.types.LoggingMessageNotificationParams,
+        async def logging_callback(
+            params: mcp.types.LoggingMessageNotificationParams,
         ) -> None:
             # Handle MCP service error logs
-            if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
-                if msg.level in ("warning", "error", "critical", "alert", "emergency"):
-                    log_msg = f"[{msg.level.upper()}] {msg.data!s}"
-                    self.server_errlogs.append(log_msg)
+            if params.level in ("warning", "error", "critical", "alert", "emergency"):
+                log_msg = f"[{params.level.upper()}] {params.data!s}"
+                self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
@@ -255,19 +254,21 @@ class MCPClient:
                     timeout=cfg.get("timeout", 5),
                     sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
                 )
-                streams = await self.exit_stack.enter_async_context(
+                read_stream, write_stream = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
 
                 # Create a new client session
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
-                self.session = await self.exit_stack.enter_async_context(
+                session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
-                        *streams,
+                        read_stream=read_stream,
+                        write_stream=write_stream,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore[arg-type]
-                    ),
+                        logging_callback=logging_callback,
+                    )
                 )
+                self.session = session
             else:
                 timeout = timedelta(seconds=cfg.get("timeout", 30))
                 sse_read_timeout = timedelta(
@@ -286,14 +287,15 @@ class MCPClient:
 
                 # Create a new client session
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
-                self.session = await self.exit_stack.enter_async_context(
+                session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore[arg-type]
-                    ),
+                        logging_callback=logging_callback,
+                    )
                 )
+                self.session = session
 
         else:
             cfg = _prepare_stdio_env(cfg)
@@ -314,26 +316,32 @@ class MCPClient:
                         log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                         self.server_errlogs.append(log_msg)
 
+            log_pipe = self.exit_stack.enter_context(
+                LogPipe(
+                    level=logging.INFO,
+                    logger=logger,
+                    identifier=f"MCPServer-{name}",
+                    callback=callback,
+                )
+            )
+            errlog_stream: TextIO = self.exit_stack.enter_context(
+                os.fdopen(os.dup(log_pipe.fileno()), "w")
+            )
             stdio_transport = await self.exit_stack.enter_async_context(
                 mcp.stdio_client(
                     server_params,
-                    errlog=cast(
-                        Any,
-                        LogPipe(
-                            level=logging.INFO,
-                            logger=logger,
-                            identifier=f"MCPServer-{name}",
-                            callback=callback,
-                        ),
-                    ),
+                    errlog=errlog_stream,
                 ),
             )
-            self.process_pid = self._extract_stdio_process_pid(self._streams_context)
+            self.process_pid = self._extract_stdio_process_pid(stdio_transport)
 
             # Create a new client session
-            self.session = await self.exit_stack.enter_async_context(
+            session = await self.exit_stack.enter_async_context(
                 mcp.ClientSession(*stdio_transport),
             )
+            self.session = session
+
+        assert self.session is not None
         await self.session.initialize()
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:

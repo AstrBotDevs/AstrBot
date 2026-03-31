@@ -165,13 +165,16 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         # 获得会话变量
         payload_vars = self.variables.copy()
         # 动态变量
-        session_var = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_variables",
-            default={},
+        session_var: dict = (
+            await sp.get_async(
+                scope="umo",
+                scope_id=session_id,
+                key="session_variables",
+                default={},
+            )
+            or {}
         )
-        payload_vars.update(session_var)  # type: ignore[arg-type]
+        payload_vars.update(session_var)
         payload_vars["system_prompt"] = system_prompt
 
         # 处理不同的 API 类型
@@ -297,7 +300,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             # Chat
             return MessageChain(chain=[Comp.Plain(chunk)])
 
-        async def parse_file(item: dict):
+        async def parse_file(item: dict) -> Comp.BaseMessageComponent:
             match item["type"]:
                 case "image":
                     return Comp.Image(file=item["url"], url=item["url"])
@@ -313,7 +316,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     return Comp.File(name=item["filename"], file=item["url"])
 
         output = chunk["data"]["outputs"][self.workflow_output_key]
-        chains = []
+        chains: list[Comp.BaseMessageComponent] = []
         if isinstance(output, str):
             # 纯文本输出
             chains.append(Comp.Plain(output))

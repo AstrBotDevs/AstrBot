@@ -56,7 +56,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
     ) -> None:
         self.req = request
         self.streaming = streaming
-        self.final_llm_resp = None
+        self.final_llm_resp: LLMResponse | None = None
         self._state = AgentState.IDLE
         self.agent_hooks = agent_hooks
         self.run_context = run_context
@@ -193,7 +193,8 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
-        chunk_text = chunk.output.get("text", "") or ""
+        chunk_text_value = chunk.output.get("text", "")
+        chunk_text = chunk_text_value if isinstance(chunk_text_value, str) else ""
         # RAG 引用脚标格式化
         chunk_text = re.sub(r"<ref>\[(\d+)\]</ref>", r"[\1]", chunk_text)
 
@@ -206,7 +207,10 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             )
 
         # 获取文档引用
-        doc_references = chunk.output.get("doc_references", None)
+        raw_doc_references = chunk.output.get("doc_references")
+        doc_references = (
+            raw_doc_references if isinstance(raw_doc_references, list) else None
+        )
 
         return output_text, doc_references, response
 
@@ -251,15 +255,17 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             default="",
         )
         # 获得会话变量
-        payload_vars = self.variables.copy()
-        session_var = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_variables",
-            default={},
+        payload_vars: dict = self.variables.copy()
+        session_var: dict = (
+            await sp.get_async(
+                scope="umo",
+                scope_id=session_id,
+                key="session_variables",
+                default={},
+            )
+            or {}
         )
-        payload_vars.update(session_var)  # type: ignore[arg-type]
-
+        payload_vars.update(session_var)
         if (
             self.dashscope_app_type in ["agent", "dialog-workflow"]
             and not self.has_rag_options()
@@ -302,7 +308,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             AgentResponse 对象
 
         """
-        response_queue = queue.Queue()
+        response_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
         consumer_thread = threading.Thread(
             target=self._consume_sync_generator,
             args=(response, response_queue),
@@ -324,6 +330,10 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             if item_type == "done":
                 break
             elif item_type == "error":
+                if not isinstance(item_data, BaseException):
+                    raise RuntimeError(
+                        f"Unexpected Dashscope error payload: {item_data!r}"
+                    )
                 raise item_data
             elif item_type == "data":
                 chunk = item_data
@@ -332,14 +342,14 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
                 (
                     output_text,
                     chunk_doc_refs,
-                    response,
+                    agent_response,
                 ) = await self._process_stream_chunk(chunk, output_text)
 
-                if response:
-                    if response.type == "err":
-                        yield response
+                if agent_response:
+                    if agent_response.type == "err":
+                        yield agent_response
                         return
-                    yield response
+                    yield agent_response
 
                 if chunk_doc_refs:
                     doc_references = chunk_doc_refs
@@ -365,11 +375,12 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
         # 创建最终响应
         chain = MessageChain(chain=[Comp.Plain(output_text)])
-        self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
+        final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
+        self.final_llm_resp = final_llm_resp
         self._transition_state(AgentState.DONE)
 
         try:
-            await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
+            await self.agent_hooks.on_agent_done(self.run_context, final_llm_resp)
         except Exception as e:
             logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 

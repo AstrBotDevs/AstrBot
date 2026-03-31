@@ -25,6 +25,7 @@ from astrbot.core.agent.context.token_counter import TokenCounter
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
+    ContentPart,
     ImageURLPart,
     Message,
     TextPart,
@@ -175,7 +176,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.fallback_providers.append(fallback_provider)
             if fallback_id:
                 seen_provider_ids.add(fallback_id)
-        self.final_llm_resp = None
+        self.final_llm_resp: LLMResponse | None = None
         self._state = AgentState.IDLE
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
@@ -213,8 +214,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 m._no_save = True
             messages.append(m)
         if request.prompt is not None:
-            m = await request.assemble_context()
-            messages.append(Message.model_validate(m))
+            assembled_context = await request.assemble_context()
+            messages.append(Message.model_validate(assembled_context))
         if request.system_prompt:
             messages.insert(
                 0,
@@ -766,7 +767,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
 
-                executor = self.tool_executor.execute(
+                executor = await self.tool_executor.execute(
                     tool=func_tool,
                     run_context=self.run_context,
                     session_manager=self.run_context.session_manager,
@@ -774,9 +775,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
                 _final_resp: CallToolResult | None = None
-                async for resp in self._iter_tool_executor_results(executor):  # type: ignore[arg-type]
+                async for resp in self._iter_tool_executor_results(executor):
                     if isinstance(resp, CallToolResult):
-                        res = resp
+                        res: CallToolResult = resp
                         _final_resp = resp
                         if not res.content:
                             _append_tool_call_result(
@@ -1011,7 +1012,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
 
-        parts = []
+        parts: list[ContentPart] = []
         if llm_resp.reasoning_content or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(

@@ -144,12 +144,12 @@ class DeerFlowAPIClient:
     async def create_thread(self, timeout: float = 20) -> dict[str, Any]:
         session = self._get_session()
         url = f"{self.api_base}/api/langgraph/threads"
-        payload = {"metadata": {}}
+        payload: dict[str, dict[str, object]] = {"metadata": {}}
         async with session.post(
             url,
             json=payload,
             headers=self.headers,
-            timeout=timeout,
+            timeout=ClientTimeout(total=timeout),
             proxy=self.proxy,
         ) as resp:
             if resp.status not in (200, 201):

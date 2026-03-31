@@ -53,6 +53,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     """DeerFlow Agent Runner via LangGraph HTTP API."""
 
     _MAX_VALUES_HISTORY = 200
+    final_llm_resp: LLMResponse | None
 
     @dataclass(frozen=True)
     class _RunnerConfig:

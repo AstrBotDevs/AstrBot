@@ -1,7 +1,7 @@
 import copy
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import field
-from typing import Any, Generic
+from typing import Any, Generic, TypedDict
 
 import jsonschema
 import mcp
@@ -17,6 +17,12 @@ ParametersType = dict[str, Any]
 ToolExecResult = str | mcp.types.CallToolResult
 
 
+class ToolArgumentSpec(TypedDict):
+    name: str
+    type: str
+    description: str
+
+
 @dataclass
 class ToolSchema:
     """A class representing the schema of a tool for function calling."""
@@ -27,7 +33,11 @@ class ToolSchema:
     description: str
     """The description of the tool."""
 
-    parameters: ParametersType
+    parameters: ParametersType = field(default_factory=dict)
+    """The parameters of the tool, in JSON Schema format."""
+
+    active: bool = True
+    """Whether the tool is active."""
     """The parameters of the tool, in JSON Schema format."""
 
     @model_validator(mode="after")
@@ -111,13 +121,13 @@ class ToolSet:
     convert the tools to different API formats (OpenAI, Anthropic, Google GenAI).
     """
 
-    tools: list[FunctionTool] = Field(default_factory=list)
+    tools: list[ToolSchema] = Field(default_factory=list)
 
     def empty(self) -> bool:
         """Check if the tool set is empty."""
         return len(self.tools) == 0
 
-    def add_tool(self, tool: FunctionTool) -> None:
+    def add_tool(self, tool: ToolSchema) -> None:
         """Add a tool to the set.
 
         If a tool with the same name already exists:
@@ -153,12 +163,13 @@ class ToolSet:
         """Get a tool by its name."""
         for tool in self.tools:
             if tool.name == name:
-                return tool
+                if isinstance(tool, FunctionTool):
+                    return tool
         return None
 
     def get_light_tool_set(self) -> "ToolSet":
         """Return a light tool set with only name/description."""
-        light_tools = []
+        light_tools: list[ToolSchema] = []
         for tool in self.tools:
             if hasattr(tool, "active") and not tool.active:
                 continue
@@ -178,7 +189,7 @@ class ToolSet:
 
     def get_param_only_tool_set(self) -> "ToolSet":
         """Return a tool set with name/parameters only (no description)."""
-        param_tools = []
+        param_tools: list[ToolSchema] = []
         for tool in self.tools:
             if hasattr(tool, "active") and not tool.active:
                 continue
@@ -201,17 +212,18 @@ class ToolSet:
     def add_func(
         self,
         name: str,
-        func_args: list,
+        func_args: list[ToolArgumentSpec],
         desc: str,
         handler: Callable[..., Awaitable[Any]],
     ) -> None:
         """Add a function tool to the set."""
+        properties: dict[str, dict[str, str]] = {}
         params = {
             "type": "object",  # hard-coded here
-            "properties": {},
+            "properties": properties,
         }
         for param in func_args:
-            params["properties"][param["name"]] = {
+            properties[param["name"]] = {
                 "type": param["type"],
                 "description": param["description"],
             }
@@ -236,11 +248,11 @@ class ToolSet:
     @property
     def func_list(self) -> list[FunctionTool]:
         """Get the list of function tools."""
-        return self.tools
+        return [t for t in self.tools if isinstance(t, FunctionTool)]
 
     def list_tools(self) -> list[FunctionTool]:
         """Get the list of function tools (alias for func_list)."""
-        return self.tools
+        return [t for t in self.tools if isinstance(t, FunctionTool)]
 
     def openai_schema(self, omit_empty_parameter_field: bool = False) -> list[dict]:
         """Convert tools to OpenAI API function calling schema format."""

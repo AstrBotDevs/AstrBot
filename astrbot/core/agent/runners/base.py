@@ -1,4 +1,5 @@
 import abc
+import asyncio
 from collections.abc import AsyncGenerator
 from enum import Enum, auto
 from typing import Any, Generic
@@ -25,7 +26,8 @@ class BaseAgentRunner(Generic[TContext]):
     def __init__(
         self,
     ):
-        self.tasks: set = set()
+        self.tasks: set[asyncio.Task[object]] = set()
+        self._state = AgentState.IDLE
 
     @abc.abstractmethod
     async def reset(
@@ -54,14 +56,12 @@ class BaseAgentRunner(Generic[TContext]):
         ...
 
     @abc.abstractmethod
-    async def step(self) -> AsyncGenerator[AgentResponse, None]:
+    def step(self) -> AsyncGenerator[AgentResponse, None]:
         """Process a single step of the agent."""
         ...
 
     @abc.abstractmethod
-    async def step_until_done(
-        self, max_step: int
-    ) -> AsyncGenerator[AgentResponse, None]:
+    def step_until_done(self, max_step: int) -> AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
         ...
 

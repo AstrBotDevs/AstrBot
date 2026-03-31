@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 # Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
 # License: Apache License 2.0
-
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, Literal, TypeGuard
 
 from pydantic import (
     BaseModel,
@@ -13,10 +14,14 @@ from pydantic import (
 from pydantic_core import core_schema
 
 
+def _is_str_keyed_dict(value: object) -> TypeGuard[dict[str, object]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
 class ContentPart(BaseModel):
     """A part of the content in a message."""
 
-    __content_part_registry: ClassVar[dict[str, type["ContentPart"]]] = {}
+    __content_part_registry: ClassVar[dict[str, type[ContentPart]]] = {}
 
     type: Literal["text", "think", "image_url", "audio_url"]
 
@@ -33,23 +38,23 @@ class ContentPart(BaseModel):
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: Any, handler: GetCoreSchemaHandler
+        cls, source_type: object, handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
         # If we're dealing with the base ContentPart class, use custom validation
         if cls.__name__ == "ContentPart":
 
-            def validate_content_part(value: Any) -> Any:
+            def validate_content_part(value: object) -> ContentPart:
                 # if it's already an instance of a ContentPart subclass, return it
-                if hasattr(value, "__class__") and issubclass(value.__class__, cls):
+                if isinstance(value, cls):
                     return value
 
                 # if it's a dict with a type field, dispatch to the appropriate subclass
-                if isinstance(value, dict) and "type" in value:
-                    type_value: Any | None = cast(dict[str, Any], value).get("type")
-                    if not isinstance(type_value, str):
-                        raise ValueError(f"Cannot validate {value} as ContentPart")
-                    target_class = cls.__content_part_registry[type_value]
-                    return target_class.model_validate(value)
+                if _is_str_keyed_dict(value):
+                    type_value = value.get("type")
+                    if isinstance(type_value, str):
+                        target_class = cls.__content_part_registry.get(type_value)
+                        if target_class is not None:
+                            return target_class.model_validate(value)
 
                 raise ValueError(f"Cannot validate {value} as ContentPart")
 
@@ -65,7 +70,7 @@ class TextPart(ContentPart):
     {'type': 'text', 'text': 'Hello, world!'}
     """
 
-    type: str = "text"
+    type: Literal["text"] = "text"
     text: str
 
 
@@ -75,12 +80,12 @@ class ThinkPart(ContentPart):
     {'type': 'think', 'think': 'I think I need to think about this.', 'encrypted': None}
     """
 
-    type: str = "think"
+    type: Literal["think"] = "think"
     think: str
     encrypted: str | None = None
     """Encrypted thinking content, or signature."""
 
-    def merge_in_place(self, other: Any) -> bool:
+    def merge_in_place(self, other: object) -> bool:
         if not isinstance(other, ThinkPart):
             return False
         if self.encrypted:
@@ -103,7 +108,7 @@ class ImageURLPart(ContentPart):
         id: str | None = None
         """The ID of the image, to allow LLMs to distinguish different images."""
 
-    type: str = "image_url"
+    type: Literal["image_url"] = "image_url"
     image_url: ImageURL
 
 
@@ -119,7 +124,7 @@ class AudioURLPart(ContentPart):
         id: str | None = None
         """The ID of the audio, to allow LLMs to distinguish different audios."""
 
-    type: str = "audio_url"
+    type: Literal["audio_url"] = "audio_url"
     audio_url: AudioURL
 
 
@@ -147,7 +152,7 @@ class ToolCall(BaseModel):
     """The ID of the tool call."""
     function: FunctionBody
     """The function body of the tool call."""
-    extra_content: dict[str, Any] | None = None
+    extra_content: dict[str, object] | None = None
     """Extra metadata for the tool call."""
 
     @model_serializer(mode="wrap")
