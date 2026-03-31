@@ -140,7 +140,22 @@ class KBHelper:
             self.kb.embedding_provider_id,
         )  # type: ignore
         if not ep:
-            logger.error(f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider")
+            logger.error(f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider,使用站位编码器")
+
+            class TempEmbeddingProvider(EmbeddingProvider):
+                def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+                    super().__init__(provider_config, provider_settings)
+
+                async def get_embedding(self, text: str) -> list[float]:
+                    return []
+
+                async def get_embeddings(self, texts: list[str]) -> list[list[float]]:
+                    return []
+
+                def get_dim(self) -> int:
+                    return 1024
+
+            ep: EmbeddingProvider = TempEmbeddingProvider({},{})
             # raise ValueError(f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider")
         return ep
 
