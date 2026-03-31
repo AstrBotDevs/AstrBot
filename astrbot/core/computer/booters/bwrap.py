@@ -284,15 +284,21 @@ class BwrapBooter(ComputerBooter):
         self.config: BwrapConfig | None = None
 
     @property
-    def fs(self) -> FileSystemComponent | None:
+    def fs(self) -> FileSystemComponent:
+        if self._fs is None:
+            raise RuntimeError("BwrapBooter filesystem is unavailable before boot")
         return self._fs
 
     @property
-    def python(self) -> PythonComponent | None:
+    def python(self) -> PythonComponent:
+        if self._python is None:
+            raise RuntimeError("BwrapBooter python is unavailable before boot")
         return self._python
 
     @property
-    def shell(self) -> ShellComponent | None:
+    def shell(self) -> ShellComponent:
+        if self._shell is None:
+            raise RuntimeError("BwrapBooter shell is unavailable before boot")
         return self._shell
 
     @property
@@ -331,11 +337,12 @@ class BwrapBooter(ComputerBooter):
             )
 
     async def shutdown(self) -> None:
-        if self.config and await asyncio.to_thread(
-            os.path.exists, self.config.workspace_dir
-        ):
+        config = self.config
+        if config is None:
+            return
+        if await asyncio.to_thread(os.path.exists, config.workspace_dir):
             await asyncio.to_thread(
-                shutil.rmtree, self.config.workspace_dir, ignore_errors=True
+                shutil.rmtree, config.workspace_dir, ignore_errors=True
             )
 
     async def upload_file(self, path: str, file_name: str) -> dict:

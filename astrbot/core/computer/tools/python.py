@@ -67,7 +67,7 @@ class PythonTool(FunctionTool):
     description: str = f"Run codes in an IPython shell. Current OS: {_OS_NAME}."
     parameters: dict = field(default_factory=lambda: param_schema)
 
-    async def call(  # type: ignore[invalid-method-override]
+    async def call(
         self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
@@ -93,7 +93,7 @@ class LocalPythonTool(FunctionTool):
 
     parameters: dict = field(default_factory=lambda: param_schema)
 
-    async def call(  # type: ignore[invalid-method-override]
+    async def call(
         self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):

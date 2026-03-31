@@ -59,7 +59,7 @@ class BrowserExecTool(FunctionTool):
         }
     )
 
-    async def call(  # type: ignore[invalid-method-override]
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         cmd: str = "",
@@ -76,7 +76,7 @@ class BrowserExecTool(FunctionTool):
             browser = await _get_browser_component(context)
             result = await browser.exec(
                 cmd=cmd,
-                timeout=timeout,
+                timeout_seconds=timeout,
                 description=description,
                 tags=tags,
                 learn=learn,
@@ -122,7 +122,7 @@ class BrowserBatchExecTool(FunctionTool):
         }
     )
 
-    async def call(  # type: ignore[invalid-method-override]
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         commands: list[str] | None = None,
@@ -140,7 +140,7 @@ class BrowserBatchExecTool(FunctionTool):
             browser = await _get_browser_component(context)
             result = await browser.exec_batch(
                 commands=commands,
-                timeout=timeout,
+                timeout_seconds=timeout,
                 stop_on_error=stop_on_error,
                 description=description,
                 tags=tags,
@@ -171,7 +171,7 @@ class RunBrowserSkillTool(FunctionTool):
         }
     )
 
-    async def call(  # type: ignore[invalid-method-override]
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         skill_key: str = "",
@@ -188,7 +188,7 @@ class RunBrowserSkillTool(FunctionTool):
             browser = await _get_browser_component(context)
             result = await browser.run_skill(
                 skill_key=skill_key,
-                timeout=timeout,
+                timeout_seconds=timeout,
                 stop_on_error=stop_on_error,
                 include_trace=include_trace,
                 description=description,

@@ -11,7 +11,7 @@ from astrbot.core.computer.olayer import (
 )
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.tool import FunctionTool
+    from astrbot.core.agent.tool import FunctionTool, ToolSchema
 
 
 class ComputerBooter(abc.ABC):
@@ -68,11 +68,11 @@ class ComputerBooter(abc.ABC):
         raise NotImplementedError("Subclass must implement available method")
 
     @classmethod
-    def get_default_tools(cls) -> list[FunctionTool]:
+    def get_default_tools(cls) -> list[ToolSchema]:
         """Conservative full tool list (no instance needed, pre-boot)."""
         return []
 
-    def get_tools(self) -> list[FunctionTool]:
+    def get_tools(self) -> list[ToolSchema]:
         """Capability-filtered tool list (post-boot).
         Defaults to get_default_tools()."""
         return self.__class__.get_default_tools()

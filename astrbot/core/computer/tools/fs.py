@@ -105,7 +105,7 @@ class FileUploadTool(FunctionTool):
         }
     )
 
-    async def call(  # type: ignore[invalid-method-override]
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         local_path: str,
@@ -170,7 +170,7 @@ class FileDownloadTool(FunctionTool):
         }
     )
 
-    async def call(  # type: ignore[invalid-method-override]
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         remote_path: str,
