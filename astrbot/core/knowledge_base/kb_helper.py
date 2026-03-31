@@ -140,9 +140,8 @@ class KBHelper:
             self.kb.embedding_provider_id,
         )  # type: ignore
         if not ep:
-            raise ValueError(
-                f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider",
-            )
+            logger.error(f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider")
+            # raise ValueError(f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider")
         return ep
 
     async def get_rp(self) -> RerankProvider | None:
