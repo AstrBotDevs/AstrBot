@@ -9,7 +9,7 @@ class TestContextTruncator:
 
     def create_message(self, role: str, content: str = "test content") -> Message:
         """Helper to create a simple test message."""
-        return Message(role=role, content=content)
+        return Message(role=role, content=content)  # type: ignore[arg-type]
 
     def create_messages(
         self, count: int, include_system: bool = False

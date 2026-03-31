@@ -2,6 +2,7 @@ import asyncio
 import re
 import uuid
 from collections.abc import AsyncGenerator
+from typing import Any, cast
 
 import anyio
 
@@ -233,7 +234,8 @@ class LineMessageEvent(AstrMessageEvent):
         raw = self.message_obj.raw_message
         reply_token = ""
         if isinstance(raw, dict):
-            reply_token = str(raw.get("replyToken") or "")
+            raw_dict = cast(dict[str, Any], raw)
+            reply_token = str(raw_dict.get("replyToken") or "")
 
         sent = False
         if reply_token:

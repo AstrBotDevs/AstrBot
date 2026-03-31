@@ -17,9 +17,7 @@ class ProviderOpenRouter(ProviderOpenAIOfficial):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         # Reference to: https://openrouter.ai/docs/api/reference/overview#headers
-        custom_headers = cast(
-            MutableMapping[str, str], getattr(self.client, "_custom_headers")
-        )
+        custom_headers = cast(MutableMapping[str, str], self.client._custom_headers)
         custom_headers["HTTP-Referer"] = "https://github.com/AstrBotDevs/AstrBot"
         custom_headers["X-OpenRouter-Title"] = "AstrBot"
         custom_headers["X-OpenRouter-Categories"] = "general-chat,personal-agent"

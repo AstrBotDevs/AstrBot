@@ -53,6 +53,8 @@ if TYPE_CHECKING:
 class PlatformManagerProtocol(Protocol):
     platform_insts: list[Platform]
 
+    def get_insts(self) -> list[Platform]: ...
+
 
 class StarManagerProtocol(Protocol):
     async def turn_off_plugin(self, plugin_name: str) -> None: ...
@@ -282,6 +284,7 @@ class Context:
         for star in star_registry:
             if star.name == star_name:
                 return star
+        return None
 
     def get_all_stars(self) -> list[StarMetadata]:
         """获取当前载入的所有插件 Metadata 的列表"""
@@ -461,7 +464,7 @@ class Context:
             try:
                 session = MessageSesion.from_str(session)
             except BaseException as e:
-                raise ValueError("不合法的 session 字符串: " + str(e))
+                raise ValueError("不合法的 session 字符串: " + str(e)) from e
 
         for platform in self.platform_manager.platform_insts:
             if platform.meta().id == session.platform_name:

@@ -15,7 +15,7 @@ from shipyard.shell import ShellComponent as ShipyardShellComponent
 from astrbot.api import logger
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.tool import FunctionTool
+    from astrbot.core.agent.tool import FunctionTool, ToolSchema
 
 from astrbot.core.computer.olayer import (
     FileSystemComponent,
@@ -178,7 +178,7 @@ class BoxliteBooter(ComputerBooter):
             session_id,
         )
         random_port = random.randint(20000, 30000)
-        self.box = boxlite.SimpleBox(  # type: ignore[attr-defined]
+        self.box = boxlite.SimpleBox(  # type: ignore[unresolved-attribute]
             image="soulter/shipyard-ship",
             memory_mib=512,
             cpus=1,
@@ -261,5 +261,5 @@ class BoxliteBooter(ComputerBooter):
         )
 
     @classmethod
-    def get_default_tools(cls) -> list[FunctionTool]:
+    def get_default_tools(cls) -> list[ToolSchema]:
         return list(cls._default_tools())

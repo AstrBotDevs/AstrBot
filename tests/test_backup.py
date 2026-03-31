@@ -676,17 +676,17 @@ class TestAstrBotImporter:
             zf.writestr("databases/main_db.json", json.dumps(main_data))
 
         importer = AstrBotImporter(main_db=mock_main_db)
-        importer._clear_main_db = AsyncMock(
+        importer._clear_main_db = AsyncMock(  # type: ignore[method-assign]
             side_effect=DatabaseClearError("清空表 platform_stats 失败: db locked")
         )
-        importer._import_main_database = AsyncMock(return_value={})
+        importer._import_main_database = AsyncMock(return_value={})  # type: ignore[method-assign]
 
         result = await importer.import_all(str(zip_path), mode="replace")
 
         assert result.success is False
         assert any("清空主数据库失败" in err for err in result.errors)
         assert any("清空表 platform_stats 失败" in err for err in result.errors)
-        importer._import_main_database.assert_not_awaited()
+        importer._import_main_database.assert_not_awaited()  # type: ignore[method-assign]
 
 
 class TestSecureFilename:

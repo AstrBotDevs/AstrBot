@@ -109,7 +109,7 @@ class FaissVecDB(BaseVecDB):
     async def retrieve(
         self,
         query: str,
-        k: int = 5,
+        top_k: int = 5,
         fetch_k: int = 20,
         rerank: bool = False,
         metadata_filters: dict | None = None,
@@ -118,7 +118,7 @@ class FaissVecDB(BaseVecDB):
 
         Args:
             query (str): 查询文本
-            k (int): 返回的最相似文档的数量
+            top_k (int): 返回的最相似文档的数量
             fetch_k (int): 在根据 metadata 过滤前从 FAISS 中获取的数量
             rerank (bool): 是否使用重排序｡这需要在实例化时提供 rerank_provider, 如果未提供并且 rerank 为 True, 不会抛出异常｡
             metadata_filters (dict): 元数据过滤器
@@ -130,7 +130,7 @@ class FaissVecDB(BaseVecDB):
         embedding = await self.embedding_provider.get_embedding(query)
         scores, indices = await self.embedding_storage.search(
             vector=np.array([embedding]).astype("float32"),
-            k=fetch_k if metadata_filters else k,
+            k=fetch_k if metadata_filters else top_k,
         )
         if len(indices[0]) == 0 or indices[0][0] == -1:
             return []
@@ -154,7 +154,7 @@ class FaissVecDB(BaseVecDB):
             score = scores[0][i]
             result_docs.append(Result(similarity=float(score), data=fetch_doc))
 
-        top_k_results = result_docs[:k]
+        top_k_results = result_docs[:top_k]
 
         if rerank and self.rerank_provider:
             documents = [doc.data["text"] for doc in top_k_results]

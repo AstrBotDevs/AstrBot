@@ -26,7 +26,7 @@ class UmopConfigRouter:
         self.umop_to_conf_id = sp_data
 
     @staticmethod
-    def _split_umo(umo: str) -> tuple[str, str, str] | None:
+    def _split_umo(umo: str | int | None) -> tuple[str, str, str] | None:
         """将 UMO 拆分为 3 个部分,同时保留 session_id 中的 ':'"""
         if not isinstance(umo, str):
             return None
@@ -43,7 +43,10 @@ class UmopConfigRouter:
         if p1_ls is None or p2_ls is None:
             return False  # 非法格式
 
-        return all(p == "" or fnmatch.fnmatchcase(t, p) for p, t in zip(p1_ls, p2_ls))
+        return all(
+            p == "" or fnmatch.fnmatchcase(t, p)
+            for p, t in zip(p1_ls, p2_ls, strict=True)
+        )
 
     def get_conf_id_for_umop(self, umo: str) -> str | None:
         """根据 UMO 获取对应的配置文件 ID

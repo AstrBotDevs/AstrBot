@@ -599,7 +599,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(PlatformMessageHistory.created_at) < before,
                     ),
                 )
-                return int(result.rowcount or 0)
+                return int(getattr(result, "rowcount", 0) or 0)
 
     async def delete_platform_message_after(
         self,
@@ -617,7 +617,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(PlatformMessageHistory.created_at) > after,
                     ),
                 )
-                return int(result.rowcount or 0)
+                return int(getattr(result, "rowcount", 0) or 0)
 
     async def delete_all_platform_message_history(
         self,
@@ -633,7 +633,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(PlatformMessageHistory.user_id) == user_id,
                     ),
                 )
-                return int(result.rowcount or 0)
+                return int(getattr(result, "rowcount", 0) or 0)
 
     async def find_platform_message_history_by_idempotency_key(
         self,
@@ -710,7 +710,7 @@ class SQLiteDatabase(BaseDatabase):
                     col(Attachment.attachment_id) == attachment_id
                 )
                 result = cast(CursorResult, await session.execute(query))
-                return result.rowcount > 0
+                return getattr(result, "rowcount", 0) > 0
 
     async def delete_attachments(self, attachment_ids: list[str]) -> int:
         """Delete multiple attachments by their IDs.
@@ -725,7 +725,7 @@ class SQLiteDatabase(BaseDatabase):
                     col(Attachment.attachment_id).in_(attachment_ids)
                 )
                 result = cast(CursorResult, await session.execute(query))
-                return result.rowcount
+                return getattr(result, "rowcount", 0)
 
     async def create_api_key(
         self,
@@ -800,7 +800,7 @@ class SQLiteDatabase(BaseDatabase):
                     .values(revoked_at=datetime.now(timezone.utc))
                 )
                 result = cast(CursorResult, await session.execute(query))
-                return result.rowcount > 0
+                return getattr(result, "rowcount", 0) > 0
 
     async def delete_api_key(self, key_id: str) -> bool:
         """Delete an API key."""
@@ -812,7 +812,7 @@ class SQLiteDatabase(BaseDatabase):
                         delete(ApiKey).where(col(ApiKey.key_id) == key_id)
                     ),
                 )
-                return result.rowcount > 0
+                return getattr(result, "rowcount", 0) > 0
 
     async def insert_persona(
         self,

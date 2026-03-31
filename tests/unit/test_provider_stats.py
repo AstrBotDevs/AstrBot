@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 from sqlmodel import select
 
+from astrbot.core import db_helper
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
@@ -14,7 +15,7 @@ async def test_record_internal_agent_stats_persists_provider_stat(
     temp_db,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(internal, "db_helper", temp_db)
+    monkeypatch.setattr(db_helper, "insert_provider_stat", temp_db.insert_provider_stat)
 
     event = SimpleNamespace(unified_msg_origin="webchat:FriendMessage:session-42")
     req = ProviderRequest(

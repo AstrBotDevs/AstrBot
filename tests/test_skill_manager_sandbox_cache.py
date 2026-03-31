@@ -50,7 +50,7 @@ def _create_mock_astrbot_paths(tmp_path: Path) -> MockAstrbotPaths:
 def test_list_skills_merges_local_and_sandbox_cache(tmp_path: Path):
     mock_paths = _create_mock_astrbot_paths(tmp_path)
 
-    mgr = SkillManager(skills_root=str(mock_paths.skills), astrbot_paths=mock_paths)
+    mgr = SkillManager(skills_root=str(mock_paths.skills), astrbot_paths=mock_paths)  # type: ignore[arg-type]
     _write_skill(mock_paths.skills, "custom-local", "local description")
 
     mgr.set_sandbox_skills_cache(
@@ -80,7 +80,7 @@ def test_list_skills_merges_local_and_sandbox_cache(tmp_path: Path):
 
 def test_sandbox_cached_skill_respects_active_and_display_path(tmp_path: Path):
     mock_paths = _create_mock_astrbot_paths(tmp_path)
-    mgr = SkillManager(skills_root=str(mock_paths.skills), astrbot_paths=mock_paths)
+    mgr = SkillManager(skills_root=str(mock_paths.skills), astrbot_paths=mock_paths)  # type: ignore[arg-type]
     mgr.set_sandbox_skills_cache(
         [
             {
@@ -109,7 +109,7 @@ def test_sandbox_cached_skill_respects_active_and_display_path(tmp_path: Path):
 
 def test_sandbox_and_local_path_resolution_with_show_sandbox_path_false(tmp_path: Path):
     mock_paths = _create_mock_astrbot_paths(tmp_path)
-    mgr = SkillManager(skills_root=str(mock_paths.skills), astrbot_paths=mock_paths)
+    mgr = SkillManager(skills_root=str(mock_paths.skills), astrbot_paths=mock_paths)  # type: ignore[arg-type]
     _write_skill(mock_paths.skills, "custom-local", "local description")
     mgr.set_sandbox_skills_cache(
         [

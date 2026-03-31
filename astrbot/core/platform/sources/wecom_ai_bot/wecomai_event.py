@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -148,6 +148,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         assert isinstance(raw, dict), (
             "wecom_ai_bot platform event raw_message should be a dict"
         )
+        raw = cast(dict[str, Any], raw)
         stream_id = raw.get("stream_id", self.session_id)
         pending_response = self.queue_mgr.get_pending_response(stream_id) or {}
         connection_mode = pending_response.get("callback_params", {}).get(
@@ -214,6 +215,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         assert isinstance(raw, dict), (
             "wecom_ai_bot platform event raw_message should be a dict"
         )
+        raw = cast(dict[str, Any], raw)
         stream_id = raw.get("stream_id", self.session_id)
         pending_response = self.queue_mgr.get_pending_response(stream_id) or {}
         connection_mode = pending_response.get("callback_params", {}).get(

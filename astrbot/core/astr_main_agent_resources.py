@@ -329,7 +329,7 @@ async def retrieve_knowledge_base(
         # 如果配置为空列表,明确表示不使用知识库
         if not kb_ids:
             logger.info(f"[知识库] 会话 {umo} 已被配置为不使用知识库")
-            return
+            return None
 
         top_k = session_config.get("top_k", 5)
 
@@ -350,7 +350,7 @@ async def retrieve_knowledge_base(
             )
 
         if not kb_names:
-            return
+            return None
 
         logger.debug(f"[知识库] 使用会话级配置,知识库数量: {len(kb_names)}")
     else:
@@ -361,13 +361,13 @@ async def retrieve_knowledge_base(
     top_k_fusion = config.get("kb_fusion_top_k", 20)
 
     if not kb_names:
-        return
+        return None
 
     all_kbs = [await kb_mgr.get_kb_by_name(kb) for kb in kb_names]
 
     if check_all_kb(all_kbs):
         logger.debug("所配置的所有知识库全为空, 跳过检索过程")
-        return
+        return None
 
     logger.debug(f"[知识库] 开始检索知识库,数量: {len(kb_names)}, top_k={top_k}")
 
@@ -379,13 +379,14 @@ async def retrieve_knowledge_base(
     )
 
     if not kb_context:
-        return
+        return None
 
     formatted = kb_context.get("context_text", "")
     if formatted:
         results = kb_context.get("results", [])
         logger.debug(f"[知识库] 为会话 {umo} 注入了 {len(results)} 条相关知识块")
         return formatted
+    return None
 
 
 KNOWLEDGE_BASE_QUERY_TOOL = KnowledgeBaseQueryTool()

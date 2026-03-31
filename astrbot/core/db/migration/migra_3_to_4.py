@@ -1,5 +1,6 @@
 import datetime
 import json
+from typing import Any, cast
 
 from sqlalchemy import text
 
@@ -292,7 +293,9 @@ async def migration_preferences(
             logger.info(f"迁移全局偏好设置 {key} 成功,值: {value}")
 
     # 2. umo scope migration
-    session_conversation = sp_v3.get("session_conversation", default={})
+    session_conversation = cast(
+        dict[str, Any], sp_v3.get("session_conversation", default={})
+    )
     for umo, conversation_id in session_conversation.items():
         if not umo or not conversation_id:
             continue
@@ -305,7 +308,9 @@ async def migration_preferences(
         except Exception as e:
             logger.error(f"迁移会话 {umo} 的对话数据失败: {e}", exc_info=True)
 
-    session_service_config = sp_v3.get("session_service_config", default={})
+    session_service_config = cast(
+        dict[str, Any], sp_v3.get("session_service_config", default={})
+    )
     for umo, config in session_service_config.items():
         if not umo or not config:
             continue
@@ -320,7 +325,7 @@ async def migration_preferences(
         except Exception as e:
             logger.error(f"迁移会话 {umo} 的服务配置失败: {e}", exc_info=True)
 
-    session_variables = sp_v3.get("session_variables", default={})
+    session_variables = cast(dict[str, Any], sp_v3.get("session_variables", default={}))
     for umo, variables in session_variables.items():
         if not umo or not variables:
             continue
@@ -332,7 +337,9 @@ async def migration_preferences(
         except Exception as e:
             logger.error(f"迁移会话 {umo} 的变量失败: {e}", exc_info=True)
 
-    session_provider_perf = sp_v3.get("session_provider_perf", default={})
+    session_provider_perf = cast(
+        dict[str, Any], sp_v3.get("session_provider_perf", default={})
+    )
     for umo, perf in session_provider_perf.items():
         if not umo or not perf:
             continue
@@ -341,7 +348,8 @@ async def migration_preferences(
             platform_id = get_platform_id(platform_id_map, session.platform_name)
             session.platform_id = platform_id
 
-            for provider_type, provider_id in perf.items():
+            perf_dict = cast(dict[str, Any], perf)
+            for provider_type, provider_id in perf_dict.items():
                 await sp.put_async(
                     "umo",
                     str(session),

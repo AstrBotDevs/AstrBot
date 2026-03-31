@@ -42,7 +42,6 @@ class InitialLoader:
         shutdown_event = core_lifecycle.dashboard_shutdown_event
         if shutdown_event is None:
             raise RuntimeError("initialize_core must set dashboard_shutdown_event")
-        shutdown_event = cast(asyncio.Event, shutdown_event)
 
         webui_dir = self.webui_dir
 

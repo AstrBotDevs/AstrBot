@@ -15,7 +15,6 @@ from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
     create_attachment_part_from_existing_file,
@@ -23,6 +22,7 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     webchat_message_parts_have_content,
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
+from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat

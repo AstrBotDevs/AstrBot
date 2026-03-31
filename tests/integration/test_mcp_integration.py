@@ -49,7 +49,7 @@ async def test_mcp_echo_server_connection():
     }
 
     # Connect to the echo server
-    await client.connect_to_server(config, "echo-test")
+    await client.connect_to_server(config, "echo-test")  # type: ignore[arg-type]
 
     try:
         # Verify connected
@@ -77,7 +77,7 @@ async def test_mcp_list_tools():
         "cwd": test_dir
     }
 
-    await client.connect_to_server(config, "echo-test")
+    await client.connect_to_server(config, "echo-test")  # type: ignore[arg-type]
 
     try:
         assert client.connected
@@ -114,7 +114,7 @@ async def test_mcp_call_echo_tool():
         "cwd": test_dir
     }
 
-    await client.connect_to_server(config, "echo-test")
+    await client.connect_to_server(config, "echo-test")  # type: ignore[arg-type]
 
     try:
         assert client.connected

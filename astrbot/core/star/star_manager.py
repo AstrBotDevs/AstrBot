@@ -594,7 +594,7 @@ class PluginManager:
 
         # 清理工具
         for tool in list(llm_tools.func_list):
-            if tool.handler_module_path in possible_paths:
+            if getattr(tool, "handler_module_path", None) in possible_paths:
                 llm_tools.func_list.remove(tool)
                 logger.info(f"清理工具: {tool.name}")
 
@@ -915,9 +915,9 @@ class PluginManager:
 
                     # 在实例化前注入类属性,保证插件 __init__ 可读取这些值
                     if metadata.star_cls_type:
-                        setattr(metadata.star_cls_type, "name", p_name)
-                        setattr(metadata.star_cls_type, "author", p_author)
-                        setattr(metadata.star_cls_type, "plugin_id", plugin_id)
+                        metadata.star_cls_type.name = p_name
+                        metadata.star_cls_type.author = p_author
+                        metadata.star_cls_type.plugin_id = plugin_id
 
                     if path not in inactivated_plugins:
                         # 只有没有禁用插件时才实例化插件类
@@ -937,9 +937,9 @@ class PluginManager:
                             )
 
                         if metadata.star_cls:
-                            setattr(metadata.star_cls, "name", p_name)
-                            setattr(metadata.star_cls, "author", p_author)
-                            setattr(metadata.star_cls, "plugin_id", plugin_id)
+                            metadata.star_cls.name = p_name
+                            metadata.star_cls.author = p_author
+                            metadata.star_cls.plugin_id = plugin_id
                     else:
                         logger.info(f"插件 {metadata.name} 已被禁用｡")
 
@@ -982,7 +982,7 @@ class PluginManager:
                                 ft.handler
                                 and ft.handler.__module__ == metadata.module_path
                             ):
-                                ft.handler_module_path = metadata.module_path
+                                ft.handler_module_path = metadata.module_path  # type: ignore[union-attr]
                                 ft.handler = functools.partial(
                                     ft.handler,
                                     metadata.star_cls,
@@ -1530,7 +1530,7 @@ class PluginManager:
         # llm_tools 中移除该插件的工具函数绑定
         to_remove = []
         for func_tool in llm_tools.func_list:
-            mp = func_tool.handler_module_path
+            mp = getattr(func_tool, "handler_module_path", None)
             if (
                 mp
                 and mp.startswith(plugin_module_path)
@@ -1604,7 +1604,7 @@ class PluginManager:
 
             # 禁用插件启用的 llm_tool
             for func_tool in llm_tools.func_list:
-                mp = func_tool.handler_module_path
+                mp = getattr(func_tool, "handler_module_path", None)
                 if (
                     plugin.module_path
                     and mp
@@ -1701,7 +1701,7 @@ class PluginManager:
 
         # 启用插件启用的 llm_tool
         for func_tool in llm_tools.func_list:
-            mp = func_tool.handler_module_path
+            mp = getattr(func_tool, "handler_module_path", None)
             if (
                 plugin.module_path
                 and mp

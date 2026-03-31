@@ -139,6 +139,7 @@ class KnowledgeBaseManager:
         """获取知识库实例"""
         if kb_id in self.kb_insts:
             return self.kb_insts[kb_id]
+        return None
 
     async def get_kb_by_name(self, kb_name: str) -> KBHelper | None:
         """通过名称获取知识库实例"""

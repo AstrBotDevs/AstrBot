@@ -443,10 +443,10 @@ class ToolsRoute(Route):
                 elif source == "internal":
                     origin = "internal"
                     origin_name = "AstrBot"
-                elif tool.handler_module_path and star_map.get(
-                    tool.handler_module_path
+                elif getattr(tool, "handler_module_path", None) and star_map.get(
+                    getattr(tool, "handler_module_path", None)
                 ):
-                    star = star_map[tool.handler_module_path]
+                    star = star_map[getattr(tool, "handler_module_path", None)]
                     origin = "plugin"
                     origin_name = star.name
                 else:

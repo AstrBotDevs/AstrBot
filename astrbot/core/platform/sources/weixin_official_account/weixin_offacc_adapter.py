@@ -267,7 +267,7 @@ class WeixinOfficialAccountServer:
                 try:
                     cached = state.get("cached_xml", None)
                     # send one cached each time, if cached is empty after pop, remove the buffer
-                    if cached and len(cached) > 0:
+                    if cached and isinstance(cached, list) and len(cached) > 0:
                         logger.info(f"wx buffer hit immediately: user={from_user}")
                         cached_xml = cached.pop(0)
                         if len(cached) == 0:
@@ -474,7 +474,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                     f"转换音频失败: {e}｡如果没有安装 ffmpeg 请先安装｡",
                 )
                 path_wav = path
-                return
+                return None
 
             abm.message_str = ""
             abm.self_id = str(msg.target)
@@ -500,6 +500,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         }
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
+        return abm
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         buffer = self.user_buffer.get(message.sender.user_id, None)

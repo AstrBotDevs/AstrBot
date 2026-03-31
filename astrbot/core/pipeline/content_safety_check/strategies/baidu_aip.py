@@ -1,6 +1,6 @@
 """使用此功能应该先 pip install baidu-aip"""
 
-from typing import TypedDict, TypeGuard
+from typing import Any, TypedDict, TypeGuard, cast
 
 from . import ContentSafetyStrategy
 
@@ -15,7 +15,8 @@ def _is_violation_list(value: object) -> TypeGuard[list[BaiduAipViolation]]:
     for item in value:
         if not isinstance(item, dict):
             return False
-        message = item.get("msg")
+        raw = cast(dict[str, Any], item)
+        message = raw.get("msg")
         if message is not None and not isinstance(message, str):
             return False
     return True
@@ -23,7 +24,7 @@ def _is_violation_list(value: object) -> TypeGuard[list[BaiduAipViolation]]:
 
 class BaiduAipStrategy(ContentSafetyStrategy):
     def __init__(self, appid: str, ak: str, sk: str) -> None:
-        from aip import AipContentCensor  # type: ignore[unresolved-import]
+        from aip import AipContentCensor
 
         self.app_id = appid
         self.api_key = ak
@@ -46,7 +47,8 @@ class BaiduAipStrategy(ContentSafetyStrategy):
         count = len(data)
         parts = [f"百度审核服务发现 {count} 处违规:\n"]
         for item in data:
-            message = item.get("msg")
+            raw_item = cast(dict[str, Any], item)
+            message = raw_item.get("msg")
             if message:
                 parts.append(f"{message};\n")
         parts.append("\n判断结果:" + conclusion)

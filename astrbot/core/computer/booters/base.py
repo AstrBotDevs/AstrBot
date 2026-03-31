@@ -11,7 +11,7 @@ from astrbot.core.computer.olayer import (
 )
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.tool import FunctionTool, ToolSchema
+    from astrbot.core.agent.tool import ToolSchema
 
 
 class ComputerBooter(abc.ABC):

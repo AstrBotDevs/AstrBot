@@ -5,7 +5,7 @@ import traceback
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from collections.abc import Set as AbstractSet
-from typing import Any
+from typing import Any, cast
 
 import mcp
 
@@ -236,7 +236,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         runtime: str,
         sandbox_cfg: dict | None = None,
         session_id: str = "",
-    ) -> dict[str, FunctionTool]:
+    ) -> dict[str, ToolSchema]:
         from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
         from astrbot.core.tool_provider import ToolProviderContext
 
@@ -643,7 +643,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             awaitable = tool.call
             method_name = "call"
         elif hasattr(tool, "run"):
-            awaitable = getattr(tool, "run")
+            awaitable = tool.run
             method_name = "run"
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
@@ -666,9 +666,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             except Exception as exc:
                 logger.warning("SDK calling_func_tool dispatch failed: %s", exc)
 
+        # awaitable is guaranteed non-None after line 648 check.
+        # cast needed: pyright cannot narrow type through the conditional chain.
+        _HandlerType = Callable[
+            ...,
+            Awaitable[MessageEventResult | mcp.types.CallToolResult | str | None]
+            | AsyncGenerator[MessageEventResult | CommandResult | str | None, None],
+        ]
         wrapper = call_local_llm_tool(
             context=run_context,
-            handler=awaitable,
+            handler=cast(_HandlerType, awaitable),
             method_name=method_name,
             **tool_args,
         )
@@ -716,7 +723,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             except asyncio.TimeoutError:
                 raise Exception(
                     f"tool {tool.name} execution timeout after {tool_call_timeout or run_context.tool_call_timeout} seconds.",
-                )
+                ) from None
             except StopAsyncIteration:
                 break
 

@@ -4,7 +4,7 @@
 提供配置元数据的国际化键转换功能
 """
 
-from typing import TypedDict, TypeGuard
+from typing import Any, TypedDict, TypeGuard
 
 
 def _is_str_keyed_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -39,7 +39,7 @@ class ConfigMetadataI18n:
             return f"{group}.{section}.{attr}"
 
     @staticmethod
-    def convert_to_i18n_keys(metadata: dict[str, object]) -> dict[str, I18nGroup]:
+    def convert_to_i18n_keys(metadata: dict[str, Any]) -> dict[str, I18nGroup]:
         """
         将配置元数据转换为使用国际化键
 

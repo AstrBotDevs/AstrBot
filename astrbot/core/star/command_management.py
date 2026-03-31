@@ -492,7 +492,7 @@ def _set_filter_aliases(
     current_aliases: set[str] = getattr(filter_ref, "alias", set())
     if set(aliases) == current_aliases:
         return
-    setattr(filter_ref, "alias", set(aliases))
+    filter_ref.alias = set(aliases)
     if hasattr(filter_ref, "_cmpl_cmd_names"):
         filter_ref._cmpl_cmd_names = None
 
@@ -515,7 +515,7 @@ def _is_command_in_use(
 
 
 def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
-    result = {
+    result: dict[str, Any] = {
         "handler_full_name": desc.handler_full_name,
         "handler_name": desc.handler_name,
         "plugin": desc.plugin_name,

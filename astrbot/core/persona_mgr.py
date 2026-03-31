@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from astrbot import logger
 from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -295,7 +297,7 @@ class PersonaManager:
 
         # 构建树形结构
         root_folders = []
-        for folder_id, folder_data in folder_map.items():
+        for _folder_id, folder_data in folder_map.items():
             parent_id = folder_data["parent_id"]
             if parent_id is None:
                 root_folders.append(folder_data)
@@ -433,10 +435,13 @@ class PersonaManager:
                     user_turn = not user_turn
 
             try:
-                persona = Personality(
-                    **persona_cfg,
-                    _begin_dialogs_processed=bd_processed,
-                    _mood_imitation_dialogs_processed="",  # deprecated
+                persona = cast(
+                    Personality,
+                    {
+                        **persona_cfg,
+                        "_begin_dialogs_processed": bd_processed,
+                        "_mood_imitation_dialogs_processed": "",  # deprecated
+                    },
                 )
                 if persona["name"] == self.default_persona:
                     selected_default_persona = persona

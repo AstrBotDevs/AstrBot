@@ -760,7 +760,7 @@ class DingtalkPlatformAdapter(Platform):
             raise KeyboardInterrupt("Graceful shutdown")
 
         if self.client_.websocket is not None:
-            self.client_.open_connection = monkey_patch_close
+            self.client_.open_connection = monkey_patch_close  # type: ignore[assignment]
             await self.client_.websocket.close(code=1000, reason="Graceful shutdown")
         if self._shutdown_event is not None:
             self._shutdown_event.set()

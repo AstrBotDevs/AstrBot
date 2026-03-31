@@ -14,7 +14,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 try:
     import genie_tts as genie
 except ImportError:
-    genie = None
+    genie = None  # type: ignore[assignment]
 
 
 @register_provider_adapter(
@@ -39,12 +39,12 @@ class GenieTTSProvider(TTSProvider):
         refer_text = provider_config.get("genie_refer_text", "")
 
         try:
-            genie.load_character(
+            genie.load_character(  # type: ignore[attr-defined]
                 character_name=self.character_name,
                 language=language,
                 onnx_model_dir=model_dir,
             )
-            genie.set_reference_audio(
+            genie.set_reference_audio(  # type: ignore[attr-defined]
                 character_name=self.character_name,
                 audio_path=refer_audio_path,
                 audio_text=refer_text,
@@ -66,7 +66,7 @@ class GenieTTSProvider(TTSProvider):
 
         def _generate(save_path: str) -> None:
             assert genie is not None
-            genie.tts(
+            genie.tts(  # type: ignore[attr-defined]
                 character_name=self.character_name,
                 text=text,
                 save_path=save_path,
@@ -105,7 +105,7 @@ class GenieTTSProvider(TTSProvider):
 
                 def _generate(save_path: str, t: str) -> None:
                     assert genie is not None
-                    genie.tts(
+                    genie.tts(  # type: ignore[attr-defined]
                         character_name=self.character_name,
                         text=t,
                         save_path=save_path,

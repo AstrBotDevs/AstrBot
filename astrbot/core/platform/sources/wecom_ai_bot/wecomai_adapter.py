@@ -8,8 +8,8 @@ import base64
 import hashlib
 import time
 import uuid
-from collections.abc import Awaitable, Callable
-from typing import Any
+from collections.abc import Awaitable, Callable, Coroutine
+from typing import Any, cast
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
@@ -355,6 +355,8 @@ class WecomAIBotAdapter(Platform):
                 except Exception as e:
                     logger.error("处理欢迎消息时发生异常: %s", e)
                     return None
+            return None
+        return None
 
     async def _process_long_connection_payload(
         self,
@@ -493,7 +495,10 @@ class WecomAIBotAdapter(Platform):
                 _img_url_to_process.append((image_url, image_payload.get("aeskey")))
         elif msgtype == WecomAIBotConstants.MSG_TYPE_MIXED:
             # 提取混合消息中的文本内容
-            msg_items = WecomAIBotMessageParser.parse_mixed_message(message_data)
+            msg_items = cast(
+                list[dict[str, Any]],
+                WecomAIBotMessageParser.parse_mixed_message(message_data),
+            )
             text_parts = []
             for item in msg_items or []:
                 if item.get("msgtype") == WecomAIBotConstants.MSG_TYPE_TEXT:

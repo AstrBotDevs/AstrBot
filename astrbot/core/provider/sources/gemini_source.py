@@ -258,7 +258,7 @@ class ProviderGoogleGenAI(Provider):
                 level = types.ThinkingLevel(thinking_level)
                 thinking_config = types.ThinkingConfig()
                 if not hasattr(types.ThinkingConfig, "thinking_level"):
-                    setattr(types.ThinkingConfig, "thinking_level", level)
+                    types.ThinkingConfig.thinking_level = level
                 else:
                     thinking_config.thinking_level = level
 
@@ -775,7 +775,7 @@ class ProviderGoogleGenAI(Provider):
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
-        **kwargs: object,
+        **kwargs,
     ) -> LLMResponse:
         if contexts is None:
             contexts = []
@@ -797,10 +797,13 @@ class ProviderGoogleGenAI(Provider):
         # tool calls result
         if tool_calls_result:
             if not isinstance(tool_calls_result, list):
-                context_query.extend(tool_calls_result.to_openai_messages())
+                tcr = cast(ToolCallsResult, tool_calls_result)
+                context_query.extend(tcr.to_openai_messages())
             else:
                 for tcr in tool_calls_result:
-                    context_query.extend(tcr.to_openai_messages())
+                    context_query.extend(
+                        cast(ToolCallsResult, tcr).to_openai_messages()
+                    )
 
         model = model or self.get_model()
 
@@ -833,7 +836,7 @@ class ProviderGoogleGenAI(Provider):
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
-        **kwargs: object,
+        **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
             contexts = []
@@ -855,10 +858,13 @@ class ProviderGoogleGenAI(Provider):
         # tool calls result
         if tool_calls_result:
             if not isinstance(tool_calls_result, list):
-                context_query.extend(tool_calls_result.to_openai_messages())
+                tcr = cast(ToolCallsResult, tool_calls_result)
+                context_query.extend(tcr.to_openai_messages())
             else:
                 for tcr in tool_calls_result:
-                    context_query.extend(tcr.to_openai_messages())
+                    context_query.extend(
+                        cast(ToolCallsResult, tcr).to_openai_messages()
+                    )
 
         model = model or self.get_model()
 
@@ -890,7 +896,7 @@ class ProviderGoogleGenAI(Provider):
                 and m.name
             ]
         except APIError as e:
-            raise Exception(f"获取模型列表失败: {e.message}")
+            raise Exception(f"获取模型列表失败: {e.message}") from e
 
     def get_current_key(self) -> str:
         return self.chosen_api_key

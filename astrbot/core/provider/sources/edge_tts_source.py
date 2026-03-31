@@ -4,7 +4,7 @@ import subprocess
 import uuid
 
 import anyio
-import edge_tts
+import edge_tts  # type: ignore[import]
 
 from astrbot.core import logger
 from astrbot.core.provider.entities import ProviderType
@@ -64,7 +64,7 @@ class ProviderEdgeTTS(TTSProvider):
             await communicate.save(mp3_path)
 
             try:
-                from pyffmpeg import FFmpeg
+                from pyffmpeg import FFmpeg  # type: ignore[import]
 
                 ff = FFmpeg()
                 ff.convert(input_file=mp3_path, output_file=wav_path)

@@ -254,7 +254,7 @@ class AiocqhttpAdapter(Platform):
                     # 如果文本段为空,则跳过
                     continue
                 message_str += current_text
-                a = ComponentTypes[t](text=current_text)
+                a = Plain(text=current_text)
                 abm.message.append(a)
 
             elif t == "file":

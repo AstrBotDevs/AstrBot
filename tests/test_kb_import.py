@@ -136,11 +136,11 @@ async def test_import_documents(
     assert result["failed_count"] == 0
 
     # Verify kb_helper.upload_document was called correctly
-    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
-    assert kb_helper.upload_document.call_count == 2
+    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")  # type: ignore[union-attr]
+    assert kb_helper.upload_document.call_count == 2  # type: ignore[attr-defined]
 
     # Check first call arguments
-    call_args_list = kb_helper.upload_document.call_args_list
+    call_args_list = kb_helper.upload_document.call_args_list  # type: ignore[union-attr]
 
     # First document
     _args1, kwargs1 = call_args_list[0]

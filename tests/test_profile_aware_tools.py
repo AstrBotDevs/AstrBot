@@ -70,7 +70,7 @@ def _make_req():
 def _import_apply_sandbox_tools():
     """Import _apply_sandbox_tools, skipping if circular-import fails."""
     try:
-        from astrbot.core.astr_main_agent import _apply_sandbox_tools
+        from astrbot.core.astr_main_agent import _apply_sandbox_tools  # type: ignore[import]
 
         return _apply_sandbox_tools
     except ImportError:

@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 
 from astrbot.core.provider.entities import (
     ProviderRequest,
-    ProviderResponse,
     ProviderMeta,
     ProviderType,
     LLMResponse,
@@ -62,7 +61,7 @@ class MockChatCompletionProvider:
             self.response_index += 1
 
         # Stream word by word
-        for word in text.split():
+        for word in text.split():  # type: ignore[union-attr]
             yield LLMResponse(
                 role="assistant",
                 completion_text=word + " ",
@@ -98,14 +97,14 @@ class MockToolCallProvider(MockChatCompletionProvider):
             return LLMResponse(
                 role="assistant",
                 completion_text="",
-                tool_calls=[tool_call],
+                tool_calls=[tool_call],  # type: ignore[call-arg]
             )
 
         # Default tool call
         return LLMResponse(
             role="assistant",
             completion_text="",
-            tool_calls=[
+            tool_calls=[  # type: ignore[call-arg]
                 {
                     "id": "call_1",
                     "type": "function",
@@ -129,7 +128,7 @@ class MockErrorProvider(MockChatCompletionProvider):
         """Raise mock error."""
         raise RuntimeError(self.error_message)
 
-    async def stream_chat(self, request: ProviderRequest) -> AsyncGenerator[LLMResponse, None]:
+    async def stream_chat(self, request: ProviderRequest) -> AsyncGenerator[LLMResponse, None]:  # type: ignore[method-assign]
         """Raise mock error."""
         raise RuntimeError(self.error_message)
 
@@ -183,5 +182,5 @@ def create_mock_llm_response(
     return LLMResponse(
         role="assistant",
         completion_text=text,
-        tool_calls=tool_calls,
+        tool_calls=tool_calls,  # type: ignore[call-arg]
     )

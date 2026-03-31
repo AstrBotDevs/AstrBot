@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -47,7 +47,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
             and message_obj.raw_message
             and isinstance(message_obj.raw_message, dict)
         ):
-            login = message_obj.raw_message.get("login", {})
+            raw_message = cast(dict[str, Any], message_obj.raw_message)
+            login = raw_message.get("login", {})
             self.platform = login.get("platform")
             user = login.get("user", {})
             self.user_id = user.get("id") if user else None

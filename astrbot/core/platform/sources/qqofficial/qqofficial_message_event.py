@@ -38,7 +38,7 @@ def _patch_qq_botpy_formdata() -> None:
         from botpy.http import _FormData
 
         if not hasattr(_FormData, "_is_processed"):
-            setattr(_FormData, "_is_processed", False)
+            _FormData._is_processed = False  # type: ignore[invalid-assignment]
     except Exception:
         logger.debug("[QQOfficial] Skip botpy FormData patch.")
 

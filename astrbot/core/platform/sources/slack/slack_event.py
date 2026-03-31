@@ -86,6 +86,7 @@ class SlackMessageEvent(AstrMessageEvent):
                     "text": f"文件: <{file_url}|{segment.name or '文件'}>",
                 },
             }
+        return None
 
     @staticmethod
     async def _parse_slack_blocks(

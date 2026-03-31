@@ -8,7 +8,7 @@ from shipyard import ShipyardClient, Spec
 from astrbot.api import logger
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.tool import FunctionTool, ToolSchema
+    from astrbot.core.agent.tool import ToolSchema
 
 from astrbot.core.computer.olayer import (
     FileSystemComponent,
@@ -30,7 +30,7 @@ class ShipyardBooter(ComputerBooter):
             PythonTool,
         )
 
-        return (
+        return (  # type: ignore[return-value]
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),

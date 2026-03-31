@@ -120,7 +120,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
                 audio_url = output_path
 
-        file_obj = await anyio.to_thread.run_sync(_open_file_rb, audio_url)
+        file_obj = await anyio.to_thread.run_sync(_open_file_rb, audio_url)  # type: ignore[call-arg]
         result = await self.client.audio.transcriptions.create(
             model=self.model_name,
             file=("audio.wav", file_obj),

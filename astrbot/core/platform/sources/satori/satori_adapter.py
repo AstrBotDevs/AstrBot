@@ -191,9 +191,11 @@ class SatoriPlatformAdapter(Platform):
 
         identify_payload: dict[str, Any] = {
             "op": 3,  # IDENTIFY
-            "body": {
-                "token": str(self.token) if self.token else "",  # 字符串
-            },
+            "body": dict[str, Any](
+                {
+                    "token": str(self.token) if self.token else "",  # 字符串
+                }
+            ),
         }
 
         # 只有在有序列号时才添加sn字段
@@ -235,7 +237,7 @@ class SatoriPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"心跳任务异常: {e}")
 
-    async def handle_message(self, message: str) -> None:
+    async def handle_message(self, message: str | bytes) -> None:
         try:
             data = json.loads(message)
             op = data.get("op")

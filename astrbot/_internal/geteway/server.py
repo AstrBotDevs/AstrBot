@@ -21,13 +21,13 @@ if TYPE_CHECKING:
 else:
     try:
         from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-        from fastapi.middleware.cors import CORSMiddleware
     except ImportError:
         logger.warning("FastAPI not installed, gateway unavailable.")
         FastAPI = cast(Any, None)
         WebSocket = cast(Any, None)
         WebSocketDisconnect = cast(Any, None)
-        CORSMiddleware = cast(Any, None)
+
+from fastapi.middleware.cors import CORSMiddleware
 
 log = logger
 

@@ -120,6 +120,7 @@ select = [
   "F",     # Pyflakes
   "W",     # pycodestyle warnings
   "E",     # pycodestyle errors
+  "B",     # bugbear
   "I",     # isort
   "UP",    # pyupgrade
   "ASYNC", # flake8-async

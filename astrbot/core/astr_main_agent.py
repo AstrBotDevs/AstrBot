@@ -242,7 +242,7 @@ async def _apply_file_extract(
         logger.error("Unsupported file extract provider: %s", config.file_extract_prov)
         return
 
-    for file_content, file_name in zip(file_contents, file_names):
+    for file_content, file_name in zip(file_contents, file_names, strict=True):
         req.contexts.append(
             {
                 "role": "system",
@@ -952,7 +952,7 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 # 保留 MCP 工具
                 new_tool_set.add_tool(tool)
                 continue
-            mp = tool.handler_module_path
+            mp = getattr(tool, "handler_module_path", None)
             if not mp:
                 # 没有 plugin 归属信息的工具(如 subagent transfer_to_*)
                 # 不应受到会话插件过滤影响｡

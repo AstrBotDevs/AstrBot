@@ -95,7 +95,7 @@ class TestAstrbotAcpClient:
 
             # Start server using loop.create_unix_server
             loop = asyncio.get_running_loop()
-            server = await loop.create_unix_server(echo_handler, path=socket_path)
+            server = await loop.create_unix_server(echo_handler, path=socket_path)  # type: ignore[arg-type]
 
             try:
                 # Connect client

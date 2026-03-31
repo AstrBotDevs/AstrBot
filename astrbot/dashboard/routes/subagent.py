@@ -100,7 +100,8 @@ class SubAgentRoute(Route):
                 # the handoff (transfer_to_*) tools as their own mounted tools.
                 if isinstance(tool, HandoffTool):
                     continue
-                if tool.handler_module_path == "core.subagent_orchestrator":
+                tool_handler_module_path = getattr(tool, "handler_module_path", None)
+                if tool_handler_module_path == "core.subagent_orchestrator":
                     continue
                 tools_dict.append(
                     {
@@ -108,7 +109,7 @@ class SubAgentRoute(Route):
                         "description": tool.description,
                         "parameters": tool.parameters,
                         "active": tool.active,
-                        "handler_module_path": tool.handler_module_path,
+                        "handler_module_path": tool_handler_module_path,
                     }
                 )
             return jsonify(Response().ok(data=tools_dict).to_json())

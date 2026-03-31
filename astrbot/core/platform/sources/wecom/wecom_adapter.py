@@ -313,9 +313,9 @@ class WecomPlatformAdapter(Platform):
     async def convert_message(self, msg: BaseMessage) -> AstrBotMessage | None:
         abm = AstrBotMessage()
         if isinstance(msg, TextMessage):
-            abm.message_str = msg.content
+            abm.message_str = cast(str, msg.content)
             abm.self_id = str(msg.agent)
-            abm.message = [Plain(msg.content)]
+            abm.message = [Plain(cast(str, msg.content))]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
                 cast(str, msg.source),
@@ -328,7 +328,9 @@ class WecomPlatformAdapter(Platform):
         elif isinstance(msg, ImageMessage):
             abm.message_str = "[图片]"
             abm.self_id = str(msg.agent)
-            abm.message = [Image(file=msg.image, url=msg.image)]
+            abm.message = [
+                Image(file=cast(str | None, msg.image), url=cast(str | None, msg.image))
+            ]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
                 cast(str, msg.source),
@@ -355,7 +357,7 @@ class WecomPlatformAdapter(Platform):
             except Exception as e:
                 logger.error(f"转换音频失败: {e}｡如果没有安装 ffmpeg 请先安装｡")
                 path_wav = path
-                return
+                return None
 
             abm.message_str = ""
             abm.self_id = str(msg.agent)
@@ -371,11 +373,12 @@ class WecomPlatformAdapter(Platform):
             abm.raw_message = msg
         else:
             logger.warning(f"暂未实现的事件: {msg.type}")
-            return
+            return None
 
         self.agent_id = abm.self_id
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
+        return abm
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
         msgtype = msg.get("msgtype")
@@ -424,13 +427,14 @@ class WecomPlatformAdapter(Platform):
             except Exception as e:
                 logger.error(f"转换音频失败: {e}｡如果没有安装 ffmpeg 请先安装｡")
                 path_wav = path
-                return
+                return None
 
             abm.message = [Record(file=path_wav, url=path_wav)]
         else:
             logger.warning(f"未实现的微信客服消息事件: {msg}")
-            return
+            return None
         await self.handle_msg(abm)
+        return abm
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = WecomPlatformEvent(

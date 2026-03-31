@@ -1424,8 +1424,8 @@ async def test_plugin_web_route_returns_503_while_runtime_loading(
         return {"status": "ok", "message": None, "data": {"called": True}}
 
     registered_web_apis = star_context.registered_web_apis
-    original_registered_web_apis = list(registered_web_apis)
-    registered_web_apis[:] = [
+    original_registered_web_apis = list(registered_web_apis)  # type: ignore[arg-type]
+    registered_web_apis[:] = [  # type: ignore[index]
         ("/runtime-guard-test", dummy_plugin_route, ["GET"], "runtime guard test"),
     ]
 
@@ -1440,7 +1440,7 @@ async def test_plugin_web_route_returns_503_while_runtime_loading(
         _assert_runtime_loading_response(data)
         assert route_called is False
     finally:
-        registered_web_apis[:] = original_registered_web_apis
+        registered_web_apis[:] = original_registered_web_apis  # type: ignore[index]
         _restore_runtime_ready(core_lifecycle_td)
 
 
@@ -1461,8 +1461,8 @@ async def test_plugin_web_route_returns_failed_response_after_runtime_bootstrap_
         return {"status": "ok", "message": None, "data": {"called": True}}
 
     registered_web_apis = star_context.registered_web_apis
-    original_registered_web_apis = list(registered_web_apis)
-    registered_web_apis[:] = [
+    original_registered_web_apis = list(registered_web_apis)  # type: ignore[arg-type]
+    registered_web_apis[:] = [  # type: ignore[index]
         (
             "/runtime-failed-guard-test",
             dummy_plugin_route,
@@ -1485,7 +1485,7 @@ async def test_plugin_web_route_returns_failed_response_after_runtime_bootstrap_
         )
         assert route_called is False
     finally:
-        registered_web_apis[:] = original_registered_web_apis
+        registered_web_apis[:] = original_registered_web_apis  # type: ignore[index]
         _restore_runtime_ready(core_lifecycle_td)
 
 
@@ -1818,10 +1818,10 @@ async def test_t2i_set_active_template_syncs_all_configs(
         data = await response.get_json()
         assert data["status"] == "ok"
 
-        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())  # type: ignore[union-attr]
         assert "default" in conf_ids
         for conf_id in conf_ids:
-            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
+            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]  # type: ignore[index]
             assert conf.get("t2i_active_template") == template_name
             assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
     finally:
@@ -1891,10 +1891,10 @@ async def test_t2i_reset_default_template_syncs_all_configs(
         data = await response.get_json()
         assert data["status"] == "ok"
 
-        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())  # type: ignore[union-attr]
         assert "default" in conf_ids
         for conf_id in conf_ids:
-            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
+            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]  # type: ignore[index]
             assert conf.get("t2i_active_template") == "base"
             assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
     finally:
@@ -1954,7 +1954,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
         )
         assert response.status_code == 200
 
-        conf_ids = list(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        conf_ids = list(core_lifecycle_td.astrbot_config_mgr.confs.keys())  # type: ignore[union-attr]
         old_schedulers = {
             conf_id: core_lifecycle_td.pipeline_scheduler_mapping[conf_id]
             for conf_id in conf_ids

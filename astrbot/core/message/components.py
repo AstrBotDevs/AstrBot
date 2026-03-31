@@ -74,6 +74,11 @@ class ComponentType(str, Enum):
     Json = "Json"
     Unknown = "Unknown"
     WechatEmoji = "WechatEmoji"  # Wechat 下的 emoji 表情包
+    # Discord-specific component types
+    DiscordEmbed = "DiscordEmbed"
+    DiscordButton = "DiscordButton"
+    DiscordReference = "DiscordReference"
+    DiscordView = "DiscordView"
 
 
 class BaseMessageComponent(BaseModel):

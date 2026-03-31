@@ -1,6 +1,6 @@
 import asyncio
 import random
-from typing import Any
+from typing import Any, cast
 
 import anyio
 
@@ -18,7 +18,7 @@ from astrbot.core.platform.astr_message_event import MessageSession
 from .misskey_api import MisskeyAPI
 
 try:
-    import magic
+    import magic  # type: ignore[assignment]
 except Exception:
     magic = None
 
@@ -200,7 +200,8 @@ class MisskeyPlatformAdapter(Platform):
         try:
             if not isinstance(message.raw_message, dict):
                 message.raw_message = {}
-            message.raw_message["poll"] = poll
+            raw_message_dict = cast(dict, message.raw_message)
+            raw_message_dict["poll"] = poll
             message.__setattr__("poll", poll)
         except Exception:
             pass
@@ -543,7 +544,8 @@ class MisskeyPlatformAdapter(Platform):
                     if not r:
                         continue
                     if isinstance(r, dict):
-                        url = r.get("fallback_url")
+                        r_dict = cast(dict, r)
+                        url = r_dict.get("fallback_url")
                         if url:
                             fallback_urls.append(str(url))
                     else:

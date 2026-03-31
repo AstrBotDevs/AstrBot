@@ -19,26 +19,20 @@ from astrbot.api import logger
 from astrbot.core.tool_provider import ToolProviderContext
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.tool import FunctionTool
+    from astrbot.core.agent.tool import FunctionTool, ToolSchema
 
 
 # ---------------------------------------------------------------------------
-# Lazy local-mode tool cache
+# Local mode tools
 # ---------------------------------------------------------------------------
 
-_LOCAL_TOOLS_CACHE: list[FunctionTool] | None = None
 
+def _get_local_tools() -> list[ToolSchema]:
+    from astrbot.core.computer.tools import ExecuteShellTool, LocalPythonTool
 
-def _get_local_tools() -> list[FunctionTool]:
-    global _LOCAL_TOOLS_CACHE
-    if _LOCAL_TOOLS_CACHE is None:
-        from astrbot.core.computer.tools import ExecuteShellTool, LocalPythonTool
-
-        _LOCAL_TOOLS_CACHE = [
-            ExecuteShellTool(is_local=True),
-            LocalPythonTool(),
-        ]
-    return list(_LOCAL_TOOLS_CACHE)
+    shell = ExecuteShellTool(is_local=True)
+    python = LocalPythonTool()
+    return [shell, python]  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +75,7 @@ class ComputerToolProvider:
     """
 
     @staticmethod
-    def get_all_tools() -> list[FunctionTool]:
+    def get_all_tools() -> list[ToolSchema]:
         """Return ALL computer-use tools across all runtimes for registration.
 
         Creates **fresh instances** separate from the runtime caches so that
@@ -114,7 +108,7 @@ class ComputerToolProvider:
             SyncSkillReleaseTool,
         )
 
-        all_tools: list[FunctionTool] = [
+        all_tools: list[ToolSchema] = [  # type: ignore[assignment]
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),
@@ -139,7 +133,7 @@ class ComputerToolProvider:
         # De-duplicate by name and mark inactive so they are visible
         # in WebUI but never sent to the LLM via func_list.
         seen: set[str] = set()
-        result: list[FunctionTool] = []
+        result: list[ToolSchema] = []
         for tool in all_tools:
             if tool.name not in seen:
                 tool.active = False
@@ -147,7 +141,7 @@ class ComputerToolProvider:
                 seen.add(tool.name)
         return result
 
-    def get_tools(self, ctx: ToolProviderContext) -> list[FunctionTool]:
+    def get_tools(self, ctx: ToolProviderContext) -> list[ToolSchema]:
         runtime = ctx.computer_use_runtime
         if runtime == "none":
             return []
@@ -176,7 +170,7 @@ class ComputerToolProvider:
 
     # -- sandbox helpers ----------------------------------------------------
 
-    def _sandbox_tools(self, ctx: ToolProviderContext) -> list[FunctionTool]:
+    def _sandbox_tools(self, ctx: ToolProviderContext) -> list[ToolSchema]:
         """Collect tools for sandbox mode.
 
         Always returns the full (pre-boot default) tool set declared by the
@@ -213,7 +207,7 @@ class ComputerToolProvider:
         return "".join(parts)
 
 
-def get_all_tools() -> list[FunctionTool]:
+def get_all_tools() -> list[ToolSchema]:
     """Module-level entry point for ``FunctionToolManager.register_internal_tools()``.
 
     Delegates to ``ComputerToolProvider.get_all_tools()`` which collects

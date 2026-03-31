@@ -10,7 +10,7 @@ import anyio
 from astrbot.api import logger
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.tool import FunctionTool
+    from astrbot.core.agent.tool import ToolSchema
 
 from astrbot.core.computer.booters.base import ComputerBooter
 from astrbot.core.computer.olayer import (
@@ -35,15 +35,15 @@ class NeoPythonComponent(PythonComponent):
     def __init__(self, sandbox: Any) -> None:
         self._sandbox = sandbox
 
-    async def exec(  # type: ignore[override]
+    async def exec(
         self,
         code: str,
         kernel_id: str | None = None,
-        timeout_sec: int = 30,
+        timeout: int = 30,
         silent: bool = False,
     ) -> dict[str, Any]:
         _ = kernel_id  # Bay runtime does not expose kernel_id in current SDK.
-        with anyio.fail_after(timeout_sec):
+        with anyio.fail_after(timeout):
             result = await self._sandbox.python.exec(code)
         payload = _maybe_model_dump(result)
 
@@ -77,12 +77,12 @@ class NeoShellComponent(ShellComponent):
     def __init__(self, sandbox: Any) -> None:
         self._sandbox = sandbox
 
-    async def exec(  # type: ignore[override]
+    async def exec(
         self,
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout_sec: int | None = 30,
+        timeout: int | None = 30,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -104,7 +104,7 @@ class NeoShellComponent(ShellComponent):
         if background:
             run_command = f"nohup sh -lc {shlex.quote(run_command)} >/tmp/astrbot_bg.log 2>&1 & echo $!"
 
-        with anyio.fail_after(timeout_sec or 30):
+        with anyio.fail_after(timeout or 30):
             result = await self._sandbox.shell.exec(run_command, cwd=cwd)
         payload = _maybe_model_dump(result)
 
@@ -534,7 +534,7 @@ class ShipyardNeoBooter(ComputerBooter):
 
     @classmethod
     @functools.cache
-    def _base_tools(cls) -> tuple[FunctionTool, ...]:
+    def _base_tools(cls) -> tuple[ToolSchema, ...]:
         """4 base + 11 Neo lifecycle = 15 tools (all Neo profiles)."""
         from astrbot.core.computer.tools import (
             AnnotateExecutionTool,
@@ -554,7 +554,7 @@ class ShipyardNeoBooter(ComputerBooter):
             SyncSkillReleaseTool,
         )
 
-        return (  # type: ignore[return-value]
+        return (
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),
@@ -574,21 +574,21 @@ class ShipyardNeoBooter(ComputerBooter):
 
     @classmethod
     @functools.cache
-    def _browser_tools(cls) -> tuple[FunctionTool, ...]:
+    def _browser_tools(cls) -> tuple[ToolSchema, ...]:
         from astrbot.core.computer.tools import (
             BrowserBatchExecTool,
             BrowserExecTool,
             RunBrowserSkillTool,
         )
 
-        return (BrowserExecTool(), BrowserBatchExecTool(), RunBrowserSkillTool())  # type: ignore[return-value]
+        return (BrowserExecTool(), BrowserBatchExecTool(), RunBrowserSkillTool())
 
     @classmethod
-    def get_default_tools(cls) -> list[FunctionTool]:
+    def get_default_tools(cls) -> list[ToolSchema]:
         """Pre-boot: conservative full list (including browser)."""
         return list(cls._base_tools()) + list(cls._browser_tools())
 
-    def get_tools(self) -> list[FunctionTool]:
+    def get_tools(self) -> list[ToolSchema]:
         """Post-boot: capability-filtered list."""
         caps = self.capabilities
         if caps is None:

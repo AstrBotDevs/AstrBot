@@ -16,5 +16,5 @@ def test_build_loggable_payload_redacts_api_key() -> None:
     loggable_payload = provider._build_loggable_payload(payload)
 
     assert payload["app"]["token"] == "secret-token"
-    assert loggable_payload["app"]["token"] == "***"
-    assert loggable_payload["request"]["text"] == "hello"
+    assert loggable_payload["app"]["token"] == "***"  # type: ignore[index]
+    assert loggable_payload["request"]["text"] == "hello"  # type: ignore[index]

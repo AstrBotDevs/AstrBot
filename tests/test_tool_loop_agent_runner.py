@@ -40,7 +40,7 @@ class MockProvider(Provider):
     async def get_models(self) -> list[str]:
         return ["test_model"]
 
-    async def text_chat(self, **kwargs) -> LLMResponse:
+    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
         self.call_count += 1
 
         # 检查工具是否被禁用
@@ -84,50 +84,44 @@ class MockToolExecutor:
     """模拟工具执行器"""
 
     @classmethod
-    def execute(cls, tool, run_context, **tool_args):
-        async def generator():
-            # 模拟工具返回结果,使用正确的类型
-            from mcp.types import CallToolResult, TextContent
+    async def execute(cls, tool, run_context, **tool_args):
+        # 模拟工具返回结果,使用正确的类型
+        from mcp.types import CallToolResult, TextContent
 
-            result = CallToolResult(
-                content=[TextContent(type="text", text="工具执行结果")]
-            )
-            yield result
-
-        return generator()
+        result = CallToolResult(
+            content=[TextContent(type="text", text="工具执行结果")]
+        )
+        yield result
 
 
 class MockMixedContentToolExecutor:
     """模拟返回图片 + 文本的工具执行器"""
 
     @classmethod
-    def execute(cls, tool, run_context, **tool_args):
-        async def generator():
-            from mcp.types import CallToolResult, ImageContent, TextContent
+    async def execute(cls, tool, run_context, **tool_args):
+        from mcp.types import CallToolResult, ImageContent, TextContent
 
-            result = CallToolResult(
-                content=[
-                    ImageContent(
-                        type="image",
-                        data="dGVzdA==",
-                        mimeType="image/png",
-                    ),
-                    TextContent(type="text", text="直播间标题:新游首发:零~红蝶~"),
-                ]
-            )
-            yield result
-
-        return generator()
+        result = CallToolResult(
+            content=[
+                ImageContent(
+                    type="image",
+                    data="dGVzdA==",
+                    mimeType="image/png",
+                ),
+                TextContent(type="text", text="直播间标题:新游首发:零~红蝶~"),
+            ]
+        )
+        yield result
 
 
 class MockFailingProvider(MockProvider):
-    async def text_chat(self, **kwargs) -> LLMResponse:
+    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
         self.call_count += 1
         raise RuntimeError("primary provider failed")
 
 
 class MockErrProvider(MockProvider):
-    async def text_chat(self, **kwargs) -> LLMResponse:
+    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
         self.call_count += 1
         return LLMResponse(
             role="err",
@@ -140,7 +134,7 @@ class MockEmptyOutputThenSuccessProvider(MockProvider):
         super().__init__()
         self.failures_before_success = failures_before_success
 
-    async def text_chat(self, **kwargs) -> LLMResponse:
+    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
         self.call_count += 1
         if self.call_count <= self.failures_before_success:
             raise EmptyModelOutputError("model returned no usable output")
@@ -180,7 +174,7 @@ class MockToolCallProvider(MockProvider):
         self.tool_args = tool_args or {}
         self.abort_signal = None
 
-    async def text_chat(self, **kwargs) -> LLMResponse:
+    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
         self.call_count += 1
         self.abort_signal = kwargs.get("abort_signal")
         return LLMResponse(
@@ -869,7 +863,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     captured_kwargs = {}
 
     class SkillsLikeProvider(MockProvider):
-        async def text_chat(self, **kwargs) -> LLMResponse:
+        async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
             self.call_count += 1
             if self.call_count == 1:
                 # 第一次调用:返回工具选择(light schema)

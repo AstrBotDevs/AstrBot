@@ -23,12 +23,12 @@ def _get_open_api_route(app: Quart):
         (
             item
             for item in app.url_map.iter_rules()
-            if item.rule == "/api/v1/chat" and "POST" in item.methods
+            if item.rule == "/api/v1/chat" and "POST" in item.methods  # type: ignore[operator]
         ),
         None,
     )
     assert rule is not None
-    return app.view_functions[rule.endpoint].__self__
+    return app.view_functions[rule.endpoint].__self__  # type: ignore[attr-defined]
 
 
 async def _create_api_key(

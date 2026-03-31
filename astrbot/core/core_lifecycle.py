@@ -180,10 +180,7 @@ class AstrBotCoreLifecycle:
             "cleanup_loaded_plugins",
         ):
             try:
-                cleanup_loaded_plugins = getattr(
-                    self.plugin_manager,
-                    "cleanup_loaded_plugins",
-                )
+                cleanup_loaded_plugins = self.plugin_manager.cleanup_loaded_plugins
                 result = cleanup_loaded_plugins()
                 if inspect.isawaitable(result):
                     await result

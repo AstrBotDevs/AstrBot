@@ -182,7 +182,7 @@ class QQOfficialPlatformAdapter(Platform):
 
         payload: dict[str, Any] = {"content": plain_text, "msg_id": msg_id}
         ret: Any = None
-        send_helper = SimpleNamespace(bot=self.client)
+        send_helper = cast(Any, SimpleNamespace(bot=self.client))
 
         if session.message_type == MessageType.GROUP_MESSAGE:
             scene = self._session_scene.get(session.session_id)
