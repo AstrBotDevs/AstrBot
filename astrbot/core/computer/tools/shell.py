@@ -96,4 +96,9 @@ class ExecuteShellTool(FunctionTool):
             result = await sb.shell.exec(command, background=background, env=env)
             return json.dumps(result)
         except Exception as e:
-            return f"Error executing command: {str(e)}"
+            return json.dumps({
+                "success": False,
+                "exit_code": -1,
+                "stdout": "",
+                "stderr": f"Error executing command: {str(e)}",
+            })
