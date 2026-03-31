@@ -1,4 +1,5 @@
 import datetime
+from typing import Any, TypedDict, cast
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -19,6 +20,41 @@ THIRD_PARTY_AGENT_RUNNER_KEY = {
     DEERFLOW_PROVIDER_TYPE: DEERFLOW_THREAD_ID_KEY,
 }
 THIRD_PARTY_AGENT_RUNNER_STR = ", ".join(THIRD_PARTY_AGENT_RUNNER_KEY.keys())
+
+
+class ResetPermissionConfig(TypedDict, total=False):
+    group_unique_on: str
+    group_unique_off: str
+    private: str
+
+
+class AlterCmdPluginConfig(TypedDict, total=False):
+    reset: ResetPermissionConfig
+
+
+def _normalize_alter_cmd_config(value: object) -> dict[str, AlterCmdPluginConfig]:
+    if not isinstance(value, dict):
+        return {}
+
+    config: dict[str, AlterCmdPluginConfig] = {}
+    for plugin_name, raw_plugin_config in value.items():
+        if not isinstance(plugin_name, str) or not isinstance(raw_plugin_config, dict):
+            continue
+
+        plugin_config: AlterCmdPluginConfig = cast(AlterCmdPluginConfig, {})
+        raw_reset = cast(dict[str, Any], raw_plugin_config).get("reset")
+        if isinstance(raw_reset, dict):
+            reset_config: ResetPermissionConfig = cast(ResetPermissionConfig, {})
+            for key in ("group_unique_on", "group_unique_off", "private"):
+                permission = raw_reset.get(key)
+                if isinstance(permission, str):
+                    reset_config[key] = permission
+            if reset_config:
+                plugin_config["reset"] = reset_config
+
+        config[plugin_name] = plugin_config
+
+    return config
 
 
 class ConversationCommands:
@@ -48,7 +84,9 @@ class ConversationCommands:
 
         scene = RstScene.get_scene(is_group, is_unique_session)
 
-        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {}) or {}
+        alter_cmd_cfg = _normalize_alter_cmd_config(
+            await sp.get_async("global", "global", "alter_cmd", {})
+        )
         plugin_config = alter_cmd_cfg.get("astrbot", {})
         reset_cfg = plugin_config.get("reset", {})
 

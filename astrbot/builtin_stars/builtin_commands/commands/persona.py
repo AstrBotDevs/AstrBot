@@ -154,7 +154,7 @@ class PersonaCommands:
                 message.set_result(MessageEventResult().message("请输入人格情景名"))
                 return
             ps = parts[2].strip()
-            if persona := next(
+            if persona_info := next(
                 builtins.filter(
                     lambda persona: persona["name"] == ps,
                     self.context.provider_manager.personas,
@@ -162,7 +162,7 @@ class PersonaCommands:
                 None,
             ):
                 msg = f"人格{ps}的详细信息:\n"
-                msg += f"{persona['prompt']}\n"
+                msg += f"{persona_info['prompt']}\n"
             else:
                 msg = f"人格{ps}不存在"
             message.set_result(MessageEventResult().message(msg))
@@ -186,7 +186,7 @@ class PersonaCommands:
                     ),
                 )
                 return
-            if persona := next(
+            if persona_info := next(
                 builtins.filter(
                     lambda persona: persona["name"] == ps,
                     self.context.provider_manager.personas,

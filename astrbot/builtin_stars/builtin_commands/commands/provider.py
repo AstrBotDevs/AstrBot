@@ -4,12 +4,12 @@ import asyncio
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, Protocol, TypeAlias, TypedDict
 
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.entities import ProviderMeta, ProviderType
 from astrbot.core.utils.error_redaction import safe_error
 
 if TYPE_CHECKING:
@@ -29,6 +29,22 @@ class _ModelLookupConfig:
     umo: str | None
     cache_ttl_seconds: float
     max_concurrency: int
+
+
+class ListedProvider(Protocol):
+    def meta(self) -> ProviderMeta: ...
+
+    async def test(self) -> None: ...
+
+
+class _ProviderDisplayEntry(TypedDict):
+    type: Literal["llm", "tts", "stt"]
+    info: str
+    mark: str
+    provider: ListedProvider
+
+
+ReachabilityCheckResult: TypeAlias = tuple[bool, str | None, str | None] | BaseException
 
 
 class _ModelCache:
@@ -260,7 +276,7 @@ class ProviderCommands:
 
     def _log_reachability_failure(
         self,
-        provider,
+        provider: ListedProvider,
         provider_capability_type: ProviderType | None,
         err_code: str,
         err_reason: str,
@@ -275,7 +291,9 @@ class ProviderCommands:
             err_reason,
         )
 
-    async def _test_provider_capability(self, provider):
+    async def _test_provider_capability(
+        self, provider: ListedProvider
+    ) -> tuple[bool, str | None, str | None]:
         """测试单个 provider 的可用性"""
         meta = provider.meta()
         provider_capability_type = meta.provider_type
@@ -395,7 +413,9 @@ class ProviderCommands:
             stts = self.context.get_all_stt_providers()
 
             # 构造待检测列表: [(provider, type_label), ...]
-            all_providers = []
+            all_providers: list[
+                tuple[ListedProvider, Literal["llm", "tts", "stt"]]
+            ] = []
             all_providers.extend([(p, "llm") for p in llms])
             all_providers.extend([(p, "tts") for p in ttss])
             all_providers.extend([(p, "stt") for p in stts])
@@ -408,7 +428,7 @@ class ProviderCommands:
                             "正在进行提供商可达性测试,请稍候..."
                         )
                     )
-                check_results = await asyncio.gather(
+                check_results: list[ReachabilityCheckResult] = await asyncio.gather(
                     *[self._test_provider_capability(p) for p, _ in all_providers],
                     return_exceptions=True,
                 )
@@ -417,11 +437,12 @@ class ProviderCommands:
                 check_results = [None for _ in all_providers]
 
             # 整合结果
-            display_data = []
+            display_data: list[_ProviderDisplayEntry] = []
             for (p, p_type), reachable in zip(all_providers, check_results):
                 meta = p.meta()
                 id_ = meta.id
                 error_code = None
+                reachable_flag: bool | None
 
                 if isinstance(reachable, asyncio.CancelledError):
                     raise reachable
@@ -438,7 +459,7 @@ class ProviderCommands:
                 elif isinstance(reachable, tuple):
                     reachable_flag, error_code, _ = reachable
                 else:
-                    reachable_flag = reachable
+                    reachable_flag = None
 
                 # 根据类型构建显示名称
                 if p_type == "llm":
@@ -519,8 +540,8 @@ class ProviderCommands:
             if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
                 event.set_result(MessageEventResult().message("无效的提供商序号｡"))
                 return
-            provider = self.context.get_all_tts_providers()[idx2 - 1]
-            id_ = provider.meta().id
+            tts_provider = self.context.get_all_tts_providers()[idx2 - 1]
+            id_ = tts_provider.meta().id
             await self.context.provider_manager.set_provider(
                 provider_id=id_,
                 provider_type=ProviderType.TEXT_TO_SPEECH,
@@ -534,8 +555,8 @@ class ProviderCommands:
             if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
                 event.set_result(MessageEventResult().message("无效的提供商序号｡"))
                 return
-            provider = self.context.get_all_stt_providers()[idx2 - 1]
-            id_ = provider.meta().id
+            stt_provider = self.context.get_all_stt_providers()[idx2 - 1]
+            id_ = stt_provider.meta().id
             await self.context.provider_manager.set_provider(
                 provider_id=id_,
                 provider_type=ProviderType.SPEECH_TO_TEXT,
@@ -546,8 +567,8 @@ class ProviderCommands:
             if idx > len(self.context.get_all_providers()) or idx < 1:
                 event.set_result(MessageEventResult().message("无效的提供商序号｡"))
                 return
-            provider = self.context.get_all_providers()[idx - 1]
-            id_ = provider.meta().id
+            llm_provider = self.context.get_all_providers()[idx - 1]
+            id_ = llm_provider.meta().id
             await self.context.provider_manager.set_provider(
                 provider_id=id_,
                 provider_type=ProviderType.CHAT_COMPLETION,

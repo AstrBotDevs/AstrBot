@@ -18,7 +18,9 @@ class AlterCmdCommands(CommandParserMixin):
         """更新reset命令在特定场景下的权限设置"""
         from astrbot.api import sp
 
-        alter_cmd_cfg = await sp.global_get("alter_cmd", {}) or {}
+        alter_cmd_cfg: dict[str, dict[str, dict[str, str]]] = (
+            await sp.global_get("alter_cmd", {}) or {}
+        )
         plugin_cfg = alter_cmd_cfg.get("astrbot", {})
         reset_cfg = plugin_cfg.get("reset", {})
         reset_cfg[scene_key] = perm_type
@@ -47,7 +49,9 @@ class AlterCmdCommands(CommandParserMixin):
         if cmd_name == "reset" and cmd_type == "config":
             from astrbot.api import sp
 
-            alter_cmd_cfg = await sp.global_get("alter_cmd", {}) or {}
+            alter_cmd_cfg: dict[str, dict[str, dict[str, str]]] = (
+                await sp.global_get("alter_cmd", {}) or {}
+            )
             plugin_ = alter_cmd_cfg.get("astrbot", {})
             reset_cfg = plugin_.get("reset", {})
 
@@ -86,8 +90,8 @@ class AlterCmdCommands(CommandParserMixin):
                 )
                 return
 
-            scene_num = int(scene_num)
-            scene = RstScene.from_index(scene_num)
+            scene_index = int(scene_num)
+            scene = RstScene.from_index(scene_index)
             scene_key = scene.key
 
             await self.update_reset_permission(scene_key, perm_type)
@@ -107,7 +111,12 @@ class AlterCmdCommands(CommandParserMixin):
 
         # 查找指令
         cmd_name = " ".join(token.tokens[1:-1])
-        cmd_type = token.get(-1)
+        permission_type = token.get(-1)
+        if permission_type not in ["admin", "member"]:
+            await event.send(
+                MessageChain().message("指令类型错误,可选类型有 admin, member"),
+            )
+            return
         found_command = None
         cmd_group = False
         for handler in star_handlers_registry:
@@ -131,20 +140,25 @@ class AlterCmdCommands(CommandParserMixin):
 
         from astrbot.api import sp
 
-        alter_cmd_cfg = await sp.global_get("alter_cmd", {}) or {}
-        plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
+        stored_alter_cmd_cfg: dict[str, dict[str, dict[str, str]]] = (
+            await sp.global_get("alter_cmd", {}) or {}
+        )
+        if found_plugin.name is None:
+            await event.send(MessageChain().message("未找到指令对应的插件名称"))
+            return
+        plugin_ = stored_alter_cmd_cfg.get(found_plugin.name, {})
         cfg = plugin_.get(found_command.handler_name, {})
-        cfg["permission"] = cmd_type
+        cfg["permission"] = permission_type
         plugin_[found_command.handler_name] = cfg
-        alter_cmd_cfg[found_plugin.name] = plugin_
+        stored_alter_cmd_cfg[found_plugin.name] = plugin_
 
-        await sp.global_put("alter_cmd", alter_cmd_cfg)
+        await sp.global_put("alter_cmd", stored_alter_cmd_cfg)
 
         # 注入权限过滤器
         found_permission_filter = False
         for filter_ in found_command.event_filters:
             if isinstance(filter_, PermissionTypeFilter):
-                if cmd_type == "admin":
+                if permission_type == "admin":
                     from astrbot.api.event import filter
 
                     filter_.permission_type = filter.PermissionType.ADMIN
@@ -161,13 +175,13 @@ class AlterCmdCommands(CommandParserMixin):
                 0,
                 PermissionTypeFilter(
                     filter.PermissionType.ADMIN
-                    if cmd_type == "admin"
+                    if permission_type == "admin"
                     else filter.PermissionType.MEMBER,
                 ),
             )
         cmd_group_str = "指令组" if cmd_group else "指令"
         await event.send(
             MessageChain().message(
-                f"已将｢{cmd_name}｣{cmd_group_str} 的权限级别调整为 {cmd_type}｡",
+                f"已将｢{cmd_name}｣{cmd_group_str} 的权限级别调整为 {permission_type}｡",
             ),
         )
