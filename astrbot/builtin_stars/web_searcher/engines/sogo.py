@@ -8,6 +8,8 @@ from . import USER_AGENTS, SearchEngine, SearchResult
 
 
 class Sogo(SearchEngine):
+    NAME = "sogo"
+
     def __init__(self) -> None:
         super().__init__()
         self.base_url = "https://www.sogou.com"
