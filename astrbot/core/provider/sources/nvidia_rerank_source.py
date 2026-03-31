@@ -56,7 +56,7 @@ class NvidiaRerankProvider(RerankProvider):
         model_path = "nvidia"
         logger.debug(f"[NVIDIA Rerank] Building endpoint for model: {self.model}")
         if "/" in self.model:
-            model_path = self.model.strip("/")
+            model_path = self.model.strip("/").replace(".", "_")
         endpoint = self.model_endpoint.lstrip("/")
         return f"{self.base_url}/{model_path}/{endpoint}"
 
