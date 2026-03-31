@@ -199,11 +199,7 @@ class Provider(AbstractProvider):
                     pending_tools.append(message)
                 continue
 
-            if (
-                role == "assistant"
-                and message.get("tool_calls") is not None
-                and len(message.get("tool_calls")) > 0
-            ):
+            if role == "assistant" and message.get("tool_calls"):
                 flush_pending_if_valid()
                 pending_assistant = message
                 continue
