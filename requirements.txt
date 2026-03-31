@@ -186,6 +186,7 @@ httpx==0.28.1
     # via
     #   aiocqhttp
     #   anthropic
+    #   astrbot
     #   google-genai
     #   lark-oapi
     #   mcp
@@ -457,6 +458,8 @@ sniffio==1.3.1
     #   anthropic
     #   google-genai
     #   openai
+socksio==1.0.0
+    # via httpx
 soupsieve==2.8.3
     # via beautifulsoup4
 sqlalchemy==2.0.48
