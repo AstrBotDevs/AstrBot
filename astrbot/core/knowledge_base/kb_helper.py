@@ -135,12 +135,12 @@ class KBHelper:
 
     async def get_ep(self) -> EmbeddingProvider:
         if not self.kb.embedding_provider_id:
-            raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
+            logger.error(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
         ep: EmbeddingProvider = await self.prov_mgr.get_provider_by_id(
             self.kb.embedding_provider_id,
         )  # type: ignore
         if not ep:
-            logger.error(f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider,使用站位Embedding Provider")
+            logger.error(f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider,使用占位Embedding Provider")
             class TempEmbeddingProvider(EmbeddingProvider):
                 def __init__(self, provider_config: dict, provider_settings: dict, embedding_provider_id:str) -> None:
                     super().__init__(provider_config, provider_settings)
@@ -164,7 +164,7 @@ class KBHelper:
             self.kb.rerank_provider_id,
         )  # type: ignore
         if not rp:
-            logger.error(f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider,使用站位Rerank Provider")
+            logger.error(f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider,使用占位Rerank Provider")
             class TempRerankProvider(RerankProvider):
                 def __init__(self, provider_config: dict, provider_settings: dict,rerank_provider_id:str) -> None:
                     super().__init__(provider_config, provider_settings)
