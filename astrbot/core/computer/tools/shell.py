@@ -84,6 +84,17 @@ class ExecuteShellTool(FunctionTool):
         if permission_error := check_admin_permission(context, "Shell execution"):
             return permission_error
 
+        timeout = 30
+        try:
+            config = context.context.context.get_config(
+                umo=context.context.event.unified_msg_origin
+            )
+            if isinstance(config, dict):
+                provider_settings = config.get("provider_settings") or {}
+                timeout = int(provider_settings.get("tool_call_timeout", 30))
+        except (ValueError, TypeError):
+            timeout = 30
+
         if self.is_local:
             work_dir = context.context.event.get_extra("local_working_dir", "")
             sb = get_local_booter(work_dir=work_dir)
@@ -93,7 +104,9 @@ class ExecuteShellTool(FunctionTool):
                 context.context.event.unified_msg_origin,
             )
         try:
-            result = await sb.shell.exec(command, background=background, env=env)
+            result = await sb.shell.exec(
+                command, background=background, env=env, timeout=timeout
+            )
             return json.dumps(result)
         except Exception as e:
             return json.dumps({
