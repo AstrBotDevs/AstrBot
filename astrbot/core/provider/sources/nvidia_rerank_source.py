@@ -26,17 +26,20 @@ class NvidiaRerankProvider(RerankProvider):
         )
         self.truncate = provider_config.get("nvidia_rerank_truncate", "")
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-
-        self.client = aiohttp.ClientSession(
-            headers=headers, timeout=aiohttp.ClientTimeout(total=self.timeout)
-        )
-
+        self.client = None
         self.set_model(self.model)
+
+    async def _get_client(self):
+        if self.client is None or self.client.closed:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+            self.client = aiohttp.ClientSession(
+                headers=headers, timeout=aiohttp.ClientTimeout(total=self.timeout)
+            )
+        return self.client
 
     def _get_endpoint(self) -> str:
         """
@@ -111,7 +114,8 @@ class NvidiaRerankProvider(RerankProvider):
         documents: list[str],
         top_n: int | None = None,
     ) -> list[RerankResult]:
-        if not self.client or self.client.closed:
+        client = await self._get_client()
+        if not client or client.closed:
             logger.error("[NVIDIA Rerank] Client session not initialized or closed")
             return []
 
@@ -125,7 +129,7 @@ class NvidiaRerankProvider(RerankProvider):
             payload = self._build_payload(query, documents)
             request_url = self._get_endpoint()
 
-            async with self.client.post(request_url, json=payload) as response:
+            async with client.post(request_url, json=payload) as response:
                 response_data = await response.json()
                 logger.debug(f"[NVIDIA Rerank] API Response: {response_data}")
 
