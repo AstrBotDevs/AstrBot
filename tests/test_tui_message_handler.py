@@ -225,7 +225,7 @@ class TestSSEMessageParserProcess:
         parser.process_message(
             ParsedMessage(type=MessageType.REASONING, data="Thinking...")
         )
-        parser._tool_calls["tc1"] = object()  # type: ignore
+        parser._tool_calls["tc1"] = object()
 
         parser.reset()
 

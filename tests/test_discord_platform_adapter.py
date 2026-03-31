@@ -25,7 +25,7 @@ async def test_collect_and_register_commands_ignores_daily_create_limit() -> Non
     adapter.client = MockDiscordBuilder.create_client()
 
     exc = HTTPException("daily limit")
-    exc.code = 30034  # type: ignore[attr-defined]
+    exc.code = 30034 [attr-defined]
     adapter.client.sync_commands.side_effect = exc
 
     await adapter._collect_and_register_commands()
