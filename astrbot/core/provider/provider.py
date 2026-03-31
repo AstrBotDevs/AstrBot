@@ -187,8 +187,13 @@ class Provider(AbstractProvider):
                     return idx, end_idx
             return None
 
+        # Removal policy: try to remove around TARGET_RECORDS messages,
+        # but allow up to MAX_RECORDS to keep tool-call/message units atomic.
+        TARGET_RECORDS = 2
+        MAX_RECORDS = 3
+
         removed = 0
-        while removed < 2:
+        while removed < TARGET_RECORDS:
             next_unit = _next_unit_bounds()
             if next_unit is None:
                 break
@@ -196,7 +201,7 @@ class Provider(AbstractProvider):
             next_unit_count = end_idx - start_idx + 1
             # Keep behavior close to the old "pop around 2 records" strategy,
             # while still preserving tool-call atomicity.
-            if removed > 0 and removed + next_unit_count > 3:
+            if removed > 0 and removed + next_unit_count > MAX_RECORDS:
                 break
             del context[start_idx : end_idx + 1]
             removed += next_unit_count
