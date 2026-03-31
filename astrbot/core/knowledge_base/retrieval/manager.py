@@ -232,8 +232,10 @@ class RetrievalManager:
 
                 all_results.extend(vec_results)
             except Exception as e:
-                logger.error(f"知识库 {kb_id} 稠密检索失败: {e}")
-                raise RuntimeError(f"知识库 {kb_id} 稠密检索失败: {e}") from e
+                logger.error(f"知识库 {kb_id} 稠密检索失败: {e}", exc_info=True)
+                if len(kb_ids) == 1:
+                    raise RuntimeError(f"知识库 {kb_id} 稠密检索失败: {e}") from e
+                # multi-KB: skip the faulty KB and continue
 
         # 按相似度排序并返回 top_k
         all_results.sort(key=lambda x: x.similarity, reverse=True)

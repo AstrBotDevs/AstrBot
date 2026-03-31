@@ -1,4 +1,3 @@
-import traceback
 from pathlib import Path
 
 from astrbot.core import logger
@@ -56,8 +55,7 @@ class KnowledgeBaseManager:
             logger.error(f"知识库模块导入失败: {e}")
             logger.warning("请确保已安装所需依赖: pypdf, aiofiles, Pillow, rank-bm25")
         except Exception as e:
-            logger.error(f"知识库模块初始化失败: {e}")
-            logger.error(traceback.format_exc())
+            logger.error(f"知识库模块初始化失败: {e}", exc_info=True)
 
     async def _init_kb_database(self) -> None:
         self.kb_db = KBSQLiteDatabase(DB_PATH.as_posix())
@@ -80,8 +78,10 @@ class KnowledgeBaseManager:
                 await kb_helper.initialize()
             except Exception as e:
                 kb_helper.init_error = str(e)
-                logger.error(f"知识库 {record.kb_name}({record.kb_id}) 初始化失败: {e}")
-                logger.error(traceback.format_exc())
+                logger.error(
+                    f"知识库 {record.kb_name}({record.kb_id}) 初始化失败: {e}",
+                    exc_info=True,
+                )
             self.kb_insts[record.kb_id] = kb_helper
 
     async def create_kb(
@@ -210,12 +210,14 @@ class KnowledgeBaseManager:
 
         # re-initialize to pick up provider changes
         try:
+            await kb_helper.terminate()
             await kb_helper.initialize()
             kb_helper.init_error = None
         except Exception as e:
             kb_helper.init_error = str(e)
-            logger.error(f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败: {e}")
-            logger.error(traceback.format_exc())
+            logger.error(
+                f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败: {e}", exc_info=True
+            )
 
         return kb_helper
 
@@ -229,15 +231,20 @@ class KnowledgeBaseManager:
         """从指定知识库中检索相关内容"""
         kb_ids = []
         kb_id_helper_map = {}
+        unavailable_kbs = []
         for kb_name in kb_names:
             if kb_helper := await self.get_kb_by_name(kb_name):
                 if kb_helper.init_error:
-                    logger.error(f"知识库 {kb_name} 不可用: {kb_helper.init_error}")
-                    raise ValueError(
-                        f"知识库 {kb_name} 不可用: {kb_helper.init_error}",
-                    )
+                    unavailable_kbs.append((kb_name, kb_helper.init_error))
+                    logger.warning(f"知识库 {kb_name} 不可用: {kb_helper.init_error}")
+                    continue
                 kb_ids.append(kb_helper.kb.kb_id)
                 kb_id_helper_map[kb_helper.kb.kb_id] = kb_helper
+
+        # all requested KBs are unavailable
+        if not kb_ids and unavailable_kbs:
+            errors = "; ".join(f"{n}: {e}" for n, e in unavailable_kbs)
+            raise ValueError(f"所有请求的知识库均不可用: {errors}")
 
         if not kb_ids:
             return {}
