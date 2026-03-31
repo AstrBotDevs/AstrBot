@@ -1,8 +1,10 @@
 <template>
-  <div class="mt-4">
-    <div class="d-flex align-center ga-2 mb-2">
-      <h3 class="text-h5 font-weight-bold mb-0">{{ tm('models.configured') }}</h3>
-      <small style="color: grey;" v-if="availableCount">{{ tm('models.available') }} {{ availableCount }}</small>
+  <div class="provider-models-panel">
+    <div class="provider-models-head">
+      <div class="provider-models-title-wrap">
+        <h3 class="provider-models-title">{{ tm('models.configured') }}</h3>
+        <small v-if="availableCount" class="provider-models-subtitle">{{ tm('models.available') }} {{ availableCount }}</small>
+      </div>
       <v-text-field
         v-model="modelSearchProxy"
         density="compact"
@@ -11,37 +13,35 @@
         hide-details
         variant="solo-filled"
         flat
-        class="ml-1"
-        style="max-width: 240px;"
+        class="provider-models-search"
         :placeholder="tm('models.searchPlaceholder')"
       />
-      <v-spacer></v-spacer>
-      <v-btn
-        color="primary"
-        prepend-icon="mdi-download"
-        :loading="loadingModels"
-        @click="emit('fetch-models')"
-        variant="tonal"
-        size="small"
-      >
-        {{ isSourceModified ? tm('providerSources.saveAndFetchModels') : tm('providerSources.fetchModels') }}
-      </v-btn>
-      <v-btn
-        color="primary"
-        prepend-icon="mdi-pencil-plus"
-        variant="text"
-        size="small"
-        class="ml-1"
-        @click="emit('open-manual-model')"
-      >
-        {{ tm('models.manualAddButton') }}
-      </v-btn>
+      <div class="provider-models-actions">
+        <v-btn
+          color="primary"
+          prepend-icon="mdi-download"
+          :loading="loadingModels"
+          @click="emit('fetch-models')"
+          variant="tonal"
+          size="small"
+        >
+          {{ isSourceModified ? tm('providerSources.saveAndFetchModels') : tm('providerSources.fetchModels') }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          prepend-icon="mdi-pencil-plus"
+          variant="text"
+          size="small"
+          @click="emit('open-manual-model')"
+        >
+          {{ tm('models.manualAddButton') }}
+        </v-btn>
+      </div>
     </div>
 
     <v-list
       density="compact"
-      class="rounded-lg border"
-      style="max-height: 520px; overflow-y: auto; font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;"
+      class="provider-models-list"
     >
       <template v-if="entries.length > 0">
         <template v-for="entry in entries" :key="entry.type === 'configured' ? `provider-${entry.provider.id}` : `model-${entry.model}`">
@@ -55,7 +55,7 @@
                 <v-list-item-title class="font-weight-medium text-truncate">
                   {{ entry.provider.id }}
                 </v-list-item-title>
-            <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1" style="font-family: monospace;">
+            <v-list-item-subtitle class="provider-model-subtitle d-flex align-center ga-1">
               <span>{{ entry.provider.model }}</span>
               <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
                 mdi-eye-outline
@@ -124,7 +124,7 @@
             <template #activator="{ props }">
               <v-list-item v-bind="props" class="cursor-pointer" @click="emit('add-model-provider', entry.model)">
                 <v-list-item-title>{{ entry.model }}</v-list-item-title>
-            <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1">
+            <v-list-item-subtitle class="provider-model-subtitle d-flex align-center ga-1">
               <span>{{ entry.model }}</span>
               <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
                 mdi-eye-outline
@@ -231,11 +231,87 @@ const isProviderTesting = (providerId) => props.testingProviders.includes(provid
 </script>
 
 <style scoped>
-.border {
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+.provider-models-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.provider-models-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.provider-models-title-wrap {
+  min-width: 0;
+}
+
+.provider-models-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+  font-weight: 650;
+}
+
+.provider-models-subtitle {
+  display: block;
+  margin-top: 6px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 12px;
+}
+
+.provider-models-search {
+  max-width: 240px;
+}
+
+.provider-models-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.provider-models-list {
+  max-height: 520px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 14px;
+  background: rgb(var(--v-theme-surface));
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+.provider-compact-item {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.provider-models-list :deep(.v-list-item:last-child) {
+  border-bottom: 0;
+}
+
+.provider-model-subtitle {
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
 .cursor-pointer {
   cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .provider-models-head {
+    align-items: stretch;
+  }
+
+  .provider-models-search {
+    max-width: none;
+    width: 100%;
+  }
+
+  .provider-models-actions {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 </style>
