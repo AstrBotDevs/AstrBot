@@ -154,7 +154,7 @@ class InternalAgentSubStage(Stage):
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
-    async def process(
+    async def process(  # type: ignore[invalid-method-override]
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
@@ -459,7 +459,7 @@ class InternalAgentSubStage(Stage):
                     consumed_marked=follow_up_consumed_marked,
                 )
 
-    async def _save_to_history(
+    async def _save_to_history(  # type: ignore[invalid-method-override]
         self,
         event: AstrMessageEvent,
         req: ProviderRequest,

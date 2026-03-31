@@ -39,25 +39,16 @@
     "subtitle": "Customize theme primary and secondary colors. Changes apply immediately and are stored locally in your browser.",
     "customize": {
       "title": "Theme Colors",
+      "colors": "Custom Colors",
       "preset": "Color Scheme",
       "primary": "Primary Color",
       "secondary": "Secondary Color",
       "reset": "Reset to Default",
-      "presetApplied": "Theme applied"
-    }
-  },
-  "style": {
-    "title": "Theme",
-    "color": {
-      "title": "Theme Colors",
-      "subtitle": "Customize theme primary and secondary colors. Changes apply immediately and are stored locally in your browser.",
-      "primary": "Primary Color",
-      "secondary": "Secondary Color"
-    },
-    "autoSync": {
-      "title": "Auto-Switch Light/Dark Theme",
-      "subtitle": "Automatically switch between light and dark themes based on your system's appearance setting.",
-      "label": "Enable Auto-Switch"
+      "presetApplied": "Theme applied",
+      "light": "Light Mode",
+      "dark": "Dark Mode",
+      "auto": "System Mode",
+      "autoSwitchDesc": "Theme will automatically switch based on your browser's appearance setting when enable system mode"
     }
   },
   "reset": {

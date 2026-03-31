@@ -181,7 +181,7 @@ class ThirdPartyAgentSubStage(Stage):
             source="Third-party runner config",
         )
 
-    async def _resolve_persona_custom_error_message(
+    async def _resolve_persona_custom_error_message(  # type: ignore[invalid-method-override]
         self, event: AstrMessageEvent
     ) -> str | None:
         try:
@@ -199,7 +199,7 @@ class ThirdPartyAgentSubStage(Stage):
             logger.debug("Failed to resolve persona custom error message: %s", e)
             return None
 
-    async def _handle_streaming_response(
+    async def _handle_streaming_response(  # type: ignore[invalid-method-override]
         self,
         *,
         runner: "BaseAgentRunner",
@@ -246,7 +246,7 @@ class ThirdPartyAgentSubStage(Stage):
                 ),
             )
 
-    async def _handle_non_streaming_response(
+    async def _handle_non_streaming_response(  # type: ignore[invalid-method-override]
         self,
         *,
         runner: "BaseAgentRunner",
@@ -281,7 +281,7 @@ class ThirdPartyAgentSubStage(Stage):
         # Second yield keeps scheduler progress consistent after final result update.
         yield
 
-    async def process(
+    async def process(  # type: ignore[invalid-method-override]
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:

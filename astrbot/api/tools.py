@@ -25,7 +25,14 @@ from typing import Any
 from astrbot._internal.tools.base import FunctionTool, ToolSchema, ToolSet
 from astrbot._internal.tools.registry import FunctionToolManager
 
-__all__ = ["FunctionTool", "ToolRegistry", "ToolSet", "get_registry", "tool", "ToolSchema"]
+__all__ = [
+    "FunctionTool",
+    "ToolRegistry",
+    "ToolSet",
+    "get_registry",
+    "tool",
+    "ToolSchema",
+]
 
 
 class ToolRegistry:

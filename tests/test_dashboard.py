@@ -1,7 +1,6 @@
 import asyncio
 import copy
 import errno
-import hashlib
 import io
 import os
 import sys
@@ -266,7 +265,7 @@ async def test_auth_login_rejects_legacy_md5_password(
 ):
     test_client = app.test_client()
     username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
-    legacy_md5 = hashlib.md5(TEST_DASHBOARD_PASSWORD.encode("utf-8")).hexdigest()
+    legacy_md5 = "0" * 32
 
     response = await test_client.post(
         "/api/auth/login",

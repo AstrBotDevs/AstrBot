@@ -32,7 +32,7 @@
       <v-card-subtitle>{{ tm("theme.subtitle") }}</v-card-subtitle>
       <v-card-text>
         <!-- Row 1: Preset selector + theme mode -->
-        <div class="d-flex flex-wrap align-center ga-4 mb-4">
+        <div class="d-flex flex-wrap align-center ga-4 mb-4 ml-3">
           <v-select
             v-model="selectedThemePreset"
             :items="presetOptions"
@@ -44,25 +44,39 @@
             @update:model-value="applyThemePreset"
           />
           <v-btn-toggle
-            v-model="isDarkMode"
+            v-model="themeMode"
             mandatory
             density="compact"
             color="primary"
-            @update:model-value="toggleThemeMode"
           >
             <v-btn value="light" size="small">
               <v-icon class="mr-1" size="18">mdi-white-balance-sunny</v-icon>
-              亮色
+              {{ tm("theme.customize.light")}}
             </v-btn>
             <v-btn value="dark" size="small">
               <v-icon class="mr-1" size="18">mdi-moon-waning-crescent</v-icon>
-              暗色
+              {{ tm("theme.customize.dark")}}
+            </v-btn>
+            <v-btn value="auto" size="small">
+              <v-icon class="mr-1" size="18">mdi-sync</v-icon>
+              {{ tm("theme.customize.auto")}}
             </v-btn>
           </v-btn-toggle>
+          <v-tooltip location="top">
+            <template #activator="{ props }">
+              <v-icon
+                v-bind="props"
+                size="16"
+                color="primary"
+                class="ml-1"
+              >mdi-help-circle-outline</v-icon>
+            </template>
+            <span>{{ tm("theme.customize.autoSwitchDesc") }}</span>
+          </v-tooltip>
         </div>
 
         <!-- Row 2: Color pickers + reset -->
-        <v-card variant="outlined" class="pa-4">
+        <v-card variant="outlined" class="pa-3">
           <div class="text-body-2 text-medium-emphasis mb-3">
             {{ tm("theme.customize.colors") }}
           </div>
@@ -344,14 +358,24 @@ const toastStore = useToastStore();
 const theme = useTheme();
 const customizer = useCustomizerStore();
 
-// Theme mode toggle (light/dark)
-const isDarkMode = ref(customizer.isDarkTheme ? "dark" : "light");
+// Theme mode toggle (light/dark/auto)
+const themeMode = computed({
+  get() {
+    if (customizer.autoSwitchTheme) return "auto";
+    return customizer.isDarkTheme ? "dark" : "light";
+  },
+  set(mode: string) {
+    if (mode === "auto") {
+      customizer.SET_AUTO_SYNC(true);
+      customizer.APPLY_SYSTEM_THEME();
+      return;
+    }
 
-const toggleThemeMode = (mode: string) => {
-  const newTheme = mode === "dark" ? DARK_THEME_NAME : LIGHT_THEME_NAME;
-  customizer.SET_UI_THEME(newTheme);
-  vuetify.theme.change(newTheme);
-};
+    customizer.SET_AUTO_SYNC(false);
+    const newTheme = mode === "dark" ? DARK_THEME_NAME : LIGHT_THEME_NAME;
+    customizer.SET_UI_THEME(newTheme);
+  },
+});
 
 const getStoredColor = (key, fallback) => {
   const stored =

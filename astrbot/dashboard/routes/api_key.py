@@ -84,7 +84,9 @@ class ApiKeyRoute(Route):
             ]
             normalized_scopes = list(dict.fromkeys(normalized_scopes))
             if not normalized_scopes:
-                return Response().error("At least one valid scope is required").to_json()
+                return (
+                    Response().error("At least one valid scope is required").to_json()
+                )
         else:
             return Response().error("Invalid scopes").to_json()
 

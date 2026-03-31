@@ -199,17 +199,17 @@ class BoxliteBooter(ComputerBooter):
             sb_url=f"http://127.0.0.1:{random_port}"
         )
         self._fs = ShipyardFileSystemComponent(
-            client=self.mocked,
+            client=self.mocked,  # type: ignore[arg-type]
             ship_id=self.box.id,
             session_id=session_id,
         )
         self._python = ShipyardPythonComponent(
-            client=self.mocked,
+            client=self.mocked,  # type: ignore[arg-type]
             ship_id=self.box.id,
             session_id=session_id,
         )
         self._shell = ShipyardShellComponent(
-            client=self.mocked,
+            client=self.mocked,  # type: ignore[arg-type]
             ship_id=self.box.id,
             session_id=session_id,
         )
@@ -253,7 +253,7 @@ class BoxliteBooter(ComputerBooter):
             PythonTool,
         )
 
-        return (
+        return (  # type: ignore[return-value]
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),

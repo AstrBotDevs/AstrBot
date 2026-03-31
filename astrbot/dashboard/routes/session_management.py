@@ -241,7 +241,8 @@ class SessionManagementRoute(Route):
                         "available_kbs": available_kbs,
                         "available_rule_keys": AVAILABLE_SESSION_RULE_KEYS,
                     }
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"获取规则列表失败: {e!s}")
@@ -280,7 +281,8 @@ class SessionManagementRoute(Route):
 
             return (
                 Response()
-                .ok({"message": f"规则 {rule_key} 已更新", "umo": umo}).to_json()
+                .ok({"message": f"规则 {rule_key} 已更新", "umo": umo})
+                .to_json()
             )
         except Exception as e:
             logger.error(f"更新会话规则失败: {e!s}")
@@ -310,12 +312,15 @@ class SessionManagementRoute(Route):
                 await sp.session_remove(umo, rule_key)
                 return (
                     Response()
-                    .ok({"message": f"规则 {rule_key} 已删除", "umo": umo}).to_json()
+                    .ok({"message": f"规则 {rule_key} 已删除", "umo": umo})
+                    .to_json()
                 )
             else:
                 # 删除该 umo 的所有规则
                 await sp.clear_async("umo", umo)
-                return Response().ok({"message": "所有规则已删除", "umo": umo}).to_json()
+                return (
+                    Response().ok({"message": "所有规则已删除", "umo": umo}).to_json()
+                )
         except Exception as e:
             logger.error(f"删除会话规则失败: {e!s}")
             return Response().error(f"删除会话规则失败: {e!s}").to_json()
@@ -408,7 +413,8 @@ class SessionManagementRoute(Route):
                             "success_count": success_count,
                             "failed_umos": failed_umos,
                         }
-                    ).to_json()
+                    )
+                    .to_json()
                 )
             else:
                 return (
@@ -418,7 +424,8 @@ class SessionManagementRoute(Route):
                             "message": message,
                             "success_count": success_count,
                         }
-                    ).to_json()
+                    )
+                    .to_json()
                 )
         except Exception as e:
             logger.error(f"批量删除会话规则失败: {e!s}")
@@ -593,7 +600,8 @@ class SessionManagementRoute(Route):
                         "available_tts_providers": available_tts_providers,
                         "available_stt_providers": available_stt_providers,
                     }
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"获取会话状态列表失败: {e!s}")
@@ -710,7 +718,8 @@ class SessionManagementRoute(Route):
                         "failed_count": len(failed_umos),
                         "failed_umos": failed_umos,
                     }
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"批量更新服务状态失败: {e!s}")
@@ -737,7 +746,8 @@ class SessionManagementRoute(Route):
             if not provider_type or not provider_id:
                 return (
                     Response()
-                    .error("缺少必要参数: provider_type, provider_id").to_json()
+                    .error("缺少必要参数: provider_type, provider_id")
+                    .to_json()
                 )
 
             # 转换 provider_type
@@ -749,7 +759,8 @@ class SessionManagementRoute(Route):
             if provider_type not in provider_type_map:
                 return (
                     Response()
-                    .error(f"不支持的 provider_type: {provider_type}").to_json()
+                    .error(f"不支持的 provider_type: {provider_type}")
+                    .to_json()
                 )
 
             provider_type_enum = provider_type_map[provider_type]
@@ -817,7 +828,8 @@ class SessionManagementRoute(Route):
                         "failed_count": len(failed_umos),
                         "failed_umos": failed_umos,
                     }
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"批量更新 Provider 失败: {e!s}")
@@ -889,7 +901,8 @@ class SessionManagementRoute(Route):
                             "umo_count": len(umos),
                         },
                     }
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"创建分组失败: {e!s}")
@@ -945,7 +958,8 @@ class SessionManagementRoute(Route):
                             "umo_count": len(group["umos"]),
                         },
                     }
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(f"更新分组失败: {e!s}")

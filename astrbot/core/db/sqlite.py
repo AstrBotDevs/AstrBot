@@ -617,7 +617,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(PlatformMessageHistory.created_at) < before,
                     ),
                 )
-                return int(result.rowcount or 0)
+                return int(result.rowcount or 0)  # type: ignore[union-attr]
 
     async def delete_platform_message_after(
         self,
@@ -636,7 +636,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(PlatformMessageHistory.created_at) > after,
                     ),
                 )
-                return int(result.rowcount or 0)
+                return int(result.rowcount or 0)  # type: ignore[union-attr]
 
     async def delete_all_platform_message_history(
         self,
@@ -653,7 +653,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(PlatformMessageHistory.user_id) == user_id,
                     ),
                 )
-                return int(result.rowcount or 0)
+                return int(result.rowcount or 0)  # type: ignore[union-attr]
 
     async def find_platform_message_history_by_idempotency_key(
         self,

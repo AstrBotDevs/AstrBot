@@ -1,7 +1,6 @@
 import base64
 import os
 import sys
-from collections.abc import AsyncGenerator
 from typing import Any
 
 import astrbot.core.message.components as Comp

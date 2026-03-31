@@ -59,7 +59,7 @@ class BrowserExecTool(FunctionTool):
         }
     )
 
-    async def call(
+    async def call(  # type: ignore[invalid-method-override]
         self,
         context: ContextWrapper[AstrAgentContext],
         cmd: str = "",
@@ -122,7 +122,7 @@ class BrowserBatchExecTool(FunctionTool):
         }
     )
 
-    async def call(
+    async def call(  # type: ignore[invalid-method-override]
         self,
         context: ContextWrapper[AstrAgentContext],
         commands: list[str] | None = None,
@@ -171,7 +171,7 @@ class RunBrowserSkillTool(FunctionTool):
         }
     )
 
-    async def call(
+    async def call(  # type: ignore[invalid-method-override]
         self,
         context: ContextWrapper[AstrAgentContext],
         skill_key: str = "",

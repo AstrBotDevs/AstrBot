@@ -154,7 +154,8 @@ class ToolsRoute(Route):
             if not has_valid_config:
                 return (
                     Response()
-                    .error("A valid server configuration is required").to_json()
+                    .error("A valid server configuration is required")
+                    .to_json()
                 )
 
             config = self.tool_mgr.load_mcp_config()
@@ -192,7 +193,8 @@ class ToolsRoute(Route):
                     return Response().error(err_msg).to_json()
                 return (
                     Response()
-                    .ok(None, f"Successfully added MCP server {name}").to_json()
+                    .ok(None, f"Successfully added MCP server {name}")
+                    .to_json()
                 )
             return Response().error("Failed to save configuration").to_json()
         except Exception as e:
@@ -283,7 +285,8 @@ class ToolsRoute(Route):
                                 Response()
                                 .error(
                                     f"Timed out while disabling MCP server {old_name} before enabling: {e!s}"
-                                ).to_json()
+                                )
+                                .to_json()
                             )
                         except Exception as e:
                             logger.error(traceback.format_exc())
@@ -291,7 +294,8 @@ class ToolsRoute(Route):
                                 Response()
                                 .error(
                                     f"Failed to disable MCP server {old_name} before enabling: {e!s}"
-                                ).to_json()
+                                )
+                                .to_json()
                             )
                     try:
                         await self.tool_mgr.enable_mcp_server(
@@ -302,13 +306,15 @@ class ToolsRoute(Route):
                     except TimeoutError:
                         return (
                             Response()
-                            .error(f"Timed out while enabling MCP server {name}.").to_json()
+                            .error(f"Timed out while enabling MCP server {name}.")
+                            .to_json()
                         )
                     except Exception as e:
                         logger.error(traceback.format_exc())
                         return (
                             Response()
-                            .error(f"Failed to enable MCP server {name}: {e!s}").to_json()
+                            .error(f"Failed to enable MCP server {name}: {e!s}")
+                            .to_json()
                         )
                 # 如果要停用服务器
                 elif old_name in self.tool_mgr.mcp_server_runtime_view:
@@ -317,18 +323,21 @@ class ToolsRoute(Route):
                     except TimeoutError:
                         return (
                             Response()
-                            .error(f"Timed out while disabling MCP server {old_name}.").to_json()
+                            .error(f"Timed out while disabling MCP server {old_name}.")
+                            .to_json()
                         )
                     except Exception as e:
                         logger.error(traceback.format_exc())
                         return (
                             Response()
-                            .error(f"Failed to disable MCP server {old_name}: {e!s}").to_json()
+                            .error(f"Failed to disable MCP server {old_name}: {e!s}")
+                            .to_json()
                         )
 
                 return (
                     Response()
-                    .ok(None, f"Successfully updated MCP server {name}").to_json()
+                    .ok(None, f"Successfully updated MCP server {name}")
+                    .to_json()
                 )
             return Response().error("Failed to save configuration").to_json()
         except Exception as e:
@@ -357,17 +366,20 @@ class ToolsRoute(Route):
                     except TimeoutError:
                         return (
                             Response()
-                            .error(f"Timed out while disabling MCP server {name}.").to_json()
+                            .error(f"Timed out while disabling MCP server {name}.")
+                            .to_json()
                         )
                     except Exception as e:
                         logger.error(traceback.format_exc())
                         return (
                             Response()
-                            .error(f"Failed to disable MCP server {name}: {e!s}").to_json()
+                            .error(f"Failed to disable MCP server {name}: {e!s}")
+                            .to_json()
                         )
                 return (
                     Response()
-                    .ok(None, f"Successfully deleted MCP server {name}").to_json()
+                    .ok(None, f"Successfully deleted MCP server {name}")
+                    .to_json()
                 )
             return Response().error("Failed to save configuration").to_json()
         except Exception as e:
@@ -390,27 +402,31 @@ class ToolsRoute(Route):
                         Response()
                         .error(
                             "Only one MCP server configuration can be tested at a time"
-                        ).to_json()
+                        )
+                        .to_json()
                     )
                 try:
                     config = _extract_mcp_server_config(mcp_servers)
                 except EmptyMcpServersError:
                     return (
                         Response()
-                        .error("MCP server configuration cannot be empty").to_json()
+                        .error("MCP server configuration cannot be empty")
+                        .to_json()
                     )
                 except ValueError as e:
                     return Response().error(f"{e!s}").to_json()
             elif not config:
                 return (
                     Response()
-                    .error("MCP server configuration cannot be empty").to_json()
+                    .error("MCP server configuration cannot be empty")
+                    .to_json()
                 )
 
             tools_name = await self.tool_mgr.test_mcp_server_connection(config)
             return (
                 Response()
-                .ok(data=tools_name, message="🎉 MCP server is available!").to_json()
+                .ok(data=tools_name, message="🎉 MCP server is available!")
+                .to_json()
             )
 
         except Exception as e:
@@ -467,7 +483,8 @@ class ToolsRoute(Route):
             if not tool_name or action is None:
                 return (
                     Response()
-                    .error("Missing required parameters: name or activate").to_json()
+                    .error("Missing required parameters: name or activate")
+                    .to_json()
                 )
 
             # Internal tools cannot be toggled by users
@@ -487,7 +504,8 @@ class ToolsRoute(Route):
                 return Response().ok(None, "Operation successful.").to_json()
             return (
                 Response()
-                .error(f"Tool {tool_name} does not exist or the operation failed.").to_json()
+                .error(f"Tool {tool_name} does not exist or the operation failed.")
+                .to_json()
             )
 
         except Exception as e:

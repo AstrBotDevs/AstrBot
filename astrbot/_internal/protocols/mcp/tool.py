@@ -1,4 +1,5 @@
 """MCP tool wrapper."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -10,7 +11,6 @@ except (ModuleNotFoundError, ImportError):
     mcp: Any = None
 
 from astrbot._internal.tools.base import FunctionTool
-
 from mcp.types import Tool as MCPTool_T
 
 if TYPE_CHECKING:

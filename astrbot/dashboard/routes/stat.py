@@ -4,8 +4,8 @@ import re
 import threading
 import time
 import traceback
-from dataclasses import asdict
 from collections import defaultdict
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from functools import cmp_to_key
 from pathlib import Path
@@ -72,7 +72,8 @@ class StatRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         await self.core_lifecycle.restart()
@@ -99,7 +100,8 @@ class StatRoute(Route):
                     "change_pwd_hint": self.is_default_cred(),
                     "need_migration": need_migration,
                 },
-            ).to_json()
+            )
+            .to_json()
         )
 
     async def get_start_time(self):
@@ -439,7 +441,9 @@ class StatRoute(Route):
                     }
                     return Response().ok(data=ret).to_json()
                 return (
-                    Response().error(f"Failed. Status code: {response.status}").to_json()
+                    Response()
+                    .error(f"Failed. Status code: {response.status}")
+                    .to_json()
                 )
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -477,12 +481,14 @@ class StatRoute(Route):
             if not await anyio.Path(changelog_path).exists():
                 return (
                     Response()
-                    .error(f"Changelog for version {version} not found").to_json()
+                    .error(f"Changelog for version {version} not found")
+                    .to_json()
                 )
             if not await anyio.Path(changelog_path).is_file():
                 return (
                     Response()
-                    .error(f"Changelog for version {version} not found").to_json()
+                    .error(f"Changelog for version {version} not found")
+                    .to_json()
                 )
 
             async with await anyio.open_file(changelog_path, encoding="utf-8") as f:

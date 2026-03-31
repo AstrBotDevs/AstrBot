@@ -122,7 +122,7 @@ class ResultDecorateStage(Stage):
                 result.append(seg)
         return result if result else [text]
 
-    async def process(
+    async def process(  # type: ignore[invalid-method-override]
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:

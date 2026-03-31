@@ -182,7 +182,8 @@ class TUIChatRoute(Route):
                     "filename": filename,
                     "type": attach_type,
                 }
-            ).to_json()
+            )
+            .to_json()
         )
 
     async def _build_user_message_parts(self, message: str | list) -> list[dict]:
@@ -266,7 +267,8 @@ class TUIChatRoute(Route):
         if not webchat_message_parts_have_content(message_parts):
             return (
                 Response()
-                .error("Message content is empty (reply only is not allowed)").to_json()
+                .error("Message content is empty (reply only is not allowed)")
+                .to_json()
             )
 
         message_id = str(uuid.uuid4())
@@ -597,7 +599,8 @@ class TUIChatRoute(Route):
                     "failed_count": len(failed_items),
                     "failed_items": failed_items,
                 }
-            ).to_json()
+            )
+            .to_json()
         )
 
     def _extract_attachment_ids(self, history_list) -> list[str]:
@@ -651,7 +654,8 @@ class TUIChatRoute(Route):
                     "session_id": session.session_id,
                     "platform_id": session.platform_id,
                 }
-            ).to_json()
+            )
+            .to_json()
         )
 
     async def get_sessions(self):

@@ -59,7 +59,8 @@ class UpdateRoute(Route):
             if type_ == "dashboard":
                 return (
                     Response()
-                    .ok({"has_new_version": dv != f"v{VERSION}", "current_version": dv}).to_json()
+                    .ok({"has_new_version": dv != f"v{VERSION}", "current_version": dv})
+                    .to_json()
                 )
             ret = await self.astrbot_updator.check_update(None, None, False)
             return Response(
@@ -121,12 +122,14 @@ class UpdateRoute(Route):
                 await self.core_lifecycle.restart()
                 ret = (
                     Response()
-                    .ok(None, "更新成功,AstrBot 将在 2 秒内全量重启以应用新的代码｡").to_json()
+                    .ok(None, "更新成功,AstrBot 将在 2 秒内全量重启以应用新的代码｡")
+                    .to_json()
                 )
                 return ret, 200, CLEAR_SITE_DATA_HEADERS
             ret = (
                 Response()
-                .ok(None, "更新成功,AstrBot 将在下次启动时应用新的代码｡").to_json()
+                .ok(None, "更新成功,AstrBot 将在下次启动时应用新的代码｡")
+                .to_json()
             )
             return ret, 200, CLEAR_SITE_DATA_HEADERS
         except Exception as e:
@@ -150,7 +153,8 @@ class UpdateRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         data = await request.json

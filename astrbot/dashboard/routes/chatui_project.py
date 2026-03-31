@@ -55,7 +55,8 @@ class ChatUIProjectRoute(Route):
                     "created_at": to_utc_isoformat(project.created_at),
                     "updated_at": to_utc_isoformat(project.updated_at),
                 }
-            ).to_json()
+            )
+            .to_json()
         )
 
     async def list_projects(self):
@@ -105,7 +106,8 @@ class ChatUIProjectRoute(Route):
                     "created_at": to_utc_isoformat(project.created_at),
                     "updated_at": to_utc_isoformat(project.updated_at),
                 }
-            ).to_json()
+            )
+            .to_json()
         )
 
     async def update_chatui_project(self):

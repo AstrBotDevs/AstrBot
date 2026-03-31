@@ -149,7 +149,8 @@ class SkillsRoute(Route):
                         "runtime": runtime,
                         "sandbox_cache": skill_mgr.get_sandbox_skills_cache_status(),
                     }
-                ).to_json()
+                )
+                .to_json()
             )
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -159,7 +160,8 @@ class SkillsRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         temp_path = None
@@ -200,7 +202,8 @@ class SkillsRoute(Route):
 
             return (
                 Response()
-                .ok({"name": skill_name}, "Skill uploaded successfully.").to_json()
+                .ok({"name": skill_name}, "Skill uploaded successfully.")
+                .to_json()
             )
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -217,7 +220,8 @@ class SkillsRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         try:
@@ -320,7 +324,8 @@ class SkillsRoute(Route):
                             "skipped": skipped,
                         },
                         message,
-                    ).to_json()
+                    )
+                    .to_json()
                 )
             if failed_count == 0 and success_count == 0:
                 message = f"All {total} file(s) were skipped."
@@ -334,7 +339,8 @@ class SkillsRoute(Route):
                             "skipped": skipped,
                         },
                         message,
-                    ).to_json()
+                    )
+                    .to_json()
                 )
             if success_count == 0 and skipped_count == 0:
                 message = f"Upload failed for all {total} file(s)."
@@ -358,7 +364,8 @@ class SkillsRoute(Route):
                         "skipped": skipped,
                     },
                     message,
-                ).to_json()
+                )
+                .to_json()
             )
 
         except Exception as e:
@@ -379,7 +386,8 @@ class SkillsRoute(Route):
                     Response()
                     .error(
                         "Sandbox preset skill cannot be downloaded from local skill files."
-                    ).to_json()
+                    )
+                    .to_json()
                 )
 
             skill_dir = Path(skill_mgr.skills_root) / name
@@ -415,7 +423,8 @@ class SkillsRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
         try:
             data = await request.get_json()
@@ -433,7 +442,8 @@ class SkillsRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
         try:
             data = await request.get_json()
@@ -511,7 +521,8 @@ class SkillsRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/evaluate requested.")
         data = await request.get_json()
@@ -540,7 +551,8 @@ class SkillsRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/promote requested.")
         data = await request.get_json()
@@ -596,7 +608,8 @@ class SkillsRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/rollback requested.")
         data = await request.get_json()
@@ -615,7 +628,8 @@ class SkillsRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/sync requested.")
         data = await request.get_json()
@@ -649,7 +663,8 @@ class SkillsRoute(Route):
                         "map_path": result.map_path,
                         "synced_at": result.synced_at,
                     }
-                ).to_json()
+                )
+                .to_json()
             )
 
         return await self._with_neo_client(_do)
@@ -658,7 +673,8 @@ class SkillsRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/delete-candidate requested.")
         data = await request.get_json()
@@ -678,7 +694,8 @@ class SkillsRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
         logger.info("[Neo] POST /skills/neo/delete-release requested.")
         data = await request.get_json()

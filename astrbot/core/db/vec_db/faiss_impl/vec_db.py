@@ -35,7 +35,7 @@ class FaissVecDB(BaseVecDB):
     async def initialize(self) -> None:
         await self.document_storage.initialize()
 
-    async def insert(
+    async def insert(  # type: ignore[invalid-method-override]
         self,
         content: str,
         metadata: dict | None = None,
@@ -55,7 +55,7 @@ class FaissVecDB(BaseVecDB):
         await self.embedding_storage.insert(vector, int_id)
         return int_id
 
-    async def insert_batch(
+    async def insert_batch(  # type: ignore[invalid-method-override]
         self,
         contents: list[str],
         metadatas: list[dict] | None = None,
@@ -106,7 +106,7 @@ class FaissVecDB(BaseVecDB):
         await self.embedding_storage.insert_batch(vectors_array, int_ids)
         return int_ids
 
-    async def retrieve(
+    async def retrieve(  # type: ignore[invalid-method-override]
         self,
         query: str,
         k: int = 5,
@@ -171,7 +171,9 @@ class FaissVecDB(BaseVecDB):
 
         return top_k_results
 
-    async def delete(self, doc_id: str) -> None:
+    async def delete(  # type: ignore[invalid-method-override]
+        self, doc_id: str
+    ) -> None:
         """删除一条文档块(chunk)"""
         # 获得对应的 int id
         result = await self.document_storage.get_document_by_doc_id(doc_id)

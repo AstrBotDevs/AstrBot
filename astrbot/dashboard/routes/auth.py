@@ -48,7 +48,8 @@ class AuthRoute(Route):
             await asyncio.sleep(3)
             return (
                 Response()
-                .error("管理员密码未设置，请先运行 'astrbot conf admin' 命令设置密码").to_json()
+                .error("管理员密码未设置，请先运行 'astrbot conf admin' 命令设置密码")
+                .to_json()
             )
 
         # Normal login flow - credentials must match stored admin account
@@ -64,7 +65,8 @@ class AuthRoute(Route):
                         "username": stored_username,
                         "change_pwd_hint": False,
                     },
-                ).to_json()
+                )
+                .to_json()
             )
 
         # Security: Don't reveal whether it's username or password error
@@ -75,7 +77,8 @@ class AuthRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode").to_json()
+                .error("You are not permitted to do this operation in demo mode")
+                .to_json()
             )
 
         stored_password_hash = self.config["dashboard"]["password"]

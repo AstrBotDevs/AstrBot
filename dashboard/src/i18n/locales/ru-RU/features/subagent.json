@@ -1,4 +1,7 @@
 {
+    "header": {
+        "eyebrow": "Orchestration"
+    },
     "page": {
         "title": "Оркестрация SubAgent",
         "beta": "Экспериментально",
@@ -8,8 +11,19 @@
         "refresh": "Обновить",
         "save": "Сохранить",
         "add": "Добавить SubAgent",
+        "expand": "Развернуть",
+        "collapse": "Свернуть",
         "delete": "Удалить",
         "close": "Закрыть"
+    },
+    "overview": {
+        "totalAgents": "Всего SubAgent",
+        "totalAgentsNote": "Количество настроенных под-агентов",
+        "enabledAgents": "Активные агенты",
+        "enabledAgentsNote": "Под-агенты, доступные для handoff",
+        "mainOrchestration": "Основная оркестрация",
+        "boundPersonas": "Привязанные персонажи",
+        "boundPersonasNote": "Под-агенты с выбранной персоной"
     },
     "switches": {
         "enable": "Включить оркестрацию SubAgent",
@@ -23,7 +37,9 @@
     },
     "section": {
         "title": "Субагенты",
-        "globalSettings": "Глобальные настройки"
+        "subtitle": "Настройте делегируемых агентов, персонажей и описания для основного LLM",
+        "globalSettings": "Глобальные настройки",
+        "agentSetup": "Настройка агента"
     },
     "cards": {
         "statusEnabled": "Включено",
@@ -33,7 +49,9 @@
         "switchLabel": "Включить",
         "previewTitle": "Предпросмотр: инструмент handoff, видимый основному LLM",
         "personaChip": "Персонаж: {id}",
-        "personaPreview": "ПРЕДПРОСМОТР ПЕРСОНАЖА"
+        "personaPreview": "Предпросмотр персонажа",
+        "noDescription": "Описание пока не задано",
+        "previewHint": "Просмотрите выбранную персону, чтобы проверить цель handoff."
     },
     "form": {
         "nameLabel": "Имя агента (используется для transfer_to_{name})",
@@ -48,6 +66,9 @@
     "messages": {
         "loadConfigFailed": "Не удалось загрузить конфигурацию",
         "loadPersonaFailed": "Не удалось загрузить список персонажей",
+        "unsavedChangesNotice": "На странице есть несохраненные изменения. Сохраните их перед уходом.",
+        "unsavedChangesLeaveConfirm": "Есть несохраненные изменения. При уходе со страницы они будут потеряны. Продолжить?",
+        "unsavedChangesReloadConfirm": "Есть несохраненные изменения. Обновление конфигурации их сбросит. Продолжить?",
         "nameMissing": "У SubAgent отсутствует имя",
         "nameInvalid": "Недопустимое имя SubAgent: только строчные латинские буквы/цифры/подчеркивания, должно начинаться с буквы",
         "nameDuplicate": "Дублирующееся имя SubAgent: {name}",

@@ -191,7 +191,8 @@ class OpenApiRoute(Route):
                 )
                 return (
                     Response()
-                    .error(f"Failed to update chat config route: {e}").to_json()
+                    .error(f"Failed to update chat config route: {e}")
+                    .to_json()
                 )
         try:
             return await self.chat_route.chat(post_data=post_data)
@@ -640,7 +641,8 @@ class OpenApiRoute(Route):
                     "page_size": page_size,
                     "total": total,
                 }
-            ).to_json()
+            )
+            .to_json()
         )
 
     async def get_chat_configs(self):
@@ -684,7 +686,8 @@ class OpenApiRoute(Route):
         if not platform_inst:
             return (
                 Response()
-                .error(f"Bot not found or not running for platform: {platform_id}").to_json()
+                .error(f"Bot not found or not running for platform: {platform_id}")
+                .to_json()
             )
 
         try:
