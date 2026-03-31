@@ -73,6 +73,9 @@ dependencies = [
   "openai-agents>=0.12.5",
   "fastapi>=0.135.1",
 ]
+[project.urls]
+Homepage = "https://astrbot.app"
+Repository = "https://github.com/AstrBotDevs/AstrBot"
 [project.scripts]
 astrbot = "astrbot:cli"
 astrbot-rs = "astrbot:cli_rs"
@@ -90,8 +93,7 @@ dev = [
 
 
 
-[project.urls]
-Repository = "https://github.com/AstrBotDevs/AstrBot"
+
 
 [tool.ruff]
 exclude = [
@@ -134,12 +136,17 @@ ignore = [
 ]
 
 [tool.pyright]
+stubPath = "types"
 typeCheckingMode = "basic"
-pythonVersion = "3.10"
+pythonVersion = "3.12"
 reportMissingTypeStubs = false
 reportMissingImports = false
 include = ["astrbot"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests", "tests/**", "**/tests/**"]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+mypy_path = "types"
 
 [tool.hatch.metadata]
 allow-direct-references = true
