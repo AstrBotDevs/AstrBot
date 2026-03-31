@@ -335,6 +335,7 @@ const pinnedPlugins = computed(() => {
                 :plugins="filteredPlugins"
                 :loading="loading_"
                 :show-reserved="showReserved"
+                :pinned-names="pinnedNames"
                 installed-view-mode="mod"
                 :updatable-count="updatableExtensions.length"
                 :search="pluginSearch"
@@ -352,6 +353,7 @@ const pinnedPlugins = computed(() => {
                 @action-configure="openExtensionConfig($event.name)"
                 @action-open-readme="viewReadme($event)"
                 @action-open-repo="(url) => window.open(url, '_blank')"
+                @toggle-pin="togglePin"
                 @config-saved="getExtensions"
               />
             </div>

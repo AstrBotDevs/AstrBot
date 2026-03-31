@@ -21,6 +21,7 @@ const props = defineProps<{
   search: string
   updatingAll?: boolean
   failedMessage?: string
+  pinnedNames?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -38,6 +39,7 @@ const emit = defineEmits<{
   (e: 'action-configure', plugin: PluginSummary): void
   (e: 'action-open-readme', plugin: PluginSummary): void
   (e: 'action-open-repo', url: string): void
+  (e: 'toggle-pin', plugin: PluginSummary): void
 
   (e: 'batch-enable', plugins: PluginSummary[]): void
   (e: 'batch-disable', plugins: PluginSummary[]): void
@@ -404,7 +406,7 @@ const handleToggleShowReserved = () => {
             <PluginDualList
               :plugins="plugins"
               :selected-plugin-name="selectedPluginName"
-
+              :pinned-names="pinnedNames"
               :loading="loading"
               @select-plugin="handleSelectPlugin"
               @update:selectedInactive="selectedInactiveNames = $event"
@@ -421,6 +423,7 @@ const handleToggleShowReserved = () => {
               @action-update="emit('action-update', $event)"
               @action-uninstall="emit('action-uninstall', $event)"
               @action-open-repo="emit('action-open-repo', $event)"
+              @toggle-pin="emit('toggle-pin', $event)"
             />
           </div>
         </template>

@@ -17,6 +17,7 @@ function parseStoredRatio(raw: string | null): number | null {
 const props = defineProps<{
   plugins: PluginSummary[]
   selectedPluginName: string | null
+  pinnedNames?: string[]
 
   loading?: boolean
 }>()
@@ -37,6 +38,7 @@ const emit = defineEmits<{
   (e: 'batch-disable', plugins: PluginSummary[]): void
   (e: 'batch-update', names: string[]): void
   (e: 'batch-uninstall', names: string[]): void
+  (e: 'toggle-pin', plugin: PluginSummary): void
 }>()
 
 const selectedInactiveNames = ref<string[]>([])
@@ -64,8 +66,16 @@ watch(
   { deep: true }
 )
 
-const inactivePlugins = computed(() => (props.plugins ?? []).filter((p) => !p.activated))
-const activePlugins = computed(() => (props.plugins ?? []).filter((p) => p.activated))
+// Sort plugins: pinned first, then unpinned
+const sortByPinned = (plugins: PluginSummary[]) => {
+  if (!props.pinnedNames || props.pinnedNames.length === 0) return plugins
+  const pinned = plugins.filter(p => props.pinnedNames!.includes(p.name))
+  const unpinned = plugins.filter(p => !props.pinnedNames!.includes(p.name))
+  return [...pinned, ...unpinned]
+}
+
+const inactivePlugins = computed(() => sortByPinned((props.plugins ?? []).filter((p) => !p.activated)))
+const activePlugins = computed(() => sortByPinned((props.plugins ?? []).filter((p) => p.activated)))
 
 const handleRowClick = (name: string) => emit('select-plugin', name)
 
@@ -89,6 +99,7 @@ const handlePrimaryActive = (plugin: PluginSummary) => emit('action-disable', pl
             :items="activePlugins"
             :selected-names="selectedActiveNames"
             :selected-plugin-name="selectedPluginName"
+            :pinned-names="pinnedNames"
 
             :loading="loading"
             @update:selected-names="selectedActiveNames = $event"
@@ -104,6 +115,7 @@ const handlePrimaryActive = (plugin: PluginSummary) => emit('action-disable', pl
             @action-update="emit('action-update', $event)"
             @action-uninstall="emit('action-uninstall', $event)"
             @action-open-repo="emit('action-open-repo', $event)"
+            @toggle-pin="emit('toggle-pin', $event)"
           />
         </div>
       </template>
@@ -116,6 +128,7 @@ const handlePrimaryActive = (plugin: PluginSummary) => emit('action-disable', pl
             :items="inactivePlugins"
             :selected-names="selectedInactiveNames"
             :selected-plugin-name="selectedPluginName"
+            :pinned-names="pinnedNames"
 
             :loading="loading"
             @update:selected-names="selectedInactiveNames = $event"
@@ -131,6 +144,7 @@ const handlePrimaryActive = (plugin: PluginSummary) => emit('action-disable', pl
             @action-update="emit('action-update', $event)"
             @action-uninstall="emit('action-uninstall', $event)"
             @action-open-repo="emit('action-open-repo', $event)"
+            @toggle-pin="emit('toggle-pin', $event)"
           />
         </div>
       </template>

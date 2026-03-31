@@ -13,6 +13,7 @@ const props = defineProps<{
   selectedNames: string[]
   selectedPluginName: string | null
   mode: Mode
+  pinnedNames?: string[]
 
   loading?: boolean
 }>()
@@ -33,6 +34,7 @@ const emit = defineEmits<{
   (e: 'action-update', name: string): void
   (e: 'action-uninstall', name: string): void
   (e: 'action-open-repo', url: string): void
+  (e: 'toggle-pin', plugin: PluginSummary): void
 }>()
 
 const selectionModel = computed<string[]>({
@@ -259,7 +261,9 @@ const getOnlineVersion = (plugin: PluginSummary): string | null => {
   return (plugin.online_version || plugin.online_vesion || null) as string | null
 }
 
-
+const isPinned = (name: string): boolean => {
+  return (props.pinnedNames ?? []).includes(name)
+}
 
 const isUpgradable = (plugin: PluginSummary) => Boolean(plugin.has_update && getOnlineVersion(plugin))
 
@@ -570,6 +574,18 @@ const getRowProps = ({ item }: { item: PluginSummary }) => {
 
 
             <div class="d-flex align-center ga-1 flex-shrink-0">
+              <v-btn
+                icon
+                size="x-small"
+                color="secondary"
+                variant="text"
+                aria-label="pin-plugin"
+                @click.stop="emit('toggle-pin', item)"
+              >
+                <v-icon size="20">{{ isPinned(item.name) ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
+                <v-tooltip activator="parent" location="top">{{ isPinned(item.name) ? '取消置顶' : '置顶' }}</v-tooltip>
+              </v-btn>
+
               <v-btn
                 icon
                 size="x-small"
