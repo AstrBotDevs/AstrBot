@@ -153,7 +153,7 @@ class KBHelper:
                     raise ValueError(f"无法找到 ID 为 {self.embedding_provider_id} 的 Embedding Provider")
 
                 def get_dim(self) -> int:
-                    raise ValueError(f"无法找到 ID 为 {self.embedding_provider_id} 的 Embedding Provider")
+                    return 512
             ep: EmbeddingProvider = TempEmbeddingProvider({},{},self.kb.embedding_provider_id)
         return ep
 
