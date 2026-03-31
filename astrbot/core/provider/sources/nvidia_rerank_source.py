@@ -130,15 +130,22 @@ class NvidiaRerankProvider(RerankProvider):
             request_url = self._get_endpoint()
 
             async with client.post(request_url, json=payload) as response:
-                response_data = await response.json()
-                logger.debug(f"[NVIDIA Rerank] API Response: {response_data}")
-
                 if response.status != 200:
-                    error_detail = response_data.get(
-                        "detail", response_data.get("message", "Unknown Error")
-                    )
+                    try:
+                        response_data = await response.json()
+                        error_detail = response_data.get(
+                            "detail", response_data.get("message", "Unknown Error")
+                        )
+
+                    except Exception:
+                        error_detail = await response.text()
+                        response_data = {"message": error_detail}
+
+                    logger.error(f"[NVIDIA Rerank] API Error Response: {response_data}")
                     raise Exception(f"HTTP {response.status} - {error_detail}")
 
+                response_data = await response.json()
+                logger.debug(f"[NVIDIA Rerank] API Response: {response_data}")
                 results = self._parse_results(response_data, top_n)
                 self._log_usage(response_data)
                 return results
