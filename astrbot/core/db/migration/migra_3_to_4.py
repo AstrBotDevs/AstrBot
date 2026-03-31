@@ -2,7 +2,6 @@ import datetime
 import json
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from astrbot.api import logger, sp
 from astrbot.core.config import AstrBotConfig
@@ -54,7 +53,6 @@ async def migration_conversation_table(
     logger.info(f"迁移 {total_cnt} 条旧的会话数据到新的表中...")
 
     async with db_helper.get_db() as dbsession:
-        dbsession: AsyncSession
         async with dbsession.begin():
             for idx, conversation in enumerate(conversations):
                 if total_cnt > 0 and (idx + 1) % max(1, total_cnt // 10) == 0:
@@ -127,7 +125,6 @@ async def migration_platform_table(
     idx = 0
 
     async with db_helper.get_db() as dbsession:
-        dbsession: AsyncSession
         async with dbsession.begin():
             total_buckets = (end_time - start_time) // 3600
             for bucket_idx, bucket_end in enumerate(range(start_time, end_time, 3600)):
@@ -192,7 +189,6 @@ async def migration_webchat_data(
     logger.info(f"迁移 {total_cnt} 条旧的 WebChat 会话数据到新的表中...")
 
     async with db_helper.get_db() as dbsession:
-        dbsession: AsyncSession
         async with dbsession.begin():
             for idx, conversation in enumerate(conversations):
                 if total_cnt > 0 and (idx + 1) % max(1, total_cnt // 10) == 0:

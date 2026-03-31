@@ -35,7 +35,7 @@ class FaissVecDB(BaseVecDB):
     async def initialize(self) -> None:
         await self.document_storage.initialize()
 
-    async def insert(  # type: ignore[invalid-method-override]
+    async def insert(
         self,
         content: str,
         metadata: dict | None = None,
@@ -46,16 +46,16 @@ class FaissVecDB(BaseVecDB):
         str_id = id or str(uuid.uuid4())  # 使用 UUID 作为原始 ID
 
         vector = await self.embedding_provider.get_embedding(content)
-        vector = np.array(vector, dtype=np.float32)
+        vector_array = np.array(vector, dtype=np.float32)
 
         # 使用 DocumentStorage 的方法插入文档
         int_id = await self.document_storage.insert_document(str_id, content, metadata)
 
         # 插入向量到 FAISS
-        await self.embedding_storage.insert(vector, int_id)
+        await self.embedding_storage.insert(vector_array, int_id)
         return int_id
 
-    async def insert_batch(  # type: ignore[invalid-method-override]
+    async def insert_batch(
         self,
         contents: list[str],
         metadatas: list[dict] | None = None,
@@ -106,7 +106,7 @@ class FaissVecDB(BaseVecDB):
         await self.embedding_storage.insert_batch(vectors_array, int_ids)
         return int_ids
 
-    async def retrieve(  # type: ignore[invalid-method-override]
+    async def retrieve(
         self,
         query: str,
         k: int = 5,
@@ -171,19 +171,18 @@ class FaissVecDB(BaseVecDB):
 
         return top_k_results
 
-    async def delete(  # type: ignore[invalid-method-override]
-        self, doc_id: str
-    ) -> None:
+    async def delete(self, doc_id: str) -> bool:
         """删除一条文档块(chunk)"""
         # 获得对应的 int id
         result = await self.document_storage.get_document_by_doc_id(doc_id)
         int_id = result["id"] if result else None
         if int_id is None:
-            return
+            return False
 
         # 使用 DocumentStorage 的删除方法
         await self.document_storage.delete_document_by_doc_id(doc_id)
         await self.embedding_storage.delete([int_id])
+        return True
 
     async def close(self) -> None:
         await self.document_storage.close()

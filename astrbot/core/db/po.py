@@ -1,7 +1,7 @@
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TypedDict
+from typing import ClassVar, TypedDict
 
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
@@ -20,7 +20,7 @@ class PlatformStat(SQLModel, table=True):
     Note: In astrbot v4, we moved `platform` table to here.
     """
 
-    __tablename__: str = "platform_stats"
+    __tablename__: ClassVar[str] = "platform_stats"
 
     id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
     timestamp: datetime = Field(nullable=False)
@@ -41,7 +41,7 @@ class PlatformStat(SQLModel, table=True):
 class ProviderStat(TimestampMixin, SQLModel, table=True):
     """Per-response provider stats for internal agent runs."""
 
-    __tablename__: str = "provider_stats"
+    __tablename__: ClassVar[str] = "provider_stats"
 
     id: int | None = Field(
         default=None,
@@ -63,7 +63,7 @@ class ProviderStat(TimestampMixin, SQLModel, table=True):
 
 
 class ConversationV2(TimestampMixin, SQLModel, table=True):
-    __tablename__: str = "conversations"
+    __tablename__: ClassVar[str] = "conversations"
 
     inner_conversation_id: int | None = Field(
         default=None,
@@ -102,7 +102,7 @@ class PersonaFolder(TimestampMixin, SQLModel, table=True):
     用于组织和管理多个 Persona,类似于文件系统的目录结构｡
     """
 
-    __tablename__: str = "persona_folders"
+    __tablename__: ClassVar[str] = "persona_folders"
 
     id: int | None = Field(
         primary_key=True,
@@ -135,7 +135,7 @@ class Persona(TimestampMixin, SQLModel, table=True):
     It can be used to customize the behavior of LLMs.
     """
 
-    __tablename__: str = "personas"
+    __tablename__: ClassVar[str] = "personas"
 
     id: int | None = Field(
         primary_key=True,
@@ -168,7 +168,7 @@ class Persona(TimestampMixin, SQLModel, table=True):
 class CronJob(TimestampMixin, SQLModel, table=True):
     """Cron job definition for scheduler and WebUI management."""
 
-    __tablename__: str = "cron_jobs"
+    __tablename__: ClassVar[str] = "cron_jobs"
 
     id: int | None = Field(
         default=None,
@@ -199,7 +199,7 @@ class CronJob(TimestampMixin, SQLModel, table=True):
 class Preference(TimestampMixin, SQLModel, table=True):
     """This class represents preferences for bots."""
 
-    __tablename__: str = "preferences"
+    __tablename__: ClassVar[str] = "preferences"
 
     id: int | None = Field(
         default=None,
@@ -230,7 +230,7 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     or platform-specific messages.
     """
 
-    __tablename__: str = "platform_message_history"
+    __tablename__: ClassVar[str] = "platform_message_history"
 
     id: int | None = Field(
         primary_key=True,
@@ -253,7 +253,7 @@ class PlatformSession(TimestampMixin, SQLModel, table=True):
     Each session can have multiple conversations (对话) associated with it.
     """
 
-    __tablename__: str = "platform_sessions"
+    __tablename__: ClassVar[str] = "platform_sessions"
 
     inner_id: int | None = Field(
         primary_key=True,
@@ -289,7 +289,7 @@ class Attachment(TimestampMixin, SQLModel, table=True):
     Attachments can be images, files, or other media types.
     """
 
-    __tablename__: str = "attachments"
+    __tablename__: ClassVar[str] = "attachments"
 
     inner_attachment_id: int | None = Field(
         primary_key=True,
@@ -317,7 +317,7 @@ class Attachment(TimestampMixin, SQLModel, table=True):
 class ApiKey(TimestampMixin, SQLModel, table=True):
     """API keys used by external developers to access Open APIs."""
 
-    __tablename__: str = "api_keys"
+    __tablename__: ClassVar[str] = "api_keys"
 
     inner_id: int | None = Field(
         primary_key=True,
@@ -357,7 +357,7 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
     Projects allow users to group related conversations together.
     """
 
-    __tablename__: str = "chatui_projects"
+    __tablename__: ClassVar[str] = "chatui_projects"
 
     inner_id: int | None = Field(
         primary_key=True,
@@ -390,7 +390,7 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
 class SessionProjectRelation(SQLModel, table=True):
     """This class represents the relationship between platform sessions and ChatUI projects."""
 
-    __tablename__: str = "session_project_relations"
+    __tablename__: ClassVar[str] = "session_project_relations"
 
     id: int | None = Field(
         primary_key=True,

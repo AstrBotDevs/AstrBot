@@ -39,6 +39,7 @@ class BaseDatabase(abc.ABC):
         # second write is attempted.  Setting timeout=30 tells SQLite to
         # wait up to 30 s for the lock, which is enough to ride out brief
         # write bursts from concurrent agent/metrics/session operations.
+        self.inited = False
         is_sqlite = "sqlite" in self.DATABASE_URL
         connect_args = {"timeout": 30} if is_sqlite else {}
         self.engine = create_async_engine(

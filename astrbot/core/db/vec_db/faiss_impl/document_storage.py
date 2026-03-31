@@ -1,11 +1,16 @@
 import json
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 
 from sqlalchemy import Column, Text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
 
 from astrbot.core import logger
@@ -37,7 +42,7 @@ class DocumentStorage:
         self.db_path = db_path
         self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
         self.engine: AsyncEngine | None = None
-        self.async_session_maker: sessionmaker | None = None
+        self.async_session_maker: async_sessionmaker[AsyncSession] | None = None
         self.sqlite_init_path = os.path.join(
             os.path.dirname(__file__),
             "sqlite_init.sql",
@@ -46,6 +51,7 @@ class DocumentStorage:
     async def initialize(self) -> None:
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
         await self.connect()
+        assert self.engine is not None, "Database connection is not initialized."
         async with self.engine.begin() as conn:
             # Create tables using SQLModel
             await conn.run_sync(BaseDocModel.metadata.create_all)
@@ -88,15 +94,17 @@ class DocumentStorage:
                 echo=False,
                 future=True,
             )
-            self.async_session_maker = sessionmaker(
+            self.async_session_maker = async_sessionmaker(
                 self.engine,
-                class_=AsyncSession,
                 expire_on_commit=False,
             )
 
     @asynccontextmanager
-    async def get_session(self):
+    async def get_session(self) -> AsyncIterator[AsyncSession]:
         """Context manager for database sessions."""
+        assert self.async_session_maker is not None, (
+            "Database session maker is not initialized."
+        )
         async with self.async_session_maker() as session:
             yield session
 
@@ -172,6 +180,7 @@ class DocumentStorage:
             )
             session.add(document)
             await session.flush()  # Flush to get the ID
+            assert document.id is not None, "Inserted document ID was not generated."
             return document.id
 
     async def insert_documents_batch(
@@ -196,7 +205,7 @@ class DocumentStorage:
         async with self.get_session() as session, session.begin():
             import json
 
-            documents = []
+            documents: list[Document] = []
             for doc_id, text, metadata in zip(doc_ids, texts, metadatas):
                 document = Document(
                     doc_id=doc_id,
@@ -209,7 +218,13 @@ class DocumentStorage:
                 session.add(document)
 
             await session.flush()  # Flush to get all IDs
-            return [doc.id for doc in documents]
+            document_ids: list[int] = []
+            for document in documents:
+                assert document.id is not None, (
+                    "Inserted document ID was not generated."
+                )
+                document_ids.append(document.id)
+            return document_ids
 
     async def delete_document_by_doc_id(self, doc_id: str) -> None:
         """Delete a document by its doc_id.

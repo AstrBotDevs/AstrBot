@@ -32,7 +32,7 @@ class BaseVecDB:
         tasks_limit: int = 3,
         max_retries: int = 3,
         progress_callback=None,
-    ) -> int:
+    ) -> list[int]:
         """批量插入文本和其对应向量,自动生成 ID 并保持一致性｡
 
         Args:

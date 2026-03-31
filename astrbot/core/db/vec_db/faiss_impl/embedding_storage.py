@@ -35,7 +35,7 @@ class EmbeddingStorage:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
             )
-        self.index.add_with_ids(vector.reshape(1, -1), np.array([id]))  # type: ignore[missing-argument]
+        self.index.add_with_ids(vector.reshape(1, -1), np.array([id]))
         await self.save_index()
 
     async def insert_batch(self, vectors: np.ndarray, ids: list[int]) -> None:
@@ -53,7 +53,7 @@ class EmbeddingStorage:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}",
             )
-        self.index.add_with_ids(vectors, np.array(ids))  # type: ignore[missing-argument]
+        self.index.add_with_ids(vectors, np.array(ids))
         await self.save_index()
 
     async def search(self, vector: np.ndarray, k: int) -> tuple:
