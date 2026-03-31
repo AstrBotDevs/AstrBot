@@ -211,6 +211,63 @@ async def test_handle_api_error_context_length_removes_orphaned_tool_messages():
 
 
 @pytest.mark.asyncio
+async def test_fix_tool_call_pairs_in_dict_context_removes_partial_multi_tool_chain():
+    provider = _make_provider()
+    try:
+        full_chain = [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "Run multiple tools"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "tool_a", "arguments": "{}"},
+                    },
+                    {
+                        "id": "call_2",
+                        "type": "function",
+                        "function": {"name": "tool_b", "arguments": "{}"},
+                    },
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "name": "tool_a",
+                "content": "result a",
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_2",
+                "name": "tool_b",
+                "content": "result b",
+            },
+            {"role": "assistant", "content": "Final answer"},
+        ]
+
+        assert provider._fix_tool_call_pairs_in_dict_context(full_chain) == full_chain
+
+        missing_assistant = full_chain[:2] + full_chain[3:]
+        assert provider._fix_tool_call_pairs_in_dict_context(missing_assistant) == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "Run multiple tools"},
+            {"role": "assistant", "content": "Final answer"},
+        ]
+
+        missing_one_tool = full_chain[:-2] + [full_chain[-1]]
+        assert provider._fix_tool_call_pairs_in_dict_context(missing_one_tool) == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "Run multiple tools"},
+            {"role": "assistant", "content": "Final answer"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_handle_api_error_context_length_preserves_remaining_valid_messages():
     provider = _make_provider()
     try:

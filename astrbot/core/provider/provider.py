@@ -186,7 +186,10 @@ class Provider(AbstractProvider):
 
         def flush_pending_if_valid() -> None:
             nonlocal pending_assistant, pending_tools
-            if pending_assistant is not None and pending_tools:
+            if pending_assistant is not None and Provider._is_complete_tool_chain(
+                pending_assistant,
+                pending_tools,
+            ):
                 fixed_context.append(pending_assistant)
                 fixed_context.extend(pending_tools)
             pending_assistant = None
@@ -209,6 +212,34 @@ class Provider(AbstractProvider):
 
         flush_pending_if_valid()
         return fixed_context
+
+    @staticmethod
+    def _is_complete_tool_chain(
+        assistant_message: dict,
+        tool_messages: list[dict],
+    ) -> bool:
+        """Check whether a dict-based assistant/tool chain is fully paired."""
+        tool_calls = assistant_message.get("tool_calls") or []
+        expected_ids = [
+            tool_call.get("id")
+            for tool_call in tool_calls
+            if tool_call.get("id") is not None
+        ]
+        if not expected_ids or len(expected_ids) != len(tool_calls):
+            return False
+
+        seen_ids: set[str] = set()
+        for tool_message in tool_messages:
+            tool_call_id = tool_message.get("tool_call_id")
+            if (
+                tool_call_id is None
+                or tool_call_id not in expected_ids
+                or tool_call_id in seen_ids
+            ):
+                return False
+            seen_ids.add(tool_call_id)
+
+        return len(seen_ids) == len(expected_ids)
 
     def _ensure_message_to_dicts(
         self,
