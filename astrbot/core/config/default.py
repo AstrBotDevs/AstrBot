@@ -1761,6 +1761,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "rerank_api_key": "",
                         "rerank_api_base": "http://127.0.0.1:8000",
+                        "rerank_api_suffix": "/v1/rerank",
                         "rerank_model": "BAAI/bge-reranker-base",
                         "timeout": 20,
                     },
@@ -1826,7 +1827,12 @@ CONFIG_METADATA_2 = {
                     "rerank_api_base": {
                         "description": "重排序模型 API Base URL",
                         "type": "string",
-                        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。",
+                        "hint": "与 rerank_api_suffix 配合使用来确定最终请求路径。",
+                    },
+                    "rerank_api_suffix": {
+                        "description": "API URL 路径后缀",
+                        "type": "string",
+                        "hint": "追加到 base_url 后的路径，如 /v1/rerank。留空则不追加。",
                     },
                     "rerank_api_key": {
                         "description": "API Key",

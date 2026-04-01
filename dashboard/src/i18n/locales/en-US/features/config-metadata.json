@@ -1075,7 +1075,11 @@
       },
       "rerank_api_base": {
         "description": "Rerank Model API Base URL",
-        "hint": "AstrBot appends /v1/rerank to the request URL."
+        "hint": "Combined with rerank_api_suffix to form the full request URL."
+      },
+      "rerank_api_suffix": {
+        "description": "API URL path suffix",
+        "hint": "Path appended to base_url, e.g. /v1/rerank. Leave empty to disable auto-append."
       },
       "rerank_api_key": {
         "description": "API Key",
