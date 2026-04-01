@@ -837,9 +837,7 @@ class PluginRoute(Route):
         connector = aiohttp.TCPConnector(ssl=ssl_context)
 
         async with aiohttp.ClientSession(
-            trust_env=True,
-            connector=connector,
-            timeout=aiohttp.ClientTimeout(total=10)
+            trust_env=True, connector=connector, timeout=aiohttp.ClientTimeout(total=10)
         ) as session:
             # 尝试从不同分支获取
             branches = ["main", "master"]
