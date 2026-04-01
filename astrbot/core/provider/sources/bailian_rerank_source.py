@@ -143,7 +143,7 @@ class BailianRerankProvider(RerankProvider):
             )
 
         # 兼容旧版 API (output.results) 和新版 compatible API (results)
-        results = data.get("output", {}).get("results") or data.get("results", [])
+        results = (data.get("output") or {}).get("results") or data.get("results") or []
         if not results:
             logger.warning(f"百炼 Rerank 返回空结果: {data}")
             return []
