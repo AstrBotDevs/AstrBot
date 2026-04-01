@@ -40,6 +40,12 @@ class ExecuteShellTool(FunctionTool):
 
     is_local: bool = False
 
+    def _get_configured_cwd(self, context: ContextWrapper[AstrAgentContext]) -> str | None:
+        cfg = context.context.context.get_config(
+            umo=context.context.event.unified_msg_origin
+        )
+        return cfg.get("provider_settings", {}).get("computer_use_local_shell_cwd", None)
+
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
@@ -58,7 +64,8 @@ class ExecuteShellTool(FunctionTool):
                 context.context.event.unified_msg_origin,
             )
         try:
-            result = await sb.shell.exec(command, background=background, env=env)
+            cwd = self._get_configured_cwd(context)
+            result = await sb.shell.exec(command, cwd=cwd, background=background, env=env)
             return json.dumps(result)
         except Exception as e:
             return f"Error executing command: {str(e)}"

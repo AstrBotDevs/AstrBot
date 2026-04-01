@@ -3147,6 +3147,22 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
                     },
+                    "provider_settings.computer_use_local_shell_cwd": {
+                        "description": "本地 Shell 默认工作目录 / Local Shell Default Working Directory",
+                        "type": "string",
+                        "hint": "zh: 设置本地 shell 命令执行时的默认工作目录。仅在 computer_use_runtime=local 时生效。留空则使用 AstrBot 根目录。\nen: Set the default working directory for local shell command execution. Only effective when computer_use_runtime=local. If empty, uses AstrBot root directory.",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "local",
+                        },
+                    },
+                    "provider_settings.computer_use_local_python_cwd": {
+                        "description": "本地 Python 默认工作目录 / Local Python Default Working Directory",
+                        "type": "string",
+                        "hint": "zh: 设置本地 Python 代码执行时的默认工作目录。仅在 computer_use_runtime=local 时生效。留空则使用 AstrBot 根目录。\nen: Set the default working directory for local Python code execution. Only effective when computer_use_runtime=local. If empty, uses AstrBot root directory.",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "local",
+                        },
+                    },
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
                         "type": "string",

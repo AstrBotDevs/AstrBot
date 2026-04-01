@@ -61,6 +61,13 @@ async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult
     return resp
 
 
+def _get_configured_python_cwd(context: ContextWrapper[AstrAgentContext]) -> str | None:
+    cfg = context.context.context.get_config(
+        umo=context.context.event.unified_msg_origin
+    )
+    return cfg.get("provider_settings", {}).get("computer_use_local_python_cwd", None)
+
+
 @dataclass
 class PythonTool(FunctionTool):
     name: str = "astrbot_execute_ipython"
@@ -77,7 +84,8 @@ class PythonTool(FunctionTool):
             context.context.event.unified_msg_origin,
         )
         try:
-            result = await sb.python.exec(code, silent=silent)
+            cwd = _get_configured_python_cwd(context)
+            result = await sb.python.exec(code, silent=silent, cwd=cwd)
             return await handle_result(result, context.context.event)
         except Exception as e:
             return f"Error executing code: {str(e)}"
@@ -100,7 +108,8 @@ class LocalPythonTool(FunctionTool):
             return permission_error
         sb = get_local_booter()
         try:
-            result = await sb.python.exec(code, silent=silent)
+            cwd = _get_configured_python_cwd(context)
+            result = await sb.python.exec(code, silent=silent, cwd=cwd)
             return await handle_result(result, context.context.event)
         except Exception as e:
             return f"Error executing code: {str(e)}"

@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from astrbot.api import logger
 from astrbot.core.utils.astrbot_path import (
@@ -51,6 +51,45 @@ def _ensure_safe_path(path: str) -> str:
     if not any(abs_path.startswith(root) for root in allowed_roots):
         raise PermissionError("Path is outside the allowed computer roots.")
     return abs_path
+
+
+def _resolve_working_dir(configured_path: str | None, fallback_func: Callable[[], str]) -> tuple[str, bool]:
+    """Resolve working directory with fallback to default.
+
+    Args:
+        configured_path: The configured working directory path, or None
+        fallback_func: A callable that returns the fallback path (e.g., get_astrbot_root)
+
+    Returns:
+        A tuple of (resolved_path, was_fallback) where was_fallback indicates if fallback was used
+    """
+    if not configured_path:
+        return fallback_func(), True
+
+    try:
+        abs_path = _ensure_safe_path(configured_path)
+    except PermissionError:
+        logger.warning(
+            f"[Computer] Configured path '{configured_path}' is outside allowed roots, "
+            f"falling back to default directory."
+        )
+        return fallback_func(), True
+
+    if not os.path.exists(abs_path):
+        logger.warning(
+            f"[Computer] Configured path '{configured_path}' does not exist, "
+            f"falling back to default directory."
+        )
+        return fallback_func(), True
+
+    if not os.access(abs_path, os.R_OK | os.W_OK):
+        logger.warning(
+            f"[Computer] Configured path '{configured_path}' is not accessible (no read/write permission), "
+            f"falling back to default directory."
+        )
+        return fallback_func(), True
+
+    return abs_path, False
 
 
 def _decode_bytes_with_fallback(
@@ -110,7 +149,7 @@ class LocalShellComponent(ShellComponent):
             run_env = os.environ.copy()
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
-            working_dir = _ensure_safe_path(cwd) if cwd else get_astrbot_root()
+            working_dir, _ = _resolve_working_dir(cwd, get_astrbot_root)
             if background:
                 # `command` is intentionally executed through the current shell so
                 # local computer-use behavior matches existing tool semantics.
@@ -146,20 +185,26 @@ class LocalShellComponent(ShellComponent):
 
 @dataclass
 class LocalPythonComponent(PythonComponent):
+    default_cwd: str | None = None
+
     async def exec(
         self,
         code: str,
         kernel_id: str | None = None,
         timeout: int = 30,
         silent: bool = False,
+        cwd: str | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             try:
+                effective_cwd = cwd if cwd else self.default_cwd
+                working_dir, _ = _resolve_working_dir(effective_cwd, get_astrbot_root)
                 result = subprocess.run(
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
                     timeout=timeout,
                     capture_output=True,
                     text=True,
+                    cwd=working_dir,
                 )
                 stdout = "" if silent else result.stdout
                 stderr = result.stderr if result.returncode != 0 else ""
