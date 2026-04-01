@@ -11,6 +11,7 @@ from pathlib import Path
 import aiohttp
 import certifi
 from quart import request
+from urllib.parse import urlparse
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
@@ -813,15 +814,21 @@ class PluginRoute(Route):
         """从远程GitHub仓库获取README内容"""
         # 解析GitHub仓库URL
         # 支持格式: https://github.com/owner/repo 或 https://github.com/owner/repo.git
-        repo_url = repo_url.rstrip("/").replace(".git", "")
+        repo_url = repo_url.rstrip("/").removesuffix(".git")
 
-        # 提取 owner 和 repo
-        parts = repo_url.split("/")
-        if len(parts) < 2:
+        # 使用 urlparse 严格解析 URL，校验域名和路径
+        parsed = urlparse(repo_url)
+
+        # 仅支持 GitHub 仓库链接
+        if parsed.netloc.lower() != "github.com":
             return None
 
-        owner = parts[-2]
-        repo = parts[-1]
+        # 提取路径中的 owner 和 repo，要求至少有两个段
+        path_parts = [part for part in parsed.path.strip("/").split("/") if part]
+        if len(path_parts) < 2:
+            return None
+
+        owner, repo = path_parts[0], path_parts[1]
 
         # 尝试多种README文件名
         readme_names = ["README.md", "readme.md", "README.MD", "Readme.md"]
@@ -832,31 +839,23 @@ class PluginRoute(Route):
         async with aiohttp.ClientSession(
             trust_env=True,
             connector=connector,
+            timeout=aiohttp.ClientTimeout(total=10)
         ) as session:
-            for readme_name in readme_names:
-                # 使用GitHub raw content URL
-                raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/main/{readme_name}"
-                try:
-                    async with session.get(raw_url) as response:
-                        if response.status == 200:
-                            content = await response.text()
-                            logger.debug(f"成功从 {raw_url} 获取README")
-                            return content
-                except Exception as e:
-                    logger.debug(f"从 {raw_url} 获取失败: {e}")
-                    continue
-
-                # 尝试 master 分支
-                raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/master/{readme_name}"
-                try:
-                    async with session.get(raw_url) as response:
-                        if response.status == 200:
-                            content = await response.text()
-                            logger.debug(f"成功从 {raw_url} 获取README")
-                            return content
-                except Exception as e:
-                    logger.debug(f"从 {raw_url} 获取失败: {e}")
-                    continue
+            # 尝试从不同分支获取
+            branches = ["main", "master"]
+            for branch in branches:
+                for readme_name in readme_names:
+                    # 使用GitHub raw content URL
+                    raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{readme_name}"
+                    try:
+                        async with session.get(raw_url) as response:
+                            if response.status == 200:
+                                content = await response.text()
+                                logger.debug(f"成功从 {raw_url} 获取README")
+                                return content
+                    except Exception as e:
+                        logger.debug(f"从 {raw_url} 获取失败: {e}")
+                        continue
 
         return None
 
