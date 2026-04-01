@@ -1616,6 +1616,47 @@ class SQLiteDatabase(BaseDatabase):
                     ),
                 )
 
+    async def migrate_user_webchat_data(
+        self, old_username: str, new_username: str
+    ) -> None:
+        """Migrate all webchat user data when username is changed."""
+        old_fragment = f"!{old_username}!"
+        new_fragment = f"!{new_username}!"
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    update(PlatformSession)
+                    .where(col(PlatformSession.creator) == old_username)
+                    .values(creator=new_username)
+                )
+                await session.execute(
+                    update(ChatUIProject)
+                    .where(col(ChatUIProject.creator) == old_username)
+                    .values(creator=new_username)
+                )
+                await session.execute(
+                    update(ConversationV2)
+                    .where(col(ConversationV2.user_id).like("webchat%"))
+                    .values(
+                        user_id=func.replace(
+                            ConversationV2.user_id, old_fragment, new_fragment
+                        )
+                    )
+                )
+                await session.execute(
+                    update(Preference)
+                    .where(
+                        col(Preference.scope) == "umo",
+                        col(Preference.scope_id).like("webchat%"),
+                    )
+                    .values(
+                        scope_id=func.replace(
+                            Preference.scope_id, old_fragment, new_fragment
+                        )
+                    )
+                )
+
     # ====
     # ChatUI Project Management
     # ====
