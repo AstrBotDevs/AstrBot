@@ -7,7 +7,7 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 
 from ..computer_client import get_booter, get_local_booter
-from .permissions import check_admin_permission
+from .permissions import check_admin_permission, get_configured_cwd
 
 
 @dataclass
@@ -41,10 +41,7 @@ class ExecuteShellTool(FunctionTool):
     is_local: bool = False
 
     def _get_configured_cwd(self, context: ContextWrapper[AstrAgentContext]) -> str | None:
-        cfg = context.context.context.get_config(
-            umo=context.context.event.unified_msg_origin
-        )
-        return cfg.get("provider_settings", {}).get("computer_use_local_shell_cwd", None)
+        return get_configured_cwd(context, "computer_use_local_shell_cwd")
 
     async def call(
         self,

@@ -2,6 +2,15 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_context import AstrAgentContext
 
 
+def get_configured_cwd(
+    context: ContextWrapper[AstrAgentContext], config_key: str
+) -> str | None:
+    cfg = context.context.context.get_config(
+        umo=context.context.event.unified_msg_origin
+    )
+    return cfg.get("provider_settings", {}).get(config_key, None)
+
+
 def check_admin_permission(
     context: ContextWrapper[AstrAgentContext], operation_name: str
 ) -> str | None:

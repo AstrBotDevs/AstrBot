@@ -8,7 +8,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
 from astrbot.core.computer.computer_client import get_booter, get_local_booter
-from astrbot.core.computer.tools.permissions import check_admin_permission
+from astrbot.core.computer.tools.permissions import check_admin_permission, get_configured_cwd
 from astrbot.core.message.message_event_result import MessageChain
 
 _OS_NAME = platform.system()
@@ -62,10 +62,7 @@ async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult
 
 
 def _get_configured_python_cwd(context: ContextWrapper[AstrAgentContext]) -> str | None:
-    cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
-    )
-    return cfg.get("provider_settings", {}).get("computer_use_local_python_cwd", None)
+    return get_configured_cwd(context, "computer_use_local_python_cwd")
 
 
 @dataclass

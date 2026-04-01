@@ -185,8 +185,6 @@ class LocalShellComponent(ShellComponent):
 
 @dataclass
 class LocalPythonComponent(PythonComponent):
-    default_cwd: str | None = None
-
     async def exec(
         self,
         code: str,
@@ -197,8 +195,7 @@ class LocalPythonComponent(PythonComponent):
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             try:
-                effective_cwd = cwd if cwd else self.default_cwd
-                working_dir, _ = _resolve_working_dir(effective_cwd, get_astrbot_root)
+                working_dir, _ = _resolve_working_dir(cwd, get_astrbot_root)
                 result = subprocess.run(
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
                     timeout=timeout,
