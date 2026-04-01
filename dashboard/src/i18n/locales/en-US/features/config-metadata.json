@@ -1075,7 +1075,7 @@
       },
       "rerank_api_base": {
         "description": "Rerank Model API Base URL",
-        "hint": "Combined with rerank_api_suffix to form the full request URL."
+        "hint": "The full request URL is formed by combining the Base URL and a path suffix (defaults to /v1/rerank)."
       },
       "rerank_api_suffix": {
         "description": "API URL path suffix",

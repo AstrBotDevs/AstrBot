@@ -21,6 +21,8 @@ class VLLMRerankProvider(RerankProvider):
         self.base_url = provider_config.get("rerank_api_base", "http://127.0.0.1:8000")
         self.base_url = self.base_url.rstrip("/")
         self.api_suffix = provider_config.get("rerank_api_suffix", "/v1/rerank")
+        if self.api_suffix is None:
+            self.api_suffix = "/v1/rerank"
         if self.api_suffix and not self.api_suffix.startswith("/"):
             self.api_suffix = "/" + self.api_suffix
         self.timeout = provider_config.get("timeout", 20)

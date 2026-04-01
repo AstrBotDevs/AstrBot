@@ -1827,7 +1827,7 @@ CONFIG_METADATA_2 = {
                     "rerank_api_base": {
                         "description": "重排序模型 API Base URL",
                         "type": "string",
-                        "hint": "与 rerank_api_suffix 配合使用来确定最终请求路径。",
+                        "hint": "最终请求路径由 Base URL 和路径后缀拼接而成（默认为 /v1/rerank）。",
                     },
                     "rerank_api_suffix": {
                         "description": "API URL 路径后缀",
