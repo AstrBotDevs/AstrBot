@@ -731,7 +731,7 @@ class BaseDatabase(abc.ABC):
 
     # ====
     # ChatUI Project Management
-    # ===="
+    # ====
 
     @abc.abstractmethod
     async def create_chatui_project(
