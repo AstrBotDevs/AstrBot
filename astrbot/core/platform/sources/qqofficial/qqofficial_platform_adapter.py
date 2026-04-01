@@ -557,4 +557,4 @@ class QQOfficialPlatformAdapter(Platform):
         logger.debug("[QQOfficial] Handlers disabled for this client instance")
 
         await self.client.close()
-        logger.info("QQ 官方机器人接口 适配器已被优雅地关闭")
+        logger.info("QQ 官方机器人接口 适配器已被不太优雅地关闭")
