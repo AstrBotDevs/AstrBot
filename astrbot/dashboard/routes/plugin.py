@@ -7,11 +7,11 @@ import traceback
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 import aiohttp
 import certifi
 from quart import request
-from urllib.parse import urlparse
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
