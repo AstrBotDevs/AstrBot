@@ -41,11 +41,14 @@ for handler in logging.root.handlers[:]:
 class botClient(Client):
     def set_platform(self, platform: QQOfficialPlatformAdapter) -> None:
         self.platform = platform
+        self._handler_enabled = True
 
     # 收到群消息
     async def on_group_at_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
+        if not getattr(self, "_handler_enabled", False):
+            return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -57,6 +60,8 @@ class botClient(Client):
 
     # 收到频道消息
     async def on_at_message_create(self, message: botpy.message.Message) -> None:
+        if not getattr(self, "_handler_enabled", False):
+            return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -70,6 +75,8 @@ class botClient(Client):
     async def on_direct_message_create(
         self, message: botpy.message.DirectMessage
     ) -> None:
+        if not getattr(self, "_handler_enabled", False):
+            return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -80,6 +87,8 @@ class botClient(Client):
 
     # 收到 C2C 消息
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
+        if not getattr(self, "_handler_enabled", False):
+            return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -536,11 +545,16 @@ class QQOfficialPlatformAdapter(Platform):
         return abm
 
     def run(self):
+        self.client._handler_enabled = True
+        logger.debug("[QQOfficial] Handlers enabled for this client instance")
         return self.client.start(appid=self.appid, secret=self.secret)
 
     def get_client(self) -> botClient:
         return self.client
 
     async def terminate(self) -> None:
+        self.client._handler_enabled = False
+        logger.debug("[QQOfficial] Handlers disabled for this client instance")
+
         await self.client.close()
         logger.info("QQ 官方机器人接口 适配器已被优雅地关闭")
