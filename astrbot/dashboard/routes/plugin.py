@@ -737,8 +737,26 @@ class PluginRoute(Route):
 
     async def get_plugin_readme(self):
         plugin_name = request.args.get("name")
-        logger.debug(f"正在获取插件 {plugin_name} 的README文件内容")
+        repo_url = request.args.get("repo")
+        logger.debug(f"正在获取插件 {plugin_name} 的README文件内容, repo: {repo_url}")
 
+        # 如果提供了 repo_url，优先从远程获取
+        if repo_url:
+            try:
+                readme_content = await self._fetch_remote_readme(repo_url)
+                if readme_content:
+                    return (
+                        Response()
+                        .ok({"content": readme_content}, "成功获取README内容")
+                        .__dict__
+                    )
+                else:
+                    return Response().error("无法从远程仓库获取README文件").__dict__
+            except Exception as e:
+                logger.error(f"从远程获取README失败: {traceback.format_exc()}")
+                return Response().error(f"获取README失败: {e!s}").__dict__
+
+        # 否则从本地获取
         if not plugin_name:
             logger.warning("插件名称为空")
             return Response().error("插件名称不能为空").__dict__
@@ -790,6 +808,57 @@ class PluginRoute(Route):
         except Exception as e:
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
             return Response().error(f"读取README文件失败: {e!s}").__dict__
+
+    async def _fetch_remote_readme(self, repo_url: str) -> str | None:
+        """从远程GitHub仓库获取README内容"""
+        # 解析GitHub仓库URL
+        # 支持格式: https://github.com/owner/repo 或 https://github.com/owner/repo.git
+        repo_url = repo_url.rstrip("/").replace(".git", "")
+
+        # 提取 owner 和 repo
+        parts = repo_url.split("/")
+        if len(parts) < 2:
+            return None
+
+        owner = parts[-2]
+        repo = parts[-1]
+
+        # 尝试多种README文件名
+        readme_names = ["README.md", "readme.md", "README.MD", "Readme.md"]
+
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        async with aiohttp.ClientSession(
+            trust_env=True,
+            connector=connector,
+        ) as session:
+            for readme_name in readme_names:
+                # 使用GitHub raw content URL
+                raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/main/{readme_name}"
+                try:
+                    async with session.get(raw_url) as response:
+                        if response.status == 200:
+                            content = await response.text()
+                            logger.debug(f"成功从 {raw_url} 获取README")
+                            return content
+                except Exception as e:
+                    logger.debug(f"从 {raw_url} 获取失败: {e}")
+                    continue
+
+                # 尝试 master 分支
+                raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/master/{readme_name}"
+                try:
+                    async with session.get(raw_url) as response:
+                        if response.status == 200:
+                            content = await response.text()
+                            logger.debug(f"成功从 {raw_url} 获取README")
+                            return content
+                except Exception as e:
+                    logger.debug(f"从 {raw_url} 获取失败: {e}")
+                    continue
+
+        return None
 
     async def get_plugin_changelog(self):
         """获取插件更新日志

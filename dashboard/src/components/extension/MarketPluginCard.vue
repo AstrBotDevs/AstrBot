@@ -20,7 +20,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["install"]);
+const emit = defineEmits(["install", "viewReadme"]);
 
 const normalizePlatformList = (platforms) => {
   if (!Array.isArray(platforms)) return [];
@@ -33,6 +33,10 @@ const platformDisplayList = computed(() =>
 
 const handleInstall = (plugin) => {
   emit("install", plugin);
+};
+
+const handleViewReadme = (plugin) => {
+  emit("viewReadme", plugin);
 };
 
 </script>
@@ -198,6 +202,18 @@ const handleInstall = (plugin) => {
         </v-list>
       </v-menu>
       <v-spacer></v-spacer>
+      <v-btn
+        v-if="plugin?.repo"
+        color="info"
+        size="small"
+        variant="tonal"
+        class="market-action-btn"
+        @click="handleViewReadme(plugin)"
+        style="height: 32px"
+      >
+        <v-icon icon="mdi-file-document-outline" start size="small"></v-icon>
+        {{ tm("buttons.viewDocs") }}
+      </v-btn>
       <v-btn
         v-if="plugin?.repo"
         color="secondary"

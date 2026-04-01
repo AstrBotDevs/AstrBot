@@ -347,6 +347,7 @@ const marketCategorySelectItems = computed(() =>
                     :default-plugin-icon="defaultPluginIcon"
                     :show-plugin-full-name="showPluginFullName"
                     @install="handleInstallPlugin"
+                    @view-readme="viewReadme"
                   />
                 </v-col>
               </v-row>
@@ -397,6 +398,7 @@ const marketCategorySelectItems = computed(() =>
                         :default-plugin-icon="defaultPluginIcon"
                         :show-plugin-full-name="showPluginFullName"
                         @install="handleInstallPlugin"
+                        @view-readme="viewReadme"
                       />
                     </v-col>
                   </v-row>

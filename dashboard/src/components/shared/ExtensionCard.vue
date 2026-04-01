@@ -462,6 +462,10 @@ const viewChangelog = () => {
             }}</v-list-item-title>
           </v-list-item>
 
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-file-document-edit-outline" @click="viewChangelog">
+            <v-list-item-title>{{ tm("buttons.viewChangelog") }}</v-list-item-title>
+          </v-list-item>
+
           <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click="uninstallExtension">
             <v-list-item-title class="text-error">{{ tm("card.actions.uninstallPlugin") }}</v-list-item-title>
           </v-list-item>

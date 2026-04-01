@@ -707,6 +707,14 @@ const pinnedPlugins = computed(() => {
 
                           <v-list-item
                             class="styled-menu-item"
+                            prepend-icon="mdi-file-document-edit-outline"
+                            @click="viewChangelog(item)"
+                          >
+                            <v-list-item-title>{{ tm("buttons.viewChangelog") }}</v-list-item-title>
+                          </v-list-item>
+
+                          <v-list-item
+                            class="styled-menu-item"
                             prepend-icon="mdi-delete"
                             :disabled="item.reserved"
                             @click="uninstallExtension(item.name)"
