@@ -47,7 +47,7 @@ class botClient(Client):
     async def on_group_at_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
-        if not getattr(self, "_handler_enabled", False):
+        if not self._handler_enabled:
             return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
@@ -60,7 +60,7 @@ class botClient(Client):
 
     # 收到频道消息
     async def on_at_message_create(self, message: botpy.message.Message) -> None:
-        if not getattr(self, "_handler_enabled", False):
+        if not self._handler_enabled:
             return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
@@ -75,7 +75,7 @@ class botClient(Client):
     async def on_direct_message_create(
         self, message: botpy.message.DirectMessage
     ) -> None:
-        if not getattr(self, "_handler_enabled", False):
+        if not self._handler_enabled:
             return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
@@ -87,7 +87,7 @@ class botClient(Client):
 
     # 收到 C2C 消息
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
-        if not getattr(self, "_handler_enabled", False):
+        if not self._handler_enabled:
             return
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
@@ -545,8 +545,6 @@ class QQOfficialPlatformAdapter(Platform):
         return abm
 
     def run(self):
-        self.client._handler_enabled = True
-        logger.debug("[QQOfficial] Handlers enabled for this client instance")
         return self.client.start(appid=self.appid, secret=self.secret)
 
     def get_client(self) -> botClient:
