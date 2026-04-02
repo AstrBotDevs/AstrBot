@@ -51,8 +51,8 @@ importers:
         specifier: ^0.16.43
         version: 0.16.44
       lodash:
-        specifier: 4.17.23
-        version: 4.17.23
+        specifier: 4.18.1
+        version: 4.18.1
       markdown-it:
         specifier: ^14.1.1
         version: 14.1.1
@@ -1877,8 +1877,8 @@ packages:
   lodash-es@4.17.23:
     resolution: {integrity: sha512-kVI48u3PZr38HdYz98UmfPnXl2DXrpdctLrFLCd3kOx1xUkOmpFPx7gCWWM5MPkL/fD8zb+Ph0QzjGFs4+hHWg==}
 
-  lodash@4.17.23:
-    resolution: {integrity: sha512-LgVTMpQtIopCi79SJeDiP0TfWi5CNEc/L/aRdTh3yIvmZXTnheWpKjSZhnvMl8iXbC1tFg9gdHHDMLoV7CnG+w==}
+  lodash@4.18.1:
+    resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
 
   magic-string-ast@1.0.3:
     resolution: {integrity: sha512-CvkkH1i81zl7mmb94DsRiFeG9V2fR2JeuK8yDgS8oiZSFa++wWLEgZ5ufEOyLHbvSbD1gTRKv9NdX69Rnvr9JA==}
@@ -4486,7 +4486,7 @@ snapshots:
 
   lodash-es@4.17.23: {}
 
-  lodash@4.17.23: {}
+  lodash@4.18.1: {}
 
   magic-string-ast@1.0.3:
     dependencies:
@@ -5030,7 +5030,7 @@ snapshots:
     dependencies:
       fontverter: 2.0.0
       harfbuzzjs: 0.4.15
-      lodash: 4.17.23
+      lodash: 4.18.1
       p-limit: 3.1.0
 
   superjson@2.2.6:
