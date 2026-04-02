@@ -94,7 +94,21 @@
 
                         <template v-slot:item.title="{ item }">
                             <div class="conversation-title-cell">
-                                <span class="conversation-title-text">{{ item.title || tm('status.noTitle') }}</span>
+                                <div class="conversation-title-row">
+                                    <span class="conversation-title-text">{{ item.title || tm('status.noTitle') }}</span>
+                                    <v-btn
+                                        icon
+                                        variant="plain"
+                                        size="x-small"
+                                        density="compact"
+                                        :ripple="false"
+                                        class="conversation-inline-edit"
+                                        @click.stop="editConversation(item)"
+                                        :disabled="loading"
+                                    >
+                                        <v-icon size="14">mdi-pencil</v-icon>
+                                    </v-btn>
+                                </div>
                                 <span class="conversation-title-meta">{{ item.cid || tm('status.unknown') }}</span>
                             </div>
                         </template>
@@ -140,10 +154,6 @@
                                 <v-btn icon variant="plain" size="x-small" class="action-button"
                                     @click="viewConversation(item)" :disabled="loading">
                                     <v-icon>mdi-eye</v-icon>
-                                </v-btn>
-                                <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="editConversation(item)" :disabled="loading">
-                                    <v-icon>mdi-pencil</v-icon>
                                 </v-btn>
                                 <v-btn icon color="error" variant="plain" size="x-small" class="action-button"
                                     @click="confirmDeleteConversation(item)" :disabled="loading">
@@ -1188,12 +1198,27 @@ export default {
     max-width: 145px;
 }
 
+.conversation-title-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
 .conversation-title-text {
     display: inline-block;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.conversation-inline-edit {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    flex-shrink: 0;
 }
 
 .conversation-title-meta {
