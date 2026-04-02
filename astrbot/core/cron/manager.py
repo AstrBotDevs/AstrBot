@@ -17,6 +17,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.tools.prompts import _format_template_with_default_fallback
 from astrbot.core.utils.history_saver import persist_agent_history
 
 if TYPE_CHECKING:
@@ -352,14 +353,25 @@ class CronJobManager:
             req.contexts = context
             context_dump = req._print_friendly_context()
             req.contexts = []
-            req.system_prompt += (
-                CONVERSATION_HISTORY_INJECT_PREFIX + f"---\n{context_dump}\n---\n"
+            req.system_prompt += _format_template_with_default_fallback(
+                prompt_template= self.ctx.get_config().get("cron_history_wrap_prompt"),
+                default_template=CONVERSATION_HISTORY_INJECT_PREFIX,
+                logger=logger,
+                log_message="[cron_history_wrap_prompt] 文案格式化失败，已退回默认格式",
+                context_dump=context_dump,
             )
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
-        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
+        req.system_prompt += _format_template_with_default_fallback(
+            prompt_template= self.ctx.get_config().get("cron_execution_prompt"),
+            default_template=PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
+            logger=logger,
+            log_message="[cron_execution_prompt] 文案格式化失败，已退回默认格式",
+            cron_job=cron_job_str,
         )
-        req.prompt = CRON_TASK_WOKE_USER_PROMPT
+        req.prompt = self.ctx.get_config().get(
+            "cron_task_work_user_prompt",
+            CRON_TASK_WOKE_USER_PROMPT
+        )
         if not req.func_tool:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
@@ -377,13 +389,25 @@ class CronJobManager:
             pass
         llm_resp = runner.get_final_llm_resp()
         cron_meta = extras.get("cron_job", {}) if extras else {}
-        summary_note = (
-            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
-            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
+        summary_note = _format_template_with_default_fallback(
+            prompt_template= self.ctx.get_config().get("cron_task_summary_note"),
+            default_template=(
+                "[CronJob] {name_or_id}: {description} "
+                " triggered at {started_at}, "
+            ),
+            logger=logger,
+            log_message="[cron_task_summary_note] 文案格式化失败，已退回默认格式",
+            name_or_id=cron_meta.get("name") or cron_meta.get("id", "unknown"),
+            description=cron_meta.get("description", ""),
+            started_at=cron_meta.get("run_started_at", "unknown time"),
         )
         if llm_resp and llm_resp.role == "assistant":
-            summary_note += (
-                f"I finished this job, here is the result: {llm_resp.completion_text}"
+            summary_note += _format_template_with_default_fallback(
+                prompt_template= self.ctx.get_config().get("cron_task_summary_note_result"),
+                default_template="I finished this job, here is the result: {result}",
+                logger=logger,
+                log_message="[cron_task_summary_note_result] 文案格式化失败，已退回默认格式",
+                result=llm_resp.completion_text,
             )
 
         await persist_agent_history(

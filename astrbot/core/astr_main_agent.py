@@ -82,6 +82,16 @@ class MainAgentBuildConfig:
     """
     tool_schema_mode: str = "full"
     """The tool schema mode, can be 'full' or 'lazy_load'."""
+    tool_call_prompt: str = TOOL_CALL_PROMPT
+    """The prompt template for tool calls when tool_schema_mode is 'full'."""
+    tool_call_lazy_load_mode_prompt: str = TOOL_CALL_PROMPT_LAZY_LOAD_MODE
+    """The prompt template for tool calls when tool_schema_mode is 'lazy_load'."""
+    tool_call_requery_instruction_prompt: str = ""
+    """The prompt template for tool calls when tool_schema_mode is 'lazy_load' to instruct args re-query."""
+    tool_call_follow_up_notice_prompt: str = ""
+    """The prompt template for tool calls when user follow up notice."""
+    tool_call_max_step_reached_prompt: str = ""
+    """The prompt template for notifying the LLM that the maximum number of tool call steps has been reached."""
     provider_wake_prefix: str = ""
     """The wake prefix for the provider. If the user message does not start with this prefix,
     the main agent will not be triggered."""
@@ -103,6 +113,10 @@ class MainAgentBuildConfig:
     """The strategy to handle context length limit reached."""
     llm_compress_instruction: str = ""
     """The instruction for compression in llm_compress strategy."""
+    context_summary_user_prompt: str = ""
+    """The user prompt for context summarization in llm_compress strategy."""
+    context_summary_ack_prompt: str = ""
+    """The assistant prompt for context summarization acknowledgment in llm_compress strategy."""
     llm_compress_keep_recent: int = 6
     """The number of most recent turns to keep during llm_compress strategy."""
     llm_compress_provider_id: str = ""
@@ -116,9 +130,12 @@ class MainAgentBuildConfig:
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
     safety_mode_strategy: str = "system_prompt"
+    llm_safety_mode_system_prompt: str = LLM_SAFETY_MODE_SYSTEM_PROMPT
     computer_use_runtime: str = "local"
     """The runtime for agent computer use: none, local, or sandbox."""
+    live_mode_system_prompt: str = LIVE_MODE_SYSTEM_PROMPT
     sandbox_cfg: dict = field(default_factory=dict)
+    local_cfg: dict = field(default_factory=dict)
     tool_providers: list[ToolProvider] = field(default_factory=list)
     """Decoupled tool providers injected by the caller.
     Each provider is queried for tools and system-prompt addons at build time."""
@@ -1007,7 +1024,9 @@ async def _handle_webchat(
 
 def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -> None:
     if config.safety_mode_strategy == "system_prompt":
-        req.system_prompt = f"{LLM_SAFETY_MODE_SYSTEM_PROMPT}\n\n{req.system_prompt}"
+        req.system_prompt = (
+            f"{config.llm_safety_mode_system_prompt}\n\n{req.system_prompt}"
+        )
     else:
         logger.warning(
             "Unsupported llm_safety_mode strategy: %s.",
@@ -1260,6 +1279,7 @@ async def build_main_agent(
         _provider_ctx = ToolProviderContext(
             computer_use_runtime=config.computer_use_runtime,
             sandbox_cfg=config.sandbox_cfg,
+            local_cfg=config.local_cfg,
             session_id=req.session_id or "",
         )
         # Respect WebUI tool enable/disable settings.
@@ -1308,15 +1328,15 @@ async def build_main_agent(
         req.func_tool.normalize()
 
         tool_prompt = (
-            TOOL_CALL_PROMPT
+            config.tool_call_prompt
             if config.tool_schema_mode == "full"
-            else TOOL_CALL_PROMPT_LAZY_LOAD_MODE
+            else config.tool_call_lazy_load_mode_prompt
         )
         req.system_prompt += f"\n{tool_prompt}\n"
 
     action_type = event.get_extra("action_type")
     if action_type == "live":
-        req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
+        req.system_prompt += f"\n{config.live_mode_system_prompt}\n"
 
     streaming_response = config.streaming_response
     if streaming_response and _should_disable_streaming_for_webchat_output(
@@ -1341,11 +1361,16 @@ async def build_main_agent(
         agent_hooks=MAIN_AGENT_HOOKS,
         streaming=streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
+        context_summary_user_prompt=config.context_summary_user_prompt,
+        context_summary_ack_prompt=config.context_summary_ack_prompt,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
         llm_compress_provider=_get_compress_provider(config, plugin_context),
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
+        tool_call_requery_instruction_prompt=config.tool_call_requery_instruction_prompt,
+        tool_call_follow_up_notice_prompt=config.tool_call_follow_up_notice_prompt,
+        tool_call_max_step_reached_prompt=config.tool_call_max_step_reached_prompt,
         fallback_providers=_get_fallback_chat_providers(
             provider, plugin_context, config.provider_settings
         ),

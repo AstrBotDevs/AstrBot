@@ -30,7 +30,7 @@ from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.prompts import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
     BACKGROUND_TASK_WOKE_USER_PROMPT,
-    CONVERSATION_HISTORY_INJECT_PREFIX,
+    CONVERSATION_HISTORY_INJECT_PREFIX, _format_template_with_default_fallback,
 )
 from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -235,6 +235,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         runtime: str,
         sandbox_cfg: dict | None = None,
+        local_cfg: dict | None = None,
         session_id: str = "",
     ) -> dict[str, ToolSchema]:
         from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
@@ -244,6 +245,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         ctx = ToolProviderContext(
             computer_use_runtime=runtime,
             sandbox_cfg=sandbox_cfg,
+            local_cfg=local_cfg,
             session_id=session_id,
         )
         tools = provider.get_tools(ctx)
@@ -268,9 +270,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
         sandbox_cfg = provider_settings.get("sandbox", {})
+        local_cfg = provider_settings.get("local", {})
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
             sandbox_cfg=sandbox_cfg,
+            local_cfg=local_cfg,
             session_id=event.unified_msg_origin,
         )
 
@@ -530,6 +534,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         event = run_context.context.event
         ctx = run_context.context.context
+        cfg = ctx.get_config(umo=event.unified_msg_origin)
+        proactive_cfg = cfg.get("provider_settings", {}).get("proactive_capability", {})
 
         task_result = {
             "task_id": task_id,
@@ -568,13 +574,28 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             req.contexts = context
             context_dump = req._print_friendly_context()
             req.contexts = []
-            req.system_prompt += CONVERSATION_HISTORY_INJECT_PREFIX + context_dump
+
+            req.system_prompt += _format_template_with_default_fallback(
+                prompt_template=proactive_cfg.get("background_history_wrap_prompt"),
+                default_template=CONVERSATION_HISTORY_INJECT_PREFIX,
+                logger=logger,
+                log_message="[background_history_wrap_prompt] 模板格式化失败，回退使用默认模板。",
+                context_dump=context_dump,
+            )
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
-        req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
-            background_task_result=bg
+        req.system_prompt += _format_template_with_default_fallback(
+                prompt_template=proactive_cfg.get("background_execution_prompt"),
+                default_template=BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
+                logger=logger,
+                log_message="[background_execution_prompt] 模板格式化失败，回退使用默认模板。",
+                background_task_result=bg,
+            )
+
+        req.prompt = proactive_cfg.get(
+            "background_task_work_user_prompt",
+            BACKGROUND_TASK_WOKE_USER_PROMPT
         )
-        req.prompt = BACKGROUND_TASK_WOKE_USER_PROMPT
         if not req.func_tool:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
@@ -592,14 +613,27 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             pass
         llm_resp = runner.get_final_llm_resp()
         task_meta = extras.get("background_task_result", {})
-        summary_note = (
-            f"[BackgroundTask] {summary_name} "
-            f"(task_id={task_meta.get('task_id', task_id)}) finished. "
-            f"Result: {task_meta.get('result') or result_text or 'no content'}"
+
+        summary_note = _format_template_with_default_fallback(
+            prompt_template=proactive_cfg.get("background_task_summary_note"),
+            default_template=(
+                "[BackgroundTask] {summary_name} "
+                "(task_id={task_id}) finished. "
+                "Result: {result}"
+            ),
+            logger=logger,
+            log_message="[background_task_summary_note] 模板格式化失败，回退使用默认模板。",
+            summary_name=summary_name,
+            task_id=task_id,
+            result=task_meta.get("result") or result_text or "no content",
         )
         if llm_resp and llm_resp.completion_text:
-            summary_note += (
-                f"I finished the task, here is the result: {llm_resp.completion_text}"
+            summary_note += _format_template_with_default_fallback(
+                prompt_template=proactive_cfg.get("background_task_summary_note_result"),
+                default_template="I finished the task, here is the result: {result}",
+                logger=logger,
+                log_message="[background_task_summary_note_result] 模板格式化失败，回退使用默认模板。",
+                result=llm_resp.completion_text,
             )
         await persist_agent_history(
             ctx.conversation_manager,

@@ -35,6 +35,8 @@ class ContextManager:
                 provider=config.llm_compress_provider,
                 keep_recent=config.llm_compress_keep_recent,
                 instruction_text=config.llm_compress_instruction,
+                user_prompt=config.context_summary_user_prompt,
+                ack_prompt=config.context_summary_ack_prompt,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(

@@ -152,6 +152,8 @@ class LLMSummaryCompressor:
         provider: "Provider",
         keep_recent: int = 4,
         instruction_text: str | None = None,
+        user_prompt: str | None = None,
+        ack_prompt: str | None = None,
         compression_threshold: float = 0.82,
     ) -> None:
         """Initialize the LLM summary compressor.
@@ -172,6 +174,16 @@ class LLMSummaryCompressor:
             "2. If any tools were used, summarize tool usage (total call count) and extract the most valuable insights from tool outputs.\n"
             "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "4. Write the summary in the user's language.\n"
+        )
+        PLACEHOLDER = "{summary_content}"
+        self.usr_prompt = (
+            user_prompt
+            if user_prompt and user_prompt.count(PLACEHOLDER) == 1
+            else f"Our previous history conversation summary: {PLACEHOLDER}"
+        )
+        self.ack_prompt = (
+            ack_prompt
+            or "Acknowledged the summary of our previous conversation history."
         )
 
     def should_compress(
@@ -229,13 +241,13 @@ class LLMSummaryCompressor:
         result.append(
             Message(
                 role="user",
-                content=f"Our previous history conversation summary: {summary_content}",
+                content=self.usr_prompt.format(summary_content=summary_content),
             )
         )
         result.append(
             Message(
                 role="assistant",
-                content="Acknowledged the summary of our previous conversation history.",
+                content=self.ack_prompt,
             )
         )
 
