@@ -460,24 +460,19 @@ class ProviderOpenAIOfficial(Provider):
         if "messages" in payloads and isinstance(payloads["messages"], list):
             cleaned_messages = []
             for idx, msg in enumerate(payloads["messages"]):
-                # 针对 assistant 角色的特殊处理
+                # 过滤空的 assistant 消息，防止严格 API（如 Moonshot）返回 400 错误
                 if msg.get("role") == "assistant":
                     content = msg.get("content")
                     tool_calls = msg.get("tool_calls")
 
-                    # 情况1: content 为空字符串且没有工具调用 -> 删除
-                    if content == "" and not tool_calls:
-                        logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
-                        continue
-
-                    # 情况2: content 为 None 但没有工具调用 -> 删除或赋予空字符串
-                    if content is None and not tool_calls:
+                    # 情况1: 空/null content 且无 tool_calls -> 过滤掉
+                    if not tool_calls and (content == "" or content is None):
                         logger.warning(
-                            f"过滤第 {idx} 条 null content 的 assistant 消息"
+                            f"过滤第 {idx} 条空 assistant 消息 (无工具调用)"
                         )
                         continue
 
-                    # 情况3: content 为 "" 但有工具调用 -> 改为 None (符合 OpenAI 规范)
+                    # 情况2: 空 content 但有 tool_calls -> 设为 None (符合 OpenAI 规范)
                     if content == "" and tool_calls:
                         msg["content"] = None
 
