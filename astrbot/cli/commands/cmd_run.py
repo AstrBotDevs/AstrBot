@@ -386,7 +386,9 @@ def run(
     except Timeout:
         raise click.ClickException(
             "Cannot acquire lock file. Please check if another instance is running"
-        )
+        ) from None
     except Exception as e:
         # Keep original traceback visible for diagnostics
-        raise click.ClickException(f"Runtime error: {e}\n{traceback.format_exc()}")
+        raise click.ClickException(
+            f"Runtime error: {e}\n{traceback.format_exc()}"
+        ) from e
