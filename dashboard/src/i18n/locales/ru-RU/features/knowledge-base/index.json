@@ -10,7 +10,8 @@
         "loading": "Загрузка...",
         "documents": "док.",
         "chunks": "фрагм.",
-        "sessionConfig": "Профиль"
+        "sessionConfig": "Профиль",
+        "initError": "Ошибка инициализации"
     },
     "card": {
         "edit": "Изменить",

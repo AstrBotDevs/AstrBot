@@ -10,7 +10,8 @@
     "loading": "正在加载...",
     "documents": "文档",
     "chunks": "分块",
-    "sessionConfig": "会话配置"
+    "sessionConfig": "会话配置",
+    "initError": "初始化失败"
   },
   "card": {
     "edit": "编辑",
