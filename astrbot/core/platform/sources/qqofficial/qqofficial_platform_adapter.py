@@ -16,7 +16,7 @@ from botpy import Client
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import At,File, Image, Plain, Record, Video
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -49,6 +49,7 @@ class botClient(Client):
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
+            self.platform.appid,
         )
         abm.group_id = cast(str, message.group_openid)
         abm.session_id = abm.group_id
@@ -60,6 +61,7 @@ class botClient(Client):
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
+            self.platform.appid,
         )
         abm.group_id = message.channel_id
         abm.session_id = abm.group_id
@@ -73,6 +75,7 @@ class botClient(Client):
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
+            self.platform.appid,
         )
         abm.session_id = abm.sender.user_id
         self.platform.remember_session_scene(abm.session_id, "friend")
@@ -83,6 +86,7 @@ class botClient(Client):
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
+            self.platform.appid,
         )
         abm.session_id = abm.sender.user_id
         self.platform.remember_session_scene(abm.session_id, "friend")
@@ -470,6 +474,7 @@ class QQOfficialPlatformAdapter(Platform):
         | botpy.message.DirectMessage
         | botpy.message.C2CMessage,
         message_type: MessageType,
+        appid: str,
     ) -> AstrBotMessage:
         abm = AstrBotMessage()
         abm.type = message_type
@@ -486,14 +491,14 @@ class QQOfficialPlatformAdapter(Platform):
             if isinstance(message, botpy.message.GroupMessage):
                 abm.sender = MessageMember(message.author.member_openid, "")
                 abm.group_id = message.group_openid
+                msg.append(At(qq=appid))
             else:
                 abm.sender = MessageMember(message.author.user_openid, "")
             # Parse face messages to readable text
             abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
                 message.content.strip()
             )
-            abm.self_id = "unknown_selfid"
-            msg.append(At(qq="qq_official"))
+            abm.self_id = appid
             msg.append(Plain(abm.message_str))
             await QQOfficialPlatformAdapter._append_attachments(
                 msg, message.attachments
@@ -507,7 +512,7 @@ class QQOfficialPlatformAdapter(Platform):
             if isinstance(message, botpy.message.Message):
                 abm.self_id = str(message.mentions[0].id)
             else:
-                abm.self_id = ""
+                abm.self_id = appid
 
             plain_content = QQOfficialPlatformAdapter._parse_face_message(
                 message.content.replace(
@@ -525,14 +530,12 @@ class QQOfficialPlatformAdapter(Platform):
                 str(message.author.id),
                 str(message.author.username),
             )
-            msg.append(At(qq="qq_official"))
             msg.append(Plain(plain_content))
 
             if isinstance(message, botpy.message.Message):
                 abm.group_id = message.channel_id
         else:
             raise ValueError(f"Unknown message type: {message_type}")
-        abm.self_id = "qq_official"
         return abm
 
     def run(self):
