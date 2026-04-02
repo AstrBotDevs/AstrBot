@@ -184,6 +184,7 @@ Connectez AstrBot à vos plateformes de chat préférées.
 | Coze | Plateformes LLMOps |
 | OpenAI Whisper | Services de reconnaissance vocale |
 | SenseVoice | Services de reconnaissance vocale |
+| Xiaomi MiMo Omni | Services de reconnaissance vocale |
 | OpenAI TTS | Services de synthèse vocale |
 | Gemini TTS | Services de synthèse vocale |
 | GPT-Sovits-Inference | Services de synthèse vocale |
@@ -193,6 +194,7 @@ Connectez AstrBot à vos plateformes de chat préférées.
 | Alibaba Cloud Bailian TTS | Services de synthèse vocale |
 | Azure TTS | Services de synthèse vocale |
 | Minimax TTS | Services de synthèse vocale |
+| Xiaomi MiMo TTS | Services de synthèse vocale |
 | Volcano Engine TTS | Services de synthèse vocale |
 
 ## ❤️ Contribuer

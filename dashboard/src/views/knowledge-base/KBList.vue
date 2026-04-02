@@ -27,14 +27,27 @@
     </div>
 
     <div v-else-if="kbList.length > 0" class="kb-grid">
-      <v-card v-for="kb in kbList" :key="kb.kb_id" class="kb-card" elevation="2" hover
-        @click="navigateToDetail(kb.kb_id)">
-        <div class="kb-card-content">
+      <v-card v-for="kb in kbList" :key="kb.kb_id" class="kb-card" elevation="2" :hover="!kb.init_error"
+        :class="{ 'kb-card-error': kb.init_error }"
+        @click="!kb.init_error && navigateToDetail(kb.kb_id)">
+        <!-- Error badge -->
+        <v-badge v-if="kb.init_error" color="error" icon="mdi-alert-circle"
+          class="kb-error-badge position-absolute" style="top: 0; right: 0; transform: translate(34%, -34%);" />
+        <div class="kb-card-content" :class="{ 'kb-card-content-error': kb.init_error }">
           <div class="kb-emoji">{{ kb.emoji || '📚' }}</div>
           <h3 class="kb-name">{{ kb.kb_name }}</h3>
-          <p class="kb-description text-medium-emphasis">{{ kb.description || '暂无描述' }}</p>
+          <p v-if="!kb.init_error" class="kb-description text-medium-emphasis">{{ kb.description || '暂无描述' }}</p>
 
-          <div class="kb-stats mt-4">
+          <!-- Error message display -->
+          <div v-if="kb.init_error" class="kb-error-panel mt-3 mb-2">
+            <div class="kb-error-title">
+              <v-icon size="16" color="error">mdi-close-circle</v-icon>
+              <span>{{ t('list.initError') }}</span>
+            </div>
+            <div class="kb-error-detail" :title="kb.init_error">{{ kb.init_error }}</div>
+          </div>
+
+          <div class="kb-stats mt-4" v-if="!kb.init_error">
             <div class="stat-item">
               <v-icon size="small" color="primary">mdi-file-document</v-icon>
               <span>{{ kb.doc_count || 0 }} {{ t('list.documents') }}</span>
@@ -45,8 +58,8 @@
             </div>
           </div>
 
-          <div class="kb-actions">
-            <v-btn icon="mdi-pencil" size="small" variant="text" color="info" @click.stop="editKB(kb)" />
+          <div class="kb-actions" :class="{ 'error-actions': kb.init_error }">
+            <v-btn v-if="!kb.init_error" icon="mdi-pencil" size="small" variant="text" color="info" @click.stop="editKB(kb)" />
             <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click.stop="confirmDelete(kb)" />
           </div>
         </div>
@@ -478,6 +491,34 @@ onMounted(() => {
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15) !important;
 }
 
+/* Error state card styles */
+.kb-card-error {
+  cursor: not-allowed;
+  border: 1px solid rgba(var(--v-theme-error), 0.3);
+  background-color: rgba(var(--v-theme-error), 0.02) !important;
+  overflow: visible; /* Allow badge to overflow */
+}
+
+.kb-card-error:hover {
+  transform: none;
+  box-shadow: 0 4px 12px rgba(var(--v-theme-error), 0.1) !important;
+  border-color: rgba(var(--v-theme-error), 0.5);
+}
+
+.kb-card-error .kb-emoji {
+  opacity: 0.7;
+  filter: grayscale(0.5);
+}
+
+.kb-card-error .kb-name {
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+.kb-error-badge {
+  z-index: 10;
+  opacity: 0.9;
+}
+
 .kb-card-content {
   padding: 24px;
   display: flex;
@@ -486,6 +527,11 @@ onMounted(() => {
   text-align: center;
   min-height: 260px;
   position: relative;
+}
+
+.kb-card-content-error {
+  justify-content: center;
+  gap: 8px;
 }
 
 .kb-emoji {
@@ -516,6 +562,36 @@ onMounted(() => {
   gap: 16px;
   width: 100%;
   justify-content: center;
+}
+
+.kb-error-panel {
+  width: 100%;
+  text-align: left;
+  background: rgba(var(--v-theme-error), 0.08);
+  border: 1px solid rgba(var(--v-theme-error), 0.18);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.kb-error-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgb(var(--v-theme-error));
+  margin-bottom: 4px;
+}
+
+.kb-error-detail {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(var(--v-theme-on-surface), 0.82);
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .stat-item {

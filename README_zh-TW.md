@@ -184,6 +184,7 @@ yay -S astrbot-git
 | Coze | LLMOps 平台 |
 | OpenAI Whisper | 語音轉文字服務 |
 | SenseVoice | 語音轉文字服務 |
+| Xiaomi MiMo Omni | 語音轉文字服務 |
 | OpenAI TTS | 文字轉語音服務 |
 | Gemini TTS | 文字轉語音服務 |
 | GPT-Sovits-Inference | 文字轉語音服務 |
@@ -193,6 +194,7 @@ yay -S astrbot-git
 | 阿里雲百煉 TTS | 文字轉語音服務 |
 | Azure TTS | 文字轉語音服務 |
 | Minimax TTS | 文字轉語音服務 |
+| Xiaomi MiMo TTS | 文字轉語音服務 |
 | 火山引擎 TTS | 文字轉語音服務 |
 
 ## ❤️ 貢獻
