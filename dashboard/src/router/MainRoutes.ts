@@ -52,10 +52,9 @@ const MainRoutes = {
       redirect: "/config#system",
     },
     {
-      name: "Default",
+      name: "Stats",
       path: "/dashboard/default",
-      component: () =>
-        import("@/views/dashboards/default/DefaultDashboard.vue"),
+      component: () => import("@/views/stats/StatsPage.vue"),
     },
     {
       name: "Conversation",

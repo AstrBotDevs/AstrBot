@@ -4,7 +4,6 @@ import axios from "@/utils/request";
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
-    // @ts-ignore
     username: "",
     returnUrl: null,
   }),

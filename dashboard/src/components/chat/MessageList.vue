@@ -30,7 +30,6 @@
             :class="{ 'has-audio': hasAudio(msg.content.message) }"
             :style="{
               backgroundColor: 'var(--v-theme-chatMessageBubble)',
-              color: '#E2E2E7 !important',
             }"
           >
             <!-- 遍历 message parts -->
@@ -185,7 +184,6 @@
               class="message-bubble bot-bubble"
               :style="{
                 backgroundColor: 'var(--v-theme-chatAssistantBubble)',
-                color: '#E2E2E7 !important',
               }"
             >
               <!-- Loading state -->
@@ -1623,7 +1621,7 @@ export default {
 
 /* Bubble text: hardcoded for debugging - #E2E2E7 = BlueBusinessDark primaryText */
 .bubble-text {
-  color: #E2E2E7 !important;
+  color: inherit;
 }
 
 /* Stats Menu 样式 */
