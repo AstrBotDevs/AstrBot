@@ -1144,43 +1144,43 @@ export default {
 </script>
 
 <style scoped>
-::v-deep(.hr-node) {
+:deep(.hr-node) {
   margin-top: 1.25rem;
   margin-bottom: 1.25rem;
   opacity: 0.5;
   border-top-width: 0.3px;
 }
 
-::v-deep(.paragraph-node) {
+:deep(.paragraph-node) {
   margin: 0.5rem 0;
   line-height: 1.7;
   margin-block: 1rem;
 }
 
-::v-deep(.list-node) {
+:deep(.list-node) {
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
-::v-deep(.mermaid-block-header) {
+:deep(.mermaid-block-header) {
   gap: 8px;
 }
 
-::v-deep(code.bg-secondary) {
+:deep(code.bg-secondary) {
   background-color: #ececec !important;
   color: #0d0d0d !important;
 }
 
-::v-deep(code.rounded) {
+:deep(code.rounded) {
   border-radius: 6px !important;
 }
 
-.messages-container.is-dark ::v-deep(code.bg-secondary) {
+.messages-container.is-dark :deep(code.bg-secondary) {
   background-color: #424242 !important;
   color: #ffffff !important;
 }
 
-.messages-container.is-dark ::v-deep(.code-block-container) {
+.messages-container.is-dark :deep(.code-block-container) {
   background-color: #1f1f1f !important;
 }
 

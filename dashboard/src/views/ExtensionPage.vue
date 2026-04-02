@@ -168,7 +168,9 @@ const {
             <v-window-item value="components">
               <div class="mb-4 pt-4 pb-4">
                 <div class="d-flex align-center flex-wrap" style="gap: 12px">
-                  <h2 class="text-h2 mb-0">{{ tm("tabs.handlersOperation") }}</h2>
+                  <h2 class="text-h2 mb-0">
+                    {{ tm("tabs.handlersOperation") }}
+                  </h2>
                 </div>
               </div>
               <v-card

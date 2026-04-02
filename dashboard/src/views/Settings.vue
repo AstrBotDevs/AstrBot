@@ -51,25 +51,22 @@
           >
             <v-btn value="light" size="small">
               <v-icon class="mr-1" size="18">mdi-white-balance-sunny</v-icon>
-              {{ tm("theme.customize.light")}}
+              {{ tm("theme.customize.light") }}
             </v-btn>
             <v-btn value="dark" size="small">
               <v-icon class="mr-1" size="18">mdi-moon-waning-crescent</v-icon>
-              {{ tm("theme.customize.dark")}}
+              {{ tm("theme.customize.dark") }}
             </v-btn>
             <v-btn value="auto" size="small">
               <v-icon class="mr-1" size="18">mdi-sync</v-icon>
-              {{ tm("theme.customize.auto")}}
+              {{ tm("theme.customize.auto") }}
             </v-btn>
           </v-btn-toggle>
           <v-tooltip location="top">
             <template #activator="{ props }">
-              <v-icon
-                v-bind="props"
-                size="16"
-                color="primary"
-                class="ml-1"
-              >mdi-help-circle-outline</v-icon>
+              <v-icon v-bind="props" size="16" color="primary" class="ml-1"
+                >mdi-help-circle-outline</v-icon
+              >
             </template>
             <span>{{ tm("theme.customize.autoSwitchDesc") }}</span>
           </v-tooltip>
@@ -135,7 +132,9 @@
         <div class="d-flex flex-wrap ga-3 mb-4">
           <div>
             <div class="text-body-2 mb-1">{{ tm("system.backup.title") }}</div>
-            <div class="text-caption text-medium-emphasis mb-2">{{ tm("system.backup.subtitle") }}</div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ tm("system.backup.subtitle") }}
+            </div>
             <v-btn color="primary" size="small" @click="openBackupDialog">
               <v-icon class="mr-1" size="16">mdi-backup-restore</v-icon>
               {{ tm("system.backup.button") }}
@@ -144,7 +143,9 @@
           <v-divider vertical class="mx-2 mx-md-4" />
           <div>
             <div class="text-body-2 mb-1">{{ tm("system.restart.title") }}</div>
-            <div class="text-caption text-medium-emphasis mb-2">{{ tm("system.restart.subtitle") }}</div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ tm("system.restart.subtitle") }}
+            </div>
             <v-btn color="error" size="small" @click="restartAstrBot">
               <v-icon class="mr-1" size="16">mdi-restart</v-icon>
               {{ tm("system.restart.button") }}
@@ -152,9 +153,18 @@
           </div>
           <v-divider vertical class="mx-2 mx-md-4" />
           <div>
-            <div class="text-body-2 mb-1">{{ tm("system.migration.title") }}</div>
-            <div class="text-caption text-medium-emphasis mb-2">{{ tm("system.migration.subtitle") }}</div>
-            <v-btn color="primary" size="small" variant="outlined" @click="startMigration">
+            <div class="text-body-2 mb-1">
+              {{ tm("system.migration.title") }}
+            </div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ tm("system.migration.subtitle") }}
+            </div>
+            <v-btn
+              color="primary"
+              size="small"
+              variant="outlined"
+              @click="startMigration"
+            >
               <v-icon class="mr-1" size="16">mdi-database-import</v-icon>
               {{ tm("system.migration.button") }}
             </v-btn>
@@ -280,12 +290,16 @@
               <tbody>
                 <tr v-for="item in apiKeys" :key="item.key_id">
                   <td>{{ item.name }}</td>
-                  <td><code>{{ item.key_prefix }}</code></td>
+                  <td>
+                    <code>{{ item.key_prefix }}</code>
+                  </td>
                   <td>{{ (item.scopes || []).join(", ") }}</td>
                   <td>
                     <v-chip
                       size="small"
-                      :color="item.is_revoked || item.is_expired ? 'error' : 'success'"
+                      :color="
+                        item.is_revoked || item.is_expired ? 'error' : 'success'
+                      "
                       variant="tonal"
                     >
                       {{
@@ -349,16 +363,20 @@ import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot"
 import { useModuleI18n } from "@/i18n/composables";
 import { useTheme } from "vuetify";
 import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
-import { LIGHT_THEME_NAME, DARK_THEME_NAME, ThemeMode } from "@/theme/constants";
+import {
+  LIGHT_THEME_NAME,
+  DARK_THEME_NAME,
+  ThemeMode,
+} from "@/theme/constants";
 import { useToastStore } from "@/stores/toast";
 import { useCustomizerStore } from "@/stores/customizer";
-import { 
-  ApiKey, 
-  ApiKeyActionResponse, 
-  ApiKeyCreatePayload, 
-  ApiKeyCreateResponse, 
-  ApiKeyExpiresDays, 
-  ApiKeyListResponse 
+import {
+  ApiKey,
+  ApiKeyActionResponse,
+  ApiKeyCreatePayload,
+  ApiKeyCreateResponse,
+  ApiKeyExpiresDays,
+  ApiKeyListResponse,
 } from "@/types/api";
 
 const { tm } = useModuleI18n("features/settings");
@@ -475,7 +493,10 @@ const applyThemePreset = (presetName: string) => {
   // Apply to themes
   applyThemeColors(preset.primary, preset.secondary);
 
-  toastStore.add({ message: tm("theme.customize.presetApplied") || "主题已应用", color: "success" });
+  toastStore.add({
+    message: tm("theme.customize.presetApplied") || "主题已应用",
+    color: "success",
+  });
 };
 
 const resolveThemes = () => {
@@ -689,10 +710,9 @@ const createApiKey = async () => {
 
 const revokeApiKey = async (keyId: string) => {
   try {
-    const res = await axios.post<ApiKeyActionResponse>(
-      "/api/apikey/revoke",
-      { key_id: keyId },
-    );
+    const res = await axios.post<ApiKeyActionResponse>("/api/apikey/revoke", {
+      key_id: keyId,
+    });
     if (res.data.status !== "ok") {
       showToast(
         res.data.message || tm("apiKey.messages.revokeFailed"),
@@ -717,10 +737,9 @@ const revokeApiKey = async (keyId: string) => {
 
 const deleteApiKey = async (keyId: string) => {
   try {
-    const res = await axios.post<ApiKeyActionResponse>(
-      "/api/apikey/delete",
-      { key_id: keyId },
-    );
+    const res = await axios.post<ApiKeyActionResponse>("/api/apikey/delete", {
+      key_id: keyId,
+    });
     if (res.data.status !== "ok") {
       showToast(
         res.data.message || tm("apiKey.messages.deleteFailed"),
@@ -753,7 +772,10 @@ const restartAstrBot = async () => {
         "error",
       );
     } else {
-      console.error("An unexpected error occurred while restarting AstrBot:", error);
+      console.error(
+        "An unexpected error occurred while restarting AstrBot:",
+        error,
+      );
       showToast(tm("apiKey.messages.restartFailed"), "error");
     }
   }

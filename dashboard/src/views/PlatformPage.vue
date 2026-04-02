@@ -861,7 +861,11 @@ export default {
   flex-shrink: 0;
 }
 
-.topbar-left { display: flex; flex-direction: column; gap: 4px; }
+.topbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 
 .topbar-title {
   font-size: clamp(24px, 3vw, 32px);
@@ -876,7 +880,11 @@ export default {
   color: var(--platform-muted);
 }
 
-.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
 .platform-content {
   background: var(--platform-panel-bg);
@@ -899,8 +907,16 @@ export default {
 }
 
 @media (max-width: 900px) {
-  .platform-topbar { flex-direction: column; align-items: flex-start; }
-  .topbar-right { width: 100%; }
-  .platform-page { gap: 12px; padding: 12px; }
+  .platform-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .topbar-right {
+    width: 100%;
+  }
+  .platform-page {
+    gap: 12px;
+    padding: 12px;
+  }
 }
 </style>

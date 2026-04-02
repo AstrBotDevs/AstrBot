@@ -77,7 +77,7 @@ export default {
 
 /* Grid overlay — lattice constraint texture */
 .stat-card::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background-image:
@@ -90,7 +90,7 @@ export default {
 
 /* Bright seam: magnetic containment at top edge only */
 .stat-card::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 12px;

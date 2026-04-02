@@ -123,7 +123,9 @@ export default {
 }
 
 .uptime-card:hover {
-  box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35), 0 0 16px rgba(76, 175, 80, 0.35) !important;
+  box-shadow:
+    inset 0 2px 12px rgba(0, 0, 0, 0.35),
+    0 0 16px rgba(76, 175, 80, 0.35) !important;
 }
 
 .memory-card {
@@ -132,11 +134,13 @@ export default {
 }
 
 .memory-card:hover {
-  box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35), 0 0 16px rgba(255, 152, 0, 0.35) !important;
+  box-shadow:
+    inset 0 2px 12px rgba(0, 0, 0, 0.35),
+    0 0 16px rgba(255, 152, 0, 0.35) !important;
 }
 
 .stat-card::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background-image:
@@ -148,7 +152,7 @@ export default {
 }
 
 .stat-card::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 12px;

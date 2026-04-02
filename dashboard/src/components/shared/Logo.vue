@@ -96,8 +96,13 @@ const formatTitle = (title: string) => {
 }
 
 @keyframes logoBreath {
-  0%, 100% { opacity: 0.75; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .logo-text {
@@ -121,7 +126,8 @@ const formatTitle = (title: string) => {
 /* Dark mode: cyan glow */
 .v-theme--bluebusinessdarktheme .logo-title {
   color: rgba(0, 242, 255, 0.95) !important;
-  text-shadow: 0 0 12px rgba(0, 242, 255, 0.5),
+  text-shadow:
+    0 0 12px rgba(0, 242, 255, 0.5),
     0 0 30px rgba(0, 242, 255, 0.2);
 }
 
@@ -153,7 +159,6 @@ const formatTitle = (title: string) => {
     line-height: 1.3;
   }
 }
-
 
 @media (max-width: 520px) {
   .logo-content {

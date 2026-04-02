@@ -214,10 +214,7 @@ function getSpecialSubtype(value) {
 </script>
 
 <template>
-  <v-card
-    v-if="shouldShowSection()"
-    class="config-reactor-card"
-  >
+  <v-card v-if="shouldShowSection()" class="config-reactor-card">
     <v-card-text
       v-if="metadata[metadataKey]?.type === 'object'"
       class="config-section"

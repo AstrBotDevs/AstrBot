@@ -107,7 +107,8 @@
     <div
       v-else-if="
         renderPart.type === 'part' &&
-        renderPart.part?.type === 'image' && renderPart.part?.embedded_url
+        renderPart.part?.type === 'image' &&
+        renderPart.part?.embedded_url
       "
       class="embedded-images"
     >
@@ -124,7 +125,8 @@
     <div
       v-else-if="
         renderPart.type === 'part' &&
-        renderPart.part?.type === 'record' && renderPart.part?.embedded_url
+        renderPart.part?.type === 'record' &&
+        renderPart.part?.embedded_url
       "
       class="embedded-audio"
     >
@@ -138,7 +140,8 @@
     <div
       v-else-if="
         renderPart.type === 'part' &&
-        renderPart.part?.type === 'file' && renderPart.part?.embedded_file
+        renderPart.part?.type === 'file' &&
+        renderPart.part?.embedded_file
       "
       class="embedded-files"
     >
@@ -195,7 +198,9 @@
           }}</span>
           <v-icon
             v-if="
-              downloadingFiles?.has(renderPart.part?.embedded_file?.attachment_id)
+              downloadingFiles?.has(
+                renderPart.part?.embedded_file?.attachment_id,
+              )
             "
             size="small"
             class="download-icon"

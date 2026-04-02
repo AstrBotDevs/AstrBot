@@ -3,7 +3,9 @@
     <div class="provider-sources-head">
       <div class="provider-sources-title-wrap">
         <div class="provider-sources-title-row">
-          <h3 class="provider-sources-title">{{ tm('providerSources.title') }}</h3>
+          <h3 class="provider-sources-title">
+            {{ tm("providerSources.title") }}
+          </h3>
           <v-chip size="x-small" variant="tonal" label>
             {{ displayedProviderSources.length }}
           </v-chip>
@@ -18,7 +20,7 @@
             variant="tonal"
             size="small"
           >
-            {{ tm('providerSources.add') }}
+            {{ tm("providerSources.add") }}
           </v-btn>
         </template>
         <v-list-item
@@ -29,7 +31,12 @@
         >
           <template #prepend>
             <v-avatar size="18" rounded="0" class="me-2">
-              <v-img v-if="sourceType.icon" :src="sourceType.icon" alt="provider icon" cover></v-img>
+              <v-img
+                v-if="sourceType.icon"
+                :src="sourceType.icon"
+                alt="provider icon"
+                cover
+              ></v-img>
               <v-icon v-else size="16">mdi-shape-outline</v-icon>
             </v-avatar>
           </template>
@@ -38,7 +45,10 @@
       </StyledMenu>
     </div>
 
-    <div v-if="isMobile && displayedProviderSources.length > 0" class="provider-sources-mobile">
+    <div
+      v-if="isMobile && displayedProviderSources.length > 0"
+      class="provider-sources-mobile"
+    >
       <div class="d-flex align-center ga-2">
         <v-select
           :model-value="selectedId"
@@ -57,7 +67,12 @@
             <v-list-item v-bind="itemProps">
               <template #prepend>
                 <v-avatar size="18" rounded="0" class="me-2">
-                  <v-img v-if="item.raw.icon" :src="item.raw.icon" alt="provider icon" cover></v-img>
+                  <v-img
+                    v-if="item.raw.icon"
+                    :src="item.raw.icon"
+                    alt="provider icon"
+                    cover
+                  ></v-img>
                   <v-icon v-else size="16">mdi-shape-outline</v-icon>
                 </v-avatar>
               </template>
@@ -75,25 +90,43 @@
       </div>
     </div>
 
-    <div v-else-if="displayedProviderSources.length > 0" class="provider-sources-list-wrap">
+    <div
+      v-else-if="displayedProviderSources.length > 0"
+      class="provider-sources-list-wrap"
+    >
       <v-list class="provider-source-list" nav density="compact" lines="two">
         <v-list-item
           v-for="source in displayedProviderSources"
-          :key="source.isPlaceholder ? `template-${source.templateKey}` : source.id"
+          :key="
+            source.isPlaceholder ? `template-${source.templateKey}` : source.id
+          "
           :value="source.id"
           :active="isActive(source)"
-          :class="['provider-source-list-item', { 'provider-source-list-item--active': isActive(source) }]"
+          :class="[
+            'provider-source-list-item',
+            { 'provider-source-list-item--active': isActive(source) },
+          ]"
           rounded="lg"
           @click="emitSelectSource(source)"
         >
           <template #prepend>
             <v-avatar size="28" class="provider-source-avatar" rounded="0">
-              <v-img v-if="source?.provider" :src="resolveSourceIcon(source)" alt="logo" cover></v-img>
+              <v-img
+                v-if="source?.provider"
+                :src="resolveSourceIcon(source)"
+                alt="logo"
+                cover
+              ></v-img>
               <v-icon v-else size="20">mdi-creation</v-icon>
             </v-avatar>
           </template>
-          <v-list-item-title class="provider-source-title">{{ getSourceDisplayName(source) }}</v-list-item-title>
-          <v-list-item-subtitle class="provider-source-subtitle text-truncate">{{ source.api_base || 'N/A' }}</v-list-item-subtitle>
+          <v-list-item-title class="provider-source-title">{{
+            getSourceDisplayName(source)
+          }}</v-list-item-title>
+          <v-list-item-subtitle
+            class="provider-source-subtitle text-truncate"
+            >{{ source.api_base || "N/A" }}</v-list-item-subtitle
+          >
           <template #append>
             <div class="d-flex align-center ga-1">
               <v-btn
@@ -112,76 +145,78 @@
     </div>
     <div v-else class="text-center py-8 px-4">
       <v-icon size="48" color="grey-lighten-1">mdi-api-off</v-icon>
-      <p class="text-grey mt-2">{{ tm('providerSources.empty') }}</p>
+      <p class="text-grey mt-2">{{ tm("providerSources.empty") }}</p>
     </div>
   </v-card>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useDisplay } from 'vuetify'
-import StyledMenu from '@/components/shared/StyledMenu.vue'
+import { computed } from "vue";
+import { useDisplay } from "vuetify";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
 
 const props = defineProps({
   displayedProviderSources: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   selectedProviderSource: {
     type: Object,
-    default: null
+    default: null,
   },
   availableSourceTypes: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   tm: {
     type: Function,
-    required: true
+    required: true,
   },
   resolveSourceIcon: {
     type: Function,
-    required: true
+    required: true,
   },
   getSourceDisplayName: {
     type: Function,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 
 const emit = defineEmits([
-  'add-provider-source',
-  'select-provider-source',
-  'delete-provider-source'
-])
+  "add-provider-source",
+  "select-provider-source",
+  "delete-provider-source",
+]);
 
-const { smAndDown } = useDisplay()
-const selectedId = computed(() => props.selectedProviderSource?.id || null)
-const isMobile = computed(() => smAndDown.value)
+const { smAndDown } = useDisplay();
+const selectedId = computed(() => props.selectedProviderSource?.id || null);
+const isMobile = computed(() => smAndDown.value);
 const mobileSourceItems = computed(() =>
   (props.displayedProviderSources || []).map((source) => ({
     value: source.id,
     label: props.getSourceDisplayName(source),
     icon: props.resolveSourceIcon(source),
-    source
-  }))
-)
+    source,
+  })),
+);
 
 const isActive = (source) => {
-  if (source.isPlaceholder) return false
-  return selectedId.value !== null && selectedId.value === source.id
-}
+  if (source.isPlaceholder) return false;
+  return selectedId.value !== null && selectedId.value === source.id;
+};
 
 const onMobileSourceChange = (sourceId) => {
-  const matched = mobileSourceItems.value.find((item) => item.value === sourceId)
+  const matched = mobileSourceItems.value.find(
+    (item) => item.value === sourceId,
+  );
   if (matched?.source) {
-    emitSelectSource(matched.source)
+    emitSelectSource(matched.source);
   }
-}
+};
 
-const emitAddSource = (type) => emit('add-provider-source', type)
-const emitSelectSource = (source) => emit('select-provider-source', source)
-const emitDeleteSource = (source) => emit('delete-provider-source', source)
+const emitAddSource = (type) => emit("add-provider-source", type);
+const emitSelectSource = (source) => emit("select-provider-source", source);
+const emitDeleteSource = (source) => emit("delete-provider-source", source);
 </script>
 
 <style scoped>
@@ -233,7 +268,9 @@ const emitDeleteSource = (source) => emit('delete-provider-source', source)
 .provider-source-list-item {
   margin-bottom: 2px;
   border: 1px solid transparent;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
   background: transparent;
 }
 

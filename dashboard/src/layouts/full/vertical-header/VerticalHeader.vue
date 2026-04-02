@@ -855,10 +855,7 @@ const isChristmas = computed(() => {
             "
           >
             <div class="markdown-content">
-              <MarkdownRender
-                :content="releaseMessage"
-                :typewriter="false"
-              />
+              <MarkdownRender :content="releaseMessage" :typewriter="false" />
             </div>
           </div>
 
@@ -1024,10 +1021,7 @@ const isChristmas = computed(() => {
       </v-card-title>
       <v-card-text style="font-size: 14px; max-height: 400px; overflow-y: auto">
         <div class="markdown-content">
-          <MarkdownRender
-            :content="selectedReleaseNotes"
-            :typewriter="false"
-          />
+          <MarkdownRender :content="selectedReleaseNotes" :typewriter="false" />
         </div>
       </v-card-text>
       <v-card-actions>

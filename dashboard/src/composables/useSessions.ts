@@ -173,8 +173,8 @@ export function useSessions(chatboxMode = false) {
       );
       const currentSessionDeleted = Boolean(
         currentSessionId &&
-          sessionIds.includes(currentSessionId) &&
-          !failedSessionIds.has(currentSessionId),
+        sessionIds.includes(currentSessionId) &&
+        !failedSessionIds.has(currentSessionId),
       );
 
       if (currentSessionDeleted) {

@@ -49,7 +49,9 @@ export const useCustomizerStore = defineStore("customizer", {
     // 应用系统主题（用于自动同步）
     APPLY_SYSTEM_THEME() {
       if (typeof window === "undefined") return;
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const prefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)",
+      ).matches;
       this.SET_UI_THEME(prefersDark ? DARK_THEME_NAME : LIGHT_THEME_NAME);
     },
     TOGGLE_CHAT_SIDEBAR() {

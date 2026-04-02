@@ -110,7 +110,7 @@ export default {
 }
 
 .stat-card::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background-image:
@@ -122,7 +122,7 @@ export default {
 }
 
 .stat-card::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 12px;

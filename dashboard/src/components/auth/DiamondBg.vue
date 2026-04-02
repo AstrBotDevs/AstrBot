@@ -1,5 +1,10 @@
 <template>
-  <div class="bg" ref="bgEl" @mousemove="onMouseMove" @mouseleave="onMouseLeave">
+  <div
+    class="bg"
+    ref="bgEl"
+    @mousemove="onMouseMove"
+    @mouseleave="onMouseLeave"
+  >
     <canvas ref="canvasEl" class="bg-canvas"></canvas>
     <div class="gravity-well"></div>
   </div>
@@ -61,7 +66,9 @@ function draw() {
   const my = smoothY.value;
 
   // draw static base grid (very faint)
-  ctx.strokeStyle = dark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 49, 83, 0.03)";
+  ctx.strokeStyle = dark
+    ? "rgba(255, 255, 255, 0.03)"
+    : "rgba(0, 49, 83, 0.03)";
   ctx.lineWidth = 0.5;
   for (let x = 0; x <= W; x += GRID) {
     ctx.beginPath();
@@ -101,9 +108,7 @@ function draw() {
       if (dist < ENERGY_RADIUS) {
         const t = 1 - dist / ENERGY_RADIUS;
         const eased = t * t * (3 - 2 * t);
-        crossAlpha = dark
-          ? 0.05 + eased * 0.35
-          : 0.04 + eased * 0.4;
+        crossAlpha = dark ? 0.05 + eased * 0.35 : 0.04 + eased * 0.4;
         crossScale = 1.0 - eased * SINK_DEPTH;
         crossBlue = dark ? Math.floor(eased * 180) : 0;
       }
@@ -111,11 +116,12 @@ function draw() {
       if (crossAlpha < 0.01) continue;
 
       const halfLen = CROSS_SIZE * crossScale;
-      const strokeColor = crossBlue > 0
-        ? `rgba(${crossBlue * 0.3}, ${crossBlue * 0.8}, ${crossBlue}, ${crossAlpha})`
-        : dark
-          ? `rgba(255, 255, 255, ${crossAlpha})`
-          : `rgba(26, 46, 60, ${crossAlpha})`;
+      const strokeColor =
+        crossBlue > 0
+          ? `rgba(${crossBlue * 0.3}, ${crossBlue * 0.8}, ${crossBlue}, ${crossAlpha})`
+          : dark
+            ? `rgba(255, 255, 255, ${crossAlpha})`
+            : `rgba(26, 46, 60, ${crossAlpha})`;
 
       ctx.strokeStyle = strokeColor;
       ctx.lineWidth = 0.4;
@@ -191,7 +197,7 @@ onUnmounted(() => {
 
 /* Light mode: clean white */
 .v-theme--bluebusinesstheme .bg {
-  background: #FFFFFF;
+  background: #ffffff;
 }
 
 .bg-canvas {

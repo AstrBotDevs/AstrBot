@@ -206,10 +206,7 @@ getCurrentVersion();
           </v-alert>
           <div v-else-if="changelogContent" class="changelog-content">
             <div class="markdown-content">
-              <MarkdownRender
-                :content="changelogContent"
-                :typewriter="false"
-              />
+              <MarkdownRender :content="changelogContent" :typewriter="false" />
             </div>
           </div>
         </div>

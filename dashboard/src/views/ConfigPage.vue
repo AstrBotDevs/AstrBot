@@ -149,10 +149,7 @@
   >
     <div class="editor-reactor-container">
       <v-card class="editor-glass-card">
-        <v-toolbar
-          class="editor-toolbar"
-          elevation="0"
-        >
+        <v-toolbar class="editor-toolbar" elevation="0">
           <v-btn icon @click="codeEditorDialog = false">
             <v-icon>mdi-close</v-icon>
           </v-btn>

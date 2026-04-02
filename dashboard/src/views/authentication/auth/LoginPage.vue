@@ -1,23 +1,26 @@
 <script setup lang="ts">
-import AuthLogin from '../authForms/AuthLogin.vue';
-import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
-import { onMounted, ref } from 'vue';
-import { useAuthStore } from '@/stores/auth';
-import { useRouter } from 'vue-router';
+import AuthLogin from "../authForms/AuthLogin.vue";
+import LanguageSwitcher from "@/components/shared/LanguageSwitcher.vue";
+import { onMounted, ref } from "vue";
+import { useAuthStore } from "@/stores/auth";
+import { useRouter } from "vue-router";
 import { useCustomizerStore } from "@/stores/customizer";
-import { useModuleI18n } from '@/i18n/composables';
-import { useTheme } from 'vuetify';
+import { useModuleI18n } from "@/i18n/composables";
+import { useTheme } from "vuetify";
 
 const cardVisible = ref(false);
 const router = useRouter();
 const authStore = useAuthStore();
 const customizer = useCustomizerStore();
-const { tm: t } = useModuleI18n('features/auth');
+const { tm: t } = useModuleI18n("features/auth");
 const theme = useTheme();
 
 // 主题切换函数
 function toggleTheme() {
-  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
+  const newTheme =
+    customizer.uiTheme === "PurpleThemeDark"
+      ? "PurpleTheme"
+      : "PurpleThemeDark";
   customizer.SET_UI_THEME(newTheme);
   theme.global.name.value = newTheme;
 }
@@ -27,9 +30,9 @@ onMounted(async () => {
   if (authStore.has_token()) {
     const onboardingCompleted = await authStore.checkOnboardingCompleted();
     if (onboardingCompleted) {
-      router.push('/dashboard/default');
+      router.push("/dashboard/default");
     } else {
-      router.push('/welcome');
+      router.push("/welcome");
     }
     return;
   }
@@ -46,23 +49,43 @@ onMounted(async () => {
     <v-card class="login-card" elevation="1">
       <v-card-title>
         <div class="d-flex justify-space-between align-center w-100">
-          <img width="80" src="@/assets/images/icon-no-shadow.svg" alt="AstrBot Logo">
+          <img
+            width="80"
+            src="@/assets/images/icon-no-shadow.svg"
+            alt="AstrBot Logo"
+          />
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
-            <v-divider vertical class="mx-1"
-              style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(var(--v-theme-primary), 0.45) !important;"></v-divider>
-            <v-btn @click="toggleTheme" class="theme-toggle-btn" icon variant="text" size="small">
+            <v-divider
+              vertical
+              class="mx-1"
+              style="
+                height: 24px !important;
+                opacity: 0.9 !important;
+                align-self: center !important;
+                border-color: rgba(var(--v-theme-primary), 0.45) !important;
+              "
+            ></v-divider>
+            <v-btn
+              @click="toggleTheme"
+              class="theme-toggle-btn"
+              icon
+              variant="text"
+              size="small"
+            >
               <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
                 mdi-white-balance-sunny
               </v-icon>
               <v-tooltip activator="parent" location="top">
-                {{ t('theme.switchToLight') }}
+                {{ t("theme.switchToLight") }}
               </v-tooltip>
             </v-btn>
           </div>
         </div>
-        <div class="ml-2" style="font-size: 26px;">{{ t('logo.title') }}</div>
-        <div class="mt-2 ml-2" style="font-size: 14px; color: grey;">{{ t('logo.subtitle') }}</div>
+        <div class="ml-2" style="font-size: 26px">{{ t("logo.title") }}</div>
+        <div class="mt-2 ml-2" style="font-size: 14px; color: grey">
+          {{ t("logo.subtitle") }}
+        </div>
       </v-card-title>
       <v-card-text>
         <AuthLogin />

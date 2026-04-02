@@ -25,7 +25,7 @@ const MONACO_DOMPURIFY = join(
   "base",
   "browser",
   "dompurify",
-  "dompurify.js"
+  "dompurify.js",
 );
 
 // Files inside monaco-editor dev/min bundles that embed dompurify source
@@ -35,7 +35,8 @@ const BUNDLED_FILES = [
 ];
 
 const PATCHED_VERSION = "3.3.3";
-const PATCHED_URL = "https://raw.githubusercontent.com/cure53/DOMPurify/main/dist/purify.js";
+const PATCHED_URL =
+  "https://raw.githubusercontent.com/cure53/DOMPurify/main/dist/purify.js";
 
 const dompurifyVersion = (content) => {
   const m = content.match(/DOMPurify\s+(\d+\.\d+\.\d+)/);
@@ -73,24 +74,26 @@ async function patchFile(source, target) {
 
   if (currentVersion && !isVulnerable(currentVersion)) {
     console.log(
-      `[patch-dompurify] ${target} already at safe version ${currentVersion}, skipping.`
+      `[patch-dompurify] ${target} already at safe version ${currentVersion}, skipping.`,
     );
     return;
   }
 
-  console.log(`[patch-dompurify] Downloading patched DOMPurify ${PATCHED_VERSION}...`);
+  console.log(
+    `[patch-dompurify] Downloading patched DOMPurify ${PATCHED_VERSION}...`,
+  );
   const patched = await download(source);
   const patchedVer = dompurifyVersion(patched);
 
   if (!patchedVer || isVulnerable(patchedVer)) {
     throw new Error(
-      `Downloaded DOMPurify version is still vulnerable: got ${patchedVer}`
+      `Downloaded DOMPurify version is still vulnerable: got ${patchedVer}`,
     );
   }
 
   writeFileSync(target, patched, "utf8");
   console.log(
-    `[patch-dompurify] Patched ${target} (${currentVersion || "new"} -> ${PATCHED_VERSION})`
+    `[patch-dompurify] Patched ${target} (${currentVersion || "new"} -> ${PATCHED_VERSION})`,
   );
 }
 
@@ -103,27 +106,27 @@ async function patchBundledContent(target) {
   if (!currentVersion || !isVulnerable(currentVersion)) return;
 
   console.log(
-    `[patch-dompurify] Downloading patched DOMPurify ${PATCHED_VERSION} for bundling...`
+    `[patch-dompurify] Downloading patched DOMPurify ${PATCHED_VERSION} for bundling...`,
   );
   const patched = await download(PATCHED_URL);
 
   // Replace the dompurify version header + IIFE in the bundled file
   const patchedHeader = patched.match(
-    /\/\*! @license DOMPurify [\d.]+ \|[\s\S]*?Mozilla Public License 2.0 \*\/[\s\S]*?^\(function\(\)/m
+    /\/\*! @license DOMPurify [\d.]+ \|[\s\S]*?Mozilla Public License 2.0 \*\/[\s\S]*?^\(function\(\)/m,
   )?.[0];
 
   if (patchedHeader) {
     const newContent = content.replace(
       /\/\*! @license DOMPurify 3\.2\.7[\s\S]*?^\(function\(\)/m,
-      patchedHeader
+      patchedHeader,
     );
     writeFileSync(target, newContent, "utf8");
     console.log(
-      `[patch-dompurify] Patched bundled dompurify in ${target} (${currentVersion} -> ${PATCHED_VERSION})`
+      `[patch-dompurify] Patched bundled dompurify in ${target} (${currentVersion} -> ${PATCHED_VERSION})`,
     );
   } else {
     console.warn(
-      `[patch-dompurify] Could not find dompurify IIFE pattern in ${target}, skipping.`
+      `[patch-dompurify] Could not find dompurify IIFE pattern in ${target}, skipping.`,
     );
   }
 }

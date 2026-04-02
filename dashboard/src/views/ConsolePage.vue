@@ -22,7 +22,10 @@ async function pipInstall() {
   loading.value = true;
   status.value = "";
   try {
-    const res = await axios.post("/api/console/pip_install", pipInstallPayload.value);
+    const res = await axios.post(
+      "/api/console/pip_install",
+      pipInstallPayload.value,
+    );
     if (res.data?.status === "ok") {
       status.value = tm("pipInstall.success");
     } else {
@@ -41,7 +44,13 @@ async function pipInstall() {
     <div class="console-topbar">
       <div class="topbar-left">
         <div class="topbar-title">{{ tm("title") }}</div>
-        <v-alert type="info" variant="tonal" density="compact" class="mt-2" style="max-width: 600px">
+        <v-alert
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mt-2"
+          style="max-width: 600px"
+        >
           {{ tm("debugHint.text") }}
         </v-alert>
       </div>
@@ -54,7 +63,11 @@ async function pipInstall() {
         />
         <v-switch
           v-model="autoScrollEnabled"
-          :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
+          :label="
+            autoScrollEnabled
+              ? tm('autoScroll.enabled')
+              : tm('autoScroll.disabled')
+          "
           hide-details
           density="compact"
           color="primary"
@@ -71,14 +84,29 @@ async function pipInstall() {
               <span class="text-h5">{{ tm("pipInstall.dialogTitle") }}</span>
             </v-card-title>
             <v-card-text>
-              <v-text-field v-model="pipInstallPayload.package" :label="tm('pipInstall.packageLabel')" variant="outlined" />
-              <v-text-field v-model="pipInstallPayload.mirror" :label="tm('pipInstall.mirrorLabel')" variant="outlined" />
+              <v-text-field
+                v-model="pipInstallPayload.package"
+                :label="tm('pipInstall.packageLabel')"
+                variant="outlined"
+              />
+              <v-text-field
+                v-model="pipInstallPayload.mirror"
+                :label="tm('pipInstall.mirrorLabel')"
+                variant="outlined"
+              />
               <small>{{ tm("pipInstall.mirrorHint") }}</small>
-              <div><small>{{ status }}</small></div>
+              <div>
+                <small>{{ status }}</small>
+              </div>
             </v-card-text>
             <v-card-actions>
               <v-spacer />
-              <v-btn color="blue-darken-1" variant="text" :loading="loading" @click="pipInstall">
+              <v-btn
+                color="blue-darken-1"
+                variant="text"
+                :loading="loading"
+                @click="pipInstall"
+              >
                 {{ tm("pipInstall.installButton") }}
               </v-btn>
             </v-card-actions>
@@ -86,7 +114,14 @@ async function pipInstall() {
         </v-dialog>
       </div>
     </div>
-    <div class="console-content" :style="isFullscreen ? 'height: calc(100vh - 120px)' : 'height: calc(100vh - 220px)'">
+    <div
+      class="console-content"
+      :style="
+        isFullscreen
+          ? 'height: calc(100vh - 120px)'
+          : 'height: calc(100vh - 220px)'
+      "
+    >
       <ConsoleDisplayer ref="consoleDisplayer" style="height: 100%" />
     </div>
   </div>
@@ -154,7 +189,11 @@ export default {
   flex-shrink: 0;
 }
 
-.topbar-left { display: flex; flex-direction: column; gap: 4px; }
+.topbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 
 .topbar-title {
   font-size: 18px;
@@ -163,7 +202,11 @@ export default {
   -webkit-text-fill-color: var(--console-primary);
 }
 
-.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
 .console-content {
   flex: 1;
@@ -185,8 +228,16 @@ export default {
 }
 
 @media (max-width: 900px) {
-  .console-topbar { flex-direction: column; align-items: flex-start; }
-  .topbar-right { width: 100%; }
-  .console-page { gap: 12px; padding: 12px; }
+  .console-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .topbar-right {
+    width: 100%;
+  }
+  .console-page {
+    gap: 12px;
+    padding: 12px;
+  }
 }
 </style>

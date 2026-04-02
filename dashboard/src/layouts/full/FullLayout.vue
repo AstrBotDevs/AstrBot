@@ -18,7 +18,9 @@ const customizer = useCustomizerStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
-const isCurrentChatRoute = computed(() => route.path === '/chat' || route.path.startsWith('/chat/'));
+const isCurrentChatRoute = computed(
+  () => route.path === "/chat" || route.path.startsWith("/chat/"),
+);
 
 const isChatPage = computed(() => {
   return route.path.startsWith("/chat");
@@ -52,7 +54,10 @@ const checkMigration = async (): Promise<boolean> => {
       return true;
     }
   } catch (error) {
-    console.warn("Failed to check migration status (backend may not be running):", error);
+    console.warn(
+      "Failed to check migration status (backend may not be running):",
+      error,
+    );
   }
   return false;
 };
@@ -78,7 +83,10 @@ const maybeShowFirstNotice = async () => {
 
     localStorage.setItem(FIRST_NOTICE_SEEN_KEY, "1");
   } catch (error) {
-    console.warn("Failed to load first notice (backend may not be running):", error);
+    console.warn(
+      "Failed to load first notice (backend may not be running):",
+      error,
+    );
   }
 };
 
