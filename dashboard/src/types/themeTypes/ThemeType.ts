@@ -3,8 +3,8 @@ export type ThemeTypes = {
   dark: boolean;
   variables?: object;
   colors: {
-    primary?: string;
-    secondary?: string;
+    primary: string;
+    secondary: string;
     tertiary?: string;
     info?: string;
     success?: string;
