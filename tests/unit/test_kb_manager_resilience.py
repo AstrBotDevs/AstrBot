@@ -81,10 +81,23 @@ def mock_knowledge_base():
 
 @pytest.fixture
 def mock_embedding_provider():
-    """Create a mock EmbeddingProvider."""
-    provider = MagicMock()
-    provider.get_embeddings_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
-    return provider
+    """Create a mock EmbeddingProvider that passes isinstance checks."""
+    from astrbot.core.provider.provider import EmbeddingProvider
+
+    class FakeEmbeddingProvider(EmbeddingProvider):
+        def __init__(self) -> None:
+            pass  # Skip normal __init__ that needs config dicts
+
+        async def get_embedding(self, text: str) -> list[float]:
+            return [0.1, 0.2, 0.3]
+
+        async def get_embeddings(self, text: list[str]) -> list[list[float]]:
+            return [[0.1, 0.2, 0.3] for _ in text]
+
+        def get_dim(self) -> int:
+            return 3
+
+    return FakeEmbeddingProvider()
 
 
 @pytest.mark.asyncio
