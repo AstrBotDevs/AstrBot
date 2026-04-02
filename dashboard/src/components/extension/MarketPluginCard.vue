@@ -39,6 +39,26 @@ const handleViewReadme = (plugin) => {
   emit("viewReadme", plugin);
 };
 
+// 从 repo URL 提取作者主页链接
+const authorHomepageUrl = computed(() => {
+  const repoUrl = props.plugin?.repo;
+  if (!repoUrl) return null;
+
+  try {
+    // 解析 GitHub URL，提取 owner
+    const url = new URL(repoUrl);
+    if (url.hostname.toLowerCase() !== 'github.com') return null;
+
+    const pathParts = url.pathname.split('/').filter(p => p);
+    if (pathParts.length < 1) return null;
+
+    const owner = pathParts[0];
+    return `https://github.com/${owner}`;
+  } catch {
+    return null;
+  }
+});
+
 </script>
 
 <template>
@@ -89,6 +109,22 @@ const handleViewReadme = (plugin) => {
           <a
             v-if="plugin?.social_link"
             :href="plugin.social_link"
+            target="_blank"
+            @click.stop
+            class="text-subtitle-2 font-weight-medium"
+            style="
+              text-decoration: none;
+              color: rgb(var(--v-theme-primary));
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            "
+          >
+            {{ plugin.author }}
+          </a>
+          <a
+            v-else-if="authorHomepageUrl"
+            :href="authorHomepageUrl"
             target="_blank"
             @click.stop
             class="text-subtitle-2 font-weight-medium"

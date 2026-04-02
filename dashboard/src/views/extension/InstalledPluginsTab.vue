@@ -199,6 +199,25 @@ const handlePinnedImgError = (e) => {
   e.target.src = defaultPluginIcon;
 };
 
+// 从 repo URL 提取作者主页链接
+const getAuthorHomepageUrl = (repoUrl) => {
+  if (!repoUrl) return null;
+
+  try {
+    // 解析 GitHub URL，提取 owner
+    const url = new URL(repoUrl);
+    if (url.hostname.toLowerCase() !== 'github.com') return null;
+
+    const pathParts = url.pathname.split('/').filter(p => p);
+    if (pathParts.length < 1) return null;
+
+    const owner = pathParts[0];
+    return `https://github.com/${owner}`;
+  } catch {
+    return null;
+  }
+};
+
 // --- 拖拽功能实现 ---
 const draggedIndex = ref(-1);
 let lastSwapTime = 0;
@@ -603,7 +622,17 @@ const pinnedPlugins = computed(() => {
                     </template>
 
                     <template v-slot:item.author="{ item }">
-                      <div class="text-body-2">{{ item.author }}</div>
+                      <a
+                        v-if="getAuthorHomepageUrl(item.repo)"
+                        :href="getAuthorHomepageUrl(item.repo)"
+                        target="_blank"
+                        @click.stop
+                        class="text-body-2"
+                        style="text-decoration: none; color: rgb(var(--v-theme-primary))"
+                      >
+                        {{ item.author }}
+                      </a>
+                      <div v-else class="text-body-2">{{ item.author }}</div>
                     </template>
 
                     <template v-slot:item.actions="{ item }">
