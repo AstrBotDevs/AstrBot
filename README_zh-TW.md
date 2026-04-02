@@ -93,7 +93,7 @@ uv tool upgrade astrbot
 ```
 
 > [!WARNING]
-> 透過 `uv` 部署的 AstrBot 不支援在 WebUI 中進行版本升級。如需更新，請透過命令列執行上述命令。
+> 透過 `uv` 部署的 AstrBot **不支援在 WebUI 中進行版本升級**。如需更新，請透過命令列執行上述命令。
 
 ### Docker 部署
 
