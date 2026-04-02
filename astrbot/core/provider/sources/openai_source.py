@@ -833,50 +833,57 @@ class ProviderOpenAIOfficial(Provider):
             context_query = await self._materialize_context_image_parts(context_query)
 
         model = model or self.get_model()
-        if isinstance(model, str):
-            model = model.strip()
-        # Provider-source：OpenAPI selected_model 常与条目 id 同为「源/短名」；上游 body.model 须为短名。
-        # 仅 `model == cfg_id` 仍可能因空白/配置缺 model 未命中，故补充后缀对齐与 cfg_model 为空时取 id 尾段。
-        cfg_id_raw = self.provider_config.get("id")
-        cfg_id = cfg_id_raw.strip() if isinstance(cfg_id_raw, str) else cfg_id_raw
-        cfg_model_raw = self.provider_config.get("model")
-        if isinstance(cfg_model_raw, str):
-            cfg_model = cfg_model_raw.strip() or None
-        elif cfg_model_raw is not None:
-            cfg_model = str(cfg_model_raw).strip() or None
-        else:
-            cfg_model = None
-
-        if cfg_id and model == cfg_id:
-            if cfg_model:
-                model = cfg_model
-            elif isinstance(model, str) and "/" in model:
-                model = model.rsplit("/", 1)[-1]
-        elif (
-            isinstance(model, str)
-            and "/" in model
-            and cfg_model
-            and model.rsplit("/", 1)[-1] == cfg_model
-            and model != cfg_model
-        ):
-            model = cfg_model
-
-        # DeepSeek's OpenAI-compatible endpoint expects short model names like "deepseek-chat".
-        # In some call paths, AstrBot may still pass internal ids like "deepseek/deepseek-chat".
-        if (
-            isinstance(model, str)
-            and "/" in model
-            and str(self.provider_config.get("provider", "")).strip() == "deepseek"
-        ):
-            model = model.rsplit("/", 1)[-1]
-            # Some frontends may append tags like "xxx:tag"; DeepSeek expects the bare model name.
-            model = model.rsplit(":", 1)[0]
+        model = self._normalize_model_name_for_provider(model)
 
         payloads = {"messages": context_query, "model": model}
 
         self._finally_convert_payload(payloads)
 
         return payloads, context_query
+
+    def _normalize_model_name_for_provider(self, model: Any) -> Any:
+        provider = self.provider_config.get("provider")
+        provider_id = self.provider_config.get("id")
+
+        # Only apply normalization rules to providers we know require it.
+        # DeepSeek's OpenAI-compatible endpoint expects short model names like "deepseek-chat",
+        # but some call paths may pass internal ids like "deepseek/deepseek-chat".
+        if provider != "deepseek" and not (
+            isinstance(provider_id, str) and provider_id.startswith("deepseek/")
+        ):
+            return model
+
+        if not isinstance(model, str):
+            return model
+
+        model = model.strip()
+        if not model:
+            return model
+
+        cfg_id = provider_id.strip() if isinstance(provider_id, str) else None
+        cfg_model_raw = self.provider_config.get("model")
+        cfg_model = cfg_model_raw.strip() if isinstance(cfg_model_raw, str) else None
+
+        if "/" in model:
+            tail = model.rsplit("/", 1)[-1]
+        else:
+            tail = model
+
+        # Prefer explicit configured short model name when we can infer it safely.
+        if cfg_id and model == cfg_id:
+            if cfg_model:
+                model = cfg_model
+            else:
+                model = tail
+        elif cfg_model and tail == cfg_model:
+            model = cfg_model
+        elif "/" in model:
+            model = tail
+
+        # Some frontends may append tags like "xxx:tag"; DeepSeek expects the bare model name.
+        model = model.rsplit(":", 1)[0]
+
+        return model
 
     def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
