@@ -183,12 +183,15 @@ class RetrievalManager:
                 first_rerank = vec_db.rerank_provider
                 break
         if first_rerank and retrieval_results:
-            retrieval_results = await self._rerank(
-                query=query,
-                results=retrieval_results,
-                top_k=top_m_final,
-                rerank_provider=first_rerank,
-            )
+            try:
+                retrieval_results = await self._rerank(
+                    query=query,
+                    results=retrieval_results,
+                    top_k=top_m_final,
+                    rerank_provider=first_rerank,
+                )
+            except Exception as e:
+                logger.warning(f"Rerank 执行失败，已跳过重排序并使用融合结果: {e}")
 
         return retrieval_results[:top_m_final]
 
@@ -228,10 +231,10 @@ class RetrievalManager:
 
                 all_results.extend(vec_results)
             except Exception as e:
-                from astrbot.core import logger
-
-                logger.warning(f"知识库 {kb_id} 稠密检索失败: {e}")
-                continue
+                logger.error(f"知识库 {kb_id} 稠密检索失败: {e}", exc_info=True)
+                if len(kb_ids) == 1:
+                    raise RuntimeError(f"知识库 {kb_id} 稠密检索失败: {e}") from e
+                # multi-KB: skip the faulty KB and continue
 
         # 按相似度排序并返回 top_k
         all_results.sort(key=lambda x: x.similarity, reverse=True)

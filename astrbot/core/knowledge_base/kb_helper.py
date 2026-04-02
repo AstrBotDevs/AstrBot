@@ -107,6 +107,7 @@ Text chunk to process:
 class KBHelper:
     vec_db: FaissVecDB | None
     kb: KnowledgeBase
+    init_error: str | None
 
     def __init__(
         self,
@@ -121,6 +122,7 @@ class KBHelper:
         self.prov_mgr = provider_manager
         self.kb_root_dir = kb_root_dir
         self.chunker = chunker
+        self.init_error = None
 
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
         self.kb_medias_dir = Path(self.kb_dir) / "medias" / self.kb.kb_id
@@ -161,12 +163,13 @@ class KBHelper:
             self.kb.rerank_provider_id,
         )
         if not rp:
-            raise ValueError(
-                f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider",
+            logger.warning(
+                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 的 Rerank Provider({self.kb.rerank_provider_id}) 不可用，将跳过重排序。"
             )
+            return None
         if not isinstance(rp, RerankProvider):
             raise ValueError(
-                f"Provider {self.kb.rerank_provider_id} is not a Rerank Provider",
+                f"Provider {self.kb.rerank_provider_id} is not a Rerank Provider"
             )
         return rp
 
@@ -175,7 +178,13 @@ class KBHelper:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
         ep = await self.get_ep()
-        rp = await self.get_rp()
+        rp: RerankProvider | None = None
+        try:
+            rp = await self.get_rp()
+        except Exception as e:
+            logger.warning(
+                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+            )
 
         vec_db = FaissVecDB(
             doc_store_path=str(self.kb_dir / "doc.db"),
@@ -185,6 +194,8 @@ class KBHelper:
         )
         await vec_db.initialize()
         self.vec_db = vec_db
+        # Clear stale init_error once initialization succeeds.
+        self.init_error = None
         return vec_db
 
     async def delete_vec_db(self) -> None:
@@ -196,7 +207,7 @@ class KBHelper:
             shutil.rmtree(self.kb_dir)
 
     async def terminate(self) -> None:
-        if self.vec_db:
+        if hasattr(self, "vec_db") and self.vec_db:
             await self.vec_db.close()
 
     async def upload_document(

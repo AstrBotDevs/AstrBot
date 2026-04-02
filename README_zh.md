@@ -188,6 +188,7 @@ yay -S astrbot-git
 | Coze | LLMOps 平台 |
 | OpenAI Whisper | 语音转文本 |
 | SenseVoice | 语音转文本 |
+| Xiaomi MiMo Omni | 语音转文本 |
 | OpenAI TTS | 文本转语音 |
 | Gemini TTS | 文本转语音 |
 | GPT-Sovits-Inference | 文本转语音 |
@@ -197,6 +198,7 @@ yay -S astrbot-git
 | 阿里云百炼 TTS | 文本转语音 |
 | Azure TTS | 文本转语音 |
 | Minimax TTS | 文本转语音 |
+| Xiaomi MiMo TTS | 文本转语音 |
 | 火山引擎 TTS | 文本转语音 |
 
 ## ❤️ Sponsors

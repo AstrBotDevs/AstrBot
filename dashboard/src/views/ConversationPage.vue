@@ -94,7 +94,21 @@
 
                         <template v-slot:item.title="{ item }">
                             <div class="conversation-title-cell">
-                                <span class="conversation-title-text">{{ item.title || tm('status.noTitle') }}</span>
+                                <div class="conversation-title-row">
+                                    <span class="conversation-title-text">{{ item.title || tm('status.noTitle') }}</span>
+                                    <v-btn
+                                        icon
+                                        variant="plain"
+                                        size="x-small"
+                                        density="compact"
+                                        :ripple="false"
+                                        class="conversation-inline-edit"
+                                        @click.stop="editConversation(item)"
+                                        :disabled="loading"
+                                    >
+                                        <v-icon size="14">mdi-pencil</v-icon>
+                                    </v-btn>
+                                </div>
                                 <span class="conversation-title-meta">{{ item.cid || tm('status.unknown') }}</span>
                             </div>
                         </template>
@@ -140,10 +154,6 @@
                                 <v-btn icon variant="plain" size="x-small" class="action-button"
                                     @click="viewConversation(item)" :disabled="loading">
                                     <v-icon>mdi-eye</v-icon>
-                                </v-btn>
-                                <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="editConversation(item)" :disabled="loading">
-                                    <v-icon>mdi-pencil</v-icon>
                                 </v-btn>
                                 <v-btn icon color="error" variant="plain" size="x-small" class="action-button"
                                     @click="confirmDeleteConversation(item)" :disabled="loading">
@@ -358,7 +368,7 @@
 </template>
 
 <script>
-import axios from '@/utils/request';
+import axios from 'axios';
 import { debounce } from 'lodash';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import { useCommonStore } from '@/stores/common';
@@ -1135,157 +1145,144 @@ export default {
 </script>
 
 <style>
-.conv-page {
-  --conv-page-bg: transparent;
-  --conv-panel-bg: rgba(var(--v-theme-surface), 0.78);
-  --conv-card-bg: rgba(var(--v-theme-surface), 0.9);
-  --conv-record-bg: rgba(var(--v-theme-surface-variant), 0.38);
-  --conv-empty-surface: rgba(var(--v-theme-surface), 0.68);
-  --conv-primary: rgb(var(--v-theme-primary));
-  --conv-primary-soft: rgba(var(--v-theme-primary), 0.08);
-  --conv-primary-soft-strong: rgba(var(--v-theme-primary), 0.14);
-  --conv-border: rgba(var(--v-theme-borderLight), 0.22);
-  --conv-border-strong: rgba(var(--v-theme-borderLight), 0.4);
-  --conv-border-active: rgba(var(--v-theme-primary), 0.24);
-  --conv-track: rgba(var(--v-theme-borderLight), 0.78);
-  --conv-track-active: rgba(var(--v-theme-primary), 0.22);
-  --conv-title: rgb(var(--v-theme-on-surface));
-  --conv-text: rgba(var(--v-theme-on-surface), 0.92);
-  --conv-muted: rgba(var(--v-theme-on-surface), 0.7);
-  --conv-subtle: rgba(var(--v-theme-on-surface), 0.54);
-  --conv-empty-icon-bg: rgba(var(--v-theme-primary), 0.1);
-  --conv-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  position: relative;
-  z-index: 1;
-  isolation: isolate;
-  gap: 16px;
-  padding: 16px;
+.actions-wrapper {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
 }
 
-:global(.v-theme--bluebusinessdarktheme) .conv-page {
-  --conv-panel-bg: rgba(var(--v-theme-surface), 0.72);
-  --conv-card-bg: rgba(var(--v-theme-surface-variant), 0.74);
-  --conv-record-bg: rgba(var(--v-theme-surface), 0.52);
-  --conv-empty-surface: rgba(var(--v-theme-surface-variant), 0.56);
-  --conv-border: rgba(var(--v-theme-borderLight), 0.46);
-  --conv-border-strong: rgba(var(--v-theme-borderLight), 0.66);
-  --conv-track: rgba(var(--v-theme-borderLight), 0.9);
-  --conv-shadow: none;
+.action-button {
+    border-radius: 8px;
+    font-weight: 500;
 }
 
-.conv-topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  background: var(--conv-panel-bg);
-  border: 1px solid var(--conv-border);
-  border-radius: 12px;
-  backdrop-filter: blur(16px);
-  box-shadow: var(--conv-shadow);
-  flex-shrink: 0;
+.monaco-editor-container {
+    height: 500px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-.topbar-left { display: flex; flex-direction: column; gap: 4px; }
-
-.topbar-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--conv-primary) !important;
-  -webkit-text-fill-color: var(--conv-primary);
-  letter-spacing: 0.01em;
-}
-
-.topbar-desc {
-  font-size: 13px;
-  color: var(--conv-muted) !important;
-  -webkit-text-fill-color: var(--conv-muted);
-  line-height: 1.5;
-  max-width: 60ch;
-}
-
-.topbar-right { display: flex; align-items: center; gap: 10px; }
-
-.conv-filters {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 16px 20px;
-  background: var(--conv-panel-bg);
-  border: 1px solid var(--conv-border);
-  border-radius: 12px;
-  backdrop-filter: blur(16px);
-  box-shadow: var(--conv-shadow);
-}
-
-.conv-filter-item { flex: 1; min-width: 200px; }
-
-.conv-content {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  position: relative;
-  z-index: 1;
-  background: var(--conv-panel-bg);
-  border: 1px solid var(--conv-border);
-  border-radius: 12px;
-  backdrop-filter: blur(16px);
-  box-shadow: var(--conv-shadow);
-}
-
-.conv-pagination {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: var(--conv-panel-bg);
-  border-top: 1px solid var(--conv-border);
-}
-
-.conv-dialog-card { border: 1px solid var(--conv-border); border-radius: 18px; }
-
-.conv-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.conv-form-grid--single { grid-template-columns: 1fr; }
-
-/* Existing styles updated with new variables */
+/* 聊天消息容器样式 */
 .conversation-messages-container {
-  max-height: 500px;
-  overflow-y: auto;
-  padding: 8px;
-  border-radius: 8px;
-  background-color: var(--conv-card-bg);
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 8px;
+    border-radius: 8px;
+    background-color: #f9f9f9;
 }
 
+/* 暗色模式下的聊天消息容器 */
 .v-theme--dark .conversation-messages-container {
-  background-color: #1e1e1e;
+    background-color: #1e1e1e;
 }
 
+/* 对话详情卡片 */
 .conversation-detail-card {
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--conv-border);
-  border-radius: 12px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
 }
 
-.conversation-title-text { color: var(--conv-text); }
-.conversation-title-meta { color: var(--conv-muted); }
+.text-truncate {
+    display: inline-block;
+    /* max-width: 100px; */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
-.umo-source-content { color: var(--conv-text); }
-.umo-session-id, .umo-raw-text { color: var(--conv-text); }
-.umo-separator { color: var(--conv-muted); }
+.conversation-title-cell {
+    padding: 6px 0px;
+    min-width: 100px;
+    max-width: 145px;
+}
 
-@media (max-width: 900px) {
-  .conv-topbar { flex-direction: column; align-items: flex-start; padding: 16px; }
-  .topbar-right { width: 100%; }
-  .topbar-desc { max-width: none; }
-  .conv-page { gap: 12px; padding: 12px; }
-  .conv-filters { flex-direction: column; }
-  .conv-filter-item { min-width: 100%; }
+.conversation-title-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
+.conversation-title-text {
+    display: inline-block;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.conversation-inline-edit {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    flex-shrink: 0;
+}
+
+.conversation-title-meta {
+    display: block;
+    color: rgba(var(--v-theme-on-surface), 0.58);
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.umo-header-cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.umo-header-toggle {
+    flex-shrink: 0;
+}
+
+.umo-source-cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.umo-source-content {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.umo-separator {
+    color: rgba(var(--v-theme-on-surface), 0.5);
+    flex-shrink: 0;
+}
+
+.umo-session-id,
+.umo-raw-text {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.umo-copy-button {
+    flex-shrink: 0;
+}
+
+/* 动画 */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 </style>

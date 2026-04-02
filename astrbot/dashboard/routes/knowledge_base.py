@@ -320,7 +320,12 @@ class KnowledgeBaseRoute(Route):
             # 转换为字典列表
             kb_list = []
             for kb in kbs:
-                kb_list.append(kb.model_dump())
+                kb_dict = kb.model_dump()
+                # include init_error from KBHelper if present
+                kb_helper = await kb_manager.get_kb(kb.kb_id)
+                if kb_helper and kb_helper.init_error:
+                    kb_dict["init_error"] = kb_helper.init_error
+                kb_list.append(kb_dict)
 
             return (
                 Response()
