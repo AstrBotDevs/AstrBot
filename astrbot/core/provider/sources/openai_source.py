@@ -537,6 +537,10 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = LLMResponse("assistant", is_chunk=True)
 
         state = ChatCompletionStreamState()
+        
+        # Track partial thinking tags across chunks for MiniMax-style reasoning
+        thinking_buffer = ""
+        in_thinking_block = False
 
         async for chunk in stream:
             if not chunk.choices:
@@ -568,10 +572,49 @@ class ProviderOpenAIOfficial(Provider):
             if delta and delta.content:
                 # Don't strip streaming chunks to preserve spaces between words
                 completion_text = self._normalize_content(delta.content, strip=False)
-                llm_response.result_chain = MessageChain(
-                    chain=[Comp.Plain(completion_text)],
-                )
-                _y = True
+                
+                # Handle partial   think... ‍ think tags that may span multiple chunks (MiniMax)
+                # Prepend any leftover thinking content from previous chunk
+                if thinking_buffer:
+                    completion_text = thinking_buffer + completion_text
+                    thinking_buffer = ""
+                
+                # Find all thinking blocks in this chunk
+                thinking_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+                
+                # Extract complete thinking blocks
+                for match in thinking_pattern.finditer(completion_text):
+                    think_content = match.group(1).strip()
+                    if think_content:
+                        if llm_response.reasoning_content:
+                            llm_response.reasoning_content += "\n" + think_content
+                        else:
+                            llm_response.reasoning_content = think_content
+                
+                # Remove all complete thinking blocks from completion_text
+                completion_text = thinking_pattern.sub("", completion_text)
+                
+                # Handle case where   think was found but ‍ think is missing (incomplete block at chunk boundary)
+                think_start = completion_text.rfind("<think>")
+                think_end = completion_text.rfind("</think>")
+                
+                if think_start != -1 and (think_end == -1 or think_end < think_start):
+                    # We have an unclosed   think tag, buffer everything from it onwards
+                    thinking_buffer = completion_text[think_start:]
+                    completion_text = completion_text[:think_start]
+                elif think_end != -1 and think_end > think_start:
+                    # We closed a thinking block, clear any buffered content
+                    thinking_buffer = ""
+                
+                # Strip whitespace but preserve structure
+                completion_text = completion_text.strip()
+                
+                # Only yield if there's actual text content remaining
+                if completion_text:
+                    llm_response.result_chain = MessageChain(
+                        chain=[Comp.Plain(completion_text)],
+                    )
+                    _y = True
             if chunk.usage:
                 llm_response.usage = self._extract_usage(chunk.usage)
             elif choice_usage := getattr(choice, "usage", None):
