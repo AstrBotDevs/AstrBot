@@ -833,6 +833,42 @@ class ProviderOpenAIOfficial(Provider):
             context_query = await self._materialize_context_image_parts(context_query)
 
         model = model or self.get_model()
+        if isinstance(model, str):
+            model = model.strip()
+        # Provider-source：OpenAPI selected_model 常与条目 id 同为「源/短名」；上游 body.model 须为短名。
+        # 仅 `model == cfg_id` 仍可能因空白/配置缺 model 未命中，故补充后缀对齐与 cfg_model 为空时取 id 尾段。
+        cfg_id_raw = self.provider_config.get("id")
+        cfg_id = cfg_id_raw.strip() if isinstance(cfg_id_raw, str) else cfg_id_raw
+        cfg_model_raw = self.provider_config.get("model")
+        if isinstance(cfg_model_raw, str):
+            cfg_model = cfg_model_raw.strip() or None
+        elif cfg_model_raw is not None:
+            cfg_model = str(cfg_model_raw).strip() or None
+        else:
+            cfg_model = None
+
+        if cfg_id and model == cfg_id:
+            if cfg_model:
+                model = cfg_model
+            elif isinstance(model, str) and "/" in model:
+                model = model.rsplit("/", 1)[-1]
+        elif (
+            isinstance(model, str)
+            and "/" in model
+            and cfg_model
+            and model.rsplit("/", 1)[-1] == cfg_model
+            and model != cfg_model
+        ):
+            model = cfg_model
+
+        # DeepSeek's OpenAI-compatible endpoint expects short model names like "deepseek-chat".
+        # In some call paths, AstrBot may still pass internal ids like "deepseek/deepseek-chat".
+        if (
+            isinstance(model, str)
+            and "/" in model
+            and str(self.provider_config.get("provider", "")).strip() == "deepseek"
+        ):
+            model = model.rsplit("/", 1)[-1]
 
         payloads = {"messages": context_query, "model": model}
 
