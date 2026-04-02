@@ -47,7 +47,7 @@ async function mountApp(app: any, pinia: any, waitForRouter = true) {
 
   // 挂载后同步 Vuetify 主题
   const customizer = useCustomizerStore(pinia);
-  vuetify.theme.change(customizer.uiTheme);
+  vuetify.theme.global.name.value = customizer.uiTheme;
   const storedPrimary = localStorage.getItem("themePrimary");
   const storedSecondary = localStorage.getItem("themeSecondary");
   if (storedPrimary || storedSecondary) {
