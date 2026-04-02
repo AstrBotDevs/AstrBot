@@ -92,6 +92,9 @@ astrbot run
 uv tool upgrade astrbot
 ```
 
+> [!WARNING]
+> `uv` 経由でデプロイした AstrBot は、WebUI からのバージョンアップグレードに対応していません。更新するには、上記のコマンドをコマンドラインで実行してください。
+
 ### Docker デプロイ
 
 コンテナ運用に慣れており、より安定した本番向けのデプロイ方法を求めるユーザーには、Docker / Docker Compose での AstrBot デプロイをおすすめします。

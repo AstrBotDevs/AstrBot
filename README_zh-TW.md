@@ -92,6 +92,9 @@ astrbot run
 uv tool upgrade astrbot
 ```
 
+> [!WARNING]
+> 透過 `uv` 部署的 AstrBot 不支援在 WebUI 中進行版本升級。如需更新，請透過命令列執行上述命令。
+
 ### Docker 部署
 
 對於熟悉容器、希望獲得更穩定且更適合正式環境部署方式的使用者，我們推薦使用 Docker / Docker Compose 部署 AstrBot。
