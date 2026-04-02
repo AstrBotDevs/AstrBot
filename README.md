@@ -93,7 +93,7 @@ uv tool upgrade astrbot
 ```
 
 > [!WARNING]
-> AstrBot deployed via `uv` does not support upgrading through the WebUI. To update, please run the command above from the command line.
+> AstrBot deployed via `uv` **does not support upgrading through the WebUI**. To update, please run the command above from the command line.
 
 ### Docker Deployment
 
