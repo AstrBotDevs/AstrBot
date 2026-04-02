@@ -14,5 +14,15 @@
   },
   "debugHint": {
     "text": "Debug 日志需要在「配置文件 → 系统 → 控制台日志级别」中开启"
+  },
+  "filters": {
+    "searchLabel": "搜索",
+    "searchPlaceholder": "搜索消息、标签、插件、平台或 UMO",
+    "tagLabel": "标签",
+    "tagPlaceholder": "按 logcat 标签过滤",
+    "clearButton": "清空过滤",
+    "summary": "{count} 条日志",
+    "emptyFiltered": "没有日志匹配当前过滤条件。",
+    "emptyIdle": "暂无日志。"
   }
 }

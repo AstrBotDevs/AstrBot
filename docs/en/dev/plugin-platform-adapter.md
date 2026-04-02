@@ -85,7 +85,11 @@ class FakePlatformAdapter(Platform):
 
         # FakeClient 是我们自己定义的，这里只是示例。这个是其回调函数
         async def on_received(data):
-            logger.info(data)
+            logger.info(
+                "Received platform message: %s",
+                data,
+                extra={"tag": "platform:fake", "platform_id": "fake"},
+            )
             abm = await self.convert_message(data=data) # 转换成 AstrBotMessage
             await self.handle_msg(abm) 
         
@@ -121,6 +125,10 @@ class FakePlatformAdapter(Platform):
         )
         self.commit_event(message_event) # 提交事件到事件队列。不要忘记！
 ```
+
+> [!TIP]
+>
+> The new console supports filtering by fields such as `tag`, `platform_id`, and `umo`. For platform adapters, it is recommended to attach at least a stable `tag` to important logs, for example `extra={"tag": "platform:fake", "platform_id": "fake"}`, so WebUI troubleshooting stays straightforward.
 
 
 `fake_platform_event.py`：

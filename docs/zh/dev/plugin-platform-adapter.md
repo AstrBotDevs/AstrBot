@@ -85,7 +85,11 @@ class FakePlatformAdapter(Platform):
 
         # FakeClient 是我们自己定义的，这里只是示例。这个是其回调函数
         async def on_received(data):
-            logger.info(data)
+            logger.info(
+                "收到平台消息: %s",
+                data,
+                extra={"tag": "platform:fake", "platform_id": "fake"},
+            )
             abm = await self.convert_message(data=data) # 转换成 AstrBotMessage
             await self.handle_msg(abm) 
         
@@ -121,6 +125,10 @@ class FakePlatformAdapter(Platform):
         )
         self.commit_event(message_event) # 提交事件到事件队列。不要忘记！
 ```
+
+> [!TIP]
+>
+> 新版日志控制台支持按 `tag`、`platform_id`、`umo` 等字段筛选。平台适配器建议至少为关键日志带上稳定的 `tag`，例如 `extra={"tag": "platform:fake", "platform_id": "fake"}`，这样在 WebUI 中排查问题会更直接。
 
 
 `fake_platform_event.py`：

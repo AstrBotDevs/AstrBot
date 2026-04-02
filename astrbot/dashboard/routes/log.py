@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncGenerator
-from typing import cast
+from typing import Any, cast
 
 from quart import Response as QuartResponse
 from quart import make_response, request
@@ -12,13 +12,109 @@ from astrbot.core import LogBroker, logger
 from .route import Response, Route, RouteContext
 
 
-def _format_log_sse(log: dict, ts: float) -> str:
-    """辅助函数：格式化 SSE 消息"""
+def _format_log_sse(log: dict[str, Any], ts: float) -> str:
+    """Format one cached event as an SSE payload."""
     payload = {
         "type": "log",
         **log,
     }
     return f"id: {ts}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _split_query_values(args, name: str) -> set[str]:
+    values: set[str] = set()
+    for raw in args.getlist(name):
+        for item in raw.split(","):
+            normalized = item.strip()
+            if normalized:
+                values.add(normalized)
+    return values
+
+
+def _normalize_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple, set)):
+        return " ".join(_normalize_text(item) for item in value)
+    return str(value)
+
+
+def _build_search_blob(item: dict[str, Any]) -> str:
+    values = [
+        item.get("message"),
+        item.get("rendered"),
+        item.get("data"),
+        item.get("tag"),
+        item.get("tags"),
+        item.get("platform_id"),
+        item.get("plugin_name"),
+        item.get("plugin_display_name"),
+        item.get("umo"),
+        item.get("logger_name"),
+        item.get("source_file"),
+        item.get("span_id"),
+        item.get("action"),
+        item.get("name"),
+        item.get("sender_name"),
+        item.get("message_outline"),
+    ]
+    return " ".join(_normalize_text(value) for value in values).lower()
+
+
+def _build_filter_state() -> dict[str, Any]:
+    args = request.args
+    return {
+        "levels": _split_query_values(args, "levels"),
+        "event_types": _split_query_values(args, "type"),
+        "tag_filters": _split_query_values(args, "tag"),
+        "platform_filters": _split_query_values(args, "platform_id"),
+        "plugin_filters": _split_query_values(args, "plugin_name"),
+        "umo_filters": _split_query_values(args, "umo"),
+        "keyword": args.get("keyword", "").strip().lower(),
+    }
+
+
+def _matches_filters(item: dict[str, Any], filters: dict[str, Any]) -> bool:
+    levels = filters["levels"]
+    if levels and str(item.get("level")) not in levels:
+        return False
+
+    event_types = filters["event_types"]
+    if event_types and str(item.get("type", "log")) not in event_types:
+        return False
+
+    tag_filters = filters["tag_filters"]
+    if tag_filters:
+        item_tags = item.get("tags")
+        if not isinstance(item_tags, list):
+            item_tags = [item.get("tag")]
+        normalized_tags = {str(tag) for tag in item_tags if tag}
+        if not normalized_tags.intersection(tag_filters):
+            return False
+
+    platform_filters = filters["platform_filters"]
+    if platform_filters and str(item.get("platform_id")) not in platform_filters:
+        return False
+
+    plugin_filters = filters["plugin_filters"]
+    if plugin_filters and str(item.get("plugin_name")) not in plugin_filters:
+        return False
+
+    umo_filters = filters["umo_filters"]
+    if umo_filters and str(item.get("umo")) not in umo_filters:
+        return False
+
+    keyword = filters["keyword"]
+    if keyword and keyword not in _build_search_blob(item):
+        return False
+
+    return True
+
+
+def _get_last_event_id() -> str | None:
+    return request.headers.get("Last-Event-ID") or request.args.get("lastEventId")
 
 
 class LogRoute(Route):
@@ -43,44 +139,53 @@ class LogRoute(Route):
         )
 
     async def _replay_cached_logs(
-        self, last_event_id: str
+        self,
+        last_event_id: str,
+        filters: dict[str, Any],
     ) -> AsyncGenerator[str, None]:
-        """辅助生成器：重放缓存的日志"""
+        """Replay cached events newer than the last SSE event id."""
         try:
             last_ts = float(last_event_id)
             cached_logs = list(self.log_broker.log_cache)
 
             for log_item in cached_logs:
                 log_ts = float(log_item.get("time", 0))
-
-                if log_ts > last_ts:
+                if log_ts > last_ts and _matches_filters(log_item, filters):
                     yield _format_log_sse(log_item, log_ts)
 
         except ValueError:
             pass
         except Exception as e:
-            logger.error(f"Log SSE 补发历史错误: {e}")
+            logger.error(f"Log SSE replay failed: {e}")
 
     async def log(self) -> QuartResponse:
-        last_event_id = request.headers.get("Last-Event-ID")
+        last_event_id = _get_last_event_id()
+        filters = _build_filter_state()
 
         async def stream():
             queue = None
             try:
                 if last_event_id:
-                    async for event in self._replay_cached_logs(last_event_id):
+                    async for event in self._replay_cached_logs(last_event_id, filters):
                         yield event
 
                 queue = self.log_broker.register()
                 while True:
-                    message = await queue.get()
-                    current_ts = message.get("time", time.time())
-                    yield _format_log_sse(message, current_ts)
+                    try:
+                        message = await asyncio.wait_for(queue.get(), timeout=15.0)
+                        if not _matches_filters(message, filters):
+                            continue
+                        current_ts = float(message.get("time", time.time()))
+                        yield _format_log_sse(message, current_ts)
+                    except TimeoutError:
+                        yield ": keepalive\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
 
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                logger.error(f"Log SSE 连接错误: {e}")
+                logger.error(f"Log SSE connection failed: {e}")
             finally:
                 if queue:
                     self.log_broker.unregister(queue)
@@ -101,44 +206,44 @@ class LogRoute(Route):
         return response
 
     async def log_history(self):
-        """获取日志历史"""
+        """Return cached logs and traces, with optional filtering."""
         try:
+            filters = _build_filter_state()
             logs = list(self.log_broker.log_cache)
-            return (
-                Response()
-                .ok(
-                    data={
-                        "logs": logs,
-                    },
-                )
-                .__dict__
-            )
+            if request.args:
+                logs = [item for item in logs if _matches_filters(item, filters)]
+
+            limit = request.args.get("limit", default=None, type=int)
+            if limit and limit > 0:
+                logs = logs[-limit:]
+
+            return Response().ok(data={"logs": logs}).__dict__
         except Exception as e:
-            logger.error(f"获取日志历史失败: {e}")
-            return Response().error(f"获取日志历史失败: {e}").__dict__
+            logger.error(f"Failed to load log history: {e}")
+            return Response().error(f"Failed to load log history: {e}").__dict__
 
     async def get_trace_settings(self):
-        """获取 Trace 设置"""
+        """Get trace switch settings."""
         try:
             trace_enable = self.config.get("trace_enable", True)
             return Response().ok(data={"trace_enable": trace_enable}).__dict__
         except Exception as e:
-            logger.error(f"获取 Trace 设置失败: {e}")
-            return Response().error(f"获取 Trace 设置失败: {e}").__dict__
+            logger.error(f"Failed to get trace settings: {e}")
+            return Response().error(f"Failed to get trace settings: {e}").__dict__
 
     async def update_trace_settings(self):
-        """更新 Trace 设置"""
+        """Update trace switch settings."""
         try:
             data = await request.json
             if data is None:
-                return Response().error("请求数据为空").__dict__
+                return Response().error("Request body is empty").__dict__
 
             trace_enable = data.get("trace_enable")
             if trace_enable is not None:
                 self.config["trace_enable"] = bool(trace_enable)
                 self.config.save_config()
 
-            return Response().ok(message="Trace 设置已更新").__dict__
+            return Response().ok(message="Trace settings updated").__dict__
         except Exception as e:
-            logger.error(f"更新 Trace 设置失败: {e}")
-            return Response().error(f"更新 Trace 设置失败: {e}").__dict__
+            logger.error(f"Failed to update trace settings: {e}")
+            return Response().error(f"Failed to update trace settings: {e}").__dict__

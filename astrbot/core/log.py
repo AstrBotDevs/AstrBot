@@ -1,13 +1,16 @@
-"""日志系统，统一将标准 logging 输出转发到 loguru。"""
+"""AstrBot logging pipeline with structured console events."""
 
 import asyncio
 import logging
-import os
 import sys
 import time
 from asyncio import Queue
 from collections import deque
-from typing import TYPE_CHECKING
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger as _raw_loguru_logger
 
@@ -15,23 +18,253 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 CACHED_SIZE = 500
+_LOG_CONTEXT: ContextVar[dict[str, Any]] = ContextVar(
+    "_astrbot_log_context",
+    default={},
+)
 
 if TYPE_CHECKING:
     from loguru import Record
 
 
+def _normalize_path(pathname: str | None) -> str:
+    if not pathname:
+        return ""
+    return str(PurePosixPath(pathname.replace("\\", "/")))
+
+
+def _extract_path_segment(pathname: str | None, marker: str) -> str | None:
+    normalized = _normalize_path(pathname)
+    if marker not in normalized:
+        return None
+
+    suffix = normalized.split(marker, 1)[1]
+    segment = PurePosixPath(suffix).parts
+    if not segment:
+        return None
+    return segment[0] or None
+
+
+def _extract_plugin_name(pathname: str | None) -> str | None:
+    return _extract_path_segment(
+        pathname, "astrbot/builtin_stars/"
+    ) or _extract_path_segment(
+        pathname,
+        "data/plugins/",
+    )
+
+
+def _extract_platform_id(pathname: str | None) -> str | None:
+    return _extract_path_segment(pathname, "astrbot/core/platform/sources/")
+
+
+def _get_short_level_name(level_name: str) -> str:
+    level_map = {
+        "DEBUG": "DBUG",
+        "INFO": "INFO",
+        "WARNING": "WARN",
+        "ERROR": "ERRO",
+        "CRITICAL": "CRIT",
+    }
+    return level_map.get(level_name, level_name[:4].upper())
+
+
+def _build_source_file(pathname: str | None) -> str:
+    if not pathname:
+        return "unknown"
+
+    path = Path(pathname)
+    stem = path.stem or "unknown"
+    parent = path.parent.name
+    return f"{parent}.{stem}" if parent else stem
+
+
+def _build_primary_tag(
+    *,
+    pathname: str | None,
+    logger_name: str,
+    plugin_name: str | None,
+    platform_id: str | None,
+    source_file: str,
+) -> str:
+    if plugin_name:
+        return f"plugin:{plugin_name}"
+    if platform_id:
+        return f"platform:{platform_id}"
+    if logger_name and logger_name not in {"root", "astrbot"}:
+        return f"core:{logger_name}"
+    if source_file and source_file != "unknown":
+        return f"core:{source_file}"
+    return "core:astrbot"
+
+
+def _build_tag_list(
+    *,
+    tag: str,
+    logger_name: str,
+    plugin_name: str | None,
+    platform_id: str | None,
+    umo: str | None,
+    extra_tags: Any,
+) -> list[str]:
+    ordered: list[str] = [tag]
+
+    if plugin_name:
+        ordered.extend([f"plugin:{plugin_name}", plugin_name, "plugin"])
+    if platform_id:
+        ordered.extend([f"platform:{platform_id}", platform_id, "platform"])
+    if umo:
+        ordered.extend([f"umo:{umo}", umo, "umo"])
+    if logger_name:
+        ordered.append(f"logger:{logger_name}")
+
+    if isinstance(extra_tags, (list, tuple, set)):
+        ordered.extend(str(item) for item in extra_tags if item)
+    elif extra_tags:
+        ordered.append(str(extra_tags))
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in ordered:
+        if value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
+
+
+def _build_display_tag(tag: str) -> str:
+    return f"[{tag}]"
+
+
+def _get_context_value(
+    name: str,
+    overrides: dict[str, Any],
+    fallback: Any = None,
+) -> Any:
+    if name in overrides and overrides[name] is not None:
+        return overrides[name]
+
+    context = _LOG_CONTEXT.get()
+    if name in context and context[name] is not None:
+        return context[name]
+
+    return fallback
+
+
+def _build_record_metadata(
+    *,
+    pathname: str | None,
+    logger_name: str,
+    level_name: str,
+    level_no: int,
+    source_line: int,
+    is_trace: bool,
+    overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    overrides = overrides or {}
+    source_file = str(
+        _get_context_value("source_file", overrides, _build_source_file(pathname))
+    )
+    plugin_name = _get_context_value(
+        "plugin_name",
+        overrides,
+        _extract_plugin_name(pathname),
+    )
+    platform_id = _get_context_value(
+        "platform_id",
+        overrides,
+        _extract_platform_id(pathname),
+    )
+    plugin_display_name = _get_context_value(
+        "plugin_display_name",
+        overrides,
+        plugin_name,
+    )
+    umo = _get_context_value("umo", overrides, None)
+    tag = _get_context_value(
+        "tag",
+        overrides,
+        _build_primary_tag(
+            pathname=pathname,
+            logger_name=logger_name,
+            plugin_name=plugin_name,
+            platform_id=platform_id,
+            source_file=source_file,
+        ),
+    )
+    tags = _build_tag_list(
+        tag=tag,
+        logger_name=logger_name,
+        plugin_name=plugin_name,
+        platform_id=platform_id,
+        umo=umo,
+        extra_tags=_get_context_value("tags", overrides, None),
+    )
+
+    return {
+        "plugin_tag": "[Plug]" if plugin_name else "[Core]",
+        "display_tag": _build_display_tag(tag),
+        "short_levelname": _get_short_level_name(level_name),
+        "astrbot_version_tag": f" [v{VERSION}]" if level_no >= logging.WARNING else "",
+        "source_file": source_file,
+        "source_line": source_line,
+        "is_trace": is_trace,
+        "tag": tag,
+        "tags": tags,
+        "platform_id": platform_id,
+        "plugin_name": plugin_name,
+        "plugin_display_name": plugin_display_name,
+        "umo": umo,
+        "logger_name": logger_name,
+    }
+
+
+def _ensure_record_metadata(record: logging.LogRecord) -> dict[str, Any]:
+    overrides = {
+        "tag": getattr(record, "tag", None),
+        "tags": getattr(record, "tags", None),
+        "platform_id": getattr(record, "platform_id", None),
+        "plugin_name": getattr(record, "plugin_name", None),
+        "plugin_display_name": getattr(record, "plugin_display_name", None),
+        "umo": getattr(record, "umo", None),
+        "source_file": getattr(record, "source_file", None),
+    }
+    metadata = _build_record_metadata(
+        pathname=getattr(record, "pathname", None),
+        logger_name=record.name,
+        level_name=record.levelname,
+        level_no=record.levelno,
+        source_line=getattr(record, "lineno", 0),
+        is_trace=record.name == "astrbot.trace",
+        overrides=overrides,
+    )
+    for key, value in metadata.items():
+        setattr(record, key, value)
+    return metadata
+
+
+def _patch_record(record: "Record") -> None:
+    extra = record["extra"]
+    metadata = _build_record_metadata(
+        pathname=record["file"].path,
+        logger_name=record["name"],
+        level_name=record["level"].name,
+        level_no=record["level"].no,
+        source_line=record["line"],
+        is_trace=bool(extra.get("is_trace", False)),
+        overrides=extra,
+    )
+    extra.update(metadata)
+
+
+_loguru = _raw_loguru_logger.patch(_patch_record)
+
+
 class _RecordEnricherFilter(logging.Filter):
-    """为 logging.LogRecord 注入 AstrBot 日志字段。"""
+    """Inject AstrBot log metadata into stdlib records."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.plugin_tag = "[Plug]" if _is_plugin_path(record.pathname) else "[Core]"
-        record.short_levelname = _get_short_level_name(record.levelname)
-        record.astrbot_version_tag = (
-            f" [v{VERSION}]" if record.levelno >= logging.WARNING else ""
-        )
-        record.source_file = _build_source_file(record.pathname)
-        record.source_line = record.lineno
-        record.is_trace = record.name == "astrbot.trace"
+        _ensure_record_metadata(record)
         return True
 
 
@@ -52,69 +285,31 @@ class _QueueAnsiColorFilter(logging.Filter):
         return True
 
 
-def _is_plugin_path(pathname: str | None) -> bool:
-    if not pathname:
-        return False
-    norm_path = os.path.normpath(pathname)
-    return ("data/plugins" in norm_path) or ("astrbot/builtin_stars/" in norm_path)
-
-
-def _get_short_level_name(level_name: str) -> str:
-    level_map = {
-        "DEBUG": "DBUG",
-        "INFO": "INFO",
-        "WARNING": "WARN",
-        "ERROR": "ERRO",
-        "CRITICAL": "CRIT",
-    }
-    return level_map.get(level_name, level_name[:4].upper())
-
-
-def _build_source_file(pathname: str | None) -> str:
-    if not pathname:
-        return "unknown"
-    dirname = os.path.dirname(pathname)
-    return (
-        os.path.basename(dirname) + "." + os.path.basename(pathname).replace(".py", "")
-    )
-
-
-def _patch_record(record: "Record") -> None:
-    extra = record["extra"]
-    extra.setdefault("plugin_tag", "[Core]")
-    extra.setdefault("short_levelname", _get_short_level_name(record["level"].name))
-    level_no = record["level"].no
-    extra.setdefault("astrbot_version_tag", f" [v{VERSION}]" if level_no >= 30 else "")
-    extra.setdefault("source_file", _build_source_file(record["file"].path))
-    extra.setdefault("source_line", record["line"])
-    extra.setdefault("is_trace", False)
-
-
-_loguru = _raw_loguru_logger.patch(_patch_record)
-
-
 class _LoguruInterceptHandler(logging.Handler):
-    """将 logging 记录转发到 loguru。"""
+    """Bridge stdlib logging records to loguru."""
 
     def emit(self, record: logging.LogRecord) -> None:
+        metadata = _ensure_record_metadata(record)
         try:
             level: str | int = _loguru.level(record.levelname).name
         except ValueError:
             level = record.levelno
 
         payload = {
-            "plugin_tag": getattr(record, "plugin_tag", "[Core]"),
-            "short_levelname": getattr(
-                record,
-                "short_levelname",
-                _get_short_level_name(record.levelname),
-            ),
-            "astrbot_version_tag": getattr(record, "astrbot_version_tag", ""),
-            "source_file": getattr(
-                record, "source_file", _build_source_file(record.pathname)
-            ),
-            "source_line": getattr(record, "source_line", record.lineno),
-            "is_trace": getattr(record, "is_trace", record.name == "astrbot.trace"),
+            "plugin_tag": metadata["plugin_tag"],
+            "display_tag": metadata["display_tag"],
+            "short_levelname": metadata["short_levelname"],
+            "astrbot_version_tag": metadata["astrbot_version_tag"],
+            "source_file": metadata["source_file"],
+            "source_line": metadata["source_line"],
+            "is_trace": metadata["is_trace"],
+            "tag": metadata["tag"],
+            "tags": metadata["tags"],
+            "platform_id": metadata["platform_id"],
+            "plugin_name": metadata["plugin_name"],
+            "plugin_display_name": metadata["plugin_display_name"],
+            "umo": metadata["umo"],
+            "logger_name": metadata["logger_name"],
         }
 
         _loguru.bind(**payload).opt(exception=record.exc_info).log(
@@ -124,7 +319,7 @@ class _LoguruInterceptHandler(logging.Handler):
 
 
 class LogBroker:
-    """日志代理类，用于缓存和分发日志消息。"""
+    """Cache and fan out live console events."""
 
     def __init__(self) -> None:
         self.log_cache = deque(maxlen=CACHED_SIZE)
@@ -138,7 +333,7 @@ class LogBroker:
     def unregister(self, q: Queue) -> None:
         self.subscribers.remove(q)
 
-    def publish(self, log_entry: dict) -> None:
+    def publish(self, log_entry: dict[str, Any]) -> None:
         self.log_cache.append(log_entry)
         for q in self.subscribers:
             try:
@@ -148,31 +343,48 @@ class LogBroker:
 
 
 class LogQueueHandler(logging.Handler):
-    """日志处理器，用于将日志消息发送到 LogBroker。"""
+    """Publish structured log events to the live console broker."""
 
     def __init__(self, log_broker: LogBroker) -> None:
         super().__init__()
         self.log_broker = log_broker
 
     def emit(self, record: logging.LogRecord) -> None:
-        log_entry = self.format(record)
-        self.log_broker.publish(
-            {
-                "level": record.levelname,
-                "time": time.time(),
-                "data": log_entry,
-            },
-        )
+        metadata = _ensure_record_metadata(record)
+        rendered = self.format(record)
+        message = record.getMessage()
+        timestamp = time.time()
+        event = {
+            "type": "log",
+            "level": record.levelname,
+            "time": timestamp,
+            "message": message,
+            "rendered": rendered,
+            "data": rendered,
+            "tag": metadata["tag"],
+            "tags": metadata["tags"],
+            "platform_id": metadata["platform_id"],
+            "plugin_name": metadata["plugin_name"],
+            "plugin_display_name": metadata["plugin_display_name"],
+            "umo": metadata["umo"],
+            "logger_name": metadata["logger_name"],
+            "source_file": metadata["source_file"],
+            "source_line": metadata["source_line"],
+            "is_trace": False,
+        }
+        self.log_broker.publish(event)
 
 
 class LogManager:
     _LOGGER_HANDLER_FLAG = "_astrbot_loguru_handler"
     _ENRICH_FILTER_FLAG = "_astrbot_enrich_filter"
+    _QUEUE_HANDLER_FLAG = "_astrbot_log_queue_handler"
 
     _configured = False
     _console_sink_id: int | None = None
     _file_sink_id: int | None = None
     _trace_sink_id: int | None = None
+    _queue_broker: LogBroker | None = None
     _NOISY_LOGGER_LEVELS: dict[str, int] = {
         "aiosqlite": logging.WARNING,
         "filelock": logging.WARNING,
@@ -183,15 +395,17 @@ class LogManager:
 
     @classmethod
     def _default_log_path(cls) -> str:
-        return os.path.join(get_astrbot_data_path(), "logs", "astrbot.log")
+        return str(Path(get_astrbot_data_path()) / "logs" / "astrbot.log")
 
     @classmethod
     def _resolve_log_path(cls, configured_path: str | None) -> str:
         if not configured_path:
             return cls._default_log_path()
-        if os.path.isabs(configured_path):
-            return configured_path
-        return os.path.join(get_astrbot_data_path(), configured_path)
+
+        path = Path(configured_path)
+        if path.is_absolute():
+            return str(path)
+        return str(Path(get_astrbot_data_path()) / path)
 
     @classmethod
     def _setup_loguru(cls) -> None:
@@ -251,26 +465,18 @@ class LogManager:
             logger.addHandler(handler)
 
     @classmethod
-    def GetLogger(cls, log_name: str = "default") -> logging.Logger:
-        cls._setup_loguru()
-        cls._setup_root_bridge()
-
-        logger = logging.getLogger(log_name)
-        cls._ensure_logger_enricher_filter(logger)
-        cls._ensure_logger_intercept_handler(logger)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-        return logger
-
-    @classmethod
-    def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker) -> None:
-        cls._ensure_logger_enricher_filter(logger)
-
-        for handler in logger.handlers:
-            if isinstance(handler, LogQueueHandler):
-                return
+    def _attach_queue_handler(
+        cls, logger: logging.Logger, log_broker: LogBroker
+    ) -> None:
+        has_handler = any(
+            getattr(handler, cls._QUEUE_HANDLER_FLAG, False)
+            for handler in logger.handlers
+        )
+        if has_handler:
+            return
 
         handler = LogQueueHandler(log_broker)
+        setattr(handler, cls._QUEUE_HANDLER_FLAG, True)
         handler.setLevel(logging.DEBUG)
         handler.addFilter(_QueueAnsiColorFilter())
         handler.setFormatter(
@@ -281,6 +487,42 @@ class LogManager:
             ),
         )
         logger.addHandler(handler)
+
+    @classmethod
+    def GetLogger(cls, log_name: str = "default") -> logging.Logger:
+        cls._setup_loguru()
+        cls._setup_root_bridge()
+
+        logger = logging.getLogger(log_name)
+        cls._ensure_logger_enricher_filter(logger)
+        cls._ensure_logger_intercept_handler(logger)
+        if cls._queue_broker is not None:
+            cls._attach_queue_handler(logger, cls._queue_broker)
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+        return logger
+
+    @classmethod
+    @contextmanager
+    def contextualize(cls, **fields: Any) -> Iterator[None]:
+        current = dict(_LOG_CONTEXT.get())
+        current.update(
+            {key: value for key, value in fields.items() if value is not None}
+        )
+        token = _LOG_CONTEXT.set(current)
+        try:
+            yield
+        finally:
+            _LOG_CONTEXT.reset(token)
+
+    @classmethod
+    def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker) -> None:
+        cls._queue_broker = log_broker
+        cls._ensure_logger_enricher_filter(logger)
+        cls._attach_queue_handler(logger, log_broker)
+        root_logger = logging.getLogger()
+        cls._ensure_logger_enricher_filter(root_logger)
+        cls._attach_queue_handler(root_logger, log_broker)
 
     @classmethod
     def _remove_sink(cls, sink_id: int | None) -> None:
@@ -301,7 +543,7 @@ class LogManager:
         backup_count: int,
         trace: bool,
     ) -> int:
-        os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
+        Path(file_path).parent.mkdir(parents=True, exist_ok=True)
         rotation = f"{max_mb} MB" if max_mb and max_mb > 0 else None
         retention = (
             backup_count if rotation and backup_count and backup_count > 0 else None

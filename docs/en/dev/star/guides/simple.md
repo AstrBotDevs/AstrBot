@@ -17,7 +17,7 @@ class MyPlugin(Star):
         '''This is a hello world command''' # This is the handler's description, which will be parsed to help users understand the plugin's functionality. Highly recommended to provide.
         user_name = event.get_sender_name()
         message_str = event.message_str # Get the plain text content of the message
-        logger.info("Hello world command triggered!")
+        logger.info("Hello world command triggered!", extra={"tag": "plugin:my_plugin"})
         yield event.plain_result(f"Hello, {user_name}!") # Send a plain text message
 
     async def terminate(self):
@@ -37,6 +37,8 @@ Explanation:
 > Handlers must be registered within the plugin class, with the first two parameters being `self` and `event`. If the file becomes too long, you can write services externally and call them from the handler.
 >
 > The file containing the plugin class must be named `main.py`.
+>
+> The new console supports filtering by `tag`. For plugin development, it is recommended to add `extra={"tag": "plugin:your_plugin"}` to important logs. If you need more dimensions, you can also provide fields such as `tags`, `platform_id`, `plugin_name`, and `umo`.
 
 All handler functions must be written within the plugin class. To keep content concise, in subsequent sections, we may omit the plugin class definition.
 ```
