@@ -5,7 +5,7 @@ import vue from "@vitejs/plugin-vue";
 import vuetify from "vite-plugin-vuetify";
 import webfontDl from "vite-plugin-webfont-dl";
 import { cpSync, mkdirSync, existsSync } from "fs";
-import { join, resolve } from "path";
+import { resolve } from "path";
 
 const require = createRequire(import.meta.url);
 
