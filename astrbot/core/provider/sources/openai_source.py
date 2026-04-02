@@ -869,6 +869,8 @@ class ProviderOpenAIOfficial(Provider):
             and str(self.provider_config.get("provider", "")).strip() == "deepseek"
         ):
             model = model.rsplit("/", 1)[-1]
+            # Some frontends may append tags like "xxx:tag"; DeepSeek expects the bare model name.
+            model = model.rsplit(":", 1)[0]
 
         payloads = {"messages": context_query, "model": model}
 
