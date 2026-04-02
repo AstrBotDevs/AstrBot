@@ -46,7 +46,7 @@ async function mountApp(app: any, pinia: any, waitForRouter = true) {
   app.mount("#app");
 
   // 挂载后同步 Vuetify 主题
-  const customizer = useCustomizerStore();
+  const customizer = useCustomizerStore(pinia);
   vuetify.theme.change(customizer.uiTheme);
   const storedPrimary = localStorage.getItem("themePrimary");
   const storedSecondary = localStorage.getItem("themeSecondary");
@@ -127,16 +127,17 @@ async function initApp() {
 
     // Suppress known Vuetify 4 internal warning about slot invocation
     app.config.warnHandler = (msg, _instance, _trace) => {
-      if (msg.includes("Slot \"default\" invoked outside of the render function")) return;
+      if (msg.includes('Slot "default" invoked outside of the render function'))
+        return;
       console.warn(msg);
     };
 
-    app.use(router);
     const pinia = createPinia();
     app.use(pinia);
+    app.use(router);
 
     const { useApiStore } = await import("@/stores/api");
-    const apiStore = useApiStore();
+    const apiStore = useApiStore(pinia);
     apiStore.setPresets(presets);
     apiStore.init();
 
