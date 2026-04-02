@@ -318,7 +318,8 @@ class SdkRequestRuntime:
             overlay.result_is_set = True
             self.set_overlay_stop_state(overlay, stopped=False)
             return
-        normalized_payload = json.loads(json.dumps(result_payload))
+        # 使用 copy.deepcopy 比 json 序列化/反序列化更快，适用于典型的 dict-of-dicts 结构
+        normalized_payload = copy.deepcopy(result_payload)
         overlay.result_payload = normalized_payload
         chain_payload = normalized_payload.get("chain")
         overlay.result_object = (
@@ -890,8 +891,12 @@ class SdkRequestRuntime:
 
     @staticmethod
     def event_has_send_operation(event: AstrMessageEvent) -> bool:
-        """读取 event 是否已发送消息，按新 API → 直接读字段的优先级适配。"""
+        """读取 event 是否已发送消息,按新 API → 兼容 API → 直接读字段的优先级适配。"""
         getter = getattr(event, "has_send_operation", None)
         if callable(getter):
             return bool(getter())
+        # 兼容旧版 event 提供的 get_send_operation_state 方法
+        legacy_getter = getattr(event, "get_send_operation_state", None)
+        if callable(legacy_getter):
+            return bool(legacy_getter())
         return bool(getattr(event, "_has_send_oper", False))

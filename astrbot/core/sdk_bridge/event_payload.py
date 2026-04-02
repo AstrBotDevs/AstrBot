@@ -79,14 +79,18 @@ class InboundEventSnapshot:
                 "platform": self.target["platform"],
                 "raw": dict(raw),
             },
-            "host_extras": copy.deepcopy(host_extras),
-            "sdk_local_extras": copy.deepcopy(sdk_local_extras),
+            # host_extras 来自 sanitize_host_extras()，已构建全新 dict，无需 deepcopy
+            "host_extras": dict(host_extras),
+            # sdk_local_extras 来自 dict(overlay.sdk_local_extras)，已是全新副本，无需 deepcopy
+            "sdk_local_extras": dict(sdk_local_extras),
             "extras": merged_extras,
         }
         if self.messages:
-            payload["messages"] = copy.deepcopy(list(self.messages))
+            # self.messages 是 frozen dataclass 的 tuple[dict, ...]，不会被修改，无需 deepcopy
+            payload["messages"] = list(self.messages)
         if field_updates:
-            payload.update(copy.deepcopy(field_updates))
+            # field_updates 由调用方新构建，直接浅拷贝即可
+            payload.update(dict(field_updates))
         return payload
 
 

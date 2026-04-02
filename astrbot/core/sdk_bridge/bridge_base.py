@@ -115,6 +115,42 @@ class CapabilityBridgeBase(CapabilityRouter):
     _plugin_bridge: Any
 
     @staticmethod
+    def _attr(obj: Any, name: str, default: Any = None) -> Any:
+        """Unified attribute accessor supporting both objects and dicts.
+
+        Some runtime objects (e.g., member/group info from platform adapters) may be
+        either dataclass-like objects with attributes or plain dicts. This helper
+        centralizes the getattr-then-dict-fallback pattern to reduce duplication.
+        """
+        value = getattr(obj, name, default)
+        if value is default and isinstance(obj, dict):
+            value = obj.get(name, default)
+        return value
+
+    @staticmethod
+    def _extract_dispatch_token_from_payload(payload: dict[str, Any]) -> str:
+        """Extract dispatch_token from nested payload structures.
+
+        Platform send requests may embed the dispatch token in different locations
+        depending on how the target was constructed. This helper normalizes the
+        extraction logic used by both dispatch target resolution and event context
+        resolution.
+        """
+        target_payload = payload.get("target")
+        if not isinstance(target_payload, dict):
+            return ""
+        raw_payload = target_payload.get("raw")
+        if not isinstance(raw_payload, dict):
+            return ""
+        dispatch_token = str(raw_payload.get("dispatch_token", ""))
+        if dispatch_token:
+            return dispatch_token
+        nested_raw = raw_payload.get("raw")
+        if isinstance(nested_raw, dict):
+            dispatch_token = str(nested_raw.get("dispatch_token", ""))
+        return dispatch_token
+
+    @staticmethod
     def _to_iso_datetime(value: Any) -> str | None:
         if value is None:
             return None
@@ -314,17 +350,11 @@ class CapabilityBridgeBase(CapabilityRouter):
     def _serialize_member(member: Any) -> dict[str, Any] | None:
         if member is None:
             return None
-        user_id = getattr(member, "user_id", None)
-        if user_id is None and isinstance(member, dict):
-            user_id = member.get("user_id")
+        user_id = CapabilityBridgeBase._attr(member, "user_id")
         if user_id is None:
             return None
-        nickname = getattr(member, "nickname", None)
-        if nickname is None and isinstance(member, dict):
-            nickname = member.get("nickname")
-        role = getattr(member, "role", None)
-        if role is None and isinstance(member, dict):
-            role = member.get("role")
+        nickname = CapabilityBridgeBase._attr(member, "nickname")
+        role = CapabilityBridgeBase._attr(member, "role")
         return {
             "user_id": str(user_id),
             "nickname": str(nickname or ""),
@@ -336,31 +366,20 @@ class CapabilityBridgeBase(CapabilityRouter):
         if group is None:
             return None
         members_payload = []
-        raw_members = getattr(group, "members", None)
+        # members 可能来自 members 或 member_list 属性/键
+        raw_members = cls._attr(group, "members")
         if raw_members is None:
-            raw_members = getattr(group, "member_list", None)
-        if raw_members is None and isinstance(group, dict):
-            raw_members = group.get("members") or group.get("member_list")
+            raw_members = cls._attr(group, "member_list")
         if isinstance(raw_members, list):
             for member in raw_members:
                 serialized_member = cls._serialize_member(member)
                 if serialized_member is not None:
                     members_payload.append(serialized_member)
-        group_id = getattr(group, "group_id", None)
-        if group_id is None and isinstance(group, dict):
-            group_id = group.get("group_id")
-        group_name = getattr(group, "group_name", None)
-        if group_name is None and isinstance(group, dict):
-            group_name = group.get("group_name")
-        group_avatar = getattr(group, "group_avatar", None)
-        if group_avatar is None and isinstance(group, dict):
-            group_avatar = group.get("group_avatar")
-        group_owner = getattr(group, "group_owner", None)
-        if group_owner is None and isinstance(group, dict):
-            group_owner = group.get("group_owner")
-        group_admins = getattr(group, "group_admins", None)
-        if group_admins is None and isinstance(group, dict):
-            group_admins = group.get("group_admins")
+        group_id = cls._attr(group, "group_id")
+        group_name = cls._attr(group, "group_name")
+        group_avatar = cls._attr(group, "group_avatar")
+        group_owner = cls._attr(group, "group_owner")
+        group_admins = cls._attr(group, "group_admins")
         return {
             "group_id": str(group_id or ""),
             "group_name": str(group_name or ""),
@@ -544,18 +563,7 @@ class CapabilityBridgeBase(CapabilityRouter):
         request_id: str,
         payload: dict[str, Any],
     ) -> tuple[str, str]:
-        target_payload = payload.get("target")
-        dispatch_token = ""
-        if isinstance(target_payload, dict):
-            raw_payload = target_payload.get("raw")
-            if isinstance(raw_payload, dict):
-                dispatch_token = str(raw_payload.get("dispatch_token", ""))
-                if not dispatch_token:
-                    nested_raw_payload = raw_payload.get("raw")
-                    if isinstance(nested_raw_payload, dict):
-                        dispatch_token = str(
-                            nested_raw_payload.get("dispatch_token", "")
-                        )
+        dispatch_token = self._extract_dispatch_token_from_payload(payload)
         if not dispatch_token:
             request_context = self._plugin_bridge.resolve_request_session(request_id)
             if request_context is None:
@@ -579,16 +587,7 @@ class CapabilityBridgeBase(CapabilityRouter):
                 return bool(has_event)
             return hasattr(request_context, "event")
 
-        target_payload = payload.get("target")
-        dispatch_token = ""
-        if isinstance(target_payload, dict):
-            raw_payload = target_payload.get("raw")
-            if isinstance(raw_payload, dict):
-                dispatch_token = str(raw_payload.get("dispatch_token", ""))
-                if not dispatch_token:
-                    nested_raw = raw_payload.get("raw")
-                    if isinstance(nested_raw, dict):
-                        dispatch_token = str(nested_raw.get("dispatch_token", ""))
+        dispatch_token = self._extract_dispatch_token_from_payload(payload)
         if dispatch_token:
             request_context = self._plugin_bridge.get_request_context_by_token(
                 dispatch_token

@@ -183,23 +183,6 @@ class SdkPluginBridge:
     async def turn_on_plugin(self, plugin_id: str) -> None:
         await self.lifecycle.turn_on_plugin(plugin_id)
 
-    def _snapshot_records(self) -> list[SdkPluginRecord]:
-        with self._store.mutation_lock:
-            return list(self._records.values())
-
-    def _snapshot_records_sorted(self) -> list[SdkPluginRecord]:
-        with self._store.mutation_lock:
-            return sorted(self._records.values(), key=lambda item: item.load_order)
-
-    def _snapshot_http_routes(self, plugin_id: str | None = None) -> list[SdkHttpRoute]:
-        with self._store.mutation_lock:
-            if plugin_id is None:
-                routes: list[SdkHttpRoute] = []
-                for entries in self._http_routes.values():
-                    routes.extend(list(entries))
-                return routes
-            return list(self._http_routes.get(plugin_id, []))
-
     def list_plugins(self) -> list[dict[str, Any]]:
         return self.registry.list_plugins()
 
@@ -782,27 +765,6 @@ class SdkPluginBridge:
     ) -> InboundEventSnapshot:
         return self.request_runtime.get_or_build_inbound_snapshot(event, overlay)
 
-    def _build_sdk_event_payload(
-        self,
-        event: AstrMessageEvent,
-        *,
-        dispatch_token: str,
-        plugin_id: str,
-        request_id: str,
-        overlay: _RequestOverlayState | None,
-        raw_updates: dict[str, Any] | None = None,
-        field_updates: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        return self.request_runtime.build_sdk_event_payload(
-            event,
-            dispatch_token=dispatch_token,
-            plugin_id=plugin_id,
-            request_id=request_id,
-            overlay=overlay,
-            raw_updates=raw_updates,
-            field_updates=field_updates,
-        )
-
     def build_sdk_event_payload(
         self,
         event: AstrMessageEvent,
@@ -871,15 +833,9 @@ class SdkPluginBridge:
 
     @staticmethod
     def _legacy_has_replied(event: AstrMessageEvent) -> bool:
-        # 按优先级尝试新版方法 → 兼容方法 → 直接读内部字段，
-        # 确保 AstrMessageEvent 的 API 演进不会破坏旧版 bridge 逻辑
-        has_send = getattr(event, "has_send_operation", None)
-        if callable(has_send):
-            return bool(has_send())
-        has_send = getattr(event, "get_send_operation_state", None)
-        if callable(has_send):
-            return bool(has_send())
-        return bool(getattr(event, "_has_send_oper", False))
+        # 委托给统一的 event_has_send_operation 方法,
+        # 该方法已包含对新版 API → 兼容 API → 直接读字段的完整适配逻辑
+        return SdkRequestRuntime.event_has_send_operation(event)
 
     def _match_handlers(self, event: AstrMessageEvent) -> list[TriggerMatch]:
         matches: list[TriggerMatch] = []
@@ -923,7 +879,7 @@ class SdkPluginBridge:
     def has_active_sdk_command_handlers(self) -> bool:
         if not self._records:
             return False
-        for record in self._snapshot_records():
+        for record in self._store.snapshot_records():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -948,7 +904,7 @@ class SdkPluginBridge:
         for conflict in conflicts:
             conflict_map.setdefault(conflict.sdk.plugin_name, []).append(conflict)
 
-        for record in self._snapshot_records():
+        for record in self._store.snapshot_records():
             record.issues = [
                 issue
                 for issue in record.issues
@@ -1024,7 +980,7 @@ class SdkPluginBridge:
 
     def _collect_sdk_command_registrations(self) -> list[Any]:
         registrations: list[Any] = []
-        for record in self._snapshot_records_sorted():
+        for record in self._store.snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1196,7 +1152,7 @@ class SdkPluginBridge:
         if not root_name:
             return None
         normalized_platform = self._normalize_platform_name(event.get_platform_name())
-        for record in self._snapshot_records_sorted():
+        for record in self._store.snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1336,18 +1292,10 @@ class SdkPluginBridge:
         event: AstrMessageEvent,
         declaration_order: int,
     ) -> TriggerMatch | None:
-        handler_ref = self._find_handler_ref(record, route.handler_full_name)
-        if handler_ref is None:
+        # 复用 _build_dynamic_route_descriptor 构建描述符，避免重复内联逻辑
+        descriptor = self._build_dynamic_route_descriptor(record, route)
+        if descriptor is None:
             return None
-        descriptor = handler_ref.descriptor.model_copy(deep=True)
-        descriptor.priority = route.priority
-        if route.use_regex:
-            descriptor.trigger = MessageTrigger(regex=route.command_name)
-        else:
-            descriptor.trigger = CommandTrigger(
-                command=route.command_name,
-                description=route.desc or None,
-            )
         return TriggerConverter.match_handler(
             plugin_id=record.plugin_id,
             descriptor=descriptor,
@@ -1400,7 +1348,7 @@ class SdkPluginBridge:
         platform_name: str = "",
     ) -> list[tuple[SdkPluginRecord, HandlerDescriptor]]:
         matches: list[tuple[int, int, int, SdkPluginRecord, HandlerDescriptor]] = []
-        for record in self._snapshot_records():
+        for record in self._store.snapshot_records():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1482,7 +1430,7 @@ class SdkPluginBridge:
 
     def get_handlers_by_event_type(self, event_type: str) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
-        for record in self._snapshot_records_sorted():
+        for record in self._store.snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1531,7 +1479,7 @@ class SdkPluginBridge:
         entries: list[dict[str, Any]] = []
         seen_names: set[str] = set()
 
-        for record in self._snapshot_records_sorted():
+        for record in self._store.snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1569,7 +1517,7 @@ class SdkPluginBridge:
         return entries
 
     def get_handler_by_full_name(self, full_name: str) -> dict[str, Any] | None:
-        for record in self._snapshot_records():
+        for record in self._store.snapshot_records():
             for handler in record.handlers:
                 if handler.descriptor.id == full_name:
                     return self._descriptor_metadata(
@@ -1580,14 +1528,14 @@ class SdkPluginBridge:
 
     def list_dashboard_commands(self) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
-        for record in self._snapshot_records_sorted():
+        for record in self._store.snapshot_records_sorted():
             items.extend(self._build_dashboard_command_items(record))
         items.sort(key=lambda item: str(item.get("effective_command", "")).lower())
         return items
 
     def list_dashboard_tools(self) -> list[dict[str, Any]]:
         tools: list[dict[str, Any]] = []
-        for record in self._snapshot_records_sorted():
+        for record in self._store.snapshot_records_sorted():
             display_name = str(
                 record.plugin.manifest_data.get("display_name") or record.plugin_id
             )

@@ -1176,6 +1176,11 @@ class ProviderCapabilityMixin(CapabilityMixinHost):
                 "build_sdk_event_payload",
                 None,
             )
+            legacy_build_sdk_event_payload = getattr(
+                self._plugin_bridge,
+                "_build_sdk_event_payload",
+                None,
+            )
             if callable(build_sdk_event_payload):
                 event_payload = build_sdk_event_payload(
                     event,
@@ -1184,13 +1189,19 @@ class ProviderCapabilityMixin(CapabilityMixinHost):
                     request_id=request_id,
                     overlay=get_overlay(dispatch_token),
                 )
-            else:
-                event_payload = self._plugin_bridge._build_sdk_event_payload(
+            elif callable(legacy_build_sdk_event_payload):
+                # Keep compatibility with older bridge stubs that only expose the
+                # private helper so tool calls still reach the worker session.
+                event_payload = legacy_build_sdk_event_payload(
                     event,
                     dispatch_token=dispatch_token,
                     plugin_id=plugin_id,
                     request_id=request_id,
                     overlay=get_overlay(dispatch_token),
+                )
+            else:
+                raise AttributeError(
+                    "SDK plugin bridge does not expose an event payload builder"
                 )
             call_payload = {
                 "plugin_id": plugin_id,

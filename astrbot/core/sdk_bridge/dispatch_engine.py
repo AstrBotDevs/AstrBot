@@ -28,6 +28,90 @@ class SdkDispatchEngine:
     def __init__(self, *, bridge: SdkPluginBridge) -> None:
         self.bridge = bridge
 
+    def _ensure_dispatch_context(
+        self,
+        dispatch_token: str,
+        event: AstrMessageEvent,
+        *,
+        plugin_id: str = "",
+        request_id: str = "",
+    ) -> _RequestContext:
+        """确保 dispatch_token 对应的 _RequestContext 存在并绑定 _DispatchState。
+
+        三处 dispatch 方法都需要在循环前准备好上下文，此方法统一处理：
+        - 若 context 不存在则新建，使用传入的 plugin_id/request_id
+        - 若已存在则更新 dispatch_state，保留原有 plugin_id/request_id
+        """
+        dispatch_state = _DispatchState(event=event)
+        request_context = self.bridge._request_contexts.get(dispatch_token)
+        if request_context is None:
+            request_context = _RequestContext(
+                plugin_id=plugin_id,
+                request_id=request_id,
+                dispatch_token=dispatch_token,
+                dispatch_state=dispatch_state,
+            )
+            self.bridge._request_contexts[dispatch_token] = request_context
+        else:
+            request_context.dispatch_state = dispatch_state
+        return request_context
+
+    def _apply_handler_result_to_dispatch(
+        self,
+        handler_result: dict,
+        dispatch_state: _DispatchState,
+        overlay,
+    ) -> bool:
+        """将 handler 返回结果应用到 dispatch_state 和 overlay。
+
+        统一处理三处 dispatch 方法中相同的结果应用逻辑：
+        - 更新 dispatch_state 的 sent_message 和 stopped 状态
+        - 根据 call_llm 设置 overlay.requested_llm 和 should_call_llm
+        - 若已发送消息或停止，则关闭 should_call_llm
+
+        Returns:
+            bool: 是否应该 break 循环（handler 要求 stop）
+        """
+        dispatch_state.sent_message = (
+            dispatch_state.sent_message or handler_result["sent_message"]
+        )
+        dispatch_state.stopped = dispatch_state.stopped or handler_result["stop"]
+        if handler_result["call_llm"]:
+            overlay.requested_llm = True
+            overlay.should_call_llm = True
+        if handler_result["sent_message"] or handler_result["stop"]:
+            overlay.should_call_llm = False
+        return handler_result["stop"]
+
+    def _finalize_dispatch(
+        self,
+        result: SdkDispatchResult,
+        overlay,
+        event: AstrMessageEvent,
+    ) -> None:
+        """dispatch 结束后的收尾工作：同步发送状态和 LLM 阻塞标记。
+
+        统一处理 dispatch_message 和 dispatch_waiter_event 的收尾逻辑：
+        - 若已发送消息：标记 event 发送操作，关闭 should_call_llm，设置 event 默认 LLM 阻塞
+        - 若事件被 stop：停止事件，关闭 should_call_llm，设置 event 默认 LLM 阻塞
+        """
+        if result.sent_message:
+            # 已发送消息：同步标记 event 和 overlay 的发送状态，防止 LLM 重复回复
+            self.bridge.request_runtime._mark_event_send_operation(event)
+            overlay.should_call_llm = False
+            self.bridge.request_runtime._set_event_default_llm_blocked(
+                event,
+                blocked=True,
+            )
+        if result.stopped:
+            event.stop_event()
+            # 事件被 stop 后 LLM 不应再处理，双重写入 overlay 和 event
+            overlay.should_call_llm = False
+            self.bridge.request_runtime._set_event_default_llm_blocked(
+                event,
+                blocked=True,
+            )
+
     async def dispatch_message(self, event: AstrMessageEvent) -> SdkDispatchResult:
         result = SdkDispatchResult()
         if event.is_stopped():
@@ -111,18 +195,8 @@ class SdkDispatchEngine:
             for match in matches
         ]
 
-        dispatch_state = _DispatchState(event=event)
-        request_context = self.bridge._request_contexts.get(dispatch_token)
-        if request_context is None:
-            request_context = _RequestContext(
-                plugin_id="",
-                request_id="",
-                dispatch_token=dispatch_token,
-                dispatch_state=dispatch_state,
-            )
-            self.bridge._request_contexts[dispatch_token] = request_context
-        else:
-            request_context.dispatch_state = dispatch_state
+        request_context = self._ensure_dispatch_context(dispatch_token, event)
+        dispatch_state = request_context.dispatch_state
         skipped_reason = None
         for match in matches:
             whitelist = (
@@ -214,38 +288,16 @@ class SdkDispatchEngine:
             result.executed_handlers.append(
                 {"plugin_id": record.plugin_id, "handler_id": match.handler_id}
             )
-            dispatch_state.sent_message = (
-                dispatch_state.sent_message or handler_result["sent_message"]
-            )
-            dispatch_state.stopped = dispatch_state.stopped or handler_result["stop"]
-            if handler_result["call_llm"]:
-                overlay.requested_llm = True
-                overlay.should_call_llm = True
-            if handler_result["sent_message"] or handler_result["stop"]:
-                overlay.should_call_llm = False
-            if handler_result["stop"]:
+            if self._apply_handler_result_to_dispatch(
+                handler_result, dispatch_state, overlay
+            ):
                 break
 
         result.sent_message = dispatch_state.sent_message
         result.stopped = dispatch_state.stopped
         if not result.executed_handlers:
             result.skipped_reason = skipped_reason or self.bridge.SKIP_NO_MATCH
-        if result.sent_message:
-            # 已发送消息：同步标记 event 和 overlay 的发送状态，防止 LLM 重复回复
-            self.bridge.request_runtime._mark_event_send_operation(event)
-            overlay.should_call_llm = False
-            self.bridge.request_runtime._set_event_default_llm_blocked(
-                event,
-                blocked=True,
-            )
-        if result.stopped:
-            event.stop_event()
-            # 事件被 stop 后 LLM 不应再处理，双重写入 overlay 和 event
-            overlay.should_call_llm = False
-            self.bridge.request_runtime._set_event_default_llm_blocked(
-                event,
-                blocked=True,
-            )
+        self._finalize_dispatch(result, overlay, event)
         return result
 
     async def dispatch_system_event(
@@ -431,19 +483,13 @@ class SdkDispatchEngine:
         records: list[SdkPluginRecord],
     ) -> SdkDispatchResult:
         result = SdkDispatchResult()
-        dispatch_state = _DispatchState(event=event)
         dispatch_token = self.bridge.get_or_bind_dispatch_token(event)
         overlay = self.bridge._ensure_request_overlay(
             dispatch_token,
             should_call_llm=self.bridge.get_effective_should_call_llm(event),
         )
-        request_context = _RequestContext(
-            plugin_id="",
-            request_id="",
-            dispatch_token=dispatch_token,
-            dispatch_state=dispatch_state,
-        )
-        self.bridge._request_contexts[dispatch_token] = request_context
+        request_context = self._ensure_dispatch_context(dispatch_token, event)
+        dispatch_state = request_context.dispatch_state
         for record in records:
             if record.state in {
                 self.bridge.SDK_STATE_DISABLED,
@@ -505,34 +551,13 @@ class SdkDispatchEngine:
             result.executed_handlers.append(
                 {"plugin_id": record.plugin_id, "handler_id": "__sdk_session_waiter__"}
             )
-            dispatch_state.sent_message = (
-                dispatch_state.sent_message or handler_result["sent_message"]
-            )
-            dispatch_state.stopped = dispatch_state.stopped or handler_result["stop"]
-            if handler_result["call_llm"]:
-                overlay.requested_llm = True
-                overlay.should_call_llm = True
-            if handler_result["sent_message"] or handler_result["stop"]:
-                overlay.should_call_llm = False
-            if handler_result["stop"]:
+            if self._apply_handler_result_to_dispatch(
+                handler_result, dispatch_state, overlay
+            ):
                 break
         result.sent_message = dispatch_state.sent_message
         result.stopped = dispatch_state.stopped
         if not result.executed_handlers:
             result.skipped_reason = self.bridge.SKIP_NO_MATCH
-        if result.sent_message:
-            # waiter dispatch 同样需要同步发送状态到 event，供后续 pipeline 阶段判断
-            self.bridge.request_runtime._mark_event_send_operation(event)
-            overlay.should_call_llm = False
-            self.bridge.request_runtime._set_event_default_llm_blocked(
-                event,
-                blocked=True,
-            )
-        if result.stopped:
-            event.stop_event()
-            overlay.should_call_llm = False
-            self.bridge.request_runtime._set_event_default_llm_blocked(
-                event,
-                blocked=True,
-            )
+        self._finalize_dispatch(result, overlay, event)
         return result
