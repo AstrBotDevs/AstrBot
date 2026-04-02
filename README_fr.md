@@ -93,7 +93,7 @@ uv tool upgrade astrbot
 ```
 
 > [!WARNING]
-> AstrBot déployé via `uv` ne prend pas en charge la mise à jour via le WebUI. Pour mettre à jour, exécutez la commande ci-dessus depuis le terminal.
+> AstrBot déployé via `uv` **ne prend pas en charge la mise à jour via le WebUI**. Pour mettre à jour, exécutez la commande ci-dessus depuis le terminal.
 
 ### Déploiement Docker
 
