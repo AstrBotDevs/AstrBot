@@ -79,7 +79,11 @@ export default defineConfig(({ command, mode }) => {
       preprocessorOptions: {
         scss: {
           api: "modern-compiler",
-          silenceDeprecations: ["import", "global-builtin"],
+          silenceDeprecations: ["import", "global-builtin", "if-function"],
+        },
+        sass: {
+          api: "modern-compiler",
+          silenceDeprecations: ["import", "global-builtin", "if-function"],
         },
       },
     },
