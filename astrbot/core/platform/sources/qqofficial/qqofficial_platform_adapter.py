@@ -509,10 +509,7 @@ class QQOfficialPlatformAdapter(Platform):
             message,
             botpy.message.DirectMessage,
         ):
-            if isinstance(message, botpy.message.Message):
-                abm.self_id = str(message.mentions[0].id)
-            else:
-                abm.self_id = appid
+            abm.self_id = appid
 
             plain_content = QQOfficialPlatformAdapter._parse_face_message(
                 message.content.replace(
@@ -530,6 +527,7 @@ class QQOfficialPlatformAdapter(Platform):
                 str(message.author.id),
                 str(message.author.username),
             )
+            msg.append(At(qq=appid))
             msg.append(Plain(plain_content))
 
             if isinstance(message, botpy.message.Message):
