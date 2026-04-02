@@ -540,7 +540,8 @@ class ProviderOpenAIOfficial(Provider):
         
         # Track partial thinking tags across chunks for MiniMax-style reasoning
         thinking_buffer = ""
-        in_thinking_block = False
+        # Compile regex once outside the loop for efficiency
+        thinking_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
         async for chunk in stream:
             if not chunk.choices:
@@ -580,8 +581,6 @@ class ProviderOpenAIOfficial(Provider):
                     thinking_buffer = ""
                 
                 # Find all thinking blocks in this chunk
-                thinking_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
-                
                 # Extract complete thinking blocks
                 for match in thinking_pattern.finditer(completion_text):
                     think_content = match.group(1).strip()
@@ -590,6 +589,7 @@ class ProviderOpenAIOfficial(Provider):
                             llm_response.reasoning_content += "\n" + think_content
                         else:
                             llm_response.reasoning_content = think_content
+                        _y = True
                 
                 # Remove all complete thinking blocks from completion_text
                 completion_text = thinking_pattern.sub("", completion_text)
@@ -607,7 +607,8 @@ class ProviderOpenAIOfficial(Provider):
                     thinking_buffer = ""
                 
                 # Strip whitespace but preserve structure
-                completion_text = completion_text.strip()
+                # Use lstrip to remove leading newlines from thinking tags, but preserve trailing spaces for chunk concatenation
+                completion_text = completion_text.lstrip()
                 
                 # Only yield if there's actual text content remaining
                 if completion_text:
