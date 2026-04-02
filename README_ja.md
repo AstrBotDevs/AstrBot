@@ -185,6 +185,7 @@ AstrBot をよく使うチャットプラットフォームに接続できます
 | Coze | LLMOps プラットフォーム |
 | OpenAI Whisper | 音声認識サービス |
 | SenseVoice | 音声認識サービス |
+| Xiaomi MiMo Omni | 音声認識サービス |
 | OpenAI TTS | 音声合成サービス |
 | Gemini TTS | 音声合成サービス |
 | GPT-Sovits-Inference | 音声合成サービス |
@@ -194,6 +195,7 @@ AstrBot をよく使うチャットプラットフォームに接続できます
 | Alibaba Cloud 百炼 TTS | 音声合成サービス |
 | Azure TTS | 音声合成サービス |
 | Minimax TTS | 音声合成サービス |
+| Xiaomi MiMo TTS | 音声合成サービス |
 | Volcano Engine TTS | 音声合成サービス |
 
 ## ❤️ コントリビューション

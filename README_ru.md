@@ -184,6 +184,7 @@ yay -S astrbot-git
 | Coze | Платформы LLMOps |
 | OpenAI Whisper | Сервисы распознавания речи |
 | SenseVoice | Сервисы распознавания речи |
+| Xiaomi MiMo Omni | Сервисы распознавания речи |
 | OpenAI TTS | Сервисы синтеза речи |
 | Gemini TTS | Сервисы синтеза речи |
 | GPT-Sovits-Inference | Сервисы синтеза речи |
@@ -193,6 +194,7 @@ yay -S astrbot-git
 | Alibaba Cloud Bailian TTS | Сервисы синтеза речи |
 | Azure TTS | Сервисы синтеза речи |
 | Minimax TTS | Сервисы синтеза речи |
+| Xiaomi MiMo TTS | Сервисы синтеза речи |
 | Volcano Engine TTS | Сервисы синтеза речи |
 
 ## ❤️ Вклад в проект
