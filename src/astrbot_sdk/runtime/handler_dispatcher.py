@@ -117,70 +117,37 @@ class HandlerDispatcher:
 
     async def invoke(self, message, cancel_token: CancelToken) -> dict[str, Any]:
         handler_id = str(message.input.get("handler_id", ""))
+        event_payload = self._coerce_event_payload(message.input.get("event"))
         if handler_id == "__sdk_session_waiter__":
-            event_payload = message.input.get("event", {})
             requested_plugin_id = str(message.input.get("plugin_id") or "").strip()
-            ctx = Context(
-                peer=self._peer,
-                plugin_id=requested_plugin_id or self._plugin_id,
+            plugin_id = self._resolve_waiter_plugin_id(
+                event_payload=event_payload,
+                requested_plugin_id=requested_plugin_id,
+            )
+            ctx, event = self._create_context_event(
+                plugin_id=plugin_id,
                 request_id=message.id,
                 cancel_token=cancel_token,
-                source_event_payload=event_payload
-                if isinstance(event_payload, dict)
-                else None,
+                event_payload=event_payload,
             )
-            event = MessageEvent.from_payload(event_payload, context=ctx)
-            session_key = event.unified_msg_origin
-            if requested_plugin_id:
-                plugin_id = requested_plugin_id
-            else:
-                plugin_ids = self._session_waiters.get_waiter_plugin_ids(session_key)
-                if len(plugin_ids) > 1:
-                    raise LookupError(
-                        "multiple active session_waiters found for session; "
-                        "dispatch requires explicit plugin identity"
-                    )
-                plugin_id = plugin_ids[0] if plugin_ids else self._plugin_id
-                if plugin_id != ctx.plugin_id:
-                    ctx = Context(
-                        peer=self._peer,
-                        plugin_id=plugin_id,
-                        request_id=message.id,
-                        cancel_token=cancel_token,
-                        source_event_payload=event_payload
-                        if isinstance(event_payload, dict)
-                        else None,
-                    )
-                    event = MessageEvent.from_payload(event_payload, context=ctx)
             event.bind_reply_handler(self._create_reply_handler(ctx, event))
-            with caller_plugin_scope(plugin_id):
-                task = asyncio.create_task(
-                    self._session_waiters.dispatch(event, plugin_id=plugin_id)
-                )
-            _mark_session_waiter_handler_task(task)
-            task.add_done_callback(_unmark_session_waiter_handler_task)
-            self._active[message.id] = (task, cancel_token)
-            try:
-                return await task
-            finally:
-                self._active.pop(message.id, None)
+            task = self._spawn_plugin_task(
+                plugin_id,
+                self._session_waiters.dispatch(event, plugin_id=plugin_id),
+            )
+            return await self._await_tracked_task(message.id, task, cancel_token)
 
         loaded = self._handlers.get(handler_id)
         if loaded is None:
             raise LookupError(f"handler not found: {handler_id}")
 
         plugin_id = self._resolve_plugin_id(loaded)
-        event_payload = message.input.get("event", {})
-        ctx = Context(
-            peer=self._peer,
+        ctx, event = self._create_context_event(
             plugin_id=plugin_id,
             request_id=message.id,
             cancel_token=cancel_token,
-            source_event_payload=event_payload
-            if isinstance(event_payload, dict)
-            else None,
+            event_payload=event_payload,
         )
-        event = MessageEvent.from_payload(event_payload, context=ctx)
         bound_logger = cast(PluginLogger, ctx.logger).bind(
             plugin_id=plugin_id,
             request_id=message.id,
@@ -202,23 +169,82 @@ class HandlerDispatcher:
         if not args:
             args = self._derive_args(loaded, event)
 
-        with caller_plugin_scope(plugin_id):
-            task = asyncio.create_task(
-                self._run_handler(
-                    loaded,
-                    event,
-                    ctx,
-                    args,
-                    schedule_context=schedule_context,
-                )
+        task = self._spawn_plugin_task(
+            plugin_id,
+            self._run_handler(
+                loaded,
+                event,
+                ctx,
+                args,
+                schedule_context=schedule_context,
+            ),
+        )
+        return await self._await_tracked_task(message.id, task, cancel_token)
+
+    @staticmethod
+    def _coerce_event_payload(payload: Any) -> dict[str, Any]:
+        return payload if isinstance(payload, dict) else {}
+
+    @staticmethod
+    def _session_key_from_payload(event_payload: dict[str, Any]) -> str:
+        return MessageEvent.session_key_from_payload(event_payload)
+
+    def _resolve_waiter_plugin_id(
+        self,
+        *,
+        event_payload: dict[str, Any],
+        requested_plugin_id: str,
+    ) -> str:
+        if requested_plugin_id:
+            return requested_plugin_id
+        # Resolve the owning plugin before constructing the runtime Context so a
+        # worker-group waiter follow-up does not rebuild the event twice.
+        plugin_ids = self._session_waiters.get_waiter_plugin_ids(
+            self._session_key_from_payload(event_payload)
+        )
+        if len(plugin_ids) > 1:
+            raise LookupError(
+                "multiple active session_waiters found for session; "
+                "dispatch requires explicit plugin identity"
             )
+        return plugin_ids[0] if plugin_ids else self._plugin_id
+
+    def _create_context_event(
+        self,
+        *,
+        plugin_id: str,
+        request_id: str,
+        cancel_token: CancelToken,
+        event_payload: dict[str, Any],
+    ) -> tuple[Context, MessageEvent]:
+        ctx = Context(
+            peer=self._peer,
+            plugin_id=plugin_id,
+            request_id=request_id,
+            cancel_token=cancel_token,
+            source_event_payload=event_payload,
+        )
+        event = MessageEvent.from_payload(event_payload, context=ctx)
+        return ctx, event
+
+    @staticmethod
+    def _spawn_plugin_task(plugin_id: str, coroutine):
+        with caller_plugin_scope(plugin_id):
+            return asyncio.create_task(coroutine)
+
+    async def _await_tracked_task(
+        self,
+        request_id: str,
+        task: asyncio.Task[Any],
+        cancel_token: CancelToken,
+    ) -> dict[str, Any]:
         _mark_session_waiter_handler_task(task)
         task.add_done_callback(_unmark_session_waiter_handler_task)
-        self._active[message.id] = (task, cancel_token)
+        self._active[request_id] = (task, cancel_token)
         try:
             return await task
         finally:
-            self._active.pop(message.id, None)
+            self._active.pop(request_id, None)
 
     def _resolve_plugin_id(self, loaded: LoadedHandler) -> str:
         if loaded.plugin_id:

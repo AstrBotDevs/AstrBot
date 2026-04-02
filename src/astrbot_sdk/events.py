@@ -106,6 +106,18 @@ def _json_safe_mapping(value: Any) -> dict[str, Any]:
     return normalized
 
 
+def _resolve_message_target(
+    payload: dict[str, Any],
+) -> tuple[SessionRef | None, Any, Any]:
+    target_payload = payload.get("target")
+    session_id = payload.get("session_id")
+    platform = payload.get("platform")
+    if not isinstance(target_payload, dict):
+        return None, session_id, platform
+    target = SessionRef.model_validate(target_payload)
+    return target, session_id or target.session, platform or target.platform
+
+
 class MessageEvent:
     """消息事件对象。
 
@@ -268,13 +280,7 @@ class MessageEvent:
         Returns:
             新的 MessageEvent 实例
         """
-        target_payload = payload.get("target")
-        session_id = payload.get("session_id")
-        platform = payload.get("platform")
-        if isinstance(target_payload, dict):
-            target = SessionRef.model_validate(target_payload)
-            session_id = session_id or target.session
-            platform = platform or target.platform
+        target, session_id, platform = _resolve_message_target(payload)
         return cls(
             text=str(payload.get("text", "")),
             user_id=payload.get("user_id"),
@@ -290,6 +296,15 @@ class MessageEvent:
             context=context,
             reply_handler=reply_handler,
         )
+
+    @staticmethod
+    def session_key_from_payload(payload: dict[str, Any]) -> str:
+        target, session_id, _ = _resolve_message_target(payload)
+        if session_id:
+            return str(session_id)
+        if target is not None and target.conversation_id:
+            return str(target.conversation_id)
+        return ""
 
     def to_payload(self) -> dict[str, Any]:
         """转换为协议载荷格式。
