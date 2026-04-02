@@ -236,9 +236,9 @@ class AstrBotDashboard:
         self.app.json.sort_keys = False
 
         # 配置 CORS
-        # 支持通过环境变量 CORS_ALLOW_ORIGIN 配置允许的域名,多个域名用逗号分隔
+        # 支持通过环境变量 ASTRBOT_CORS_ALLOW_ORIGIN 配置允许的域名,多个域名用逗号分隔
         # 如果前端使用 withCredentials:true,需要设置具体的域名而非 "*"
-        cors_allow_origin = os.environ.get("CORS_ALLOW_ORIGIN", "*")
+        cors_allow_origin = os.environ.get("ASTRBOT_CORS_ALLOW_ORIGIN", "*")
         cors_allow_credentials = False
         if cors_allow_origin != "*":
             cors_allow_origin = [
