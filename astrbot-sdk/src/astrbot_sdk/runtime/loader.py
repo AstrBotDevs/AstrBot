@@ -67,10 +67,10 @@ import sys
 import threading
 import types
 import typing
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, cast
+from typing import Any, Literal, TypeAlias, TypeVar, cast
 
 import yaml
 
@@ -133,6 +133,7 @@ _ORIGINAL_BUILTIN_IMPORT = builtins.__import__
 _PLUGIN_IMPORT_HOOK_INSTALLED = False
 _PLUGIN_IMPORT_META_FINDER: _PluginScopedMetaPathFinder | None = None
 _PLUGIN_IMPORT_ALIAS_STATE = threading.local()
+_TMeta = TypeVar("_TMeta", LimiterMeta, ConversationMeta)
 
 
 def _default_python_version() -> str:
@@ -574,6 +575,28 @@ def _plugin_config_path(plugin_dir: Path, plugin_name: str) -> Path:
     return _plugin_config_dir(plugin_dir) / f"{plugin_name}_config.json"
 
 
+def _read_json_object(
+    path: Path,
+    *,
+    parse_error_message: str,
+    read_error_message: str,
+    non_object_message: str | None = None,
+) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        logger.warning(parse_error_message, path, exc)
+        return {}
+    except OSError as exc:
+        logger.warning(read_error_message, path, exc)
+        return {}
+    if isinstance(payload, dict):
+        return payload
+    if non_object_message is not None:
+        logger.warning(non_object_message, path, type(payload).__name__)
+    return {}
+
+
 def _schema_default(field_schema: dict[str, Any]) -> Any:
     if "default" in field_schema:
         return copy.deepcopy(field_schema["default"])
@@ -643,31 +666,12 @@ def load_plugin_config_schema(plugin: PluginSpec) -> dict[str, Any]:
     schema_path = plugin.plugin_dir / CONFIG_SCHEMA_FILE
     if not schema_path.exists():
         return {}
-
-    try:
-        schema_payload = json.loads(schema_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        logger.warning(
-            "Failed to parse SDK plugin config schema {}: {}",
-            schema_path,
-            exc,
-        )
-        return {}
-    except OSError as exc:
-        logger.warning(
-            "Failed to read SDK plugin config schema {}: {}",
-            schema_path,
-            exc,
-        )
-        return {}
-    if not isinstance(schema_payload, dict):
-        logger.warning(
-            "SDK plugin config schema {} must be a JSON object, got {}",
-            schema_path,
-            type(schema_payload).__name__,
-        )
-        return {}
-    return schema_payload
+    return _read_json_object(
+        schema_path,
+        parse_error_message="Failed to parse SDK plugin config schema {}: {}",
+        read_error_message="Failed to read SDK plugin config schema {}: {}",
+        non_object_message="SDK plugin config schema {} must be a JSON object, got {}",
+    )
 
 
 def save_plugin_config(
@@ -708,27 +712,15 @@ def load_plugin_config(
         return {}
 
     config_path = _plugin_config_path(plugin.plugin_dir, plugin.name)
-    try:
-        existing_payload = (
-            json.loads(config_path.read_text(encoding="utf-8"))
-            if config_path.exists()
-            else {}
-        )
-    except json.JSONDecodeError as exc:
-        logger.warning(
-            "Failed to parse SDK plugin config {}: {}",
+    existing = (
+        _read_json_object(
             config_path,
-            exc,
+            parse_error_message="Failed to parse SDK plugin config {}: {}",
+            read_error_message="Failed to read SDK plugin config {}: {}",
         )
-        existing_payload = {}
-    except OSError as exc:
-        logger.warning(
-            "Failed to read SDK plugin config {}: {}",
-            config_path,
-            exc,
-        )
-        existing_payload = {}
-    existing = existing_payload if isinstance(existing_payload, dict) else {}
+        if config_path.exists()
+        else {}
+    )
     normalized = {
         key: _normalize_config_value(field_schema, existing.get(key))
         for key, field_schema in active_schema.items()
@@ -1012,17 +1004,11 @@ class PluginEnvironmentManager:
     def _load_state(state_path: Path) -> dict[str, Any]:
         if not state_path.exists():
             return {}
-        try:
-            data = json.loads(state_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            logger.warning(
-                "Failed to parse plugin worker state {}: {}", state_path, exc
-            )
-            return {}
-        except OSError as exc:
-            logger.warning("Failed to read plugin worker state {}: {}", state_path, exc)
-            return {}
-        return data if isinstance(data, dict) else {}
+        return _read_json_object(
+            state_path,
+            parse_error_message="Failed to parse plugin worker state {}: {}",
+            read_error_message="Failed to read plugin worker state {}: {}",
+        )
 
     @staticmethod
     def _write_state(state_path: Path, plugin: PluginSpec, fingerprint: str) -> None:
@@ -1053,28 +1039,12 @@ class PluginEnvironmentManager:
         return match is not None and match.group(1) == version
 
 
-def _copy_limiter_meta(meta: LimiterMeta | None) -> LimiterMeta | None:
+def _copy_meta(meta: _TMeta | None) -> _TMeta | None:
     if meta is None:
         return None
-    return LimiterMeta(
-        kind=meta.kind,
-        limit=meta.limit,
-        window=meta.window,
-        scope=meta.scope,
-        behavior=meta.behavior,
-        message=meta.message,
-    )
-
-
-def _copy_conversation_meta(meta: ConversationMeta | None) -> ConversationMeta | None:
-    if meta is None:
-        return None
-    return ConversationMeta(
-        timeout=meta.timeout,
-        mode=meta.mode,
-        busy_message=meta.busy_message,
-        grace_period=meta.grace_period,
-    )
+    # Use dataclass-level cloning so metadata schema changes do not silently
+    # drift away from the loader's copy helpers.
+    return replace(meta)
 
 
 def _validate_handler_kind(
@@ -1185,8 +1155,8 @@ def _build_loaded_handler(
         owner=instance,
         plugin_id=plugin.name,
         local_filters=list(meta.local_filters),
-        limiter=_copy_limiter_meta(meta.limiter),
-        conversation=_copy_conversation_meta(meta.conversation),
+        limiter=_copy_meta(meta.limiter),
+        conversation=_copy_meta(meta.conversation),
     )
 
 

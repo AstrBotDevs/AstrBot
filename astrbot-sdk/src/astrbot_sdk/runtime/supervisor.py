@@ -131,6 +131,47 @@ def _plugin_name_from_handler_id(handler_id: str) -> str:
     return handler_id
 
 
+def _metadata_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _metadata_string_dict(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: item
+        for key, item in value.items()
+        if isinstance(key, str) and isinstance(item, str)
+    }
+
+
+def _metadata_dict_list(
+    value: Any,
+    *,
+    require_name: bool = False,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    records = [dict(item) for item in value if isinstance(item, dict)]
+    if not require_name:
+        return records
+    return [record for record in records if str(record.get("name", "")).strip()]
+
+
+def _group_records_by_plugin(
+    records: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for item in records:
+        plugin_name = str(item.get("plugin_id", "")).strip()
+        if not plugin_name:
+            continue
+        grouped.setdefault(plugin_name, []).append(dict(item))
+    return grouped
+
+
 class WorkerSession:
     def __init__(
         self,
@@ -253,37 +294,28 @@ class WorkerSession:
         self.handlers = list(self.peer.remote_handlers)
         self.provided_capabilities = list(self.peer.remote_provided_capabilities)
         metadata = dict(self.peer.remote_metadata)
+        self.loaded_plugins = _metadata_string_list(metadata.get("loaded_plugins")) or [
+            plugin.name for plugin in self.plugins
+        ]
+        self.skipped_plugins = _metadata_string_dict(metadata.get("skipped_plugins"))
+        self.capability_sources = _metadata_string_dict(
+            metadata.get("capability_sources")
+        )
+        self.issues = self._parse_remote_issues(metadata.get("issues"))
+        self.llm_tools = _metadata_dict_list(metadata.get("llm_tools"))
+        self.agents = _metadata_dict_list(metadata.get("agents"))
+        self.worker_registry = _metadata_dict_list(
+            metadata.get("worker_registry"),
+            require_name=True,
+        )
 
-        remote_loaded_plugins = metadata.get("loaded_plugins")
-        if isinstance(remote_loaded_plugins, list):
-            self.loaded_plugins = [
-                plugin_name
-                for plugin_name in remote_loaded_plugins
-                if isinstance(plugin_name, str)
-            ]
-        else:
-            self.loaded_plugins = [plugin.name for plugin in self.plugins]
-
-        remote_skipped_plugins = metadata.get("skipped_plugins")
-        if isinstance(remote_skipped_plugins, dict):
-            self.skipped_plugins = {
-                str(plugin_name): str(reason)
-                for plugin_name, reason in remote_skipped_plugins.items()
-            }
-
-        remote_capability_sources = metadata.get("capability_sources")
-        if isinstance(remote_capability_sources, dict):
-            self.capability_sources = {
-                str(capability_name): str(plugin_name)
-                for capability_name, plugin_name in remote_capability_sources.items()
-            }
-
-        remote_issues = metadata.get("issues")
+    def _parse_remote_issues(self, value: Any) -> list[PluginDiscoveryIssue]:
         default_issue_owner = (
             self.plugin.name if self.plugin is not None else self.worker_id
         )
-        if isinstance(remote_issues, list):
-            self.issues = [
+        issues: list[PluginDiscoveryIssue] = []
+        for item in _metadata_dict_list(value):
+            issues.append(
                 PluginDiscoveryIssue(
                     severity=str(item.get("severity", "error")),  # type: ignore[arg-type]
                     phase=str(item.get("phase", "load")),  # type: ignore[arg-type]
@@ -292,29 +324,8 @@ class WorkerSession:
                     details=str(item.get("details", "")),
                     hint=str(item.get("hint", "")),
                 )
-                for item in remote_issues
-                if isinstance(item, dict)
-            ]
-
-        remote_llm_tools = metadata.get("llm_tools")
-        if isinstance(remote_llm_tools, list):
-            self.llm_tools = [
-                dict(item) for item in remote_llm_tools if isinstance(item, dict)
-            ]
-
-        remote_agents = metadata.get("agents")
-        if isinstance(remote_agents, list):
-            self.agents = [
-                dict(item) for item in remote_agents if isinstance(item, dict)
-            ]
-
-        remote_worker_registry = metadata.get("worker_registry")
-        if isinstance(remote_worker_registry, list):
-            self.worker_registry = [
-                dict(item)
-                for item in remote_worker_registry
-                if isinstance(item, dict) and str(item.get("name", "")).strip()
-            ]
+            )
+        return issues
 
     def _validate_initialized_state(self) -> None:
         assert self.peer is not None
@@ -618,22 +629,9 @@ class SupervisorRuntime:
 
     def _publish_session_runtime_metadata(self, session: WorkerSession) -> None:
         self._publish_worker_registry(session.worker_registry)
-        tools_by_plugin: dict[str, list[dict[str, Any]]] = {}
-        for item in session.llm_tools:
-            plugin_name = str(item.get("plugin_id", "")).strip()
-            if not plugin_name:
-                continue
-            tools_by_plugin.setdefault(plugin_name, []).append(dict(item))
-        for plugin_name, items in tools_by_plugin.items():
+        for plugin_name, items in _group_records_by_plugin(session.llm_tools).items():
             self.capability_router.set_plugin_llm_tools(plugin_name, items)
-
-        agents_by_plugin: dict[str, list[dict[str, Any]]] = {}
-        for item in session.agents:
-            plugin_name = str(item.get("plugin_id", "")).strip()
-            if not plugin_name:
-                continue
-            agents_by_plugin.setdefault(plugin_name, []).append(dict(item))
-        for plugin_name, items in agents_by_plugin.items():
+        for plugin_name, items in _group_records_by_plugin(session.agents).items():
             self.capability_router.set_plugin_agents(plugin_name, items)
 
     @staticmethod

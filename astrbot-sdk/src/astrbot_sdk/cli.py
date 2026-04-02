@@ -109,6 +109,24 @@ class _PluginTreeWatcher:
         return changed
 
 
+@dataclass(slots=True)
+class _LocalDevState:
+    session_id: str
+    user_id: str
+    platform: str
+    group_id: str | None
+    event_type: str
+
+    def dispatch_kwargs(self) -> dict[str, Any]:
+        return {
+            "session_id": str(self.session_id),
+            "user_id": str(self.user_id),
+            "platform": str(self.platform),
+            "group_id": self.group_id,
+            "event_type": str(self.event_type),
+        }
+
+
 def setup_logger(verbose: bool = False) -> None:
     """初始化 CLI 使用的日志配置。"""
     logger.remove()
@@ -137,6 +155,44 @@ def _resolve_protocol_stdout(
     return opened_stdout, opened_stdout
 
 
+def _handle_cli_entrypoint_failure(
+    exc: Exception,
+    *,
+    context: dict[str, Any] | None = None,
+) -> typing.NoReturn:
+    exit_code, error_code, hint = _classify_cli_exception(exc)
+    docs_url = exc.docs_url if isinstance(exc, AstrBotError) else ""
+    details = exc.details if isinstance(exc, AstrBotError) else None
+    _render_cli_error(
+        error_code=error_code,
+        message=str(exc),
+        hint=hint,
+        docs_url=docs_url,
+        details=details,
+        context=context,
+    )
+    if exit_code == EXIT_UNEXPECTED:
+        logger.exception("CLI 异常退出")
+    raise SystemExit(exit_code) from exc
+
+
+def _run_entrypoint(
+    runner: typing.Callable[[], object],
+    *,
+    log_message: str,
+    log_level: str = "info",
+    context: dict[str, Any] | None = None,
+) -> None:
+    getattr(logger, log_level)(log_message)
+    try:
+        runner()
+    except (click.Abort, KeyboardInterrupt):
+        click.echo("\n创建插件已优雅地中断。", err=True)
+        raise SystemExit(130)
+    except Exception as exc:
+        _handle_cli_entrypoint_failure(exc, context=context)
+
+
 def _run_async_entrypoint(
     entrypoint: Coroutine[Any, Any, object],
     *,
@@ -144,28 +200,12 @@ def _run_async_entrypoint(
     log_level: str = "info",
     context: dict[str, Any] | None = None,
 ) -> None:
-    log_method = getattr(logger, log_level)
-    log_method(log_message)
-    try:
-        asyncio.run(entrypoint)
-    except (click.Abort, KeyboardInterrupt):
-        click.echo("\n创建插件已优雅地中断。", err=True)
-        raise SystemExit(130)
-    except Exception as exc:
-        exit_code, error_code, hint = _classify_cli_exception(exc)
-        docs_url = exc.docs_url if isinstance(exc, AstrBotError) else ""
-        details = exc.details if isinstance(exc, AstrBotError) else None
-        _render_cli_error(
-            error_code=error_code,
-            message=str(exc),
-            hint=hint,
-            docs_url=docs_url,
-            details=details,
-            context=context,
-        )
-        if exit_code == EXIT_UNEXPECTED:
-            logger.exception("CLI 异常退出")
-        raise SystemExit(exit_code) from exc
+    _run_entrypoint(
+        lambda: asyncio.run(entrypoint),
+        log_message=log_message,
+        log_level=log_level,
+        context=context,
+    )
 
 
 def _run_sync_entrypoint(
@@ -175,28 +215,12 @@ def _run_sync_entrypoint(
     log_level: str = "info",
     context: dict[str, Any] | None = None,
 ) -> None:
-    log_method = getattr(logger, log_level)
-    log_method(log_message)
-    try:
-        entrypoint()
-    except (click.Abort, KeyboardInterrupt):
-        click.echo("\n创建插件已优雅地中断。", err=True)
-        raise SystemExit(130)
-    except Exception as exc:
-        exit_code, error_code, hint = _classify_cli_exception(exc)
-        docs_url = exc.docs_url if isinstance(exc, AstrBotError) else ""
-        details = exc.details if isinstance(exc, AstrBotError) else None
-        _render_cli_error(
-            error_code=error_code,
-            message=str(exc),
-            hint=hint,
-            docs_url=docs_url,
-            details=details,
-            context=context,
-        )
-        if exit_code == EXIT_UNEXPECTED:
-            logger.exception("CLI 异常退出")
-        raise SystemExit(exit_code) from exc
+    _run_entrypoint(
+        entrypoint,
+        log_message=log_message,
+        log_level=log_level,
+        context=context,
+    )
 
 
 def _classify_cli_exception(exc: Exception) -> tuple[int, str, str]:
@@ -278,19 +302,46 @@ def _render_nonfatal_dev_error(
         logger.exception("watch 模式收到未分类异常")
 
 
+def _should_include_plugin_file(
+    path: Path,
+    *,
+    plugin_root: Path,
+    output_root: Path | None = None,
+) -> bool:
+    # Keep watch/build file selection on the same exclusion contract so hot
+    # reload and packaged artifacts do not silently drift apart.
+    if output_root is not None and _path_is_within(path, output_root):
+        return False
+    relative = path.relative_to(plugin_root)
+    if any(part in BUILD_EXCLUDED_DIRS for part in relative.parts[:-1]):
+        return False
+    if relative.name in BUILD_EXCLUDED_FILES:
+        return False
+    return path.suffix not in {".pyc", ".pyo"}
+
+
 def _iter_watch_files(plugin_dir: Path) -> typing.Iterator[Path]:
     root = plugin_dir.resolve()
-    for path in sorted(root.rglob("*")):
-        if path.is_dir():
+    stack = [root]
+    while stack:
+        current_dir = stack.pop()
+        try:
+            with os.scandir(current_dir) as entries:
+                for entry in entries:
+                    entry_path = Path(entry.path)
+                    if entry.is_dir(follow_symlinks=False):
+                        if entry.name in BUILD_EXCLUDED_DIRS:
+                            continue
+                        stack.append(entry_path)
+                        continue
+                    if not _should_include_plugin_file(
+                        entry_path,
+                        plugin_root=root,
+                    ):
+                        continue
+                    yield entry_path
+        except FileNotFoundError:
             continue
-        relative = path.relative_to(root)
-        if any(part in BUILD_EXCLUDED_DIRS for part in relative.parts[:-1]):
-            continue
-        if relative.name in BUILD_EXCLUDED_FILES:
-            continue
-        if path.suffix in {".pyc", ".pyo"}:
-            continue
-        yield path
 
 
 def _snapshot_watch_files(plugin_dir: Path) -> dict[str, tuple[int, int]]:
@@ -323,7 +374,7 @@ class _ReloadableLocalDevRunner:
         self,
         *,
         plugin_dir: Path,
-        state: dict[str, Any],
+        state: _LocalDevState,
         plugin_load_error: type[Exception],
         plugin_execution_error: type[Exception],
         plugin_harness,
@@ -338,6 +389,9 @@ class _ReloadableLocalDevRunner:
         self._harness = None
         self._lock = asyncio.Lock()
 
+    def _dispatch_kwargs(self) -> dict[str, Any]:
+        return self.state.dispatch_kwargs()
+
     async def close(self) -> None:
         async with self._lock:
             await self._stop_harness()
@@ -347,11 +401,7 @@ class _ReloadableLocalDevRunner:
             await self._stop_harness()
             harness = self._plugin_harness.from_plugin_dir(
                 self.plugin_dir,
-                session_id=str(self.state["session_id"]),
-                user_id=str(self.state["user_id"]),
-                platform=str(self.state["platform"]),
-                group_id=typing.cast(str | None, self.state["group_id"]),
-                event_type=str(self.state["event_type"]),
+                **self._dispatch_kwargs(),
                 platform_sink=self._stdout_platform_sink(stream=sys.stdout),
             )
             try:
@@ -379,11 +429,7 @@ class _ReloadableLocalDevRunner:
             try:
                 await self._harness.dispatch_text(
                     text,
-                    session_id=str(self.state["session_id"]),
-                    user_id=str(self.state["user_id"]),
-                    platform=str(self.state["platform"]),
-                    group_id=typing.cast(str | None, self.state["group_id"]),
-                    event_type=str(self.state["event_type"]),
+                    **self._dispatch_kwargs(),
                 )
             except (self._plugin_load_error, self._plugin_execution_error) as exc:
                 _render_nonfatal_dev_error(
@@ -508,13 +554,13 @@ async def _run_local_dev(
         _PluginLoadError,
     )
 
-    state = {
-        "session_id": session_id,
-        "user_id": user_id,
-        "platform": platform,
-        "group_id": group_id,
-        "event_type": event_type,
-    }
+    state = _LocalDevState(
+        session_id=str(session_id),
+        user_id=str(user_id),
+        platform=str(platform),
+        group_id=group_id,
+        event_type=str(event_type),
+    )
     if watch:
         runner = _ReloadableLocalDevRunner(
             plugin_dir=plugin_dir,
@@ -536,11 +582,7 @@ async def _run_local_dev(
     sink = StdoutPlatformSink(stream=sys.stdout)
     harness = PluginHarness.from_plugin_dir(
         plugin_dir,
-        session_id=session_id,
-        user_id=user_id,
-        platform=platform,
-        group_id=group_id,
-        event_type=event_type,
+        **state.dispatch_kwargs(),
         platform_sink=sink,
     )
     try:
@@ -562,54 +604,43 @@ async def _run_local_dev(
                         continue
                     await harness.dispatch_text(
                         text,
-                        session_id=str(state["session_id"]),
-                        user_id=str(state["user_id"]),
-                        platform=str(state["platform"]),
-                        group_id=typing.cast(str | None, state["group_id"]),
-                        event_type=str(state["event_type"]),
+                        **state.dispatch_kwargs(),
                     )
                 return
             assert event_text is not None
-            await harness.dispatch_text(
-                event_text,
-                session_id=session_id,
-                user_id=user_id,
-                platform=platform,
-                group_id=group_id,
-                event_type=event_type,
-            )
+            await harness.dispatch_text(event_text, **state.dispatch_kwargs())
     except _PluginLoadError as exc:
         raise _CliPluginLoadError(str(exc)) from exc
     except _PluginExecutionError as exc:
         raise _CliPluginExecutionError(str(exc)) from exc
 
 
-def _handle_dev_meta_command(command: str, state: dict[str, Any]) -> bool:
+def _handle_dev_meta_command(command: str, state: _LocalDevState) -> bool:
     if command in {"/exit", "/quit"}:
         return True
     if command.startswith("/session "):
-        state["session_id"] = command.split(" ", 1)[1].strip()
-        click.echo(f"切换 session_id -> {state['session_id']}")
+        state.session_id = command.split(" ", 1)[1].strip()
+        click.echo(f"切换 session_id -> {state.session_id}")
         return True
     if command.startswith("/user "):
-        state["user_id"] = command.split(" ", 1)[1].strip()
-        click.echo(f"切换 user_id -> {state['user_id']}")
+        state.user_id = command.split(" ", 1)[1].strip()
+        click.echo(f"切换 user_id -> {state.user_id}")
         return True
     if command.startswith("/platform "):
-        state["platform"] = command.split(" ", 1)[1].strip()
-        click.echo(f"切换 platform -> {state['platform']}")
+        state.platform = command.split(" ", 1)[1].strip()
+        click.echo(f"切换 platform -> {state.platform}")
         return True
     if command.startswith("/group "):
-        state["group_id"] = command.split(" ", 1)[1].strip()
-        click.echo(f"切换 group_id -> {state['group_id']}")
+        state.group_id = command.split(" ", 1)[1].strip()
+        click.echo(f"切换 group_id -> {state.group_id}")
         return True
     if command == "/private":
-        state["group_id"] = None
+        state.group_id = None
         click.echo("已切换为私聊上下文")
         return True
     if command.startswith("/event "):
-        state["event_type"] = command.split(" ", 1)[1].strip()
-        click.echo(f"切换 event_type -> {state['event_type']}")
+        state.event_type = command.split(" ", 1)[1].strip()
+        click.echo(f"切换 event_type -> {state.event_type}")
         return True
     return False
 
@@ -999,14 +1030,11 @@ def _iter_build_files(plugin_dir: Path, output_dir: Path) -> list[Path]:
     for path in sorted(plugin_dir.rglob("*")):
         if path.is_dir():
             continue
-        if _path_is_within(path, output_dir):
-            continue
-        relative = path.relative_to(plugin_dir)
-        if any(part in BUILD_EXCLUDED_DIRS for part in relative.parts[:-1]):
-            continue
-        if relative.name in BUILD_EXCLUDED_FILES:
-            continue
-        if path.suffix in {".pyc", ".pyo"}:
+        if not _should_include_plugin_file(
+            path,
+            plugin_root=plugin_dir,
+            output_root=output_dir,
+        ):
             continue
         files.append(path)
     return files

@@ -111,6 +111,41 @@ def _wrap_context_exception(
     return RuntimeError(message)
 
 
+async def _call_proxy_with_context(
+    proxy: CapabilityProxy,
+    capability: str,
+    payload: dict[str, Any],
+    *,
+    method_name: str,
+    details: str | None = None,
+) -> dict[str, Any]:
+    try:
+        return await proxy.call(capability, payload)
+    except Exception as exc:
+        raise _wrap_context_exception(
+            method_name=method_name,
+            details=details,
+            exc=exc,
+        ) from exc
+
+
+def _normalize_platform_instance_payload(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    platform_id = str(payload.get("id", "")).strip()
+    platform_type = str(payload.get("type", "")).strip()
+    if not platform_id or not platform_type:
+        return None
+    # Normalize platform records once at the runtime boundary so later lookups
+    # do not each need to remember the same string cleanup rules.
+    return {
+        "id": platform_id,
+        "name": str(payload.get("name", platform_id)).strip() or platform_id,
+        "type": platform_type,
+        "status": PlatformStatus.from_value(payload.get("status")),
+    }
+
+
 @dataclass(slots=True)
 class PlatformCompatFacade:
     """兼容层平台入口，仅暴露安全元信息和主动发送能力。"""
@@ -170,31 +205,21 @@ class PlatformCompatFacade:
 
     async def clear_errors(self) -> None:
         async with self._state_lock:
-            try:
-                await self._ctx._proxy.call(
-                    "platform.manager.clear_errors",
-                    {"platform_id": self.id},
-                )
-                await self._refresh_locked()
-            except Exception as exc:
-                raise _wrap_context_exception(
-                    method_name="platform.clear_errors",
-                    details=f"platform_id={self.id!r}",
-                    exc=exc,
-                ) from exc
+            await self._call_platform_manager(
+                "platform.manager.clear_errors",
+                {"platform_id": self.id},
+                method_name="platform.clear_errors",
+                details=f"platform_id={self.id!r}",
+            )
+            await self._refresh_locked()
 
     async def get_stats(self) -> PlatformStats | None:
-        try:
-            output = await self._ctx._proxy.call(
-                "platform.manager.get_stats",
-                {"platform_id": self.id},
-            )
-        except Exception as exc:
-            raise _wrap_context_exception(
-                method_name="platform.get_stats",
-                details=f"platform_id={self.id!r}",
-                exc=exc,
-            ) from exc
+        output = await self._call_platform_manager(
+            "platform.manager.get_stats",
+            {"platform_id": self.id},
+            method_name="platform.get_stats",
+            details=f"platform_id={self.id!r}",
+        )
         return PlatformStats.from_payload(output.get("stats"))
 
     def _apply_snapshot(self, payload: Any) -> None:
@@ -217,18 +242,37 @@ class PlatformCompatFacade:
         self.unified_webhook = bool(payload.get("unified_webhook", False))
 
     async def _refresh_locked(self) -> None:
-        try:
-            output = await self._ctx._proxy.call(
-                "platform.manager.get_by_id",
-                {"platform_id": self.id},
-            )
-        except Exception as exc:
-            raise _wrap_context_exception(
-                method_name="platform.refresh",
-                details=f"platform_id={self.id!r}",
-                exc=exc,
-            ) from exc
+        output = await self._call_platform_manager(
+            "platform.manager.get_by_id",
+            {"platform_id": self.id},
+            method_name="platform.refresh",
+            details=f"platform_id={self.id!r}",
+        )
         self._apply_snapshot(output.get("platform"))
+
+    async def _call_platform_manager(
+        self,
+        capability: str,
+        payload: dict[str, Any],
+        *,
+        method_name: str,
+        details: str | None = None,
+    ) -> dict[str, Any]:
+        call_proxy = getattr(self._ctx, "_call_proxy", None)
+        if callable(call_proxy):
+            return await call_proxy(
+                capability,
+                payload,
+                method_name=method_name,
+                details=details,
+            )
+        return await _call_proxy_with_context(
+            self._ctx._proxy,
+            capability,
+            payload,
+            method_name=method_name,
+            details=details,
+        )
 
 
 @dataclass(slots=True)
@@ -380,15 +424,50 @@ class Context:
             dict(source_event_payload) if isinstance(source_event_payload, dict) else {}
         )
 
+    async def _call_proxy(
+        self,
+        capability: str,
+        payload: dict[str, Any],
+        *,
+        method_name: str,
+        details: str | None = None,
+    ) -> dict[str, Any]:
+        return await _call_proxy_with_context(
+            self._proxy,
+            capability,
+            payload,
+            method_name=method_name,
+            details=details,
+        )
+
+    @staticmethod
+    def _platform_lookup_target(value: str) -> tuple[str, str]:
+        normalized_value = str(value).strip()
+        return normalized_value, normalized_value.lower()
+
+    @staticmethod
+    def _match_platform_instance(
+        platform_payload: dict[str, Any],
+        *,
+        platform_id: str | None = None,
+        platform_alias: str | None = None,
+    ) -> bool:
+        if platform_id is not None and platform_payload.get("id") == platform_id:
+            return True
+        if platform_alias is None:
+            return False
+        return (
+            str(platform_payload.get("type", "")).strip().lower() == platform_alias
+            or str(platform_payload.get("name", "")).strip().lower() == platform_alias
+        )
+
     async def get_data_dir(self) -> Path:
         """Return the plugin-scoped data directory path."""
-        try:
-            output = await self._proxy.call("system.get_data_dir", {})
-        except Exception as exc:
-            raise _wrap_context_exception(
-                method_name="get_data_dir",
-                exc=exc,
-            ) from exc
+        output = await self._call_proxy(
+            "system.get_data_dir",
+            {},
+            method_name="get_data_dir",
+        )
         return Path(str(output.get("path", "")))
 
     async def _register_file_url(
@@ -412,17 +491,12 @@ class Context:
         return_url: bool = True,
     ) -> str:
         """Render plain text into an image using the host renderer."""
-        try:
-            output = await self._proxy.call(
-                "system.text_to_image",
-                {"text": text, "return_url": return_url},
-            )
-        except Exception as exc:
-            raise _wrap_context_exception(
-                method_name="text_to_image",
-                details=f"return_url={return_url!r}",
-                exc=exc,
-            ) from exc
+        output = await self._call_proxy(
+            "system.text_to_image",
+            {"text": text, "return_url": return_url},
+            method_name="text_to_image",
+            details=f"return_url={return_url!r}",
+        )
         return str(output.get("result", ""))
 
     async def html_render(
@@ -434,39 +508,29 @@ class Context:
         options: dict[str, Any] | None = None,
     ) -> str:
         """Render an HTML template using the host renderer."""
-        try:
-            output = await self._proxy.call(
-                "system.html_render",
-                {
-                    "tmpl": tmpl,
-                    "data": dict(data),
-                    "return_url": return_url,
-                    "options": options,
-                },
-            )
-        except Exception as exc:
-            raise _wrap_context_exception(
-                method_name="html_render",
-                details=f"tmpl={tmpl!r}, return_url={return_url!r}",
-                exc=exc,
-            ) from exc
+        output = await self._call_proxy(
+            "system.html_render",
+            {
+                "tmpl": tmpl,
+                "data": dict(data),
+                "return_url": return_url,
+                "options": options,
+            },
+            method_name="html_render",
+            details=f"tmpl={tmpl!r}, return_url={return_url!r}",
+        )
         return str(output.get("result", ""))
 
     async def get_using_provider(self, umo: str | None = None) -> ProviderMeta | None:
         return await self.providers.get_using_chat(umo)
 
     async def get_current_chat_provider_id(self, umo: str | None = None) -> str | None:
-        try:
-            output = await self._proxy.call(
-                "provider.get_current_chat_provider_id",
-                {"umo": umo},
-            )
-        except Exception as exc:
-            raise _wrap_context_exception(
-                method_name="get_current_chat_provider_id",
-                details=f"umo={umo!r}",
-                exc=exc,
-            ) from exc
+        output = await self._call_proxy(
+            "provider.get_current_chat_provider_id",
+            {"umo": umo},
+            method_name="get_current_chat_provider_id",
+            details=f"umo={umo!r}",
+        )
         value = output.get("provider_id")
         return str(value) if value else None
 
@@ -528,23 +592,23 @@ class Context:
         return normalized
 
     async def _resolve_platform_target(self, platform: str) -> dict[str, Any]:
-        target = str(platform).strip()
+        target, normalized_target = self._platform_lookup_target(platform)
         if not target:
             raise AstrBotError.invalid_input(
                 "send_message_by_id requires explicit platform"
             )
         instances = await self._list_platform_instances()
         id_matches = [
-            item for item in instances if str(item.get("id", "")).strip() == target
+            item
+            for item in instances
+            if self._match_platform_instance(item, platform_id=target)
         ]
         if len(id_matches) == 1:
             return id_matches[0]
-        normalized_target = target.lower()
         alias_matches = [
             item
             for item in instances
-            if str(item.get("type", "")).strip().lower() == normalized_target
-            or str(item.get("name", "")).strip().lower() == normalized_target
+            if self._match_platform_instance(item, platform_alias=normalized_target)
         ]
         if len(alias_matches) == 1:
             return alias_matches[0]
@@ -666,17 +730,15 @@ class Context:
             # Preserve the original message target so core can recover the
             # dispatch token for message-bound tool loop execution.
             payload["target"] = dict(target_payload)
-        try:
-            output = await self._proxy.call("agent.tool_loop.run", payload)
-        except Exception as exc:
-            raise _wrap_context_exception(
-                method_name="tool_loop_agent",
-                details=(
-                    f"session_id={provider_request.session_id!r}, "
-                    f"contexts={len(provider_request.contexts)!r}"
-                ),
-                exc=exc,
-            ) from exc
+        output = await self._call_proxy(
+            "agent.tool_loop.run",
+            payload,
+            method_name="tool_loop_agent",
+            details=(
+                f"session_id={provider_request.session_id!r}, "
+                f"contexts={len(provider_request.contexts)!r}"
+            ),
+        )
         return LLMResponse.model_validate(output)
 
     def _source_event_type(self) -> str:
@@ -718,28 +780,23 @@ class Context:
             )
         normalized_command_name = str(command_name)
         normalized_handler_name = str(handler_full_name)
-        try:
-            await self._proxy.call(
-                "registry.command.register",
-                {
-                    "command_name": normalized_command_name,
-                    "handler_full_name": normalized_handler_name,
-                    "source_event_type": source_event_type,
-                    "desc": str(desc),
-                    "priority": priority,
-                    "use_regex": bool(use_regex),
-                    "ignore_prefix": False,
-                },
-            )
-        except Exception as exc:
-            raise _wrap_context_exception(
-                method_name="register_commands",
-                details=(
-                    f"command_name={normalized_command_name!r}, "
-                    f"handler_full_name={normalized_handler_name!r}"
-                ),
-                exc=exc,
-            ) from exc
+        await self._call_proxy(
+            "registry.command.register",
+            {
+                "command_name": normalized_command_name,
+                "handler_full_name": normalized_handler_name,
+                "source_event_type": source_event_type,
+                "desc": str(desc),
+                "priority": priority,
+                "use_regex": bool(use_regex),
+                "ignore_prefix": False,
+            },
+            method_name="register_commands",
+            details=(
+                f"command_name={normalized_command_name!r}, "
+                f"handler_full_name={normalized_handler_name!r}"
+            ),
+        )
 
     async def register_task(
         self,
@@ -806,32 +863,19 @@ class Context:
         return background_task
 
     async def _list_platform_instances(self) -> list[dict[str, Any]]:
-        try:
-            output = await self._proxy.call("platform.list_instances", {})
-        except Exception as exc:
-            raise _wrap_context_exception(
-                method_name="list_platforms",
-                exc=exc,
-            ) from exc
+        output = await self._call_proxy(
+            "platform.list_instances",
+            {},
+            method_name="list_platforms",
+        )
         items = output.get("platforms")
         if not isinstance(items, list):
             return []
         normalized: list[dict[str, Any]] = []
         for item in items:
-            if not isinstance(item, dict):
-                continue
-            platform_id = str(item.get("id", "")).strip()
-            platform_type = str(item.get("type", "")).strip()
-            if not platform_id or not platform_type:
-                continue
-            normalized.append(
-                {
-                    "id": platform_id,
-                    "name": str(item.get("name", platform_id)),
-                    "type": platform_type,
-                    "status": PlatformStatus.from_value(item.get("status")),
-                }
-            )
+            normalized_item = _normalize_platform_instance_payload(item)
+            if normalized_item is not None:
+                normalized.append(normalized_item)
         return normalized
 
     def _build_platform_facade(
@@ -862,19 +906,19 @@ class Context:
         ]
 
     async def get_platform(self, platform_type: str) -> PlatformCompatFacade | None:
-        target_type = str(platform_type).strip().lower()
+        _, target_type = self._platform_lookup_target(platform_type)
         if not target_type:
             return None
         for item in await self._list_platform_instances():
-            if str(item.get("type", "")).strip().lower() == target_type:
+            if self._match_platform_instance(item, platform_alias=target_type):
                 return self._build_platform_facade(item)
         return None
 
     async def get_platform_inst(self, platform_id: str) -> PlatformCompatFacade | None:
-        target_id = str(platform_id).strip()
+        target_id, _ = self._platform_lookup_target(platform_id)
         if not target_id:
             return None
         for item in await self._list_platform_instances():
-            if str(item.get("id", "")).strip() == target_id:
+            if self._match_platform_instance(item, platform_id=target_id):
                 return self._build_platform_facade(item)
         return None
