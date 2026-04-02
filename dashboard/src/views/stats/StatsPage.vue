@@ -205,7 +205,7 @@
 
 <script setup lang="ts">
 import type { ApexOptions } from 'apexcharts'
-import axios from 'axios'
+import axios from '@/utils/request'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTheme } from 'vuetify'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
