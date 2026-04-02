@@ -995,9 +995,11 @@ def _apply_enhanced_subagent_tools(
             DynamicSubAgentManager.set_shared_context_enabled(
                 event.unified_msg_origin, True
             )
-
+        session_id = event.unified_msg_origin
         # Inject enhanced system prompt
-        dynamic_subagent_prompt = DynamicSubAgentManager.get_dynamic_subagent_prompt()
+        dynamic_subagent_prompt = DynamicSubAgentManager.build_dynamic_subagent_prompt(
+            session_id
+        )
         req.system_prompt = f"{req.system_prompt or ''}\n{dynamic_subagent_prompt}\n"
         # Register existing handoff tools from config
         plugin_context = getattr(event, "_plugin_context", None)
@@ -1007,7 +1009,6 @@ def _apply_enhanced_subagent_tools(
                 for tool in so.handoffs:
                     req.func_tool.add_tool(tool)
         # Register dynamically created handoff tools
-        session_id = event.unified_msg_origin
         dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(
             session_id
         )
@@ -1017,7 +1018,7 @@ def _apply_enhanced_subagent_tools(
     except ImportError as e:
         from astrbot import logger
 
-        logger.warning(f"[DynamicSubAgent] Cannot import module: {e}")
+        logger.warning(f"[EnhancedSubAgent] Cannot import module: {e}")
 
 
 def _apply_sandbox_tools(

@@ -367,9 +367,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
                 # 注入公共上下文
                 shared_context_prompt = (
-                    DynamicSubAgentManager.build_shared_context_prompt_v2(
-                        umo, agent_name
-                    )
+                    DynamicSubAgentManager.build_shared_context_prompt(umo, agent_name)
                 )
                 if shared_context_prompt:
                     subagent_system_prompt += f"\n{shared_context_prompt}"
@@ -449,15 +447,20 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
             if agent_name:
                 session = DynamicSubAgentManager.get_session(umo)
-                if session and agent_name in session.agents:
-                    # 增强版：在 DynamicSubAgentManager 中创建 pending 任务
+                if session and agent_name in session.subagents:
                     subagent_task_id = (
                         DynamicSubAgentManager.create_pending_subagent_task(
                             session_id=umo, agent_name=agent_name
                         )
                     )
+                    DynamicSubAgentManager.set_subagent_status(
+                        session_id=umo,
+                        agent_name=agent_name,
+                        status="RUNNING",
+                    )
+
                     logger.info(
-                        f"[EnhancedSubAgent] Created pending task {subagent_task_id} for {agent_name}"
+                        f"[EnhancedSubAgent] Created background task {subagent_task_id} for {agent_name}"
                     )
         except Exception as e:
             logger.debug(f"[EnhancedSubAgent] Failed to create pending task: {e}")
@@ -551,8 +554,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         execution_time = time.time() - start_time
         success = error_text is None
 
-        # 检查是否是增强版 SubAgent
-        enhanced_enabled = False
+        enhanced_subagent_enabled = False
         try:
             from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
 
@@ -560,18 +562,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             if session and agent_name:
                 # 检查是否是动态创建的 SubAgent
                 if agent_name in session.agents:
-                    enhanced_enabled = True
+                    enhanced_subagent_enabled = True
         except Exception:
-            pass
+            session = None
 
         subagent_task_id = tool_args.get("subagent_task_id", None)
 
-        if enhanced_enabled and agent_name and subagent_task_id:
-            # 增强版：存储结果到 DynamicSubAgentManager
+        if enhanced_subagent_enabled and session and agent_name and subagent_task_id:
+            # 如果增强版subagent正在运行：存储结果到 DynamicSubAgentManager，使得主Agent可以访问
             try:
                 from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
 
-                # 存储结果（使用 subagent_task_id）
                 DynamicSubAgentManager.store_subagent_result(
                     session_id=umo,
                     agent_name=agent_name,
@@ -581,16 +582,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     error=error_text,
                     execution_time=execution_time,
                 )
+                if error_text:
+                    DynamicSubAgentManager.set_subagent_status(
+                        session_id=umo,
+                        agent_name=agent_name,
+                        status="FAILED",
+                    )
+                else:
+                    DynamicSubAgentManager.set_subagent_status(
+                        session_id=umo,
+                        agent_name=agent_name,
+                        status="COMPLETED",
+                    )
 
                 # 如果启用了 shared_context，发布完成状态
                 if session.shared_context_enabled:
-                    status_content = (
-                        f" SubAgent '{agent_name}' 任务完成，耗时 {execution_time:.1f}s"
-                    )
+                    status_content = f" SubAgent '{agent_name}' 任务'{subagent_task_id}'完成，耗时 {execution_time:.1f}s"
                     if error_text:
-                        status_content = (
-                            f" SubAgent '{agent_name}' 任务失败: {error_text}"
-                        )
+                        status_content = f" SubAgent '{agent_name}' 任务'{subagent_task_id}' 失败: {error_text}"
 
                     DynamicSubAgentManager.add_shared_context(
                         session_id=umo,
@@ -627,7 +636,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     },
                 )
         else:
-            # 非增强版：使用原有的唤醒机制
+            # 未开启增强subagent：使用原有的唤醒机制
             await cls._wake_main_agent_for_background_result(
                 run_context=run_context,
                 task_id=task_id,
