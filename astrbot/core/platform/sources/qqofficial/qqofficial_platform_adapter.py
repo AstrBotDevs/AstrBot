@@ -16,7 +16,7 @@ from botpy import Client
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At,File, Image, Plain, Record, Video
+from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,

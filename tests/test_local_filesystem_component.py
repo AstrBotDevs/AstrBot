@@ -27,7 +27,7 @@ def test_local_file_system_component_prefers_utf8_before_windows_locale(
 
     skill_path = tmp_path / "skills" / "demo.txt"
     skill_path.parent.mkdir(parents=True, exist_ok=True)
-    skill_path.write_bytes("技能内容".encode("utf-8"))
+    skill_path.write_bytes("技能内容".encode())
 
     result = asyncio.run(LocalFileSystemComponent().read_file(str(skill_path)))
 
