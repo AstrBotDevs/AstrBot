@@ -467,9 +467,7 @@ class ProviderOpenAIOfficial(Provider):
 
                     # 情况1: 空/null content 且无 tool_calls -> 过滤掉
                     if not tool_calls and (content == "" or content is None):
-                        logger.warning(
-                            f"过滤第 {idx} 条空 assistant 消息 (无工具调用)"
-                        )
+                        logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
                         continue
 
                     # 情况2: 空 content 但有 tool_calls -> 设为 None (符合 OpenAI 规范)
