@@ -184,6 +184,20 @@ class KnowledgeBaseManager:
             return None
 
         kb = kb_helper.kb
+        previous_state = {
+            "kb_name": kb.kb_name,
+            "description": kb.description,
+            "emoji": kb.emoji,
+            "embedding_provider_id": kb.embedding_provider_id,
+            "rerank_provider_id": kb.rerank_provider_id,
+            "chunk_size": kb.chunk_size,
+            "chunk_overlap": kb.chunk_overlap,
+            "top_k_dense": kb.top_k_dense,
+            "top_k_sparse": kb.top_k_sparse,
+            "top_m_final": kb.top_m_final,
+        }
+        previous_init_error = kb_helper.init_error
+
         if kb_name is not None:
             kb.kb_name = kb_name
         if description is not None:
@@ -203,23 +217,47 @@ class KnowledgeBaseManager:
             kb.top_k_sparse = top_k_sparse
         if top_m_final is not None:
             kb.top_m_final = top_m_final
+
+        # Build a new helper first. Keep current vec_db alive until new init succeeds.
+        new_helper = KBHelper(
+            kb_db=self.kb_db,
+            kb=kb,
+            provider_manager=self.provider_manager,
+            kb_root_dir=FILES_PATH,
+            chunker=CHUNKER,
+        )
+
+        try:
+            await new_helper.initialize()
+        except Exception as e:
+            # Roll back in-memory settings and keep current helper available.
+            kb.kb_name = previous_state["kb_name"]
+            kb.description = previous_state["description"]
+            kb.emoji = previous_state["emoji"]
+            kb.embedding_provider_id = previous_state["embedding_provider_id"]
+            kb.rerank_provider_id = previous_state["rerank_provider_id"]
+            kb.chunk_size = previous_state["chunk_size"]
+            kb.chunk_overlap = previous_state["chunk_overlap"]
+            kb.top_k_dense = previous_state["top_k_dense"]
+            kb.top_k_sparse = previous_state["top_k_sparse"]
+            kb.top_m_final = previous_state["top_m_final"]
+            kb_helper.init_error = previous_init_error
+            logger.error(
+                f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败，继续使用旧实例: {e}",
+                exc_info=True,
+            )
+            return kb_helper
+
         async with self.kb_db.get_db() as session:
             session.add(kb)
             await session.commit()
             await session.refresh(kb)
 
-        # re-initialize to pick up provider changes
-        try:
-            await kb_helper.terminate()
-            await kb_helper.initialize()
-            kb_helper.init_error = None
-        except Exception as e:
-            kb_helper.init_error = str(e)
-            logger.error(
-                f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败: {e}", exc_info=True
-            )
-
-        return kb_helper
+        old_helper = kb_helper
+        self.kb_insts[kb_id] = new_helper
+        await old_helper.terminate()
+        new_helper.init_error = None
+        return new_helper
 
     async def retrieve(
         self,

@@ -181,6 +181,8 @@ class KBHelper:
         )
         await vec_db.initialize()
         self.vec_db = vec_db
+        # Clear stale init_error once initialization succeeds.
+        self.init_error = None
         return vec_db
 
     async def delete_vec_db(self) -> None:
