@@ -14,7 +14,6 @@
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
   },
   "dependencies": {
-    "qrcode": "^1.5.4",
     "@guolao/vue-monaco-editor": "^1.5.4",
     "@tiptap/starter-kit": "2.1.7",
     "@tiptap/vue-3": "2.1.7",
@@ -35,6 +34,7 @@
     "monaco-editor": "^0.52.2",
     "pinia": "2.1.6",
     "pinyin-pro": "^3.26.0",
+    "qrcode": "^1.5.4",
     "shiki": "^3.20.0",
     "stream-markdown": "^0.0.13",
     "vee-validate": "4.11.3",
@@ -61,7 +61,7 @@
     "eslint": "8.48.0",
     "eslint-plugin-vue": "9.17.0",
     "prettier": "3.0.2",
-    "sass": "1.66.1",
+    "sass": "1.98.0",
     "sass-loader": "13.3.2",
     "subset-font": "^2.4.0",
     "typescript": "5.1.6",
