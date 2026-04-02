@@ -6,15 +6,16 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 try:
-    import mcp
+    import mcp as _mcp
 except (ModuleNotFoundError, ImportError):
-    mcp: Any = None
+    _mcp: Any = None
 
-from astrbot._internal.tools.base import FunctionTool
 from mcp.types import Tool as MCPTool_T
 
+from astrbot._internal.tools.base import FunctionTool
+
 if TYPE_CHECKING:
-    from astrbot._internal.protocols.mcp.client import McpClient
+    from astrbot._internal.protocols._mcp.client import McpClient
 
 
 class MCPTool(FunctionTool):

@@ -23,22 +23,41 @@ __all__ = [
 
 
 # MCP config constants (re-exported from protocols)
+DEFAULT_MCP_CONFIG: Any = {}
+MCPAllServicesFailedError: Any = Exception
+MCPInitError: Any = Exception
+MCPInitSummary: Any = dict
+MCPInitTimeoutError: Any = TimeoutError
+MCPShutdownTimeoutError: Any = TimeoutError
+
 try:
-    from astrbot._internal.protocols.mcp import (
-        DEFAULT_MCP_CONFIG,
-        MCPAllServicesFailedError,
-        MCPInitError,
-        MCPInitSummary,
-        MCPInitTimeoutError,
-        MCPShutdownTimeoutError,
+    from astrbot._internal.protocols._mcp import (
+        DEFAULT_MCP_CONFIG as _imported_default_mcp_config,
     )
+    from astrbot._internal.protocols._mcp import (
+        MCPAllServicesFailedError as _imported_mcp_all_services_failed_error,
+    )
+    from astrbot._internal.protocols._mcp import (
+        MCPInitError as _imported_mcp_init_error,
+    )
+    from astrbot._internal.protocols._mcp import (
+        MCPInitSummary as _imported_mcp_init_summary,
+    )
+    from astrbot._internal.protocols._mcp import (
+        MCPInitTimeoutError as _imported_mcp_init_timeout_error,
+    )
+    from astrbot._internal.protocols._mcp import (
+        MCPShutdownTimeoutError as _imported_mcp_shutdown_timeout_error,
+    )
+
+    DEFAULT_MCP_CONFIG = _imported_default_mcp_config
+    MCPAllServicesFailedError = _imported_mcp_all_services_failed_error
+    MCPInitError = _imported_mcp_init_error
+    MCPInitSummary = _imported_mcp_init_summary
+    MCPInitTimeoutError = _imported_mcp_init_timeout_error
+    MCPShutdownTimeoutError = _imported_mcp_shutdown_timeout_error
 except ImportError:
-    DEFAULT_MCP_CONFIG: dict[str, Any] = {}
-    MCPAllServicesFailedError: type[Exception] = Exception
-    MCPInitError: type[Exception] = Exception
-    MCPInitSummary: type[dict] = dict
-    MCPInitTimeoutError: type[TimeoutError] = TimeoutError
-    MCPShutdownTimeoutError: type[TimeoutError] = TimeoutError
+    pass
 
 ENABLE_MCP_TIMEOUT_ENV = "ASTRBOT_MCP_TIMEOUT_ENABLED"
 MCP_INIT_TIMEOUT_ENV = "ASTRBOT_MCP_INIT_TIMEOUT"
@@ -123,7 +142,7 @@ class FunctionToolManager:
         """Test MCP server connection (stub)."""
         return False, "Not implemented"
 
-    async def sync_modelscope_mcp_servers(self) -> None:
+    async def sync_modelscope_mcp_servers(self, access_token: str = "") -> None:
         """Sync ModelScope MCP servers (stub)."""
         pass
 
@@ -137,10 +156,18 @@ class FunctionToolManager:
 
     def activate_llm_tool(self, name: str) -> bool:
         """Activate an LLM tool (stub)."""
+        tool = self.get_func(name)
+        if tool is None:
+            return False
+        tool.active = True
         return True
 
     def deactivate_llm_tool(self, name: str) -> bool:
         """Deactivate an LLM tool (stub)."""
+        tool = self.get_func(name)
+        if tool is None:
+            return False
+        tool.active = False
         return True
 
     @property
@@ -201,6 +228,32 @@ class FuncCall(FunctionToolManager):
         )
         self.add(func)
 
+    def spec_to_func(
+        self,
+        name: str,
+        func_args: list[dict[str, Any]],
+        desc: str,
+        handler: Any,
+    ) -> FunctionTool:
+        """Create and return a FunctionTool (for registering agent tools)."""
+        params: dict[str, Any] = {
+            "type": "object",
+            "properties": {},
+        }
+        for param in func_args:
+            params["properties"][param["name"]] = {
+                "type": param.get("type", "string"),
+                "description": param.get("description", ""),
+            }
+        func = FunctionTool(
+            name=name,
+            parameters=params,
+            description=desc,
+            handler=handler,
+        )
+        self.add(func)
+        return func
+
     def remove_func(self, name: str) -> None:
         """Remove a function tool by name (deprecated, use remove() instead)."""
         self.remove(name)
@@ -244,21 +297,13 @@ class FuncCall(FunctionToolManager):
         """Save MCP configuration (stub implementation)."""
         return True
 
-    def activate_llm_tool(self, name: str) -> bool:
-        """Activate an LLM tool (stub implementation)."""
-        return True
-
-    def deactivate_llm_tool(self, name: str) -> bool:
-        """Deactivate an LLM tool (stub implementation)."""
-        return True
-
     async def test_mcp_server_connection(
         self, config: dict[str, Any]
     ) -> tuple[bool, str]:
         """Test MCP server connection (stub implementation)."""
         # Import the actual test function if available
         try:
-            from astrbot._internal.protocols.mcp.client import (
+            from astrbot._internal.protocols._mcp.client import (
                 _quick_test_mcp_connection,
             )
 
@@ -269,7 +314,7 @@ class FuncCall(FunctionToolManager):
         except Exception as e:
             raise Exception(f"MCP connection test failed: {e!s}") from e
 
-    async def sync_modelscope_mcp_servers(self) -> None:
+    async def sync_modelscope_mcp_servers(self, access_token: str = "") -> None:
         """Sync ModelScope MCP servers (stub implementation)."""
         pass
 

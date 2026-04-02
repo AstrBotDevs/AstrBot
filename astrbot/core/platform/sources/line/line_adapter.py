@@ -3,7 +3,7 @@ import mimetypes
 import time
 import uuid
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
@@ -36,7 +36,6 @@ LINE_CONFIG_METADATA = {
         "hint": "用于校验 LINE Webhook 签名｡",
     },
 }
-
 LINE_I18N_RESOURCES = {
     "zh-CN": {
         "channel_access_token": {
@@ -70,10 +69,7 @@ LINE_I18N_RESOURCES = {
 )
 class LinePlatformAdapter(Platform):
     def __init__(
-        self,
-        platform_config: dict,
-        platform_settings: dict,
-        event_queue: asyncio.Queue,
+        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.config["unified_webhook_mode"] = True
@@ -81,23 +77,16 @@ class LinePlatformAdapter(Platform):
         self.settings = platform_settings
         self._event_id_timestamps: dict[str, float] = {}
         self.shutdown_event = asyncio.Event()
-
         channel_access_token = str(platform_config.get("channel_access_token", ""))
         channel_secret = str(platform_config.get("channel_secret", ""))
         if not channel_access_token or not channel_secret:
-            raise ValueError(
-                "LINE 适配器需要 channel_access_token 和 channel_secret｡",
-            )
-
+            raise ValueError("LINE 适配器需要 channel_access_token 和 channel_secret｡")
         self.line_api = LineAPIClient(
-            channel_access_token=channel_access_token,
-            channel_secret=channel_secret,
+            channel_access_token=channel_access_token, channel_secret=channel_secret
         )
 
     async def send_by_session(
-        self,
-        session: MessageSesion,
-        message_chain: MessageChain,
+        self, session: MessageSesion, message_chain: MessageChain
     ) -> None:
         messages = await LineMessageEvent.build_line_messages(message_chain)
         if messages:
@@ -108,7 +97,7 @@ class LinePlatformAdapter(Platform):
         return PlatformMetadata(
             name="line",
             description="LINE Messaging API 适配器",
-            id=cast(str, self.config.get("id", "line")),
+            id=self.config.get("id", "line"),
             support_streaming_message=False,
         )
 
@@ -129,38 +118,31 @@ class LinePlatformAdapter(Platform):
         signature = request.headers.get("x-line-signature")
         if not self.line_api.verify_signature(raw_body, signature):
             logger.warning("[LINE] invalid webhook signature")
-            return "invalid signature", 400
-
+            return ("invalid signature", 400)
         try:
             payload = await request.get_json(force=True, silent=False)
         except Exception as e:
             logger.warning("[LINE] invalid webhook body: %s", e)
-            return "bad request", 400
-
+            return ("bad request", 400)
         if not isinstance(payload, dict):
-            return "bad request", 400
-
+            return ("bad request", 400)
         await self.handle_webhook_event(payload)
-        return "ok", 200
+        return ("ok", 200)
 
     async def handle_webhook_event(self, payload: dict[str, Any]) -> None:
         destination = str(payload.get("destination", "")).strip()
         if destination:
             self.destination = destination
-
         events = payload.get("events")
         if not isinstance(events, list):
             return
-
         for event in events:
             if not isinstance(event, dict):
                 continue
-
             event_id = str(event.get("webhookEventId", ""))
             if event_id and self._is_duplicate_event(event_id):
                 logger.debug("[LINE] duplicate event skipped: %s", event_id)
                 continue
-
             abm = await self.convert_message(event)
             if abm is None:
                 continue
@@ -171,20 +153,16 @@ class LinePlatformAdapter(Platform):
             return None
         if str(event.get("mode", "active")) == "standby":
             return None
-
         source = event.get("source", {})
         if not isinstance(source, dict):
             return None
-
         message = event.get("message", {})
         if not isinstance(message, dict):
             return None
-
         source_type = str(source.get("type", ""))
         user_id = str(source.get("userId", "")).strip()
         group_id = str(source.get("groupId", "")).strip()
         room_id = str(source.get("roomId", "")).strip()
-
         abm = AstrBotMessage()
         abm.self_id = self.destination or self.meta().id
         abm.message = []
@@ -195,17 +173,15 @@ class LinePlatformAdapter(Platform):
             or event.get("deliveryContext", {}).get("deliveryId", "")
             or uuid.uuid4().hex
         )
-
         event_timestamp = event.get("timestamp")
         if isinstance(event_timestamp, int):
             abm.timestamp = (
                 event_timestamp // 1000
-                if event_timestamp > 1_000_000_000_000
+                if event_timestamp > 1000000000000
                 else event_timestamp
             )
         else:
             abm.timestamp = int(time.time())
-
         if source_type in {"group", "room"}:
             abm.type = MessageType.GROUP_MESSAGE
             container_id = group_id or room_id
@@ -220,9 +196,7 @@ class LinePlatformAdapter(Platform):
             abm.type = MessageType.OTHER_MESSAGE
             abm.session_id = user_id or group_id or room_id or "unknown"
             sender_id = abm.session_id
-
         abm.sender = MessageMember(user_id=sender_id, nickname=sender_id[:8])
-
         components = await self._parse_line_message_components(message)
         if not components:
             return None
@@ -230,46 +204,35 @@ class LinePlatformAdapter(Platform):
         abm.message_str = self._build_message_str(components)
         return abm
 
-    async def _parse_line_message_components(
-        self,
-        message: dict[str, Any],
-    ) -> list:
+    async def _parse_line_message_components(self, message: dict[str, Any]) -> list:
         msg_type = str(message.get("type", ""))
         message_id = str(message.get("id", "")).strip()
-
         if msg_type == "text":
             text = str(message.get("text", ""))
             mention = message.get("mention")
             if isinstance(mention, dict):
                 return self._parse_text_with_mentions(text, mention)
             return [Plain(text=text)] if text else []
-
         if msg_type == "image":
             image_component = await self._build_image_component(message_id, message)
             return [image_component] if image_component else [Plain(text="[image]")]
-
         if msg_type == "video":
             video_component = await self._build_video_component(message_id, message)
             return [video_component] if video_component else [Plain(text="[video]")]
-
         if msg_type == "audio":
             audio_component = await self._build_audio_component(message_id, message)
             return [audio_component] if audio_component else [Plain(text="[audio]")]
-
         if msg_type == "file":
             file_component = await self._build_file_component(message_id, message)
             return [file_component] if file_component else [Plain(text="[file]")]
-
         if msg_type == "sticker":
             return [Plain(text="[sticker]")]
-
         return [Plain(text=f"[{msg_type}]")]
 
     def _parse_text_with_mentions(self, text: str, mention_obj: dict[str, Any]) -> list:
         mentions = mention_obj.get("mentionees", [])
         if not isinstance(mentions, list) or not mentions:
             return [Plain(text=text)] if text else []
-
         normalized = []
         for item in mentions:
             if not isinstance(item, dict):
@@ -280,7 +243,6 @@ class LinePlatformAdapter(Platform):
                 continue
             normalized.append((start, length, item))
         normalized.sort(key=lambda x: x[0])
-
         ret = []
         cursor = 0
         for start, length, item in normalized:
@@ -288,7 +250,6 @@ class LinePlatformAdapter(Platform):
                 part = text[cursor:start]
                 if part:
                     ret.append(Plain(text=part))
-
             label = text[start : start + length] or "@user"
             mention_type = str(item.get("type", ""))
             if mention_type == "user":
@@ -297,7 +258,6 @@ class LinePlatformAdapter(Platform):
             else:
                 ret.append(Plain(text=label))
             cursor = max(cursor, start + length)
-
         if cursor < len(text):
             tail = text[cursor:]
             if tail:
@@ -305,14 +265,11 @@ class LinePlatformAdapter(Platform):
         return ret
 
     async def _build_image_component(
-        self,
-        message_id: str,
-        message: dict[str, Any],
+        self, message_id: str, message: dict[str, Any]
     ) -> Image | None:
         external_url = self._get_external_content_url(message)
         if external_url:
             return Image.fromURL(external_url)
-
         content = await self.line_api.get_message_content(message_id)
         if not content:
             return None
@@ -320,14 +277,11 @@ class LinePlatformAdapter(Platform):
         return Image.fromBytes(content_bytes)
 
     async def _build_video_component(
-        self,
-        message_id: str,
-        message: dict[str, Any],
+        self, message_id: str, message: dict[str, Any]
     ) -> Video | None:
         external_url = self._get_external_content_url(message)
         if external_url:
             return Video.fromURL(external_url)
-
         content = await self.line_api.get_message_content(message_id)
         if not content:
             return None
@@ -337,14 +291,11 @@ class LinePlatformAdapter(Platform):
         return Video(file=file_path, path=file_path)
 
     async def _build_audio_component(
-        self,
-        message_id: str,
-        message: dict[str, Any],
+        self, message_id: str, message: dict[str, Any]
     ) -> Record | None:
         external_url = self._get_external_content_url(message)
         if external_url:
             return Record.fromURL(external_url)
-
         content = await self.line_api.get_message_content(message_id)
         if not content:
             return None
@@ -354,9 +305,7 @@ class LinePlatformAdapter(Platform):
         return Record(file=file_path, url=file_path)
 
     async def _build_file_component(
-        self,
-        message_id: str,
-        message: dict[str, Any],
+        self, message_id: str, message: dict[str, Any]
     ) -> File | None:
         content = await self.line_api.get_message_content(message_id)
         if not content:
@@ -366,11 +315,7 @@ class LinePlatformAdapter(Platform):
         suffix = Path(default_name).suffix or self._guess_suffix(content_type, ".bin")
         final_name = filename or default_name
         file_path = self._store_temp_content(
-            "file",
-            message_id,
-            content_bytes,
-            suffix,
-            original_name=final_name,
+            "file", message_id, content_bytes, suffix, original_name=final_name
         )
         return File(name=final_name, file=file_path, url=file_path)
 
@@ -407,7 +352,10 @@ class LinePlatformAdapter(Platform):
         if original_name:
             safe_stem = Path(original_name).stem.strip()
             safe_stem = "".join(
-                ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in safe_stem
+
+                    ch if ch.isalnum() or ch in ("-", "_", ".") else "_"
+                    for ch in safe_stem
+
             )
             safe_stem = safe_stem.strip("._")
             if safe_stem:

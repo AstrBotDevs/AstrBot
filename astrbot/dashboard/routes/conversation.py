@@ -66,6 +66,9 @@ class ConversationRoute(Route):
                 page_size = 20
             page_size = min(page_size, 100)
 
+            if not self.conv_mgr:
+                return Response().error("Conversation manager not available").to_json()
+
             try:
                 (
                     conversations,
@@ -114,6 +117,8 @@ class ConversationRoute(Route):
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").to_json()
 
+            if not self.conv_mgr:
+                return Response().error("Conversation manager not available").to_json()
             conversation = await self.conv_mgr.get_conversation(
                 unified_msg_origin=user_id,
                 conversation_id=cid,
@@ -151,6 +156,8 @@ class ConversationRoute(Route):
 
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").to_json()
+            if not self.conv_mgr:
+                return Response().error("Conversation manager not available").to_json()
             conversation = await self.conv_mgr.get_conversation(
                 unified_msg_origin=user_id,
                 conversation_id=cid,
@@ -203,7 +210,13 @@ class ConversationRoute(Route):
                         continue
 
                     try:
-                        await self.core_lifecycle.conversation_manager.delete_conversation(
+                        conv_mgr = self.core_lifecycle.conversation_manager
+                        if conv_mgr is None:
+                            failed_items.append(
+                                f"user_id:{user_id}, cid:{cid} - conversation manager not available"
+                            )
+                            continue
+                        await conv_mgr.delete_conversation(
                             unified_msg_origin=user_id,
                             conversation_id=cid,
                         )
@@ -234,7 +247,10 @@ class ConversationRoute(Route):
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").to_json()
 
-            await self.core_lifecycle.conversation_manager.delete_conversation(
+            conv_mgr = self.core_lifecycle.conversation_manager
+            if conv_mgr is None:
+                return Response().error("Conversation manager not available").to_json()
+            await conv_mgr.delete_conversation(
                 unified_msg_origin=user_id,
                 conversation_id=cid,
             )
@@ -257,6 +273,9 @@ class ConversationRoute(Route):
 
             if history is None:
                 return Response().error("缺少必要参数: history").to_json()
+
+            if not self.conv_mgr:
+                return Response().error("Conversation manager not available").to_json()
 
             # 历史记录必须是合法的 JSON 字符串
             try:
@@ -299,6 +318,9 @@ class ConversationRoute(Route):
 
             if not conversations_to_export:
                 return Response().error("导出列表不能为空").to_json()
+
+            if not self.conv_mgr:
+                return Response().error("Conversation manager not available").to_json()
 
             # 收集所有对话的内容
             jsonl_lines = []

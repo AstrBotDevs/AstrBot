@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from astrbot import logger
 from astrbot._internal.abc.base_astrbot_gateway import BaseAstrbotGateway
@@ -23,10 +23,9 @@ else:
         from fastapi import FastAPI, WebSocket, WebSocketDisconnect
     except ImportError:
         logger.warning("FastAPI not installed, gateway unavailable.")
-        FastAPI = cast(Any, None)
-        WebSocket = cast(Any, None)
-        WebSocketDisconnect = cast(Any, None)
-
+        FastAPI = None
+        WebSocket = None
+        WebSocketDisconnect = None
 from fastapi.middleware.cors import CORSMiddleware
 
 log = logger
@@ -57,15 +56,12 @@ class AstrbotGateway(BaseAstrbotGateway):
         """
         if FastAPI is None:
             raise RuntimeError("FastAPI is not installed")
-
         log.info(f"Starting AstrBot Gateway on {self._host}:{self._port}")
 
         @asynccontextmanager
         async def lifespan(app: FastAPI):
-            # Startup
             log.info("Gateway server started.")
             yield
-            # Shutdown
             await self.ws_manager.broadcast({"type": "server_shutdown"})
             log.info("Gateway server stopped.")
 
@@ -75,27 +71,18 @@ class AstrbotGateway(BaseAstrbotGateway):
             version="1.0.0",
             lifespan=lifespan,
         )
-
-        # CORS middleware
         self._app.add_middleware(
-            cast(Any, CORSMiddleware),
+            CORSMiddleware,
             allow_origins=["*"],
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
         )
-
-        # Include routers
         self._setup_routes()
-
-        # Run with uvicorn
         import uvicorn
 
         config = uvicorn.Config(
-            self._app,
-            host=self._host,
-            port=self._port,
-            log_level="info",
+            self._app, host=self._host, port=self._port, log_level="info"
         )
         server = uvicorn.Server(config)
         await server.serve()
@@ -104,15 +91,12 @@ class AstrbotGateway(BaseAstrbotGateway):
         """Set up API routes."""
         if self._app is None:
             return
-
         from fastapi import APIRouter
 
-        # Health check
         @self._app.get("/health")
         async def health():
             return {"status": "ok"}
 
-        # WebSocket endpoint
         @self._app.websocket("/ws")
         async def websocket_endpoint(ws: WebSocket):
             await self.ws_manager.connect(ws)
@@ -129,7 +113,6 @@ class AstrbotGateway(BaseAstrbotGateway):
             except WebSocketDisconnect:
                 self.ws_manager.disconnect(ws)
 
-        # Stats router
         stats_router = APIRouter(prefix="/api/stats", tags=["stats"])
 
         @stats_router.get("/overview")
@@ -137,8 +120,6 @@ class AstrbotGateway(BaseAstrbotGateway):
             return await self._get_stats_overview()
 
         self._app.include_router(stats_router)
-
-        # Inspector router
         inspector_router = APIRouter(prefix="/api/inspector", tags=["inspector"])
 
         @inspector_router.get("/stars")
@@ -150,8 +131,6 @@ class AstrbotGateway(BaseAstrbotGateway):
             return await self._get_star_detail(star_name)
 
         self._app.include_router(inspector_router)
-
-        # Memory router
         memory_router = APIRouter(prefix="/api/memory", tags=["memory"])
 
         @memory_router.get("/")
@@ -174,16 +153,12 @@ class AstrbotGateway(BaseAstrbotGateway):
         """
         msg_type = message.get("type")
         data = message.get("data", {})
-
         if msg_type == "ping":
             return {"type": "pong", "data": {}}
-
         if msg_type == "call_tool":
             return await self._handle_call_tool(data)
-
         if msg_type == "get_stars":
             return {"type": "stars_list", "data": await self._list_stars()}
-
         return {
             "type": "error",
             "data": {"message": f"Unknown message type: {msg_type}"},
@@ -194,13 +169,11 @@ class AstrbotGateway(BaseAstrbotGateway):
         star_name = data.get("star")
         tool_name = data.get("tool")
         arguments = data.get("arguments", {})
-
         if not star_name or not tool_name:
             return {
                 "type": "tool_result",
                 "data": {"error": "Missing star or tool name"},
             }
-
         try:
             result = await self.orchestrator.abp.call_star_tool(
                 star_name, tool_name, arguments
@@ -237,10 +210,7 @@ class AstrbotGateway(BaseAstrbotGateway):
         import gc
 
         gc.collect()
-        return {
-            "gc_objects": len(gc.get_objects()),
-            "python_memory": "N/A",  # Would need psutil for actual values
-        }
+        return {"gc_objects": len(gc.get_objects()), "python_memory": "N/A"}
 
     def set_listen_address(self, host: str, port: int) -> None:
         """Set the listen address for the gateway server."""

@@ -128,7 +128,7 @@ class AstrBotUpdator(RepoZipUpdator):
             logger.error(f"重启失败({executable}, {e}),请尝试手动重启｡")
             raise e
 
-    async def check_update(  # type: ignore[invalid-method-override]
+    async def check_update(
         self,
         url: str | None,
         current_version: str | None,
@@ -144,7 +144,7 @@ class AstrBotUpdator(RepoZipUpdator):
     async def get_releases(self) -> list:
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
-    async def update(  # type: ignore[invalid-method-override]
+    async def update(  # type: ignore[override]
         self, reboot=False, latest=True, version=None, proxy=""
     ) -> None:
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)

@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from astrbot import logger
-from astrbot._internal.abc.abp.base_astrbot_abp_client import BaseAstrbotAbpClient
+from astrbot._internal.abc._abp.base_astrbot_abp_client import BaseAstrbotAbpClient
 
 log = logger
 

@@ -229,7 +229,7 @@ astrbot run --debug --log-level DEBUG
 
 ## Next Steps
 
-- [Configure LLM Providers](../providers/llm.md)
-- [Install Plugins](../use/plugin.md)
-- [Use Skills](../use/skills.md)
+- [Configure LLM Providers](providers/llm.md)
+- [Install Plugins](use/plugin.md)
+- [Use Skills](use/skills.md)
 - [Deploy to Server](./deploy/astrbot/docker.md)

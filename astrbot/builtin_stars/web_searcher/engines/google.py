@@ -1,5 +1,4 @@
 import urllib.parse
-from typing import cast
 
 from bs4 import Tag
 
@@ -35,7 +34,7 @@ class Google(SearchEngine):
         return await self._get_html(url, None)
 
     def _get_url(self, tag: Tag) -> str:
-        href = cast(str, tag.get("href") or "")
+        href = str(tag.get("href") or "")
         if href.startswith("/url?"):
             parsed = urllib.parse.urlparse(href)
             q = urllib.parse.parse_qs(parsed.query).get("q", [""])[0]

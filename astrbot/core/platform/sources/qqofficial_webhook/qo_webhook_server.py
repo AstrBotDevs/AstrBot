@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import time
-from typing import cast
 
 import quart
 from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Token
@@ -9,7 +8,6 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from astrbot.api import logger
 
-# remove logger handler
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 
@@ -23,32 +21,25 @@ class QQOfficialWebhook:
         self.port = config.get("port", 6196)
         self.is_sandbox = config.get("is_sandbox", False)
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
-
         if isinstance(self.port, str):
             self.port = int(self.port)
-
         self.http: BotHttp = BotHttp(timeout=300, is_sandbox=self.is_sandbox)
         self.api: BotAPI = BotAPI(http=self.http)
         self.token = Token(self.appid, self.secret)
-
         self.server = quart.Quart(__name__)
         self.server.add_url_rule(
-            "/astrbot-qo-webhook/callback",
-            view_func=self.callback,
-            methods=["POST"],
+            "/astrbot-qo-webhook/callback", view_func=self.callback, methods=["POST"]
         )
         self.client = botpy_client
         self.event_queue = event_queue
         self.shutdown_event = asyncio.Event()
-        # Deduplication cache for webhook retry callbacks.
         self._seen_event_ids: dict[str, float] = {}
-        self._dedup_ttl: int = 60  # seconds
+        self._dedup_ttl: int = 60
 
     async def initialize(self) -> None:
         logger.info("正在登录到 QQ 官方机器人...")
         self.user = await self.http.login(self.token)
         logger.info(f"已登录 QQ 官方机器人账号: {self.user}")
-        # 直接注入到 botpy 的 Client,移花接木!
         self.client.api = self.api
         self.client.http = self.http
 
@@ -73,10 +64,8 @@ class QQOfficialWebhook:
         seed = await self.repeat_seed(self.secret)
         private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
         msg = validation_payload.get("event_ts", "") + validation_payload.get(
-            "plain_token",
-            "",
+            "plain_token", ""
         )
-        # sign
         signature = private_key.sign(msg.encode()).hex()
         response = {
             "plain_token": validation_payload.get("plain_token"),
@@ -99,20 +88,15 @@ class QQOfficialWebhook:
         """
         msg: dict = await request.json
         logger.debug(f"收到 qq_official_webhook 回调: {msg}")
-
         event = msg.get("t")
         opcode = msg.get("op")
         data = msg.get("d")
-
         if opcode == 13:
-            # validation
-            signed = await self.webhook_validation(cast(dict, data))
+            signed = await self.webhook_validation(data)
             return signed
-
         event_id = msg.get("id")
         if event_id:
             now = time.monotonic()
-            # Lazily evict expired entries to prevent unbounded growth.
             expired = [
                 k
                 for k, ts in self._seen_event_ids.items()
@@ -124,7 +108,6 @@ class QQOfficialWebhook:
                 logger.debug(f"Duplicate webhook event {event_id!r}, skipping.")
                 return {"opcode": 12}
             self._seen_event_ids[event_id] = now
-
         if event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
             event = msg["t"].lower()
             try:
@@ -133,12 +116,11 @@ class QQOfficialWebhook:
                 logger.error("_parser unknown event %s.", event)
             else:
                 func(msg)
-
         return {"opcode": 12}
 
     async def start_polling(self) -> None:
         logger.info(
-            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器｡",
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器｡"
         )
         await self.server.run_task(
             host=self.callback_server_host,

@@ -13,7 +13,7 @@ def _is_str_keyed_dict(value: object) -> TypeGuard[dict[str, object]]:
 
 class I18nGroup(TypedDict):
     name: str
-    metadata: dict[str, object]
+    metadata: dict[str, Any]
 
 
 class ConfigMetadataI18n:

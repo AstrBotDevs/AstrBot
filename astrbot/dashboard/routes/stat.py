@@ -14,7 +14,7 @@ import aiohttp
 import anyio
 import psutil
 from quart import request
-from sqlmodel import select
+from sqlmodel import asc, select
 
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.config import VERSION
@@ -168,7 +168,8 @@ class StatRoute(Route):
             thread_count = threading.active_count()
 
             # 获取插件信息
-            plugins = self.core_lifecycle.star_context.get_all_stars()
+            star_ctx = self.core_lifecycle.star_context
+            plugins = star_ctx.get_all_stars() if star_ctx else []
             plugin_info = []
             for plugin in plugins:
                 info = {
@@ -190,7 +191,9 @@ class StatRoute(Route):
                     ).platform,
                     "message_count": self.db_helper.get_total_message_count() or 0,
                     "platform_count": len(
-                        self.core_lifecycle.platform_manager.get_insts(),
+                        self.core_lifecycle.platform_manager.get_insts()
+                        if self.core_lifecycle.platform_manager
+                        else [],
                     ),
                     "plugin_count": len(plugins),
                     "plugins": plugin_info,
@@ -244,7 +247,7 @@ class StatRoute(Route):
                         ProviderStat.agent_type == "internal",
                         ProviderStat.created_at >= query_start_utc,
                     )
-                    .order_by(ProviderStat.created_at.asc())
+                    .order_by(asc(ProviderStat.created_at))
                 )
                 records = result.scalars().all()
 

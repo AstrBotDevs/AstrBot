@@ -68,7 +68,10 @@ class OpenApiRoute(Route):
         return username, None
 
     def _get_chat_config_list(self) -> list[dict]:
-        conf_list = self.core_lifecycle.astrbot_config_mgr.get_conf_list()
+        mgr = self.core_lifecycle.astrbot_config_mgr
+        if mgr is None:
+            return []
+        conf_list = mgr.get_conf_list()
 
         result = []
         for conf_info in conf_list:
@@ -174,13 +177,16 @@ class OpenApiRoute(Route):
         g.username = effective_username
         if config_id:
             umo = f"webchat:FriendMessage:webchat!{effective_username}!{session_id}"
+            router = self.core_lifecycle.umop_config_router
             try:
-                if config_id == "default":
-                    await self.core_lifecycle.umop_config_router.delete_route(umo)
-                else:
-                    await self.core_lifecycle.umop_config_router.update_route(
-                        umo, config_id
+                if router is None:
+                    return (
+                        Response().error("UMOP config router not available").to_json()
                     )
+                if config_id == "default":
+                    await router.delete_route(umo)
+                else:
+                    await router.update_route(umo, config_id)
             except Exception as e:
                 logger.error(
                     "Failed to update chat config route for %s with %s: %s",
@@ -269,13 +275,14 @@ class OpenApiRoute(Route):
             return None
 
         umo = f"webchat:FriendMessage:webchat!{username}!{session_id}"
+        router = self.core_lifecycle.umop_config_router
+        if router is None:
+            return "UMOP config router not available"
         try:
             if config_id == "default":
-                await self.core_lifecycle.umop_config_router.delete_route(umo)
+                await router.delete_route(umo)
             else:
-                await self.core_lifecycle.umop_config_router.update_route(
-                    umo, config_id
-                )
+                await router.update_route(umo, config_id)
         except Exception as e:
             logger.error(
                 "Failed to update chat config route for %s with %s: %s",
@@ -662,10 +669,13 @@ class OpenApiRoute(Route):
             return Response().error(f"Invalid umo: {e}").to_json()
 
         platform_id = session.platform_name
+        platform_mgr = self.platform_manager
+        if platform_mgr is None:
+            return Response().error("Platform manager not available").to_json()
         platform_inst = next(
             (
                 inst
-                for inst in self.platform_manager.platform_insts
+                for inst in platform_mgr.platform_insts
                 if inst.meta().id == platform_id
             ),
             None,

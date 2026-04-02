@@ -3,7 +3,7 @@ import urllib.parse
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout
 from bs4 import BeautifulSoup, Tag
 
 HEADERS = {
@@ -43,7 +43,7 @@ class SearchEngine:
     """搜索引擎爬虫基类"""
 
     def __init__(self) -> None:
-        self.TIMEOUT = 10
+        self.TIMEOUT = ClientTimeout(total=10)
         self.page = 1
         self.headers = HEADERS
 

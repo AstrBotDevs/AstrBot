@@ -50,7 +50,6 @@ astrbot.lock
 chroma
 venv/*
 pytest.ini
-AGENTS.md
 IFLOW.md
 
 # genie_tts data

@@ -19,7 +19,7 @@ from astrbot.api import logger
 from astrbot.core.tool_provider import ToolProviderContext
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.tool import FunctionTool, ToolSchema
+    from astrbot.core.agent.tool import ToolSchema
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ class ComputerToolProvider:
             SyncSkillReleaseTool,
         )
 
-        all_tools: list[ToolSchema] = [  # type: ignore[assignment]
+        all_tools: list[ToolSchema] = [  # type: ignore
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),

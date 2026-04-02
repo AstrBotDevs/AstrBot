@@ -7,7 +7,6 @@
 
 import asyncio
 import traceback
-from typing import cast
 
 from astrbot.core import LogBroker, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle

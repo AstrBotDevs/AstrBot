@@ -455,11 +455,11 @@ async def test_update_plugin_dependency_install_flow(
     events = []
     _mock_missing_requirements(monkeypatch, {"networkx"})
 
-    async def mock_update(plugin, proxy=""):
+    async def mock_update_plugin(plugin, proxy=""):
         del proxy
         events.append(("update", plugin.name))
 
-    monkeypatch.setattr(plugin_manager_pm.updator, "update", mock_update)
+    monkeypatch.setattr(plugin_manager_pm.updator, "update_plugin", mock_update_plugin)
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.pip_installer.install",
         _build_dependency_install_mock(events, dependency_install_fails),

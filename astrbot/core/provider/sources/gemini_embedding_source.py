@@ -1,5 +1,3 @@
-from typing import cast
-
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -20,11 +18,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         super().__init__(provider_config, provider_settings)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
-
         api_key: str = provider_config["embedding_api_key"]
         api_base: str = provider_config["embedding_api_base"]
         timeout: int = int(provider_config.get("timeout", 20))
-
         http_options = types.HttpOptions(timeout=timeout * 1000)
         if api_base:
             api_base = api_base.removesuffix("/")
@@ -33,12 +29,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         if proxy:
             http_options.async_client_args = {"proxy": proxy}
             logger.info(f"[Gemini Embedding] 使用代理: {proxy}")
-
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
-
         self.model = provider_config.get(
-            "embedding_model",
-            "gemini-embedding-exp-03-07",
+            "embedding_model", "gemini-embedding-exp-03-07"
         )
 
     async def get_embedding(self, text: str) -> list[float]:
@@ -47,9 +40,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             result = await self.client.models.embed_content(
                 model=self.model,
                 contents=text,
-                config=types.EmbedContentConfig(
-                    output_dimensionality=self.get_dim(),
-                ),
+                config=types.EmbedContentConfig(output_dimensionality=self.get_dim()),
             )
             assert result.embeddings is not None
             assert result.embeddings[0].values is not None
@@ -62,13 +53,10 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         try:
             result = await self.client.models.embed_content(
                 model=self.model,
-                contents=cast(types.ContentListUnion, text),
-                config=types.EmbedContentConfig(
-                    output_dimensionality=self.get_dim(),
-                ),
+                contents=text,
+                config=types.EmbedContentConfig(output_dimensionality=self.get_dim()),
             )
             assert result.embeddings is not None
-
             embeddings: list[list[float]] = []
             for embedding in result.embeddings:
                 assert embedding.values is not None

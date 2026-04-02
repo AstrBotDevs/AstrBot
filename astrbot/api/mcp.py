@@ -31,8 +31,8 @@ from typing import Any
 
 # Import from _internal package (the canonical source)
 # TODO: fix path - should be protocols.mcp.client
-from astrbot._internal.protocols.mcp.client import McpClient as MCPClient
-from astrbot._internal.protocols.mcp.tool import MCPTool
+from astrbot._internal.protocols._mcp.client import McpClient as MCPClient
+from astrbot._internal.protocols._mcp.tool import MCPTool
 
 __all__ = [
     "MCPClient",

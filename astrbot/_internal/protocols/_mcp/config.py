@@ -5,7 +5,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-DEFAULT_MCP_CONFIG = {"mcpServers": {}}
+DEFAULT_MCP_CONFIG: dict[str, dict[str, object]] = {"mcpServers": {}}
 
 
 def get_mcp_config_path() -> str:

@@ -319,8 +319,8 @@ class LiveChatRoute(Route):
         text: str,
         media_parts: list,
         reasoning: str,
-        agent_stats: dict,
-        refs: dict,
+        agent_stats: dict[str, Any],
+        refs: dict[str, Any],
     ):
         """保存 bot 消息到历史记录｡"""
         bot_message_parts = []
@@ -328,7 +328,7 @@ class LiveChatRoute(Route):
         if text:
             bot_message_parts.append({"type": "plain", "text": text})
 
-        new_his = {"type": "bot", "message": bot_message_parts}
+        new_his: dict[str, Any] = {"type": "bot", "message": bot_message_parts}
         if reasoning:
             new_his["reasoning"] = reasoning
         if agent_stats:
@@ -336,7 +336,9 @@ class LiveChatRoute(Route):
         if refs:
             new_his["refs"] = refs
 
-        return await self.platform_history_mgr.insert(
+        mgr = self.platform_history_mgr
+        assert mgr is not None
+        return await mgr.insert(
             platform_id="webchat",
             user_id=webchat_conv_id,
             content=new_his,
@@ -544,7 +546,9 @@ class LiveChatRoute(Route):
             )
 
             message_parts_for_storage = strip_message_parts_path_fields(message_parts)
-            await self.platform_history_mgr.insert(
+            mgr = self.platform_history_mgr
+            assert mgr is not None
+            await mgr.insert(
                 platform_id="webchat",
                 user_id=session_id,
                 content={"type": "user", "message": message_parts_for_storage},
@@ -801,7 +805,14 @@ class LiveChatRoute(Route):
             session.should_interrupt = False
 
             # 1. STT - 语音转文字
-            ctx = self.plugin_manager.context
+            pm = self.plugin_manager
+            if pm is None or pm.context is None:
+                logger.error("[Live Chat] Plugin manager not available")
+                await websocket.send_json(
+                    {"t": "error", "data": "Plugin manager not available"}
+                )
+                return
+            ctx = pm.context
             stt_provider = ctx.provider_manager.stt_provider_insts[0]
 
             if not stt_provider:

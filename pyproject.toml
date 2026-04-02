@@ -78,7 +78,6 @@ Homepage = "https://astrbot.app"
 Repository = "https://github.com/AstrBotDevs/AstrBot"
 [project.scripts]
 astrbot = "astrbot:cli"
-astrbot-rs = "astrbot:cli_rs"
 
 [dependency-groups]
 dev = [
@@ -90,10 +89,6 @@ dev = [
   "ruff>=0.15.0",
   "textual-dev>=1.8.0",
 ]
-
-
-
-
 
 [tool.ruff]
 exclude = [
@@ -111,6 +106,7 @@ exclude = [
     "rust",
     "examples",
     "**/tests/**",
+    "**/scripts",
 ]
 line-length = 88
 target-version = "py310"
@@ -152,13 +148,6 @@ mypy_path = "types"
 [tool.hatch.metadata]
 allow-direct-references = true
 
-# AstrBot Core Rust extension
-#:schema strict = false
-[tool.maturin]
-manifest-path = "rust/Cargo.toml"
-module-name = "astrbot.rust._core"
-build-hook = "buildHooks.custom:pre_build_hook"
-
 [build-system]
-requires = ["maturin>=1.12.0"]
-build-backend = "maturin"
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"

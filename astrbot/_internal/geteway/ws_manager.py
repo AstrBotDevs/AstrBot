@@ -4,7 +4,7 @@ WebSocket connection manager for the AstrBot gateway.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import anyio
 
@@ -17,8 +17,7 @@ else:
         from fastapi import WebSocket
     except ImportError:
         logger.warning("FastAPI not installed, WebSocketManager unavailable.")
-        WebSocket = cast(Any, None)
-
+        WebSocket = None
 log = logger
 
 
@@ -69,7 +68,6 @@ class WebSocketManager:
         """
         async with self._lock:
             connections = list(self._connections)
-
         for conn in connections:
             try:
                 await conn.send_json(data)

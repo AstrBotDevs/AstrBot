@@ -48,6 +48,9 @@ class ProviderVolcengineTTS(TTSProvider):
             cluster = app_payload.get("cluster")
             if isinstance(cluster, str) and cluster:
                 safe_app["cluster"] = cluster
+            token = app_payload.get("token")
+            if isinstance(token, str) and token:
+                safe_app["token"] = "***"
 
         safe_user: dict[str, Any] = {}
         if isinstance(user_payload, dict):
@@ -73,7 +76,7 @@ class ProviderVolcengineTTS(TTSProvider):
                     safe_request[key] = value
             text = request_payload.get("text")
             if isinstance(text, str):
-                safe_request["text_length"] = len(text)
+                safe_request["text"] = text
 
         return {
             "app": safe_app,

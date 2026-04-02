@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import TypedDict, TypeVar
+from typing import Any, TypedDict, TypeVar
 
 from astrbot.core import AstrBotConfig, logger
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
@@ -107,14 +107,15 @@ class AstrBotConfigManager:
         abconf_name: str | None = None,
     ) -> None:
         """保存配置文件的映射关系"""
-        abconf_data = self.sp.get(
+        raw_abconf: dict[str, Any] | None = self.sp.get(
             "abconf_mapping",
             {},
             scope="global",
             scope_id="global",
         )
+        abconf_data: dict[str, dict[str, str]] = raw_abconf if raw_abconf else {}
         random_word = abconf_name or uuid.uuid4().hex[:8]
-        abconf_data[abconf_id] = {  # type: ignore[index]
+        abconf_data[abconf_id] = {
             "path": abconf_path,
             "name": random_word,
         }
@@ -191,7 +192,7 @@ class AstrBotConfigManager:
             raise ValueError("不能删除默认配置文件")
 
         # 从映射中移除
-        abconf_data = (
+        abconf_data: dict[str, dict[str, str]] = (
             self.sp.get(
                 "abconf_mapping",
                 {},
@@ -245,7 +246,7 @@ class AstrBotConfigManager:
         if conf_id == "default":
             raise ValueError("不能更新默认配置文件的信息")
 
-        abconf_data = (
+        abconf_data: dict[str, dict[str, str]] = (
             self.sp.get(
                 "abconf_mapping",
                 {},

@@ -27,7 +27,7 @@ class NetworkRenderStrategy(RenderStrategy):
             self.BASE_RENDER_URL = ASTRBOT_T2I_DEFAULT_ENDPOINT
         else:
             self.BASE_RENDER_URL = self._clean_url(base_url)
-        self.tasks = set()
+        self.tasks: set[asyncio.Task[None]] = set()
         self.endpoints = [self.BASE_RENDER_URL]
         self.template_manager = TemplateManager()
 
@@ -58,7 +58,7 @@ class NetworkRenderStrategy(RenderStrategy):
                         data = await resp.json()
                         all_endpoints: list[dict] = data.get("data", [])
                         self.endpoints = [
-                            ep.get("url")
+                            ep["url"]
                             for ep in all_endpoints
                             if ep.get("active") and ep.get("url")
                         ]

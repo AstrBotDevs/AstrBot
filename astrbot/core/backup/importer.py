@@ -942,9 +942,10 @@ class AstrBotImporter:
 
         # 获取模型的 datetime 字段
         from sqlalchemy import inspect as sa_inspect
+        from sqlalchemy.orm import Mapper
 
         try:
-            mapper = sa_inspect(model_class)
+            mapper: Mapper[Any] = sa_inspect(model_class)
             for column in mapper.columns:
                 if column.name in result and result[column.name] is not None:
                     # 检查是否是 datetime 类型的列

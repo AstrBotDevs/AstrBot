@@ -136,7 +136,7 @@ class Response:
         self.message = message
         return self
 
-    def ok(self, data: dict | list | None = None, message: str | None = None):
+    def ok(self, data: Any = None, message: str | None = None):
         self.status = "ok"
         if data is None:
             data = {}

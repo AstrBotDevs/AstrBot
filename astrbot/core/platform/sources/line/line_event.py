@@ -2,7 +2,6 @@ import asyncio
 import re
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any, cast
 
 import anyio
 
@@ -44,13 +43,11 @@ class LineMessageEvent(AstrMessageEvent):
             if not text:
                 return None
             return {"type": "text", "text": text[:5000]}
-
         if isinstance(segment, At):
             name = str(segment.name or segment.qq or "").strip()
             if not name:
                 return None
             return {"type": "text", "text": f"@{name}"[:5000]}
-
         if isinstance(segment, Image):
             image_url = await LineMessageEvent._resolve_image_url(segment)
             if not image_url:
@@ -60,7 +57,6 @@ class LineMessageEvent(AstrMessageEvent):
                 "originalContentUrl": image_url,
                 "previewImageUrl": image_url,
             }
-
         if isinstance(segment, Record):
             audio_url = await LineMessageEvent._resolve_record_url(segment)
             if not audio_url:
@@ -71,7 +67,6 @@ class LineMessageEvent(AstrMessageEvent):
                 "originalContentUrl": audio_url,
                 "duration": duration,
             }
-
         if isinstance(segment, Video):
             video_url = await LineMessageEvent._resolve_video_url(segment)
             if not video_url:
@@ -84,7 +79,6 @@ class LineMessageEvent(AstrMessageEvent):
                 "originalContentUrl": video_url,
                 "previewImageUrl": preview_url,
             }
-
         if isinstance(segment, File):
             file_url = await LineMessageEvent._resolve_file_url(segment)
             if not file_url:
@@ -99,7 +93,6 @@ class LineMessageEvent(AstrMessageEvent):
                 "fileSize": file_size,
                 "originalContentUrl": file_url,
             }
-
         return None
 
     @staticmethod
@@ -151,20 +144,17 @@ class LineMessageEvent(AstrMessageEvent):
         cover_candidate = (segment.cover or "").strip()
         if cover_candidate.startswith("https://"):
             return cover_candidate
-
         if cover_candidate:
             try:
                 cover_seg = Image(file=cover_candidate)
                 return await cover_seg.register_to_file_service()
             except Exception as e:
                 logger.debug("[LINE] resolve video cover failed: %s", e)
-
         try:
             video_path = await segment.convert_to_file_path()
             temp_dir = anyio.Path(get_astrbot_temp_path())
             await temp_dir.mkdir(parents=True, exist_ok=True)
             thumb_path = temp_dir / f"line_video_preview_{uuid.uuid4().hex}.jpg"
-
             process = await asyncio.create_subprocess_exec(
                 "ffmpeg",
                 "-y",
@@ -181,7 +171,6 @@ class LineMessageEvent(AstrMessageEvent):
             await process.communicate()
             if process.returncode != 0 or not await thumb_path.exists():
                 return ""
-
             cover_seg = Image.fromFileSystem(str(thumb_path))
             return await cover_seg.register_to_file_service()
         except Exception as e:
@@ -215,10 +204,8 @@ class LineMessageEvent(AstrMessageEvent):
             obj = await cls._component_to_message_object(segment)
             if obj:
                 messages.append(obj)
-
         if not messages:
             return []
-
         if len(messages) > 5:
             logger.warning(
                 "[LINE] message count exceeds 5, extra segments will be dropped."
@@ -230,28 +217,22 @@ class LineMessageEvent(AstrMessageEvent):
         messages = await self.build_line_messages(message)
         if not messages:
             return
-
         raw = self.message_obj.raw_message
         reply_token = ""
         if isinstance(raw, dict):
-            raw_dict = cast(dict[str, Any], raw)
+            raw_dict = raw
             reply_token = str(raw_dict.get("replyToken") or "")
-
         sent = False
         if reply_token:
             sent = await self.line_api.reply_message(reply_token, messages)
-
         if not sent:
             target_id = self.get_group_id() or self.get_sender_id()
             if target_id:
                 await self.line_api.push_message(target_id, messages)
-
         await super().send(message)
 
     async def send_streaming(
-        self,
-        generator: AsyncGenerator,
-        use_fallback: bool = False,
+        self, generator: AsyncGenerator, use_fallback: bool = False
     ):
         if not use_fallback:
             buffer = None
@@ -265,10 +246,8 @@ class LineMessageEvent(AstrMessageEvent):
             buffer.squash_plain()
             await self.send(buffer)
             return await super().send_streaming(generator, use_fallback)
-
         buffer = ""
-        pattern = re.compile(r"[^｡?!~…]+[｡?!~…]+")
-
+        pattern = re.compile("[^｡?!~…]+[｡?!~…]+")
         async for chain in generator:
             if isinstance(chain, MessageChain):
                 for comp in chain.chain:
@@ -279,7 +258,6 @@ class LineMessageEvent(AstrMessageEvent):
                     else:
                         await self.send(MessageChain(chain=[comp]))
                         await asyncio.sleep(1.5)
-
         if buffer.strip():
             await self.send(MessageChain([Plain(buffer)]))
         return await super().send_streaming(generator, use_fallback)

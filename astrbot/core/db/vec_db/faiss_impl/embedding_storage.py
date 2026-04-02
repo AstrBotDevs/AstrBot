@@ -3,7 +3,7 @@ try:
 except ModuleNotFoundError:
     raise ImportError(
         "faiss 未安装｡请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装｡",
-    )
+    ) from None
 import os
 
 import numpy as np

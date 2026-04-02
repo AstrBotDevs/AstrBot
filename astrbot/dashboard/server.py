@@ -768,7 +768,7 @@ class AstrBotDashboard:
         local_ips: list[IPv4Address | IPv6Address] = get_local_ip_addresses()
         mode_label = "WebUI + API" if enable_webui else "API Server (WebUI 已分离)"
 
-        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} {mode_label} 已启动\n\n"]
+        parts: list[str] = [f"\n ✨✨✨\n  AstrBot v{VERSION} {mode_label} 已启动\n\n"]
 
         parts.append(f"   ➜  本地: {scheme}://localhost:{port}\n")
 

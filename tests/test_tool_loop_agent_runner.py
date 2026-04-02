@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, AsyncGenerator, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -40,7 +40,7 @@ class MockProvider(Provider):
     async def get_models(self) -> list[str]:
         return ["test_model"]
 
-    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
+    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[override]
         self.call_count += 1
 
         # 检查工具是否被禁用
@@ -72,7 +72,7 @@ class MockProvider(Provider):
             usage=TokenUsage(input_other=10, output=5),
         )
 
-    async def text_chat_stream(self, **kwargs):
+    async def text_chat_stream(self, **kwargs) -> AsyncGenerator[LLMResponse, None]:  # type: ignore[override]
         response = await self.text_chat(**kwargs)
         response.is_chunk = True
         yield response
@@ -115,13 +115,13 @@ class MockMixedContentToolExecutor:
 
 
 class MockFailingProvider(MockProvider):
-    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
+    async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
         raise RuntimeError("primary provider failed")
 
 
 class MockErrProvider(MockProvider):
-    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
+    async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
         return LLMResponse(
             role="err",
@@ -134,7 +134,7 @@ class MockEmptyOutputThenSuccessProvider(MockProvider):
         super().__init__()
         self.failures_before_success = failures_before_success
 
-    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
+    async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
         if self.call_count <= self.failures_before_success:
             raise EmptyModelOutputError("model returned no usable output")
@@ -174,7 +174,7 @@ class MockToolCallProvider(MockProvider):
         self.tool_args = tool_args or {}
         self.abort_signal = None
 
-    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
+    async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
         self.abort_signal = kwargs.get("abort_signal")
         return LLMResponse(
@@ -863,7 +863,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     captured_kwargs = {}
 
     class SkillsLikeProvider(MockProvider):
-        async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[method-assign]
+        async def text_chat(self, **kwargs) -> LLMResponse:
             self.call_count += 1
             if self.call_count == 1:
                 # 第一次调用:返回工具选择(light schema)

@@ -38,7 +38,9 @@ def get_handler_full_name(
     awaitable: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
 ) -> str:
     """获取 Handler 的全名"""
-    return f"{awaitable.__module__}_{awaitable.__name__}"
+    return (
+        f"{getattr(awaitable, '__module__', '')}_{getattr(awaitable, '__name__', '')}"
+    )
 
 
 def get_handler_or_create(
@@ -59,8 +61,8 @@ def get_handler_or_create(
     md = StarHandlerMetadata(
         event_type=event_type,
         handler_full_name=handler_full_name,
-        handler_name=handler.__name__,
-        handler_module_path=handler.__module__,
+        handler_name=getattr(handler, "__name__", ""),
+        handler_module_path=getattr(handler, "__module__", ""),
         handler=handler,
         event_filters=[],
     )
@@ -560,7 +562,7 @@ def register_llm_tool(name: str | None = None, **kwargs):
             | Awaitable[MessageEventResult | str | None],
         ],
     ):
-        llm_tool_name = name_ if name_ else awaitable.__name__
+        llm_tool_name = name_ if name_ else getattr(awaitable, "__name__", "")
         func_doc = awaitable.__doc__ or ""
         docstring = docstring_parser.parse(func_doc)
         args = []
@@ -569,7 +571,7 @@ def register_llm_tool(name: str | None = None, **kwargs):
             type_name = arg.type_name
             if not type_name:
                 raise ValueError(
-                    f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 的参数 {arg.arg_name} 缺少类型注释｡",
+                    f"LLM 函数工具 {getattr(awaitable, '__module__', '')}_{llm_tool_name} 的参数 {arg.arg_name} 缺少类型注释｡",
                 )
             # parse type_name to handle cases like "list[string]"
             match = re.match(r"(\w+)\[(\w+)\]", type_name)
@@ -653,7 +655,7 @@ def register_agent(
         )
         handoff_tool = HandoffTool(agent=agent)
         handoff_tool.handler = awaitable
-        llm_tools.func_list.append(handoff_tool)
+        llm_tools.func_list.append(handoff_tool)  # type: ignore[arg-type]
         return RegisteringAgent(agent)
 
     return decorator

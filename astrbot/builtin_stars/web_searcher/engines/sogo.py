@@ -1,6 +1,5 @@
 import random
 import re
-from typing import cast
 
 from bs4 import BeautifulSoup, Tag
 
@@ -30,7 +29,7 @@ class Sogo(SearchEngine):
         return await self._get_html(url, None)
 
     def _get_url(self, tag: Tag) -> str:
-        return cast(str, tag.get("href"))
+        return str(tag.get("href") or "")
 
     async def search(self, query: str, num_results: int) -> list[SearchResult]:
         results = await super().search(query, num_results)
@@ -48,7 +47,7 @@ class Sogo(SearchEngine):
             script_text = (
                 script.string if script.string is not None else script.get_text()
             )
-            match = re.search(r'window.location.replace\("(.+?)"\)', script_text)
+            match = re.search('window.location.replace\\("(.+?)"\\)', script_text)
             if match:
                 url = match.group(1)
         return url

@@ -12,7 +12,9 @@ class FileTokenService:
 
     def __init__(self, default_timeout: float = 300) -> None:
         self.lock = asyncio.Lock()
-        self.staged_files = {}  # token: (file_path, expire_time)
+        self.staged_files: dict[
+            str, tuple[str, float]
+        ] = {}  # token: (file_path, expire_time)
         self.default_timeout = default_timeout
 
     async def _cleanup_expired_tokens(self) -> None:

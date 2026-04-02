@@ -54,6 +54,8 @@ class TestDocStructure:
             Path("config/model-config.md"),
             Path("use/astrbot-sandbox.md"),
             Path("config"),  # en has config dir, zh doesn't
+            Path("community-events"),
+            Path("ospp"),  # en has ospp dir, zh doesn't
         }
 
         unexpected_missing_en = missing_in_en - known_diffs

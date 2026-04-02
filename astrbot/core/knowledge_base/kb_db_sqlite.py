@@ -83,7 +83,6 @@ class KBSQLiteDatabase:
         创建所有必要的索引以优化查询性能
         """
         async with self.get_db() as session:
-            session: AsyncSession
             async with session.begin():
                 # 创建知识库表索引
                 await session.execute(

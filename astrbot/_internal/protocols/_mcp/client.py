@@ -6,7 +6,7 @@ import os
 import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Any, cast
+from typing import Any
 
 from tenacity import (
     before_sleep_log,
@@ -16,7 +16,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from astrbot._internal.abc.mcp.base_astrbot_mcp_client import (
+from astrbot._internal.abc._mcp.base_astrbot_mcp_client import (
     BaseAstrbotMcpClient,
     McpServerConfig,
     McpToolInfo,
@@ -24,23 +24,19 @@ from astrbot._internal.abc.mcp.base_astrbot_mcp_client import (
 from astrbot.core.utils.log_pipe import LogPipe
 
 logger = logging.getLogger("astrbot")
-
-
 try:
     import anyio
-
     import mcp
     from mcp.client.sse import sse_client
 except (ModuleNotFoundError, ImportError):
     logger.warning(
         "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
     )
-
 try:
     from mcp.client.streamable_http import streamablehttp_client
 except (ModuleNotFoundError, ImportError):
     logger.warning(
-        "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
+        "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable."
     )
 
 
@@ -57,11 +53,9 @@ def _prepare_stdio_env(config: dict) -> dict:
     """Preserve Windows executable resolution for stdio subprocesses."""
     if sys.platform != "win32":
         return config
-
     pathext = os.environ.get("PATHEXT")
     if not pathext:
         return config
-
     prepared = config.copy()
     env = dict(prepared.get("env") or {})
     env.setdefault("PATHEXT", pathext)
@@ -74,11 +68,9 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     import aiohttp
 
     cfg = _prepare_config(config.copy())
-
     url = cfg["url"]
     headers = cfg.get("headers", {})
     timeout = cfg.get("timeout", 10)
-
     try:
         if "transport" in cfg:
             transport_type = cfg["transport"]
@@ -86,7 +78,6 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
             transport_type = cfg["type"]
         else:
             raise Exception("MCP connection config missing transport or type field")
-
         async with aiohttp.ClientSession() as session:
             if transport_type == "streamable_http":
                 test_payload = {
@@ -110,8 +101,8 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                     timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as response:
                     if response.status == 200:
-                        return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
+                        return (True, "")
+                    return (False, f"HTTP {response.status}: {response.reason}")
             else:
                 async with session.get(
                     url,
@@ -122,34 +113,29 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                     timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as response:
                     if response.status == 200:
-                        return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
-
+                        return (True, "")
+                    return (False, f"HTTP {response.status}: {response.reason}")
     except asyncio.TimeoutError:
-        return False, f"Connection timeout: {timeout} seconds"
+        return (False, f"Connection timeout: {timeout} seconds")
     except Exception as e:
-        return False, f"{e!s}"
+        return (False, f"{e!s}")
 
 
 class McpClient(BaseAstrbotMcpClient):
     def __init__(self) -> None:
-        # Initialize session and client objects
         self.session: mcp.ClientSession | None = None
         self.exit_stack = AsyncExitStack()
-        self._old_exit_stacks: list[AsyncExitStack] = []  # Track old stacks for cleanup
-
+        self._old_exit_stacks: list[AsyncExitStack] = []
         self.name: str | None = None
         self.active: bool = True
         self.tools: list[mcp.Tool] = []
         self.server_errlogs: list[str] = []
         self.running_event = anyio.Event()
         self.process_pid: int | None = None
-
-        # Store connection config for reconnection
         self._mcp_server_config: McpServerConfig | None = None
         self._server_name: str | None = None
-        self._reconnect_lock = anyio.Lock()  # Lock for thread-safe reconnection
-        self._reconnecting: bool = False  # For logging and debugging
+        self._reconnect_lock = anyio.Lock()
+        self._reconnecting: bool = False
 
     async def connect(self) -> None:
         """Initialize the MCP client connection.
@@ -157,8 +143,6 @@ class McpClient(BaseAstrbotMcpClient):
         Note: Actual server connections are made via connect_to_server().
         This method prepares the client for use.
         """
-        # MCP client is initialized on-demand via connect_to_server
-        # This is a no-op stub to satisfy BaseAstrbotMcpClient
         logger.debug("MCP client initialized.")
 
     @property
@@ -171,7 +155,7 @@ class McpClient(BaseAstrbotMcpClient):
         if not self.session:
             return []
         result = await self.list_tools_and_save()
-        tools = [
+        tools: list[McpToolInfo] = [
             {
                 "name": tool.name,
                 "description": tool.description or "",
@@ -179,13 +163,10 @@ class McpClient(BaseAstrbotMcpClient):
             }
             for tool in result.tools
         ]
-        return cast(list[McpToolInfo], tools)
+        return tools
 
     async def call_tool(
-        self,
-        name: str,
-        arguments: dict[str, Any],
-        read_timeout_seconds: int = 60,
+        self, name: str, arguments: dict[str, Any], read_timeout_seconds: int = 60
     ) -> Any:
         """Call a tool on the MCP server with reconnection support."""
         return await self.call_tool_with_reconnect(
@@ -224,17 +205,14 @@ class McpClient(BaseAstrbotMcpClient):
             config: Configuration for the MCP server. See https://modelcontextprotocol.io/quickstart/server
 
         """
-        # Store config for reconnection
         self._mcp_server_config = config
         self._server_name = name
         self.process_pid = None
-
         cfg = _prepare_config(dict(config))
 
         def logging_callback(
             msg: str | mcp.types.LoggingMessageNotificationParams,
         ) -> None:
-            # Handle MCP service error logs
             if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
                 if msg.level in ("warning", "error", "critical", "alert", "emergency"):
                     log_msg = f"[{msg.level.upper()}] {msg.data!s}"
@@ -244,16 +222,13 @@ class McpClient(BaseAstrbotMcpClient):
             success, error_msg = await _quick_test_mcp_connection(cfg)
             if not success:
                 raise Exception(error_msg)
-
             if "transport" in cfg:
                 transport_type = cfg["transport"]
             elif "type" in cfg:
                 transport_type = cfg["type"]
             else:
                 raise Exception("MCP connection config missing transport or type field")
-
             if transport_type != "streamable_http":
-                # SSE transport method
                 self._streams_context = sse_client(
                     url=cfg["url"],
                     headers=cfg.get("headers", {}),
@@ -261,22 +236,20 @@ class McpClient(BaseAstrbotMcpClient):
                     sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
                 )
                 streams = await self.exit_stack.enter_async_context(
-                    self._streams_context,
+                    self._streams_context
                 )
-
-                # Create a new client session
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
                 self.session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
                         *streams,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=cast(Any, logging_callback),
-                    ),
+                        logging_callback=logging_callback,
+                    )
                 )
             else:
                 timeout = timedelta(seconds=cfg.get("timeout", 30))
                 sse_read_timeout = timedelta(
-                    seconds=cfg.get("sse_read_timeout", 60 * 5),
+                    seconds=cfg.get("sse_read_timeout", 60 * 5)
                 )
                 self._streams_context = streamablehttp_client(
                     url=cfg["url"],
@@ -286,28 +259,22 @@ class McpClient(BaseAstrbotMcpClient):
                     terminate_on_close=cfg.get("terminate_on_close", True),
                 )
                 read_s, write_s, _ = await self.exit_stack.enter_async_context(
-                    self._streams_context,
+                    self._streams_context
                 )
-
-                # Create a new client session
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
                 self.session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
-                    ),
+                        logging_callback=logging_callback,
+                    )
                 )
-
         else:
             cfg = _prepare_stdio_env(cfg)
-            server_params = mcp.StdioServerParameters(
-                **cfg,
-            )
+            server_params = mcp.StdioServerParameters(**cfg)
 
             def callback(msg: str | mcp.types.LoggingMessageNotificationParams) -> None:
-                # Handle MCP service error logs
                 if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
                     if msg.level in (
                         "warning",
@@ -322,22 +289,17 @@ class McpClient(BaseAstrbotMcpClient):
             stdio_transport = await self.exit_stack.enter_async_context(
                 mcp.stdio_client(
                     server_params,
-                    errlog=cast(
-                        Any,
-                        LogPipe(
-                            level=logging.INFO,
-                            logger=logger,
-                            identifier=f"MCPServer-{name}",
-                            callback=callback,
-                        ),
+                    errlog=LogPipe(
+                        level=logging.INFO,
+                        logger=logger,
+                        identifier=f"MCPServer-{name}",
+                        callback=callback,
                     ),
-                ),
+                )
             )
             self.process_pid = self._extract_stdio_process_pid(stdio_transport)
-
-            # Create a new client session
             self.session = await self.exit_stack.enter_async_context(
-                mcp.ClientSession(*stdio_transport),
+                mcp.ClientSession(*stdio_transport)
             )
         await self.session.initialize()
 
@@ -358,36 +320,24 @@ class McpClient(BaseAstrbotMcpClient):
             Exception: raised when reconnection fails
         """
         async with self._reconnect_lock:
-            # Check if already reconnecting (useful for logging)
             if self._reconnecting:
                 logger.debug(
                     f"MCP Client {self._server_name} is already reconnecting, skipping"
                 )
                 return
-
             if not self._mcp_server_config or not self._server_name:
                 raise Exception("Cannot reconnect: missing connection configuration")
-
             self._reconnecting = True
             try:
                 logger.info(
                     f"Attempting to reconnect to MCP server {self._server_name}..."
                 )
-
-                # Save old exit_stack for later cleanup (don't close it now to avoid cancel scope issues)
                 if self.exit_stack:
                     self._old_exit_stacks.append(self.exit_stack)
-
-                # Mark old session as invalid
                 self.session = None
-
-                # Create new exit stack for new connection
                 self.exit_stack = AsyncExitStack()
-
-                # Reconnect using stored config
                 await self.connect_to_server(self._mcp_server_config, self._server_name)
                 await self.list_tools_and_save()
-
                 logger.info(
                     f"Successfully reconnected to MCP server {self._server_name}"
                 )
@@ -400,10 +350,7 @@ class McpClient(BaseAstrbotMcpClient):
                 self._reconnecting = False
 
     async def call_tool_with_reconnect(
-        self,
-        tool_name: str,
-        arguments: dict,
-        read_timeout_seconds: timedelta,
+        self, tool_name: str, arguments: dict, read_timeout_seconds: timedelta
     ) -> mcp.types.CallToolResult:
         """Call MCP tool with automatic reconnection on failure, max 2 retries.
 
@@ -424,13 +371,12 @@ class McpClient(BaseAstrbotMcpClient):
             retry=retry_if_exception_type(anyio.ClosedResourceError),
             stop=stop_after_attempt(2),
             wait=wait_exponential(multiplier=1, min=1, max=3),
-            before_sleep=before_sleep_log(logger, logging.WARNING),  # type: ignore[arg-type]
+            before_sleep=before_sleep_log(logger, logging.WARNING),
             reraise=True,
         )
         async def _call_with_retry():
             if not self.session:
                 raise ValueError("MCP session is not available for MCP function tools.")
-
             try:
                 return await self.session.call_tool(
                     name=tool_name,
@@ -441,26 +387,17 @@ class McpClient(BaseAstrbotMcpClient):
                 logger.warning(
                     f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect..."
                 )
-                # Attempt to reconnect
                 await self._reconnect()
-                # Reraise the exception to trigger tenacity retry
                 raise
 
         return await _call_with_retry()
 
     async def cleanup(self) -> None:
         """Clean up resources including old exit stacks from reconnections"""
-        # Close current exit stack
         try:
             await self.exit_stack.aclose()
         except Exception as e:
             logger.debug(f"Error closing current exit stack: {e}")
-
-        # Don't close old exit stacks as they may be in different task contexts
-        # They will be garbage collected naturally
-        # Just clear the list to release references
         self._old_exit_stacks.clear()
-
-        # Set running_event first to unblock any waiting tasks
         self.running_event.set()
         self.process_pid = None

@@ -4,7 +4,7 @@ import threading
 from collections.abc import Callable, Iterable
 from logging import Logger
 from types import TracebackType
-from typing import Self
+from typing import Any, Self
 
 
 class LogPipe(threading.Thread, io.TextIOBase):
@@ -68,7 +68,7 @@ class LogPipe(threading.Thread, io.TextIOBase):
     def seekable(self) -> bool:
         return False
 
-    def writelines(self, lines: Iterable[str]) -> None:
+    def writelines(self, lines: Iterable[Any]) -> None:
         for line in lines:
             self.write(line)
 

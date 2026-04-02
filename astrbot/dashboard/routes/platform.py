@@ -80,6 +80,8 @@ class PlatformRoute(Route):
         Returns:
             平台适配器实例,未找到则返回 None
         """
+        if self.platform_manager is None:
+            return None
         for platform in self.platform_manager.platform_insts:
             if platform.config.get("webhook_uuid") == webhook_uuid:
                 if platform.unified_webhook():
@@ -93,7 +95,10 @@ class PlatformRoute(Route):
             包含平台统计信息的响应
         """
         try:
-            stats = self.platform_manager.get_all_stats()
+            mgr = self.platform_manager
+            if mgr is None:
+                return Response().error("Platform manager not available").to_json()
+            stats = mgr.get_all_stats()
             return Response().ok(stats).to_json()
         except Exception as e:
             logger.error(f"获取平台统计信息失败: {e}", exc_info=True)

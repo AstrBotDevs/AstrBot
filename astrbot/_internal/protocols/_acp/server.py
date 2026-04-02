@@ -13,7 +13,7 @@ from collections.abc import Callable
 from typing import Any
 
 from astrbot import logger
-from astrbot._internal.abc.acp.base_astrbot_acp_server import BaseAstrbotAcpServer
+from astrbot._internal.abc._acp.base_astrbot_acp_server import BaseAstrbotAcpServer
 
 log = logger
 

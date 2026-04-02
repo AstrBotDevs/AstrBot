@@ -182,7 +182,7 @@ hpack==4.1.0
     # via h2
 httpcore==1.0.9
     # via httpx
-httpx==0.28.1
+httpx[socks]>=0.28.1
     # via
     #   aiocqhttp
     #   anthropic

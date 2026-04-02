@@ -41,6 +41,8 @@ class PersonaRoute(Route):
     async def list_personas(self):
         """获取所有人格列表"""
         try:
+            if not self.persona_mgr:
+                return Response().error("Persona manager not available").to_json()
             # 支持按文件夹筛选
             folder_id = request.args.get("folder_id")
             if folder_id is not None:
@@ -86,6 +88,9 @@ class PersonaRoute(Route):
 
             if not persona_id:
                 return Response().error("缺少必要参数: persona_id").to_json()
+
+            if not self.persona_mgr:
+                return Response().error("Persona manager not available").to_json()
 
             persona = await self.persona_mgr.get_persona(persona_id)
             if not persona:
@@ -149,6 +154,8 @@ class PersonaRoute(Route):
                     .to_json()
                 )
 
+            if not self.persona_mgr:
+                return Response().error("Persona manager not available").to_json()
             persona = await self.persona_mgr.create_persona(
                 persona_id=persona_id,
                 system_prompt=system_prompt,
@@ -236,6 +243,9 @@ class PersonaRoute(Route):
             if has_custom_error_message:
                 update_kwargs["custom_error_message"] = custom_error_message
 
+            if not self.persona_mgr:
+                return Response().error("Persona manager not available").to_json()
+
             await self.persona_mgr.update_persona(**update_kwargs)
 
             return Response().ok({"message": "人格更新成功"}).to_json()
@@ -254,7 +264,10 @@ class PersonaRoute(Route):
             if not persona_id:
                 return Response().error("缺少必要参数: persona_id").to_json()
 
-            await self.persona_mgr.delete_persona(persona_id)
+            mgr = self.persona_mgr
+            if mgr is None:
+                return Response().error("Persona manager not available").to_json()
+            await mgr.delete_persona(persona_id)
 
             return Response().ok({"message": "人格删除成功"}).to_json()
         except ValueError as e:
@@ -275,6 +288,9 @@ class PersonaRoute(Route):
 
             if not new_persona_id:
                 return Response().error("新人格ID不能为空").to_json()
+
+            if not self.persona_mgr:
+                return Response().error("Persona manager not available").to_json()
 
             persona = await self.persona_mgr.clone_persona(
                 source_persona_id=source_persona_id,
@@ -322,7 +338,10 @@ class PersonaRoute(Route):
             if not persona_id:
                 return Response().error("缺少必要参数: persona_id").to_json()
 
-            await self.persona_mgr.move_persona_to_folder(persona_id, folder_id)
+            mgr = self.persona_mgr
+            if mgr is None:
+                return Response().error("Persona manager not available").to_json()
+            await mgr.move_persona_to_folder(persona_id, folder_id)
 
             return Response().ok({"message": "人格移动成功"}).to_json()
         except ValueError as e:
@@ -342,6 +361,8 @@ class PersonaRoute(Route):
             # 空字符串视为 None(根目录)
             if parent_id == "":
                 parent_id = None
+            if not self.persona_mgr:
+                return Response().error("Persona manager not available").to_json()
             folders = await self.persona_mgr.get_folders(parent_id)
             return (
                 Response()
@@ -372,6 +393,8 @@ class PersonaRoute(Route):
     async def get_folder_tree(self):
         """获取文件夹树形结构"""
         try:
+            if not self.persona_mgr:
+                return Response().error("Persona manager not available").to_json()
             tree = await self.persona_mgr.get_folder_tree()
             return Response().ok(tree).to_json()
         except Exception as e:
@@ -387,7 +410,10 @@ class PersonaRoute(Route):
             if not folder_id:
                 return Response().error("缺少必要参数: folder_id").to_json()
 
-            folder = await self.persona_mgr.get_folder(folder_id)
+            mgr = self.persona_mgr
+            if mgr is None:
+                return Response().error("Persona manager not available").to_json()
+            folder = await mgr.get_folder(folder_id)
             if not folder:
                 return Response().error("文件夹不存在").to_json()
 
@@ -426,7 +452,10 @@ class PersonaRoute(Route):
             if not name:
                 return Response().error("文件夹名称不能为空").to_json()
 
-            folder = await self.persona_mgr.create_folder(
+            mgr = self.persona_mgr
+            if mgr is None:
+                return Response().error("Persona manager not available").to_json()
+            folder = await mgr.create_folder(
                 name=name,
                 parent_id=parent_id,
                 description=description,
@@ -472,6 +501,9 @@ class PersonaRoute(Route):
             if not folder_id:
                 return Response().error("缺少必要参数: folder_id").to_json()
 
+            if not self.persona_mgr:
+                return Response().error("Persona manager not available").to_json()
+
             await self.persona_mgr.update_folder(
                 folder_id=folder_id,
                 name=name,
@@ -493,6 +525,9 @@ class PersonaRoute(Route):
 
             if not folder_id:
                 return Response().error("缺少必要参数: folder_id").to_json()
+
+            if not self.persona_mgr:
+                return Response().error("Persona manager not available").to_json()
 
             await self.persona_mgr.delete_folder(folder_id)
 
@@ -535,6 +570,9 @@ class PersonaRoute(Route):
                         .error("type 字段必须是 'persona' 或 'folder'")
                         .to_json()
                     )
+
+            if not self.persona_mgr:
+                return Response().error("Persona manager not available").to_json()
 
             await self.persona_mgr.batch_update_sort_order(items)
 

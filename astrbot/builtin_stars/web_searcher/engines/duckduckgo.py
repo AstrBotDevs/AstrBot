@@ -1,5 +1,4 @@
 import urllib.parse
-from typing import cast
 
 from bs4 import Tag
 
@@ -29,7 +28,7 @@ class DuckDuckGo(SearchEngine):
         return await self._get_html(url, None)
 
     def _get_url(self, tag: Tag) -> str:
-        href = cast(str, tag.get("href") or "")
+        href = str(tag.get("href") or "")
         if "duckduckgo.com/l/?" in href:
             parsed = urllib.parse.urlparse(href)
             target = urllib.parse.parse_qs(parsed.query).get("uddg", [""])[0]

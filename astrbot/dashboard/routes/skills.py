@@ -575,7 +575,7 @@ class SkillsRoute(Route):
             release_json = result.get("release")
             logger.info(f"[Neo] Candidate promoted: id={candidate_id}, stage={stage}")
 
-            sync_json = result.get("sync")
+            sync_json = result.get("sync") or {}
             did_sync_to_local = bool(sync_json)
             if did_sync_to_local:
                 logger.info(

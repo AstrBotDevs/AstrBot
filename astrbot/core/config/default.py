@@ -55,7 +55,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 ]
 
 # 默认配置
-DEFAULT_CONFIG = {
+DEFAULT_CONFIG: dict[str, Any] = {
     "config_version": 2,
     "platform_settings": {
         "unique_session": False,

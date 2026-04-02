@@ -473,15 +473,15 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
             "cert_file": "",
             "key_file": "",
         }
-        monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
+        monkeypatch.setattr(server, "check_port_in_use", lambda host, port: False)
         monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
         monkeypatch.setattr(
             "astrbot.dashboard.server.logger.warning",
-            lambda message: warning_messages.append(message),
+            lambda message, *_: warning_messages.append(message),
         )
         monkeypatch.setattr(
             "astrbot.dashboard.server.logger.info",
-            lambda message: info_messages.append(message),
+            lambda message, *args: info_messages.append(message % args if args else message),
         )
 
         config = await server.run()
@@ -490,7 +490,9 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
         assert getattr(config, "keyfile", None) is None
         assert any("cert_file 和 key_file" in message for message in warning_messages)
         assert any(
-            "正在启动 WebUI, 监听地址: http://" in message for message in info_messages
+            ("正在启动 WebUI + API, 监听: http://" in message)
+            or ("正在启动 API Server, 监听: http://" in message)
+            for message in info_messages
         )
     finally:
         core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
@@ -1540,7 +1542,7 @@ async def test_plugins(
 
     # 设置 Mock
     monkeypatch.setattr(plugin_manager.updator, "install", mock_install)
-    monkeypatch.setattr(plugin_manager.updator, "update", mock_update)
+    monkeypatch.setattr(plugin_manager.updator, "update_plugin", mock_update)
 
     try:
         # 插件安装

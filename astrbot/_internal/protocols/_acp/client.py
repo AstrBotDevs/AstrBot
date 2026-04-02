@@ -12,7 +12,7 @@ import json
 from typing import Any
 
 from astrbot import logger
-from astrbot._internal.abc.acp.base_astrbot_acp_client import BaseAstrbotAcpClient
+from astrbot._internal.abc._acp.base_astrbot_acp_client import BaseAstrbotAcpClient
 
 log = logger
 

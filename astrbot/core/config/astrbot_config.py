@@ -2,6 +2,7 @@ import enum
 import json
 import logging
 import os
+from typing import Any
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -67,7 +68,7 @@ class AstrBotConfig(dict):
 
     def _config_schema_to_default_config(self, schema: dict) -> dict:
         """将 Schema 转换成 Config"""
-        conf = {}
+        conf: dict[str, Any] = {}
 
         def _parse_schema(schema: dict, conf: dict) -> None:
             for k, v in schema.items():

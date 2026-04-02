@@ -54,8 +54,9 @@ class SubAgentRoute(Route):
 
             # Backward/forward compatibility: ensure each agent contains provider_id.
             # None means follow global/default provider settings.
-            if isinstance(data.get("agents"), list):
-                for a in data["agents"]:
+            agents_list = data.get("agents")
+            if isinstance(agents_list, list):
+                for a in agents_list:
                     if isinstance(a, dict):
                         a.setdefault("provider_id", None)
                         a.setdefault("persona_id", None)
@@ -93,7 +94,10 @@ class SubAgentRoute(Route):
         UI can use this to build a multi-select list for subagent tool assignment.
         """
         try:
-            tool_mgr = self.core_lifecycle.provider_manager.llm_tools
+            prov_mgr = self.core_lifecycle.provider_manager
+            if prov_mgr is None:
+                return Response().error("Provider manager not available").to_json()
+            tool_mgr = prov_mgr.llm_tools
             tools_dict = []
             for tool in tool_mgr.func_list:
                 # Prevent recursive routing: subagents should not be able to select

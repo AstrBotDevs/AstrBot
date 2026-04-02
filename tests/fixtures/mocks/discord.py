@@ -68,11 +68,15 @@ def create_mock_discord_modules():
     mock_discord.errors.ConnectionClosed = Exception
     mock_discord.errors.NotFound = Exception
     mock_discord.errors.Forbidden = Exception
-    mock_discord.errors.HTTPException = type(
-        "HTTPException",
-        (Exception,),
-        {},
-    )
+
+    class HTTPException(Exception):
+        """Mock HTTPException that properly stores code attribute."""
+
+        def __init__(self, response, kwargs):
+            super().__init__(response, kwargs)
+            self.code = kwargs.get("code")
+
+    mock_discord.errors.HTTPException = HTTPException
 
     # Mock discord.abc
     mock_discord.abc = MagicMock()

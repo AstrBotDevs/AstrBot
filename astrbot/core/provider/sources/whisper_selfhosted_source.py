@@ -4,7 +4,7 @@ import uuid
 from typing import Protocol
 
 import anyio
-import whisper  # type: ignore[import]
+import whisper  # type: ignore
 
 from astrbot.core import logger
 from astrbot.core.provider.entities import ProviderType

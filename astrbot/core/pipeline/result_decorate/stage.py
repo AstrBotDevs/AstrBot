@@ -84,9 +84,9 @@ class ResultDecorateStage(Stage):
         ].get("split_words", ["。", "？", "！", "~", "…"])
         self.split_words_pattern: re.Pattern[str] | None
         if self.split_words:
-            escaped_words = sorted(
-                [re.escape(word) for word in self.split_words], key=len, reverse=True
-            )
+            escaped_words_list = [re.escape(word) for word in self.split_words]
+            escaped_words_list.sort(key=len, reverse=True)
+            escaped_words = escaped_words_list
             self.split_words_pattern = re.compile(
                 f"(.*?({'|'.join(escaped_words)})|.+$)", re.DOTALL
             )

@@ -146,6 +146,43 @@ AgentContextWrapper(session_manager=ToolSessionManager())
 3. Coverage target: `uv run pytest --cov=astrbot tests/`
 4. Test files: `test_*.py` or `*_test.py`
 
+### Code Quality Scoring Test
+
+The project enforces a **code quality score** via `tests/test_code_quality_typing.py`. All agents must treat this as a hard constraint when modifying code.
+
+**Run the test:**
+```bash
+uv run pytest tests/test_code_quality_typing.py -v
+```
+
+**Scoring rules (target: 100/100, threshold for PASS: 80/100):**
+
+| Pattern | Cost |
+|---------|------|
+| `cast(Any, ...)` | -1 pt each |
+| `# type: ignore` | -0.5 pt each |
+| **BAD** `# type: ignore[...]` (unresolved-import, class-alias, no-name-module, attr-defined, etc.) | **-3 pt each** |
+| `bare except:` (no exception type) | -0.5 pt each |
+| Duplicate code block (5+ identical lines, ≥2 occurrences) | -2 pt each |
+
+**Why bad type: ignore is heavily penalized:**
+- `# type: ignore[unresolved-import]` — hides missing module/stub issues
+- `# type: ignore[class-alias]` — hides improper type alias patterns
+- `# type: ignore[attr-defined]` — hides missing attribute errors
+- These are **workarounds, not fixes** — they paper over real type errors
+
+**Scoring formula:**
+```
+score = max(0, 100 - cast_any - type_ignore*0.5 - bad_type_ignore*3 - bare_except*0.5 - dup_blocks*2)
+```
+
+**Agent rules when modifying code:**
+1. **Do not add** `# type: ignore[unresolved-import]` or `# type: ignore[class-alias]` — fix the underlying issue instead
+2. **Do not use** `cast(Any, ...)` to suppress type errors — use proper type annotations
+3. **Do not add** bare `except:` clauses — use `except SomeSpecificException:`
+4. **Do not copy-paste** 5+ line blocks — extract to a shared helper function
+5. Before committing, run the scoring test and ensure score ≥ 80
+
 ## Git Conventions
 
 ### Commit Messages

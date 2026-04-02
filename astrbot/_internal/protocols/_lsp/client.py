@@ -14,7 +14,7 @@ import anyio
 from anyio.abc import ByteReceiveStream, ByteSendStream, Process
 
 from astrbot import logger
-from astrbot._internal.abc.lsp.base_astrbot_lsp_client import BaseAstrbotLspClient
+from astrbot._internal.abc._lsp.base_astrbot_lsp_client import BaseAstrbotLspClient
 
 log = logger
 

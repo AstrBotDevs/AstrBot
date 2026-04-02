@@ -1,5 +1,3 @@
-from typing import Any, cast
-
 from astrbot import logger
 from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -29,7 +27,6 @@ class PersonaManager:
         self.default_persona: str = default_ps.get("default_personality", "default")
         self.personas: list[Persona] = []
         self.selected_default_persona: Persona | None = None
-
         self.personas_v3: list[Personality] = []
         self.selected_default_persona_v3: Personality | None = None
         self.persona_v3_config: list[dict] = []
@@ -63,14 +60,12 @@ class PersonaManager:
         )
 
     async def get_default_persona_v3(
-        self,
-        umo: str | MessageSession | None = None,
+        self, umo: str | MessageSession | None = None
     ) -> Personality:
         """获取默认 persona"""
         cfg = self.acm.get_conf(umo)
         default_persona_id = cfg.get("provider_settings", {}).get(
-            "default_personality",
-            "default",
+            "default_personality", "default"
         )
         return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
 
@@ -93,34 +88,25 @@ class PersonaManager:
         """
         session_service_config = (
             await sp.get_async(
-                scope="umo",
-                scope_id=str(umo),
-                key="session_service_config",
-                default={},
+                scope="umo", scope_id=str(umo), key="session_service_config", default={}
             )
             or {}
         )
-
         force_applied_persona_id = session_service_config.get("persona_id")
         persona_id = force_applied_persona_id
-
         if not persona_id:
             persona_id = conversation_persona_id
             if persona_id == "[%None]":
                 pass
             elif persona_id is None:
                 persona_id = (provider_settings or {}).get("default_personality")
-
         persona = next(
-            (item for item in self.personas_v3 if item["name"] == persona_id),
-            None,
+            (item for item in self.personas_v3 if item["name"] == persona_id), None
         )
-
         use_webchat_special_default = False
-        if not persona and platform_name == "webchat" and persona_id != "[%None]":
+        if not persona and platform_name == "webchat" and (persona_id != "[%None]"):
             persona_id = "_chatui_default_"
             use_webchat_special_default = True
-
         return (
             persona_id,
             persona,
@@ -156,12 +142,8 @@ class PersonaManager:
             update_kwargs["skills"] = skills
         if custom_error_message is not NOT_GIVEN:
             update_kwargs["custom_error_message"] = custom_error_message
-
         persona = await self.db.update_persona(
-            persona_id,
-            system_prompt,
-            begin_dialogs,
-            **update_kwargs,
+            persona_id, system_prompt, begin_dialogs, **update_kwargs
         )
         if persona:
             for i, p in enumerate(self.personas):
@@ -201,10 +183,6 @@ class PersonaManager:
                     self.personas[i] = persona
                     break
         return persona
-
-    # ====
-    # Persona Folder Management
-    # ====
 
     async def create_folder(
         self,
@@ -271,7 +249,6 @@ class PersonaManager:
                 - sort_order: 新的排序顺序值
         """
         await self.db.batch_update_sort_order(items)
-        # 刷新缓存
         self.personas = await self.get_all_personas()
         self.get_v3_persona_data()
 
@@ -283,8 +260,6 @@ class PersonaManager:
         """
         all_folders = await self.get_all_folders()
         folder_map: dict[str, dict] = {}
-
-        # 创建文件夹字典
         for folder in all_folders:
             folder_map[folder.folder_id] = {
                 "folder_id": folder.folder_id,
@@ -294,8 +269,6 @@ class PersonaManager:
                 "sort_order": folder.sort_order,
                 "children": [],
             }
-
-        # 构建树形结构
         root_folders = []
         for _folder_id, folder_data in folder_map.items():
             parent_id = folder_data["parent_id"]
@@ -304,7 +277,6 @@ class PersonaManager:
             elif parent_id in folder_map:
                 folder_map[parent_id]["children"].append(folder_data)
 
-        # 递归排序
         def sort_folders(folders: list[dict]) -> list[dict]:
             folders.sort(key=lambda f: (f["sort_order"], f["name"]))
             for folder in folders:
@@ -353,9 +325,7 @@ class PersonaManager:
         return new_persona
 
     async def clone_persona(
-        self,
-        source_persona_id: str,
-        new_persona_id: str,
+        self, source_persona_id: str, new_persona_id: str
     ) -> Persona:
         """Clone an existing persona with a new ID.
 
@@ -369,10 +339,8 @@ class PersonaManager:
         source_persona = await self.db.get_persona_by_id(source_persona_id)
         if not source_persona:
             raise ValueError(f"Persona with ID {source_persona_id} does not exist.")
-
         if await self.db.get_persona_by_id(new_persona_id):
             raise ValueError(f"Persona with ID {new_persona_id} already exists.")
-
         new_persona = await self.db.insert_persona(
             new_persona_id,
             source_persona.system_prompt,
@@ -387,9 +355,7 @@ class PersonaManager:
         self.get_v3_persona_data()
         return new_persona
 
-    def get_v3_persona_data(
-        self,
-    ) -> tuple[list[dict], list[Personality], Personality]:
+    def get_v3_persona_data(self) -> tuple[list[dict], list[Personality], Personality]:
         """获取 AstrBot <4.0.0 版本的 persona 数据｡
 
         Returns:
@@ -403,24 +369,22 @@ class PersonaManager:
                 "prompt": persona.system_prompt,
                 "name": persona.persona_id,
                 "begin_dialogs": persona.begin_dialogs or [],
-                "mood_imitation_dialogs": [],  # deprecated
+                "mood_imitation_dialogs": [],
                 "tools": persona.tools,
                 "skills": persona.skills,
                 "custom_error_message": persona.custom_error_message,
             }
             for persona in self.personas
         ]
-
         personas_v3: list[Personality] = []
         selected_default_persona: Personality | None = None
-
         for persona_cfg in v3_persona_config:
             begin_dialogs = persona_cfg.get("begin_dialogs", [])
             bd_processed = []
             if begin_dialogs:
                 if len(begin_dialogs) % 2 != 0:
                     logger.error(
-                        f"{persona_cfg['name']} 人格情景预设对话格式不对,条数应该为偶数｡",
+                        f"{persona_cfg['name']} 人格情景预设对话格式不对,条数应该为偶数｡"
                     )
                     begin_dialogs = []
                 user_turn = True
@@ -429,34 +393,26 @@ class PersonaManager:
                         {
                             "role": "user" if user_turn else "assistant",
                             "content": dialog,
-                            "_no_save": True,  # 不持久化到 db
-                        },
+                            "_no_save": True,
+                        }
                     )
                     user_turn = not user_turn
-
             try:
-                persona = cast(
-                    Personality,
-                    {
-                        **persona_cfg,
-                        "_begin_dialogs_processed": bd_processed,
-                        "_mood_imitation_dialogs_processed": "",  # deprecated
-                    },
-                )
+                persona = {
+                    **persona_cfg,
+                    "_begin_dialogs_processed": bd_processed,
+                    "_mood_imitation_dialogs_processed": "",
+                }
                 if persona["name"] == self.default_persona:
                     selected_default_persona = persona
                 personas_v3.append(persona)
             except Exception as e:
                 logger.error(f"解析 Persona 配置失败:{e}")
-
         if not selected_default_persona and len(personas_v3) > 0:
-            # 默认选择第一个
             selected_default_persona = personas_v3[0]
-
         if not selected_default_persona:
             selected_default_persona = DEFAULT_PERSONALITY
             personas_v3.append(selected_default_persona)
-
         self.personas_v3 = personas_v3
         self.selected_default_persona_v3 = selected_default_persona
         self.persona_v3_config = v3_persona_config
@@ -468,5 +424,4 @@ class PersonaManager:
             skills=selected_default_persona["skills"] or None,
             custom_error_message=selected_default_persona["custom_error_message"],
         )
-
-        return v3_persona_config, personas_v3, selected_default_persona
+        return (v3_persona_config, personas_v3, selected_default_persona)

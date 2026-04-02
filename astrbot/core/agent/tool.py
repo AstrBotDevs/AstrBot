@@ -33,7 +33,7 @@ class ToolSchema:
     description: str
     """The description of the tool."""
 
-    parameters: ParametersType = field(default_factory=dict)
+    parameters: ParametersType | None = None
     """The parameters of the tool, in JSON Schema format."""
 
     active: bool = True
@@ -42,9 +42,10 @@ class ToolSchema:
 
     @model_validator(mode="after")
     def validate_parameters(self) -> "ToolSchema":
-        jsonschema.validate(
-            self.parameters, jsonschema.Draft202012Validator.META_SCHEMA
-        )
+        if self.parameters is not None:
+            jsonschema.validate(
+                self.parameters, jsonschema.Draft202012Validator.META_SCHEMA
+            )
         return self
 
 

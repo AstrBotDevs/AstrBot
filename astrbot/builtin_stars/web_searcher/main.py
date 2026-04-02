@@ -597,7 +597,7 @@ class Main(star.Star):
 
         tool_set = req.func_tool
         if isinstance(tool_set, FunctionToolManager):
-            req.func_tool = tool_set.get_full_tool_set()  # type: ignore[assignment]
+            req.func_tool = tool_set.get_full_tool_set()  # type: ignore
             tool_set = req.func_tool
 
         if not tool_set:

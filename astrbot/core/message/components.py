@@ -28,6 +28,7 @@ import os
 import sys
 import uuid
 from enum import Enum
+from typing import Any
 
 import anyio
 
@@ -666,7 +667,7 @@ class Nodes(BaseMessageComponent):
 
     async def to_dict(self) -> dict:
         """将 Nodes 转换为字典格式,适用于 OneBot JSON 格式"""
-        ret = {"messages": []}
+        ret: dict[str, list[dict[str, Any]]] = {"messages": []}
         for node in self.nodes:
             d = await node.to_dict()
             ret["messages"].append(d)

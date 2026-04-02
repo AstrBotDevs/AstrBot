@@ -3,6 +3,7 @@ import tempfile
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 from zipfile import ZipFile
 
 import click
@@ -83,7 +84,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def load_yaml_metadata(plugin_dir: Path) -> dict:
+def load_yaml_metadata(plugin_dir: Path) -> dict[str, Any]:
     """Load plugin metadata from metadata.yaml file
 
     Args:
@@ -96,7 +97,10 @@ def load_yaml_metadata(plugin_dir: Path) -> dict:
     yaml_path = plugin_dir / "metadata.yaml"
     if yaml_path.exists():
         try:
-            return yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return dict[str, Any](data)
+            return {}
         except Exception as e:
             click.echo(f"Failed to read {yaml_path}: {e}", err=True)
     return {}
@@ -172,8 +176,8 @@ def build_plug_list(plugins_dir: Path) -> list:
             )
             if (
                 VersionComparator.compare_version(
-                    local_plugin["version"],
-                    online_plugin["version"],
+                    local_plugin["version"] or "",
+                    online_plugin["version"] or "",
                 )
                 < 0
             ):
@@ -185,7 +189,10 @@ def build_plug_list(plugins_dir: Path) -> list:
     # Add uninstalled online plugins
     for online_plugin in online_plugins:
         if not any(plugin["name"] == online_plugin["name"] for plugin in result):
-            result.append(online_plugin)
+            clean: dict[str, str] = {
+                k: v for k, v in online_plugin.items() if v is not None
+            }
+            result.append(clean)
 
     return result
 

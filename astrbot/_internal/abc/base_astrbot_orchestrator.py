@@ -156,7 +156,8 @@ if TYPE_CHECKING:
     from astrbot._internal.protocols.abp.client import AstrbotAbpClient
     from astrbot._internal.protocols.acp.client import AstrbotAcpClient
     from astrbot._internal.protocols.lsp.client import AstrbotLspClient
-    from astrbot._internal.protocols.mcp.client import McpClient
+
+    from astrbot._internal.protocols._mcp.client import McpClient
 
 
 #: Default heartbeat interval for run_loop()

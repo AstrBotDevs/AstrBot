@@ -15,11 +15,9 @@ try:
     )
 
     _MultiModalConversationType: type = MultiModalConversation
-except (
-    ImportError,
-):  # pragma: no cover - older dashscope versions without Qwen TTS support
-    MultiModalConversation = None  # type: ignore[assignment]
-    _MultiModalConversationType = None  # type: ignore[assignment]
+except ImportError:  # pragma: no cover - older dashscope versions without Qwen TTS support
+    MultiModalConversation = None  # type: ignore
+    _MultiModalConversationType = None  # type: ignore
 
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider

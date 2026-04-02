@@ -17,13 +17,14 @@ class UmopConfigRouter:
     async def _load_routing_table(self) -> None:
         """加载路由表"""
         # 从 SharedPreferences 中加载 umop_to_conf_id 映射
-        sp_data = await self.sp.get_async(
+        sp_data: dict[str, str] | None = await self.sp.get_async(
             key="umop_config_routing",
             default={},
             scope="global",
             scope_id="global",
         )
-        self.umop_to_conf_id = sp_data
+        if sp_data is not None:
+            self.umop_to_conf_id = sp_data
 
     @staticmethod
     def _split_umo(umo: str | int | None) -> tuple[str, str, str] | None:

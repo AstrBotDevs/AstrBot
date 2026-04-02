@@ -1,4 +1,3 @@
-from typing import cast
 from urllib.parse import unquote, urlencode, urlparse
 
 from bs4 import Tag
@@ -25,10 +24,7 @@ class Comet(SearchEngine):
             "url": "a[href^='http'], a[href^='//']",
             "title": "main h1, main h2, main h3, h3, h2",
             "text": "main article, main div[role='article'], main section, main p, p",
-            "links": (
-                "main article, main div[role='article'], main li, main div.result, "
-                "article, div[role='article'], li, div.result"
-            ),
+            "links": "main article, main div[role='article'], main li, main div.result, article, div[role='article'], li, div.result",
             "next": "",
         }
         return selectors[selector]
@@ -38,7 +34,7 @@ class Comet(SearchEngine):
         return await self._get_html(url, None)
 
     def _get_url(self, tag: Tag) -> str:
-        href = cast(str, tag.get("href") or "")
+        href = str(tag.get("href") or "")
         if href.startswith("//"):
             return f"https:{href}"
         return href
@@ -52,7 +48,6 @@ class Comet(SearchEngine):
             return False
         if not lowered.startswith(("http://", "https://")):
             return False
-
         netloc = urlparse(lowered).netloc
         if not netloc:
             return False

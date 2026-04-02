@@ -156,7 +156,7 @@ class ToolSet:
 
     def get_light_tool_set(self) -> "ToolSet":
         """Return a light tool set with only name/description."""
-        light_tools = []
+        light_tools: list[ToolSchema] = []
         for tool in self.tools:
             if hasattr(tool, "active") and not tool.active:
                 continue
@@ -172,7 +172,7 @@ class ToolSet:
 
     def get_param_only_tool_set(self) -> "ToolSet":
         """Return a tool set with name/parameters only (no description)."""
-        param_tools = []
+        param_tools: list[ToolSchema] = []
         for tool in self.tools:
             if hasattr(tool, "active") and not tool.active:
                 continue

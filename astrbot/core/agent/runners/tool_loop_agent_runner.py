@@ -38,6 +38,7 @@ from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgent
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -291,6 +292,64 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 if has_stream_output:
                     return
+            except EmptyModelOutputError as exc:
+                last_exception = exc
+                # Retry on the same provider for empty output errors
+                retry_count = 0
+                should_retry = True
+                while (
+                    retry_count < self.EMPTY_OUTPUT_RETRY_ATTEMPTS - 1 and should_retry
+                ):
+                    retry_count += 1
+                    wait_time = min(
+                        self.EMPTY_OUTPUT_RETRY_WAIT_MIN_S
+                        + (
+                            self.EMPTY_OUTPUT_RETRY_WAIT_MAX_S
+                            - self.EMPTY_OUTPUT_RETRY_WAIT_MIN_S
+                        )
+                        * (
+                            (retry_count - 1)
+                            / max(self.EMPTY_OUTPUT_RETRY_ATTEMPTS - 1, 1)
+                        ),
+                        self.EMPTY_OUTPUT_RETRY_WAIT_MAX_S,
+                    )
+                    logger.warning(
+                        "Chat Model %s returned empty output (attempt %d/%d). Retrying in %.1fs...",
+                        candidate_id,
+                        retry_count,
+                        self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
+                        wait_time,
+                    )
+                    if self._is_stop_requested():
+                        should_retry = False
+                        break
+                    await asyncio.sleep(wait_time)
+                    try:
+                        async for resp in self._iter_llm_responses(
+                            include_model=idx == 0
+                        ):
+                            if resp.is_chunk:
+                                has_stream_output = True
+                                yield resp
+                                continue
+                            if (
+                                resp.role == "err"
+                                and not has_stream_output
+                                and (not is_last_candidate)
+                            ):
+                                last_err_response = resp
+                                should_retry = False
+                                break
+                            yield resp
+                            return
+                        if has_stream_output:
+                            return
+                    except EmptyModelOutputError as retry_exc:
+                        last_exception = retry_exc
+                        if retry_count >= self.EMPTY_OUTPUT_RETRY_ATTEMPTS:
+                            should_retry = False
+                # All retries exhausted, move to fallback
+                continue
             except Exception as exc:
                 last_exception = exc
                 logger.warning(
@@ -690,6 +749,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_name,
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
+            strict=True,
         ):
             yield _HandleFunctionToolsResult.from_message_chain(
                 MessageChain(
@@ -767,7 +827,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
 
-                executor = await self.tool_executor.execute(
+                executor = self.tool_executor.execute(
                     tool=func_tool,
                     run_context=self.run_context,
                     session_manager=self.run_context.session_manager,
