@@ -457,6 +457,27 @@ class ProviderOpenAIOfficial(Provider):
 
         model = payloads.get("model", "").lower()
 
+        if "messages" in payloads and isinstance(payloads["messages"], list):
+            cleaned_messages = []
+            for idx, msg in enumerate(payloads["messages"]):
+                # 过滤空的 assistant 消息，防止严格 API（如 Moonshot）返回 400 错误
+                if msg.get("role") == "assistant":
+                    content = msg.get("content")
+                    tool_calls = msg.get("tool_calls")
+
+                    # 情况1: 空/null content 且无 tool_calls -> 过滤掉
+                    if not tool_calls and (content == "" or content is None):
+                        logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
+                        continue
+
+                    # 情况2: 空 content 但有 tool_calls -> 设为 None (符合 OpenAI 规范)
+                    if content == "" and tool_calls:
+                        msg["content"] = None
+
+                cleaned_messages.append(msg)
+
+            payloads["messages"] = cleaned_messages
+
         completion = await self.client.chat.completions.create(
             **payloads,
             stream=False,
