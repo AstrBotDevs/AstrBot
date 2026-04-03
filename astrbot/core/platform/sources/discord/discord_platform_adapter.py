@@ -46,7 +46,7 @@ class DiscordPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
-        self.client_self_id: str | None = None
+        self.bot_self_id: str | None = None
         self.registered_handlers = []
         # 指令注册相关
         self.enable_command_register = self.config.get("discord_command_register", True)
@@ -92,10 +92,10 @@ class DiscordPlatformAdapter(Platform):
 
         message_obj.message_str = message_chain.get_plain_text()
         message_obj.sender = MessageMember(
-            user_id=str(self.client_self_id),
+            user_id=str(self.bot_self_id),
             nickname=self.client.user.display_name,
         )
-        message_obj.self_id = cast(str, self.client_self_id)
+        message_obj.self_id = cast(str, self.bot_self_id)
         message_obj.session_id = session.session_id
         message_obj.message = message_chain.chain
 
@@ -128,8 +128,8 @@ class DiscordPlatformAdapter(Platform):
         # 初始化回调函数
         async def on_received(message_data) -> None:
             logger.debug(f"[Discord] 收到消息: {message_data}")
-            if self.client_self_id is None:
-                self.client_self_id = message_data.get("bot_id")
+            if self.bot_self_id is None:
+                self.bot_self_id = message_data.get("bot_id")
             abm = await self.convert_message(data=message_data)
             await self.handle_msg(abm)
 
@@ -241,7 +241,7 @@ class DiscordPlatformAdapter(Platform):
                     )
         abm.message = message_chain
         abm.raw_message = message
-        abm.self_id = cast(str, self.client_self_id)
+        abm.self_id = cast(str, self.bot_self_id)
         abm.session_id = str(message.channel.id)
         abm.message_id = str(message.id)
         return abm
@@ -465,7 +465,7 @@ class DiscordPlatformAdapter(Platform):
             )
             abm.message = [Plain(text=message_str_for_filter)]
             abm.raw_message = ctx.interaction
-            abm.self_id = cast(str, self.client_self_id)
+            abm.self_id = cast(str, self.bot_self_id)
             abm.session_id = str(ctx.channel_id)
             abm.message_id = str(ctx.interaction.id)
 
