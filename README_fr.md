@@ -92,6 +92,9 @@ Mettre à jour `astrbot` :
 uv tool upgrade astrbot
 ```
 
+> [!WARNING]
+> AstrBot déployé via `uv` **ne prend pas en charge la mise à jour via le WebUI**. Pour mettre à jour, exécutez la commande ci-dessus depuis le terminal.
+
 ### Déploiement Docker
 
 Pour les utilisateurs familiers avec les conteneurs et qui souhaitent une méthode plus stable et adaptée à la production, nous recommandons de déployer AstrBot avec Docker / Docker Compose.
