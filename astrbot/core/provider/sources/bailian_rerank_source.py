@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import aiohttp
 
@@ -88,9 +89,7 @@ class BailianRerankProvider(RerankProvider):
         normalized_model = self.model.strip().lower()
         normalized_top_n = top_n if top_n is not None and top_n > 0 else None
 
-        is_compatible_api = "compatible-api" in self.base_url
-
-        if normalized_model == self.QWEN3_RERANK_MODEL and is_compatible_api:
+        if normalized_model == self.QWEN3_RERANK_MODEL:
             payload = {
                 "model": self.model,
                 "query": query,
@@ -107,6 +106,7 @@ class BailianRerankProvider(RerankProvider):
                 )
             return payload
 
+        payload_input = {"query": query, "documents": documents}
         params = {
             k: v
             for k, v in [
@@ -116,12 +116,9 @@ class BailianRerankProvider(RerankProvider):
             if v is not None
         }
 
-        if is_compatible_api:
-            base = {"model": self.model, "query": query, "documents": documents}
-        else:
-            base = {"model": self.model, "input": {"query": query, "documents": documents}}
-            if params:
-                base["parameters"] = params
+        base: dict[str, Any] = {"model": self.model, "input": payload_input}
+        if params:
+            base["parameters"] = params
 
         return base
 
