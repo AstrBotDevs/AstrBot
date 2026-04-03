@@ -50,7 +50,6 @@ class TelegramPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
-        self.client_self_id = uuid.uuid4().hex[:8]
 
         base_url = self.config.get(
             "telegram_api_base_url",
@@ -335,6 +334,20 @@ class TelegramPlatformAdapter(Platform):
             logger.warning("Received an update without a message.")
             return None
 
+        def _apply_caption() -> None:
+            if not update.message:
+                return
+            if update.message.caption:
+                message.message_str = update.message.caption
+                message.message.append(Comp.Plain(message.message_str))
+            if update.message.caption and update.message.caption_entities:
+                for entity in update.message.caption_entities:
+                    if entity.type == "mention":
+                        name = update.message.caption[
+                            entity.offset + 1 : entity.offset + entity.length
+                        ]
+                        message.message.append(Comp.At(qq=name, name=name))
+
         message = AstrBotMessage()
         message.session_id = str(update.message.chat.id)
 
@@ -446,24 +459,15 @@ class TelegramPlatformAdapter(Platform):
             )
             path_wav = await convert_audio_to_wav(temp_path, path_wav)
 
-            message.message = [
-                Comp.Record(file=path_wav, url=path_wav),
-            ]
+            record = Comp.Record(file=path_wav, url=path_wav)
+            record.path = path_wav
+            message.message = [record]
 
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo
             file = await photo.get_file()
             message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
-            if update.message.caption:
-                message.message_str = update.message.caption
-                message.message.append(Comp.Plain(message.message_str))
-            if update.message.caption_entities:
-                for entity in update.message.caption_entities:
-                    if entity.type == "mention":
-                        name = message.message_str[
-                            entity.offset + 1 : entity.offset + entity.length
-                        ]
-                        message.message.append(Comp.At(qq=name, name=name))
+            _apply_caption()
 
         elif update.message.sticker:
             # 将sticker当作图片处理
@@ -486,6 +490,7 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(
                     Comp.File(file=file_path, name=file_name, url=file_path)
                 )
+                _apply_caption()
 
         elif update.message.video:
             file = await update.message.video.get_file()
@@ -497,6 +502,7 @@ class TelegramPlatformAdapter(Platform):
                 )
             else:
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
+                _apply_caption()
 
         return message
 

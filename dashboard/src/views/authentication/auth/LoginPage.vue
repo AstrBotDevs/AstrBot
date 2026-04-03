@@ -22,10 +22,15 @@ function toggleTheme() {
   theme.global.name.value = newTheme;
 }
 
-onMounted(() => {
+onMounted(async () => {
   // 检查用户是否已登录，如果已登录则重定向
   if (authStore.has_token()) {
-    router.push(authStore.returnUrl || '/');
+    const onboardingCompleted = await authStore.checkOnboardingCompleted();
+    if (onboardingCompleted) {
+      router.push('/dashboard/default');
+    } else {
+      router.push('/welcome');
+    }
     return;
   }
 

@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.22.0"
+VERSION = "4.22.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -1629,10 +1629,14 @@ CONFIG_METADATA_2 = {
                         "type": "gsvi_tts_api",
                         "provider": "gpt_sovits_inference",
                         "provider_type": "text_to_speech",
-                        "api_base": "http://127.0.0.1:5000",
-                        "character": "",
-                        "emotion": "default",
                         "enable": False,
+                        "api_key": "",
+                        "api_base": "http://127.0.0.1:8000",
+                        "version": "v4",
+                        "character": "",
+                        "prompt_text_lang": "中文",
+                        "emotion": "默认",
+                        "text_lang": "中文",
                         "timeout": 20,
                     },
                     "FishAudio TTS(API)": {
@@ -3489,11 +3493,13 @@ CONFIG_METADATA_3 = {
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
+                        "collapsed": True,
                     },
                     "provider_settings.reachability_check": {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
+                        "collapsed": True,
                     },
                     "provider_settings.max_quoted_fallback_images": {
                         "description": "引用图片回退解析上限",
@@ -3502,6 +3508,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_component_chain_depth": {
                         "description": "引用解析组件链深度",
@@ -3510,6 +3517,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_forward_node_depth": {
                         "description": "引用解析转发节点深度",
@@ -3518,6 +3526,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_forward_fetch": {
                         "description": "引用解析转发拉取上限",
@@ -3526,6 +3535,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.warn_on_action_failure": {
                         "description": "引用解析 action 失败告警",
@@ -3534,6 +3544,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                 },
                 "condition": {
@@ -4035,9 +4046,9 @@ CONFIG_METADATA_3_SYSTEM = {
                         "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab",
                     },
                     "http_proxy": {
-                        "description": "HTTP 代理",
+                        "description": "代理",
                         "type": "string",
-                        "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`",
+                        "hint": "启用后，会以添加环境变量的方式设置代理。支持 http://、https://、socks5:// 格式，例如：http://127.0.0.1:7890 或 socks5://127.0.0.1:7891",
                     },
                     "no_proxy": {
                         "description": "直连地址列表",

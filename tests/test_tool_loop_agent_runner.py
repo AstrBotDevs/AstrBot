@@ -17,6 +17,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
 
@@ -131,6 +132,22 @@ class MockErrProvider(MockProvider):
         return LLMResponse(
             role="err",
             completion_text="primary provider returned error",
+        )
+
+
+class MockEmptyOutputThenSuccessProvider(MockProvider):
+    def __init__(self, failures_before_success: int = 1):
+        super().__init__()
+        self.failures_before_success = failures_before_success
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        if self.call_count <= self.failures_before_success:
+            raise EmptyModelOutputError("model returned no usable output")
+        return LLMResponse(
+            role="assistant",
+            completion_text="这是重试后的最终回答",
+            usage=TokenUsage(input_other=10, output=5),
         )
 
 
@@ -576,6 +593,67 @@ async def test_fallback_provider_used_when_primary_returns_err(
     assert final_resp.role == "assistant"
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == 1
+    assert fallback_provider.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_empty_output_is_retried_before_succeeding(
+    runner, provider_request, mock_tool_executor, mock_hooks, monkeypatch
+):
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MAX_S", 0)
+
+    provider = MockEmptyOutputThenSuccessProvider(failures_before_success=1)
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "assistant"
+    assert final_resp.completion_text == "这是重试后的最终回答"
+    assert provider.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
+    runner, provider_request, mock_tool_executor, mock_hooks, monkeypatch
+):
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MAX_S", 0)
+
+    primary_provider = MockEmptyOutputThenSuccessProvider(
+        failures_before_success=runner.EMPTY_OUTPUT_RETRY_ATTEMPTS
+    )
+    fallback_provider = MockProvider()
+    fallback_provider.should_call_tools = False
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "assistant"
+    assert final_resp.completion_text == "这是我的最终回答"
+    assert primary_provider.call_count == runner.EMPTY_OUTPUT_RETRY_ATTEMPTS
     assert fallback_provider.call_count == 1
 
 

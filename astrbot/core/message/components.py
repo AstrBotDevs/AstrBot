@@ -122,7 +122,7 @@ class Record(BaseMessageComponent):
     # Original text content (e.g. TTS source text), used as caption in fallback scenarios
     text: str | None = None
     # 额外
-    path: str | None
+    path: str | None = None
 
     def __init__(self, file: str | None, **_) -> None:
         for k in _:

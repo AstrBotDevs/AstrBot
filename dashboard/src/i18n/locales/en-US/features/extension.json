@@ -242,7 +242,7 @@
     "emptyHint": "Upload a Skills zip to get started",
     "uploadDialogTitle": "Upload Skills",
     "uploadHint": "Upload multiple zip skill packages or drag them in. The system validates the structure automatically and shows a result for each file.",
-    "structureRequirement": "The most common failure is an invalid archive structure. Each zip must contain exactly one top-level folder such as `skillname/`, and that folder must include `SKILL.md`.",
+    "structureRequirement": "The archive supports multiple skills folders.",
     "abilityMultiple": "Upload multiple zip files at once",
     "abilityValidate": "Validate `SKILL.md` automatically",
     "abilitySkip": "Automatically skip duplicate files.",

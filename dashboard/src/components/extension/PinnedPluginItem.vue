@@ -39,6 +39,16 @@ const emit = defineEmits([
 const handlePinnedImgError = (e) => {
   e.target.src = defaultPluginIcon;
 };
+
+const authorDisplay = computed(() => {
+  const p = props.plugin || {};
+  if (typeof p.author === 'string' && p.author.trim()) return p.author;
+  if (Array.isArray(p.authors) && p.authors.length) return p.authors.join(', ');
+  if (typeof p.author_name === 'string' && p.author_name.trim()) return p.author_name;
+  if (typeof p.owner === 'string' && p.owner.trim()) return p.owner;
+  if (p.author && typeof p.author === 'object' && p.author.name) return p.author.name;
+  return '';
+});
 </script>
 
 <template>
@@ -55,21 +65,45 @@ const handlePinnedImgError = (e) => {
   >
     <v-menu offset-y>
       <template #activator="{ props: menuProps }">
-        <v-avatar
-          v-bind="menuProps"
-          size="72"
-          class="pinned-avatar activator-avatar"
-          :title="plugin.display_name || plugin.name"
-        >
-          <img
-            :src="(typeof plugin.logo === 'string' && plugin.logo.trim()) ? plugin.logo : defaultPluginIcon"
-            :alt="plugin.name"
-            @error="handlePinnedImgError"
-          />
-        </v-avatar>
+        <div class="d-flex flex-column align-center" style="cursor: pointer; width: 80px;">
+          <v-avatar
+            v-bind="menuProps"
+            size="72"
+            class="pinned-avatar activator-avatar mb-1"
+            :title="plugin.display_name || plugin.name"
+          >
+            <img
+              :src="(typeof plugin.logo === 'string' && plugin.logo.trim()) ? plugin.logo : defaultPluginIcon"
+              :alt="plugin.name"
+              @error="handlePinnedImgError"
+            />
+          </v-avatar>
+          <span 
+            class="text-caption text-center text-truncate" 
+            style="width: 100%; font-size: 0.75rem; opacity: 0.9; line-height: 1.2;"
+          >
+            {{ plugin.display_name || plugin.name }}
+          </span>
+        </div>
       </template>
 
       <v-card>
+        <v-card-title class="d-flex" style="gap:8px; padding:12px; align-items:center;">
+          <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+            <v-avatar size="40" class="pinned-avatar" style="width:40px; height:40px;">
+              <img
+                :src="(typeof plugin.logo === 'string' && plugin.logo.trim()) ? plugin.logo : defaultPluginIcon"
+                :alt="plugin.name"
+                @error="handlePinnedImgError"
+              />
+            </v-avatar>
+            <div style="min-width:0; overflow:hidden;">
+              <div style="font-weight:600; font-size:0.95rem; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">{{ plugin.display_name || plugin.name }}</div>
+              <div style="font-size:0.8rem; color:var(--v-theme-on-surface); opacity:0.8; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">{{ authorDisplay || (plugin.author || '') }}</div>
+            </div>
+          </div>
+        </v-card-title>
+        <v-divider></v-divider>
         <v-card-text class="d-flex" style="gap:8px; padding:12px;">
           <v-tooltip location="top" :text="tm('buttons.viewDocs')">
             <template #activator="{ props: a }">
@@ -156,8 +190,7 @@ const handlePinnedImgError = (e) => {
 .pinned-card-wrapper {
   position: relative;
   display: inline-block;
-  width: 72px;
-  height: 72px;
+  width: 80px;
 }
 
 .pinned-item {

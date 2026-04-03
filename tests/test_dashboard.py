@@ -109,6 +109,51 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
+async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config.get("dashboard", {}),
+    )
+    warning_messages = []
+    info_messages = []
+
+    async def fake_serve(app, config, shutdown_trigger):
+        return config
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["ssl"] = {
+            "enable": True,
+            "cert_file": "",
+            "key_file": "",
+        }
+        monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
+        monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.warning",
+            lambda message: warning_messages.append(message),
+        )
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.info",
+            lambda message: info_messages.append(message),
+        )
+
+        config = await server.run()
+
+        assert getattr(config, "certfile", None) is None
+        assert getattr(config, "keyfile", None) is None
+        assert any("cert_file 和 key_file" in message for message in warning_messages)
+        assert any(
+            "正在启动 WebUI, 监听地址: http://" in message for message in info_messages
+        )
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+
+
+@pytest.mark.asyncio
 async def test_subagent_config_accepts_default_persona(
     app: Quart,
     authenticated_header: dict,

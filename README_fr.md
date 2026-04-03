@@ -92,6 +92,9 @@ Mettre à jour `astrbot` :
 uv tool upgrade astrbot
 ```
 
+> [!WARNING]
+> AstrBot déployé via `uv` **ne prend pas en charge la mise à jour via le WebUI**. Pour mettre à jour, exécutez la commande ci-dessus depuis le terminal.
+
 ### Déploiement Docker
 
 Pour les utilisateurs familiers avec les conteneurs et qui souhaitent une méthode plus stable et adaptée à la production, nous recommandons de déployer AstrBot avec Docker / Docker Compose.
@@ -184,6 +187,7 @@ Connectez AstrBot à vos plateformes de chat préférées.
 | Coze | Plateformes LLMOps |
 | OpenAI Whisper | Services de reconnaissance vocale |
 | SenseVoice | Services de reconnaissance vocale |
+| Xiaomi MiMo Omni | Services de reconnaissance vocale |
 | OpenAI TTS | Services de synthèse vocale |
 | Gemini TTS | Services de synthèse vocale |
 | GPT-Sovits-Inference | Services de synthèse vocale |
@@ -193,6 +197,7 @@ Connectez AstrBot à vos plateformes de chat préférées.
 | Alibaba Cloud Bailian TTS | Services de synthèse vocale |
 | Azure TTS | Services de synthèse vocale |
 | Minimax TTS | Services de synthèse vocale |
+| Xiaomi MiMo TTS | Services de synthèse vocale |
 | Volcano Engine TTS | Services de synthèse vocale |
 
 ## ❤️ Contribuer
@@ -217,10 +222,17 @@ pre-commit install
 
 ### Groupes QQ
 
-- Groupe 1 : 322154837
-- Groupe 3 : 630166526
-- Groupe 5 : 822130018
-- Groupe 6 : 753075035
+- Groupe 12 : 916228568 (nouveau)
+- Groupe 9 : 1076659624 (complet)
+- Groupe 10 : 1078079676 (complet)
+- Groupe 11 : 704659519 (complet)
+- Groupe 1 : 322154837 (complet)
+- Groupe 3 : 630166526 (complet)
+- Groupe 4 : 1077826412 (complet)
+- Groupe 5 : 822130018 (complet)
+- Groupe 6 : 753075035 (complet)
+- Groupe 7 : 743746109 (complet)
+- Groupe 8 : 1030353265 (complet)
 - Groupe développeurs : 975206796
 - Groupe développeurs (officiel) : 1039761811
 
