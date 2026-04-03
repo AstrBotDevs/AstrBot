@@ -51,16 +51,27 @@ def _prepare_stdio_env(config: dict) -> dict:
     """Preserve Windows executable resolution for stdio subprocesses."""
     if sys.platform != "win32":
         return config
-
-    pathext = os.environ.get("PATHEXT")
-    if not pathext:
-        return config
-
     prepared = config.copy()
     env = dict(prepared.get("env") or {})
-    env.setdefault("PATHEXT", pathext)
+    env = _merge_environment_variables(env)
     prepared["env"] = env
     return prepared
+
+
+def _merge_environment_variables(env: dict) -> dict:
+    """合并环境变量，处理Windows不区分大小写的情况"""
+    merged = env.copy()
+
+    # 将用户环境变量转换为统一的大小写形式便于比较
+    user_keys_lower = {k.lower(): k for k in merged.keys()}
+
+    for sys_key, sys_value in os.environ.items():
+        sys_key_lower = sys_key.lower()
+        if sys_key_lower not in user_keys_lower:
+            # 使用系统环境变量中的原始大小写
+            merged[sys_key] = sys_value
+
+    return merged
 
 
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
