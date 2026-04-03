@@ -50,7 +50,6 @@ class TelegramPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
-        self.client_self_id = uuid.uuid4().hex[:8]
 
         base_url = self.config.get(
             "telegram_api_base_url",
@@ -336,6 +335,8 @@ class TelegramPlatformAdapter(Platform):
             return None
 
         def _apply_caption() -> None:
+            if not update.message:
+                return
             if update.message.caption:
                 message.message_str = update.message.caption
                 message.message.append(Comp.Plain(message.message_str))

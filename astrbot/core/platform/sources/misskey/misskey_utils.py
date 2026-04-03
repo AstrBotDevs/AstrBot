@@ -335,7 +335,7 @@ def extract_sender_info(
 def create_base_message(
     raw_data: dict[str, Any],
     sender_info: dict[str, Any],
-    client_self_id: str,
+    bot_self_id: str,
     is_chat: bool = False,
     room_id: str | None = None,
 ) -> AstrBotMessage:
@@ -367,7 +367,7 @@ def create_base_message(
         session_id if sender_info["sender_id"] else f"{session_prefix}%unknown"
     )
     message.message_id = str(raw_data.get("id", ""))
-    message.self_id = client_self_id
+    message.self_id = bot_self_id
 
     return message
 
@@ -376,7 +376,7 @@ def process_at_mention(
     message: AstrBotMessage,
     raw_text: str,
     bot_username: str,
-    client_self_id: str,
+    bot_self_id: str,
 ) -> tuple[list[str], str]:
     """处理@提及逻辑，返回消息部分列表和处理后的文本"""
     message_parts = []
@@ -386,7 +386,7 @@ def process_at_mention(
 
     if bot_username and raw_text.startswith(f"@{bot_username}"):
         at_mention = f"@{bot_username}"
-        message.message.append(Comp.At(qq=client_self_id))
+        message.message.append(Comp.At(qq=bot_self_id))
         remaining_text = raw_text[len(at_mention) :].strip()
         if remaining_text:
             message.message.append(Comp.Plain(remaining_text))
@@ -401,7 +401,7 @@ def cache_user_info(
     user_cache: dict[str, Any],
     sender_info: dict[str, Any],
     raw_data: dict[str, Any],
-    client_self_id: str,
+    bot_self_id: str,
     is_chat: bool = False,
 ) -> None:
     """缓存用户信息"""
@@ -410,7 +410,7 @@ def cache_user_info(
             "username": sender_info["username"],
             "nickname": sender_info["nickname"],
             "visibility": "specified",
-            "visible_user_ids": [client_self_id, sender_info["sender_id"]],
+            "visible_user_ids": [bot_self_id, sender_info["sender_id"]],
         }
     else:
         user_cache_data = {
@@ -428,7 +428,7 @@ def cache_user_info(
 def cache_room_info(
     user_cache: dict[str, Any],
     raw_data: dict[str, Any],
-    client_self_id: str,
+    bot_self_id: str,
 ) -> None:
     """缓存房间信息"""
     room_data = raw_data.get("toRoom")
@@ -442,7 +442,7 @@ def cache_room_info(
             "room_description": room_data.get("description", ""),
             "owner_id": room_data.get("ownerId", ""),
             "visibility": "specified",
-            "visible_user_ids": [client_self_id],
+            "visible_user_ids": [bot_self_id],
         }
 
 
