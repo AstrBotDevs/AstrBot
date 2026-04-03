@@ -2,7 +2,6 @@
 import { ref, useCssModule } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { Form } from 'vee-validate';
-import md5 from 'js-md5';
 import { useModuleI18n } from '@/i18n/composables';
 
 const { tm: t } = useModuleI18n('features/auth');
@@ -17,17 +16,10 @@ const loading = ref(false);
 async function validate(values: any, { setErrors }: any) {
   loading.value = true;
 
-  // md5加密
-  let password_ = password.value;
-  if (password.value != '') {
-    // @ts-ignore
-    password_ = md5(password.value);
-  }
-
   const authStore = useAuthStore();
   // @ts-ignore
   authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect');
-  return authStore.login(username.value, password_).then((res) => {
+  return authStore.login(username.value, password.value).then((res) => {
     console.log(res);
     loading.value = false;
   }).catch((err) => {

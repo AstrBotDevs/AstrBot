@@ -24,7 +24,17 @@ export const useAuthStore = defineStore({
         this.username = res.data.data.username
         localStorage.setItem('user', this.username);
         localStorage.setItem('token', res.data.data.token);
-        localStorage.setItem('change_pwd_hint', res.data.data?.change_pwd_hint);
+        if (res.data.data?.change_pwd_hint || res.data.data?.legacy_pwd_hint) {
+          localStorage.setItem('change_pwd_hint', 'true');
+          if (res.data.data?.legacy_pwd_hint) {
+            localStorage.setItem('legacy_pwd_hint', 'true');
+          } else {
+            localStorage.removeItem('legacy_pwd_hint');
+          }
+        } else {
+          localStorage.removeItem('change_pwd_hint');
+          localStorage.removeItem('legacy_pwd_hint');
+        }
         
         const onboardingCompleted = await this.checkOnboardingCompleted();
         this.returnUrl = null;
@@ -70,6 +80,8 @@ export const useAuthStore = defineStore({
       this.username = '';
       localStorage.removeItem('user');
       localStorage.removeItem('token');
+      localStorage.removeItem('change_pwd_hint');
+      localStorage.removeItem('legacy_pwd_hint');
       router.push('/auth/login');
     },
     has_token(): boolean {

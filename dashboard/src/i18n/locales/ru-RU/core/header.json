@@ -1,4 +1,4 @@
-﻿{
+{
     "logoTitle": "Панель управления AstrBot",
     "version": {
         "hasNewVersion": "Доступна новая версия AstrBot!",
@@ -80,20 +80,21 @@
     },
     "accountDialog": {
         "title": "Изменить аккаунт",
-        "securityWarning": "Безопасность: Пожалуйста, смените пароль по умолчанию для защиты аккаунта",
+        "securityWarning": "Безопасность: Пожалуйста, смените пароль для защиты аккаунта",
+        "securityWarningLegacy": "Новая версия AstrBot улучшила безопасность. Пожалуйста, измените пароль.",
         "form": {
             "currentPassword": "Текущий пароль",
             "newPassword": "Новый пароль",
             "confirmPassword": "Подтвердите новый пароль",
             "newUsername": "Новое имя пользователя (опционально)",
-            "passwordHint": "Пароль должен быть не менее 8 символов",
+            "passwordHint": "Пароль должен быть не менее 12 символов",
             "confirmPasswordHint": "Введите новый пароль еще раз",
             "usernameHint": "Оставьте пустым, если не хотите менять имя пользователя",
-            "defaultCredentials": "Логин и пароль по умолчанию: astrbot"
+            "defaultCredentials": "Новая версия AstrBot улучшила безопасность. Пожалуйста, измените пароль."
         },
         "validation": {
             "passwordRequired": "Введите пароль",
-            "passwordMinLength": "Пароль должен быть не менее 8 символов",
+            "passwordMinLength": "Пароль должен быть не менее 12 символов",
             "passwordMatch": "Паролы не совпадают",
             "usernameMinLength": "Имя пользователя должно быть не менее 3 символов"
         },
