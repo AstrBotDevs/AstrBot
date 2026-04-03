@@ -10,7 +10,8 @@
     "loading": "Loading...",
     "documents": "Documents",
     "chunks": "Chunks",
-    "sessionConfig": "Session Config"
+    "sessionConfig": "Session Config",
+    "initError": "Initialization Failed"
   },
   "card": {
     "edit": "Edit",

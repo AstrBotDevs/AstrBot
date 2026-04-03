@@ -457,6 +457,27 @@ class ProviderOpenAIOfficial(Provider):
 
         model = payloads.get("model", "").lower()
 
+        if "messages" in payloads and isinstance(payloads["messages"], list):
+            cleaned_messages = []
+            for idx, msg in enumerate(payloads["messages"]):
+                # 过滤空的 assistant 消息，防止严格 API（如 Moonshot）返回 400 错误
+                if msg.get("role") == "assistant":
+                    content = msg.get("content")
+                    tool_calls = msg.get("tool_calls")
+
+                    # 情况1: 空/null content 且无 tool_calls -> 过滤掉
+                    if not tool_calls and (content == "" or content is None):
+                        logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
+                        continue
+
+                    # 情况2: 空 content 但有 tool_calls -> 设为 None (符合 OpenAI 规范)
+                    if content == "" and tool_calls:
+                        msg["content"] = None
+
+                cleaned_messages.append(msg)
+
+            payloads["messages"] = cleaned_messages
+
         completion = await self.client.chat.completions.create(
             **payloads,
             stream=False,
@@ -589,7 +610,10 @@ class ProviderOpenAIOfficial(Provider):
     def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
         ptd = getattr(usage, "prompt_tokens_details", None)
         cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
-        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+        cached = (
+            cached if isinstance(cached, int) else 0
+        )  # ptd.cached_tokens 可能为None
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0  # 安全
         completion_tokens = getattr(usage, "completion_tokens", 0) or 0
         cached = cached or 0
         prompt_tokens = prompt_tokens or 0
@@ -839,6 +863,9 @@ class ProviderOpenAIOfficial(Provider):
 
     def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
+        model = payloads.get("model", "").lower()
+        is_gemini = "gemini" in model
+
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
@@ -850,10 +877,23 @@ class ProviderOpenAIOfficial(Provider):
                         reasoning_content += str(part.get("think"))
                     else:
                         new_content.append(part)
-                message["content"] = new_content
-                # reasoning key is "reasoning_content"
+                # Some providers (Grok, etc.) reject empty content lists.
+                # When all parts were think blocks, fall back to None.
+                message["content"] = new_content or None
                 if reasoning_content:
                     message["reasoning_content"] = reasoning_content
+
+            # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
+            # 纯文本会触发 400 Invalid argument，需要包一层 JSON。
+            if is_gemini and message.get("role") == "tool":
+                content = message.get("content", "")
+                if isinstance(content, str):
+                    try:
+                        json.loads(content)
+                    except (json.JSONDecodeError, ValueError):
+                        message["content"] = json.dumps(
+                            {"result": content}, ensure_ascii=False
+                        )
 
     async def _handle_api_error(
         self,
