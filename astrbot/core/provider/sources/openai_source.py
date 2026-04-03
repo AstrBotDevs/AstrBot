@@ -579,38 +579,17 @@ class ProviderOpenAIOfficial(Provider):
                 if thinking_buffer:
                     completion_text = thinking_buffer + completion_text
                     thinking_buffer = ""
-                
-                # Find all thinking blocks in this chunk
-                # Extract complete thinking blocks
-                for match in thinking_pattern.finditer(completion_text):
-                    think_content = match.group(1).strip()
-                    if think_content:
-                        if llm_response.reasoning_content:
-                            llm_response.reasoning_content += "\n" + think_content
-                        else:
-                            llm_response.reasoning_content = think_content
-                        _y = True
-                
-                # Remove all complete thinking blocks from completion_text
-                completion_text = thinking_pattern.sub("", completion_text)
-                
-                # Handle case where   think was found but ‍ think is missing (incomplete block at chunk boundary)
-                think_start = completion_text.rfind("<think>")
-                think_end = completion_text.rfind("</think>")
-                
-                if think_start != -1 and (think_end == -1 or think_end < think_start):
-                    # We have an unclosed   think tag, buffer everything from it onwards
-                    thinking_buffer = completion_text[think_start:]
-                    completion_text = completion_text[:think_start]
-                elif think_end != -1 and think_end > think_start:
-                    # We closed a thinking block, clear any buffered content
-                    thinking_buffer = ""
-                
-                # Strip whitespace but preserve structure
-                # Use lstrip to remove leading newlines from thinking tags, but preserve trailing spaces for chunk concatenation
-                completion_text = completion_text.lstrip()
-                
-                # Only yield if there's actual text content remaining
+
+                completion_text, thinking_buffer, llm_response.reasoning_content, _y = (
+                    self._extract_thinking_blocks(
+                        completion_text,
+                        thinking_buffer,
+                        llm_response.reasoning_content,
+                        thinking_pattern,
+                        _y,
+                    )
+                )
+
                 if completion_text:
                     llm_response.result_chain = MessageChain(
                         chain=[Comp.Plain(completion_text)],
@@ -630,6 +609,50 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = await self._parse_openai_completion(final_completion, tools)
 
         yield llm_response
+
+    def _extract_thinking_blocks(
+        self,
+        completion_text: str,
+        thinking_buffer: str,
+        reasoning_content: str | None,
+        thinking_pattern: re.Pattern,
+        has_content: bool,
+    ) -> tuple[str, str, str | None, bool]:
+        """
+        Extract thinking blocks from completion text and handle partial blocks across chunks.
+
+        Returns:
+            tuple of (cleaned_text, new_thinking_buffer, updated_reasoning_content, found_content)
+        """
+        # Extract complete thinking blocks
+        for match in thinking_pattern.finditer(completion_text):
+            think_content = match.group(1).strip()
+            if think_content:
+                if reasoning_content:
+                    reasoning_content += "\n" + think_content
+                else:
+                    reasoning_content = think_content
+                has_content = True
+
+        # Remove all complete thinking blocks from completion_text
+        completion_text = thinking_pattern.sub("", completion_text)
+
+        # Handle case where partial thinking tags span chunks
+        think_start = completion_text.rfind("<think>")
+        think_end = completion_text.rfind("</think>")
+
+        if think_start != -1 and (think_end == -1 or think_end < think_start):
+            # Buffer incomplete thinking block
+            thinking_buffer = completion_text[think_start:]
+            completion_text = completion_text[:think_start]
+        elif think_end != -1 and think_end > think_start:
+            # Clear buffer when thinking block closes
+            thinking_buffer = ""
+
+        # Strip leading whitespace
+        completion_text = completion_text.lstrip()
+
+        return completion_text, thinking_buffer, reasoning_content, has_content
 
     def _extract_reasoning_content(
         self,
