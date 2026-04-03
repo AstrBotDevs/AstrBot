@@ -92,6 +92,9 @@ Update `astrbot`:
 uv tool upgrade astrbot
 ```
 
+> [!WARNING]
+> AstrBot deployed via `uv` **does not support upgrading through the WebUI**. To update, please run the command above from the command line.
+
 ### Docker Deployment
 
 For users familiar with containers and looking for a more stable, production-ready deployment method, we recommend deploying AstrBot with Docker / Docker Compose.
