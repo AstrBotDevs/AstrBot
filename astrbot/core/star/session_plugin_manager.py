@@ -60,7 +60,9 @@ class SessionPluginManager:
             bool: True表示启用，False表示禁用
 
         """
-        session_config = await SessionPluginManager.get_session_plugin_config(session_id)
+        session_config = await SessionPluginManager.get_session_plugin_config(
+            session_id
+        )
         return SessionPluginManager.is_plugin_enabled_for_session_config(
             plugin_name,
             session_config,
@@ -87,7 +89,9 @@ class SessionPluginManager:
         session_id = event.unified_msg_origin
         filtered_handlers = []
 
-        session_config = await SessionPluginManager.get_session_plugin_config(session_id)
+        session_config = await SessionPluginManager.get_session_plugin_config(
+            session_id
+        )
 
         for handler in handlers:
             # 获取处理器对应的插件
