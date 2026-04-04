@@ -1126,7 +1126,6 @@ class SQLiteDatabase(BaseDatabase):
         extra_data: dict | None = None,
         auto_managed: bool | None = None,
     ) -> CommandConfig:
-
         async def _op(session: AsyncSession) -> CommandConfig:
             config = await session.get(CommandConfig, handler_full_name)
             if not config:
@@ -1205,7 +1204,6 @@ class SQLiteDatabase(BaseDatabase):
         extra_data: dict | None = None,
         auto_generated: bool | None = None,
     ) -> CommandConflict:
-
         async def _op(session: AsyncSession) -> CommandConflict:
             result = await session.execute(
                 select(CommandConflict).where(
@@ -1311,7 +1309,6 @@ class SQLiteDatabase(BaseDatabase):
         return result
 
     def get_grouped_base_stats(self, offset_sec=86400):
-
         async def _inner():
             async with self.get_db() as session:
                 now = datetime.now()

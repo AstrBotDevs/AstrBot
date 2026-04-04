@@ -453,7 +453,6 @@ class DingtalkPlatformAdapter(Platform):
         message_chain: MessageChain,
         at_str: str = "",
     ) -> None:
-
         async def send_message(msg_key: str, msg_param: dict) -> None:
             if target_type == "group":
                 await self._send_group_message(
@@ -641,7 +640,6 @@ class DingtalkPlatformAdapter(Platform):
         self._event_queue.put_nowait(event)
 
     async def run(self) -> None:
-
         def start_client(loop: asyncio.AbstractEventLoop) -> None:
             try:
                 self._shutdown_event = threading.Event()
@@ -659,7 +657,6 @@ class DingtalkPlatformAdapter(Platform):
         await loop.run_in_executor(None, start_client, loop)
 
     async def terminate(self) -> None:
-
         def monkey_patch_close() -> NoReturn:
             raise KeyboardInterrupt("Graceful shutdown")
 

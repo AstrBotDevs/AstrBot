@@ -225,7 +225,7 @@ def set_config(key: str, value: str) -> None:
         # Attempt to get old value (may raise KeyError)
         try:
             old_value = _get_nested_item(config, key)
-        except Exception as e:
+        except Exception:
             old_value = "<not set>"
 
         validated_value = CONFIG_VALIDATORS[key](value)

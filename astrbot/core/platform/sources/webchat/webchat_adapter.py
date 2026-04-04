@@ -193,7 +193,6 @@ class WebChatAdapter(Platform):
         return abm
 
     def run(self) -> Coroutine[Any, Any, None]:
-
         async def callback(data: tuple) -> None:
             abm = await self.convert_message(data)
             await self.handle_msg(abm)
