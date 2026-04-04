@@ -28,7 +28,6 @@ import { useCustomizerStore } from "@/stores/customizer";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
 
 const toastStore = useToastStore();
-const theme = useTheme();
 const customizer = useCustomizerStore();
 const globalWaitingRef = ref(null);
 let disposeTrayRestartListener = null;
