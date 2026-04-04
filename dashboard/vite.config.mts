@@ -37,7 +37,7 @@ function mdiFontDownload() {
       }
       mkdirSync(mdiDest, { recursive: true });
       cpSync(mdiSource, mdiDest, { recursive: true });
-      console.log("[mdi-font] Downloaded MDI fonts to public/fonts/");
+      console.info("[mdi-font] Downloaded MDI fonts to public/fonts/");
     },
   };
 }

@@ -114,7 +114,8 @@ const releasesHeader = computed(() => [
 // Form validation
 const formValid = ref(true);
 const passwordRules = computed(() => [
-  (v: string) => !!v || t("core.header.accountDialog.validation.passwordRequired"),
+  (v: string) =>
+    !!v || t("core.header.accountDialog.validation.passwordRequired"),
   (v: string) =>
     v.length >= 12 ||
     t("core.header.accountDialog.validation.passwordMinLength"),
@@ -125,8 +126,7 @@ const passwordRules = computed(() => [
     /[a-z]/.test(v) ||
     t("core.header.accountDialog.validation.passwordLowercase"),
   (v: string) =>
-    /\d/.test(v) ||
-    t("core.header.accountDialog.validation.passwordDigit"),
+    /\d/.test(v) || t("core.header.accountDialog.validation.passwordDigit"),
 ]);
 const confirmPasswordRules = computed(() => [
   (v: string) =>
