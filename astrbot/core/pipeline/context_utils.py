@@ -7,6 +7,7 @@ from astrbot.core.message.message_event_result import CommandResult, MessageEven
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
 
 
 async def call_handler(
@@ -89,11 +90,24 @@ async def call_event_hook(
         hook_type,
         plugins_name=event.plugins_name,
     )
+    session_config = await SessionPluginManager.get_session_plugin_config(
+        event.unified_msg_origin
+    )
     for handler in handlers:
+        plugin = star_map.get(handler.handler_module_path)
+        if plugin and not SessionPluginManager.is_plugin_enabled_for_session_config(
+            plugin.name,
+            session_config,
+            reserved=plugin.reserved,
+        ):
+            logger.debug(
+                f"插件 {plugin.name} 在会话 {event.unified_msg_origin} 中被禁用，跳过 hook {handler.handler_name}",
+            )
+            continue
         try:
             assert inspect.iscoroutinefunction(handler.handler)
             logger.debug(
-                f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                f"hook({hook_type.name}) -> {plugin.name if plugin else handler.handler_module_path} - {handler.handler_name}",
             )
             await handler.handler(event, *args, **kwargs)
         except BaseException:
@@ -101,7 +115,7 @@ async def call_event_hook(
 
         if event.is_stopped():
             logger.info(
-                f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。",
+                f"{plugin.name if plugin else handler.handler_module_path} - {handler.handler_name} 终止了事件传播。",
             )
             return True
 

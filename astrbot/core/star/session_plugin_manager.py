@@ -8,9 +8,47 @@ class SessionPluginManager:
     """管理会话级别的插件启停状态"""
 
     @staticmethod
+    async def get_session_plugin_config(session_id: str) -> dict:
+        """获取指定会话的插件配置。"""
+        session_plugin_config = await sp.get_async(
+            scope="umo",
+            scope_id=session_id,
+            key="session_plugin_config",
+            default={},
+        )
+        return session_plugin_config.get(session_id, {})
+
+    @staticmethod
+    def is_plugin_enabled_for_session_config(
+        plugin_name: str | None,
+        session_config: dict | None,
+        *,
+        reserved: bool = False,
+    ) -> bool:
+        """检查插件是否在指定会话配置中启用。"""
+        if reserved or not plugin_name:
+            return True
+
+        if not session_config:
+            return True
+
+        enabled_plugins = session_config.get("enabled_plugins", [])
+        disabled_plugins = session_config.get("disabled_plugins", [])
+
+        if plugin_name in disabled_plugins:
+            return False
+
+        if plugin_name in enabled_plugins:
+            return True
+
+        return True
+
+    @staticmethod
     async def is_plugin_enabled_for_session(
         session_id: str,
         plugin_name: str,
+        *,
+        reserved: bool = False,
     ) -> bool:
         """检查插件是否在指定会话中启用
 
@@ -22,28 +60,12 @@ class SessionPluginManager:
             bool: True表示启用，False表示禁用
 
         """
-        # 获取会话插件配置
-        session_plugin_config = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_plugin_config",
-            default={},
+        session_config = await SessionPluginManager.get_session_plugin_config(session_id)
+        return SessionPluginManager.is_plugin_enabled_for_session_config(
+            plugin_name,
+            session_config,
+            reserved=reserved,
         )
-        session_config = session_plugin_config.get(session_id, {})
-
-        enabled_plugins = session_config.get("enabled_plugins", [])
-        disabled_plugins = session_config.get("disabled_plugins", [])
-
-        # 如果插件在禁用列表中，返回False
-        if plugin_name in disabled_plugins:
-            return False
-
-        # 如果插件在启用列表中，返回True
-        if plugin_name in enabled_plugins:
-            return True
-
-        # 如果都没有配置，默认为启用（兼容性考虑）
-        return True
 
     @staticmethod
     async def filter_handlers_by_session(
@@ -65,14 +87,7 @@ class SessionPluginManager:
         session_id = event.unified_msg_origin
         filtered_handlers = []
 
-        session_plugin_config = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_plugin_config",
-            default={},
-        )
-        session_config = session_plugin_config.get(session_id, {})
-        disabled_plugins = session_config.get("disabled_plugins", [])
+        session_config = await SessionPluginManager.get_session_plugin_config(session_id)
 
         for handler in handlers:
             # 获取处理器对应的插件
@@ -91,7 +106,11 @@ class SessionPluginManager:
                 continue
 
             # 检查插件是否在当前会话中启用
-            if plugin.name in disabled_plugins:
+            if not SessionPluginManager.is_plugin_enabled_for_session_config(
+                plugin.name,
+                session_config,
+                reserved=plugin.reserved,
+            ):
                 logger.debug(
                     f"插件 {plugin.name} 在会话 {session_id} 中被禁用，跳过处理器 {handler.handler_name}",
                 )
