@@ -198,15 +198,14 @@ class ProviderGoogleGenAI(Provider):
                 "budget", 0
             )
             if thinking_budget is not None:
-                thinking_config = types.ThinkingConfig(thinking_budget=thinking_budget)
-        elif model_name in [
-            "gemini-3-pro",
-            "gemini-3-pro-preview",
-            "gemini-3-flash",
-            "gemini-3-flash-preview",
-            "gemini-3-flash-lite",
-            "gemini-3-flash-lite-preview",
-        ]:
+                thinking_config = types.ThinkingConfig(
+                    thinking_budget=thinking_budget,
+                )
+        elif any(model_name.startswith(p) for p in ("gemini-3-", "gemini-3.")):
+            # The thinkingLevel parameter, recommended for Gemini 3 models and onwards.
+            # Use prefix match so new variants (3.1, 3-flash-lite-preview, etc.) are
+            # covered without needing to keep an exhaustive list up to date.
+            # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
             thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
                 "level", "HIGH"
             )
@@ -437,7 +436,11 @@ class ProviderGoogleGenAI(Provider):
         ):
             chain.append(Comp.Plain("这是图片"))
         for part in result_parts:
-            if part.text:
+            # Skip thinking parts — their text is already captured via
+            # _extract_reasoning_content above.  Including them here would
+            # leak the model's internal reasoning into the user-facing message,
+            # which also causes duplicate/triple replies on some platforms.
+            if part.text and not part.thought:
                 chain.append(Comp.Plain(part.text))
             if (
                 part.function_call

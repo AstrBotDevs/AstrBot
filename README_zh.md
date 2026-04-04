@@ -95,6 +95,9 @@ uv tool install git+https://github.com/AstrBotDevs/AstrBot@dev
 uv tool upgrade astrbot
 ```
 
+> [!WARNING]
+> 通过 `uv` 部署的 AstrBot **不支持在 WebUI 中进行版本升级**。如需更新，请通过命令行执行上述命令。
+
 ### Docker 部署
 
 对于熟悉容器、希望获得更稳定且更适合生产环境部署方式的用户，我们推荐使用 Docker / Docker Compose 部署 AstrBot。

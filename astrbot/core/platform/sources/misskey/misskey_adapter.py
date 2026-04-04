@@ -82,7 +82,7 @@ class MisskeyPlatformAdapter(Platform):
             self.max_download_bytes = None
         self.api: MisskeyAPI | None = None
         self._running = False
-        self.client_self_id = ""
+        self.bot_self_id = ""
         self._bot_username = ""
         self._user_cache: dict[str, Any] = {}
 
@@ -123,10 +123,10 @@ class MisskeyPlatformAdapter(Platform):
         self._running = True
         try:
             user_info = await self.api.get_current_user()
-            self.client_self_id = str(user_info.get("id", ""))
+            self.bot_self_id = str(user_info.get("id", ""))
             self._bot_username = user_info.get("username", "")
             logger.info(
-                f"[Misskey] 已连接用户: {self._bot_username} (ID: {self.client_self_id})"
+                f"[Misskey] 已连接用户: {self._bot_username} (ID: {self.bot_self_id})",
             )
         except Exception as e:
             logger.error(f"[Misskey] 获取用户信息失败: {e}")
@@ -275,9 +275,9 @@ class MisskeyPlatformAdapter(Platform):
             )
             room_id = data.get("toRoomId")
             logger.debug(
-                f"[Misskey] 收到聊天事件: sender_id={sender_id}, room_id={room_id}, is_self={sender_id == self.client_self_id}"
+                f"[Misskey] 收到聊天事件: sender_id={sender_id}, room_id={room_id}, is_self={sender_id == self.bot_self_id}",
             )
-            if sender_id == self.client_self_id:
+            if sender_id == self.bot_self_id:
                 return
             if room_id:
                 raw_text = data.get("text", "")
@@ -313,12 +313,12 @@ class MisskeyPlatformAdapter(Platform):
         mentions = note.get("mentions", [])
         if self._bot_username and f"@{self._bot_username}" in text:
             return True
-        if self.client_self_id in [str(uid) for uid in mentions]:
+        if self.bot_self_id in [str(uid) for uid in mentions]:
             return True
         reply = note.get("reply")
         if reply and isinstance(reply, dict):
             reply_user_id = str(reply.get("user", {}).get("id", ""))
-            if reply_user_id == self.client_self_id:
+            if reply_user_id == self.bot_self_id:
                 return bool(self._bot_username and f"@{self._bot_username}" in text)
         return False
 
@@ -517,7 +517,7 @@ class MisskeyPlatformAdapter(Platform):
                     visibility, visible_user_ids = resolve_message_visibility(
                         user_id=user_id_for_cache,
                         user_cache=self._user_cache,
-                        self_id=self.client_self_id,
+                        self_id=self.bot_self_id,
                         default_visibility=self.default_visibility,
                     )
                     logger.debug(
@@ -548,16 +548,26 @@ class MisskeyPlatformAdapter(Platform):
         """将 Misskey 贴文数据转换为 AstrBotMessage 对象"""
         sender_info = extract_sender_info(raw_data, is_chat=False)
         message = create_base_message(
-            raw_data, sender_info, self.client_self_id, is_chat=False
+            raw_data,
+            sender_info,
+            self.bot_self_id,
+            is_chat=False,
         )
         cache_user_info(
-            self._user_cache, sender_info, raw_data, self.client_self_id, is_chat=False
+            self._user_cache,
+            sender_info,
+            raw_data,
+            self.bot_self_id,
+            is_chat=False,
         )
         message_parts = []
         raw_text = raw_data.get("text", "")
         if raw_text:
-            text_parts, _processed_text = process_at_mention(
-                message, raw_text, self._bot_username, self.client_self_id
+            text_parts, processed_text = process_at_mention(
+                message,
+                raw_text,
+                self._bot_username,
+                self.bot_self_id,
             )
             message_parts.extend(text_parts)
         files = raw_data.get("files", [])
@@ -581,10 +591,17 @@ class MisskeyPlatformAdapter(Platform):
         """将 Misskey 聊天消息数据转换为 AstrBotMessage 对象"""
         sender_info = extract_sender_info(raw_data, is_chat=True)
         message = create_base_message(
-            raw_data, sender_info, self.client_self_id, is_chat=True
+            raw_data,
+            sender_info,
+            self.bot_self_id,
+            is_chat=True,
         )
         cache_user_info(
-            self._user_cache, sender_info, raw_data, self.client_self_id, is_chat=True
+            self._user_cache,
+            sender_info,
+            raw_data,
+            self.bot_self_id,
+            is_chat=True,
         )
         raw_text = raw_data.get("text", "")
         if raw_text:
@@ -599,18 +616,30 @@ class MisskeyPlatformAdapter(Platform):
         sender_info = extract_sender_info(raw_data, is_chat=True)
         room_id = raw_data.get("toRoomId", "")
         message = create_base_message(
-            raw_data, sender_info, self.client_self_id, is_chat=False, room_id=room_id
+            raw_data,
+            sender_info,
+            self.bot_self_id,
+            is_chat=False,
+            room_id=room_id,
         )
         cache_user_info(
-            self._user_cache, sender_info, raw_data, self.client_self_id, is_chat=False
+            self._user_cache,
+            sender_info,
+            raw_data,
+            self.bot_self_id,
+            is_chat=False,
         )
-        cache_room_info(self._user_cache, raw_data, self.client_self_id)
+        cache_room_info(self._user_cache, raw_data, self.bot_self_id)
+
         raw_text = raw_data.get("text", "")
         message_parts = []
         if raw_text:
             if self._bot_username and f"@{self._bot_username}" in raw_text:
-                text_parts, _processed_text = process_at_mention(
-                    message, raw_text, self._bot_username, self.client_self_id
+                text_parts, processed_text = process_at_mention(
+                    message,
+                    raw_text,
+                    self._bot_username,
+                    self.bot_self_id,
                 )
                 message_parts.extend(text_parts)
             else:

@@ -46,8 +46,12 @@ class TelegramPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
+<<<<<<< HEAD
         self.client_self_id = uuid.uuid4().hex[:8]
         self.sdk_plugin_bridge = None
+=======
+
+>>>>>>> origin/master
         base_url = self.config.get(
             "telegram_api_base_url", "https://api.telegram.org/bot"
         )
@@ -303,8 +307,15 @@ class TelegramPlatformAdapter(Platform):
         msg = update.message
 
         def _apply_caption() -> None:
+<<<<<<< HEAD
             if msg.caption:
                 message.message_str = msg.caption
+=======
+            if not update.message:
+                return
+            if update.message.caption:
+                message.message_str = update.message.caption
+>>>>>>> origin/master
                 message.message.append(Comp.Plain(message.message_str))
             if msg.caption and msg.caption_entities:
                 for entity in msg.caption_entities:
