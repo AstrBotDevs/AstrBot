@@ -5,11 +5,13 @@ import jwt
 from quart import request
 
 from astrbot.cli.commands.cmd_conf import (
-    hash_dashboard_password_secure,
     is_dashboard_password_hash,
-    verify_dashboard_password,
 )
 from astrbot.core import DEMO_MODE
+from astrbot.core.utils.auth_password import (
+    hash_dashboard_password,
+    verify_dashboard_password,
+)
 
 from .route import Response, Route, RouteContext
 
@@ -99,7 +101,7 @@ class AuthRoute(Route):
                 return Response().error("两次输入的新密码不一致").to_json()
             # Hash the new password before storing to ensure backend and CLI use the same format
             try:
-                new_hash = hash_dashboard_password_secure(new_pwd)
+                new_hash = hash_dashboard_password(new_pwd)
             except Exception as e:
                 return Response().error(f"Failed to hash new password: {e}").to_json()
             self.config["dashboard"]["password"] = new_hash
@@ -143,7 +145,7 @@ class AuthRoute(Route):
 
         if pwd_plain:
             try:
-                return verify_dashboard_password(pwd_plain, stored_password_hash)
+                return verify_dashboard_password(stored_password_hash, pwd_plain)
             except Exception:
                 # Do not crash authentication on unexpected verifier errors; treat as mismatch.
                 return False

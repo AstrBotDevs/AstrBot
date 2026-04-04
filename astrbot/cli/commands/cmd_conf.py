@@ -72,7 +72,7 @@ def _validate_dashboard_password(value: str) -> str:
     try:
         validate_dashboard_password(value)
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     # Return the canonical stored representation.
     return hash_dashboard_password(value)
 
@@ -80,8 +80,8 @@ def _validate_dashboard_password(value: str) -> str:
 def _validate_timezone(value: str) -> str:
     try:
         zoneinfo.ZoneInfo(value)
-    except Exception:
-        raise click.ClickException(t("config_timezone_invalid", value=value))
+    except Exception as e:
+        raise click.ClickException(t("config_timezone_invalid", value=value)) from e
     return value
 
 
@@ -126,7 +126,7 @@ def _load_config() -> dict[str, Any]:
     try:
         return json.loads(config_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as e:
-        raise click.ClickException(f"Failed to parse config file: {e!s}")
+        raise click.ClickException(f"Failed to parse config file: {e!s}") from e
 
 
 def _save_config(config: dict[str, Any]) -> None:
@@ -225,7 +225,7 @@ def set_config(key: str, value: str) -> None:
         # Attempt to get old value (may raise KeyError)
         try:
             old_value = _get_nested_item(config, key)
-        except Exception:
+        except Exception as e:
             old_value = "<not set>"
 
         validated_value = CONFIG_VALIDATORS[key](value)
@@ -240,7 +240,7 @@ def set_config(key: str, value: str) -> None:
     except click.ClickException:
         raise
     except Exception as e:
-        raise click.UsageError(f"Failed to set config: {e!s}")
+        raise click.UsageError(f"Failed to set config: {e!s}") from e
 
 
 @conf.command(name="get")
@@ -258,7 +258,7 @@ def get_config(key: str | None = None) -> None:
         except KeyError:
             raise click.ClickException(f"Unknown config key: {key}")
         except Exception as e:
-            raise click.UsageError(f"Failed to get config: {e!s}")
+            raise click.UsageError(f"Failed to get config: {e!s}") from e
     else:
         click.echo("Current config:")
         for k in CONFIG_VALIDATORS:

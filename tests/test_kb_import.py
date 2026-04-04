@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 from quart import Quart
 
-from astrbot.cli.commands.cmd_conf import hash_dashboard_password_secure
+from astrbot.core.utils.auth_password import hash_dashboard_password
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -26,7 +26,7 @@ async def core_lifecycle_td(tmp_path_factory):
     await core_lifecycle.initialize()
     core_lifecycle.astrbot_config["dashboard"]["username"] = "astrbot"
     core_lifecycle.astrbot_config["dashboard"]["password"] = (
-        hash_dashboard_password_secure(TEST_DASHBOARD_PASSWORD)
+        hash_dashboard_password(TEST_DASHBOARD_PASSWORD)
     )
 
     # Mock kb_manager and kb_helper
