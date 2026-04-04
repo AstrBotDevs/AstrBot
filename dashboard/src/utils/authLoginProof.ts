@@ -39,7 +39,7 @@ async function signNonce(secret: BufferSource, nonce: string): Promise<string> {
     secret,
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign"],
   );
   const signature = await subtle.sign("HMAC", key, encoder.encode(nonce));
   return bytesToHex(signature);
@@ -56,7 +56,7 @@ async function createPbkdf2Proof(
 
   const passwordKey = await subtle.importKey(
     "raw",
-    encoder.encode(password),
+    encoder.encode(password).buffer as ArrayBuffer,
     "PBKDF2",
     false,
     ["deriveBits"],
@@ -65,11 +65,11 @@ async function createPbkdf2Proof(
     {
       name: "PBKDF2",
       hash: "SHA-256",
-      salt: hexToBytes(challenge.salt),
-      iterations: challenge.iterations
+      salt: hexToBytes(challenge.salt).buffer as ArrayBuffer,
+      iterations: challenge.iterations,
     },
     passwordKey,
-    256
+    256,
   );
 
   return signNonce(derivedBits, challenge.nonce);
@@ -80,7 +80,7 @@ async function createLegacyMd5Proof(
   challenge: LoginChallenge,
 ): Promise<string> {
   return signNonce(
-    encoder.encode(md5(password).toLowerCase()),
+    encoder.encode(md5(password).toLowerCase()).buffer as ArrayBuffer,
     challenge.nonce,
   );
 }
