@@ -22,6 +22,7 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
+from astrbot.core.utils.web_search_utils import collect_web_search_results
 
 from .route import Route, RouteContext
 
@@ -198,37 +199,7 @@ class LiveChatRoute(Route):
         self, accumulated_text: str, accumulated_parts: list
     ) -> dict:
         """从消息中提取 web_search 引用。"""
-        supported = [
-            "web_search_tavily",
-            "web_search_bocha",
-            "web_search_exa",
-            "exa_find_similar",
-        ]
-        web_search_results = {}
-        tool_call_parts = [
-            p
-            for p in accumulated_parts
-            if p.get("type") == "tool_call" and p.get("tool_calls")
-        ]
-
-        for part in tool_call_parts:
-            for tool_call in part["tool_calls"]:
-                if tool_call.get("name") not in supported or not tool_call.get(
-                    "result"
-                ):
-                    continue
-                try:
-                    result_data = json.loads(tool_call["result"])
-                    for item in result_data.get("results", []):
-                        if idx := item.get("index"):
-                            web_search_results[idx] = {
-                                "url": item.get("url"),
-                                "title": item.get("title"),
-                                "snippet": item.get("snippet"),
-                            }
-                except (json.JSONDecodeError, KeyError):
-                    pass
-
+        web_search_results = collect_web_search_results(accumulated_parts)
         if not web_search_results:
             return {}
 

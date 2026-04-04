@@ -11,10 +11,13 @@ from astrbot.api import AstrBotConfig, llm_tool, logger, sp, star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.provider import ProviderRequest
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
+from astrbot.core.utils.web_search_utils import normalize_web_search_base_url
 
 from .engines import HEADERS, USER_AGENTS, SearchResult
 from .engines.bing import Bing
 from .engines.sogo import Sogo
+
+MIN_WEB_SEARCH_TIMEOUT = 30
 
 
 class Main(star.Star):
@@ -28,6 +31,14 @@ class Main(star.Star):
         "exa_extract_web_page",
         "exa_find_similar",
     ]
+    MANAGED_TOOLS = TOOLS + ["AIsearch"]
+    PROVIDER_TOOLS = {
+        "default": ("web_search", "fetch_url"),
+        "tavily": ("web_search_tavily", "tavily_extract_web_page"),
+        "baidu_ai_search": ("AIsearch",),
+        "bocha": ("web_search_bocha",),
+        "exa": ("web_search_exa", "exa_extract_web_page", "exa_find_similar"),
+    }
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
@@ -79,15 +90,40 @@ class Main(star.Star):
         """清理文本，去除空格、换行符等"""
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
 
+    def _normalize_timeout(self, timeout: int) -> aiohttp.ClientTimeout:
+        return aiohttp.ClientTimeout(total=max(timeout, MIN_WEB_SEARCH_TIMEOUT))
+
+    def _get_tavily_base_url(self, cfg: AstrBotConfig) -> str:
+        return normalize_web_search_base_url(
+            cfg.get("provider_settings", {}).get("websearch_tavily_base_url"),
+            default="https://api.tavily.com",
+            provider_name="Tavily",
+        )
+
+    def _get_exa_base_url(self, cfg: AstrBotConfig) -> str:
+        return normalize_web_search_base_url(
+            cfg.get("provider_settings", {}).get("websearch_exa_base_url"),
+            default="https://api.exa.ai",
+            provider_name="Exa",
+        )
+
+    def _add_active_tools(
+        self, tool_set, func_tool_mgr, tool_names: tuple[str, ...]
+    ) -> None:
+        for tool_name in tool_names:
+            tool = func_tool_mgr.get_func(tool_name)
+            if tool and tool.active:
+                tool_set.add_tool(tool)
+
     async def _get_from_url(self, url: str, timeout: int = 30) -> str:
         """获取网页内容"""
-        if timeout < 30:
-            timeout = 30
-        header = HEADERS
-        header.update({"User-Agent": random.choice(USER_AGENTS)})
+        header = HEADERS.copy()
+        header["User-Agent"] = random.choice(USER_AGENTS)
         async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.get(
-                url, headers=header, timeout=aiohttp.ClientTimeout(total=timeout)
+                url,
+                headers=header,
+                timeout=self._normalize_timeout(timeout),
             ) as response:
                 html = await response.text(encoding="utf-8")
                 doc = Document(html)
@@ -145,9 +181,10 @@ class Main(star.Star):
         """并发安全的从列表中获取并轮换Tavily API密钥。"""
         tavily_keys = cfg.get("provider_settings", {}).get("websearch_tavily_key", [])
         if not tavily_keys:
-            raise ValueError("错误：Tavily API密钥未在AstrBot中配置。")
+            raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
         async with self.tavily_key_lock:
+            self.tavily_key_index %= len(tavily_keys)
             key = tavily_keys[self.tavily_key_index]
             self.tavily_key_index = (self.tavily_key_index + 1) % len(tavily_keys)
             return key
@@ -160,13 +197,7 @@ class Main(star.Star):
     ) -> list[SearchResult]:
         """使用 Tavily 搜索引擎进行搜索"""
         tavily_key = await self._get_tavily_key(cfg)
-        base_url = (
-            cfg.get("provider_settings", {})
-            .get("websearch_tavily_base_url", "https://api.tavily.com")
-            .rstrip("/")
-        )
-        if timeout < 30:
-            timeout = 30
+        base_url = self._get_tavily_base_url(cfg)
         url = f"{base_url}/search"
         header = {
             "Authorization": f"Bearer {tavily_key}",
@@ -177,7 +208,7 @@ class Main(star.Star):
                 url,
                 json=payload,
                 headers=header,
-                timeout=aiohttp.ClientTimeout(total=timeout),
+                timeout=self._normalize_timeout(timeout),
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -201,13 +232,7 @@ class Main(star.Star):
     ) -> list[dict]:
         """使用 Tavily 提取网页内容"""
         tavily_key = await self._get_tavily_key(cfg)
-        base_url = (
-            cfg.get("provider_settings", {})
-            .get("websearch_tavily_base_url", "https://api.tavily.com")
-            .rstrip("/")
-        )
-        if timeout < 30:
-            timeout = 30
+        base_url = self._get_tavily_base_url(cfg)
         url = f"{base_url}/extract"
         header = {
             "Authorization": f"Bearer {tavily_key}",
@@ -218,7 +243,7 @@ class Main(star.Star):
                 url,
                 json=payload,
                 headers=header,
-                timeout=aiohttp.ClientTimeout(total=timeout),
+                timeout=self._normalize_timeout(timeout),
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -243,7 +268,7 @@ class Main(star.Star):
         """搜索网络以回答用户的问题。当用户需要搜索网络以获取即时性的信息时调用此工具。
 
         Args:
-            query(string): 和用户的问题最相关的搜索关键词，用于在 Google 上搜索。
+            query(string): 和用户的问题最相关的搜索关键词，用于在搜索引擎上搜索。
             max_results(number): 返回的最大搜索结果数量，默认为 5。
 
         """
@@ -308,8 +333,6 @@ class Main(star.Star):
             timeout(number): Optional. Request timeout in seconds. Minimum is 30. Default is 30.
 
         """
-        if timeout < 30:
-            timeout = 30
         resp = await self._get_from_url(url, timeout=timeout)
         return resp
 
@@ -342,8 +365,6 @@ class Main(star.Star):
             timeout(number): Optional. Request timeout in seconds. Minimum is 30. Default is 30.
 
         """
-        if timeout < 30:
-            timeout = 30
         logger.info(f"web_searcher - search_from_tavily: {query}")
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         # websearch_link = cfg["provider_settings"].get("web_search_link", False)
@@ -409,8 +430,6 @@ class Main(star.Star):
             timeout(number): Optional. Request timeout in seconds. Minimum is 30. Default is 30.
 
         """
-        if timeout < 30:
-            timeout = 30
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         if not cfg.get("provider_settings", {}).get("websearch_tavily_key", []):
             raise ValueError("Error: Tavily API key is not configured in AstrBot.")
@@ -437,9 +456,10 @@ class Main(star.Star):
         """并发安全的从列表中获取并轮换BoCha API密钥。"""
         bocha_keys = cfg.get("provider_settings", {}).get("websearch_bocha_key", [])
         if not bocha_keys:
-            raise ValueError("错误：BoCha API密钥未在AstrBot中配置。")
+            raise ValueError("Error: BoCha API key is not configured in AstrBot.")
 
         async with self.bocha_key_lock:
+            self.bocha_key_index %= len(bocha_keys)
             key = bocha_keys[self.bocha_key_index]
             self.bocha_key_index = (self.bocha_key_index + 1) % len(bocha_keys)
             return key
@@ -452,8 +472,6 @@ class Main(star.Star):
     ) -> list[SearchResult]:
         """使用 BoCha 搜索引擎进行搜索"""
         bocha_key = await self._get_bocha_key(cfg)
-        if timeout < 30:
-            timeout = 30
         url = "https://api.bochaai.com/v1/web-search"
         header = {
             "Authorization": f"Bearer {bocha_key}",
@@ -464,7 +482,7 @@ class Main(star.Star):
                 url,
                 json=payload,
                 headers=header,
-                timeout=aiohttp.ClientTimeout(total=timeout),
+                timeout=self._normalize_timeout(timeout),
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -545,8 +563,6 @@ class Main(star.Star):
 
             timeout(number): Optional. Request timeout in seconds. Minimum is 30. Default is 30.
         """
-        if timeout < 30:
-            timeout = 30
         logger.info(f"web_searcher - search_from_bocha: {query}")
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         # websearch_link = cfg["provider_settings"].get("web_search_link", False)
@@ -600,9 +616,10 @@ class Main(star.Star):
         """并发安全的从列表中获取并轮换 Exa API 密钥。"""
         exa_keys = cfg.get("provider_settings", {}).get("websearch_exa_key", [])
         if not exa_keys:
-            raise ValueError("错误：Exa API 密钥未在 AstrBot 中配置。")
+            raise ValueError("Error: Exa API key is not configured in AstrBot.")
 
         async with self.exa_key_lock:
+            self.exa_key_index %= len(exa_keys)
             key = exa_keys[self.exa_key_index]
             self.exa_key_index = (self.exa_key_index + 1) % len(exa_keys)
             return key
@@ -615,11 +632,7 @@ class Main(star.Star):
     ) -> list[SearchResult]:
         """使用 Exa 搜索引擎进行搜索"""
         exa_key = await self._get_exa_key(cfg)
-        base_url = (
-            cfg.get("provider_settings", {})
-            .get("websearch_exa_base_url", "https://api.exa.ai")
-            .rstrip("/")
-        )
+        base_url = self._get_exa_base_url(cfg)
         url = f"{base_url}/search"
         header = {
             "x-api-key": exa_key,
@@ -630,7 +643,7 @@ class Main(star.Star):
                 url,
                 json=payload,
                 headers=header,
-                timeout=aiohttp.ClientTimeout(total=timeout),
+                timeout=self._normalize_timeout(timeout),
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -670,8 +683,6 @@ class Main(star.Star):
             timeout(number): Optional. Request timeout in seconds. Minimum is 30. Default is 30.
 
         """
-        if timeout < 30:
-            timeout = 30
         logger.info(f"web_searcher - search_from_exa: {query}")
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         if not cfg.get("provider_settings", {}).get("websearch_exa_key", []):
@@ -725,13 +736,7 @@ class Main(star.Star):
     ) -> list[dict]:
         """使用 Exa 提取网页内容"""
         exa_key = await self._get_exa_key(cfg)
-        base_url = (
-            cfg.get("provider_settings", {})
-            .get("websearch_exa_base_url", "https://api.exa.ai")
-            .rstrip("/")
-        )
-        if timeout < 30:
-            timeout = 30
+        base_url = self._get_exa_base_url(cfg)
         url = f"{base_url}/contents"
         header = {
             "x-api-key": exa_key,
@@ -742,7 +747,7 @@ class Main(star.Star):
                 url,
                 json=payload,
                 headers=header,
-                timeout=aiohttp.ClientTimeout(total=timeout),
+                timeout=self._normalize_timeout(timeout),
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -750,12 +755,7 @@ class Main(star.Star):
                         f"Exa content extraction failed: {reason}, status: {response.status}",
                     )
                 data = await response.json()
-                results: list[dict] = data.get("results", [])
-                if not results:
-                    raise ValueError(
-                        "Error: Exa content extraction does not return any results.",
-                    )
-                return results
+                return data.get("results", [])
 
     @llm_tool("exa_extract_web_page")
     async def exa_extract_web_page(
@@ -772,8 +772,6 @@ class Main(star.Star):
             timeout(number): Optional. Request timeout in seconds. Minimum is 30. Default is 30.
 
         """
-        if timeout < 30:
-            timeout = 30
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         if not cfg.get("provider_settings", {}).get("websearch_exa_key", []):
             raise ValueError("Error: Exa API key is not configured in AstrBot.")
@@ -787,6 +785,8 @@ class Main(star.Star):
         }
 
         results = await self._extract_exa(cfg, payload, timeout=timeout)
+        if not results:
+            return "Error: Exa content extraction does not return any results."
         ret_ls = []
         for result in results:
             ret_ls.append(f"URL: {result.get('url', 'No URL')}")
@@ -802,13 +802,7 @@ class Main(star.Star):
     ) -> list[SearchResult]:
         """使用 Exa 查找相似链接"""
         exa_key = await self._get_exa_key(cfg)
-        base_url = (
-            cfg.get("provider_settings", {})
-            .get("websearch_exa_base_url", "https://api.exa.ai")
-            .rstrip("/")
-        )
-        if timeout < 30:
-            timeout = 30
+        base_url = self._get_exa_base_url(cfg)
         url = f"{base_url}/findSimilar"
         header = {
             "x-api-key": exa_key,
@@ -819,7 +813,7 @@ class Main(star.Star):
                 url,
                 json=payload,
                 headers=header,
-                timeout=aiohttp.ClientTimeout(total=timeout),
+                timeout=self._normalize_timeout(timeout),
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -854,8 +848,6 @@ class Main(star.Star):
             timeout(number): Optional. Request timeout in seconds. Minimum is 30. Default is 30.
 
         """
-        if timeout < 30:
-            timeout = 30
         logger.info(f"web_searcher - find_similar_links: {url}")
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         if not cfg.get("provider_settings", {}).get("websearch_exa_key", []):
@@ -912,81 +904,25 @@ class Main(star.Star):
             return
 
         if not websearch_enable:
-            # pop tools
-            for tool_name in self.TOOLS:
+            for tool_name in self.MANAGED_TOOLS:
                 tool_set.remove_tool(tool_name)
             return
 
         func_tool_mgr = self.context.get_llm_tool_manager()
-        if provider == "default":
-            web_search_t = func_tool_mgr.get_func("web_search")
-            fetch_url_t = func_tool_mgr.get_func("fetch_url")
-            if web_search_t and web_search_t.active:
-                tool_set.add_tool(web_search_t)
-            if fetch_url_t and fetch_url_t.active:
-                tool_set.add_tool(fetch_url_t)
-            tool_set.remove_tool("web_search_tavily")
-            tool_set.remove_tool("tavily_extract_web_page")
-            tool_set.remove_tool("AIsearch")
-            tool_set.remove_tool("web_search_bocha")
-            tool_set.remove_tool("web_search_exa")
-            tool_set.remove_tool("exa_extract_web_page")
-            tool_set.remove_tool("exa_find_similar")
-        elif provider == "tavily":
-            web_search_tavily = func_tool_mgr.get_func("web_search_tavily")
-            tavily_extract_web_page = func_tool_mgr.get_func("tavily_extract_web_page")
-            if web_search_tavily and web_search_tavily.active:
-                tool_set.add_tool(web_search_tavily)
-            if tavily_extract_web_page and tavily_extract_web_page.active:
-                tool_set.add_tool(tavily_extract_web_page)
-            tool_set.remove_tool("web_search")
-            tool_set.remove_tool("fetch_url")
-            tool_set.remove_tool("AIsearch")
-            tool_set.remove_tool("web_search_bocha")
-            tool_set.remove_tool("web_search_exa")
-            tool_set.remove_tool("exa_extract_web_page")
-            tool_set.remove_tool("exa_find_similar")
-        elif provider == "baidu_ai_search":
+        for tool_name in self.MANAGED_TOOLS:
+            tool_set.remove_tool(tool_name)
+
+        if provider == "baidu_ai_search":
             try:
                 await self.ensure_baidu_ai_search_mcp(event.unified_msg_origin)
-                aisearch_tool = func_tool_mgr.get_func("AIsearch")
-                if aisearch_tool and aisearch_tool.active:
-                    tool_set.add_tool(aisearch_tool)
-                tool_set.remove_tool("web_search")
-                tool_set.remove_tool("fetch_url")
-                tool_set.remove_tool("web_search_tavily")
-                tool_set.remove_tool("tavily_extract_web_page")
-                tool_set.remove_tool("web_search_bocha")
-                tool_set.remove_tool("web_search_exa")
-                tool_set.remove_tool("exa_extract_web_page")
-                tool_set.remove_tool("exa_find_similar")
+                self._add_active_tools(
+                    tool_set,
+                    func_tool_mgr,
+                    self.PROVIDER_TOOLS["baidu_ai_search"],
+                )
             except Exception as e:
                 logger.error(f"Cannot Initialize Baidu AI Search MCP Server: {e}")
-        elif provider == "bocha":
-            web_search_bocha = func_tool_mgr.get_func("web_search_bocha")
-            if web_search_bocha and web_search_bocha.active:
-                tool_set.add_tool(web_search_bocha)
-            tool_set.remove_tool("web_search")
-            tool_set.remove_tool("fetch_url")
-            tool_set.remove_tool("AIsearch")
-            tool_set.remove_tool("web_search_tavily")
-            tool_set.remove_tool("tavily_extract_web_page")
-            tool_set.remove_tool("web_search_exa")
-            tool_set.remove_tool("exa_extract_web_page")
-            tool_set.remove_tool("exa_find_similar")
-        elif provider == "exa":
-            web_search_exa = func_tool_mgr.get_func("web_search_exa")
-            exa_extract_web_page = func_tool_mgr.get_func("exa_extract_web_page")
-            exa_find_similar = func_tool_mgr.get_func("exa_find_similar")
-            if web_search_exa and web_search_exa.active:
-                tool_set.add_tool(web_search_exa)
-            if exa_extract_web_page and exa_extract_web_page.active:
-                tool_set.add_tool(exa_extract_web_page)
-            if exa_find_similar and exa_find_similar.active:
-                tool_set.add_tool(exa_find_similar)
-            tool_set.remove_tool("web_search")
-            tool_set.remove_tool("fetch_url")
-            tool_set.remove_tool("AIsearch")
-            tool_set.remove_tool("web_search_tavily")
-            tool_set.remove_tool("tavily_extract_web_page")
-            tool_set.remove_tool("web_search_bocha")
+            return
+
+        tool_names = self.PROVIDER_TOOLS.get(provider, self.PROVIDER_TOOLS["default"])
+        self._add_active_tools(tool_set, func_tool_mgr, tool_names)

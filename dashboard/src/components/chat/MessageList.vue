@@ -200,6 +200,13 @@ setCustomComponents('message-list', {
     code_block: MarkdownCodeBlockNode
 });
 
+const WEB_SEARCH_REFERENCE_TOOLS = Object.freeze([
+    'web_search_tavily',
+    'web_search_bocha',
+    'web_search_exa',
+    'exa_find_similar'
+]);
+
 export default {
     name: 'MessageList',
     components: {
@@ -303,8 +310,7 @@ export default {
                     
                     part.tool_calls.forEach(toolCall => {
                         // 检查是否是网页搜索工具调用
-                        const supportedTools = ['web_search_tavily', 'web_search_bocha', 'web_search_exa', 'exa_find_similar'];
-                        if (!supportedTools.includes(toolCall.name) || !toolCall.result) {
+                        if (!WEB_SEARCH_REFERENCE_TOOLS.includes(toolCall.name) || !toolCall.result) {
                             return;
                         }
                         

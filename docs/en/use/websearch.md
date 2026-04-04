@@ -1,7 +1,7 @@
 
 # Web Search
 
-The web search feature aims to provide large language models with the ability to invoke search engines like Google, Bing, and Sogou to obtain recent world information, which can improve the accuracy of model responses and reduce hallucinations to some extent.
+The web search feature aims to provide large language models with the ability to invoke search engines like Bing and Sogou to obtain recent world information, which can improve the accuracy of model responses and reduce hallucinations to some extent.
 
 AstrBot's built-in web search functionality relies on the large language model's `function calling` capability. If you're not familiar with function calling, please refer to: [Function Calling](/use/websearch).
 
@@ -16,7 +16,7 @@ And other prompts with search intent to trigger the model to invoke the search t
 
 AstrBot supports 5 types of web search source integration: `default`, `Tavily`, `Baidu AI Search`, `BoCha`, and `Exa`.
 
-The former uses AstrBot's built-in web search requester to query Google, Bing, and Sogou search engines, performing best in network environments with Google access. **We recommend using Tavily or Exa**.
+The former uses AstrBot's built-in web search requester to query Bing and Sogou search engines. **We recommend using Tavily or Exa**.
 
 ![image](https://files.astrbot.app/docs/source/images/websearch/image.png)
 

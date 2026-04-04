@@ -23,6 +23,7 @@ from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queu
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
+from astrbot.core.utils.web_search_utils import collect_web_search_results
 
 from .route import Response, Route, RouteContext
 
@@ -215,7 +216,7 @@ class ChatRoute(Route):
     def _extract_web_search_refs(
         self, accumulated_text: str, accumulated_parts: list
     ) -> dict:
-        """从消息中提取 web_search_tavily 的引用
+        """从消息中提取网页搜索引用。
 
         Args:
             accumulated_text: 累积的文本内容
@@ -224,38 +225,7 @@ class ChatRoute(Route):
         Returns:
             包含 used 列表的字典，记录被引用的搜索结果
         """
-        supported = [
-            "web_search_tavily",
-            "web_search_bocha",
-            "web_search_exa",
-            "exa_find_similar",
-        ]
-        # 从 accumulated_parts 中找到所有 web_search_tavily 的工具调用结果
-        web_search_results = {}
-        tool_call_parts = [
-            p
-            for p in accumulated_parts
-            if p.get("type") == "tool_call" and p.get("tool_calls")
-        ]
-
-        for part in tool_call_parts:
-            for tool_call in part["tool_calls"]:
-                if tool_call.get("name") not in supported or not tool_call.get(
-                    "result"
-                ):
-                    continue
-                try:
-                    result_data = json.loads(tool_call["result"])
-                    for item in result_data.get("results", []):
-                        if idx := item.get("index"):
-                            web_search_results[idx] = {
-                                "url": item.get("url"),
-                                "title": item.get("title"),
-                                "snippet": item.get("snippet"),
-                            }
-                except (json.JSONDecodeError, KeyError):
-                    pass
-
+        web_search_results = collect_web_search_results(accumulated_parts)
         if not web_search_results:
             return {}
 

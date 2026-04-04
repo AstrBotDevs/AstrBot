@@ -2,6 +2,8 @@ import asyncio
 
 import aiohttp
 
+from astrbot.core.utils.web_search_utils import normalize_web_search_base_url
+
 
 class URLExtractor:
     """URL 内容提取器，封装了 Tavily API 调用和密钥管理"""
@@ -22,7 +24,11 @@ class URLExtractor:
         self.tavily_keys = tavily_keys
         self.tavily_key_index = 0
         self.tavily_key_lock = asyncio.Lock()
-        self.tavily_base_url = tavily_base_url.rstrip("/")
+        self.tavily_base_url = normalize_web_search_base_url(
+            tavily_base_url,
+            default="https://api.tavily.com",
+            provider_name="Tavily",
+        )
 
     async def _get_tavily_key(self) -> str:
         """并发安全的从列表中获取并轮换Tavily API密钥。"""
