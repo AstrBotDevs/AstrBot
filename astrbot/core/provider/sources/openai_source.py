@@ -532,6 +532,7 @@ class ProviderOpenAIOfficial(Provider):
             **payloads,
             stream=True,
             extra_body=extra_body,
+            stream_options={"include_usage": True},
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
@@ -539,12 +540,11 @@ class ProviderOpenAIOfficial(Provider):
         state = ChatCompletionStreamState()
 
         async for chunk in stream:
-            if not chunk.choices:
-                continue
-            choice = chunk.choices[0]
-            delta = choice.delta
+            logger.debug(f"Received chunk: {chunk}")
+            choice = chunk.choices[0] if chunk.choices else None
+            delta = choice.delta if choice else None
 
-            if dtcs := delta.tool_calls:
+            if delta and (dtcs := delta.tool_calls):
                 for idx, tc in enumerate(dtcs):
                     # siliconflow workaround
                     if tc.function and tc.function.arguments:
@@ -574,7 +574,7 @@ class ProviderOpenAIOfficial(Provider):
                 _y = True
             if chunk.usage:
                 llm_response.usage = self._extract_usage(chunk.usage)
-            elif choice_usage := getattr(choice, "usage", None):
+            elif choice and (choice_usage := getattr(choice, "usage", None)):
                 # Workaround for some providers that only return usage in choices[].usage, e.g. MoonshotAI
                 # See https://github.com/AstrBotDevs/AstrBot/issues/6614
                 llm_response.usage = self._extract_usage(choice_usage)
