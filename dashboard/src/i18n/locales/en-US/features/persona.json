@@ -96,6 +96,7 @@
       "moveSuccess": "Persona moved successfully",
       "moveError": "Failed to move persona",
       "exportSuccess": "Exported successfully(excluding skills and tools)",
+      "exportError": "Failed to export persona",
       "importSuccess": "Imported successfully",
       "importError": "Failed to import persona"
     }
