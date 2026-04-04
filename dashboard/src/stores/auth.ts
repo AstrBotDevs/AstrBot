@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { router } from '@/router';
 import axios from 'axios';
+import { createLoginProof, type LoginChallenge } from '@/utils/authLoginProof';
 
 export const useAuthStore = defineStore({
   id: 'auth',
@@ -12,9 +13,17 @@ export const useAuthStore = defineStore({
   actions: {
     async login(username: string, password: string): Promise<void> {
       try {
+        const challengeRes = await axios.post('/api/auth/login/challenge');
+        const challenge = challengeRes.data?.data as LoginChallenge | undefined;
+        if (!challenge) {
+          return Promise.reject('Failed to initialize secure login');
+        }
+
+        const passwordProof = await createLoginProof(password, challenge);
         const res = await axios.post('/api/auth/login', {
           username: username,
-          password: password
+          challenge_id: challenge.challenge_id,
+          password_proof: passwordProof
         });
     
         if (res.data.status === 'error') {

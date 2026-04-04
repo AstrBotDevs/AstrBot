@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import re
 import secrets
+from typing import Any
 
 _PBKDF2_ITERATIONS = 600_000
 _PBKDF2_SALT_BYTES = 16
@@ -65,6 +66,59 @@ def _is_pbkdf2_hash(stored: str) -> bool:
     return isinstance(stored, str) and stored.startswith(_PBKDF2_FORMAT)
 
 
+def get_dashboard_login_challenge(stored_hash: str) -> dict[str, Any]:
+    """Return the public challenge parameters needed for proof-based login."""
+    if _is_legacy_md5_hash(stored_hash):
+        return {"algorithm": "legacy_md5"}
+
+    if _is_pbkdf2_hash(stored_hash):
+        parts: list[str] = stored_hash.split("$")
+        if len(parts) != 4:
+            raise ValueError("Invalid dashboard password hash")
+        _, iterations_s, salt, _ = parts
+        return {
+            "algorithm": _PBKDF2_ALGORITHM,
+            "iterations": int(iterations_s),
+            "salt": salt,
+        }
+
+    raise ValueError("Unsupported dashboard password hash")
+
+
+def verify_dashboard_login_proof(
+    stored_hash: str, challenge_nonce: str, proof: str
+) -> bool:
+    """Verify an HMAC-SHA256 login proof generated from the stored password secret."""
+    if (
+        not isinstance(stored_hash, str)
+        or not isinstance(challenge_nonce, str)
+        or not isinstance(proof, str)
+    ):
+        return False
+
+    proof_key: bytes
+    if _is_legacy_md5_hash(stored_hash):
+        proof_key = stored_hash.lower().encode("utf-8")
+    elif _is_pbkdf2_hash(stored_hash):
+        parts: list[str] = stored_hash.split("$")
+        if len(parts) != 4:
+            return False
+        _, _, _, digest = parts
+        try:
+            proof_key = bytes.fromhex(digest)
+        except ValueError:
+            return False
+    else:
+        return False
+
+    expected = hmac.new(
+        proof_key,
+        challenge_nonce.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected.lower(), proof.lower())
+
+
 def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool:
     """Verify password against legacy md5 or new PBKDF2-SHA256 format."""
     if not isinstance(stored_hash, str) or not isinstance(candidate_password, str):
@@ -72,7 +126,7 @@ def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool
 
     if _is_legacy_md5_hash(stored_hash):
         # Keep compatibility with existing md5-based deployments:
-        # new clients send plain password, old clients may send md5 of it.
+        # challenge-based clients send proof, fallback clients may send plain password or md5.
         candidate_md5 = hashlib.md5(candidate_password.encode("utf-8")).hexdigest()
         return hmac.compare_digest(
             stored_hash.lower(), candidate_md5.lower()
