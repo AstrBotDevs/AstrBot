@@ -1134,6 +1134,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "LongCat": {
+                        "id": "longcat",
+                        "provider": "longcat",
+                        "type": "longcat_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.longcat.chat/openai",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "Google Gemini": {
                         "id": "google_gemini",
                         "provider": "google",
