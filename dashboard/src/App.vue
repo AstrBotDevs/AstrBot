@@ -45,7 +45,7 @@ watch(
   () => customizer.uiTheme,
   (newTheme) => {
     if (newTheme) {
-      theme.global.name.value = newTheme;
+
     }
   },
   { immediate: true },
