@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -1171,6 +1172,93 @@ async def test_parse_openai_completion_raises_empty_model_output_error():
 
         with pytest.raises(EmptyModelOutputError):
             await provider._parse_openai_completion(completion, tools=None)
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch):
+    provider = _make_provider()
+    try:
+        chunks = [
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "content": "ok",
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            ),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [],
+                    "usage": {
+                        "prompt_tokens": 2550,
+                        "completion_tokens": 125,
+                        "total_tokens": 2675,
+                        "prompt_tokens_details": {
+                            "cached_tokens": 2488,
+                        },
+                    },
+                }
+            ),
+        ]
+
+        async def fake_stream():
+            for chunk in chunks:
+                yield chunk
+
+        async def fake_create(**kwargs):
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        responses = [
+            response
+            async for response in provider._query_stream(
+                payloads={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": "hello"}],
+                },
+                tools=None,
+            )
+        ]
+
+        final_response = responses[-1]
+        assert final_response.completion_text == "ok"
+        assert final_response.usage is not None
+        assert final_response.usage.input_other == 62
+        assert final_response.usage.input_cached == 2488
+        assert final_response.usage.output == 125
     finally:
         await provider.terminate()
 
