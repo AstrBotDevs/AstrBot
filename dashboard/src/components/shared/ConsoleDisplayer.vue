@@ -140,7 +140,7 @@ export default {
           Authorization: token ? `Bearer ${token}` : "",
         },
         heartbeatTimeout: 300000,
-        withCredentials: true,
+        
       });
 
       this.eventSource.onopen = () => {
@@ -352,7 +352,7 @@ export default {
 }
 
 .fullscreen-btn {
-  color: rgba(255, 255, 255, 0.7) !important; /* 提高在深色背景下的对比度 */
+  color: rgba(var(--v-theme-on-surface), 0.7) !important;
 }
 
 :deep(.console-log-line) {

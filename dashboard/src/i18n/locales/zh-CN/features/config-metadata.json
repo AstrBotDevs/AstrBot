@@ -165,8 +165,8 @@
             "description": "沙箱环境驱动器"
           },
           "bwrap_rw_binds": {
-            "description": "Bubblewrap 额外读写挂载目录",
-            "hint": "Bubblewrap 沙箱额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写。"
+            "description": "Bubblewrap 读写挂载目录",
+            "hint": "额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写，整个宿主机系统默认是只读挂载于沙箱内的相同位置）。"
           },
           "bwrap_ro_binds": {
             "description": "Bubblewrap 额外只读挂载目录",
@@ -203,10 +203,6 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Ship 会话复用上限",
             "hint": "决定了一个实例承载的最大会话数量。"
-          },
-          "bwrap_rw_binds": {
-            "description": "Bubblewrap 读写挂载目录",
-            "hint": "额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写，整个宿主机系统默认是只读挂载于沙箱内的相同位置）。"
           }
         }
       }
@@ -1044,8 +1040,8 @@
       "dashboard": {
         "ssl": {
           "enable": {
-            "description": "启用 WebUI HTTPS",
-            "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。"
+            "description": "启用 AstrBot 面板 HTTPS",
+            "hint": "启用后，AstrBot 面板 将直接使用 HTTPS 提供服务。"
           },
           "cert_file": {
             "description": "SSL 证书文件路径",

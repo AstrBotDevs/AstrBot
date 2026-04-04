@@ -10,7 +10,8 @@
     "theme": {
       "light": "Light Mode",
       "dark": "Dark Mode"
-    }
+    },
+    "logout": "Logout"
   },
   "updateDialog": {
     "title": "Update AstrBot",
@@ -90,7 +91,7 @@
       "passwordHint": "At least 12 characters, including uppercase, lowercase letters, and digits",
       "confirmPasswordHint": "Please enter new password again to confirm",
       "usernameHint": "Leave blank to keep current username",
-      "defaultCredentials": "The default username and password are astrbot. Please change them immediately after logging in to ensure security."
+      "defaultCredentials": "The first user to log in automatically becomes the administrator. Passwords can be reset via the CLI tool if forgotten."
     },
     "validation": {
       "passwordRequired": "Please enter password",

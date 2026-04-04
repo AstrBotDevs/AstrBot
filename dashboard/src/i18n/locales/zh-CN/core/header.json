@@ -2,7 +2,7 @@
   "logoTitle": "AstrBot 仪表盘",
   "version": {
     "hasNewVersion": "AstrBot 有新版本！",
-    "dashboardHasNewVersion": "WebUI 有新版本！"
+    "dashboardHasNewVersion": "AstrBot 面板有新版本！"
   },
   "buttons": {
     "update": "更新",
@@ -10,7 +10,8 @@
     "theme": {
       "light": "浅色模式",
       "dark": "深色模式"
-    }
+    },
+    "logout": "退出登录"
   },
   "updateDialog": {
     "title": "更新 AstrBot",
@@ -31,7 +32,7 @@
       "issueLink": "GitHub Issues"
     },
     "tip": "💡 TIP: ",
-    "tipContinue": "默认在切换版本时会下载对应版本的 WebUI 文件。WebUI 代码位于项目的 dashboard 目录，您可使用 npm 自行构建。",
+    "tipContinue": "默认在切换版本时会下载对应版本的面板文件。面板代码位于项目的 dashboard 目录，您可使用 npm 自行构建。",
     "dockerTip": "切换版本时，会同时尝试更新机器人主程序和管理面板。如果您正在使用 Docker 部署，也可以重新拉取镜像或者使用",
     "dockerTipLink": "watchtower",
     "dockerTipContinue": "来自动监控拉取。",
@@ -90,7 +91,7 @@
       "passwordHint": "长度至少 12 位，且包含大写字母、小写字母和数字",
       "confirmPasswordHint": "请再次输入新密码以确认",
       "usernameHint": "留空表示不修改用户名",
-      "defaultCredentials": "默认用户名和密码为 astrbot，请在登录后立即修改以确保安全。"
+      "defaultCredentials": "首次登录的用户将自动成为管理员。如需修改或重置密码，请使用终端命令行工具。"
     },
     "validation": {
       "passwordRequired": "请输入密码",
