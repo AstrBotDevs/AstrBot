@@ -11,7 +11,9 @@ import { useCustomizerStore } from "@/stores/customizer";
 import { useTheme } from "vuetify";
 
 const vuetifyTheme = useTheme();
-const isDark = computed(() => vuetifyTheme.global.name.value === 'BlueBusinessDarkTheme');
+const isDark = computed(
+  () => vuetifyTheme.global.name.value === "BlueBusinessDarkTheme",
+);
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
 import { getApiBaseUrlValidationError } from "@/utils/request";
@@ -182,7 +184,10 @@ onMounted(() => {
         <div class="ml-2" style="font-size: 26px">
           {{ t("logo.title") }}
         </div>
-        <div class="mt-2 ml-2" style="font-size: 14px; color: var(--v-theme-on-surface-variant)">
+        <div
+          class="mt-2 ml-2"
+          style="font-size: 14px; color: var(--v-theme-on-surface-variant)"
+        >
           <DailyQuote />
         </div>
       </v-card-title>
@@ -208,7 +213,9 @@ onMounted(() => {
             </div>
 
             <v-chip-group
-              v-if="apiStore.presets.length > 0 || apiStore.customPresets.length > 0"
+              v-if="
+                apiStore.presets.length > 0 || apiStore.customPresets.length > 0
+              "
               column
               class="mb-2"
             >
@@ -301,8 +308,10 @@ onMounted(() => {
           </v-btn>
 
           <!-- Auto theme switch -->
-          <div class="d-flex align-center justify-space-between preset-auto-switch">
-            <div class="text-caption">{{ t('autoTheme') }}</div>
+          <div
+            class="d-flex align-center justify-space-between preset-auto-switch"
+          >
+            <div class="text-caption">{{ t("autoTheme") }}</div>
             <v-switch
               v-model="customizer.autoSwitchTheme"
               color="primary"
@@ -342,13 +351,21 @@ onMounted(() => {
 // Dark mode: radial mask + DiamondBg
 .v-theme--bluebusinessdarktheme .login-page-container {
   background-color: rgb(var(--v-theme-containerBg));
-  mask-image: radial-gradient(ellipse 60% 70% at 50% 50%, black 30%, transparent 70%);
-  -webkit-mask-image: radial-gradient(ellipse 60% 70% at 50% 50%, black 30%, transparent 70%);
+  mask-image: radial-gradient(
+    ellipse 60% 70% at 50% 50%,
+    black 30%,
+    transparent 70%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 60% 70% at 50% 50%,
+    black 30%,
+    transparent 70%
+  );
 }
 
 // Light mode: pure white
 .v-theme--bluebusinesstheme .login-page-container {
-  background-color: #FFFFFF;
+  background-color: #ffffff;
   mask-image: none;
   -webkit-mask-image: none;
 }
@@ -367,7 +384,7 @@ onMounted(() => {
 
 // Light mode: clean white card
 .v-theme--bluebusinesstheme .login-card {
-  background: #FFFFFF !important;
+  background: #ffffff !important;
   border: 1px solid rgba(0, 49, 83, 0.12) !important;
   box-shadow: 0 4px 24px rgba(0, 49, 83, 0.08) !important;
   backdrop-filter: none;

@@ -45,7 +45,6 @@ watch(
   () => customizer.uiTheme,
   (newTheme) => {
     if (newTheme) {
-
     }
   },
   { immediate: true },

@@ -140,7 +140,6 @@ export default {
           Authorization: token ? `Bearer ${token}` : "",
         },
         heartbeatTimeout: 300000,
-        
       });
 
       this.eventSource.onopen = () => {
