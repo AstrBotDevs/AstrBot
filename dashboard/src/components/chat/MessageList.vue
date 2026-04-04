@@ -302,8 +302,9 @@ export default {
                     }
                     
                     part.tool_calls.forEach(toolCall => {
-                        // 检查是否是 web_search_tavily 工具调用
-                        if (toolCall.name !== 'web_search_tavily' || !toolCall.result) {
+                        // 检查是否是网页搜索工具调用
+                        const supportedTools = ['web_search_tavily', 'web_search_bocha', 'web_search_exa', 'exa_find_similar'];
+                        if (!supportedTools.includes(toolCall.name) || !toolCall.result) {
                             return;
                         }
                         

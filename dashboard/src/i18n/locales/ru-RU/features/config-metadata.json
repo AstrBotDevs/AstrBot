@@ -117,6 +117,10 @@
                     "description": "API-ключ Tavily",
                     "hint": "Можно добавить несколько ключей для ротации."
                 },
+                "websearch_tavily_base_url": {
+                    "description": "Базовый URL API Tavily",
+                    "hint": "По умолчанию: https://api.tavily.com. Можно изменить на прокси-адрес."
+                },
                 "websearch_bocha_key": {
                     "description": "API-ключ BoCha",
                     "hint": "Можно добавить несколько ключей для ротации."
@@ -124,6 +128,14 @@
                 "websearch_baidu_app_builder_key": {
                     "description": "API-ключ Baidu Qianfan APP Builder",
                     "hint": "Ссылка: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
+                },
+                "websearch_exa_key": {
+                    "description": "API-ключ Exa",
+                    "hint": "Можно добавить несколько ключей для ротации."
+                },
+                "websearch_exa_base_url": {
+                    "description": "Базовый URL API Exa",
+                    "hint": "По умолчанию: https://api.exa.ai. Можно изменить на прокси-адрес."
                 },
                 "web_search_link": {
                     "description": "Показывать ссылки на источники"

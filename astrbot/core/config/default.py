@@ -108,8 +108,11 @@ DEFAULT_CONFIG = {
         "web_search": False,
         "websearch_provider": "default",
         "websearch_tavily_key": [],
+        "websearch_tavily_base_url": "https://api.tavily.com",
         "websearch_bocha_key": [],
         "websearch_baidu_app_builder_key": "",
+        "websearch_exa_key": [],
+        "websearch_exa_base_url": "https://api.exa.ai",
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -3084,7 +3087,13 @@ CONFIG_METADATA_3 = {
                     "provider_settings.websearch_provider": {
                         "description": "网页搜索提供商",
                         "type": "string",
-                        "options": ["default", "tavily", "baidu_ai_search", "bocha"],
+                        "options": [
+                            "default",
+                            "tavily",
+                            "baidu_ai_search",
+                            "bocha",
+                            "exa",
+                        ],
                         "condition": {
                             "provider_settings.web_search": True,
                         },
@@ -3115,6 +3124,34 @@ CONFIG_METADATA_3 = {
                         "hint": "参考：https://console.bce.baidu.com/iam/#/iam/apikey/list",
                         "condition": {
                             "provider_settings.websearch_provider": "baidu_ai_search",
+                        },
+                    },
+                    "provider_settings.websearch_tavily_base_url": {
+                        "description": "Tavily API Base URL",
+                        "type": "string",
+                        "hint": "默认为 https://api.tavily.com，可改为代理地址。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "tavily",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_exa_key": {
+                        "description": "Exa API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "exa",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_exa_base_url": {
+                        "description": "Exa API Base URL",
+                        "type": "string",
+                        "hint": "默认为 https://api.exa.ai，可改为代理地址。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "exa",
+                            "provider_settings.web_search": True,
                         },
                     },
                     "provider_settings.web_search_link": {
