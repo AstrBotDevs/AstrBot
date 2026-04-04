@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
-import axios from 'axios';
+import axios from '@/utils/request';
 import Logo from '@/components/shared/Logo.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useCommonStore } from '@/stores/common';
@@ -513,7 +513,7 @@ const isChristmas = computed(() => {
 
 // 语言切换相关
 const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
-const languages = computed(() => 
+const languages = computed(() =>
   languageOptions.value.map(lang => ({
     code: lang.value,
     name: lang.label,
@@ -593,7 +593,7 @@ onMounted(async () => {
         {{ t('core.header.version.dashboardHasNewVersion') }}
       </small>
     </div>
-    
+
     <!-- Bot/Chat 模式切换按钮 - 手机端隐藏，移入 ... 菜单 -->
 <v-btn-toggle
   v-model="currentMode"
