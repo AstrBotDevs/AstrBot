@@ -66,8 +66,8 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
 
 def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
     password = core_lifecycle_td.astrbot_config["dashboard"]["password"]
-    if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
-        return "astrbot"
+    if isinstance(password, str) and ((password.startswith("pbkdf2_sha256$") or password.startswith("$argon2")) or password.startswith("$argon2")):
+        return "astrbot-test-password"
     return password
 
 

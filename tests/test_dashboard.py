@@ -61,8 +61,8 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
 def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
     """Return a login password compatible with both hashed and plain defaults."""
     password = core_lifecycle_td.astrbot_config["dashboard"]["password"]
-    if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
-        return "astrbot"
+    if isinstance(password, str) and (password.startswith("pbkdf2_sha256$") or password.startswith("$argon2")):
+        return "astrbot-test-password"
     return password
 
 
@@ -74,11 +74,12 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                
             "password": _resolve_dashboard_password(core_lifecycle_td),
         },
     )
     data = await response.get_json()
-    assert data["status"] == "ok"
+    assert data["status"] == "ok", str(data)
     token = data["data"]["token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -98,6 +99,7 @@ async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                
             "password": _resolve_dashboard_password(core_lifecycle_td),
         },
     )
@@ -142,11 +144,11 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
         monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
         monkeypatch.setattr(
             "astrbot.dashboard.server.logger.warning",
-            lambda message: warning_messages.append(message),
+            lambda *args, **kwargs: warning_messages.append(message),
         )
         monkeypatch.setattr(
             "astrbot.dashboard.server.logger.info",
-            lambda message: info_messages.append(message),
+            lambda *args, **kwargs: info_messages.append(message),
         )
 
         config = await server.run()
@@ -1095,7 +1097,7 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
-        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        "astrbot.core.utils.astrbot_path.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
