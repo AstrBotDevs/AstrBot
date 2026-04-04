@@ -461,6 +461,14 @@ class ProviderManager:
                 from .sources.gemini_tts_source import (
                     ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
                 )
+            case "qwen_tts_realtime":
+                from .sources.qwen_tts_realtime_source import (
+                    ProviderQwenTTSRealtime as ProviderQwenTTSRealtime,
+                )
+            case "cosyvoice_tts":
+                from .sources.cosyvoice_tts_source import (
+                    ProviderCosyVoiceTTS as ProviderCosyVoiceTTS,
+                )
             case "openai_embedding":
                 from .sources.openai_embedding_source import (
                     OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,

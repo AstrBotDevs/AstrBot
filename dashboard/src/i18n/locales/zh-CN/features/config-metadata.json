@@ -1334,6 +1334,54 @@
       "dashscope_tts_voice": {
         "description": "音色"
       },
+      "qwen_tts_voice": {
+        "description": "音色",
+        "hint": "Qwen TTS Realtime 音色名称，可选: Cherry(芊悦)、Serena(苏瑶)、Ethan(晨煦) 等。详见阿里云文档。"
+      },
+      "qwen_tts_instructions": {
+        "description": "指令控制",
+        "hint": "通过自然语言描述控制语音表达效果，如'语速较快，带有明显的上扬语调'。仅 qwen3-tts-instruct-flash-realtime 模型支持，长度不超过 1600 Token。"
+      },
+      "qwen_tts_optimize_instructions": {
+        "description": "优化指令",
+        "hint": "启用后模型会自动优化指令描述以获得更好的效果。仅 qwen3-tts-instruct-flash-realtime 模型支持。"
+      },
+      "qwen_tts_speech_rate": {
+        "description": "语速",
+        "hint": "语速调节比例，1.0 为正常语速，大于 1.0 加快，小于 1.0 减慢。"
+      },
+      "qwen_tts_volume": {
+        "description": "音量",
+        "hint": "音量调节比例，1.0 为正常音量。"
+      },
+      "qwen_tts_pitch_rate": {
+        "description": "音调",
+        "hint": "音调调节比例，1.0 为正常音调。"
+      },
+      "qwen_tts_url": {
+        "description": "WebSocket 地址",
+        "hint": "Qwen TTS Realtime WebSocket 地址。北京: wss://dashscope.aliyuncs.com/api-ws/v1/realtime；新加坡: wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime"
+      },
+      "cosyvoice_voice": {
+        "description": "音色",
+        "hint": "CosyVoice 音色名称，可选: longanyang、longxiaochun_v2 等。不同模型版本需使用对应版本的音色。"
+      },
+      "cosyvoice_speech_rate": {
+        "description": "语速",
+        "hint": "语速调节比例，1.0 为正常语速。仅部分模型支持。"
+      },
+      "cosyvoice_volume": {
+        "description": "音量",
+        "hint": "音量调节比例，1.0 为正常音量。仅部分模型支持。"
+      },
+      "cosyvoice_pitch_rate": {
+        "description": "音调",
+        "hint": "音调(音高)调节比例，1.0 为正常音调。仅部分模型支持。"
+      },
+      "cosyvoice_base_url": {
+        "description": "WebSocket 地址",
+        "hint": "CosyVoice WebSocket 地址。北京: wss://dashscope.aliyuncs.com/api-ws/v1/inference；新加坡: wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference"
+      },
       "gm_resp_image_modal": {
         "description": "启用图片模态",
         "hint": "启用后，将支持返回图片内容。需要模型支持，否则会报错。具体支持模型请查看 Google Gemini 官方网站。温馨提示，如果您需要生成图片，请关闭 `启用群员识别` 配置获得更好的效果。"

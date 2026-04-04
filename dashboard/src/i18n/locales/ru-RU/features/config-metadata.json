@@ -1329,6 +1329,54 @@
             "dashscope_tts_voice": {
                 "description": "Голос"
             },
+            "qwen_tts_voice": {
+                "description": "Голос Qwen TTS",
+                "hint": "Имя голоса для Qwen TTS Realtime, например Cherry."
+            },
+            "qwen_tts_instructions": {
+                "description": "Инструкция Qwen TTS",
+                "hint": "Дополнительные инструкции для модели TTS, управляющие стилем речи."
+            },
+            "qwen_tts_optimize_instructions": {
+                "description": "Оптимизировать инструкцию Qwen TTS",
+                "hint": "Если включено, модель автоматически оптимизирует инструкцию для лучшего результата."
+            },
+            "qwen_tts_speech_rate": {
+                "description": "Скорость речи Qwen TTS",
+                "hint": "Множитель скорости речи. 1.0 — нормальная скорость."
+            },
+            "qwen_tts_volume": {
+                "description": "Громкость Qwen TTS",
+                "hint": "Множитель громкости. 1.0 — нормальная громкость."
+            },
+            "qwen_tts_pitch_rate": {
+                "description": "Высота голоса Qwen TTS",
+                "hint": "Множитель высоты голоса. 1.0 — нормальная высота."
+            },
+            "qwen_tts_url": {
+                "description": "WebSocket URL Qwen TTS",
+                "hint": "Адрес WebSocket API для Qwen TTS Realtime."
+            },
+            "cosyvoice_voice": {
+                "description": "Голос CosyVoice",
+                "hint": "Имя голоса для CosyVoice TTS, например longanyang."
+            },
+            "cosyvoice_speech_rate": {
+                "description": "Скорость речи CosyVoice",
+                "hint": "Множитель скорости речи. 1.0 — нормальная скорость."
+            },
+            "cosyvoice_volume": {
+                "description": "Громкость CosyVoice",
+                "hint": "Множитель громкости. 1.0 — нормальная громкость."
+            },
+            "cosyvoice_pitch_rate": {
+                "description": "Высота голоса CosyVoice",
+                "hint": "Множитель высоты голоса. 1.0 — нормальная высота."
+            },
+            "cosyvoice_base_url": {
+                "description": "Base URL CosyVoice",
+                "hint": "Адрес WebSocket API для CosyVoice TTS."
+            },
             "gm_resp_image_modal": {
                 "description": "Включить визуальную модальность",
                 "hint": "Если включено, ответы могут содержать изображения. Требует поддержки моделью. Совет: для генерации изображений отключите 'Распознавание участников'."

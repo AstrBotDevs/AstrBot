@@ -1332,6 +1332,54 @@
       "dashscope_tts_voice": {
         "description": "Voice"
       },
+      "qwen_tts_voice": {
+        "description": "Voice",
+        "hint": "Qwen TTS Realtime voice name, e.g. Cherry, Serena, Ethan, etc. See Alibaba Cloud documentation for details."
+      },
+      "qwen_tts_instructions": {
+        "description": "Instructions",
+        "hint": "Natural language description to control speech expression, e.g. 'fast-paced with an upbeat tone'. Only supported by qwen3-tts-instruct-flash-realtime model, max 1600 tokens."
+      },
+      "qwen_tts_optimize_instructions": {
+        "description": "Optimize Instructions",
+        "hint": "When enabled, the model will automatically optimize the instruction description for better results. Only supported by qwen3-tts-instruct-flash-realtime model."
+      },
+      "qwen_tts_speech_rate": {
+        "description": "Speech Rate",
+        "hint": "Speech rate ratio, 1.0 is normal speed. Greater than 1.0 is faster, less than 1.0 is slower."
+      },
+      "qwen_tts_volume": {
+        "description": "Volume",
+        "hint": "Volume ratio, 1.0 is normal volume."
+      },
+      "qwen_tts_pitch_rate": {
+        "description": "Pitch",
+        "hint": "Pitch ratio, 1.0 is normal pitch."
+      },
+      "qwen_tts_url": {
+        "description": "WebSocket URL",
+        "hint": "Qwen TTS Realtime WebSocket URL. Beijing: wss://dashscope.aliyuncs.com/api-ws/v1/realtime; Singapore: wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime"
+      },
+      "cosyvoice_voice": {
+        "description": "Voice",
+        "hint": "CosyVoice voice name, e.g. longanyang, longxiaochun_v2, etc. Different model versions require corresponding voices."
+      },
+      "cosyvoice_speech_rate": {
+        "description": "Speech Rate",
+        "hint": "Speech rate ratio, 1.0 is normal speed. Only supported by some models."
+      },
+      "cosyvoice_volume": {
+        "description": "Volume",
+        "hint": "Volume ratio, 1.0 is normal volume. Only supported by some models."
+      },
+      "cosyvoice_pitch_rate": {
+        "description": "Pitch",
+        "hint": "Pitch ratio, 1.0 is normal pitch. Only supported by some models."
+      },
+      "cosyvoice_base_url": {
+        "description": "WebSocket URL",
+        "hint": "CosyVoice WebSocket URL. Beijing: wss://dashscope.aliyuncs.com/api-ws/v1/inference; Singapore: wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference"
+      },
       "gm_resp_image_modal": {
         "description": "Enable image modality",
         "hint": "When enabled, responses can include images. Requires model support or it will error. See the Google Gemini website for supported models. Tip: if you need image generation, disable the `Enable member recognition` setting for better results."
