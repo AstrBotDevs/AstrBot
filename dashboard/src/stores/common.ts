@@ -61,7 +61,7 @@ export const useCommonStore = defineStore("common", () => {
         if (!response.ok) {
           throw new Error(`SSE connection failed: ${response.status}`);
         }
-        console.log("SSE stream opened");
+        console.info("SSE stream opened");
         sse_connected.value = true;
 
         if (!response.body) {
@@ -79,7 +79,7 @@ export const useCommonStore = defineStore("common", () => {
           value?: Uint8Array;
         }): Promise<void> => {
           if (done) {
-            console.log("SSE stream closed");
+            console.info("SSE stream closed");
             setTimeout(() => {
               if (isUnmounted.value) return;
               eventSource.value = null;

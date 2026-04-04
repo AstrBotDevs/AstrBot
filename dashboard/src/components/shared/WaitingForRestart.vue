@@ -48,7 +48,7 @@ export default {
           this.startTime = commonStore.getStartTime();
         }
       }
-      console.log("start wfr");
+      console.info("start wfr");
       setTimeout(() => {
         this.timeoutInternal();
       }, 1000);
@@ -59,7 +59,7 @@ export default {
       this.newStartTime = -1;
     },
     timeoutInternal() {
-      console.log("wfr: timeoutInternal", this.newStartTime, this.startTime);
+      console.info("wfr: timeoutInternal", this.newStartTime, this.startTime);
       if (this.newStartTime === -1 && this.cnt < 60 && this.visible) {
         this.checkStartTime();
         this.cnt++;
@@ -80,10 +80,10 @@ export default {
       try {
         const res = await axios.get("/api/stat/start-time", { timeout: 3000 });
         const newStartTime = res.data.data.start_time;
-        console.log("wfr: checkStartTime", newStartTime, this.startTime);
+        console.info("wfr: checkStartTime", newStartTime, this.startTime);
         if (this.startTime !== -1 && newStartTime !== this.startTime) {
           this.newStartTime = newStartTime;
-          console.log("wfr: restarted");
+          console.info("wfr: restarted");
           this.visible = false;
           // reload
           window.location.reload();

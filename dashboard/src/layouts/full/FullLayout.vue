@@ -43,7 +43,7 @@ const checkMigration = async (): Promise<boolean> => {
       ) {
         const result = await migrationDialog.value.open();
         if (result.success) {
-          console.log("Migration completed successfully:", result.message);
+          console.info("Migration completed successfully:", result.message);
           window.location.reload();
         }
       }

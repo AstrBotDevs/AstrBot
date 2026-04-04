@@ -134,7 +134,7 @@ export default {
         const res = await axios.get("/api/stat/get");
         this.stat = res.data.data;
         this.lastUpdated = new Date().toLocaleTimeString();
-        console.log("Dashboard data:", this.stat);
+        console.info("Dashboard data:", this.stat);
       } catch (error) {
         console.error(this.t("status.dataError"), error);
       } finally {

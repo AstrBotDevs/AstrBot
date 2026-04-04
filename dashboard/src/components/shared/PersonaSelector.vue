@@ -192,7 +192,7 @@ function openEditPersona(persona: Persona) {
 
 // 人格保存成功（创建或编辑）
 async function handlePersonaSaved(message: string) {
-  console.log("人格保存成功:", message);
+  console.info("人格保存成功:", message);
   const savedPersonaId = editingPersona.value?.persona_id || "";
   showPersonaDialog.value = false;
   editingPersona.value = null;

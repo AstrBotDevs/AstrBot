@@ -305,7 +305,7 @@ async function accountEdit() {
       }, 2000);
     })
     .catch((err) => {
-      console.log(err);
+      console.info(err);
       accountEditStatus.value.error = true;
       accountEditStatus.value.message =
         typeof err === "string"
@@ -336,7 +336,7 @@ function getVersion() {
       }
     })
     .catch((err) => {
-      console.log(err);
+      console.info(err);
     });
 }
 
@@ -359,12 +359,12 @@ function checkUpdate() {
     })
     .catch((err) => {
       if (err.response && err.response.status == 401) {
-        console.log("401");
+        console.info("401");
         const authStore = useAuthStore();
         authStore.logout();
         return;
       }
-      console.log(err);
+      console.info(err);
       updateStatus.value = err;
     });
 }
@@ -379,7 +379,7 @@ function getReleases() {
       });
     })
     .catch((err) => {
-      console.log(err);
+      console.info(err);
     });
 }
 
@@ -400,7 +400,7 @@ function switchVersion(version: string) {
       }
     })
     .catch((err) => {
-      console.log(err);
+      console.info(err);
       updateStatus.value = err;
     })
     .finally(() => {
@@ -422,7 +422,7 @@ function updateDashboard() {
       }
     })
     .catch((err) => {
-      console.log(err);
+      console.info(err);
       updateStatus.value = err;
     })
     .finally(() => {

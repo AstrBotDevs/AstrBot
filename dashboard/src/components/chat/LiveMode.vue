@@ -227,7 +227,7 @@ async function startLiveMode() {
     await vadRecording.startRecording(
       // onSpeechStart 回调
       () => {
-        console.log("[Live Mode] VAD 检测到开始说话");
+        console.info("[Live Mode] VAD 检测到开始说话");
         isListening.value = false;
         currentStamp = generateStamp();
 
@@ -244,7 +244,7 @@ async function startLiveMode() {
       },
       // onSpeechEnd 回调
       (audio: Float32Array) => {
-        console.log("[Live Mode] VAD 检测到语音结束，音频长度:", audio.length);
+        console.info("[Live Mode] VAD 检测到语音结束，音频长度:", audio.length);
 
         // 将完整音频转换为 PCM16 并发送
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -337,7 +337,7 @@ function connectWebSocket(): Promise<void> {
     ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      console.log("[Live Mode] WebSocket 连接成功");
+      console.info("[Live Mode] WebSocket 连接成功");
       resolve();
     };
 
@@ -349,7 +349,7 @@ function connectWebSocket(): Promise<void> {
     ws.onmessage = handleWebSocketMessage;
 
     ws.onclose = () => {
-      console.log("[Live Mode] WebSocket 连接关闭");
+      console.info("[Live Mode] WebSocket 连接关闭");
     };
 
     // 超时处理

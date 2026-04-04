@@ -28,7 +28,7 @@ function loadTranslations(locale: Locale) {
       console.warn(`Translations not found for locale: ${locale}`);
       // 回退到中文
       if (locale !== "zh-CN") {
-        console.log("Falling back to zh-CN");
+        console.info("Falling back to zh-CN");
         translations.value = staticTranslations["zh-CN"];
       }
     }
@@ -36,7 +36,7 @@ function loadTranslations(locale: Locale) {
     console.error(`Failed to load translations for ${locale}:`, error);
     // 回退到中文
     if (locale !== "zh-CN") {
-      console.log("Falling back to zh-CN");
+      console.info("Falling back to zh-CN");
       translations.value = staticTranslations["zh-CN"];
     }
   }

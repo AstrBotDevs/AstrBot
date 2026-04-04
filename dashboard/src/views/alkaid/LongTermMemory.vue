@@ -660,7 +660,7 @@ export default {
 
           this.updateD3Graph();
           this.updateGraphStats();
-          console.log(
+          console.info(
             "Graph initialized with",
             this.nodes.length,
             "nodes and",
@@ -707,7 +707,7 @@ export default {
     },
 
     onNodeSelect() {
-      console.log("Selected user ID:", this.searchUserId);
+      console.info("Selected user ID:", this.searchUserId);
       if (!this.searchUserId) return;
 
       // 使用API的user_id参数筛选数据

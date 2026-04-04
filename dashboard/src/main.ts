@@ -45,10 +45,10 @@ async function mountApp(app: any, pinia: any, waitForRouter = true) {
   }
   app.mount("#app");
 
-  	// 挂载后同步 Vuetify 主题
-  	const customizer = useCustomizerStore(pinia);
-  	vuetify.theme.change(customizer.uiTheme);
-  	const storedPrimary = localStorage.getItem("themePrimary");
+  // 挂载后同步 Vuetify 主题
+  const customizer = useCustomizerStore(pinia);
+  vuetify.theme.change(customizer.uiTheme);
+  const storedPrimary = localStorage.getItem("themePrimary");
   const storedSecondary = localStorage.getItem("themeSecondary");
   if (storedPrimary || storedSecondary) {
     const themes = vuetify.theme.themes.value;
@@ -78,7 +78,7 @@ async function initApp() {
     localApiUrl !== null ? localApiUrl : configApiUrl || envApiUrl;
 
   if (apiBaseUrl) {
-    console.log(
+    console.info(
       `API Base URL set to: ${apiBaseUrl} (Local: ${localApiUrl}, Config: ${configApiUrl})`,
     );
   }
@@ -152,7 +152,7 @@ async function initApp() {
   // 初始化新的i18n系统，等待完成后再挂载应用
   setupI18n()
     .then(() => {
-      console.log("🌍 新i18n系统初始化完成");
+      console.info("🌍 新i18n系统初始化完成");
       createAndMountApp(true);
     })
     .catch((error) => {

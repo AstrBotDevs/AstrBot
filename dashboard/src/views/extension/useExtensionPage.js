@@ -1593,7 +1593,7 @@ export const useExtensionPage = () => {
         ? route.query.open_config[0]
         : route.query.open_config;
       if (plugin_name) {
-        console.log(`Opening config for plugin: ${plugin_name}`);
+        console.info(`Opening config for plugin: ${plugin_name}`);
         openExtensionConfig(plugin_name);
       }
 

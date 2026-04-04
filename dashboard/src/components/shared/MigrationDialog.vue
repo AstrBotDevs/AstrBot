@@ -256,7 +256,7 @@ const handleMigration = async () => {
       }
     });
 
-    console.log("Migration platform_id_map:", platformIdMap);
+    console.info("Migration platform_id_map:", platformIdMap);
 
     const response = await axios.post("/api/update/migration", {
       platform_id_map: platformIdMap,

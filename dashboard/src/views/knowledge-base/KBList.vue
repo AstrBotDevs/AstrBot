@@ -540,7 +540,7 @@ const deleteKB = async () => {
       kb_id: deleteTarget.value.kb_id,
     });
 
-    console.log("Delete response:", response.data); // 调试日志
+    console.info("Delete response:", response.data); // 调试日志
 
     if (response.data.status === "ok") {
       showSnackbar(t("messages.deleteSuccess"));

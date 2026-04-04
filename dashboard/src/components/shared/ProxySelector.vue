@@ -187,7 +187,7 @@ export default {
         const response = await axios.post("/api/stat/test-ghproxy-connection", {
           proxy_url: proxy,
         });
-        console.log(response.data);
+        console.info(response.data);
         if (response.status === 200) {
           this.proxyStatus[idx] = {
             available: true,

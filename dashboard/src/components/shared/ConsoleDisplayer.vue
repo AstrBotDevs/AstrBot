@@ -131,7 +131,7 @@ export default {
         this.eventSource = null;
       }
 
-      console.log(`正在连接日志流... (尝试次数: ${this.retryAttempts})`);
+      console.info(`正在连接日志流... (尝试次数: ${this.retryAttempts})`);
 
       const token = localStorage.getItem("token");
 
@@ -144,7 +144,7 @@ export default {
       });
 
       this.eventSource.onopen = () => {
-        console.log("日志流连接成功！");
+        console.info("日志流连接成功！");
         this.retryAttempts = 0;
 
         if (!this.lastEventId) {
@@ -187,7 +187,7 @@ export default {
           30000,
         );
 
-        console.log(
+        console.info(
           `⏳ ${delay}ms 后尝试第 ${this.retryAttempts + 1} 次重连...`,
         );
 

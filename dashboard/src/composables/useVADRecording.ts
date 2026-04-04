@@ -65,7 +65,7 @@ export function useVADRecording() {
     try {
       vadInstance.value = await (window.vad.MicVAD as any).new({
         onSpeechStart: () => {
-          console.log("[VAD] Speech started");
+          console.info("[VAD] Speech started");
           isSpeaking.value = true;
           // 调用开始说话回调
           if (onSpeechStartCallback.value) {
@@ -73,10 +73,10 @@ export function useVADRecording() {
           }
         },
         onSpeechRealStart: () => {
-          console.log("[VAD] Real speech started");
+          console.info("[VAD] Real speech started");
         },
         onSpeechEnd: (audio: Float32Array) => {
-          console.log("[VAD] Speech ended, audio length:", audio.length);
+          console.info("[VAD] Speech ended, audio length:", audio.length);
           isSpeaking.value = false;
           // 调用语音结束回调，传递原始音频数据
           if (onSpeechEndCallback.value) {
@@ -84,7 +84,7 @@ export function useVADRecording() {
           }
         },
         onVADMisfire: () => {
-          console.log("[VAD] VAD misfire - speech segment too short");
+          console.info("[VAD] VAD misfire - speech segment too short");
           isSpeaking.value = false;
         },
         onFrameProcessed: (
@@ -117,7 +117,7 @@ export function useVADRecording() {
       });
 
       isInitialized.value = true;
-      console.log("VAD initialized successfully");
+      console.info("VAD initialized successfully");
     } catch (error) {
       console.error("Failed to initialize VAD:", error);
       isInitialized.value = false;
@@ -140,7 +140,7 @@ export function useVADRecording() {
     if (vadInstance.value) {
       vadInstance.value.start();
       isRecording.value = true;
-      console.log("[VAD] Started");
+      console.info("[VAD] Started");
     }
   }
 
@@ -152,7 +152,7 @@ export function useVADRecording() {
       isSpeaking.value = false;
       onSpeechStartCallback.value = null;
       onSpeechEndCallback.value = null;
-      console.log("[VAD] Stopped");
+      console.info("[VAD] Stopped");
     }
   }
 

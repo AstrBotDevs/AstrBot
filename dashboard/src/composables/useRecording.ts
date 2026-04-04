@@ -60,7 +60,7 @@ export function useRecording() {
           });
 
           const audio = response.data.data.filename;
-          console.log("Audio uploaded:", audio);
+          console.info("Audio uploaded:", audio);
           resolve(audio);
         } catch (err) {
           console.error("Error uploading audio:", err);

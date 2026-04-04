@@ -117,7 +117,7 @@ async function getEmbeddingDimensions(providerConfig) {
       response.data.status != "error" &&
       response.data.data?.embedding_dimensions
     ) {
-      console.log(response.data.data.embedding_dimensions);
+      console.info(response.data.data.embedding_dimensions);
       providerConfig.embedding_dimensions =
         response.data.data.embedding_dimensions;
       useToast().success(

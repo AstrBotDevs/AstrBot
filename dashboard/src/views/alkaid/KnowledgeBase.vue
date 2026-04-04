@@ -1559,7 +1559,7 @@ export default {
           ),
         };
 
-        console.log(
+        console.info(
           "Starting URL import with payload:",
           JSON.stringify(payload, null, 2),
         );

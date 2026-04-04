@@ -786,7 +786,7 @@ const startMigration = async () => {
     try {
       const result = await migrationDialog.value.open();
       if (result.success) {
-        console.log("Migration completed successfully:", result.message);
+        console.info("Migration completed successfully:", result.message);
       }
     } catch (error) {
       console.error("Migration dialog error:", error);

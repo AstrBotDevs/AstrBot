@@ -744,14 +744,14 @@ export default {
 
     // 检测是否为暗色模式
     isDark() {
-      console.log("isDark", this.customizerStore.uiTheme);
+      console.info("isDark", this.customizerStore.uiTheme);
       return this.customizerStore.uiTheme === "PurpleThemeDark";
     },
 
     // 将对话历史转换为 MessageList 组件期望的格式
     formattedMessages() {
       return this.conversationHistory.map((msg) => {
-        console.log("处理消息:", msg.role, msg.content);
+        console.info("处理消息:", msg.role, msg.content);
 
         // 将消息内容转换为 MessagePart[] 格式
         const messageParts = this.convertContentToMessageParts(msg.content);
@@ -963,7 +963,7 @@ export default {
       this.isEditingHistory = false;
 
       try {
-        console.log(
+        console.info(
           `正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`,
         );
         const response = await axios.post("/api/conversation/detail", {

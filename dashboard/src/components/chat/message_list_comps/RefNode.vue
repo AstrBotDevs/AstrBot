@@ -25,7 +25,7 @@ const props = defineProps({
   },
 });
 
-console.log("RefNode node:", props.node);
+console.info("RefNode node:", props.node);
 
 // 从父组件注入的暗黑模式状态和搜索结果
 const isDark = inject("isDark", false);

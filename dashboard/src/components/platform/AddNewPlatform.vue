@@ -1076,7 +1076,7 @@ export default {
           conf_id: configId,
         });
 
-        console.log(`成功更新路由表: ${umop} -> ${configId}`);
+        console.info(`成功更新路由表: ${umop} -> ${configId}`);
       } catch (err) {
         console.error("更新路由表失败:", err);
         const errorMessage = err.response?.data?.message || err.message;
@@ -1101,7 +1101,7 @@ export default {
         });
 
         const newConfigId = createRes.data.data.conf_id;
-        console.log(`成功创建新配置文件 ${configName}，ID: ${newConfigId}`);
+        console.info(`成功创建新配置文件 ${configName}，ID: ${newConfigId}`);
 
         return newConfigId;
       } catch (err) {
