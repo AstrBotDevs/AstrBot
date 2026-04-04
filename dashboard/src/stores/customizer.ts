@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import config from "@/config";
 import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
+import vuetify from "@/plugins/vuetify";
 
 export const useCustomizerStore = defineStore("customizer", {
   state: () => ({
@@ -31,6 +32,13 @@ export const useCustomizerStore = defineStore("customizer", {
     SET_UI_THEME(payload: string) {
       this.uiTheme = payload;
       localStorage.setItem("uiTheme", payload);
+      // @ts-ignore
+      if (typeof vuetify.theme?.change === "function") {
+        // @ts-ignore
+        vuetify.theme.change(payload);
+      } else if (vuetify.theme?.global) {
+        vuetify.theme.global.name.value = payload;
+      }
     },
     SET_VIEW_MODE(payload: "bot" | "chat") {
       this.viewMode = payload;
