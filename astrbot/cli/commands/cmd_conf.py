@@ -16,75 +16,20 @@ import zoneinfo
 from collections.abc import Callable
 from typing import Any
 
-import argon2.exceptions as argon2_exceptions
 import click
-from argon2 import PasswordHasher
 
 from astrbot.cli.i18n import t
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
-
-_PASSWORD_HASHER = PasswordHasher()
-
-
-PBKDF2_SALT = b"astrbot-dashboard"
-PBKDF2_ITER = 200_000
-
+from astrbot.core.utils.auth_password import (
+    _is_argon2_hash,
+    _is_pbkdf2_hash,
+    hash_dashboard_password,
+    is_legacy_dashboard_password,
+    validate_dashboard_password,
+)
 
 # --- Password hashing & validation utilities ---
-
-
-def hash_dashboard_password_secure(value: str) -> str:
-    """
-    Hash the dashboard password for storage.
-
-    Stored format:
-        $argon2id$... (if Argon2 available) or pbkdf2_sha256 fallback.
-    """
-    if _PASSWORD_HASHER is not None:
-        try:
-            return _PASSWORD_HASHER.hash(value)
-        except Exception as e:
-            raise click.ClickException(
-                f"Failed to hash password securely (argon2): {e!s}"
-            )
-
-    dk = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), PBKDF2_SALT, PBKDF2_ITER)
-    return f"pbkdf2_sha256${PBKDF2_ITER}${binascii.hexlify(PBKDF2_SALT).decode()}${dk.hex()}"
-
-
-def verify_dashboard_password(value: str, stored_hash: str) -> bool:
-    """
-    Verify a plaintext password `value` against a stored hash.
-
-    Supported format:
-    - Argon2 encoded string: $argon2id$...
-    - PBKDF2 encoded string: pbkdf2_sha256$...
-    - Legacy SHA-256 (64 hex chars) and MD5 (32 hex chars) for backward compatibility.
-    """
-    if not stored_hash:
-        return False
-
-    if stored_hash.startswith("$argon2"):
-        try:
-            return _PASSWORD_HASHER.verify(stored_hash, value)
-        except argon2_exceptions.VerifyMismatchError:
-            return False
-        except Exception as e:
-            raise click.ClickException(f"Password verification failure (argon2): {e!s}")
-
-    if stored_hash.startswith("pbkdf2_sha256$"):
-        try:
-            _, iters_s, salt_hex, digest_hex = stored_hash.split("$", 3)
-            iters = int(iters_s)
-            salt = binascii.unhexlify(salt_hex)
-            expected = digest_hex.lower()
-            dk = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), salt, iters)
-            return dk.hex() == expected
-        except Exception:
-            return False
-
-    return False
 
 
 def is_dashboard_password_hash(value: str) -> bool:
@@ -93,22 +38,7 @@ def is_dashboard_password_hash(value: str) -> bool:
     """
     if not isinstance(value, str) or not value:
         return False
-    return value.startswith("$argon2") or value.startswith("pbkdf2_sha256$")
-
-
-def is_legacy_dashboard_password_hash(value: str) -> bool:
-    """
-    Heuristic: return True if `value` looks like a legacy password hash format.
-    Legacy formats are plain SHA-256 (64 hex chars) or MD5 (32 hex chars) digests.
-    """
-    if not isinstance(value, str) or not value:
-        return False
-    # Legacy plain hex digests: SHA-256 (64 hex chars) or MD5 (32 hex chars)
-    if len(value) == 64 and all(ch in "0123456789abcdef" for ch in value.lower()):
-        return True
-    if len(value) == 32 and all(ch in "0123456789abcdef" for ch in value.lower()):
-        return True
-    return False
+    return _is_argon2_hash(value) or _is_pbkdf2_hash(value)
 
 
 # --- Validators for CLI configuration items ---
@@ -141,8 +71,12 @@ def _validate_dashboard_username(value: str) -> str:
 def _validate_dashboard_password(value: str) -> str:
     if value is None or value == "":
         raise click.ClickException(t("config_password_empty"))
+    try:
+        validate_dashboard_password(value)
+    except ValueError as e:
+        raise click.ClickException(str(e))
     # Return the canonical stored representation.
-    return hash_dashboard_password_secure(value)
+    return hash_dashboard_password(value)
 
 
 def _validate_timezone(value: str) -> str:
@@ -252,7 +186,7 @@ def set_dashboard_credentials(
         if isinstance(password_hash, str) and is_dashboard_password_hash(password_hash):
             _set_nested_item(config, "dashboard.password", password_hash)
         else:
-            if is_legacy_dashboard_password_hash(password_hash):
+            if is_legacy_dashboard_password(password_hash):
                 raise click.ClickException(
                     "Storing legacy dashboard password hashes is no longer supported. "
                     "Please provide the plaintext password (it will be hashed securely), "
@@ -364,7 +298,7 @@ def set_dashboard_password(username: str | None, password: str | None) -> None:
         if isinstance(password, str) and is_dashboard_password_hash(password):
             password_hash = password
         else:
-            if is_legacy_dashboard_password_hash(password):
+            if is_legacy_dashboard_password(password):
                 raise click.ClickException(
                     "Providing legacy dashboard password hashes is no longer supported. "
                     "Please supply the plaintext password (it will be hashed securely), "
