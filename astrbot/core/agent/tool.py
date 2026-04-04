@@ -217,6 +217,28 @@ class ToolSet:
             result.append(func_def)
         return result
 
+    def openai_responses_schema(
+        self, omit_empty_parameter_field: bool = False
+    ) -> list[dict]:
+        """Convert tools to OpenAI Responses API schema format.
+
+        Note: Responses API expects top-level `name` instead of nested `function.name`.
+        """
+        result = []
+        for tool_def in self.openai_schema(
+            omit_empty_parameter_field=omit_empty_parameter_field
+        ):
+            func_def = tool_def.get("function", {})
+            if not func_def:
+                continue
+            converted = {"type": "function", "name": func_def.get("name", "")}
+            if func_def.get("description"):
+                converted["description"] = func_def["description"]
+            if func_def.get("parameters") is not None:
+                converted["parameters"] = func_def["parameters"]
+            result.append(converted)
+        return result
+
     def anthropic_schema(self) -> list[dict]:
         """Convert tools to Anthropic API format."""
         result = []
