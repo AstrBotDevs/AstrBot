@@ -13,10 +13,10 @@ import anyio
 
 from astrbot import logger
 from astrbot._internal.abc.base_astrbot_orchestrator import BaseAstrbotOrchestrator
-from astrbot._internal.protocols._mcp.client import McpClient
 from astrbot._internal.protocols._abp.client import AstrbotAbpClient
 from astrbot._internal.protocols._acp.client import AstrbotAcpClient
 from astrbot._internal.protocols._lsp.client import AstrbotLspClient
+from astrbot._internal.protocols._mcp.client import McpClient
 from astrbot._internal.stars import RuntimeStatusStar
 
 log = logger

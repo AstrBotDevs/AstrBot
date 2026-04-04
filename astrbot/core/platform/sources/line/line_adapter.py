@@ -352,10 +352,7 @@ class LinePlatformAdapter(Platform):
         if original_name:
             safe_stem = Path(original_name).stem.strip()
             safe_stem = "".join(
-
-                    ch if ch.isalnum() or ch in ("-", "_", ".") else "_"
-                    for ch in safe_stem
-
+                ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in safe_stem
             )
             safe_stem = safe_stem.strip("._")
             if safe_stem:

@@ -9,8 +9,6 @@ This module provides:
 
 from __future__ import annotations
 
-import binascii
-import hashlib
 import json
 import zoneinfo
 from collections.abc import Callable

@@ -15,7 +15,9 @@ try:
     )
 
     _MultiModalConversationType: type = MultiModalConversation
-except ImportError:  # pragma: no cover - older dashscope versions without Qwen TTS support
+except (
+    ImportError
+):  # pragma: no cover - older dashscope versions without Qwen TTS support
     MultiModalConversation = None  # type: ignore
     _MultiModalConversationType = None  # type: ignore
 

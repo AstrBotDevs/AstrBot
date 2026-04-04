@@ -427,12 +427,10 @@ class ProviderGoogleGenAI(Provider):
         chain: list[Comp.BaseMessageComponent] = []
         part: types.Part
         if all(
-
-                part.inline_data
-                and part.inline_data.mime_type
-                and part.inline_data.mime_type.startswith("image/")
-                for part in result_parts
-
+            part.inline_data
+            and part.inline_data.mime_type
+            and part.inline_data.mime_type.startswith("image/")
+            for part in result_parts
         ):
             chain.append(Comp.Plain("这是图片"))
         for part in result_parts:

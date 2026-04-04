@@ -342,19 +342,14 @@ class MisskeyPlatformAdapter(Platform):
                     user_info = self._user_cache.get(user_id_for_cache)
                 text = add_at_mention_if_needed(text, user_info, has_at_user)
             has_file_components = any(
-
-                    isinstance(comp, Comp.Image)
-                    or isinstance(comp, Comp.File)
-                    or hasattr(comp, "convert_to_file_path")
-                    or hasattr(comp, "get_file")
-                    or any(
-
-                            hasattr(comp, a)
-                            for a in ("file", "url", "path", "src", "source")
-
-                    )
-                    for comp in message_chain.chain
-
+                isinstance(comp, Comp.Image)
+                or isinstance(comp, Comp.File)
+                or hasattr(comp, "convert_to_file_path")
+                or hasattr(comp, "get_file")
+                or any(
+                    hasattr(comp, a) for a in ("file", "url", "path", "src", "source")
+                )
+                for comp in message_chain.chain
             )
             if not text or not text.strip():
                 if not has_file_components:
@@ -445,10 +440,8 @@ class MisskeyPlatformAdapter(Platform):
                         or hasattr(comp, "convert_to_file_path")
                         or hasattr(comp, "get_file")
                         or any(
-
-                                hasattr(comp, a)
-                                for a in ("file", "url", "path", "src", "source")
-
+                            hasattr(comp, a)
+                            for a in ("file", "url", "path", "src", "source")
                         )
                     ):
                         file_components.append(comp)

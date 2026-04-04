@@ -277,10 +277,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
             self.message_obj.raw_message, "mentions"
         ):
             return any(
-
-                    mention.id == int(self.message_obj.self_id)
-                    for mention in self.message_obj.raw_message.mentions
-
+                mention.id == int(self.message_obj.self_id)
+                for mention in self.message_obj.raw_message.mentions
             )
         return False
 

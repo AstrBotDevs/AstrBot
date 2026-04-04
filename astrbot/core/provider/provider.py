@@ -360,7 +360,9 @@ class EmbeddingProvider(AbstractProvider):
         results = await asyncio.gather(*tasks, return_exceptions=True)
         errors = [r for r in results if isinstance(r, Exception)]
         if errors:
-            error_msg = f"有 {len(errors)} 个批次处理失败: {'; '.join(str(e) for e in errors)}"
+            error_msg = (
+                f"有 {len(errors)} 个批次处理失败: {'; '.join(str(e) for e in errors)}"
+            )
             raise Exception(error_msg)
         return all_embeddings
 
