@@ -1077,7 +1077,11 @@
       },
       "rerank_api_base": {
         "description": "重排序模型 API Base URL",
-        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。"
+        "hint": "最终请求路径由 Base URL 和路径后缀拼接而成（默认为 /v1/rerank）。"
+      },
+      "rerank_api_suffix": {
+        "description": "API URL 路径后缀",
+        "hint": "追加到 base_url 后的路径后缀，如 /v1/rerank。留空则不追加。"
       },
       "rerank_api_key": {
         "description": "API Key",
