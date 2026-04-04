@@ -90,7 +90,7 @@
       "passwordHint": "At least 12 characters, including uppercase, lowercase letters, and digits",
       "confirmPasswordHint": "Please enter new password again to confirm",
       "usernameHint": "Leave blank to keep current username",
-      "defaultCredentials": "The new AstrBot version has improved security. Please change your password."
+      "defaultCredentials": "The default username and password are astrbot. Please change them immediately after logging in to ensure security."
     },
     "validation": {
       "passwordRequired": "Please enter password",
