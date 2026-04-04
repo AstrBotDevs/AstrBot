@@ -54,7 +54,7 @@ def _validate_dashboard_port(value: str) -> int:
     try:
         port = int(value)
     except ValueError:
-        raise click.ClickException(t("config_port_must_be_number"))
+        raise click.ClickException(t("config_port_must_be_number")) from None
     if port < 1 or port > 65535:
         raise click.ClickException(t("config_port_range_invalid"))
     return port

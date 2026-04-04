@@ -3,6 +3,7 @@ import AuthLogin from "../authForms/AuthLogin.vue";
 import LanguageSwitcher from "@/components/shared/LanguageSwitcher.vue";
 import { onMounted, ref } from "vue";
 import { useAuthStore } from "@/stores/auth";
+import { useApiStore } from "@/stores/api";
 import { useRouter } from "vue-router";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
@@ -11,9 +12,38 @@ import { useTheme } from "vuetify";
 const cardVisible = ref(false);
 const router = useRouter();
 const authStore = useAuthStore();
+const apiStore = useApiStore();
 const customizer = useCustomizerStore();
 const { tm: t } = useModuleI18n("features/auth");
 const theme = useTheme();
+
+const serverConfigDialog = ref(false);
+const apiUrl = ref(apiStore.apiBaseUrl);
+
+const showAddPreset = ref(false);
+const newPresetName = ref("");
+const newPresetUrl = ref("");
+
+function saveApiUrl() {
+  apiStore.setApiBaseUrl(apiUrl.value);
+  serverConfigDialog.value = false;
+  window.location.reload();
+}
+
+function savePreset() {
+  if (!newPresetName.value || !newPresetUrl.value) return;
+  apiStore.addPreset({
+    name: newPresetName.value,
+    url: newPresetUrl.value,
+  });
+  showAddPreset.value = false;
+  newPresetName.value = "";
+  newPresetUrl.value = "";
+}
+
+function isCustomPreset(name: string) {
+  return apiStore.customPresets.some((p) => p.name === name);
+}
 
 // 主题切换函数
 function toggleTheme() {
@@ -25,15 +55,10 @@ function toggleTheme() {
   theme.global.name.value = newTheme;
 }
 
-onMounted(async () => {
+onMounted(() => {
   // 检查用户是否已登录，如果已登录则重定向
   if (authStore.has_token()) {
-    const onboardingCompleted = await authStore.checkOnboardingCompleted();
-    if (onboardingCompleted) {
-      router.push("/dashboard/default");
-    } else {
-      router.push("/welcome");
-    }
+    router.push(authStore.returnUrl || "/");
     return;
   }
 
@@ -63,9 +88,31 @@ onMounted(async () => {
                 height: 24px !important;
                 opacity: 0.9 !important;
                 align-self: center !important;
-                border-color: rgba(var(--v-theme-primary), 0.45) !important;
+                border-color: rgba(180, 148, 246, 0.8) !important;
               "
             ></v-divider>
+
+            <v-btn
+              @click="serverConfigDialog = true"
+              icon
+              variant="text"
+              size="small"
+            >
+              <v-icon
+                size="18"
+                :color="
+                  useCustomizerStore().uiTheme === 'PurpleTheme'
+                    ? '#5e35b1'
+                    : '#d7c5fa'
+                "
+              >
+                mdi-server
+              </v-icon>
+              <v-tooltip activator="parent" location="top">
+                {{ t("serverConfig.tooltip") }}
+              </v-tooltip>
+            </v-btn>
+
             <v-btn
               @click="toggleTheme"
               class="theme-toggle-btn"
@@ -73,7 +120,14 @@ onMounted(async () => {
               variant="text"
               size="small"
             >
-              <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
+              <v-icon
+                size="18"
+                :color="
+                  useCustomizerStore().uiTheme === 'PurpleTheme'
+                    ? '#5e35b1'
+                    : '#d7c5fa'
+                "
+              >
                 mdi-white-balance-sunny
               </v-icon>
               <v-tooltip activator="parent" location="top">
@@ -91,6 +145,107 @@ onMounted(async () => {
         <AuthLogin />
       </v-card-text>
     </v-card>
+
+    <v-dialog v-model="serverConfigDialog" max-width="450">
+      <v-card>
+        <v-card-title>{{ t("serverConfig.title") }}</v-card-title>
+        <v-card-text>
+          <div class="text-body-2 text-medium-emphasis mb-4">
+            {{ t("serverConfig.description") }}
+          </div>
+
+          <div
+            v-if="
+              (apiStore.presets && apiStore.presets.length > 0) ||
+              apiStore.customPresets
+            "
+            class="mb-4"
+          >
+            <div class="d-flex justify-space-between align-center mb-2">
+              <div class="text-caption text-medium-emphasis">
+                {{ t("serverConfig.presetLabel") }}
+              </div>
+              <v-btn
+                size="x-small"
+                variant="text"
+                icon
+                @click="showAddPreset = !showAddPreset"
+              >
+                <v-icon>mdi-plus</v-icon>
+              </v-btn>
+            </div>
+
+            <v-expand-transition>
+              <div
+                v-if="showAddPreset"
+                class="mb-2 pa-2 bg-grey-lighten-4 rounded border"
+              >
+                <v-text-field
+                  v-model="newPresetName"
+                  label="Name"
+                  density="compact"
+                  hide-details
+                  class="mb-2"
+                  variant="outlined"
+                  bg-color="white"
+                ></v-text-field>
+                <v-text-field
+                  v-model="newPresetUrl"
+                  label="URL"
+                  density="compact"
+                  hide-details
+                  class="mb-2"
+                  variant="outlined"
+                  bg-color="white"
+                ></v-text-field>
+                <v-btn
+                  size="small"
+                  block
+                  color="primary"
+                  variant="flat"
+                  @click="savePreset"
+                  >Add Preset</v-btn
+                >
+              </div>
+            </v-expand-transition>
+
+            <v-chip-group column>
+              <v-chip
+                v-for="preset in apiStore.presets"
+                :key="preset.name"
+                size="small"
+                @click="apiUrl = preset.url"
+                :variant="apiUrl === preset.url ? 'flat' : 'tonal'"
+                :color="apiUrl === preset.url ? 'primary' : undefined"
+                :closable="isCustomPreset(preset.name)"
+                @click:close="apiStore.removePreset(preset.name)"
+              >
+                {{ preset.name }}
+              </v-chip>
+            </v-chip-group>
+          </div>
+
+          <v-text-field
+            v-model="apiUrl"
+            :label="t('serverConfig.label')"
+            :placeholder="t('serverConfig.placeholder')"
+            :hint="t('serverConfig.hint')"
+            persistent-hint
+            variant="outlined"
+            density="compact"
+          ></v-text-field>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="serverConfigDialog = false">{{
+            t("serverConfig.cancel")
+          }}</v-btn>
+          <v-btn color="primary" variant="flat" @click="saveApiUrl">{{
+            t("serverConfig.save")
+          }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
