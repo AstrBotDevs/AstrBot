@@ -3,7 +3,7 @@ import { md5 } from 'js-md5';
 export type LoginChallenge = {
   challenge_id: string;
   nonce: string;
-  algorithm: 'pbkdf2_sha256' | 'legacy_md5';
+  algorithm: 'pbkdf2_sha256' | 'legacy_md5' | 'argon2';
   iterations?: number;
   salt?: string;
 };

@@ -1,14 +1,12 @@
 import { defineStore } from "pinia";
 import { router } from "@/router";
-import axios from "axios";
+import axios from "@/utils/request";
 import { createLoginProof, type LoginChallenge } from "@/utils/authLoginProof";
 
-export const useAuthStore = defineStore({
-  id: "auth",
+export const useAuthStore = defineStore("auth", {
   state: () => ({
-    // @ts-ignore
     username: "",
-    returnUrl: null,
+    returnUrl: null as string | null,
   }),
   actions: {
     async login(username: string, password: string): Promise<void> {
@@ -20,7 +18,6 @@ export const useAuthStore = defineStore({
         }
 
         let res;
-        // @ts-ignore
         if (challenge.algorithm === "argon2") {
           res = await axios.post("/api/auth/login", {
             username: username,

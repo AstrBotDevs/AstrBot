@@ -68,6 +68,7 @@ async function validate(_values: any, { setErrors }: any) {
       variant="outlined"
       prepend-inner-icon="mdi-account"
       :disabled="loading"
+      autocomplete="username"
     />
 
     <v-text-field
@@ -81,6 +82,7 @@ async function validate(_values: any, { setErrors }: any) {
       class="pwd-input"
       prepend-inner-icon="mdi-lock"
       :disabled="loading"
+      autocomplete="current-password"
       @click:append="show1 = !show1"
     />
 
