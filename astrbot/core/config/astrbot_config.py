@@ -5,6 +5,9 @@ import os
 from typing import Any
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.auth_password import (
+    normalize_dashboard_password_hash,
+)
 
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
@@ -60,6 +63,13 @@ class AstrBotConfig(dict):
 
         # 检查配置完整性,并插入
         has_new = self.check_config_integrity(default_config, conf)
+        if (
+            "dashboard" in conf
+            and isinstance(conf["dashboard"], dict)
+            and not conf["dashboard"].get("password")
+        ):
+            conf["dashboard"]["password"] = normalize_dashboard_password_hash("")
+            has_new = True
         self.update(conf)
         if has_new:
             self.save_config()

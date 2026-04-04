@@ -1,112 +1,56 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
-import { useAuthStore } from "@/stores/auth";
-import { Form } from "vee-validate";
-import { useModuleI18n } from "@/i18n/composables";
+import { ref, useCssModule } from 'vue';
+import { useAuthStore } from '@/stores/auth';
+import { Form } from 'vee-validate';
+import { useModuleI18n } from '@/i18n/composables';
 
-const { tm: t } = useModuleI18n("features/auth");
+const { tm: t } = useModuleI18n('features/auth');
 
+const valid = ref(false);
 const show1 = ref(false);
-const password = ref("");
-const username = ref("");
+const password = ref('');
+const username = ref('');
 const loading = ref(false);
 
-// 从URL参数读取用户名
-const params = new URLSearchParams(window.location.search);
-const usernameParam = params.get("username");
-if (usernameParam) {
-  username.value = usernameParam;
-}
-
-// 监听从LoginPage传来的用户名参数
-function handleUsernameParam(event: Event) {
-  const customEvent = event as CustomEvent<{ username: string }>;
-  username.value = customEvent.detail.username;
-}
-
-onMounted(() => {
-  window.addEventListener("astrbot-url-param-username", handleUsernameParam);
-});
-
-onUnmounted(() => {
-  window.removeEventListener("astrbot-url-param-username", handleUsernameParam);
-});
-
-async function validate(_values: any, { setErrors }: any) {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+async function validate(values: any, { setErrors }: any) {
   loading.value = true;
 
   const authStore = useAuthStore();
-  const redirectParam = new URLSearchParams(window.location.search).get(
-    "redirect",
-  );
-  // 将 string | null 显式断言为与 store 兼容的类型，避免因 store 初始状态推断不完整而导致的编译错误
-  authStore.returnUrl = redirectParam as unknown as string | null;
-  return authStore
-    .login(username.value, password.value)
-    .then(() => {
-      loading.value = false;
-    })
-    .catch((err) => {
-      setErrors({ apiError: err });
-      loading.value = false;
-    });
+  // @ts-ignore
+  authStore.returnUrl = new URLSearchParams(window.location.search).get('redirect');
+  return authStore.login(username.value, password.value).then((res) => {
+    console.log(res);
+    loading.value = false;
+  }).catch((err) => {
+    setErrors({ apiError: err });
+    loading.value = false;
+  });
 }
+
 </script>
 
 <template>
-  <Form
-    v-slot="{ errors, isSubmitting }"
-    class="mt-4 login-form"
-    @submit="validate"
-  >
-    <v-text-field
-      v-model="username"
-      :label="t('username')"
-      class="mb-6 input-field"
-      required
-      hide-details="auto"
-      variant="outlined"
-      prepend-inner-icon="mdi-account"
-      :disabled="loading"
-    />
+  <Form @submit="validate" class="mt-4 login-form" v-slot="{ errors, isSubmitting }">
+    <v-text-field v-model="username" :label="t('username')" class="mb-6 input-field" required hide-details="auto"
+      variant="outlined" prepend-inner-icon="mdi-account" :disabled="loading"></v-text-field>
 
-    <v-text-field
-      v-model="password"
-      :label="t('password')"
-      required
-      variant="outlined"
-      hide-details="auto"
-      :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
-      :type="show1 ? 'text' : 'password'"
-      class="pwd-input"
-      prepend-inner-icon="mdi-lock"
-      :disabled="loading"
-      @click:append="show1 = !show1"
-    />
+    <v-text-field v-model="password" :label="t('password')" required variant="outlined" hide-details="auto"
+      :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'" :type="show1 ? 'text' : 'password'"
+      @click:append="show1 = !show1" class="pwd-input" prepend-inner-icon="mdi-lock" :disabled="loading"></v-text-field>
 
     <div class="mt-2">
-      <small class="hint-label">{{ t("defaultHint") }}</small>
+      <small style="color: grey;">{{ t('defaultHint') }}</small>
     </div>
 
-    <v-btn
-      color="secondary"
-      :loading="isSubmitting || loading"
-      block
-      class="login-btn mt-8"
-      variant="flat"
-      size="large"
-      type="submit"
-    >
-      <span class="login-btn-text">{{ t("login") }}</span>
+
+    <v-btn color="secondary" :loading="isSubmitting || loading" block class="login-btn mt-8" variant="flat" size="large"
+      :disabled="valid" type="submit">
+      <span class="login-btn-text">{{ t('login') }}</span>
     </v-btn>
 
     <div v-if="errors.apiError" class="mt-4 error-container">
-      <v-alert
-        color="error"
-        variant="tonal"
-        icon="mdi-alert-circle"
-        border="start"
-      >
+      <v-alert color="error" variant="tonal" icon="mdi-alert-circle" border="start">
         {{ errors.apiError }}
       </v-alert>
     </div>
@@ -178,8 +122,8 @@ async function validate(_values: any, { setErrors }: any) {
     }
   }
 
-  .hint-label {
-    color: var(--v-theme-on-surface-variant);
+  .hint-text {
+    color: var(--v-theme-secondaryText);
     padding-left: 5px;
   }
 

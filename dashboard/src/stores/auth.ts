@@ -1,19 +1,39 @@
 import { defineStore } from "pinia";
 import { router } from "@/router";
-import axios from "@/utils/request";
+import axios from "axios";
+import { createLoginProof, type LoginChallenge } from "@/utils/authLoginProof";
 
-export const useAuthStore = defineStore("auth", {
+export const useAuthStore = defineStore({
+  id: "auth",
   state: () => ({
+    // @ts-ignore
     username: "",
     returnUrl: null,
   }),
   actions: {
     async login(username: string, password: string): Promise<void> {
       try {
-        const res = await axios.post("/api/auth/login", {
-          username: username,
-          password: password,
-        });
+        const challengeRes = await axios.post("/api/auth/login/challenge");
+        const challenge = challengeRes.data?.data as LoginChallenge | undefined;
+        if (!challenge) {
+          return Promise.reject("Failed to initialize secure login");
+        }
+
+        let res;
+        // @ts-ignore
+        if (challenge.algorithm === "argon2") {
+          res = await axios.post("/api/auth/login", {
+            username: username,
+            password: password,
+          });
+        } else {
+          const passwordProof = await createLoginProof(password, challenge);
+          res = await axios.post("/api/auth/login", {
+            username: username,
+            challenge_id: challenge.challenge_id,
+            password_proof: passwordProof,
+          });
+        }
 
         if (res.data.status === "error") {
           return Promise.reject(res.data.message);
@@ -22,7 +42,17 @@ export const useAuthStore = defineStore("auth", {
         this.username = res.data.data.username;
         localStorage.setItem("user", this.username);
         localStorage.setItem("token", res.data.data.token);
-        localStorage.setItem("change_pwd_hint", res.data.data?.change_pwd_hint);
+        if (res.data.data?.change_pwd_hint || res.data.data?.legacy_pwd_hint) {
+          localStorage.setItem("change_pwd_hint", "true");
+          if (res.data.data?.legacy_pwd_hint) {
+            localStorage.setItem("legacy_pwd_hint", "true");
+          } else {
+            localStorage.removeItem("legacy_pwd_hint");
+          }
+        } else {
+          localStorage.removeItem("change_pwd_hint");
+          localStorage.removeItem("legacy_pwd_hint");
+        }
 
         const onboardingCompleted = await this.checkOnboardingCompleted();
         this.returnUrl = null;
@@ -70,6 +100,8 @@ export const useAuthStore = defineStore("auth", {
       this.username = "";
       localStorage.removeItem("user");
       localStorage.removeItem("token");
+      localStorage.removeItem("change_pwd_hint");
+      localStorage.removeItem("legacy_pwd_hint");
       router.push("/auth/login");
     },
     has_token(): boolean {

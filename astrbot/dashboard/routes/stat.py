@@ -5,16 +5,14 @@ import threading
 import time
 import traceback
 from collections import defaultdict
-from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from functools import cmp_to_key
 from pathlib import Path
 
 import aiohttp
-import anyio
 import psutil
 from quart import request
-from sqlmodel import asc, select
+from sqlmodel import col, select
 
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.config import VERSION
@@ -23,22 +21,15 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.migration.helper import check_migration_needed_v4
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.auth_password import (
+    is_default_dashboard_password,
+    is_legacy_dashboard_password,
+)
 from astrbot.core.utils.io import get_dashboard_version
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 from astrbot.core.utils.version_comparator import VersionComparator
 
-from .route import (
-    Response,
-    Route,
-    RouteContext,
-    build_runtime_status_data,
-    is_runtime_request_ready,
-    runtime_loading_response,
-)
-
-
-def _resolve_path(path: str | Path) -> Path:
-    return Path(path).resolve(strict=False)
+from .route import Response, Route, RouteContext
 
 
 class StatRoute(Route):
@@ -53,7 +44,6 @@ class StatRoute(Route):
             "/stat/get": ("GET", self.get_stat),
             "/stat/provider-tokens": ("GET", self.get_provider_token_stats),
             "/stat/version": ("GET", self.get_version),
-            "/stat/runtime-status": ("GET", self.get_runtime_status),
             "/stat/start-time": ("GET", self.get_start_time),
             "/stat/restart-core": ("POST", self.restart_core),
             "/stat/test-ghproxy-connection": ("POST", self.test_ghproxy_connection),
@@ -73,11 +63,11 @@ class StatRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .to_json()
+                .__dict__
             )
 
         await self.core_lifecycle.restart()
-        return Response().ok().to_json()
+        return Response().ok().__dict__
 
     def _get_running_time_components(self, total_seconds: int):
         """将总秒数转换为时分秒组件"""
@@ -86,7 +76,13 @@ class StatRoute(Route):
         return {"hours": hours, "minutes": minutes, "seconds": seconds}
 
     def is_default_cred(self):
-        return False
+        username = self.config["dashboard"]["username"]
+        password = self.config["dashboard"]["password"]
+        return (
+            username == "astrbot"
+            and is_default_dashboard_password(password)
+            and not DEMO_MODE
+        )
 
     async def get_version(self):
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
@@ -98,31 +94,26 @@ class StatRoute(Route):
                     "version": VERSION,
                     "dashboard_version": await get_dashboard_version(),
                     "change_pwd_hint": self.is_default_cred(),
+                    "legacy_pwd_hint": is_legacy_dashboard_password(
+                        self.config["dashboard"]["password"]
+                    ),
                     "need_migration": need_migration,
                 },
             )
-            .to_json()
+            .__dict__
         )
 
     async def get_start_time(self):
-        if not is_runtime_request_ready(self.core_lifecycle):
-            return runtime_loading_response(
-                self.core_lifecycle,
-                include_failure_details=False,
-            )
-        return Response().ok({"start_time": self.core_lifecycle.start_time}).to_json()
-
-    async def get_runtime_status(self):
-        return Response().ok(build_runtime_status_data(self.core_lifecycle)).to_json()
+        return Response().ok({"start_time": self.core_lifecycle.start_time}).__dict__
 
     async def get_storage_status(self):
         try:
             status = await asyncio.to_thread(self.storage_cleaner.get_status)
-            return Response().ok(status).to_json()
+            return Response().ok(status).__dict__
         except Exception:
             logger.error("获取存储占用失败", exc_info=True)
             return (
-                Response().error("获取存储占用失败, 请查看后端日志了解详情。").to_json()
+                Response().error("获取存储占用失败，请查看后端日志了解详情。").__dict__
             )
 
     async def cleanup_storage(self):
@@ -133,16 +124,14 @@ class StatRoute(Route):
                 target = str(data.get("target", "all"))
 
             result = await asyncio.to_thread(self.storage_cleaner.cleanup, target)
-            return Response().ok(result).to_json()
+            return Response().ok(result).__dict__
         except ValueError as e:
-            return Response().error(str(e)).to_json()
+            return Response().error(str(e)).__dict__
         except Exception:
             logger.error("清理存储失败", exc_info=True)
-            return Response().error("清理存储失败, 请查看后端日志了解详情。").to_json()
+            return Response().error("清理存储失败，请查看后端日志了解详情。").__dict__
 
     async def get_stat(self):
-        if not is_runtime_request_ready(self.core_lifecycle):
-            return runtime_loading_response(self.core_lifecycle)
         offset_sec = request.args.get("offset_sec", 86400)
         offset_sec = int(offset_sec)
         try:
@@ -162,14 +151,13 @@ class StatRoute(Route):
                     idx += 1
                 message_time_based_stats.append([bucket_end, cnt])
 
-            stat_dict = asdict(stat)
+            stat_dict = stat.__dict__
 
             cpu_percent = psutil.cpu_percent(interval=0.5)
             thread_count = threading.active_count()
 
             # 获取插件信息
-            star_ctx = self.core_lifecycle.star_context
-            plugins = star_ctx.get_all_stars() if star_ctx else []
+            plugins = self.core_lifecycle.star_context.get_all_stars()
             plugin_info = []
             for plugin in plugins:
                 info = {
@@ -191,9 +179,7 @@ class StatRoute(Route):
                     ).platform,
                     "message_count": self.db_helper.get_total_message_count() or 0,
                     "platform_count": len(
-                        self.core_lifecycle.platform_manager.get_insts()
-                        if self.core_lifecycle.platform_manager
-                        else [],
+                        self.core_lifecycle.platform_manager.get_insts(),
                     ),
                     "plugin_count": len(plugins),
                     "plugins": plugin_info,
@@ -209,10 +195,10 @@ class StatRoute(Route):
                 },
             )
 
-            return Response().ok(stat_dict).to_json()
+            return Response().ok(stat_dict).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(e.__str__()).to_json()
+            return Response().error(e.__str__()).__dict__
 
     @staticmethod
     def _ensure_aware_utc(value: datetime) -> datetime:
@@ -247,7 +233,7 @@ class StatRoute(Route):
                         ProviderStat.agent_type == "internal",
                         ProviderStat.created_at >= query_start_utc,
                     )
-                    .order_by(asc(ProviderStat.created_at))
+                    .order_by(col(ProviderStat.created_at).asc())
                 )
                 records = result.scalars().all()
 
@@ -416,13 +402,13 @@ class StatRoute(Route):
             return Response().error(f"Error: {e!s}").__dict__
 
     async def test_ghproxy_connection(self):
-        """测试 GitHub 代理连接是否可用｡"""
+        """测试 GitHub 代理连接是否可用。"""
         try:
             data = await request.get_json()
             proxy_url: str = data.get("proxy_url")
 
             if not proxy_url:
-                return Response().error("proxy_url is required").to_json()
+                return Response().error("proxy_url is required").__dict__
 
             proxy_url = proxy_url.rstrip("/")
 
@@ -442,65 +428,71 @@ class StatRoute(Route):
                     ret = {
                         "latency": round((end_time - start_time) * 1000, 2),
                     }
-                    return Response().ok(data=ret).to_json()
+                    return Response().ok(data=ret).__dict__
                 return (
-                    Response()
-                    .error(f"Failed. Status code: {response.status}")
-                    .to_json()
+                    Response().error(f"Failed. Status code: {response.status}").__dict__
                 )
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"Error: {e!s}").to_json()
+            return Response().error(f"Error: {e!s}").__dict__
 
     async def get_changelog(self):
         """获取指定版本的更新日志"""
         try:
             version = request.args.get("version")
             if not version:
-                return Response().error("version parameter is required").to_json()
+                return Response().error("version parameter is required").__dict__
 
             version = version.lstrip("v")
 
             # 防止路径遍历攻击
             if not re.match(r"^[a-zA-Z0-9._-]+$", version):
-                return Response().error("Invalid version format").to_json()
+                return Response().error("Invalid version format").__dict__
             if ".." in version or "/" in version or "\\" in version:
-                return Response().error("Invalid version format").to_json()
+                return Response().error("Invalid version format").__dict__
 
             filename = f"v{version}.md"
             project_path = get_astrbot_path()
-            changelogs_dir = _resolve_path(Path(project_path) / "changelogs")
-            changelog_path = _resolve_path(changelogs_dir / filename)
+            changelogs_dir = os.path.join(project_path, "changelogs")
+            changelog_path = os.path.join(changelogs_dir, filename)
 
-            # 验证最终路径在预期的 changelogs 目录内(防止路径遍历)
-            try:
-                changelog_path.relative_to(changelogs_dir)
-            except ValueError:
+            # 规范化路径，防止符号链接攻击
+            changelog_path = os.path.realpath(changelog_path)
+            changelogs_dir = os.path.realpath(changelogs_dir)
+
+            # 验证最终路径在预期的 changelogs 目录内（防止路径遍历）
+            # 确保规范化后的路径以 changelogs_dir 开头，且是目录内的文件
+            changelog_path_normalized = os.path.normpath(changelog_path)
+            changelogs_dir_normalized = os.path.normpath(changelogs_dir)
+
+            # 检查路径是否在预期目录内（必须是目录的子文件，不能是目录本身）
+            expected_prefix = changelogs_dir_normalized + os.sep
+            if not changelog_path_normalized.startswith(expected_prefix):
                 logger.warning(
                     f"Path traversal attempt detected: {version} -> {changelog_path}",
                 )
-                return Response().error("Invalid version format").to_json()
+                return Response().error("Invalid version format").__dict__
 
-            if not await anyio.Path(changelog_path).exists():
+            if not os.path.exists(changelog_path):
                 return (
                     Response()
                     .error(f"Changelog for version {version} not found")
-                    .to_json()
+                    .__dict__
                 )
-            if not await anyio.Path(changelog_path).is_file():
+            if not os.path.isfile(changelog_path):
                 return (
                     Response()
                     .error(f"Changelog for version {version} not found")
-                    .to_json()
+                    .__dict__
                 )
 
-            async with await anyio.open_file(changelog_path, encoding="utf-8") as f:
-                content = await f.read()
+            with open(changelog_path, encoding="utf-8") as f:
+                content = f.read()
 
-            return Response().ok({"content": content, "version": version}).to_json()
+            return Response().ok({"content": content, "version": version}).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"Error: {e!s}").to_json()
+            return Response().error(f"Error: {e!s}").__dict__
 
     async def list_changelog_versions(self):
         """获取所有可用的更新日志版本列表"""
@@ -508,19 +500,19 @@ class StatRoute(Route):
             project_path = get_astrbot_path()
             changelogs_dir = os.path.join(project_path, "changelogs")
 
-            if not await anyio.Path(changelogs_dir).exists():
-                return Response().ok({"versions": []}).to_json()
+            if not os.path.exists(changelogs_dir):
+                return Response().ok({"versions": []}).__dict__
 
             versions = []
             for filename in os.listdir(changelogs_dir):
                 if filename.endswith(".md") and filename.startswith("v"):
-                    # 提取版本号(去除 v 前缀和 .md 后缀)
+                    # 提取版本号（去除 v 前缀和 .md 后缀）
                     version = filename[1:-3]  # 去掉 "v" 和 ".md"
                     # 验证版本号格式
                     if re.match(r"^[a-zA-Z0-9._-]+$", version):
                         versions.append(version)
 
-            # 按版本号排序(降序,最新的在前)
+            # 按版本号排序（降序，最新的在前）
             # 使用项目中的 VersionComparator 进行语义化版本号排序
             versions.sort(
                 key=cmp_to_key(
@@ -528,13 +520,13 @@ class StatRoute(Route):
                 ),
             )
 
-            return Response().ok({"versions": versions}).to_json()
+            return Response().ok({"versions": versions}).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"Error: {e!s}").to_json()
+            return Response().error(f"Error: {e!s}").__dict__
 
     async def get_first_notice(self):
-        """读取项目根目录 FIRST_NOTICE.md 内容｡"""
+        """读取项目根目录 FIRST_NOTICE.md 内容。"""
         try:
             locale = (request.args.get("locale") or "").strip()
             if not re.match(r"^[A-Za-z0-9_-]*$", locale):
@@ -563,9 +555,9 @@ class StatRoute(Route):
                     continue
                 content = notice_path.read_text(encoding="utf-8")
                 if content.strip():
-                    return Response().ok({"content": content}).to_json()
+                    return Response().ok({"content": content}).__dict__
 
-            return Response().ok({"content": None}).to_json()
+            return Response().ok({"content": None}).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"Error: {e!s}").to_json()
+            return Response().error(f"Error: {e!s}").__dict__

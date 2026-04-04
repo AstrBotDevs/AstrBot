@@ -239,7 +239,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "dashboard": {
         "enable": True,
         "username": "astrbot",
-        "password": "77b90590a8945a7d36c963981a307dc9",
+        "password": "",
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,

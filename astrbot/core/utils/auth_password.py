@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import re
 import secrets
+from typing import Any
 
 try:
     import argon2.exceptions as argon2_exceptions
@@ -81,6 +82,62 @@ def _is_pbkdf2_hash(stored: str) -> bool:
 
 def _is_argon2_hash(stored: str) -> bool:
     return isinstance(stored, str) and stored.startswith("$argon2")
+
+
+def get_dashboard_login_challenge(stored_hash: str) -> dict[str, Any]:
+    """Return the public challenge parameters needed for proof-based login."""
+    if _is_argon2_hash(stored_hash):
+        return {"algorithm": "argon2"}
+
+    if _is_legacy_md5_hash(stored_hash):
+        return {"algorithm": "legacy_md5"}
+
+    if _is_pbkdf2_hash(stored_hash):
+        parts: list[str] = stored_hash.split("$")
+        if len(parts) != 4:
+            raise ValueError("Invalid dashboard password hash")
+        _, iterations_s, salt, _ = parts
+        return {
+            "algorithm": _PBKDF2_ALGORITHM,
+            "iterations": int(iterations_s),
+            "salt": salt,
+        }
+
+    raise ValueError("Unsupported dashboard password hash")
+
+
+def verify_dashboard_login_proof(
+    stored_hash: str, challenge_nonce: str, proof: str
+) -> bool:
+    """Verify an HMAC-SHA256 login proof generated from the stored password secret."""
+    if (
+        not isinstance(stored_hash, str)
+        or not isinstance(challenge_nonce, str)
+        or not isinstance(proof, str)
+    ):
+        return False
+
+    proof_key: bytes
+    if _is_legacy_md5_hash(stored_hash):
+        proof_key = stored_hash.lower().encode("utf-8")
+    elif _is_pbkdf2_hash(stored_hash):
+        parts: list[str] = stored_hash.split("$")
+        if len(parts) != 4:
+            return False
+        _, _, _, digest = parts
+        try:
+            proof_key = bytes.fromhex(digest)
+        except ValueError:
+            return False
+    else:
+        return False
+
+    expected = hmac.new(
+        proof_key,
+        challenge_nonce.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected.lower(), proof.lower())
 
 
 def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool:

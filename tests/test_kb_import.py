@@ -5,15 +5,12 @@ import pytest
 import pytest_asyncio
 from quart import Quart
 
-from astrbot.core.utils.auth_password import hash_dashboard_password
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.dashboard.server import AstrBotDashboard
-
-TEST_DASHBOARD_PASSWORD = "astrbot-test-password"
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -24,10 +21,6 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
-    core_lifecycle.astrbot_config["dashboard"]["username"] = "astrbot"
-    core_lifecycle.astrbot_config["dashboard"]["password"] = (
-        hash_dashboard_password(TEST_DASHBOARD_PASSWORD)
-    )
 
     # Mock kb_manager and kb_helper
     kb_manager = MagicMock()
@@ -71,6 +64,13 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
     return server.app
 
 
+def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
+    password = core_lifecycle_td.astrbot_config["dashboard"]["password"]
+    if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
+        return "astrbot"
+    return password
+
+
 @pytest_asyncio.fixture(scope="module")
 async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     """Handles login and returns an authenticated header."""
@@ -79,7 +79,7 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": TEST_DASHBOARD_PASSWORD,
+            "password": _resolve_dashboard_password(core_lifecycle_td),
         },
     )
     data = await response.get_json()
@@ -136,19 +136,19 @@ async def test_import_documents(
     assert result["failed_count"] == 0
 
     # Verify kb_helper.upload_document was called correctly
-    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")  # type: ignore[union-attr]
-    assert kb_helper.upload_document.call_count == 2  # type: ignore[attr-defined]
+    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    assert kb_helper.upload_document.call_count == 2
 
     # Check first call arguments
-    call_args_list = kb_helper.upload_document.call_args_list  # type: ignore[union-attr]
+    call_args_list = kb_helper.upload_document.call_args_list
 
     # First document
-    _args1, kwargs1 = call_args_list[0]
+    args1, kwargs1 = call_args_list[0]
     assert kwargs1["file_name"] == "test_file_1.txt"
     assert kwargs1["pre_chunked_text"] == ["chunk1", "chunk2"]
 
     # Second document
-    _args2, kwargs2 = call_args_list[1]
+    args2, kwargs2 = call_args_list[1]
     assert kwargs2["file_name"] == "test_file_2.md"
     assert kwargs2["pre_chunked_text"] == ["chunk3", "chunk4", "chunk5"]
 
