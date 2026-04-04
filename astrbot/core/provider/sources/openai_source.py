@@ -540,7 +540,6 @@ class ProviderOpenAIOfficial(Provider):
         state = ChatCompletionStreamState()
 
         async for chunk in stream:
-            logger.debug(f"Received chunk: {chunk}")
             choice = chunk.choices[0] if chunk.choices else None
             delta = choice.delta if choice else None
 
