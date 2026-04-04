@@ -20,7 +20,7 @@ The former uses AstrBot's built-in web search requester to query Google, Bing, a
 
 ![image](https://files.astrbot.app/docs/source/images/websearch/image.png)
 
-Go to `Configuration`, scroll down to find Web Search, where you can select `default` (default, not recommended) or `Tavily` or `Exa`.
+Go to `Configuration`, scroll down to find Web Search, where you can select `default` (default, not recommended), `Tavily`, `Baidu AI Search`, `BoCha`, or `Exa`.
 
 ### default (Not Recommended)
 

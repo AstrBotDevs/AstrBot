@@ -19,7 +19,7 @@ AstrBot 支持 5 种网页搜索源接入方式：`默认`、`Tavily`、`百度 
 
 ![image](https://files.astrbot.app/docs/source/images/websearch/image.png)
 
-进入 `配置`，下拉找到网页搜索，您可选择 `default`（默认，不推荐） 或 `Tavily` 或 `Exa`。
+进入 `配置`，下拉找到网页搜索，您可选择 `default`（默认，不推荐）、`Tavily`、`百度 AI 搜索`、`BoCha` 或 `Exa`。
 
 ### default（不推荐）
 
