@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import re
 import uuid
 from contextlib import asynccontextmanager
 from typing import cast
@@ -23,7 +22,7 @@ from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queu
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
-from astrbot.core.utils.web_search_utils import collect_web_search_results
+from astrbot.core.utils.web_search_utils import build_web_search_refs
 
 from .route import Response, Route, RouteContext
 
@@ -216,35 +215,13 @@ class ChatRoute(Route):
     def _extract_web_search_refs(
         self, accumulated_text: str, accumulated_parts: list
     ) -> dict:
-        """从消息中提取网页搜索引用。
-
-        Args:
-            accumulated_text: 累积的文本内容
-            accumulated_parts: 累积的消息部分列表
-
-        Returns:
-            包含 used 列表的字典，记录被引用的搜索结果
-        """
-        web_search_results = collect_web_search_results(accumulated_parts)
-        if not web_search_results:
-            return {}
-
-        # 从文本中提取所有 <ref>xxx</ref> 标签并去重
-        ref_indices = {
-            m.strip() for m in re.findall(r"<ref>(.*?)</ref>", accumulated_text)
-        }
-
-        # 构建被引用的结果列表
-        used_refs = []
-        for ref_index in ref_indices:
-            if ref_index not in web_search_results:
-                continue
-            payload = {"index": ref_index, **web_search_results[ref_index]}
-            if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
-                payload["favicon"] = favicon
-            used_refs.append(payload)
-
-        return {"used": used_refs} if used_refs else {}
+        """从消息中提取网页搜索引用。"""
+        favicon_cache = sp.temporary_cache.get("_ws_favicon", {})
+        return build_web_search_refs(
+            accumulated_text,
+            accumulated_parts,
+            favicon_cache,
+        )
 
     async def _save_bot_message(
         self,
@@ -446,19 +423,27 @@ class ChatRoute(Route):
                                 accumulated_parts.append(part)
 
                         # 消息结束处理
+                        should_save = False
                         if msg_type == "end":
-                            break
+                            should_save = bool(
+                                accumulated_parts
+                                or accumulated_text
+                                or accumulated_reasoning
+                                or refs
+                                or agent_stats
+                            )
                         elif (
                             (streaming and msg_type == "complete") or not streaming
                             # or msg_type == "break"
                         ):
-                            if (
-                                chain_type == "tool_call"
-                                or chain_type == "tool_call_result"
+                            if chain_type not in (
+                                "tool_call",
+                                "tool_call_result",
+                                "agent_stats",
                             ):
-                                continue
+                                should_save = True
 
-                            # 提取 web_search_tavily 引用
+                        if should_save:
                             try:
                                 refs = self._extract_web_search_refs(
                                     accumulated_text,
@@ -499,6 +484,9 @@ class ChatRoute(Route):
                             # tool_calls = {}
                             agent_stats = {}
                             refs = {}
+
+                        if msg_type == "end":
+                            break
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
             finally:

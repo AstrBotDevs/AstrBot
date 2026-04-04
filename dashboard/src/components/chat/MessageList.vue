@@ -149,7 +149,7 @@
                                 @click="$emit('replyMessage', msg, index)" :title="tm('actions.reply')" />
                             
                             <!-- Refs Visualization -->
-                            <ActionRef :refs="msg.content.refs" @open-refs="openRefsSidebar" />
+                            <ActionRef :refs="getMessageRefs(msg.content)" @open-refs="openRefsSidebar" />
                         </div>
                     </div>
                 </div>
@@ -294,7 +294,81 @@ export default {
         this.extractWebSearchResults();
     },
     methods: {
-        // 从消息中提取 web_search_tavily 的搜索结果
+        extractRefsFromToolCall(toolCall) {
+            if (!WEB_SEARCH_REFERENCE_TOOLS.includes(toolCall?.name) || !toolCall.result) {
+                return [];
+            }
+
+            try {
+                const resultData = typeof toolCall.result === 'string'
+                    ? JSON.parse(toolCall.result)
+                    : toolCall.result;
+
+                if (!resultData?.results || !Array.isArray(resultData.results)) {
+                    return [];
+                }
+
+                const refs = [];
+                const seenIndices = new Set();
+
+                resultData.results.forEach(item => {
+                    if (!item?.index || seenIndices.has(item.index)) {
+                        return;
+                    }
+
+                    refs.push({
+                        index: item.index,
+                        url: item.url,
+                        title: item.title,
+                        snippet: item.snippet
+                    });
+                    seenIndices.add(item.index);
+                });
+
+                return refs;
+            } catch (e) {
+                console.error('Failed to parse web search result:', e);
+                return [];
+            }
+        },
+
+        collectMessageWebSearchRefs(messageParts) {
+            if (!Array.isArray(messageParts)) {
+                return [];
+            }
+
+            const refs = [];
+            const seenIndices = new Set();
+
+            messageParts.forEach(part => {
+                if (part.type !== 'tool_call' || !Array.isArray(part.tool_calls)) {
+                    return;
+                }
+
+                part.tool_calls.forEach(toolCall => {
+                    this.extractRefsFromToolCall(toolCall).forEach(ref => {
+                        if (seenIndices.has(ref.index)) {
+                            return;
+                        }
+                        refs.push(ref);
+                        seenIndices.add(ref.index);
+                    });
+                });
+            });
+
+            return refs;
+        },
+
+        getMessageRefs(content) {
+            if (content?.refs?.used?.length) {
+                return content.refs;
+            }
+
+            const fallbackRefs = this.collectMessageWebSearchRefs(content?.message);
+            return fallbackRefs.length ? { used: fallbackRefs } : null;
+        },
+
+        // 从消息中提取网页搜索结果映射
         extractWebSearchResults() {
             const results = {};
             
@@ -302,39 +376,13 @@ export default {
                 if (msg.content.type !== 'bot' || !Array.isArray(msg.content.message)) {
                     return;
                 }
-                
-                msg.content.message.forEach(part => {
-                    if (part.type !== 'tool_call' || !Array.isArray(part.tool_calls)) {
-                        return;
-                    }
-                    
-                    part.tool_calls.forEach(toolCall => {
-                        // 检查是否是网页搜索工具调用
-                        if (!WEB_SEARCH_REFERENCE_TOOLS.includes(toolCall.name) || !toolCall.result) {
-                            return;
-                        }
-                        
-                        try {
-                            // 解析工具调用结果
-                            const resultData = typeof toolCall.result === 'string' 
-                                ? JSON.parse(toolCall.result) 
-                                : toolCall.result;
-                            
-                            if (resultData.results && Array.isArray(resultData.results)) {
-                                resultData.results.forEach(item => {
-                                    if (item.index) {
-                                        results[item.index] = {
-                                            url: item.url,
-                                            title: item.title,
-                                            snippet: item.snippet
-                                        };
-                                    }
-                                });
-                            }
-                        } catch (e) {
-                            console.error('Failed to parse web search result:', e);
-                        }
-                    });
+
+                this.collectMessageWebSearchRefs(msg.content.message).forEach(ref => {
+                    results[ref.index] = {
+                        url: ref.url,
+                        title: ref.title,
+                        snippet: ref.snippet
+                    };
                 });
             });
             
