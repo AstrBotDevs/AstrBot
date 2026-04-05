@@ -57,6 +57,7 @@ class MattermostPlatformAdapter(Platform):
         )
         self.bot_self_id = ""
         self.bot_username = ""
+        self._mention_pattern: re.Pattern[str] | None = None
         self._running = True
         self._seen_post_ids: dict[str, float] = {}
 
@@ -75,6 +76,7 @@ class MattermostPlatformAdapter(Platform):
         me = await self.client.get_me()
         self.bot_self_id = str(me.get("id", ""))
         self.bot_username = str(me.get("username", ""))
+        self._mention_pattern = self._build_mention_pattern(self.bot_username)
         if not self.bot_self_id:
             raise RuntimeError("Mattermost auth succeeded but returned empty user id")
 
@@ -228,10 +230,11 @@ class MattermostPlatformAdapter(Platform):
         if not self.bot_username:
             return [Plain(message_text)]
 
-        mention_pattern = re.compile(
-            rf"(?<![A-Za-z0-9_.-])@{re.escape(self.bot_username)}(?![A-Za-z0-9_.-])",
-            flags=re.IGNORECASE,
-        )
+        mention_pattern = self._mention_pattern
+        if mention_pattern is None:
+            mention_pattern = self._build_mention_pattern(self.bot_username)
+            if mention_pattern is None:
+                return [Plain(message_text)]
         last_end = 0
 
         for match in mention_pattern.finditer(message_text):
@@ -246,6 +249,15 @@ class MattermostPlatformAdapter(Platform):
         if not components:
             components.append(Plain(message_text))
         return components
+
+    @staticmethod
+    def _build_mention_pattern(bot_username: str) -> re.Pattern[str] | None:
+        if not bot_username:
+            return None
+        return re.compile(
+            rf"(?<![A-Za-z0-9_.-])@{re.escape(bot_username)}(?![A-Za-z0-9_.-])",
+            flags=re.IGNORECASE,
+        )
 
     @staticmethod
     def _build_message_str(components: list[Any], fallback: str) -> str:

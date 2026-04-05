@@ -10,6 +10,8 @@ from .client import MattermostClient
 
 
 class MattermostMessageEvent(AstrMessageEvent):
+    _FALLBACK_SENTENCE_PATTERN = re.compile(r"[^。？！~…]+[。？！~…]+")
+
     def __init__(
         self,
         message_str,
@@ -33,35 +35,39 @@ class MattermostMessageEvent(AstrMessageEvent):
         use_fallback: bool = False,
     ):
         if not use_fallback:
-            buffer = None
+            message_buffer: MessageChain | None = None
             async for chain in generator:
-                if not buffer:
-                    buffer = chain
+                if not message_buffer:
+                    message_buffer = chain
                 else:
-                    buffer.chain.extend(chain.chain)
-            if not buffer:
+                    message_buffer.chain.extend(chain.chain)
+            if not message_buffer:
                 return None
-            buffer.squash_plain()
-            await self.send(buffer)
-            return await super().send_streaming(generator, use_fallback)
+            message_buffer.squash_plain()
+            await self.send(message_buffer)
+            await super().send_streaming(generator, use_fallback)
+            return None
 
-        buffer = ""
-        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+        text_buffer = ""
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
                 for comp in chain.chain:
                     if isinstance(comp, Plain):
-                        buffer += comp.text
-                        if any(p in buffer for p in "。？！~…"):
-                            buffer = await self.process_buffer(buffer, pattern)
+                        text_buffer += comp.text
+                        if any(p in text_buffer for p in "。？！~…"):
+                            text_buffer = await self.process_buffer(
+                                text_buffer,
+                                self._FALLBACK_SENTENCE_PATTERN,
+                            )
                     else:
                         await self.send(MessageChain(chain=[comp]))
                         await asyncio.sleep(1.5)
 
-        if buffer.strip():
-            await self.send(MessageChain([Plain(buffer)]))
-        return await super().send_streaming(generator, use_fallback)
+        if text_buffer.strip():
+            await self.send(MessageChain([Plain(text_buffer)]))
+        await super().send_streaming(generator, use_fallback)
+        return None
 
     async def get_group(self, group_id=None, **kwargs):
         channel_id = group_id or self.get_group_id()
