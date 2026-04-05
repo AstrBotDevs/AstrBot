@@ -461,14 +461,19 @@ class ProviderGoogleGenAI(Provider):
         self,
         candidate: types.Candidate,
         llm_response: LLMResponse,
+        *,
+        validate_output: bool = True,
     ) -> MessageChain:
         """处理内容部分并构建消息链"""
         if not candidate.content:
             logger.warning(f"收到的 candidate.content 为空: {candidate}")
-            raise EmptyModelOutputError(
-                "Gemini candidate content is empty. "
-                f"finish_reason={candidate.finish_reason}"
-            )
+            if validate_output:
+                raise EmptyModelOutputError(
+                    "Gemini candidate content is empty. "
+                    f"finish_reason={candidate.finish_reason}"
+                )
+            llm_response.result_chain = MessageChain(chain=[])
+            return llm_response.result_chain
 
         finish_reason = candidate.finish_reason
         result_parts: list[types.Part] | None = candidate.content.parts
@@ -490,10 +495,13 @@ class ProviderGoogleGenAI(Provider):
 
         if not result_parts:
             logger.warning(f"收到的 candidate.content.parts 为空: {candidate}")
-            raise EmptyModelOutputError(
-                "Gemini candidate content parts are empty. "
-                f"finish_reason={candidate.finish_reason}"
-            )
+            if validate_output:
+                raise EmptyModelOutputError(
+                    "Gemini candidate content parts are empty. "
+                    f"finish_reason={candidate.finish_reason}"
+                )
+            llm_response.result_chain = MessageChain(chain=[])
+            return llm_response.result_chain
 
         # 提取 reasoning content
         reasoning = self._extract_reasoning_content(candidate)
@@ -550,11 +558,12 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.reasoning_signature = base64.b64encode(ts).decode("utf-8")
         chain_result = MessageChain(chain=chain)
         llm_response.result_chain = chain_result
-        self._ensure_usable_response(
-            llm_response,
-            response_id=None,
-            finish_reason=str(finish_reason) if finish_reason is not None else None,
-        )
+        if validate_output:
+            self._ensure_usable_response(
+                llm_response,
+                response_id=None,
+                finish_reason=str(finish_reason) if finish_reason is not None else None,
+            )
         return chain_result
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
@@ -708,6 +717,7 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.result_chain = self._process_content_parts(
                     chunk.candidates[0],
                     llm_response,
+                    validate_output=False,
                 )
                 llm_response.id = chunk.response_id
                 if chunk.usage_metadata:
@@ -738,6 +748,7 @@ class ProviderGoogleGenAI(Provider):
                     final_response.result_chain = self._process_content_parts(
                         chunk.candidates[0],
                         final_response,
+                        validate_output=False,
                     )
                     final_response.id = chunk.response_id
                     if chunk.usage_metadata:
