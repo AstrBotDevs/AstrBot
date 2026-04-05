@@ -519,6 +519,14 @@ CONFIG_METADATA_2 = {
                         "kook_max_heartbeat_failures": 3,
                         "kook_max_consecutive_failures": 5,
                     },
+                    "Mattermost": {
+                        "id": "mattermost",
+                        "type": "mattermost",
+                        "enable": False,
+                        "mattermost_url": "https://chat.example.com",
+                        "mattermost_bot_token": "",
+                        "mattermost_reconnect_delay": 5.0,
+                    },
                     # "WebChat": {
                     #     "id": "webchat",
                     #     "type": "webchat",
@@ -652,6 +660,21 @@ CONFIG_METADATA_2 = {
                         "description": "Bot Token",
                         "type": "string",
                         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
+                    },
+                    "mattermost_url": {
+                        "description": "Mattermost URL",
+                        "type": "string",
+                        "hint": "Mattermost 服务地址，例如 https://chat.example.com。",
+                    },
+                    "mattermost_bot_token": {
+                        "description": "Mattermost Bot Token",
+                        "type": "string",
+                        "hint": "在 Mattermost 中创建 Bot 账户后生成的访问令牌。",
+                    },
+                    "mattermost_reconnect_delay": {
+                        "description": "Mattermost 重连延迟",
+                        "type": "float",
+                        "hint": "WebSocket 断开后的重连等待时间，单位为秒。默认 5 秒。",
                     },
                     "misskey_instance_url": {
                         "description": "Misskey 实例 URL",
