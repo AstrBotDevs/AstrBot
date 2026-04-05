@@ -528,9 +528,18 @@ class ProviderOpenAIOfficial(Provider):
             del payloads[key]
         self._apply_provider_specific_extra_body_overrides(extra_body)
 
+        # Build streaming options - enable stream_usage for providers that need it (e.g. MiniMax)
+        # Auto-detect MiniMax by api_base URL
+        api_base = self.provider_config.get("api_base", "") or ""
+        is_minimax = "minimaxi" in api_base.lower()
+        stream_options = None
+        if self.provider_config.get("enable_stream_usage", False) or is_minimax:
+            stream_options = {"include_usage": True}
+
         stream = await self.client.chat.completions.create(
             **payloads,
             stream=True,
+            stream_options=stream_options,
             extra_body=extra_body,
         )
 
@@ -544,7 +553,12 @@ class ProviderOpenAIOfficial(Provider):
         thinking_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
         async for chunk in stream:
+            # Handle usage in chunks with empty choices (e.g., MiniMax sends usage in final chunk)
             if not chunk.choices:
+                if chunk.usage:
+                    llm_response.usage = self._extract_usage(chunk.usage)
+                    # Yield this response so usage can be captured by the caller
+                    yield llm_response
                 continue
             choice = chunk.choices[0]
             delta = choice.delta

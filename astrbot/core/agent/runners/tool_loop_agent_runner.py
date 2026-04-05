@@ -459,6 +459,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if self.stats.time_to_first_token == 0:
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
 
+                # Handle usage from providers like MiniMax that send usage in chunk responses
+                if llm_response.usage:
+                    self.stats.token_usage += llm_response.usage
+
                 if llm_response.result_chain:
                     yield AgentResponse(
                         type="streaming_delta",
