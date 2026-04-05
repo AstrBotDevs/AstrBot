@@ -1,3 +1,4 @@
+import asyncio
 import json
 import mimetypes
 from pathlib import Path
@@ -165,10 +166,11 @@ class MattermostClient:
             elif isinstance(segment, Image):
                 path = await segment.convert_to_file_path()
                 file_path = Path(path)
+                file_bytes = await asyncio.to_thread(file_path.read_bytes)
                 file_ids.append(
                     await self.upload_file(
                         channel_id,
-                        file_path.read_bytes(),
+                        file_bytes,
                         file_path.name,
                         mimetypes.guess_type(file_path.name)[0] or "image/jpeg",
                     )
@@ -181,10 +183,11 @@ class MattermostClient:
                     path = await segment.convert_to_file_path()
                     filename = Path(path).name
                 file_path = Path(path)
+                file_bytes = await asyncio.to_thread(file_path.read_bytes)
                 file_ids.append(
                     await self.upload_file(
                         channel_id,
-                        file_path.read_bytes(),
+                        file_bytes,
                         filename,
                         mimetypes.guess_type(filename)[0] or "application/octet-stream",
                     )
@@ -224,7 +227,7 @@ class MattermostClient:
             suffix = Path(filename).suffix
             file_path = Path(get_astrbot_temp_path()) / f"mattermost_{file_id}{suffix}"
             try:
-                file_path.write_bytes(file_bytes)
+                await asyncio.to_thread(file_path.write_bytes, file_bytes)
             except OSError as exc:
                 logger.warning(
                     "Mattermost write attachment failed %s -> %s: %s",

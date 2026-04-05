@@ -292,5 +292,5 @@ class MattermostPlatformAdapter(Platform):
         self._running = False
         await self.client.close()
 
-    def get_client(self):
+    def get_client(self) -> MattermostClient:
         return self.client

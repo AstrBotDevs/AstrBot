@@ -33,7 +33,9 @@ class MattermostMessageEvent(AstrMessageEvent):
         self,
         generator: AsyncGenerator,
         use_fallback: bool = False,
-    ):
+    ) -> None:
+        await super().send_streaming(generator, use_fallback)
+
         if not use_fallback:
             message_buffer: MessageChain | None = None
             async for chain in generator:
@@ -45,7 +47,6 @@ class MattermostMessageEvent(AstrMessageEvent):
                 return None
             message_buffer.squash_plain()
             await self.send(message_buffer)
-            await super().send_streaming(generator, use_fallback)
             return None
 
         text_buffer = ""
@@ -66,7 +67,6 @@ class MattermostMessageEvent(AstrMessageEvent):
 
         if text_buffer.strip():
             await self.send(MessageChain([Plain(text_buffer)]))
-        await super().send_streaming(generator, use_fallback)
         return None
 
     async def get_group(self, group_id=None, **kwargs):
