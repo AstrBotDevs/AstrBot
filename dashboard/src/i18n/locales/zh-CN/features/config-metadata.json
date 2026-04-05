@@ -73,6 +73,16 @@
         },
         "trigger_probability": {
           "description": "TTS 触发概率"
+        },
+        "tts_text_filter": {
+          "enable": {
+            "description": "过滤 TTS 文本中的括号内容",
+            "hint": "开启后将自动去除 *文字*、【文字】、(文字) 等括号/标记内容，避免 TTS 朗读情绪标记"
+          },
+          "custom_rules": {
+            "description": "自定义 TTS 过滤正则",
+            "hint": "每行一条正则表达式，将匹配到的内容从 TTS 文本中移除"
+          }
         }
       }
     },

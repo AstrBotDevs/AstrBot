@@ -73,6 +73,16 @@
         },
         "trigger_probability": {
           "description": "TTS Trigger Probability"
+        },
+        "tts_text_filter": {
+          "enable": {
+            "description": "Filter bracket content in TTS text",
+            "hint": "When enabled, automatically removes *text*, 【text】, (text) and other bracket/marker content to avoid TTS reading emotion markers"
+          },
+          "custom_rules": {
+            "description": "Custom TTS filter regex",
+            "hint": "One regex per line. Matched content will be removed from TTS text"
+          }
         }
       }
     },
