@@ -240,6 +240,10 @@ class MattermostClient:
 
             if mime_type.startswith("image/"):
                 components.append(Image.fromFileSystem(str(file_path)))
+            elif mime_type.startswith("audio/"):
+                components.append(Record.fromFileSystem(str(file_path)))
+            elif mime_type.startswith("video/"):
+                components.append(Video.fromFileSystem(str(file_path)))
             else:
                 components.append(File(name=filename, file=str(file_path)))
 
