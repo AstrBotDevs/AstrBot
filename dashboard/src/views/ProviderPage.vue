@@ -100,6 +100,7 @@
                         :loading-models="loadingModels"
                         :is-source-modified="isSourceModified"
                         :supports-image-input="supportsImageInput"
+                        :supports-audio-input="supportsAudioInput"
                         :supports-tool-call="supportsToolCall"
                         :supports-reasoning="supportsReasoning"
                         :format-context-limit="formatContextLimit"
@@ -324,6 +325,7 @@ const {
   resolveSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
+  supportsAudioInput,
   supportsToolCall,
   supportsReasoning,
   formatContextLimit,
