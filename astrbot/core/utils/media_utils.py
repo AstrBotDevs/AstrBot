@@ -338,9 +338,6 @@ def _get_audio_magic_type(audio_path: str) -> str:
     if header[:3] == b"ID3" or header[:2] == b"\xff\xfb":
         return "mp3"
 
-    if header[:4] == b"\x4d\x54\x68\x64":
-        return "mp4"
-
     if header[:4] == b"ftyp" and b"mp4" in header[:8]:
         return "mp4"
 

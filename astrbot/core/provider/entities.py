@@ -229,15 +229,26 @@ class ProviderRequest:
                 if audio_url.startswith("http"):
                     parsed_url = urlparse(audio_url)
                     suffix = Path(parsed_url.path).suffix
+                    temp_dir = Path(get_astrbot_temp_path())
+                    temp_dir.mkdir(parents=True, exist_ok=True)
                     temp_audio_path = (
-                        Path(get_astrbot_temp_path())
-                        / f"provider_request_audio_{uuid.uuid4().hex}{suffix}"
+                        temp_dir / f"provider_request_audio_{uuid.uuid4().hex}{suffix}"
                     )
-                    await download_file(audio_url, str(temp_audio_path))
-                    audio_data = await self._encode_audio_bs64(
-                        str(temp_audio_path),
-                        source_ref=audio_url,
-                    )
+                    try:
+                        await download_file(audio_url, str(temp_audio_path))
+                        audio_data = await self._encode_audio_bs64(
+                            str(temp_audio_path),
+                            source_ref=audio_url,
+                        )
+                    finally:
+                        try:
+                            temp_audio_path.unlink(missing_ok=True)
+                        except Exception as exc:
+                            logger.warning(
+                                "Failed to cleanup %s: %s",
+                                temp_audio_path,
+                                exc,
+                            )
                 elif audio_url.startswith("file:///"):
                     audio_path = audio_url.replace("file:///", "")
                     audio_data = await self._encode_audio_bs64(

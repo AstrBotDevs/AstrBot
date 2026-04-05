@@ -313,31 +313,47 @@ class ProviderOpenAIOfficial(Provider):
 
         return url
 
-    async def _audio_ref_to_local_path(self, audio_ref: str) -> str:
+    async def _audio_ref_to_local_path(self, audio_ref: str) -> tuple[str, list[Path]]:
+        cleanup_paths: list[Path] = []
         if audio_ref.startswith("http"):
             suffix = Path(urlparse(audio_ref).path).suffix or ".wav"
             temp_dir = Path(get_astrbot_temp_path())
             temp_dir.mkdir(parents=True, exist_ok=True)
             target_path = temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
             await download_file(audio_ref, str(target_path))
-            return str(target_path)
+            cleanup_paths.append(target_path)
+            return str(target_path), cleanup_paths
         if audio_ref.startswith("file://"):
-            return self._file_uri_to_path(audio_ref)
-        return audio_ref
+            return self._file_uri_to_path(audio_ref), cleanup_paths
+        return audio_ref, cleanup_paths
 
     async def _resolve_audio_part(self, audio_ref: str) -> dict | None:
+        cleanup_paths: list[Path] = []
         try:
-            audio_path = await self._audio_ref_to_local_path(audio_ref)
+            audio_path, cleanup_paths = await self._audio_ref_to_local_path(audio_ref)
             suffix = Path(audio_path).suffix.lower()
             if suffix == ".mp3":
                 audio_format = "mp3"
             else:
-                audio_path = await ensure_wav(audio_path)
+                converted_audio_path = await ensure_wav(audio_path)
+                if converted_audio_path != audio_path:
+                    cleanup_paths.append(Path(converted_audio_path))
+                audio_path = converted_audio_path
                 audio_format = "wav"
             audio_bytes = Path(audio_path).read_bytes()
         except Exception as exc:
             logger.warning("音频 %s 预处理失败，将忽略。错误: %s", audio_ref, exc)
             return None
+        finally:
+            for cleanup_path in cleanup_paths:
+                try:
+                    cleanup_path.unlink(missing_ok=True)
+                except Exception as cleanup_exc:
+                    logger.warning(
+                        "Failed to cleanup %s: %s",
+                        cleanup_path,
+                        cleanup_exc,
+                    )
 
         return {
             "type": "input_audio",
