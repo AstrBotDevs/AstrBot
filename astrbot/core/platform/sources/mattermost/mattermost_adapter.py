@@ -2,6 +2,7 @@ import asyncio
 import json
 import re
 import time
+from collections import deque
 from typing import Any, cast
 
 import aiohttp
@@ -60,6 +61,8 @@ class MattermostPlatformAdapter(Platform):
         self._mention_pattern: re.Pattern[str] | None = None
         self._running = True
         self._seen_post_ids: dict[str, float] = {}
+        self._seen_post_queue: deque[tuple[str, float]] = deque()
+        self._dedup_ttl = 300.0
 
     async def send_by_session(
         self,
@@ -167,14 +170,23 @@ class MattermostPlatformAdapter(Platform):
             await self.handle_msg(abm)
 
     def _is_duplicate_post(self, post_id: str) -> bool:
-        now = time.time()
-        expired = [key for key, ts in self._seen_post_ids.items() if now - ts > 300]
-        for key in expired:
-            self._seen_post_ids.pop(key, None)
+        now = time.monotonic()
+        self._prune_seen_posts(now)
         if post_id in self._seen_post_ids:
             return True
         self._seen_post_ids[post_id] = now
+        self._seen_post_queue.append((post_id, now))
         return False
+
+    def _prune_seen_posts(self, now: float) -> None:
+        while self._seen_post_queue:
+            queued_post_id, seen_at = self._seen_post_queue[0]
+            if now - seen_at <= self._dedup_ttl:
+                break
+            self._seen_post_queue.popleft()
+            current_seen_at = self._seen_post_ids.get(queued_post_id)
+            if current_seen_at == seen_at:
+                del self._seen_post_ids[queued_post_id]
 
     async def convert_message(
         self,
