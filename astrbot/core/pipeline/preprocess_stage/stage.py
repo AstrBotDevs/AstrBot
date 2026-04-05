@@ -72,6 +72,8 @@ class PreProcessStage(Stage):
                 try:
                     original_path = await component.convert_to_file_path()
                     record_path = await ensure_wav(original_path)
+                    if record_path != original_path:
+                        event.track_temporary_local_file(record_path)
                     component.file = record_path
                     component.path = record_path
                     message_chain[idx] = component
