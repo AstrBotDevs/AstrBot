@@ -1192,12 +1192,16 @@ class WeixinOCAdapter(Platform):
         sender_id: str,
         sender_nickname: str,
         timestamp: int,
+        timestamp_ms: int | None = None,
         components: list[Any],
         message_str: str,
         message_kind: str | None = None,
     ) -> None:
         if not session_id or not message_id:
             return
+        resolved_timestamp_ms = (
+            timestamp_ms if timestamp_ms is not None else timestamp * 1000
+        )
         cache = self._get_recent_message_cache(session_id)
         cache.append(
             WeixinOCRecentMessage(
@@ -1205,7 +1209,7 @@ class WeixinOCAdapter(Platform):
                 sender_id=sender_id,
                 sender_nickname=sender_nickname,
                 timestamp=timestamp,
-                timestamp_ms=timestamp * 1000,
+                timestamp_ms=resolved_timestamp_ms,
                 components=list(components),
                 message_str=message_str,
                 message_kind=message_kind
@@ -1334,15 +1338,24 @@ class WeixinOCAdapter(Platform):
                 or f"weixin_oc_ref_{ref_create_time_ms or uuid.uuid4().hex}"
             )
         )
-        reply_sender_id = (
+        quoted_sender_id_raw = str(message_item.get("from_user_id") or "unknown")
+        reply_sender_id_raw = (
             matched_message.sender_id
             if matched_message is not None
-            else str(message_item.get("from_user_id") or "unknown")
+            else quoted_sender_id_raw
+        )
+        normalized_reply_sender_id = self._normalize_reply_sender_id(
+            reply_sender_id_raw
+        )
+        reply_sender_id = (
+            normalized_reply_sender_id
+            if normalized_reply_sender_id
+            else reply_sender_id_raw
         )
         reply_sender_nickname = (
             matched_message.sender_nickname
             if matched_message is not None
-            else str(message_item.get("from_user_id") or "unknown")
+            else quoted_sender_id_raw
         )
         reply_time = (
             matched_message.timestamp
@@ -1366,6 +1379,14 @@ class WeixinOCAdapter(Platform):
             ),
             metadata,
         )
+
+    def _normalize_reply_sender_id(self, sender_id: str) -> str:
+        normalized_sender_id = sender_id.strip()
+        if not normalized_sender_id:
+            return normalized_sender_id
+        if self.account_id and normalized_sender_id == str(self.account_id):
+            return self.meta().id
+        return normalized_sender_id
 
     async def _item_list_to_components(
         self, item_list: list[dict[str, Any]] | None
@@ -1423,12 +1444,16 @@ class WeixinOCAdapter(Platform):
         text = self._message_text_from_item_list(item_list, include_ref_text=False)
         message_id = str(msg.get("message_id") or msg.get("msg_id") or uuid.uuid4().hex)
         create_time = msg.get("create_time_ms") or msg.get("create_time")
+        create_time_ms: int | None = None
         if isinstance(create_time, (int, float)) and create_time > 1_000_000_000_000:
+            create_time_ms = int(create_time)
             ts = int(float(create_time) / 1000)
         elif isinstance(create_time, (int, float)):
             ts = int(create_time)
+            create_time_ms = ts * 1000
         else:
             ts = int(time.time())
+            create_time_ms = ts * 1000
 
         abm = AstrBotMessage()
         abm.self_id = self.meta().id
@@ -1453,6 +1478,7 @@ class WeixinOCAdapter(Platform):
             sender_id=from_user_id,
             sender_nickname=from_user_id,
             timestamp=ts,
+            timestamp_ms=create_time_ms,
             components=components,
             message_str=text,
         )

@@ -280,6 +280,87 @@ async def test_weixin_oc_matches_reply_from_recent_message_cache():
 
 
 @pytest.mark.asyncio
+async def test_weixin_oc_normalizes_bot_reply_sender_id_from_cache():
+    adapter = _make_adapter()
+    adapter.account_id = "wx_bot_real_id"
+    captured_events: list[Any] = []
+    adapter.commit_event = lambda event: captured_events.append(event)  # type: ignore[method-assign]
+    adapter._cache_recent_message(
+        "user_bot_reply",
+        message_id="bot_msg_real",
+        sender_id="wx_bot_real_id",
+        sender_nickname="wx_bot_real_id",
+        timestamp=1775408790,
+        timestamp_ms=1775408790123,
+        components=[Plain("上一条 Bot 消息")],
+        message_str="上一条 Bot 消息",
+        message_kind="text",
+    )
+
+    await adapter._handle_inbound_message(
+        {
+            "from_user_id": "user_bot_reply",
+            "message_id": "msg_bot_reply",
+            "create_time_ms": 1775408796000,
+            "item_list": [
+                {
+                    "type": 1,
+                    "ref_msg": {
+                        "message_item": {
+                            "create_time_ms": 1775408790123,
+                            "is_completed": True,
+                        }
+                    },
+                    "text_item": {"text": "回复 Bot"},
+                }
+            ],
+        }
+    )
+
+    assert len(captured_events) == 1
+    event = captured_events[0]
+    reply = event.message_obj.message[0]
+    assert isinstance(reply, Reply)
+    assert reply.sender_id == "weixin_oc_test"
+
+
+def test_weixin_oc_recent_message_cache_preserves_millisecond_precision():
+    adapter = _make_adapter()
+    adapter._cache_recent_message(
+        "user_ms",
+        message_id="text_msg",
+        sender_id="bot",
+        sender_nickname="bot",
+        timestamp=1775408790,
+        timestamp_ms=1775408790001,
+        components=[Plain("caption")],
+        message_str="caption",
+        message_kind="text",
+    )
+    adapter._cache_recent_message(
+        "user_ms",
+        message_id="image_msg",
+        sender_id="bot",
+        sender_nickname="bot",
+        timestamp=1775408790,
+        timestamp_ms=1775408790900,
+        components=[],
+        message_str="[图片]",
+        message_kind="image",
+    )
+
+    matched, metadata = adapter._match_recent_reply(
+        "user_ms",
+        ref_create_time_ms=1775408790890,
+    )
+
+    assert matched is not None
+    assert metadata is not None
+    assert matched.message_id == "image_msg"
+    assert metadata["distance_ms"] == 10
+
+
+@pytest.mark.asyncio
 async def test_weixin_oc_message_text_does_not_include_quoted_prefix():
     adapter = _make_adapter()
 
