@@ -79,6 +79,16 @@ class WeixinOCRecentSessionCache:
     updated_at: float
 
 
+@dataclass
+class WeixinOCReplyMeta:
+    is_reply: bool = False
+    ref_msg: dict[str, Any] | None = None
+    reply_kind: str | None = None
+    quoted_item_type: int | None = None
+    quoted_text: str | None = None
+    reply_to: dict[str, Any] = field(default_factory=lambda: {"matched": False})
+
+
 @register_platform_adapter(
     "weixin_oc",
     "个人微信",
@@ -141,32 +151,20 @@ class WeixinOCAdapter(Platform):
         self._context_tokens: dict[str, str] = {}
         self._typing_states: dict[str, TypingSessionState] = {}
         self._last_inbound_error = ""
-        self._recent_message_cache_size = max(
+        self._recent_message_cache_size = self._get_int_config(
+            "weixin_oc_recent_message_cache_size",
+            self.RECENT_MESSAGE_CACHE_SIZE,
             1,
-            int(
-                platform_config.get(
-                    "weixin_oc_recent_message_cache_size",
-                    self.RECENT_MESSAGE_CACHE_SIZE,
-                )
-            ),
         )
-        self._recent_session_cache_ttl_s = max(
+        self._recent_session_cache_ttl_s = self._get_int_config(
+            "weixin_oc_recent_session_cache_ttl_s",
+            self.RECENT_SESSION_CACHE_TTL_S,
             60,
-            int(
-                platform_config.get(
-                    "weixin_oc_recent_session_cache_ttl_s",
-                    self.RECENT_SESSION_CACHE_TTL_S,
-                )
-            ),
         )
-        self._max_recent_message_sessions = max(
+        self._max_recent_message_sessions = self._get_int_config(
+            "weixin_oc_max_recent_message_sessions",
+            self.MAX_RECENT_MESSAGE_SESSIONS,
             1,
-            int(
-                platform_config.get(
-                    "weixin_oc_max_recent_message_sessions",
-                    self.MAX_RECENT_MESSAGE_SESSIONS,
-                )
-            ),
         )
         self._recent_messages: dict[str, WeixinOCRecentSessionCache] = {}
         self._typing_keepalive_interval_s = max(
@@ -202,6 +200,18 @@ class WeixinOCAdapter(Platform):
         self.client.cdn_base_url = self.cdn_base_url
         self.client.api_timeout_ms = self.api_timeout_ms
         self.client.token = self.token
+
+    def _get_int_config(
+        self,
+        key: str,
+        default: int,
+        minimum: int,
+    ) -> int:
+        try:
+            value = int(self.config.get(key, default))
+        except (TypeError, ValueError):
+            value = default
+        return max(minimum, value)
 
     def _get_typing_state(self, user_id: str) -> TypingSessionState:
         state = self._typing_states.get(user_id)
@@ -820,6 +830,9 @@ class WeixinOCAdapter(Platform):
         self,
         user_id: str,
         item_list: list[dict[str, Any]],
+        *,
+        cache_components: list[Any] | None = None,
+        cache_message_str: str | None = None,
     ) -> bool:
         if not self.token:
             logger.warning("weixin_oc(%s): missing token, skip send", self.meta().id)
@@ -858,6 +871,11 @@ class WeixinOCAdapter(Platform):
             token_required=True,
             headers={},
         )
+        resolved_cache_components = (
+            list(cache_components)
+            if cache_components is not None
+            else self._build_cache_components_from_items(item_list)
+        )
         sender_id = str(self.account_id or self.meta().id)
         self._cache_recent_message(
             user_id,
@@ -865,13 +883,29 @@ class WeixinOCAdapter(Platform):
             sender_id=sender_id,
             sender_nickname=sender_id,
             timestamp=int(time.time()),
-            components=await self._item_list_to_components(item_list),
-            message_str=self._message_text_from_item_list(
+            components=resolved_cache_components,
+            message_str=cache_message_str
+            if cache_message_str is not None
+            else self._message_text_from_item_list(
                 item_list,
                 include_ref_text=False,
             ),
         )
         return True
+
+    def _build_cache_components_from_items(
+        self,
+        item_list: list[dict[str, Any]],
+    ) -> list[Any]:
+        components: list[Any] = []
+        for item in item_list:
+            item_type = int(item.get("type") or 0)
+            if item_type != 1:
+                continue
+            text = str(item.get("text_item", {}).get("text", "")).strip()
+            if text:
+                components.append(Plain(text))
+        return components
 
     async def _send_media_segment(
         self,
@@ -922,8 +956,18 @@ class WeixinOCAdapter(Platform):
             await self._send_items_to_session(
                 user_id,
                 [self._build_plain_text_item(text)],
+                cache_components=[Plain(text)],
+                cache_message_str=text,
             )
-        return await self._send_items_to_session(user_id, [media_item])
+        return await self._send_items_to_session(
+            user_id,
+            [media_item],
+            cache_components=[segment],
+            cache_message_str=self._message_text_from_item_list(
+                [media_item],
+                include_ref_text=False,
+            ),
+        )
 
     async def _start_login_session(self) -> OpenClawLoginSession:
         endpoint = "ilink/bot/get_bot_qrcode"
@@ -1215,27 +1259,23 @@ class WeixinOCAdapter(Platform):
         *,
         session_id: str,
         ref_msg: dict[str, Any],
-    ) -> tuple[Reply | None, dict[str, Any]]:
-        metadata: dict[str, Any] = {
-            "is_reply": True,
-            "ref_msg": ref_msg,
-            "reply_kind": "unknown",
-            "quoted_item_type": None,
-            "quoted_text": None,
-            "reply_to": {"matched": False},
-        }
+    ) -> tuple[Reply | None, WeixinOCReplyMeta]:
+        metadata = WeixinOCReplyMeta(ref_msg=ref_msg)
         message_item = ref_msg.get("message_item")
         if not isinstance(message_item, dict):
             return None, metadata
 
         quoted_item_type_raw = message_item.get("type")
-        quoted_item_type = (
-            int(quoted_item_type_raw)
-            if quoted_item_type_raw not in (None, "")
-            else None
-        )
-        metadata["quoted_item_type"] = quoted_item_type
-        metadata["reply_kind"] = self._item_type_to_kind(quoted_item_type)
+        try:
+            quoted_item_type = (
+                int(quoted_item_type_raw)
+                if quoted_item_type_raw not in (None, "")
+                else None
+            )
+        except (TypeError, ValueError):
+            quoted_item_type = None
+        metadata.quoted_item_type = quoted_item_type
+        metadata.reply_kind = self._item_type_to_kind(quoted_item_type)
 
         ref_create_time_ms_raw = message_item.get("create_time_ms")
         try:
@@ -1257,11 +1297,11 @@ class WeixinOCAdapter(Platform):
             )
 
         if quoted_text:
-            metadata["quoted_text"] = quoted_text
-            metadata["reply_to"] = {
+            metadata.quoted_text = quoted_text
+            metadata.reply_to = {
                 "matched": True,
                 "strategy": "direct-ref-msg",
-                "matched_kind": metadata["reply_kind"],
+                "matched_kind": metadata.reply_kind,
                 "matched_text": quoted_text,
                 "confidence": 1.0,
             }
@@ -1276,12 +1316,14 @@ class WeixinOCAdapter(Platform):
             if matched_message is not None:
                 quoted_components = list(matched_message.components)
                 quoted_text = matched_message.message_str
-                metadata["quoted_text"] = quoted_text or None
-                metadata["reply_kind"] = matched_message.message_kind
-                metadata["reply_to"] = matched_reply_to or {"matched": True}
+                metadata.quoted_text = quoted_text or None
+                metadata.reply_kind = matched_message.message_kind
+                metadata.reply_to = matched_reply_to or {"matched": True}
 
         if not quoted_text and not quoted_components and ref_create_time_ms is None:
             return None, metadata
+
+        metadata.is_reply = True
 
         reply_message_id = (
             matched_message.message_id
@@ -1293,7 +1335,9 @@ class WeixinOCAdapter(Platform):
             )
         )
         reply_sender_id = (
-            matched_message.sender_id if matched_message is not None else "unknown"
+            matched_message.sender_id
+            if matched_message is not None
+            else str(message_item.get("from_user_id") or "unknown")
         )
         reply_sender_nickname = (
             matched_message.sender_nickname
@@ -1361,14 +1405,7 @@ class WeixinOCAdapter(Platform):
 
         item_list = cast(list[dict[str, Any]], msg.get("item_list", []))
         reply_component = None
-        reply_metadata: dict[str, Any] = {
-            "is_reply": False,
-            "ref_msg": None,
-            "reply_kind": None,
-            "quoted_item_type": None,
-            "quoted_text": None,
-            "reply_to": {"matched": False},
-        }
+        reply_metadata = WeixinOCReplyMeta()
         for item in item_list:
             ref_msg = item.get("ref_msg")
             if isinstance(ref_msg, dict):
@@ -1403,12 +1440,12 @@ class WeixinOCAdapter(Platform):
         abm.message_str = text
         abm.timestamp = ts
         abm.raw_message = msg
-        abm.is_reply = reply_metadata["is_reply"]
-        abm.ref_msg = reply_metadata["ref_msg"]
-        abm.reply_kind = reply_metadata["reply_kind"]
-        abm.quoted_item_type = reply_metadata["quoted_item_type"]
-        abm.quoted_text = reply_metadata["quoted_text"]
-        abm.reply_to = reply_metadata["reply_to"]
+        abm.is_reply = reply_metadata.is_reply
+        abm.ref_msg = reply_metadata.ref_msg
+        abm.reply_kind = reply_metadata.reply_kind
+        abm.quoted_item_type = reply_metadata.quoted_item_type
+        abm.quoted_text = reply_metadata.quoted_text
+        abm.reply_to = reply_metadata.reply_to
 
         self._cache_recent_message(
             from_user_id,

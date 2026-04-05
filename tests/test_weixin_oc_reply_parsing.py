@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from astrbot.api.message_components import Plain, Reply
+from astrbot.api.message_components import Image, Plain, Reply
 from astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter import WeixinOCAdapter
 
 
@@ -69,6 +69,7 @@ async def test_weixin_oc_builds_reply_component_from_direct_ref_text():
                     "ref_msg": {
                         "message_item": {
                             "type": 1,
+                            "from_user_id": "quoted_user",
                             "create_time_ms": 1775408781000,
                             "update_time_ms": 1775408781000,
                             "is_completed": True,
@@ -85,6 +86,8 @@ async def test_weixin_oc_builds_reply_component_from_direct_ref_text():
     event = captured_events[0]
     reply = event.message_obj.message[0]
     assert isinstance(reply, Reply)
+    assert reply.sender_id == "quoted_user"
+    assert reply.sender_nickname == "quoted_user"
     assert reply.message_str == "你好"
     assert reply.chain and isinstance(reply.chain[0], Plain)
     assert reply.chain[0].text == "你好"
@@ -94,6 +97,135 @@ async def test_weixin_oc_builds_reply_component_from_direct_ref_text():
     assert event.message_obj.quoted_item_type == 1
     assert event.message_obj.quoted_text == "你好"
     assert event.message_obj.reply_to["strategy"] == "direct-ref-msg"
+
+
+@pytest.mark.asyncio
+async def test_weixin_oc_send_cache_uses_original_components_without_item_conversion():
+    adapter = _make_adapter()
+    adapter.token = "token"
+    adapter.account_id = "bot_account"
+    adapter._context_tokens["user_3"] = "ctx"
+
+    called = {"request": 0, "convert": 0}
+
+    async def fake_request_json(*args, **kwargs):
+        called["request"] += 1
+        return {}
+
+    async def fail_if_convert(_item_list):
+        called["convert"] += 1
+        raise AssertionError("send-path cache should not convert outbound item_list")
+
+    adapter.client.request_json = fake_request_json  # type: ignore[method-assign]
+    adapter._item_list_to_components = fail_if_convert  # type: ignore[method-assign]
+
+    media_component = Image(file="file:///tmp/fake-image.jpg")
+
+    ok = await adapter._send_items_to_session(
+        "user_3",
+        [{"type": adapter.IMAGE_ITEM_TYPE, "image_item": {"media": {}}}],
+        cache_components=[media_component],
+        cache_message_str="[图片]",
+    )
+
+    assert ok is True
+    assert called["request"] == 1
+    assert called["convert"] == 0
+    cached = adapter._recent_messages["user_3"].messages[-1]
+    assert cached.components == [media_component]
+    assert cached.message_str == "[图片]"
+
+
+@pytest.mark.asyncio
+async def test_weixin_oc_text_send_cache_preserves_plain_components_by_default():
+    adapter = _make_adapter()
+    adapter.token = "token"
+    adapter.account_id = "bot_account"
+    adapter._context_tokens["user_text"] = "ctx"
+
+    async def fake_request_json(*args, **kwargs):
+        return {}
+
+    adapter.client.request_json = fake_request_json  # type: ignore[method-assign]
+
+    ok = await adapter._send_items_to_session(
+        "user_text",
+        [adapter._build_plain_text_item("bot reply text")],
+    )
+
+    assert ok is True
+    cached = adapter._recent_messages["user_text"].messages[-1]
+    assert len(cached.components) == 1
+    assert isinstance(cached.components[0], Plain)
+    assert cached.components[0].text == "bot reply text"
+    assert cached.message_kind == "text"
+    assert cached.message_str == "bot reply text"
+
+
+@pytest.mark.asyncio
+async def test_weixin_oc_invalid_ref_msg_does_not_mark_message_as_reply():
+    adapter = _make_adapter()
+    captured_events: list[Any] = []
+    adapter.commit_event = lambda event: captured_events.append(event)  # type: ignore[method-assign]
+
+    await adapter._handle_inbound_message(
+        {
+            "from_user_id": "user_invalid",
+            "message_id": "msg_invalid",
+            "create_time_ms": 1775408782000,
+            "item_list": [
+                {
+                    "type": 1,
+                    "ref_msg": {"message_item": "not-a-dict"},
+                    "text_item": {"text": "正文"},
+                }
+            ],
+        }
+    )
+
+    assert len(captured_events) == 1
+    event = captured_events[0]
+    assert not any(isinstance(comp, Reply) for comp in event.message_obj.message)
+    assert event.message_obj.is_reply is False
+    assert event.message_obj.ref_msg == {"message_item": "not-a-dict"}
+    assert event.message_obj.reply_to == {"matched": False}
+
+
+@pytest.mark.asyncio
+async def test_weixin_oc_non_numeric_quoted_type_does_not_crash():
+    adapter = _make_adapter()
+    captured_events: list[Any] = []
+    adapter.commit_event = lambda event: captured_events.append(event)  # type: ignore[method-assign]
+
+    await adapter._handle_inbound_message(
+        {
+            "from_user_id": "user_bad_type",
+            "message_id": "msg_bad_type",
+            "create_time_ms": 1775408782000,
+            "item_list": [
+                {
+                    "type": 1,
+                    "ref_msg": {
+                        "message_item": {
+                            "type": "bad-type",
+                            "from_user_id": "quoted_user",
+                            "create_time_ms": 1775408781000,
+                        }
+                    },
+                    "text_item": {"text": "正文"},
+                }
+            ],
+        }
+    )
+
+    assert len(captured_events) == 1
+    event = captured_events[0]
+    assert event.message_obj.message_str == "正文"
+    assert event.message_obj.quoted_item_type is None
+    assert (
+        event.message_obj.reply_kind is None
+        or event.message_obj.reply_kind == "unknown"
+    )
 
 
 @pytest.mark.asyncio
