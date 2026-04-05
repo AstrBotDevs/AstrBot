@@ -556,9 +556,14 @@ class ProviderOpenAIOfficial(Provider):
             # Handle usage in chunks with empty choices (e.g., MiniMax sends usage in final chunk)
             if not chunk.choices:
                 if chunk.usage:
-                    llm_response.usage = self._extract_usage(chunk.usage)
-                    # Yield this response so usage can be captured by the caller
-                    yield llm_response
+                    # Create a separate response for usage-only chunks to avoid
+                    # mutating the shared llm_response object that may have
+                    # pending content in result_chain
+                    usage_response = LLMResponse(role="assistant")
+                    usage_response.id = chunk.id
+                    usage_response.usage = self._extract_usage(chunk.usage)
+                    usage_response.is_chunk = True
+                    yield usage_response
                 continue
             choice = chunk.choices[0]
             delta = choice.delta
