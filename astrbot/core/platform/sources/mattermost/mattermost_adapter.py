@@ -231,7 +231,11 @@ class MattermostPlatformAdapter(Platform):
             abm.message.extend(attachment_components)
             setattr(abm, "temporary_file_paths", temp_paths)
 
-        abm.message_str = self._build_message_str(abm.message, message_text)
+        abm.message_str = self._build_message_str(
+            abm.message,
+            message_text,
+            self.bot_self_id,
+        )
         return abm
 
     def _parse_text_components(self, message_text: str) -> list[Any]:
@@ -272,12 +276,23 @@ class MattermostPlatformAdapter(Platform):
         )
 
     @staticmethod
-    def _build_message_str(components: list[Any], fallback: str) -> str:
+    def _build_message_str(
+        components: list[Any],
+        fallback: str,
+        self_id: str,
+    ) -> str:
         text_parts: list[str] = []
+        leading_self_mention_skipped = False
+
         for component in components:
             if isinstance(component, Plain):
                 text_parts.append(component.text)
             elif isinstance(component, At):
+                is_self_mention = str(component.qq) == self_id
+                if not leading_self_mention_skipped and is_self_mention:
+                    leading_self_mention_skipped = True
+                    if not text_parts or not "".join(text_parts).strip():
+                        continue
                 mention_name = str(component.name or component.qq or "").strip()
                 if mention_name:
                     text_parts.append(f"@{mention_name}")
