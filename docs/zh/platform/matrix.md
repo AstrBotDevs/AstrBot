@@ -3,6 +3,14 @@
 > [!TIP]
 > 该平台适配器由社区([stevessr](https://github.com/stevessr)) 维护。如果您觉得有帮助，请支持开发者，给该仓库点一个 Star。❤️
 
+## 部署 Matrix 服务器
+
+Matrix 是一个 IM 协议，有着丰富的服务端实现。
+
+请在 [Matrix Server](https://matrix.org/ecosystem/servers/)查看可用的服务端。
+
+
+
 ## 支持的基本消息类型
 
 
