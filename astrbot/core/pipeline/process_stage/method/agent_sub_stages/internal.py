@@ -268,6 +268,13 @@ class InternalAgentSubStage(Stage):
                                 "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
                             )
 
+                        # 获取 TTS 文本过滤配置
+                        tts_filter_cfg = self.ctx.astrbot_config.get(
+                            "provider_tts_settings", {}
+                        ).get("tts_text_filter", {})
+                        tts_filter_enable = tts_filter_cfg.get("enable", False)
+                        tts_filter_rules = tts_filter_cfg.get("custom_rules", [])
+
                         # 使用 run_live_agent，总是使用流式响应
                         event.set_result(
                             MessageEventResult()
@@ -280,6 +287,8 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
+                                    tts_filter_enable=tts_filter_enable,
+                                    tts_filter_custom_rules=tts_filter_rules,
                                 ),
                             ),
                         )

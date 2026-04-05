@@ -13,6 +13,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.utils.tts_text_filter import TTSTextFilter
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage, registered_stages
@@ -296,8 +297,27 @@ class ResultDecorateStage(Stage):
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:
                         try:
-                            logger.info(f"TTS 请求: {comp.text}")
-                            audio_path = await tts_provider.get_audio(comp.text)
+                            # 应用 TTS 文本过滤
+                            tts_filter_config = self.ctx.astrbot_config[
+                                "provider_tts_settings"
+                            ].get("tts_text_filter", {})
+                            tts_filter_enable = tts_filter_config.get("enable", False)
+                            tts_custom_rules = tts_filter_config.get("custom_rules", [])
+
+                            if tts_filter_enable:
+                                tts_text = TTSTextFilter.apply(
+                                    comp.text, tts_custom_rules
+                                )
+                            else:
+                                tts_text = comp.text
+
+                            if not tts_text:
+                                # 过滤后为空，跳过 TTS
+                                new_chain.append(comp)
+                                continue
+
+                            logger.info(f"TTS 请求: {tts_text}")
+                            audio_path = await tts_provider.get_audio(tts_text)
                             logger.info(f"TTS 结果: {audio_path}")
                             if not audio_path:
                                 logger.error(

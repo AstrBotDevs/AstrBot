@@ -206,6 +206,10 @@ DEFAULT_CONFIG = {
         "dual_output": False,
         "use_file_service": False,
         "trigger_probability": 1.0,
+        "tts_text_filter": {
+            "enable": False,
+            "custom_rules": [],
+        },
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
@@ -3213,6 +3217,23 @@ CONFIG_METADATA_3 = {
                         "description": "TTS 触发概率",
                         "type": "float",
                         "slider": {"min": 0, "max": 1, "step": 0.05},
+                        "condition": {
+                            "provider_tts_settings.enable": True,
+                        },
+                    },
+                    "provider_tts_settings.tts_text_filter.enable": {
+                        "description": "过滤 TTS 文本中的括号内容",
+                        "type": "bool",
+                        "hint": "开启后将自动去除 *文字*、【文字】、(文字) 等括号/标记内容，避免 TTS 朗读情绪标记",
+                        "condition": {
+                            "provider_tts_settings.enable": True,
+                        },
+                    },
+                    "provider_tts_settings.tts_text_filter.custom_rules": {
+                        "description": "自定义 TTS 过滤正则",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "每行一条正则表达式，将匹配到的内容从 TTS 文本中移除",
                         "condition": {
                             "provider_tts_settings.enable": True,
                         },

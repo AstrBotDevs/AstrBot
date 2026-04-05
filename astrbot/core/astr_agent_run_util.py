@@ -19,6 +19,7 @@ from astrbot.core.persona_error_reply import (
 )
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.utils.tts_text_filter import FilteredQueue
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
@@ -288,6 +289,8 @@ async def run_live_agent(
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,
+    tts_filter_enable: bool = False,
+    tts_filter_custom_rules: list[str] | None = None,
 ) -> AsyncGenerator[MessageChain | None, None]:
     """Live Mode 的 Agent 运行器，支持流式 TTS
 
@@ -298,6 +301,8 @@ async def run_live_agent(
         show_tool_use: 是否显示工具使用
         show_tool_call_result: 是否显示工具返回结果
         show_reasoning: 是否显示推理过程
+        tts_filter_enable: 是否启用 TTS 文本过滤
+        tts_filter_custom_rules: 自定义 TTS 过滤正则规则
 
     Yields:
         MessageChain: 包含文本或音频数据的消息链
@@ -330,15 +335,22 @@ async def run_live_agent(
     first_chunk_received = False
 
     # 创建队列
-    text_queue: asyncio.Queue[str | None] = asyncio.Queue()
+    raw_text_queue: asyncio.Queue[str | None] = asyncio.Queue()
     # audio_queue stored bytes or (text, bytes)
     audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
+
+    # 为 TTS 创建过滤队列（Feeder 写入原始文本，TTS 读取过滤后文本）
+    tts_text_queue: asyncio.Queue[str | None] = (
+        FilteredQueue(raw_text_queue, tts_filter_custom_rules)
+        if tts_filter_enable
+        else raw_text_queue
+    )
 
     # 1. 启动 Agent Feeder 任务：负责运行 Agent 并将文本分句喂给 text_queue
     feeder_task = asyncio.create_task(
         _run_agent_feeder(
             agent_runner,
-            text_queue,
+            raw_text_queue,
             max_step,
             show_tool_use,
             show_tool_call_result,
@@ -349,11 +361,11 @@ async def run_live_agent(
     # 2. 启动 TTS 任务：负责从 text_queue 读取文本并生成音频到 audio_queue
     if support_stream:
         tts_task = asyncio.create_task(
-            _safe_tts_stream_wrapper(tts_provider, text_queue, audio_queue)
+            _safe_tts_stream_wrapper(tts_provider, tts_text_queue, audio_queue)
         )
     else:
         tts_task = asyncio.create_task(
-            _simulated_stream_tts(tts_provider, text_queue, audio_queue)
+            _simulated_stream_tts(tts_provider, tts_text_queue, audio_queue)
         )
 
     # 3. 主循环：从 audio_queue 读取音频并 yield
