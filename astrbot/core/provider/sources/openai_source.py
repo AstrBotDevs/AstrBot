@@ -532,6 +532,7 @@ class ProviderOpenAIOfficial(Provider):
             **payloads,
             stream=True,
             extra_body=extra_body,
+            stream_options={"include_usage": True},
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
@@ -539,12 +540,10 @@ class ProviderOpenAIOfficial(Provider):
         state = ChatCompletionStreamState()
 
         async for chunk in stream:
-            if not chunk.choices:
-                continue
-            choice = chunk.choices[0]
-            delta = choice.delta
+            choice = chunk.choices[0] if chunk.choices else None
+            delta = choice.delta if choice else None
 
-            if dtcs := delta.tool_calls:
+            if delta and (dtcs := delta.tool_calls):
                 for idx, tc in enumerate(dtcs):
                     # siliconflow workaround
                     if tc.function and tc.function.arguments:
@@ -574,7 +573,7 @@ class ProviderOpenAIOfficial(Provider):
                 _y = True
             if chunk.usage:
                 llm_response.usage = self._extract_usage(chunk.usage)
-            elif choice_usage := getattr(choice, "usage", None):
+            elif choice and (choice_usage := getattr(choice, "usage", None)):
                 # Workaround for some providers that only return usage in choices[].usage, e.g. MoonshotAI
                 # See https://github.com/AstrBotDevs/AstrBot/issues/6614
                 llm_response.usage = self._extract_usage(choice_usage)
@@ -863,6 +862,9 @@ class ProviderOpenAIOfficial(Provider):
 
     def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
+        model = payloads.get("model", "").lower()
+        is_gemini = "gemini" in model
+
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
@@ -874,10 +876,23 @@ class ProviderOpenAIOfficial(Provider):
                         reasoning_content += str(part.get("think"))
                     else:
                         new_content.append(part)
-                message["content"] = new_content
-                # reasoning key is "reasoning_content"
+                # Some providers (Grok, etc.) reject empty content lists.
+                # When all parts were think blocks, fall back to None.
+                message["content"] = new_content or None
                 if reasoning_content:
                     message["reasoning_content"] = reasoning_content
+
+            # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
+            # 纯文本会触发 400 Invalid argument，需要包一层 JSON。
+            if is_gemini and message.get("role") == "tool":
+                content = message.get("content", "")
+                if isinstance(content, str):
+                    try:
+                        json.loads(content)
+                    except (json.JSONDecodeError, ValueError):
+                        message["content"] = json.dumps(
+                            {"result": content}, ensure_ascii=False
+                        )
 
     async def _handle_api_error(
         self,
