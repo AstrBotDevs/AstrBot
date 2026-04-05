@@ -28,8 +28,9 @@
     "all": "全部"
   },
   "views": {
-    "card": "卡片视图",
-    "list": "列表视图"
+    "card": "卡片布局",
+    "list": "列表布局",
+    "modManager": "管理器布局"
   },
   "buttons": {
     "showSystemPlugins": "显示系统插件",
@@ -89,7 +90,8 @@
       "tags": "标签",
       "eventType": "行为类型",
       "specificType": "具体类型",
-      "trigger": "触发方式"
+      "trigger": "触发方式",
+      "index": "序号"
     }
   },
   "empty": {
@@ -367,5 +369,57 @@
   },
   "pluginChangelog": {
     "menuTitle": "查看更新日志"
+  },
+  "modManager": {
+    "viewToggle": {
+      "switchToLegacy": "切换到经典视图",
+      "switchToModManager": "切换到管理器布局"
+    },
+    "panelTabs": {
+      "info": "概况",
+      "config": "配置",
+      "overview": "文档",
+      "changelog": "更新日志",
+      "reserved": "扩展区"
+    },
+    "welcome": {
+      "title": "欢迎使用 AstrBot 插件管理器",
+      "subtitle": "管理、配置和监控你的插件",
+      "links": {
+        "docs": "文档"
+      },
+      "actions": {
+        "viewOnGithub": "在 GitHub 上查看",
+        "retry": "重试"
+      },
+      "readme": {
+        "loading": "正在加载 README...",
+        "errors": {
+          "rateLimited": "GitHub API 请求频率受限，请稍后再试",
+          "fetchFailed": "获取 README 失败"
+        },
+        "empty": {
+          "title": "暂无 README",
+          "subtitle": "该项目尚未提供 README 文件"
+        }
+      },
+      "tip": {
+        "market": "提示：你可以在「插件市场」标签页中发现和安装更多插件。"
+      }
+    },
+    "changelogPanel": {
+      "loading": "正在加载更新日志...",
+      "errors": {
+        "fetchFailed": "获取更新日志失败",
+        "fetchError": "获取更新日志时发生错误"
+      },
+      "actions": {
+        "retry": "重试"
+      },
+      "empty": {
+        "title": "暂无更新日志",
+        "subtitle": "该插件尚未提供更新日志"
+      }
+    }
   }
 }

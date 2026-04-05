@@ -1,0 +1,247 @@
+.markdown-body {
+  --markdown-border: rgba(128, 128, 128, 0.3);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+    sans-serif;
+  line-height: 1.6;
+  padding: 8px 0;
+  color: var(--v-theme-secondaryText);
+}
+
+.markdown-body [align="center"] {
+  text-align: center;
+}
+.markdown-body [align="center"] > div {
+  text-align: center;
+}
+.markdown-body [align="right"] {
+  text-align: right;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  scroll-margin-top: 12px;
+}
+
+.markdown-body h1 {
+  font-size: 2em;
+  border-bottom: 1px solid var(--v-theme-border);
+  padding-bottom: 0.3em;
+}
+.markdown-body h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--v-theme-border);
+  padding-bottom: 0.3em;
+}
+.markdown-body p {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.markdown-body .code-block-wrapper {
+  position: relative;
+  margin-bottom: 16px;
+}
+.markdown-body .code-lang-label {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 12px;
+  color: #8b949e;
+  text-transform: uppercase;
+  font-weight: 500;
+  z-index: 1;
+}
+
+.markdown-body .copy-code-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(110, 118, 129, 0.4);
+  border: none;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  color: #c9d1d9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+  z-index: 1;
+}
+
+.markdown-body .copy-code-btn:hover {
+  background: rgba(110, 118, 129, 0.6);
+  color: #fff;
+}
+
+.markdown-body code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  background-color: rgba(110, 118, 129, 0.2);
+  border-radius: 6px;
+  font-size: 85%;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.markdown-body pre.hljs {
+  padding: 16px;
+  padding-top: 32px;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  background-color: #0d1117;
+  border-radius: 6px;
+  margin: 0;
+}
+
+.markdown-body pre.hljs code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: #c9d1d9;
+}
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 2em;
+  margin-bottom: 16px;
+}
+
+.markdown-body img {
+  display: inline-block;
+  max-width: 100% !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 4px 0;
+  box-sizing: border-box;
+  background-color: var(--v-theme-background);
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+// Constrain images inside table cells to prevent row height explosion
+.markdown-body table td img,
+.markdown-body table th img {
+  max-height: 200px;
+  object-fit: contain;
+}
+
+.markdown-body img[src*="shields.io"],
+.markdown-body img[src*="badge"],
+.markdown-body img[src*="hellogithub"],
+.markdown-body img[src*="trendshift"] {
+  display: inline-block;
+  vertical-align: middle;
+  height: auto;
+  margin: 2px 4px;
+  background-color: transparent;
+}
+
+.markdown-body blockquote {
+  padding: 0 1em;
+  color: var(--v-theme-secondaryText);
+  border-left: 0.25em solid var(--v-theme-border);
+  margin-bottom: 16px;
+}
+
+.markdown-body a {
+  color: var(--v-theme-primary);
+  text-decoration: none;
+}
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body table {
+  border-spacing: 0;
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0;
+  border: 1px solid var(--markdown-border);
+}
+.markdown-body .table-container {
+  width: 100%;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  border: 1px solid var(--markdown-border);
+  border-radius: 6px;
+}
+
+.markdown-body table th,
+.markdown-body table td {
+  padding: 6px 13px;
+  border: 1px solid var(--markdown-border);
+}
+.markdown-body table th {
+  font-weight: 600;
+  background-color: rgba(128, 128, 128, 0.1);
+}
+.markdown-body table tr {
+  background-color: transparent;
+}
+.markdown-body table tr:nth-child(2n) {
+  background-color: rgba(128, 128, 128, 0.05);
+}
+
+.markdown-body hr {
+  height: 0.25em;
+  padding: 0;
+  margin: 24px 0;
+  background-color: var(--v-theme-containerBg);
+  border: 0;
+}
+
+.markdown-body details {
+  margin-bottom: 16px;
+  border: 1px solid var(--v-theme-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  background-color: var(--v-theme-surface);
+}
+
+.markdown-body details[open] {
+  padding-bottom: 12px;
+}
+.markdown-body summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 0;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.markdown-body summary::before {
+  content: "▶";
+  font-size: 0.75em;
+  transition: transform 0.2s ease;
+}
+.markdown-body details[open] summary::before {
+  transform: rotate(90deg);
+}
+.markdown-body summary::-webkit-details-marker {
+  display: none;
+}
+.markdown-body details > *:not(summary) {
+  margin-top: 12px;
+}
+
+.markdown-body .hljs-keyword,
+.markdown-body .hljs-selector-tag,
+.markdown-body .hljs-title,
+.markdown-body .hljs-section,
+.markdown-body .hljs-doctag,
+.markdown-body .hljs-name,
+.markdown-body .hljs-strong {
+  font-weight: bold;
+}

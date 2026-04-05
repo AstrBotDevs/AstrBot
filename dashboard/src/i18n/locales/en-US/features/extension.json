@@ -27,8 +27,9 @@
     "all": "All"
   },
   "views": {
-    "card": "Card View",
-    "list": "List View"
+    "card": "Card Layout",
+    "list": "List Layout",
+    "modManager": "Manager Layout"
   },
   "buttons": {
     "showSystemPlugins": "Show System Extensions",
@@ -86,7 +87,8 @@
       "tags": "Tags",
       "eventType": "Event Type",
       "specificType": "Specific Type",
-      "trigger": "Trigger"
+      "trigger": "Trigger",
+      "index": "Index"
     }
   },
   "empty": {
@@ -364,5 +366,57 @@
   },
   "pluginChangelog": {
     "menuTitle": "View Changelog"
+  },
+  "modManager": {
+    "viewToggle": {
+      "switchToLegacy": "Switch to Classic View",
+      "switchToModManager": "Switch to Manager Layout"
+    },
+    "panelTabs": {
+      "info": "Profile",
+      "config": "Config",
+      "overview": "Docs",
+      "changelog": "Changelog",
+      "reserved": "Extension"
+    },
+    "welcome": {
+      "title": "Welcome to AstrBot Plugin Manager",
+      "subtitle": "Manage, configure and monitor your plugins",
+      "links": {
+        "docs": "Documentation"
+      },
+      "actions": {
+        "viewOnGithub": "View on GitHub",
+        "retry": "Retry"
+      },
+      "readme": {
+        "loading": "Loading README...",
+        "errors": {
+          "rateLimited": "GitHub API rate limit exceeded, please try again later",
+          "fetchFailed": "Failed to fetch README"
+        },
+        "empty": {
+          "title": "No README available",
+          "subtitle": "This project has not provided a README file"
+        }
+      },
+      "tip": {
+        "market": "Tip: You can discover and install more plugins in the Plugin Market tab."
+      }
+    },
+    "changelogPanel": {
+      "loading": "Loading changelog...",
+      "errors": {
+        "fetchFailed": "Failed to fetch changelog",
+        "fetchError": "An error occurred while fetching the changelog"
+      },
+      "actions": {
+        "retry": "Retry"
+      },
+      "empty": {
+        "title": "No changelog available",
+        "subtitle": "This plugin has not provided a changelog"
+      }
+    }
   }
 }

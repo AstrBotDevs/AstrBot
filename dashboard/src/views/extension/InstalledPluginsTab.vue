@@ -3,9 +3,10 @@ import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import PinnedPluginItem from "@/components/extension/PinnedPluginItem.vue";
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import ModManagerLayout from "@/components/extension/mod-manager/ModManagerLayout.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { normalizeTextInput } from "@/utils/inputValue";
-import { ref, computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 
 const props = defineProps({
   state: {
@@ -158,6 +159,28 @@ const {
   searchDebounceTimer,
 } = props.state;
 
+// MOD manager view mode persistence
+const VIEW_MODE_KEY = "pluginManager.installedViewMode";
+const installedViewMode = ref(localStorage.getItem(VIEW_MODE_KEY) || "legacy");
+watch(installedViewMode, (val) => {
+  localStorage.setItem(VIEW_MODE_KEY, val);
+});
+
+// Unified three-state view mode: 'card' | 'list' | 'mod'
+const combinedViewMode = computed(() => {
+  if (installedViewMode.value === "mod") return "mod";
+  return isListView.value ? "list" : "card";
+});
+
+const setCombinedViewMode = (val) => {
+  if (val === "mod") {
+    installedViewMode.value = "mod";
+  } else {
+    installedViewMode.value = "legacy";
+    isListView.value = val === "list";
+  }
+};
+
 // 置顶插件（保存在 localStorage）
 const PINNED_KEY = "astrbot.pinnedExtensions";
 const pinnedNames = ref([]);
@@ -208,14 +231,14 @@ const onDragStart = (index) => {
 };
 
 const onDragOver = (e) => {
-  e.preventDefault(); // 必须调用，否则不会触发 drop
+  e.preventDefault();
 };
 
 const onDragEnter = (e, index) => {
   e.preventDefault();
-  
+
   const now = Date.now();
-  if (now - lastSwapTime < 100) return; // 100ms 冷却，防止快速抖动
+  if (now - lastSwapTime < 100) return;
 
   if (draggedIndex.value === -1 || draggedIndex.value === index) {
     return;
@@ -224,9 +247,9 @@ const onDragEnter = (e, index) => {
   const newList = [...pinnedNames.value];
   const item = newList.splice(draggedIndex.value, 1)[0];
   newList.splice(index, 0, item);
-  
+
   pinnedNames.value = newList;
-  draggedIndex.value = index; 
+  draggedIndex.value = index;
   lastSwapTime = now;
 };
 
@@ -237,9 +260,7 @@ const onDrop = () => {
 const onDragEnd = () => {
   draggedIndex.value = -1;
 };
-// ----------------
 
-// 映射 name -> plugin 对象（优先从 sortedPlugins 找）
 const pinnedPlugins = computed(() => {
   if (!Array.isArray(pinnedNames.value)) return [];
 
@@ -284,18 +305,61 @@ const pinnedPlugins = computed(() => {
                   </v-text-field>
 
                   <v-btn-toggle
-                    v-model="isListView"
+                    :model-value="combinedViewMode"
+                    @update:model-value="setCombinedViewMode"
                     mandatory
                     density="compact"
                     color="primary"
                     class="view-mode-toggle"
                   >
-                    <v-btn :value="false" icon="mdi-view-grid"></v-btn>
-                    <v-btn :value="true" icon="mdi-view-list"></v-btn>
+                    <v-btn value="card">
+                      <v-icon size="18">mdi-view-grid</v-icon>
+                      <v-tooltip activator="parent" location="bottom">{{ tm('views.card') }}</v-tooltip>
+                    </v-btn>
+                    <v-btn value="list">
+                      <v-icon size="18">mdi-view-list</v-icon>
+                      <v-tooltip activator="parent" location="bottom">{{ tm('views.list') }}</v-tooltip>
+                    </v-btn>
+                    <v-btn value="mod">
+                      <v-icon size="18">mdi-view-dashboard-outline</v-icon>
+                      <v-tooltip activator="parent" location="bottom">{{ tm('views.modManager') }}</v-tooltip>
+                    </v-btn>
                   </v-btn-toggle>
                 </div>
               </div>
             </div>
+
+            <!-- MOD Manager view -->
+            <div v-if="installedViewMode === 'mod'" style="height: calc(100vh - 200px)">
+              <ModManagerLayout
+                :plugins="filteredPlugins"
+                :loading="loading_"
+                :show-reserved="showReserved"
+                :pinned-names="pinnedNames"
+                installed-view-mode="mod"
+                :updatable-count="updatableExtensions.length"
+                :search="pluginSearch"
+                :updating-all="updatingAll"
+                @update:search="pluginSearch = $event"
+                @update:show-reserved="toggleShowReserved"
+                @update:installed-view-mode="installedViewMode = $event"
+                @install="dialog = true"
+                @update-all="showUpdateAllConfirm"
+                @action-enable="pluginOn($event)"
+                @action-disable="pluginOff($event)"
+                @action-reload="reloadPlugin($event)"
+                @action-update="updateExtension($event)"
+                @action-uninstall="uninstallExtension($event)"
+                @action-configure="openExtensionConfig($event.name)"
+                @action-open-readme="viewReadme($event)"
+                @action-open-repo="(url) => window.open(url, '_blank')"
+                @toggle-pin="togglePin"
+                @config-saved="getExtensions"
+              />
+            </div>
+
+            <!-- Legacy views -->
+            <template v-else>
 
             <v-row class="mb-4">
               <v-col cols="12">
@@ -401,7 +465,7 @@ const pinnedPlugins = computed(() => {
               </v-col>
             </v-row>
 
-            
+
             <v-card
               v-if="failedPluginItems.length > 0"
               class="mb-4 rounded-lg"
@@ -783,6 +847,8 @@ const pinnedPlugins = computed(() => {
                 </v-row>
               </div>
             </v-fade-transition>
+
+            </template>
 
             <v-tooltip :text="tm('market.installPlugin')" location="left">
               <template v-slot:activator="{ props }">
