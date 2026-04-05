@@ -361,6 +361,8 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
+            case "longcat_chat_completion":
+                from .sources.longcat_source import ProviderLongCat as ProviderLongCat
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
             case "groq_chat_completion":
