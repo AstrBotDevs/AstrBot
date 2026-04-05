@@ -3450,9 +3450,9 @@ CONFIG_METADATA_3 = {
                     "provider_settings.tool_schema_mode": {
                         "description": "工具调用模式",
                         "type": "string",
-                        "options": ["skills_like", "full"],
-                        "labels": ["Skills-like（两阶段）", "Full（完整参数）"],
-                        "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+                        "options": ["lazy_load", "full"],
+                        "labels": ["Lazy Load（两阶段）", "Full（完整参数）"],
+                        "hint": "Lazy Load 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },

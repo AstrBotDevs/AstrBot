@@ -2,10 +2,9 @@ import asyncio
 import inspect
 import json
 import traceback
-import typing as T
 import uuid
-from collections.abc import Sequence
-from collections.abc import Set as AbstractSet
+from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence, Set
+from typing import Any
 
 import mcp
 
@@ -42,17 +41,21 @@ from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
+# Fallback message when a tool completes successfully but produces no direct output.
+# This is defined as a constant so it can be localized or overridden by i18n systems.
+TOOL_NO_OUTPUT_FALLBACK_MESSAGE = "Tool executed successfully with no output."
+
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
-    def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
+    def _collect_image_urls_from_args(cls, image_urls_raw: Any) -> list[str]:
         if image_urls_raw is None:
             return []
 
         if isinstance(image_urls_raw, str):
             return [image_urls_raw]
 
-        if isinstance(image_urls_raw, (Sequence, AbstractSet)) and not isinstance(
+        if isinstance(image_urls_raw, (Sequence, Set)) and not isinstance(
             image_urls_raw, (str, bytes, bytearray)
         ):
             return [item for item in image_urls_raw if isinstance(item, str)]
@@ -92,7 +95,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     async def _collect_handoff_image_urls(
         cls,
         run_context: ContextWrapper[AstrAgentContext],
-        image_urls_raw: T.Any,
+        image_urls_raw: Any,
     ) -> list[str]:
         candidates: list[str] = []
         candidates.extend(cls._collect_image_urls_from_args(image_urls_raw))
@@ -242,7 +245,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         *,
         image_urls_prepared: bool = False,
-        **tool_args: T.Any,
+        **tool_args: Any,
     ):
         tool_args = dict(tool_args)
         input_ = tool_args.get("input")
@@ -448,10 +451,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         task_id: str,
         tool_name: str,
         result_text: str,
-        tool_args: dict[str, T.Any],
+        tool_args: dict[str, Any],
         note: str,
         summary_name: str,
-        extra_result_fields: dict[str, T.Any] | None = None,
+        extra_result_fields: dict[str, Any] | None = None,
     ) -> None:
         from astrbot.core.astr_main_agent import (
             MainAgentBuildConfig,
@@ -609,23 +612,30 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         yield mcp.types.CallToolResult(content=[text_content])
                 else:
                     # NOTE: Tool 在这里直接请求发送消息给用户
-                    # TODO: 是否需要判断 event.get_result() 是否为空?
-                    # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
-                    if res := run_context.context.event.get_result():
-                        if res.chain:
-                            try:
-                                await event.send(
-                                    MessageChain(
-                                        chain=res.chain,
-                                        type="tool_direct_result",
-                                    )
+                    res = run_context.context.event.get_result()
+                    if res and res.chain:
+                        try:
+                            await event.send(
+                                MessageChain(
+                                    chain=res.chain,
+                                    type="tool_direct_result",
                                 )
-                            except Exception as e:
-                                logger.error(
-                                    f"Tool 直接发送消息失败: {e}",
-                                    exc_info=True,
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Tool 直接发送消息失败: {e}",
+                                exc_info=True,
+                            )
+                        yield None
+                    else:
+                        yield mcp.types.CallToolResult(
+                            content=[
+                                mcp.types.TextContent(
+                                    type="text",
+                                    text=TOOL_NO_OUTPUT_FALLBACK_MESSAGE,
                                 )
-                    yield None
+                            ]
+                        )
             except asyncio.TimeoutError:
                 raise Exception(
                     f"tool {tool.name} execution timeout after {tool_call_timeout or run_context.tool_call_timeout} seconds.",
@@ -648,15 +658,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
 async def call_local_llm_tool(
     context: ContextWrapper[AstrAgentContext],
-    handler: T.Callable[
+    handler: Callable[
         ...,
-        T.Awaitable[MessageEventResult | mcp.types.CallToolResult | str | None]
-        | T.AsyncGenerator[MessageEventResult | CommandResult | str | None, None],
+        Awaitable[MessageEventResult | mcp.types.CallToolResult | str | None]
+        | AsyncGenerator[MessageEventResult | CommandResult | str | None, None],
     ],
     method_name: str,
     *args,
     **kwargs,
-) -> T.AsyncGenerator[T.Any, None]:
+) -> AsyncGenerator[Any, None]:
     """执行本地 LLM 工具的处理函数并处理其返回结果"""
     ready_to_call = None  # 一个协程或者异步生成器
 
