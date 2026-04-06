@@ -396,7 +396,7 @@ class Main(star.Star):
             return "Error: Tavily web searcher does not return any results."
 
         ret_ls = []
-        ref_uuid = str(uuid.uuid4())[:4]
+        ref_uuid = str(uuid.uuid4())
         for idx, result in enumerate(results, 1):
             index = f"{ref_uuid}.{idx}"
             ret_ls.append(
@@ -425,7 +425,7 @@ class Main(star.Star):
         """Extract the content of a web page using Tavily.
 
         Args:
-            url(string): Required. An URl to extract content from.
+            url(string): Required. A URL to extract content from.
             extract_depth(string): Optional. The depth of the extraction, must be one of 'basic', 'advanced'. Default is "basic".
             timeout(number): Optional. Request timeout in seconds. Minimum is 30. Default is 30.
 
@@ -595,7 +595,7 @@ class Main(star.Star):
             return "Error: BoCha web searcher does not return any results."
 
         ret_ls = []
-        ref_uuid = str(uuid.uuid4())[:4]
+        ref_uuid = str(uuid.uuid4())
         for idx, result in enumerate(results, 1):
             index = f"{ref_uuid}.{idx}"
             ret_ls.append(
@@ -717,7 +717,7 @@ class Main(star.Star):
             return "Error: Exa web searcher does not return any results."
 
         ret_ls = []
-        ref_uuid = str(uuid.uuid4())[:4]
+        ref_uuid = str(uuid.uuid4())
         for idx, result in enumerate(results, 1):
             index = f"{ref_uuid}.{idx}"
             ret_ls.append(
@@ -869,7 +869,7 @@ class Main(star.Star):
             return "Error: Exa find similar does not return any results."
 
         ret_ls = []
-        ref_uuid = str(uuid.uuid4())[:4]
+        ref_uuid = str(uuid.uuid4())
         for idx, result in enumerate(results, 1):
             index = f"{ref_uuid}.{idx}"
             ret_ls.append(

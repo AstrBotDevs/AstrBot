@@ -1,9 +1,12 @@
 import json
 
+import pytest
+
 from astrbot.core.utils.web_search_utils import (
     build_web_search_refs,
     collect_web_search_ref_items,
     collect_web_search_results,
+    normalize_web_search_base_url,
 )
 
 
@@ -88,3 +91,18 @@ def test_build_web_search_refs_ignores_tool_call_id_and_falls_back():
     )
 
     assert [ref["index"] for ref in refs["used"]] == ["a152.1", "a152.2"]
+
+
+def test_normalize_web_search_base_url_reports_invalid_value():
+    with pytest.raises(ValueError) as exc_info:
+        normalize_web_search_base_url(
+            "exa.ai/search",
+            default="https://api.exa.ai",
+            provider_name="Exa",
+        )
+
+    assert str(exc_info.value) == (
+        "Error: Exa API Base URL must be a base host URL starting with "
+        "http:// or https:// (for example, https://api.exa.ai), not a full "
+        "endpoint path. Received: 'exa.ai/search'."
+    )

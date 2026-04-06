@@ -25,7 +25,9 @@ def normalize_web_search_base_url(
     parsed = urlparse(normalized)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError(
-            f"Error: {provider_name} API Base URL must start with http:// or https://.",
+            f"Error: {provider_name} API Base URL must be a base host URL starting "
+            f"with http:// or https:// (for example, {default}), not a full endpoint "
+            f"path. Received: {normalized!r}.",
         )
     return normalized
 

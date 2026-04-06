@@ -274,7 +274,8 @@ export default {
                 url: ''
             },
             // Web search results mapping: { 'uuid.idx': { url, title, snippet } }
-            webSearchResults: {}
+            webSearchResults: {},
+            messageRefsCache: new WeakMap()
         };
     },
     async mounted() {
@@ -359,13 +360,66 @@ export default {
             return refs;
         },
 
+        buildMessageRefsCacheKey(messageParts) {
+            if (!Array.isArray(messageParts)) {
+                return '';
+            }
+
+            const cacheParts = [];
+
+            messageParts.forEach(part => {
+                if (part.type !== 'tool_call' || !Array.isArray(part.tool_calls)) {
+                    return;
+                }
+
+                part.tool_calls.forEach(toolCall => {
+                    if (!WEB_SEARCH_REFERENCE_TOOLS.includes(toolCall?.name) || !toolCall.result) {
+                        return;
+                    }
+
+                    const rawResult = typeof toolCall.result === 'string'
+                        ? toolCall.result
+                        : JSON.stringify(toolCall.result);
+
+                    cacheParts.push(`${toolCall.id || toolCall.name}:${rawResult}`);
+                });
+            });
+
+            return cacheParts.join('||');
+        },
+
+        getCachedMessageRefs(content) {
+            if (!content || typeof content !== 'object') {
+                return null;
+            }
+
+            const cacheKey = this.buildMessageRefsCacheKey(content.message);
+            if (!cacheKey) {
+                return null;
+            }
+
+            const cachedEntry = this.messageRefsCache.get(content);
+            if (cachedEntry?.key === cacheKey) {
+                return cachedEntry.refs;
+            }
+
+            const refs = this.collectMessageWebSearchRefs(content.message);
+            const normalizedRefs = refs.length ? { used: refs } : null;
+
+            this.messageRefsCache.set(content, {
+                key: cacheKey,
+                refs: normalizedRefs
+            });
+
+            return normalizedRefs;
+        },
+
         getMessageRefs(content) {
             if (content?.refs?.used?.length) {
                 return content.refs;
             }
 
-            const fallbackRefs = this.collectMessageWebSearchRefs(content?.message);
-            return fallbackRefs.length ? { used: fallbackRefs } : null;
+            return this.getCachedMessageRefs(content);
         },
 
         // 从消息中提取网页搜索结果映射
@@ -377,7 +431,12 @@ export default {
                     return;
                 }
 
-                this.collectMessageWebSearchRefs(msg.content.message).forEach(ref => {
+                const refs = this.getMessageRefs(msg.content);
+                if (!refs?.used?.length) {
+                    return;
+                }
+
+                refs.used.forEach(ref => {
                     results[ref.index] = {
                         url: ref.url,
                         title: ref.title,
