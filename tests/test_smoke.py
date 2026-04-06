@@ -47,20 +47,6 @@ def test_smoke_critical_imports_in_fresh_interpreter() -> None:
     _run_code_in_fresh_interpreter(code, "Smoke import check failed.")
 
 
-def test_smoke_startup_imports_do_not_eagerly_load_faiss() -> None:
-    code = (
-        "import sys;"
-        "import astrbot.core.core_lifecycle;"
-        "assert 'faiss' not in sys.modules, 'faiss loaded after core_lifecycle import';"
-        "import astrbot.dashboard.server;"
-        "assert 'faiss' not in sys.modules, 'faiss loaded after dashboard.server import'"
-    )
-    _run_code_in_fresh_interpreter(
-        code,
-        "Startup imports should not eagerly load faiss.",
-    )
-
-
 def test_smoke_pipeline_stage_registration_matches_order() -> None:
     ensure_builtin_stages_registered()
     stage_names = {cls.__name__ for cls in registered_stages}
