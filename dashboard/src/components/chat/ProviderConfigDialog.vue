@@ -63,6 +63,7 @@
                 <ProviderModelsPanel :entries="filteredMergedModelEntries" :available-count="availableModels.length"
                   v-model:model-search="modelSearch" :loading-models="loadingModels"
                   :is-source-modified="isSourceModified" :supports-image-input="supportsImageInput"
+                  :supports-audio-input="supportsAudioInput"
                   :supports-tool-call="supportsToolCall" :supports-reasoning="supportsReasoning"
                   :format-context-limit="formatContextLimit" :testing-providers="testingProviders" :tm="tm"
                   @fetch-models="fetchAvailableModels" @open-manual-model="openManualModelDialog"
@@ -185,6 +186,7 @@ const {
   resolveSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
+  supportsAudioInput,
   supportsToolCall,
   supportsReasoning,
   formatContextLimit,

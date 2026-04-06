@@ -100,6 +100,7 @@
                         :loading-models="loadingModels"
                         :is-source-modified="isSourceModified"
                         :supports-image-input="supportsImageInput"
+                        :supports-audio-input="supportsAudioInput"
                         :supports-tool-call="supportsToolCall"
                         :supports-reasoning="supportsReasoning"
                         :format-context-limit="formatContextLimit"
@@ -174,6 +175,7 @@
 
     <!-- 添加提供商对话框 -->
     <AddNewProvider v-model:show="showAddProviderDialog" :metadata="configSchema"
+      :current-provider-type="selectedProviderType"
       @select-template="selectProviderTemplate" />
 
     <!-- 手动添加模型对话框 -->
@@ -324,6 +326,7 @@ const {
   resolveSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
+  supportsAudioInput,
   supportsToolCall,
   supportsReasoning,
   formatContextLimit,

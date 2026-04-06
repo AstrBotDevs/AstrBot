@@ -556,6 +556,18 @@
         "description": "Bot Token",
         "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
       },
+      "mattermost_url": {
+        "description": "Mattermost URL",
+        "hint": "Mattermost service URL, for example https://chat.example.com."
+      },
+      "mattermost_bot_token": {
+        "description": "Mattermost Bot Token",
+        "hint": "The access token generated after creating a bot account in Mattermost."
+      },
+      "mattermost_reconnect_delay": {
+        "description": "Mattermost Reconnect Delay",
+        "hint": "Delay in seconds before reconnecting after the WebSocket disconnects. Defaults to 5 seconds."
+      },
       "type": {
         "description": "Adapter Type"
       },
@@ -1096,6 +1108,24 @@
         "description": "Custom rerank task description",
         "hint": "Only effective for qwen3-rerank models. Recommended to write in English."
       },
+      "nvidia_rerank_api_base": {
+          "description": "API Base URL"
+      },
+      "nvidia_rerank_api_key": {
+          "description": "API Key"
+      },
+      "nvidia_rerank_model": {
+          "description": "Rerank Model Name",
+          "hint": "Please refer to the NVIDIA Docs for the model name."
+      },
+      "nvidia_rerank_model_endpoint": {
+          "description": "Custom Model Endpoint",
+          "hint": "Custom URL suffix endpoint, defaults to /reranking."
+      },
+      "nvidia_rerank_truncate": {
+          "description": "Text Truncation Strategy",
+          "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
+      },
       "launch_model_if_not_running": {
         "description": "Auto-start model if not running",
         "hint": "If the model is not running in Xinference, attempt to start it automatically. Recommended to disable in production."
@@ -1106,6 +1136,7 @@
         "labels": [
           "Text",
           "Image",
+          "Audio",
           "Tool use"
         ]
       },

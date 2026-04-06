@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.22.2"
+VERSION = "4.22.3"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -515,7 +515,7 @@ CONFIG_METADATA_2 = {
                         "satori_heartbeat_interval": 10,
                         "satori_reconnect_delay": 5,
                     },
-                    "kook": {
+                    "KOOK": {
                         "id": "kook",
                         "type": "kook",
                         "enable": False,
@@ -527,6 +527,14 @@ CONFIG_METADATA_2 = {
                         "kook_heartbeat_timeout": 6,
                         "kook_max_heartbeat_failures": 3,
                         "kook_max_consecutive_failures": 5,
+                    },
+                    "Mattermost": {
+                        "id": "mattermost",
+                        "type": "mattermost",
+                        "enable": False,
+                        "mattermost_url": "https://chat.example.com",
+                        "mattermost_bot_token": "",
+                        "mattermost_reconnect_delay": 5.0,
                     },
                     # "WebChat": {
                     #     "id": "webchat",
@@ -661,6 +669,21 @@ CONFIG_METADATA_2 = {
                         "description": "Bot Token",
                         "type": "string",
                         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
+                    },
+                    "mattermost_url": {
+                        "description": "Mattermost URL",
+                        "type": "string",
+                        "hint": "Mattermost 服务地址，例如 https://chat.example.com。",
+                    },
+                    "mattermost_bot_token": {
+                        "description": "Mattermost Bot Token",
+                        "type": "string",
+                        "hint": "在 Mattermost 中创建 Bot 账户后生成的访问令牌。",
+                    },
+                    "mattermost_reconnect_delay": {
+                        "description": "Mattermost 重连延迟",
+                        "type": "float",
+                        "hint": "WebSocket 断开后的重连等待时间，单位为秒。默认 5 秒。",
                     },
                     "misskey_instance_url": {
                         "description": "Misskey 实例 URL",
@@ -1811,6 +1834,19 @@ CONFIG_METADATA_2 = {
                         "return_documents": False,
                         "instruct": "",
                     },
+                    "NVIDIA Rerank": {
+                        "id": "nvidia_rerank",
+                        "type": "nvidia_rerank",
+                        "provider": "nvidia",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "nvidia_rerank_api_key": "",
+                        "nvidia_rerank_api_base": "https://ai.api.nvidia.com/v1/retrieval",
+                        "nvidia_rerank_model": "nv-rerank-qa-mistral-4b:1",
+                        "nvidia_rerank_model_endpoint": "/reranking",
+                        "timeout": 20,
+                        "nvidia_rerank_truncate": "",
+                    },
                     "Xinference STT": {
                         "id": "xinference_stt",
                         "type": "xinference_stt",
@@ -1879,12 +1915,40 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "如果模型当前未在 Xinference 服务中运行，是否尝试自动启动它。在生产环境中建议关闭。",
                     },
+                    "nvidia_rerank_api_base": {
+                        "description": "API Base URL",
+                        "type": "string",
+                    },
+                    "nvidia_rerank_api_key": {
+                        "description": "API Key",
+                        "type": "string",
+                    },
+                    "nvidia_rerank_model": {
+                        "description": "重排序模型名称",
+                        "type": "string",
+                        "hint": "请参照NVIDIA Docs中模型名称填写。",
+                    },
+                    "nvidia_rerank_model_endpoint": {
+                        "description": "自定义模型端点",
+                        "type": "string",
+                        "hint": "自定义URL末尾端点，默认为 /reranking",
+                    },
+                    "nvidia_rerank_truncate": {
+                        "description": "文本截断策略",
+                        "type": "string",
+                        "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。",
+                        "options": [
+                            "",
+                            "NONE",
+                            "END",
+                        ],
+                    },
                     "modalities": {
                         "description": "模型能力",
                         "type": "list",
                         "items": {"type": "string"},
-                        "options": ["text", "image", "tool_use"],
-                        "labels": ["文本", "图像", "工具使用"],
+                        "options": ["text", "image", "audio", "tool_use"],
+                        "labels": ["文本", "图像", "音频", "工具使用"],
                         "render_type": "checkbox",
                         "hint": "模型支持的模态。如所填写的模型不支持图像，请取消勾选图像。",
                     },

@@ -35,6 +35,11 @@
                                         <v-icon v-bind="tipProps" size="12" color="grey">mdi-eye-outline</v-icon>
                                     </template>
                                 </v-tooltip>
+                                <v-tooltip text="支持音频输入" location="top" v-if="supportsAudioInput(provider)">
+                                    <template v-slot:activator="{ props: tipProps }">
+                                        <v-icon v-bind="tipProps" size="12" color="grey">mdi-music-note-outline</v-icon>
+                                    </template>
+                                </v-tooltip>
                                 <v-tooltip text="支持工具调用" location="top" v-if="supportsToolCall(provider)">
                                     <template v-slot:activator="{ props: tipProps }">
                                         <v-icon v-bind="tipProps" size="12" color="grey">mdi-wrench</v-icon>
@@ -132,6 +137,11 @@ function selectProvider(provider: ProviderConfig) {
 function supportsImageInput(provider: ProviderConfig): boolean {
     const inputs = provider.model_metadata?.modalities?.input || [];
     return inputs.includes('image');
+}
+
+function supportsAudioInput(provider: ProviderConfig): boolean {
+    const inputs = provider.model_metadata?.modalities?.input || [];
+    return inputs.includes('audio');
 }
 
 function supportsToolCall(provider: ProviderConfig): boolean {
