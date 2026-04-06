@@ -1093,6 +1093,24 @@
                 "description": "Описание задачи для Rerank",
                 "hint": "Эффективно только для моделей qwen3-rerank. Рекомендуется писать на английском."
             },
+            "nvidia_rerank_api_base": {
+                "description": "Базовый URL API"
+            },
+            "nvidia_rerank_api_key": {
+                "description": "API-ключ"
+            },
+            "nvidia_rerank_model": {
+                "description": "Название модели Rerank",
+                "hint": "Укажите название модели в соответствии с документацией NVIDIA."
+            },
+            "nvidia_rerank_model_endpoint": {
+                "description": "Пользовательский endpoint модели",
+                "hint": "Пользовательский суффикс URL endpoint, по умолчанию /reranking."
+            },
+            "nvidia_rerank_truncate": {
+                "description": "Стратегия усечения текста",
+                "hint": "Определяет, следует ли усекать входной текст, если он слишком длинный и не помещается в максимальную длину контекста модели."
+            },
             "launch_model_if_not_running": {
                 "description": "Автозапуск модели",
                 "hint": "Если модель не запущена в Xinference, попытаться запустить её автоматически. Рекомендуется отключать в продакшене."

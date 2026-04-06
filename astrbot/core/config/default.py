@@ -1789,7 +1789,7 @@ CONFIG_METADATA_2 = {
                         "return_documents": False,
                         "instruct": "",
                     },
-                    "Nvidia Rerank": {
+                    "NVIDIA Rerank": {
                         "id": "nvidia_rerank",
                         "type": "nvidia_rerank",
                         "provider": "nvidia",
