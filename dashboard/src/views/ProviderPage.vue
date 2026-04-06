@@ -29,9 +29,9 @@
         </v-tabs>
 
         <!-- Chat Completion: 左侧列表 + 右侧上下卡片布局 -->
-        <div v-if="selectedProviderType === 'chat_completion'" class="d-flex align-center justify-center">
-          <v-row style="max-width: 1500px; ">
-            <v-col cols="12" md="4" lg="3" class="pr-md-4">
+        <div v-if="selectedProviderType === 'chat_completion'" class="provider-workbench">
+          <v-row class="provider-workbench__shell">
+            <v-col cols="12" md="4" lg="3" class="provider-workbench__sources">
               <ProviderSourcesPanel
                 :displayed-provider-sources="displayedProviderSources"
                 :selected-provider-source="selectedProviderSource"
@@ -45,66 +45,78 @@
               />
             </v-col>
 
-            <v-col cols="12" md="8" lg="9">
-              <v-card class="provider-config-card h-100" elevation="0" style="overflow-y: auto;">
-                <v-card-title class="d-flex align-center justify-space-between flex-wrap ga-3 pt-4 pl-5">
-                  <div class="d-flex align-center ga-3" v-if="selectedProviderSource">
-                    <div>
-                      <div class="text-h4 font-weight-bold">{{ selectedProviderSource.id }}</div>
-                      <div class="text-caption text-medium-emphasis">{{ selectedProviderSource.api_base || 'N/A' }}
-                      </div>
+            <v-col cols="12" md="8" lg="9" class="provider-workbench__settings">
+              <v-card class="provider-config-card provider-settings-panel h-100" elevation="0">
+                <div v-if="selectedProviderSource" class="provider-config-header">
+                  <div class="provider-config-headline">
+                    <div class="provider-config-kicker">{{ tm('providers.settings') }}</div>
+                    <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
+                    <div class="provider-config-subtitle">
+                      {{ selectedProviderSource.api_base || 'N/A' }}
                     </div>
                   </div>
 
-                  <div class="d-flex align-center ga-2" v-if="selectedProviderSource">
-                    <v-btn color="success" prepend-icon="mdi-check" :loading="savingSource"
-                      :disabled="!isSourceModified" @click="saveProviderSource" variant="flat">
+                  <div class="provider-config-actions">
+                    <v-btn
+                      color="primary"
+                      prepend-icon="mdi-content-save-outline"
+                      :loading="savingSource"
+                      :disabled="!isSourceModified"
+                      @click="saveProviderSource"
+                      variant="tonal"
+                    >
                       {{ tm('providerSources.save') }}
                     </v-btn>
                   </div>
-                </v-card-title>
+                </div>
 
-                <v-card-text>
+                <v-card-text class="provider-config-body">
                   <template v-if="selectedProviderSource">
-                    <div>
+                    <section class="provider-section">
+                      <div class="provider-section-head">
+                        <div class="provider-section-title">{{ tm('providers.settings') }}</div>
+                      </div>
                       <AstrBotConfig v-if="basicSourceConfig" :iterable="basicSourceConfig" :metadata="providerSourceSchema"
                         metadataKey="provider" :is-editing="true" />
-                    </div>
+                    </section>
 
-                    <v-expansion-panels variant="accordion" class="mb-2">
-                      <v-expansion-panel elevation="0" class="border rounded-lg">
-                        <v-expansion-panel-title>
-                          <span class="font-weight-medium">{{ tm('providerSources.advancedConfig') }}</span>
-                        </v-expansion-panel-title>
-                        <v-expansion-panel-text>
-                          <AstrBotConfig v-if="advancedSourceConfig" :iterable="advancedSourceConfig"
-                            :metadata="providerSourceSchema" metadataKey="provider" :is-editing="true" />
-                        </v-expansion-panel-text>
-                      </v-expansion-panel>
-                    </v-expansion-panels>
+                    <section v-if="advancedSourceConfig" class="provider-section">
+                      <div class="provider-section-head">
+                        <div class="provider-section-title">{{ tm('providerSources.advancedConfig') }}</div>
+                      </div>
+                      <AstrBotConfig
+                        :iterable="advancedSourceConfig"
+                        :metadata="providerSourceSchema"
+                        metadataKey="provider"
+                        :is-editing="true"
+                      />
+                    </section>
 
-                    <ProviderModelsPanel
-                      :entries="filteredMergedModelEntries"
-                      :available-count="availableModels.length"
-                      v-model:model-search="modelSearch"
-                      :loading-models="loadingModels"
-                      :is-source-modified="isSourceModified"
-                      :supports-image-input="supportsImageInput"
-                      :supports-tool-call="supportsToolCall"
-                      :supports-reasoning="supportsReasoning"
-                      :format-context-limit="formatContextLimit"
-                      :testing-providers="testingProviders"
-                      :tm="tm"
-                      @fetch-models="fetchAvailableModels"
-                      @open-manual-model="openManualModelDialog"
-                      @open-provider-edit="openProviderEdit"
-                      @toggle-provider-enable="toggleProviderEnable"
-                      @test-provider="testProvider"
-                      @delete-provider="deleteProvider"
-                      @add-model-provider="addModelProvider"
-                    />
+                    <section class="provider-section provider-section--models">
+                      <ProviderModelsPanel
+                        :entries="filteredMergedModelEntries"
+                        :available-count="availableModels.length"
+                        v-model:model-search="modelSearch"
+                        :loading-models="loadingModels"
+                        :is-source-modified="isSourceModified"
+                        :supports-image-input="supportsImageInput"
+                        :supports-audio-input="supportsAudioInput"
+                        :supports-tool-call="supportsToolCall"
+                        :supports-reasoning="supportsReasoning"
+                        :format-context-limit="formatContextLimit"
+                        :testing-providers="testingProviders"
+                        :tm="tm"
+                        @fetch-models="fetchAvailableModels"
+                        @open-manual-model="openManualModelDialog"
+                        @open-provider-edit="openProviderEdit"
+                        @toggle-provider-enable="toggleProviderEnable"
+                        @test-provider="testProvider"
+                        @delete-provider="deleteProvider"
+                        @add-model-provider="addModelProvider"
+                      />
+                    </section>
                   </template>
-                  <div v-else class="text-center py-8 text-medium-emphasis">
+                  <div v-else class="provider-empty-state">
                     <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
                     <p class="mt-2">{{ tm('providerSources.selectHint') }}</p>
                   </div>
@@ -163,6 +175,7 @@
 
     <!-- 添加提供商对话框 -->
     <AddNewProvider v-model:show="showAddProviderDialog" :metadata="configSchema"
+      :current-provider-type="selectedProviderType"
       @select-template="selectProviderTemplate" />
 
     <!-- 手动添加模型对话框 -->
@@ -313,6 +326,7 @@ const {
   resolveSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
+  supportsAudioInput,
   supportsToolCall,
   supportsReasoning,
   formatContextLimit,
@@ -665,18 +679,141 @@ function goToConfigPage() {
 
 <style scoped>
 .provider-page {
+  --provider-surface: rgb(var(--v-theme-surface));
+  --provider-text: rgb(var(--v-theme-on-surface));
+  --provider-muted: rgba(var(--v-theme-on-surface), 0.68);
+  --provider-subtle: rgba(var(--v-theme-on-surface), 0.56);
+  --provider-border: rgba(var(--v-theme-on-surface), 0.1);
+  --provider-border-strong: rgba(var(--v-theme-on-surface), 0.14);
+  --provider-soft: rgba(var(--v-theme-primary), 0.08);
   padding: 20px;
   padding-top: 8px;
   padding-bottom: 40px;
 }
 
+.provider-workbench {
+  display: flex;
+  justify-content: center;
+}
+
+.provider-workbench__shell {
+  width: 100%;
+  max-width: 1500px;
+}
+
+.provider-workbench__sources,
+.provider-workbench__settings {
+  min-width: 0;
+}
+
 .provider-config-card {
   min-height: 280px;
+  border: 1px solid var(--provider-border);
+  border-radius: 16px;
+  background: var(--provider-surface);
+  overflow: hidden;
+}
+
+.provider-settings-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.provider-config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--provider-border);
+}
+
+.provider-config-headline {
+  min-width: 0;
+}
+
+.provider-config-kicker {
+  color: var(--provider-subtle);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.provider-config-title {
+  margin-top: 8px;
+  font-size: 22px;
+  line-height: 1.1;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+  color: var(--provider-text);
+}
+
+.provider-config-subtitle {
+  margin-top: 8px;
+  color: var(--provider-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.provider-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.provider-config-body {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px 20px;
+}
+
+.provider-section {
+  border: 1px solid var(--provider-border);
+  border-radius: 14px;
+  background: rgba(var(--v-theme-primary), 0.02);
+  padding: 16px;
+}
+
+.provider-section--models {
+  padding: 18px;
+}
+
+.provider-section-head {
+  margin-bottom: 10px;
+}
+
+.provider-section-title {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--provider-text);
+}
+
+.provider-empty-state {
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--provider-muted);
 }
 
 @media (max-width: 960px) {
   .provider-config-card {
     min-height: auto;
+  }
+
+  .provider-config-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .provider-config-body {
+    padding: 18px;
   }
 }
 </style>

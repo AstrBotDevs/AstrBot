@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 252 icons */
+/* Auto-generated MDI subset – 256 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -128,8 +128,16 @@
   content: "\F00ED";
 }
 
+.mdi-calendar-blank-outline::before {
+  content: "\F0B66";
+}
+
 .mdi-calendar-edit::before {
   content: "\F08A7";
+}
+
+.mdi-calendar-multiple::before {
+  content: "\F00F1";
 }
 
 .mdi-calendar-plus::before {
@@ -282,6 +290,10 @@
 
 .mdi-content-save::before {
   content: "\F0193";
+}
+
+.mdi-content-save-outline::before {
+  content: "\F0818";
 }
 
 .mdi-creation::before {
@@ -670,6 +682,10 @@
 
 .mdi-minus-box::before {
   content: "\F0375";
+}
+
+.mdi-music-note-outline::before {
+  content: "\F0F74";
 }
 
 .mdi-note-text-outline::before {
