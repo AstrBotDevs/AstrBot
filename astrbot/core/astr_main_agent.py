@@ -29,9 +29,11 @@ from astrbot.core.astr_main_agent_resources import (
     EVALUATE_SKILL_CANDIDATE_TOOL,
     EXECUTE_SHELL_TOOL,
     FILE_DOWNLOAD_TOOL,
+    FILE_EDIT_TOOL,
     FILE_UPLOAD_TOOL,
     GET_EXECUTION_HISTORY_TOOL,
     GET_SKILL_PAYLOAD_TOOL,
+    GREP_TOOL,
     KNOWLEDGE_BASE_QUERY_TOOL,
     LIST_SKILL_CANDIDATES_TOOL,
     LIST_SKILL_RELEASES_TOOL,
@@ -41,6 +43,7 @@ from astrbot.core.astr_main_agent_resources import (
     LOCAL_PYTHON_TOOL,
     PROMOTE_SKILL_CANDIDATE_TOOL,
     PYTHON_TOOL,
+    READ_FILE_TOOL,
     ROLLBACK_SKILL_RELEASE_TOOL,
     RUN_BROWSER_SKILL_TOOL,
     SANDBOX_MODE_PROMPT,
@@ -285,6 +288,9 @@ def _apply_local_env_tools(req: ProviderRequest) -> None:
         req.func_tool = ToolSet()
     req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
     req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
+    req.func_tool.add_tool(READ_FILE_TOOL)
+    req.func_tool.add_tool(FILE_EDIT_TOOL)
+    req.func_tool.add_tool(GREP_TOOL)
     req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
 
 
@@ -991,6 +997,9 @@ def _apply_sandbox_tools(
     req.func_tool.add_tool(PYTHON_TOOL)
     req.func_tool.add_tool(FILE_UPLOAD_TOOL)
     req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
+    req.func_tool.add_tool(READ_FILE_TOOL)
+    req.func_tool.add_tool(FILE_EDIT_TOOL)
+    req.func_tool.add_tool(GREP_TOOL)
     if booter == "shipyard_neo":
         # Neo-specific path rule: filesystem tools operate relative to sandbox
         # workspace root. Do not prepend "/workspace".

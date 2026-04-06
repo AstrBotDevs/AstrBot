@@ -1,5 +1,5 @@
 from .browser import BrowserBatchExecTool, BrowserExecTool, RunBrowserSkillTool
-from .fs import FileDownloadTool, FileUploadTool
+from .fs import FileDownloadTool, FileEditTool, FileUploadTool, GrepTool, ReadFileTool
 from .neo_skills import (
     AnnotateExecutionTool,
     CreateSkillCandidateTool,
@@ -32,6 +32,9 @@ __all__ = [
     "RollbackSkillReleaseTool",
     "SyncSkillReleaseTool",
     "FileUploadTool",
+    "FileEditTool",
+    "GrepTool",
+    "ReadFileTool",
     "PythonTool",
     "LocalPythonTool",
     "ExecuteShellTool",
