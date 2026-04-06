@@ -237,12 +237,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if isinstance(msg, dict) and msg.get("_no_save"):
                 m._no_save = True
             messages.append(m)
-        if (
-            request.prompt is not None
-            or request.image_urls
-            or request.audio_urls
-            or request.extra_user_content_parts
-        ):
+        if request.prompt is not None:
             m = await request.assemble_context()
             messages.append(Message.model_validate(m))
         if request.system_prompt:
