@@ -224,7 +224,6 @@ const emitDeleteSource = (source) => emit('delete-provider-source', source)
 }
 
 .provider-source-list {
-  max-height: calc(100vh - 335px);
   overflow-y: auto;
   padding: 0;
   background: transparent;
