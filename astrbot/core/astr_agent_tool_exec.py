@@ -447,23 +447,27 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
             if agent_name:
                 session = DynamicSubAgentManager.get_session(umo)
-                if session and agent_name in session.subagents:
+                if session and (agent_name in session.subagents):
                     subagent_task_id = (
                         DynamicSubAgentManager.create_pending_subagent_task(
                             session_id=umo, agent_name=agent_name
                         )
                     )
-                    DynamicSubAgentManager.set_subagent_status(
-                        session_id=umo,
-                        agent_name=agent_name,
-                        status="RUNNING",
-                    )
 
-                    logger.info(
-                        f"[EnhancedSubAgent] Created background task {subagent_task_id} for {agent_name}"
-                    )
+                    if subagent_task_id.startswith("__PENDING_TASK_CREATE_FAILED__"):
+                        logger.info(subagent_task_id)
+                    else:
+                        DynamicSubAgentManager.set_subagent_status(
+                            session_id=umo,
+                            agent_name=agent_name,
+                            status="RUNNING",
+                        )
+
+                        logger.info(
+                            f"[EnhancedSubAgent] Created background task {subagent_task_id} for {agent_name}"
+                        )
         except Exception as e:
-            logger.debug(f"[EnhancedSubAgent] Failed to create pending task: {e}")
+            logger.info(f"[EnhancedSubAgent] Failed to create pending task: {e}")
 
         # 生成原始的 task_id（用于唤醒机制等）
         original_task_id = uuid.uuid4().hex
@@ -561,7 +565,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             session = DynamicSubAgentManager.get_session(umo)
             if session and agent_name:
                 # 检查是否是动态创建的 SubAgent
-                if agent_name in session.agents:
+                if agent_name in session.subagents:
                     enhanced_subagent_enabled = True
         except Exception:
             session = None

@@ -970,8 +970,9 @@ def _apply_enhanced_subagent_tools(
         if DynamicSubAgentManager.is_auto_cleanup_per_turn():
             req.func_tool.add_tool(PROTECT_SUBAGENT_TOOL)
             req.func_tool.add_tool(UNPROTECT_SUBAGENT_TOOL)
-        req.func_tool.add_tool(VIEW_SHARED_CONTEXT_TOOL)
-        req.func_tool.add_tool(SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT)
+        if DynamicSubAgentManager.is_shared_context_enabled():
+            req.func_tool.add_tool(VIEW_SHARED_CONTEXT_TOOL)
+            req.func_tool.add_tool(SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT)
         req.func_tool.add_tool(WAIT_FOR_SUBAGENT_TOOL)
 
         # Configure logger
@@ -1346,8 +1347,9 @@ async def build_main_agent(
     elif config.computer_use_runtime == "local":
         _apply_local_env_tools(req)
 
-    # Apply enhanced SubAgent tools
-    _apply_enhanced_subagent_tools(config, req, event)
+    if config.enhanced_subagent.get("enabled", False):
+        # Apply enhanced SubAgent tools
+        _apply_enhanced_subagent_tools(config, req, event)
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(

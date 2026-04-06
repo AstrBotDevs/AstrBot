@@ -26,6 +26,7 @@ class DynamicSubAgentConfig:
     provider_id: str | None = None
     description: str = ""
 
+
 @dataclass
 class SubAgentExecutionResult:
     task_id: str  # 任务唯一标识符
@@ -53,11 +54,11 @@ class DynamicSubAgentSession:
     subagent_histories: dict = field(default_factory=dict)  # 存储每个子代理的历史上下文
     shared_context: list = field(default_factory=list)  # 公共上下文列表
     shared_context_enabled: bool = False  # 是否启用公共上下文
-    subagent_results: dict = field(
+    subagent_background_results: dict = field(
         default_factory=dict
-    )  # 结果存储: {agent_name: {task_id: SubAgentExecutionResult}}
+    )  # 后台subagent结果存储: {agent_name: {task_id: SubAgentExecutionResult}}
     # 任务计数器: {agent_name: next_task_id}
-    _task_counters: dict = field(default_factory=dict)
+    background_task_counters: dict = field(default_factory=dict)
 
 
 class DynamicSubAgentManager:
@@ -71,10 +72,12 @@ class DynamicSubAgentManager:
     @classmethod
     def build_dynamic_subagent_prompt(cls, session_id: str):
         session = cls.get_session(session_id)
+        if not session:
+            return ""
         current_agent_num = len(session.subagents.keys())
         if cls._max_subagent_count - current_agent_num <= 0:
             return f"""# Dynamic Sub-Agent Capability
-            You are the Main Agent with the ability to dynamically create and manage sub-agents with isolated instructions, tools and skills. But You can not create more subagents now because it's up tp limit {cls._max_subagent_count}.
+            You are the Main Agent with the ability to dynamically create and manage sub-agents with isolated instructions, tools and skills. But You can not create more subagents now because it's up to limit {cls._max_subagent_count}.
             Current subagents are {session.subagents.keys()}. You can still delegate existing sub-agents by using `transfer_to_{{name}}` tool.
             ## When to delegate Sub-agents:
 
@@ -204,7 +207,8 @@ class DynamicSubAgentManager:
             ### 2. Allocate available Tools and Skills
             Before you create a sub-agent, consider first: If you were the sub-agent, what tools and skills would you need to use to complete the task? Tools and skills must be allocated; otherwise, this sub-agent should not be created.
             Available tools and Skills depend on the system's configuration. You should check and list your tools and skills first, and assign tools and skills to sub-agents that need specialized capabilities.
-            The tool `astrbot_execute_shell` and `astrbot_execute_python` are powerful, always allocate to a sub-agent unless it's just for text generation task.
+            The tool `astrbot_execute_shell` and `astrbot_execute_python` are powerful, always allocate to a sub-agent unless it's just for simple task, such as pure-text generation.
+            The tool `send_shared_context_for_main_agent` is only for you (Main Agent), do not allocate it to sub-agents. The system will automatically give them `send_shared_context` instead.
 
             ## Sub-agent Lifecycle
 
@@ -231,8 +235,12 @@ class DynamicSubAgentManager:
         cls._shared_context_maxlen = shared_context_maxlen
 
     @classmethod
-    def is_auto_cleanup_per_turn(cls):
+    def is_auto_cleanup_per_turn(cls) -> bool:
         return cls._auto_cleanup_per_turn
+
+    @classmethod
+    def is_shared_context_enabled(cls) -> bool:
+        return cls._shared_context_enabled
 
     @classmethod
     def cleanup_session_turn_end(cls, session_id: str) -> dict:
@@ -244,7 +252,7 @@ class DynamicSubAgentManager:
         cleaned = []
         for name in list(session.subagents.keys()):
             if name not in session.protected_agents:
-                cls._cleanup_single_subagent(session_id, name)
+                cls.remove_subagent(session_id, name)
                 cleaned.append(name)
 
         # 如果启用了公共上下文，处理清理
@@ -267,23 +275,6 @@ class DynamicSubAgentManager:
                     cls.cleanup_shared_context_by_agent(session_id, name)
 
         return {"status": "cleaned", "cleaned_agents": cleaned}
-
-    @classmethod
-    def _cleanup_single_subagent(cls, session_id: str, agent_name: str) -> None:
-        """Internal method to cleanup a single subagent"""
-        session = cls.get_session(session_id)
-        if not session:
-            return
-        session.subagents.pop(agent_name, None)
-        session.handoff_tools.pop(agent_name, None)
-        session.protected_agents.discard(agent_name)
-        session.subagent_histories.pop(agent_name, None)
-        SubAgentLogger.info(
-            session_id,
-            "DynamicSubAgentrManager:auto_cleanup",
-            f"Auto cleaned: {agent_name}",
-            agent_name,
-        )
 
     @classmethod
     def protect_subagent(cls, session_id: str, agent_name: str) -> None:
@@ -382,8 +373,9 @@ class DynamicSubAgentManager:
         if not session:
             return f"__HISTORY_CLEARED_FAILED_: Session_id {session_id} does not exist."
         if agent_name in session.subagent_histories:
-            session.subagent_histories.pop(agent_name)
-
+            session.subagent_histories.pop(agent_name, None)
+            # session.subagent_status.pop(agent_name, None)
+            # session.background_task_counters.pop(agent_name, None)
             if session.shared_context_enabled:
                 cls.cleanup_shared_context_by_agent(session_id, agent_name)
             SubAgentLogger.debug(
@@ -541,7 +533,9 @@ class DynamicSubAgentManager:
             and m["sender"] != agent_name
         ]
         if inter_agent_msgs:
-            lines.append("\n## @OtherAgents - Communication among Other Agents (Last 10 messages)")
+            lines.append(
+                "\n## @OtherAgents - Communication among Other Agents (Last 10 messages)"
+            )
             for msg in inter_agent_msgs[-10:]:
                 ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
                 content_text = msg["content"]
@@ -552,7 +546,9 @@ class DynamicSubAgentManager:
         # === 5. Status 更新 ===
         status_msgs = [m for m in session.shared_context if m["type"] == "status"]
         if status_msgs:
-            lines.append("\n## @Status - Task progress of each agent (Last 10 messages)")
+            lines.append(
+                "\n## @Status - Task progress of each agent (Last 10 messages)"
+            )
             for msg in status_msgs[-10:]:
                 ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
                 lines.append(f"[{ts}] {msg['sender']}: {msg['content']}")
@@ -660,9 +656,11 @@ class DynamicSubAgentManager:
         if session.shared_context_enabled:
             if config.tools is None:
                 config.tools = []
+            if "send_shared_context_for_main_agent" in config.tools:
+                config.tools.remove("send_shared_context_for_main_agent")
             config.tools.append("send_shared_context")
         session.subagents[config.name] = config
-
+        print(config.tools)
         agent = Agent(
             name=config.name,
             instructions=config.system_prompt,
@@ -708,8 +706,9 @@ class DynamicSubAgentManager:
             session.handoff_tools.clear()
             session.subagent_histories.clear()
             session.shared_context.clear()
-            session.subagent_results.clear()
-            return "__SUBAGENT_REMOVED__"
+            session.subagent_background_results.clear()
+            session.background_task_counters.clear()
+            return "__SUBAGENT_REMOVED__: All subagents have been removed."
         else:
             if agent_name not in session.subagents:
                 return f"__SUBAGENT_REMOVE_FAILED__: {agent_name} not found. Available subagent names {list(session.subagents.keys())}"
@@ -717,7 +716,8 @@ class DynamicSubAgentManager:
                 session.subagents.pop(agent_name, None)
                 session.handoff_tools.pop(agent_name, None)
                 session.subagent_histories.pop(agent_name, None)
-                session.subagent_results.pop(agent_name, None)
+                session.subagent_background_results.pop(agent_name, None)
+                session.background_task_counters.pop(agent_name, None)
                 # 清理公共上下文中包含该Agent的内容
                 cls.cleanup_shared_context_by_agent(session_id, agent_name)
                 SubAgentLogger.info(
@@ -726,7 +726,7 @@ class DynamicSubAgentManager:
                     f"Cleaned: {agent_name}",
                     agent_name,
                 )
-                return "__SUBAGENT_REMOVED__"
+                return f"__SUBAGENT_REMOVED__: Subagent {agent_name} has been removed."
 
     @classmethod
     def get_handoff_tools_for_session(cls, session_id: str) -> list:
@@ -749,10 +749,10 @@ class DynamicSubAgentManager:
         session = cls.get_or_create_session(session_id)
 
         # 初始化
-        if agent_name not in session.subagent_results:
-            session.subagent_results[agent_name] = {}
-        if agent_name not in session._task_counters:
-            session._task_counters[agent_name] = 0
+        if agent_name not in session.subagent_background_results:
+            session.subagent_background_results[agent_name] = {}
+        if agent_name not in session.background_task_counters:
+            session.background_task_counters[agent_name] = 0
 
         if (
             session.subagent_status[agent_name] == "RUNNING"
@@ -762,17 +762,19 @@ class DynamicSubAgentManager:
             )
 
         # 生成递增的任务ID
-        session._task_counters[agent_name] += 1
-        task_id = str(session._task_counters[agent_name])
+        session.background_task_counters[agent_name] += 1
+        task_id = str(session.background_task_counters[agent_name])
 
         # 创建 pending 占位
-        session.subagent_results[agent_name][task_id] = SubAgentExecutionResult(
-            task_id=task_id,
-            agent_name=agent_name,
-            success=False,
-            result=None,
-            created_at=time.time(),
-            metadata={},
+        session.subagent_background_results[agent_name][task_id] = (
+            SubAgentExecutionResult(
+                task_id=task_id,
+                agent_name=agent_name,
+                success=False,
+                result=None,
+                created_at=time.time(),
+                metadata={},
+            )
         )
         # SubAgentLogger.info(
         #     session_id,
@@ -786,30 +788,34 @@ class DynamicSubAgentManager:
     def get_pending_subagent_tasks(cls, session_id: str, agent_name: str) -> list[str]:
         """获取 SubAgent 的所有 pending 任务 ID 列表（按创建时间排序）"""
         session = cls.get_session(session_id)
-        if not session or agent_name not in session.subagent_results:
+        if not session or agent_name not in session.subagent_background_results:
             return []
 
         # 按 created_at 排序
         pending = [
             task_id
-            for task_id, result in session.subagent_results[agent_name].items()
+            for task_id, result in session.subagent_background_results[
+                agent_name
+            ].items()
             if not result.result and result.completed_at == 0.0
         ]
         return sorted(
             pending,
-            key=lambda tid: session.subagent_results[agent_name][tid].created_at,
+            key=lambda tid: (
+                session.subagent_background_results[agent_name][tid].created_at
+            ),
         )
 
     @classmethod
     def get_latest_task_id(cls, session_id: str, agent_name: str) -> str | None:
         """获取 SubAgent 的最新任务 ID"""
         session = cls.get_session(session_id)
-        if not session or agent_name not in session.subagent_results:
+        if not session or agent_name not in session.subagent_background_results:
             return None
 
         # 按 created_at 排序取最新的
         sorted_tasks = sorted(
-            session.subagent_results[agent_name].items(),
+            session.subagent_background_results[agent_name].items(),
             key=lambda x: x[1].created_at,
             reverse=True,
         )
@@ -841,8 +847,8 @@ class DynamicSubAgentManager:
         """
         session = cls.get_or_create_session(session_id)
 
-        if agent_name not in session.subagent_results:
-            session.subagent_results[agent_name] = {}
+        if agent_name not in session.subagent_background_results:
+            session.subagent_background_results[agent_name] = {}
 
         if task_id is None:
             # 如果没有指定task_id，尝试找最新的pending任务
@@ -855,25 +861,33 @@ class DynamicSubAgentManager:
                 )
                 return
 
-        if task_id not in session.subagent_results[agent_name]:
+        if task_id not in session.subagent_background_results[agent_name]:
             # 如果任务不存在，先创建一个占位
-            session.subagent_results[agent_name][task_id] = SubAgentExecutionResult(
-                task_id=task_id,
-                agent_name=agent_name,
-                success=False,
-                result="",
-                created_at=time.time(),
-                metadata=metadata or {},
+            session.subagent_background_results[agent_name][task_id] = (
+                SubAgentExecutionResult(
+                    task_id=task_id,
+                    agent_name=agent_name,
+                    success=False,
+                    result="",
+                    created_at=time.time(),
+                    metadata=metadata or {},
+                )
             )
 
         # 更新结果
-        session.subagent_results[agent_name][task_id].success = success
-        session.subagent_results[agent_name][task_id].result = result
-        session.subagent_results[agent_name][task_id].error = error
-        session.subagent_results[agent_name][task_id].execution_time = execution_time
-        session.subagent_results[agent_name][task_id].completed_at = time.time()
+        session.subagent_background_results[agent_name][task_id].success = success
+        session.subagent_background_results[agent_name][task_id].result = result
+        session.subagent_background_results[agent_name][task_id].error = error
+        session.subagent_background_results[agent_name][
+            task_id
+        ].execution_time = execution_time
+        session.subagent_background_results[agent_name][
+            task_id
+        ].completed_at = time.time()
         if metadata:
-            session.subagent_results[agent_name][task_id].metadata.update(metadata)
+            session.subagent_background_results[agent_name][task_id].metadata.update(
+                metadata
+            )
 
     @classmethod
     def get_subagent_result(
@@ -890,14 +904,14 @@ class DynamicSubAgentManager:
             SubAgentExecutionResult 或 None
         """
         session = cls.get_session(session_id)
-        if not session or agent_name not in session.subagent_results:
+        if not session or agent_name not in session.subagent_background_results:
             return None
 
         if task_id is None:
             # 获取最新的已完成任务
             completed = [
                 (tid, r)
-                for tid, r in session.subagent_results[agent_name].items()
+                for tid, r in session.subagent_background_results[agent_name].items()
                 if r.result != "" or r.completed_at > 0
             ]
             if not completed:
@@ -906,7 +920,7 @@ class DynamicSubAgentManager:
             completed.sort(key=lambda x: x[1].created_at, reverse=True)
             return completed[0][1]
 
-        return session.subagent_results[agent_name].get(task_id)
+        return session.subagent_background_results[agent_name].get(task_id)
 
     @classmethod
     def has_subagent_result(
@@ -920,19 +934,19 @@ class DynamicSubAgentManager:
             task_id: 任务ID，如果为None则检查是否有任何已完成的任务
         """
         session = cls.get_session(session_id)
-        if not session or agent_name not in session.subagent_results:
+        if not session or agent_name not in session.subagent_background_results:
             return False
 
         if task_id is None:
             # 检查是否有任何已完成的任务
             return any(
                 r.result != "" or r.completed_at > 0
-                for r in session.subagent_results[agent_name].values()
+                for r in session.subagent_background_results[agent_name].values()
             )
 
-        if task_id not in session.subagent_results[agent_name]:
+        if task_id not in session.subagent_background_results[agent_name]:
             return False
-        result = session.subagent_results[agent_name][task_id]
+        result = session.subagent_background_results[agent_name][task_id]
         return result.result != "" or result.completed_at > 0
 
     @classmethod
@@ -947,16 +961,16 @@ class DynamicSubAgentManager:
             task_id: 任务ID，如果为None则清除该Agent所有任务
         """
         session = cls.get_session(session_id)
-        if not session or agent_name not in session.subagent_results:
+        if not session or agent_name not in session.subagent_background_results:
             return
 
         if task_id is None:
             # 清除所有任务
-            session.subagent_results.pop(agent_name, None)
-            session._task_counters.pop(agent_name, None)
+            session.subagent_background_results.pop(agent_name, None)
+            session.background_task_counters.pop(agent_name, None)
         else:
             # 清除特定任务
-            session.subagent_results[agent_name].pop(task_id, None)
+            session.subagent_background_results[agent_name].pop(task_id, None)
 
     @classmethod
     def get_subagent_status(cls, session_id: str, agent_name: str) -> str:
@@ -1112,13 +1126,13 @@ class ListDynamicSubagentsTool(FunctionTool):
             return "No subagents"
 
         lines = ["Subagents:"]
-        for name in session.subagents.keys():
+        for name, config in session.subagents.items():
             protected = " (protected)" if name in session.protected_agents else ""
             if include_status:
                 status = DynamicSubAgentManager.get_subagent_status(session_id, name)
-                lines.append(f" {name}{protected} [{status}]")
+                lines.append(f" {name}{protected} [{status}]\ttools:{config.tools}")
             else:
-                lines.append(f" - {name}{protected}")
+                lines.append(f" - {name}{protected}\ttools:{config.tools}")
         return "\n".join(lines)
 
 
