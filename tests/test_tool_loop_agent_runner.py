@@ -11,8 +11,8 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from astrbot.core.agent.agent import Agent
-from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -599,14 +599,25 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
     assert len(tool_messages) == 5
 
     tool_contents = [str(message.content) for message in tool_messages]
-    assert "same tool" not in tool_contents[0]
-    assert "By the way" in tool_contents[1]
-    assert "2 times consecutively" in tool_contents[1]
-    assert "Important" in tool_contents[2]
-    assert "3 times consecutively" in tool_contents[2]
-    assert "Important" in tool_contents[4]
-    assert "5 times consecutively" in tool_contents[4]
-    assert "very high" in tool_contents[4]
+    runner_cls = type(runner)
+    level_1_notice = runner_cls.SAME_TOOL_NOTICE_LEVEL_1_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.SAME_TOOL_NOTICE_LEVEL_1_THRESHOLD,
+    )
+    level_2_notice = runner_cls.SAME_TOOL_NOTICE_LEVEL_2_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.SAME_TOOL_NOTICE_LEVEL_2_THRESHOLD,
+    )
+    level_3_notice = runner_cls.SAME_TOOL_NOTICE_LEVEL_3_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.SAME_TOOL_NOTICE_LEVEL_3_THRESHOLD,
+    )
+
+    assert level_1_notice not in tool_contents[0]
+    assert level_2_notice not in tool_contents[0]
+    assert level_1_notice in tool_contents[1]
+    assert level_2_notice in tool_contents[2]
+    assert level_3_notice in tool_contents[4]
 
 
 @pytest.mark.asyncio
@@ -652,11 +663,21 @@ async def test_same_tool_streak_resets_after_switching_tools(
     assert len(tool_messages) == 4
 
     tool_contents = [str(message.content) for message in tool_messages]
-    assert "same tool" not in tool_contents[0]
-    assert "same tool" not in tool_contents[1]
-    assert "same tool" not in tool_contents[2]
-    assert "By the way" in tool_contents[3]
-    assert "`test_tool` 2 times consecutively" in tool_contents[3]
+    runner_cls = type(runner)
+    level_1_notice = runner_cls.SAME_TOOL_NOTICE_LEVEL_1_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.SAME_TOOL_NOTICE_LEVEL_1_THRESHOLD,
+    )
+    level_2_notice = runner_cls.SAME_TOOL_NOTICE_LEVEL_2_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.SAME_TOOL_NOTICE_LEVEL_2_THRESHOLD,
+    )
+
+    assert level_1_notice not in tool_contents[0]
+    assert level_1_notice not in tool_contents[1]
+    assert level_1_notice not in tool_contents[2]
+    assert level_2_notice not in tool_contents[2]
+    assert level_1_notice in tool_contents[3]
 
 
 @pytest.mark.asyncio
@@ -1084,7 +1105,9 @@ async def test_follow_up_accepted_when_active_and_not_stopping(
 
     ticket = runner.follow_up(message_text="valid follow-up message")
 
-    assert ticket is not None, "Follow-up should be accepted when runner is active and not stopping"
+    assert ticket is not None, (
+        "Follow-up should be accepted when runner is active and not stopping"
+    )
     assert ticket.text == "valid follow-up message"
     assert ticket.consumed is False
     assert ticket in runner._pending_follow_ups

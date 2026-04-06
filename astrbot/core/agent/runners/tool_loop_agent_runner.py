@@ -95,16 +95,62 @@ class _ToolExecutionInterrupted(Exception):
 
 ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
 
-USER_INTERRUPTION_MESSAGE = (
-    "[SYSTEM: User actively interrupted the response generation. "
-    "Partial output before interruption is preserved.]"
-)
-
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
     EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
+    USER_INTERRUPTION_MESSAGE = (
+        "[SYSTEM: User actively interrupted the response generation. "
+        "Partial output before interruption is preserved.]"
+    )
+    FOLLOW_UP_NOTICE_TEMPLATE = (
+        "\n\n[SYSTEM NOTICE] User sent follow-up messages while tool execution "
+        "was in progress. Prioritize these follow-up instructions in your next "
+        "actions. In your very next action, briefly acknowledge to the user "
+        "that their follow-up message(s) were received before continuing.\n"
+        "{follow_up_lines}"
+    )
+    MAX_STEPS_REACHED_PROMPT = (
+        "Maximum tool call limit reached. "
+        "Stop calling tools, and based on the information you have gathered, "
+        "summarize your task and findings, and reply to the user directly."
+    )
+    SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE = (
+        "You have decided to call tool(s): {tool_names}. Now call the tool(s) "
+        "with required arguments using the tool schema, and follow the existing "
+        "tool-use rules."
+    )
+    SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION = (
+        "This is the second-stage tool execution step. "
+        "You must do exactly one of the following: "
+        "1. Call one of the selected tools using the provided tool schema. "
+        "2. If calling a tool is no longer possible or appropriate, reply to the user "
+        "with a brief explanation of why. "
+        "Do not return an empty response. "
+        "Do not ignore the selected tools without explanation."
+    )
+    REPEATED_TOOL_NOTICE_L1_THRESHOLD = 2
+    REPEATED_TOOL_NOTICE_L2_THRESHOLD = 3
+    REPEATED_TOOL_NOTICE_L3_THRESHOLD = 5
+    REPEATED_TOOL_NOTICE_L1_TEMPLATE = (
+        "\n\n[SYSTEM NOTICE] By the way, you have executed the same tool "
+        "`{tool_name}` {streak} times consecutively. Double-check whether another "
+        "tool, different arguments, or a summary would move the task forward better."
+    )
+    REPEATED_TOOL_NOTICE_L2_TEMPLATE = (
+        "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
+        "`{tool_name}` {streak} times consecutively. Unless this repetition is "
+        "clearly necessary, stop repeating the same action and either switch "
+        "tools, refine parameters, or summarize what is still missing."
+    )
+    REPEATED_TOOL_NOTICE_L3_TEMPLATE = (
+        "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
+        "`{tool_name}` {streak} times consecutively. Repetition is now very "
+        "high. Continue only if each call is clearly producing new information. "
+        "Otherwise, change strategy, adjust arguments, or explain the limitation "
+        "to the user."
+    )
 
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
@@ -415,12 +461,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         follow_up_lines = "\n".join(
             f"{idx}. {ticket.text}" for idx, ticket in enumerate(follow_ups, start=1)
         )
-        return (
-            "\n\n[SYSTEM NOTICE] User sent follow-up messages while tool execution "
-            "was in progress. Prioritize these follow-up instructions in your next "
-            "actions. In your very next action, briefly acknowledge to the user "
-            "that their follow-up message(s) were received before continuing.\n"
-            f"{follow_up_lines}"
+        return self.FOLLOW_UP_NOTICE_TEMPLATE.format(
+            follow_up_lines=follow_up_lines,
         )
 
     def _merge_follow_up_notice(self, content: str) -> str:
@@ -438,30 +480,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return self._same_tool_streak
 
     def _build_same_tool_guidance(self, tool_name: str, streak: int) -> str:
-        if streak < 3:
+        if streak < self.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
             return ""
 
-        if streak >= 5:
-            return (
-                "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
-                f"`{tool_name}` {streak} times consecutively. Repetition is now very "
-                "high. Continue only if each call is clearly producing new information. "
-                "Otherwise, change strategy, adjust arguments, or explain the limitation "
-                "to the user."
+        if streak >= self.REPEATED_TOOL_NOTICE_L3_THRESHOLD:
+            return self.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
+                tool_name=tool_name,
+                streak=streak,
             )
 
-        if streak >= 3:
-            return (
-                "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
-                f"`{tool_name}` {streak} times consecutively. Unless this repetition is "
-                "clearly necessary, stop repeating the same action and either switch "
-                "tools, refine parameters, or summarize what is still missing."
+        if streak >= self.REPEATED_TOOL_NOTICE_L2_THRESHOLD:
+            return self.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
+                tool_name=tool_name,
+                streak=streak,
             )
 
-        return (
-            "\n\n[SYSTEM NOTICE] By the way, you have executed the same tool "
-            f"`{tool_name}` {streak} times consecutively. Double-check whether another "
-            "tool, different arguments, or a summary would move the task forward better."
+        return self.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
+            tool_name=tool_name,
+            streak=streak,
         )
 
     @override
@@ -520,7 +556,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if self._is_stop_requested():
                     llm_resp_result = LLMResponse(
                         role="assistant",
-                        completion_text=USER_INTERRUPTION_MESSAGE,
+                        completion_text=self.USER_INTERRUPTION_MESSAGE,
                         reasoning_content=llm_response.reasoning_content,
                         reasoning_signature=llm_response.reasoning_signature,
                     )
@@ -718,7 +754,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.run_context.messages.append(
                 Message(
                     role="user",
-                    content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                    content=self.MAX_STEPS_REACHED_PROMPT,
                 )
             )
             # 再执行最后一步
@@ -990,11 +1026,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 contexts.append(msg.model_dump())  # type: ignore[call-arg]
             elif isinstance(msg, dict):
                 contexts.append(copy.deepcopy(msg))
-        instruction = (
-            "You have decided to call tool(s): "
-            + ", ".join(tool_names)
-            + ". Now call the tool(s) with required arguments using the tool schema, "
-            "and follow the existing tool-use rules."
+        instruction = self.SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE.format(
+            tool_names=", ".join(tool_names)
         )
         if extra_instruction:
             instruction = f"{instruction}\n{extra_instruction}"
@@ -1065,14 +1098,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     repair_contexts = self._build_tool_requery_context(
                         tool_names,
-                        extra_instruction=(
-                            "This is the second-stage tool execution step. "
-                            "You must do exactly one of the following: "
-                            "1. Call one of the selected tools using the provided tool schema. "
-                            "2. If calling a tool is no longer possible or appropriate, reply to the user with a brief explanation of why. "
-                            "Do not return an empty response. "
-                            "Do not ignore the selected tools without explanation."
-                        ),
+                        extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
                     repair_resp = await self.provider.text_chat(
                         contexts=repair_contexts,
@@ -1114,7 +1140,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.role != "assistant":
             llm_resp = LLMResponse(
                 role="assistant",
-                completion_text=USER_INTERRUPTION_MESSAGE,
+                completion_text=self.USER_INTERRUPTION_MESSAGE,
             )
         self.final_llm_resp = llm_resp
         self._aborted = True
