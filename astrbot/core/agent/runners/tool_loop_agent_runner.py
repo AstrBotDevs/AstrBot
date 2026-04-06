@@ -209,6 +209,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
+        self._last_tool_name: str | None = None
+        self._same_tool_streak = 0
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -426,6 +428,41 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not notice:
             return content
         return f"{content}{notice}"
+
+    def _track_tool_call_streak(self, tool_name: str) -> int:
+        if tool_name == self._last_tool_name:
+            self._same_tool_streak += 1
+        else:
+            self._last_tool_name = tool_name
+            self._same_tool_streak = 1
+        return self._same_tool_streak
+
+    def _build_same_tool_guidance(self, tool_name: str, streak: int) -> str:
+        if streak < 3:
+            return ""
+
+        if streak >= 5:
+            return (
+                "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
+                f"`{tool_name}` {streak} times consecutively. Repetition is now very "
+                "high. Continue only if each call is clearly producing new information. "
+                "Otherwise, change strategy, adjust arguments, or explain the limitation "
+                "to the user."
+            )
+
+        if streak >= 3:
+            return (
+                "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
+                f"`{tool_name}` {streak} times consecutively. Unless this repetition is "
+                "clearly necessary, stop repeating the same action and either switch "
+                "tools, refine parameters, or summarize what is still missing."
+            )
+
+        return (
+            "\n\n[SYSTEM NOTICE] By the way, you have executed the same tool "
+            f"`{tool_name}` {streak} times consecutively. Double-check whether another "
+            "tool, different arguments, or a summary would move the task forward better."
+        )
 
     @override
     async def step(self):
@@ -712,6 +749,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
+            tool_call_streak = self._track_tool_call_streak(func_tool_name)
             yield _HandleFunctionToolsResult.from_message_chain(
                 MessageChain(
                     type="tool_call",
@@ -861,7 +899,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         if result_parts:
                             _append_tool_call_result(
                                 func_tool_id,
-                                "\n\n".join(result_parts),
+                                "\n\n".join(result_parts)
+                                + self._build_same_tool_guidance(
+                                    func_tool_name, tool_call_streak
+                                ),
                             )
 
                     elif resp is None:
@@ -875,7 +916,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         self.stats.end_time = time.time()
                         _append_tool_call_result(
                             func_tool_id,
-                            "The tool has no return value, or has sent the result directly to the user.",
+                            "The tool has no return value, or has sent the result directly to the user."
+                            + self._build_same_tool_guidance(
+                                func_tool_name, tool_call_streak
+                            ),
                         )
                     else:
                         # 不应该出现其他类型
@@ -884,7 +928,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
                         _append_tool_call_result(
                             func_tool_id,
-                            "*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*",
+                            "*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*"
+                            + self._build_same_tool_guidance(
+                                func_tool_name, tool_call_streak
+                            ),
                         )
 
                 try:
@@ -902,7 +949,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 logger.warning(traceback.format_exc())
                 _append_tool_call_result(
                     func_tool_id,
-                    f"error: {e!s}",
+                    f"error: {e!s}"
+                    + self._build_same_tool_guidance(func_tool_name, tool_call_streak),
                 )
 
         # yield the last tool call result

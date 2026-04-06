@@ -193,6 +193,32 @@ class MockToolCallProvider(MockProvider):
         )
 
 
+class SequentialToolProvider(MockProvider):
+    def __init__(self, tool_sequence: list[str]):
+        super().__init__()
+        self.tool_sequence = tool_sequence
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > len(self.tool_sequence):
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+        tool_name = self.tool_sequence[self.call_count - 1]
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            tools_call_name=[tool_name],
+            tools_call_args=[{"query": f"step-{self.call_count}"}],
+            tools_call_ids=[f"call_{self.call_count}"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
 class MockHandoffProvider(MockToolCallProvider):
     def __init__(self, handoff_tool_name: str):
         super().__init__(handoff_tool_name, {"input": "delegate this task"})
@@ -536,6 +562,101 @@ async def test_tool_result_includes_all_calltoolresult_content(
             "mime_type": "image/png",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_same_tool_consecutive_results_include_escalating_guidance(
+    runner, mock_tool_executor, mock_hooks
+):
+    provider = SequentialToolProvider(["test_tool"] * 5)
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="请连续执行工具",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(6):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == 5
+
+    tool_contents = [str(message.content) for message in tool_messages]
+    assert "same tool" not in tool_contents[0]
+    assert "By the way" in tool_contents[1]
+    assert "2 times consecutively" in tool_contents[1]
+    assert "Important" in tool_contents[2]
+    assert "3 times consecutively" in tool_contents[2]
+    assert "Important" in tool_contents[4]
+    assert "5 times consecutively" in tool_contents[4]
+    assert "very high" in tool_contents[4]
+
+
+@pytest.mark.asyncio
+async def test_same_tool_streak_resets_after_switching_tools(
+    runner, mock_tool_executor, mock_hooks
+):
+    provider = SequentialToolProvider(
+        ["test_tool", "other_tool", "test_tool", "test_tool"]
+    )
+    tool_a = FunctionTool(
+        name="test_tool",
+        description="测试工具 A",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    tool_b = FunctionTool(
+        name="other_tool",
+        description="测试工具 B",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="切换工具后再重复",
+        func_tool=ToolSet(tools=[tool_a, tool_b]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == 4
+
+    tool_contents = [str(message.content) for message in tool_messages]
+    assert "same tool" not in tool_contents[0]
+    assert "same tool" not in tool_contents[1]
+    assert "same tool" not in tool_contents[2]
+    assert "By the way" in tool_contents[3]
+    assert "`test_tool` 2 times consecutively" in tool_contents[3]
 
 
 @pytest.mark.asyncio
