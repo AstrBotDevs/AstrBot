@@ -63,6 +63,9 @@ export function getPlatformIcon(name) {
   } else if (name === "line") {
     return new URL("@/assets/images/platform_logos/line.png", import.meta.url)
       .href;
+  } else if (name === "matrix") {
+    return new URL("@/assets/images/platform_logos/matrix.svg", import.meta.url)
+      .href;
   }
 }
 
@@ -92,6 +95,7 @@ export function getTutorialLink(platformType) {
     satori: "https://docs.astrbot.app/platform/satori/llonebot.html",
     misskey: "https://docs.astrbot.app/platform/misskey.html",
     line: "https://docs.astrbot.app/platform/line.html",
+    matrix: "https://docs.astrbot.app/platform/matrix.html",
   };
   return tutorialMap[platformType] || "https://docs.astrbot.app";
 }
@@ -134,6 +138,7 @@ export function getPlatformDisplayName(platformId) {
     vocechat: "vocechat (VoceChat)",
     satori: "satori (Satori)",
     line: "line (LINE)",
+    matrix: "matrix (Matrix)",
   };
   return displayNameMap[platformId] || platformId;
 }

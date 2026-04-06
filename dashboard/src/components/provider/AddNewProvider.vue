@@ -5,23 +5,23 @@
         <v-tabs v-model="activeProviderTab" grow>
           <v-tab value="agent_runner" class="font-weight-medium px-3">
             <v-icon start> mdi-cogs </v-icon>
-            {{ tm("dialogs.addProvider.tabs.agentRunner") }}
+            {{ tm('dialogs.addProvider.tabs.agentRunner') }}
           </v-tab>
           <v-tab value="speech_to_text" class="font-weight-medium px-3">
             <v-icon start> mdi-microphone-message </v-icon>
-            {{ tm("dialogs.addProvider.tabs.speechToText") }}
+            {{ tm('dialogs.addProvider.tabs.speechToText') }}
           </v-tab>
           <v-tab value="text_to_speech" class="font-weight-medium px-3">
             <v-icon start> mdi-volume-high </v-icon>
-            {{ tm("dialogs.addProvider.tabs.textToSpeech") }}
+            {{ tm('dialogs.addProvider.tabs.textToSpeech') }}
           </v-tab>
           <v-tab value="embedding" class="font-weight-medium px-3">
             <v-icon start> mdi-code-json </v-icon>
-            {{ tm("dialogs.addProvider.tabs.embedding") }}
+            {{ tm('dialogs.addProvider.tabs.embedding') }}
           </v-tab>
           <v-tab value="rerank" class="font-weight-medium px-3">
             <v-icon start> mdi-compare-vertical </v-icon>
-            {{ tm("dialogs.addProvider.tabs.rerank") }}
+            {{ tm('dialogs.addProvider.tabs.rerank') }}
           </v-tab>
         </v-tabs>
 
@@ -81,7 +81,7 @@
                 cols="12"
               >
                 <v-alert type="info" variant="tonal">
-                  {{ tm("dialogs.addProvider.noTemplates") }}
+                  {{ tm('dialogs.addProvider.noTemplates') }}
                 </v-alert>
               </v-col>
             </v-row>
@@ -91,7 +91,7 @@
       <v-card-actions>
         <v-spacer />
         <v-btn text @click="closeDialog">
-          {{ tm("dialogs.config.cancel") }}
+          {{ tm('dialogs.config.cancel') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -101,6 +101,8 @@
 <script lang="ts">
 import { useModuleI18n } from "@/i18n/composables";
 import { getProviderIcon, getProviderDescription } from "@/utils/providerUtils";
+
+const AVAILABLE_PROVIDER_TABS = ['agent_runner', 'speech_to_text', 'text_to_speech', 'embedding', 'rerank'];
 
 export default {
   name: "AddNewProvider",
@@ -113,6 +115,10 @@ export default {
       type: Object,
       default: () => ({}),
     },
+    currentProviderType: {
+      type: String,
+      default: 'agent_runner'
+    }
   },
   emits: ["update:show", "select-template"],
   setup() {
@@ -121,7 +127,7 @@ export default {
   },
   data() {
     return {
-      activeProviderTab: "chat_completion",
+      activeProviderTab: "agent_runner",
     };
   },
   computed: {
@@ -134,7 +140,25 @@ export default {
       },
     },
   },
+  watch: {
+    show(value) {
+      if (value) {
+        this.syncActiveProviderTab();
+      }
+    },
+    currentProviderType() {
+      if (this.showDialog) {
+        this.syncActiveProviderTab();
+      }
+    }
+  },
   methods: {
+    syncActiveProviderTab() {
+      this.activeProviderTab = AVAILABLE_PROVIDER_TABS.includes(this.currentProviderType)
+        ? this.currentProviderType
+        : 'agent_runner';
+    },
+
     closeDialog() {
       this.showDialog = false;
     },

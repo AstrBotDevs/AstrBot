@@ -121,12 +121,13 @@
 
                 <!-- 模型配置 -->
                 <ProviderModelsPanel
-                  v-model:model-search="modelSearch"
                   :entries="filteredMergedModelEntries"
                   :available-count="availableModels.length"
+                  v-model:model-search="modelSearch"
                   :loading-models="loadingModels"
                   :is-source-modified="isSourceModified"
                   :supports-image-input="supportsImageInput"
+                  :supports-audio-input="supportsAudioInput"
                   :supports-tool-call="supportsToolCall"
                   :supports-reasoning="supportsReasoning"
                   :format-context-limit="formatContextLimit"
@@ -140,6 +141,51 @@
                   @delete-provider="deleteProvider"
                   @add-model-provider="addModelProvider"
                 />
+                >>>>>>> origin =======
+                <ProviderModelsPanel
+                  v-model:model-search="modelSearch"
+                  :entries="filteredMergedModelEntries"
+                  :available-count="availableModels.length"
+                  :loading-models="loadingModels"
+                  :is-source-modified="isSourceModified"
+                  :supports-image-input="supportsImageInput"
+                  :supports-audio-input="supportsAudioInput"
+                  :supports-tool-call="supportsToolCall"
+                  :supports-reasoning="supportsReasoning"
+                  :format-context-limit="formatContextLimit"
+                  :testing-providers="testingProviders"
+                  :tm="tm"
+                  @fetch-models="fetchAvailableModels"
+                  @open-manual-model="openManualModelDialog"
+                  @open-provider-edit="openProviderEdit"
+                  @toggle-provider-enable="toggleProviderEnable"
+                  @test-provider="testProvider"
+                  @delete-provider="deleteProvider"
+                  @add-model-provider="addModelProvider"
+                />
+                =======
+                <ProviderModelsPanel
+                  :entries="filteredMergedModelEntries"
+                  :available-count="availableModels.length"
+                  v-model:model-search="modelSearch"
+                  :loading-models="loadingModels"
+                  :is-source-modified="isSourceModified"
+                  :supports-image-input="supportsImageInput"
+                  :supports-audio-input="supportsAudioInput"
+                  :supports-tool-call="supportsToolCall"
+                  :supports-reasoning="supportsReasoning"
+                  :format-context-limit="formatContextLimit"
+                  :testing-providers="testingProviders"
+                  :tm="tm"
+                  @fetch-models="fetchAvailableModels"
+                  @open-manual-model="openManualModelDialog"
+                  @open-provider-edit="openProviderEdit"
+                  @toggle-provider-enable="toggleProviderEnable"
+                  @test-provider="testProvider"
+                  @delete-provider="deleteProvider"
+                  @add-model-provider="addModelProvider"
+                />
+                >>>>>>> origin
               </div>
             </div>
             <div
@@ -292,6 +338,7 @@ const {
   resolveSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
+  supportsAudioInput,
   supportsToolCall,
   supportsReasoning,
   formatContextLimit,

@@ -593,10 +593,21 @@ function hasVisibleItemsAfter(items, currentIndex) {
     padding: 8px 0;
   }
 
-  .property-info,
+  .property-info {
+    padding: 4px 4px;
+  }
+
+  .property-info :deep(.v-list-item) {
+    padding-inline: 0;
+  }
+
   .type-indicator,
   .config-input {
     padding: 4px;
+  }
+
+  .config-divider {
+    display: none;
   }
 }
 </style>

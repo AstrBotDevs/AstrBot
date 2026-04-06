@@ -1087,7 +1087,11 @@
       },
       "rerank_api_base": {
         "description": "Rerank Model API Base URL",
-        "hint": "AstrBot appends /v1/rerank to the request URL."
+        "hint": "The full request URL is formed by combining the Base URL and a path suffix (defaults to /v1/rerank)."
+      },
+      "rerank_api_suffix": {
+        "description": "API URL path suffix",
+        "hint": "Path appended to base_url, e.g. /v1/rerank. Leave empty to disable auto-append."
       },
       "rerank_api_key": {
         "description": "API Key",
@@ -1104,6 +1108,24 @@
         "description": "Custom rerank task description",
         "hint": "Only effective for qwen3-rerank models. Recommended to write in English."
       },
+      "nvidia_rerank_api_base": {
+          "description": "API Base URL"
+      },
+      "nvidia_rerank_api_key": {
+          "description": "API Key"
+      },
+      "nvidia_rerank_model": {
+          "description": "Rerank Model Name",
+          "hint": "Please refer to the NVIDIA Docs for the model name."
+      },
+      "nvidia_rerank_model_endpoint": {
+          "description": "Custom Model Endpoint",
+          "hint": "Custom URL suffix endpoint, defaults to /reranking."
+      },
+      "nvidia_rerank_truncate": {
+          "description": "Text Truncation Strategy",
+          "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
+      },
       "launch_model_if_not_running": {
         "description": "Auto-start model if not running",
         "hint": "If the model is not running in Xinference, attempt to start it automatically. Recommended to disable in production."
@@ -1114,6 +1136,7 @@
         "labels": [
           "Text",
           "Image",
+          "Audio",
           "Tool use"
         ]
       },

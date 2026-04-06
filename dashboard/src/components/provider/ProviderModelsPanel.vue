@@ -81,6 +81,13 @@
                     mdi-eye-outline
                   </v-icon>
                   <v-icon
+                    v-if="supportsAudioInput(entry.metadata)"
+                    size="14"
+                    color="grey"
+                  >
+                    mdi-music-note-outline
+                  </v-icon>
+                  <v-icon
                     v-if="supportsToolCall(entry.metadata)"
                     size="14"
                     color="grey"
@@ -184,6 +191,13 @@
                     mdi-eye-outline
                   </v-icon>
                   <v-icon
+                    v-if="supportsAudioInput(entry.metadata)"
+                    size="14"
+                    color="grey"
+                  >
+                    mdi-music-note-outline
+                  </v-icon>
+                  <v-icon
                     v-if="supportsToolCall(entry.metadata)"
                     size="14"
                     color="grey"
@@ -258,6 +272,10 @@ const props = defineProps({
   supportsImageInput: {
     type: Function,
     required: true,
+  },
+  supportsAudioInput: {
+    type: Function,
+    required: true
   },
   supportsToolCall: {
     type: Function,
