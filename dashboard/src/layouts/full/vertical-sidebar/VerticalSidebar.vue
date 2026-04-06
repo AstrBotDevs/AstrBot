@@ -1,5 +1,6 @@
 <script setup>
 import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useTheme } from 'vuetify';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems from './sidebarItem';
@@ -10,6 +11,7 @@ import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
 const { t, locale } = useI18n();
 
 const customizer = useCustomizerStore();
+const theme = useTheme();
 
 function collectGroupValues(items, values = new Set()) {
   items.forEach((item) => {
@@ -85,6 +87,10 @@ const maxSidebarWidth = 300;
 const isResizing = ref(false);
 
 const isDark = computed(() => customizer.uiTheme === 'PurpleThemeDark');
+const themeColors = computed(() => theme.current.value.colors);
+const iframeBackground = computed(() => isDark.value ? themeColors.value.surface || 'white' : 'white');
+const dragHeaderBackground = computed(() => isDark.value ? themeColors.value.mcpCardBg || themeColors.value.surface || 'white' : '#f0f0f0');
+const frameBorder = computed(() => `1px solid ${isDark.value ? (themeColors.value.borderLight || '#ccc') : '#ccc'}`);
 
 const isMobile = window.innerWidth < 768;
 if (isMobile) {
@@ -103,7 +109,7 @@ const iframeStyle = computed(() => {
     ...pos,
     minWidth: '300px',
     minHeight: '200px',
-    background: isDark.value ? '#1e1e2e' : 'white',
+    background: iframeBackground.value,
     resize: 'both',
     overflow: 'auto',
     borderRadius: '12px',
@@ -123,8 +129,8 @@ const iframeInnerStyle = computed(() => ({
 const dragHeaderStyle = computed(() => ({
   width: '100%',
   padding: '8px',
-  background: isDark.value ? '#2a2a3a' : '#f0f0f0',
-  borderBottom: isDark.value ? '1px solid #444' : '1px solid #ccc',
+  background: dragHeaderBackground.value,
+  borderBottom: frameBorder.value,
   borderTopLeftRadius: '8px',
   borderTopRightRadius: '8px',
   display: 'flex',
@@ -348,7 +354,7 @@ function openChangelogDialog() {
           icon
           @click.stop="openIframeLink('https://astrbot.app')"
           @mousedown.stop
-          :style="{ borderRadius: '8px', border: isDark ? '1px solid #444' : '1px solid #ccc' }"
+          :style="{ borderRadius: '8px', border: frameBorder }"
         >
           <v-icon icon="mdi-open-in-new" />
         </v-btn>
@@ -356,7 +362,7 @@ function openChangelogDialog() {
           icon
           @click.stop="toggleIframe"
           @mousedown.stop
-          :style="{ borderRadius: '8px', border: isDark ? '1px solid #444' : '1px solid #ccc' }"
+          :style="{ borderRadius: '8px', border: frameBorder }"
         >
           <v-icon icon="mdi-close" />
         </v-btn>

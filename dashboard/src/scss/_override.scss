@@ -48,7 +48,7 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
 // Dark mode global overrides
 .v-theme--PurpleThemeDark {
   // Override code text color for dark mode
-  --astrbot-code-color: #e0e0e0;
+  --astrbot-code-color: rgb(var(--v-theme-on-surface-variant));
 
   // Soften flat primary buttons for dark mode
   .v-btn--variant-flat.bg-primary {
@@ -60,6 +60,12 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
     opacity: 0.85;
   }
 
+  // Use a darker scrim for overlays and dialogs in dark mode.
+  .v-overlay__scrim {
+    background-color: rgba(var(--v-theme-background), 0.72) !important;
+    opacity: 1 !important;
+  }
+
   // Ensure dialog/card surfaces use the dark surface color
   .v-overlay__content > .v-card {
     background-color: rgb(var(--v-theme-surface)) !important;
@@ -68,6 +74,6 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   // Links inside markdown - slightly muted
   .markdown-content a,
   .markstream-vue a {
-    color: #6cb6ff;
+    color: rgb(var(--v-theme-primary));
   }
 }

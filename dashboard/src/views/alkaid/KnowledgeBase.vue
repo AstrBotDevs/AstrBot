@@ -1,5 +1,5 @@
 <template>
-    <div class="flex-grow-1" style="display: flex; flex-direction: column; height: 100%;">
+    <div class="knowledge-base-view flex-grow-1" style="display: flex; flex-direction: column; height: 100%;">
         <div style="flex-grow: 1; width: 100%; border: 1px solid #eee; border-radius: 8px; padding: 16px">
             <v-banner lines="one">
                 <template v-slot:text>
@@ -1216,10 +1216,6 @@ export default {
     background: linear-gradient(145deg, #f5f7fa 0%, #e4e8f0 100%);
 }
 
-.v-theme--PurpleThemeDark .book-content {
-    background: linear-gradient(145deg, #1a1a2e 0%, #16213e 100%);
-}
-
 .emoji-container {
     width: 80px;
     height: 80px;
@@ -1244,17 +1240,9 @@ export default {
     color: #333;
 }
 
-.v-theme--PurpleThemeDark .kb-name {
-    color: #ddd;
-}
-
 .kb-count {
     font-size: 14px;
     color: #666;
-}
-
-.v-theme--PurpleThemeDark .kb-count {
-    color: #aaa;
 }
 
 .emoji-picker {
@@ -1383,5 +1371,19 @@ export default {
 
 .data-source-select :deep(.v-field__prepend-inner) {
     padding-right: 12px;
+}
+</style>
+
+<style>
+.v-theme--PurpleThemeDark .knowledge-base-view .book-content {
+    background: linear-gradient(145deg, rgb(var(--v-theme-background)) 0%, rgb(var(--v-theme-lightprimary)) 100%);
+}
+
+.v-theme--PurpleThemeDark .knowledge-base-view .kb-name {
+    color: rgba(var(--v-theme-on-surface-variant), 0.84);
+}
+
+.v-theme--PurpleThemeDark .knowledge-base-view .kb-count {
+    color: rgba(var(--v-theme-on-surface-variant), 0.58);
 }
 </style>

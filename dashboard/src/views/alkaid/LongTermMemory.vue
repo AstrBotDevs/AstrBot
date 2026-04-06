@@ -997,10 +997,6 @@ export default {
   flex-grow: 1;
 }
 
-.v-theme--PurpleThemeDark #graph-container {
-  background-color: #1a1a2e;
-}
-
 #graph-control-panel {
   overflow-y: auto;
   /* 让控制面板可滚动而不是整个页面滚动 */
@@ -1023,10 +1019,6 @@ export default {
 
 .d3-graph {
   background-color: #f2f6f9;
-}
-
-.v-theme--PurpleThemeDark .d3-graph {
-  background-color: #1a1a2e;
 }
 
 /* 为连接线添加交互样式 */
@@ -1069,7 +1061,18 @@ export default {
   font-size: 12px;
 }
 
-.v-theme--PurpleThemeDark .fact-detail-card :deep(pre) {
-  background-color: #1e1e2e;
+</style>
+
+<style>
+.v-theme--PurpleThemeDark #long-term-memory #graph-container {
+  background-color: rgb(var(--v-theme-background));
+}
+
+.v-theme--PurpleThemeDark #long-term-memory .d3-graph {
+  background-color: rgb(var(--v-theme-background));
+}
+
+.v-theme--PurpleThemeDark .fact-detail-card pre {
+  background-color: rgb(var(--v-theme-codeBg));
 }
 </style>
