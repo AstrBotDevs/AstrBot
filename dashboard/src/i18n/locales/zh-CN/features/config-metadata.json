@@ -558,6 +558,18 @@
         "description": "Bot Token",
         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
       },
+      "mattermost_url": {
+        "description": "Mattermost URL",
+        "hint": "Mattermost 服务地址，例如 https://chat.example.com。"
+      },
+      "mattermost_bot_token": {
+        "description": "Mattermost Bot Token",
+        "hint": "在 Mattermost 中创建 Bot 账户后生成的访问令牌。"
+      },
+      "mattermost_reconnect_delay": {
+        "description": "Mattermost 重连延迟",
+        "hint": "WebSocket 断开后的重连等待时间，单位为秒。默认 5 秒。"
+      },
       "type": {
         "description": "适配器类型"
       },
