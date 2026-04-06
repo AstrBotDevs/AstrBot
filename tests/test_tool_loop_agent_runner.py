@@ -568,7 +568,9 @@ async def test_tool_result_includes_all_calltoolresult_content(
 async def test_same_tool_consecutive_results_include_escalating_guidance(
     runner, mock_tool_executor, mock_hooks
 ):
-    provider = SequentialToolProvider(["test_tool"] * 5)
+    runner_cls = type(runner)
+    total_calls = runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD
+    provider = SequentialToolProvider(["test_tool"] * total_calls)
     tool = FunctionTool(
         name="test_tool",
         description="测试工具",
@@ -590,16 +592,15 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
         streaming=False,
     )
 
-    async for _ in runner.step_until_done(6):
+    async for _ in runner.step_until_done(total_calls + 1):
         pass
 
     tool_messages = [
         m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
     ]
-    assert len(tool_messages) == 5
+    assert len(tool_messages) == total_calls
 
     tool_contents = [str(message.content) for message in tool_messages]
-    runner_cls = type(runner)
     level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
         tool_name="test_tool",
         streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
@@ -613,19 +614,33 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
         streak=runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD,
     )
 
-    assert level_1_notice not in tool_contents[0]
-    assert level_2_notice not in tool_contents[0]
-    assert level_1_notice in tool_contents[1]
-    assert level_2_notice in tool_contents[2]
-    assert level_3_notice in tool_contents[4]
+    for streak, content in enumerate(tool_contents, start=1):
+        if streak < runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
+            assert level_1_notice not in content
+            assert level_2_notice not in content
+            assert level_3_notice not in content
+        elif streak < runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD:
+            assert level_1_notice in content
+            assert level_2_notice not in content
+            assert level_3_notice not in content
+        elif streak < runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD:
+            assert level_1_notice not in content
+            assert level_2_notice in content
+            assert level_3_notice not in content
+        else:
+            assert level_1_notice not in content
+            assert level_2_notice not in content
+            assert level_3_notice in content
 
 
 @pytest.mark.asyncio
 async def test_same_tool_streak_resets_after_switching_tools(
     runner, mock_tool_executor, mock_hooks
 ):
+    runner_cls = type(runner)
+    repeated_after_reset = runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD
     provider = SequentialToolProvider(
-        ["test_tool", "other_tool", "test_tool", "test_tool"]
+        ["test_tool", "other_tool", *(["test_tool"] * repeated_after_reset)]
     )
     tool_a = FunctionTool(
         name="test_tool",
@@ -654,16 +669,15 @@ async def test_same_tool_streak_resets_after_switching_tools(
         streaming=False,
     )
 
-    async for _ in runner.step_until_done(5):
+    async for _ in runner.step_until_done(repeated_after_reset + 3):
         pass
 
     tool_messages = [
         m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
     ]
-    assert len(tool_messages) == 4
+    assert len(tool_messages) == repeated_after_reset + 2
 
     tool_contents = [str(message.content) for message in tool_messages]
-    runner_cls = type(runner)
     level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
         tool_name="test_tool",
         streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
@@ -675,9 +689,20 @@ async def test_same_tool_streak_resets_after_switching_tools(
 
     assert level_1_notice not in tool_contents[0]
     assert level_1_notice not in tool_contents[1]
-    assert level_1_notice not in tool_contents[2]
-    assert level_2_notice not in tool_contents[2]
-    assert level_1_notice in tool_contents[3]
+    assert level_2_notice not in tool_contents[0]
+    assert level_2_notice not in tool_contents[1]
+
+    repeated_contents = tool_contents[2:]
+    for streak_after_reset, content in enumerate(repeated_contents, start=1):
+        if streak_after_reset < runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
+            assert level_1_notice not in content
+            assert level_2_notice not in content
+        elif streak_after_reset < runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD:
+            assert level_1_notice in content
+            assert level_2_notice not in content
+        else:
+            assert level_1_notice not in content
+            assert level_2_notice in content
 
 
 @pytest.mark.asyncio
