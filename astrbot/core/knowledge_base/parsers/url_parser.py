@@ -79,7 +79,10 @@ class URLExtractor:
                     if response.status != 200:
                         reason = await response.text()
                         raise OSError(
-                            f"Tavily web extraction failed: {reason}, status: {response.status}"
+                            f"Tavily web extraction failed for URL {api_url}: "
+                            f"{reason}, status: {response.status}. If you configured "
+                            "a Tavily API Base URL, make sure it is a base URL or "
+                            "proxy prefix rather than a specific endpoint path."
                         )
 
                     data = await response.json()

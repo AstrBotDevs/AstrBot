@@ -93,16 +93,44 @@ def test_build_web_search_refs_ignores_tool_call_id_and_falls_back():
     assert [ref["index"] for ref in refs["used"]] == ["a152.1", "a152.2"]
 
 
-def test_normalize_web_search_base_url_reports_invalid_value():
+@pytest.mark.parametrize(
+    ("base_url", "expected_message"),
+    [
+        (
+            "exa.ai/search",
+            "Error: Exa API Base URL must start with http:// or https://. "
+            "Proxy base paths are allowed. Received: 'exa.ai/search'.",
+        ),
+    ],
+)
+def test_normalize_web_search_base_url_reports_invalid_value(
+    base_url: str, expected_message: str
+):
     with pytest.raises(ValueError) as exc_info:
         normalize_web_search_base_url(
-            "exa.ai/search",
+            base_url,
             default="https://api.exa.ai",
             provider_name="Exa",
         )
 
-    assert str(exc_info.value) == (
-        "Error: Exa API Base URL must be a base host URL starting with "
-        "http:// or https:// (for example, https://api.exa.ai), not a full "
-        "endpoint path. Received: 'exa.ai/search'."
+    assert str(exc_info.value) == expected_message
+
+
+@pytest.mark.parametrize(
+    ("base_url", "expected"),
+    [
+        (" https://api.exa.ai/ ", "https://api.exa.ai"),
+        ("https://proxy.example.com/exa/", "https://proxy.example.com/exa"),
+        ("https://api.exa.ai/search", "https://api.exa.ai/search"),
+    ],
+)
+def test_normalize_web_search_base_url_accepts_proxy_paths(
+    base_url: str, expected: str
+):
+    normalized = normalize_web_search_base_url(
+        base_url,
+        default="https://api.exa.ai",
+        provider_name="Exa",
     )
+
+    assert normalized == expected

@@ -107,6 +107,15 @@ class Main(star.Star):
             provider_name="Exa",
         )
 
+    def _format_provider_request_error(
+        self, provider_name: str, action: str, url: str, reason: str, status: int
+    ) -> str:
+        return (
+            f"{provider_name} {action} failed for URL {url}: {reason}, status: {status}. "
+            "If you configured an API Base URL, make sure it is a base URL or proxy "
+            "prefix rather than a specific endpoint path."
+        )
+
     def _add_active_tools(
         self, tool_set, func_tool_mgr, tool_names: tuple[str, ...]
     ) -> None:
@@ -213,7 +222,13 @@ class Main(star.Star):
                 if response.status != 200:
                     reason = await response.text()
                     raise Exception(
-                        f"Tavily web search failed: {reason}, status: {response.status}",
+                        self._format_provider_request_error(
+                            "Tavily",
+                            "web search",
+                            url,
+                            reason,
+                            response.status,
+                        ),
                     )
                 data = await response.json()
                 results = []
@@ -248,7 +263,13 @@ class Main(star.Star):
                 if response.status != 200:
                     reason = await response.text()
                     raise Exception(
-                        f"Tavily web search failed: {reason}, status: {response.status}",
+                        self._format_provider_request_error(
+                            "Tavily",
+                            "content extraction",
+                            url,
+                            reason,
+                            response.status,
+                        ),
                     )
                 data = await response.json()
                 results: list[dict] = data.get("results", [])
@@ -648,7 +669,13 @@ class Main(star.Star):
                 if response.status != 200:
                     reason = await response.text()
                     raise Exception(
-                        f"Exa web search failed: {reason}, status: {response.status}",
+                        self._format_provider_request_error(
+                            "Exa",
+                            "web search",
+                            url,
+                            reason,
+                            response.status,
+                        ),
                     )
                 data = await response.json()
                 results = []
@@ -752,7 +779,13 @@ class Main(star.Star):
                 if response.status != 200:
                     reason = await response.text()
                     raise Exception(
-                        f"Exa content extraction failed: {reason}, status: {response.status}",
+                        self._format_provider_request_error(
+                            "Exa",
+                            "content extraction",
+                            url,
+                            reason,
+                            response.status,
+                        ),
                     )
                 data = await response.json()
                 return data.get("results", [])
@@ -818,7 +851,13 @@ class Main(star.Star):
                 if response.status != 200:
                     reason = await response.text()
                     raise Exception(
-                        f"Exa find similar failed: {reason}, status: {response.status}",
+                        self._format_provider_request_error(
+                            "Exa",
+                            "find similar",
+                            url,
+                            reason,
+                            response.status,
+                        ),
                     )
                 data = await response.json()
                 results = []
