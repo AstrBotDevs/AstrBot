@@ -163,6 +163,60 @@ async def test_weixin_oc_text_send_cache_preserves_plain_components_by_default()
 
 
 @pytest.mark.asyncio
+async def test_weixin_oc_send_cache_preserves_outbound_millisecond_precision(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    adapter = _make_adapter()
+    adapter.token = "token"
+    adapter.account_id = "bot_account"
+    adapter._context_tokens["user_precise"] = "ctx"
+
+    async def fake_request_json(*args, **kwargs):
+        return {}
+
+    adapter.client.request_json = fake_request_json  # type: ignore[method-assign]
+
+    time_points_ns = iter([1775408790123456789, 1775408790987654321])
+    monkeypatch.setattr(time, "time_ns", lambda: next(time_points_ns))
+
+    ok_first = await adapter._send_items_to_session(
+        "user_precise",
+        [adapter._build_plain_text_item("first bot reply")],
+    )
+    ok_second = await adapter._send_items_to_session(
+        "user_precise",
+        [adapter._build_plain_text_item("second bot reply")],
+    )
+
+    assert ok_first is True
+    assert ok_second is True
+    cached_messages = list(adapter._recent_messages["user_precise"].messages)
+    assert cached_messages[-2].timestamp_ms == 1775408790123
+    assert cached_messages[-1].timestamp_ms == 1775408790987
+
+
+@pytest.mark.asyncio
+async def test_weixin_oc_send_cache_skips_failed_business_response():
+    adapter = _make_adapter()
+    adapter.token = "token"
+    adapter.account_id = "bot_account"
+    adapter._context_tokens["user_failed"] = "ctx"
+
+    async def fake_request_json(*args, **kwargs):
+        return {"ret": 0, "errcode": 1001, "errmsg": "send failed"}
+
+    adapter.client.request_json = fake_request_json  # type: ignore[method-assign]
+
+    ok = await adapter._send_items_to_session(
+        "user_failed",
+        [adapter._build_plain_text_item("bot reply text")],
+    )
+
+    assert ok is False
+    assert "user_failed" not in adapter._recent_messages
+
+
+@pytest.mark.asyncio
 async def test_weixin_oc_invalid_ref_msg_does_not_mark_message_as_reply():
     adapter = _make_adapter()
     captured_events: list[Any] = []
@@ -226,6 +280,41 @@ async def test_weixin_oc_non_numeric_quoted_type_does_not_crash():
         event.message_obj.reply_kind is None
         or event.message_obj.reply_kind == "unknown"
     )
+
+
+@pytest.mark.asyncio
+async def test_weixin_oc_cache_miss_does_not_emit_empty_reply_component():
+    adapter = _make_adapter()
+    captured_events: list[Any] = []
+    adapter.commit_event = lambda event: captured_events.append(event)  # type: ignore[method-assign]
+
+    await adapter._handle_inbound_message(
+        {
+            "from_user_id": "user_cache_miss",
+            "message_id": "msg_cache_miss",
+            "create_time_ms": 1775408782000,
+            "item_list": [
+                {
+                    "type": 1,
+                    "ref_msg": {
+                        "message_item": {
+                            "create_time_ms": 1775408781000,
+                            "is_completed": True,
+                        }
+                    },
+                    "text_item": {"text": "正文"},
+                }
+            ],
+        }
+    )
+
+    assert len(captured_events) == 1
+    event = captured_events[0]
+    assert not any(isinstance(comp, Reply) for comp in event.message_obj.message)
+    assert event.message_obj.is_reply is False
+    assert event.message_obj.quoted_text is None
+    assert event.message_obj.reply_to == {"matched": False}
+    assert event.message_obj.message_str == "正文"
 
 
 @pytest.mark.asyncio
@@ -324,6 +413,78 @@ async def test_weixin_oc_normalizes_bot_reply_sender_id_from_cache():
     assert reply.sender_id == "weixin_oc_test"
 
 
+@pytest.mark.asyncio
+async def test_weixin_oc_inbound_cache_excludes_synthetic_reply_component():
+    adapter = _make_adapter()
+    captured_events: list[Any] = []
+    adapter.commit_event = lambda event: captured_events.append(event)  # type: ignore[method-assign]
+    adapter._cache_recent_message(
+        "user_nested",
+        message_id="bot_msg_seed",
+        sender_id="weixin_oc_test",
+        sender_nickname="weixin_oc_test",
+        timestamp=1775408790,
+        timestamp_ms=1775408790000,
+        components=[Plain("最初的 Bot 消息")],
+        message_str="最初的 Bot 消息",
+        message_kind="text",
+    )
+
+    await adapter._handle_inbound_message(
+        {
+            "from_user_id": "user_nested",
+            "message_id": "msg_reply_1",
+            "create_time_ms": 1775408796000,
+            "item_list": [
+                {
+                    "type": 1,
+                    "ref_msg": {
+                        "message_item": {
+                            "create_time_ms": 1775408790000,
+                            "is_completed": True,
+                        }
+                    },
+                    "text_item": {"text": "第一层回复"},
+                }
+            ],
+        }
+    )
+
+    cached = adapter._recent_messages["user_nested"].messages[-1]
+    assert len(cached.components) == 1
+    assert isinstance(cached.components[0], Plain)
+    assert cached.components[0].text == "第一层回复"
+
+    await adapter._handle_inbound_message(
+        {
+            "from_user_id": "user_nested",
+            "message_id": "msg_reply_2",
+            "create_time_ms": 1775408802000,
+            "item_list": [
+                {
+                    "type": 1,
+                    "ref_msg": {
+                        "message_item": {
+                            "create_time_ms": 1775408796000,
+                            "is_completed": True,
+                        }
+                    },
+                    "text_item": {"text": "第二层回复"},
+                }
+            ],
+        }
+    )
+
+    assert len(captured_events) == 2
+    second_event = captured_events[-1]
+    second_reply = second_event.message_obj.message[0]
+    assert isinstance(second_reply, Reply)
+    assert second_reply.message_str == "第一层回复"
+    assert len(second_reply.chain) == 1
+    assert isinstance(second_reply.chain[0], Plain)
+    assert second_reply.chain[0].text == "第一层回复"
+
+
 def test_weixin_oc_recent_message_cache_preserves_millisecond_precision():
     adapter = _make_adapter()
     adapter._cache_recent_message(
@@ -351,13 +512,49 @@ def test_weixin_oc_recent_message_cache_preserves_millisecond_precision():
 
     matched, metadata = adapter._match_recent_reply(
         "user_ms",
-        ref_create_time_ms=1775408790890,
+        ref_create_time_ms=1775408790910,
     )
 
     assert matched is not None
     assert metadata is not None
     assert matched.message_id == "image_msg"
     assert metadata["distance_ms"] == 10
+
+
+def test_weixin_oc_recent_reply_match_accepts_small_future_clock_skew():
+    adapter = _make_adapter()
+    adapter._cache_recent_message(
+        "user_future",
+        message_id="past_msg",
+        sender_id="bot",
+        sender_nickname="bot",
+        timestamp=1775408790,
+        timestamp_ms=1775408790000,
+        components=[Plain("过去的消息")],
+        message_str="过去的消息",
+        message_kind="text",
+    )
+    adapter._cache_recent_message(
+        "user_future",
+        message_id="future_msg",
+        sender_id="bot",
+        sender_nickname="bot",
+        timestamp=1775408790,
+        timestamp_ms=1775408793050,
+        components=[Plain("稍晚的真实消息")],
+        message_str="稍晚的真实消息",
+        message_kind="text",
+    )
+
+    matched, metadata = adapter._match_recent_reply(
+        "user_future",
+        ref_create_time_ms=1775408793000,
+    )
+
+    assert matched is not None
+    assert metadata is not None
+    assert matched.message_id == "future_msg"
+    assert metadata["distance_ms"] == 50
 
 
 @pytest.mark.asyncio

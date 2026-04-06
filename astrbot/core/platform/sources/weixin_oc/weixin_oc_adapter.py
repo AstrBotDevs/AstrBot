@@ -262,12 +262,12 @@ class WeixinOCAdapter(Platform):
             return state.ticket
 
         payload = await self.client.get_typing_config(user_id, context_token)
-        if int(payload.get("ret") or 0) != 0:
+        if not self._is_successful_api_payload(payload):
             logger.warning(
                 "weixin_oc(%s): getconfig failed for %s: %s",
                 self.meta().id,
                 user_id,
-                payload.get("errmsg", ""),
+                self._format_api_error(payload),
             )
             return None
 
@@ -288,9 +288,9 @@ class WeixinOCAdapter(Platform):
         cancel: bool,
     ) -> None:
         payload = await self.client.send_typing_state(user_id, ticket, cancel=cancel)
-        if int(payload.get("ret") or 0) != 0:
+        if not self._is_successful_api_payload(payload):
             raise RuntimeError(
-                f"sendtyping failed for {user_id}: {payload.get('errmsg', '')}"
+                f"sendtyping failed for {user_id}: {self._format_api_error(payload)}"
             )
 
     async def _run_typing_keepalive(self, user_id: str) -> None:
@@ -851,7 +851,7 @@ class WeixinOCAdapter(Platform):
                 user_id,
             )
             return False
-        await self.client.request_json(
+        payload = await self.client.request_json(
             "POST",
             "ilink/bot/sendmessage",
             payload={
@@ -871,18 +871,28 @@ class WeixinOCAdapter(Platform):
             token_required=True,
             headers={},
         )
+        if not self._is_successful_api_payload(payload):
+            logger.warning(
+                "weixin_oc(%s): sendmessage failed for %s: %s",
+                self.meta().id,
+                user_id,
+                self._format_api_error(payload),
+            )
+            return False
         resolved_cache_components = (
             list(cache_components)
             if cache_components is not None
             else self._build_cache_components_from_items(item_list)
         )
         sender_id = str(self.account_id or self.meta().id)
+        sent_at_ms = time.time_ns() // 1_000_000
         self._cache_recent_message(
             user_id,
             message_id=uuid.uuid4().hex,
             sender_id=sender_id,
             sender_nickname=sender_id,
-            timestamp=int(time.time()),
+            timestamp=sent_at_ms // 1000,
+            timestamp_ms=sent_at_ms,
             components=resolved_cache_components,
             message_str=cache_message_str
             if cache_message_str is not None
@@ -906,6 +916,19 @@ class WeixinOCAdapter(Platform):
             if text:
                 components.append(Plain(text))
         return components
+
+    @staticmethod
+    def _is_successful_api_payload(payload: dict[str, Any]) -> bool:
+        ret = payload.get("ret", 0)
+        errcode = payload.get("errcode", 0)
+        return int(ret or 0) == 0 and int(errcode or 0) == 0
+
+    @staticmethod
+    def _format_api_error(payload: dict[str, Any]) -> str:
+        ret = int(payload.get("ret") or 0)
+        errcode = int(payload.get("errcode") or 0)
+        errmsg = str(payload.get("errmsg", ""))
+        return f"ret={ret}, errcode={errcode}, errmsg={errmsg}"
 
     async def _send_media_segment(
         self,
@@ -1324,7 +1347,7 @@ class WeixinOCAdapter(Platform):
                 metadata.reply_kind = matched_message.message_kind
                 metadata.reply_to = matched_reply_to or {"matched": True}
 
-        if not quoted_text and not quoted_components and ref_create_time_ms is None:
+        if not quoted_text and not quoted_components:
             return None, metadata
 
         metadata.is_reply = True
@@ -1438,7 +1461,8 @@ class WeixinOCAdapter(Platform):
                     ref_msg=ref_msg,
                 )
                 break
-        components = await self._item_list_to_components(item_list)
+        cached_components = await self._item_list_to_components(item_list)
+        components = list(cached_components)
         if reply_component is not None:
             components.insert(0, reply_component)
         text = self._message_text_from_item_list(item_list, include_ref_text=False)
@@ -1479,7 +1503,7 @@ class WeixinOCAdapter(Platform):
             sender_nickname=from_user_id,
             timestamp=ts,
             timestamp_ms=create_time_ms,
-            components=components,
+            components=cached_components,
             message_str=text,
         )
 
@@ -1506,20 +1530,8 @@ class WeixinOCAdapter(Platform):
             token_required=True,
             timeout_ms=self.long_poll_timeout_ms,
         )
-        ret = int(data.get("ret") or 0)
-        errcode = data.get("errcode", 0)
-        if ret != 0 and ret is not None:
-            errmsg = str(data.get("errmsg", ""))
-            self._last_inbound_error = f"ret={ret}, errcode={errcode}, errmsg={errmsg}"
-            logger.warning(
-                "weixin_oc(%s): getupdates error: %s",
-                self.meta().id,
-                self._last_inbound_error,
-            )
-            return
-        if errcode and int(errcode) != 0:
-            errmsg = str(data.get("errmsg", ""))
-            self._last_inbound_error = f"ret={ret}, errcode={errcode}, errmsg={errmsg}"
+        if not self._is_successful_api_payload(data):
+            self._last_inbound_error = self._format_api_error(data)
             logger.warning(
                 "weixin_oc(%s): getupdates error: %s",
                 self.meta().id,
