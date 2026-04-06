@@ -556,6 +556,18 @@
         "description": "Bot Token",
         "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
       },
+      "mattermost_url": {
+        "description": "Mattermost URL",
+        "hint": "Mattermost service URL, for example https://chat.example.com."
+      },
+      "mattermost_bot_token": {
+        "description": "Mattermost Bot Token",
+        "hint": "The access token generated after creating a bot account in Mattermost."
+      },
+      "mattermost_reconnect_delay": {
+        "description": "Mattermost Reconnect Delay",
+        "hint": "Delay in seconds before reconnecting after the WebSocket disconnects. Defaults to 5 seconds."
+      },
       "type": {
         "description": "Adapter Type"
       },

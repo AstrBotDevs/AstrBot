@@ -40,6 +40,8 @@ export function getPlatformIcon(name) {
     return new URL('@/assets/images/platform_logos/line.png', import.meta.url).href
   } else if (name === 'matrix') {
     return new URL('@/assets/images/platform_logos/matrix.svg', import.meta.url).href
+  } else if (name === 'mattermost') {
+    return new URL('@/assets/images/platform_logos/mattermost.svg', import.meta.url).href
   }
 }
 
