@@ -40,7 +40,10 @@ export function getProviderIcon(type) {
     'aihubmix': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/aihubmix-color.svg',
     'openrouter': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
     "tokenpony": "https://tokenpony.cn/tokenpony-web/logo.png",
-    "compshare": "https://compshare.cn/favicon.ico"
+    "compshare": "https://compshare.cn/favicon.ico",
+    "xinference": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xinference-color.svg",
+    "bailian": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/bailian-color.svg",
+    "volcengine": 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine-color.svg',
   };
   return icons[type] || '';
 }
