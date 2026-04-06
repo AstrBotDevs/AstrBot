@@ -175,6 +175,7 @@
 
     <!-- 添加提供商对话框 -->
     <AddNewProvider v-model:show="showAddProviderDialog" :metadata="configSchema"
+      :current-provider-type="selectedProviderType"
       @select-template="selectProviderTemplate" />
 
     <!-- 手动添加模型对话框 -->
