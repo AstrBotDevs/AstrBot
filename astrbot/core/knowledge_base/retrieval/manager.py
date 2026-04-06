@@ -173,7 +173,9 @@ class RetrievalManager:
         first_rerank = None
         for kb_id in kb_ids:
             vec_db = kb_options[kb_id]["vec_db"]
-            rerank_provider = getattr(vec_db, "rerank_provider", None) if vec_db else None
+            rerank_provider = (
+                getattr(vec_db, "rerank_provider", None) if vec_db else None
+            )
             if rerank_provider is None:
                 continue
 
