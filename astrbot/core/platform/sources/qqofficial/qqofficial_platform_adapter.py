@@ -134,7 +134,7 @@ class botClient(Client):
         self._active_websockets.add(websocket)
         try:
             await websocket.ws_connect()
-        except (Exception, KeyboardInterrupt, SystemExit) as e:
+        except Exception as e:
             if not self.is_shutting_down:
                 await websocket.on_error(e)
         finally:
