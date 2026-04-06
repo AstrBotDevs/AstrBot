@@ -479,7 +479,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self._same_tool_streak = 1
         return self._same_tool_streak
 
-    def _build_same_tool_guidance(self, tool_name: str, streak: int) -> str:
+    def _build_repeated_tool_call_guidance(self, tool_name: str, streak: int) -> str:
         if streak < self.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
             return ""
 
@@ -936,7 +936,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             _append_tool_call_result(
                                 func_tool_id,
                                 "\n\n".join(result_parts)
-                                + self._build_same_tool_guidance(
+                                + self._build_repeated_tool_call_guidance(
                                     func_tool_name, tool_call_streak
                                 ),
                             )
@@ -953,7 +953,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         _append_tool_call_result(
                             func_tool_id,
                             "The tool has no return value, or has sent the result directly to the user."
-                            + self._build_same_tool_guidance(
+                            + self._build_repeated_tool_call_guidance(
                                 func_tool_name, tool_call_streak
                             ),
                         )
@@ -965,7 +965,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         _append_tool_call_result(
                             func_tool_id,
                             "*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*"
-                            + self._build_same_tool_guidance(
+                            + self._build_repeated_tool_call_guidance(
                                 func_tool_name, tool_call_streak
                             ),
                         )
@@ -986,7 +986,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 _append_tool_call_result(
                     func_tool_id,
                     f"error: {e!s}"
-                    + self._build_same_tool_guidance(func_tool_name, tool_call_streak),
+                    + self._build_repeated_tool_call_guidance(
+                        func_tool_name, tool_call_streak
+                    ),
                 )
 
         # yield the last tool call result
