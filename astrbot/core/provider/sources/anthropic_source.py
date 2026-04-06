@@ -12,7 +12,7 @@ from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
+from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
@@ -242,6 +242,13 @@ class ProviderAnthropic(Provider):
                                 logger.warning(
                                     f"Unsupported image URL format for Anthropic: {url[:50]}..."
                                 )
+                        elif part.get("type") == "audio_url":
+                            converted_content.append(
+                                {
+                                    "type": "text",
+                                    "text": "[Audio Attachment]",
+                                }
+                            )
                         else:
                             converted_content.append(part)
                     new_messages.append(
@@ -517,6 +524,7 @@ class ProviderAnthropic(Provider):
         prompt=None,
         session_id=None,
         image_urls=None,
+        audio_urls=None,
         func_tool=None,
         contexts=None,
         system_prompt=None,
@@ -531,7 +539,10 @@ class ProviderAnthropic(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_user_content_parts
+                prompt or "",
+                image_urls,
+                audio_urls,
+                extra_user_content_parts,
             )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
@@ -577,6 +588,7 @@ class ProviderAnthropic(Provider):
         prompt=None,
         session_id=None,
         image_urls=None,
+        audio_urls=None,
         func_tool=None,
         contexts=None,
         system_prompt=None,
@@ -591,7 +603,10 @@ class ProviderAnthropic(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_user_content_parts
+                prompt or "",
+                image_urls,
+                audio_urls,
+                extra_user_content_parts,
             )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
@@ -642,6 +657,7 @@ class ProviderAnthropic(Provider):
         self,
         text: str,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
     ):
         """组装上下文，支持文本和图片"""
@@ -680,7 +696,9 @@ class ProviderAnthropic(Provider):
             content.append({"type": "text", "text": text})
         elif image_urls:
             # 如果没有文本但有图片，添加占位文本
-            content.append({"type": "text", "text": "[图片]"})
+            content.append({"type": "text", "text": "[Image]"})
+        elif audio_urls:
+            content.append({"type": "text", "text": "[Audio]"})
         elif extra_user_content_parts:
             # 如果只有额外内容块，也需要添加占位文本
             content.append({"type": "text", "text": " "})
@@ -694,6 +712,8 @@ class ProviderAnthropic(Provider):
                     image_dict = await resolve_image_url(block.image_url.url)
                     if image_dict:
                         content.append(image_dict)
+                elif isinstance(block, AudioURLPart):
+                    content.append({"type": "text", "text": "[Audio]"})
                 else:
                     raise ValueError(f"不支持的额外内容块类型: {type(block)}")
 
@@ -703,12 +723,16 @@ class ProviderAnthropic(Provider):
                 image_dict = await resolve_image_url(image_url)
                 if image_dict:
                     content.append(image_dict)
+        if audio_urls:
+            for _audio_path in audio_urls:
+                content.append({"type": "text", "text": "[Audio]"})
 
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts
             and not image_urls
+            and not audio_urls
             and len(content) == 1
             and content[0]["type"] == "text"
         ):

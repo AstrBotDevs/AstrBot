@@ -414,6 +414,7 @@ class AstrMessageEvent(abc.ABC):
         tool_set: ToolSet | None = None,
         session_id: str = "",
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         contexts: list | None = None,
         system_prompt: str = "",
         conversation: Conversation | None = None,
@@ -432,6 +433,8 @@ class AstrMessageEvent(abc.ABC):
 
         image_urls: 可以是 base64:// 或者 http:// 开头的图片链接，也可以是本地图片路径。
 
+        audio_urls: 音频 URL 列表，也支持本地路径。
+
         contexts: 当指定 contexts 时，将会使用 contexts 作为上下文。如果同时传入了 conversation，将会忽略 conversation。
 
         func_tool_manager: [Deprecated] 函数工具管理器，用于调用函数工具。用 self.context.get_llm_tool_manager() 获取。已过时，请使用 tool_set 参数代替。
@@ -441,6 +444,8 @@ class AstrMessageEvent(abc.ABC):
         """
         if image_urls is None:
             image_urls = []
+        if audio_urls is None:
+            audio_urls = []
         if contexts is None:
             contexts = []
         if len(contexts) > 0 and conversation:
@@ -450,6 +455,7 @@ class AstrMessageEvent(abc.ABC):
             prompt=prompt,
             session_id=session_id,
             image_urls=image_urls,
+            audio_urls=audio_urls,
             # func_tool=func_tool_manager,
             func_tool=tool_set,
             contexts=contexts,

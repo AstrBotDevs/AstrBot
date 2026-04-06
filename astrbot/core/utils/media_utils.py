@@ -229,7 +229,7 @@ async def convert_audio_format(
 
     Args:
         audio_path: 原始音频文件路径
-        output_format: 目标格式，例如 amr / ogg
+        output_format: 目标格式，例如 amr / ogg / opus / wav
         output_path: 输出文件路径，如果为None则自动生成
 
     Returns:
@@ -247,6 +247,8 @@ async def convert_audio_format(
     if output_format == "amr":
         args.extend(["-ac", "1", "-ar", "8000", "-ab", "12.2k"])
     elif output_format == "ogg":
+        args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
+    elif output_format == "opus":
         args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
     args.append(output_path)
 
@@ -289,11 +291,67 @@ async def convert_audio_to_wav(audio_path: str, output_path: str | None = None) 
     )
 
 
+async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
+    """Ensure the audio path points to wav format by extension/guess and convert when needed.
+
+    If the file appears to already be wav, return it directly to avoid extra conversion.
+    """
+
+    if not audio_path:
+        return audio_path
+
+    if _get_audio_magic_type(audio_path) == "wav":
+        return audio_path
+
+    return await convert_audio_to_wav(audio_path, output_path)
+
+
+def _get_audio_magic_type(audio_path: str) -> str:
+    """Detect common audio formats from magic bytes."""
+    try:
+        with open(audio_path, "rb") as f:
+            header = f.read(64)
+    except FileNotFoundError:
+        logger.warning(f"[Media Utils] wav check file not found: {audio_path}")
+        return ""
+    except Exception as e:
+        logger.warning(f"[Media Utils] wav check failed: {audio_path}, error: {e}")
+        return ""
+
+    if len(header) < 12:
+        return ""
+
+    if header[:4] == b"RIFF" and header[8:12] == b"WAVE":
+        return "wav"
+
+    if header[:4] == b"#!AM":
+        return "amr"
+
+    if header[:4] == b"OggS":
+        if b"OpusHead" in header:
+            return "opus"
+        return "ogg"
+
+    if header[:3] == b"fLa":
+        return "flac"
+
+    if header[:3] == b"ID3" or header[:2] == b"\xff\xfb":
+        return "mp3"
+
+    if header[:4] == b"ftyp" and b"mp4" in header[:8]:
+        return "mp4"
+
+    if header[:8] == b"#!SILK_V3":
+        return "silk"
+
+    return ""
+
+
 async def extract_video_cover(
     video_path: str,
     output_path: str | None = None,
 ) -> str:
-    """从视频中提取封面图（JPG）。"""
+    """从视频中提取封面图(JPG)"""
     if output_path is None:
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)

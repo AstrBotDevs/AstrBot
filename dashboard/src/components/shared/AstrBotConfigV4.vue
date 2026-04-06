@@ -601,14 +601,17 @@ function getSpecialSubtype(value) {
     padding: 8px 0;
   }
 
-  .property-info,
   .type-indicator {
     padding: 4px 8px;
   }
 
   .config-input {
-    padding-left: 24px;
-    padding-right: 24px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .config-divider {
+    display: none;
   }
 }
 </style>

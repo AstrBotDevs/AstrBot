@@ -107,6 +107,7 @@ class Context:
         chat_provider_id: str,
         prompt: str | None = None,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
         contexts: list[Message] | None = None,
@@ -120,6 +121,7 @@ class Context:
             chat_provider_id: The chat provider ID to use.
             prompt: The prompt to send to the LLM, if `contexts` and `prompt` are both provided, `prompt` will be appended as the last user message
             image_urls: List of image URLs to include in the prompt, if `contexts` and `prompt` are both provided, `image_urls` will be appended to the last user message
+            audio_urls: List of audio URLs or local paths to include in the prompt, if `contexts` and `prompt` are both provided, `audio_urls` will be appended to the last user message
             tools: ToolSet of tools available to the LLM
             system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
             contexts: context messages for the LLM
@@ -135,6 +137,7 @@ class Context:
         llm_resp = await prov.text_chat(
             prompt=prompt,
             image_urls=image_urls,
+            audio_urls=audio_urls,
             func_tool=tools,
             contexts=contexts,
             system_prompt=system_prompt,
@@ -149,6 +152,7 @@ class Context:
         chat_provider_id: str,
         prompt: str | None = None,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
         contexts: list[Message] | None = None,
@@ -165,6 +169,7 @@ class Context:
             chat_provider_id: The chat provider ID to use.
             prompt: The prompt to send to the LLM, if `contexts` and `prompt` are both provided, `prompt` will be appended as the last user message
             image_urls: List of image URLs to include in the prompt, if `contexts` and `prompt` are both provided, `image_urls` will be appended to the last user message
+            audio_urls: List of audio URLs or local paths to include in the prompt, if `contexts` and `prompt` are both provided, `audio_urls` will be appended to the last user message
             tools: ToolSet of tools available to the LLM
             system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
             contexts: context messages for the LLM
@@ -207,6 +212,7 @@ class Context:
         request = ProviderRequest(
             prompt=prompt,
             image_urls=image_urls or [],
+            audio_urls=audio_urls or [],
             func_tool=tools,
             contexts=context_,
             system_prompt=system_prompt or "",

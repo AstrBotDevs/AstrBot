@@ -98,6 +98,7 @@ class Provider(AbstractProvider):
         prompt: str | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         func_tool: ToolSet | None = None,
         contexts: list[Message] | list[dict] | None = None,
         system_prompt: str | None = None,
@@ -113,6 +114,7 @@ class Provider(AbstractProvider):
             prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
+            audio_urls: 音频 URL 列表，也支持本地路径
             tools: tool set
             tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
             contexts: 上下文，和 prompt 二选一使用
@@ -122,6 +124,7 @@ class Provider(AbstractProvider):
 
         Notes:
             - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
+            - 如果传入了 audio_urls，将会在对话时附上音频。如果模型不支持音频输入，将会抛出错误或降级处理。
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
@@ -132,6 +135,7 @@ class Provider(AbstractProvider):
         prompt: str | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         func_tool: ToolSet | None = None,
         contexts: list[Message] | list[dict] | None = None,
         system_prompt: str | None = None,
@@ -146,6 +150,7 @@ class Provider(AbstractProvider):
             prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
+            audio_urls: 音频 URL 列表，也支持本地路径
             tools: tool set
             tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
             contexts: 上下文，和 prompt 二选一使用
@@ -154,6 +159,7 @@ class Provider(AbstractProvider):
 
         Notes:
             - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
+            - 如果传入了 audio_urls，将会在对话时附上音频。如果模型不支持音频输入，将会抛出错误或降级处理。
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """

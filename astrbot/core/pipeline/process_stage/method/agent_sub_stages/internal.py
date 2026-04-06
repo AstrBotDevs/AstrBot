@@ -13,7 +13,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     build_main_agent,
 )
-from astrbot.core.message.components import File, Image
+from astrbot.core.message.components import File, Image, Record, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -153,7 +153,8 @@ class InternalAgentSubStage(Stage):
             has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
             has_media_content = any(
-                isinstance(comp, Image | File) for comp in event.message_obj.message
+                isinstance(comp, (Image, File, Record, Video))
+                for comp in event.message_obj.message
             )
 
             if (

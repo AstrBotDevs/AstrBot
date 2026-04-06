@@ -1106,6 +1106,7 @@
         "labels": [
           "Text",
           "Image",
+          "Audio",
           "Tool use"
         ]
       },
