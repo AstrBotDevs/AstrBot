@@ -6,6 +6,26 @@ export function useRecording() {
     const audioChunks = ref<Blob[]>([]);
     const mediaRecorder = ref<MediaRecorder | null>(null);
 
+    function getRecordingMimeType(): string {
+        const chunkType = audioChunks.value.find(chunk => chunk.type)?.type;
+        return chunkType || mediaRecorder.value?.mimeType || 'audio/webm';
+    }
+
+    function getRecordingFilename(mimeType: string): string {
+        const extensionMap: Record<string, string> = {
+            'audio/webm': 'webm',
+            'audio/webm;codecs=opus': 'webm',
+            'audio/ogg': 'ogg',
+            'audio/ogg;codecs=opus': 'ogg',
+            'audio/mp4': 'm4a',
+            'audio/mpeg': 'mp3',
+            'audio/wav': 'wav'
+        };
+        const normalizedMimeType = mimeType.toLowerCase();
+        const extension = extensionMap[normalizedMimeType] || normalizedMimeType.split('/')[1]?.split(';')[0] || 'webm';
+        return `${crypto.randomUUID()}.${extension}`;
+    }
+
     async function startRecording(onStart?: (label: string) => void) {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -40,13 +60,15 @@ export function useRecording() {
 
             mediaRecorder.value.stop();
             mediaRecorder.value.onstop = async () => {
-                const audioBlob = new Blob(audioChunks.value, { type: 'audio/wav' });
+                const mimeType = getRecordingMimeType();
+                const audioBlob = new Blob(audioChunks.value, { type: mimeType });
+                const filename = getRecordingFilename(mimeType);
                 audioChunks.value = [];
 
                 mediaRecorder.value?.stream.getTracks().forEach(track => track.stop());
 
                 const formData = new FormData();
-                formData.append('file', audioBlob);
+                formData.append('file', audioBlob, filename);
 
                 try {
                     const response = await axios.post('/api/chat/post_file', formData, {
@@ -55,9 +77,9 @@ export function useRecording() {
                         }
                     });
 
-                    const audio = response.data.data.filename;
-                    console.log('Audio uploaded:', audio);
-                    resolve(audio);
+                    const attachmentId = response.data.data.attachment_id;
+                    console.log('Audio uploaded:', attachmentId);
+                    resolve(attachmentId);
                 } catch (err) {
                     console.error('Error uploading audio:', err);
                     reject(err);

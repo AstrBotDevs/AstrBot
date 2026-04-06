@@ -755,6 +755,7 @@ export function useMessages(
     function buildBackendMessageParts(
         prompt: string,
         stagedFiles: { attachment_id: string; url: string; original_name: string; type: string }[],
+        audioAttachmentId: string,
         replyTo: ReplyInfo | null
     ): MessagePart[] {
         const parts: MessagePart[] = [];
@@ -780,6 +781,13 @@ export function useMessages(
             parts.push({
                 type: partType as 'image' | 'record' | 'file',
                 attachment_id: f.attachment_id
+            });
+        }
+
+        if (audioAttachmentId) {
+            parts.push({
+                type: 'record',
+                attachment_id: audioAttachmentId
             });
         }
 
@@ -916,7 +924,7 @@ export function useMessages(
     async function sendMessage(
         prompt: string,
         stagedFiles: { attachment_id: string; url: string; original_name: string; type: string }[],
-        audioName: string,
+        audioAttachmentId: string,
         selectedProviderId: string,
         selectedModelName: string,
         replyTo: ReplyInfo | null = null
@@ -956,10 +964,12 @@ export function useMessages(
             });
         }
 
-        if (audioName) {
+        if (audioAttachmentId) {
+            const embeddedUrl = await getAttachment(audioAttachmentId);
             userMessageParts.push({
                 type: 'record',
-                embedded_url: audioName
+                attachment_id: audioAttachmentId,
+                embedded_url: embeddedUrl
             });
         }
 
@@ -987,8 +997,13 @@ export function useMessages(
             userStopRequested.value = false;
             currentRunningSessionId.value = currSessionId.value;
 
-            const backendMessageParts = buildBackendMessageParts(prompt, stagedFiles, replyTo);
-            const hasAttachmentOrReply = stagedFiles.length > 0 || !!replyTo;
+            const backendMessageParts = buildBackendMessageParts(
+                prompt,
+                stagedFiles,
+                audioAttachmentId,
+                replyTo
+            );
+            const hasAttachmentOrReply = stagedFiles.length > 0 || !!audioAttachmentId || !!replyTo;
 
             if (transportMode.value === 'websocket') {
                 await sendMessageViaWebSocket(
