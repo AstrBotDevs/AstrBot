@@ -600,17 +600,17 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
 
     tool_contents = [str(message.content) for message in tool_messages]
     runner_cls = type(runner)
-    level_1_notice = runner_cls.SAME_TOOL_NOTICE_LEVEL_1_TEMPLATE.format(
+    level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
         tool_name="test_tool",
-        streak=runner_cls.SAME_TOOL_NOTICE_LEVEL_1_THRESHOLD,
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
     )
-    level_2_notice = runner_cls.SAME_TOOL_NOTICE_LEVEL_2_TEMPLATE.format(
+    level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
         tool_name="test_tool",
-        streak=runner_cls.SAME_TOOL_NOTICE_LEVEL_2_THRESHOLD,
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
     )
-    level_3_notice = runner_cls.SAME_TOOL_NOTICE_LEVEL_3_TEMPLATE.format(
+    level_3_notice = runner_cls.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
         tool_name="test_tool",
-        streak=runner_cls.SAME_TOOL_NOTICE_LEVEL_3_THRESHOLD,
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD,
     )
 
     assert level_1_notice not in tool_contents[0]
@@ -664,13 +664,13 @@ async def test_same_tool_streak_resets_after_switching_tools(
 
     tool_contents = [str(message.content) for message in tool_messages]
     runner_cls = type(runner)
-    level_1_notice = runner_cls.SAME_TOOL_NOTICE_LEVEL_1_TEMPLATE.format(
+    level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
         tool_name="test_tool",
-        streak=runner_cls.SAME_TOOL_NOTICE_LEVEL_1_THRESHOLD,
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
     )
-    level_2_notice = runner_cls.SAME_TOOL_NOTICE_LEVEL_2_TEMPLATE.format(
+    level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
         tool_name="test_tool",
-        streak=runner_cls.SAME_TOOL_NOTICE_LEVEL_2_THRESHOLD,
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
     )
 
     assert level_1_notice not in tool_contents[0]
