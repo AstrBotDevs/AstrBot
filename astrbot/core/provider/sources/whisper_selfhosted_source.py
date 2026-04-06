@@ -4,7 +4,6 @@ import uuid
 from functools import partial
 from typing import cast
 
-import torch
 import whisper
 
 from astrbot.core import logger
@@ -35,6 +34,8 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
 
     def _resolve_device(self) -> str:
         if self.device == "mps":
+            import torch  # torch is a dependency of openai-whisper
+
             mps_backend = getattr(torch.backends, "mps", None)
             if mps_backend and mps_backend.is_available():
                 return "mps"
