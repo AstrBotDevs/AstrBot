@@ -36,23 +36,51 @@ export interface FileInfo {
 }
 
 // 消息部分的类型定义
-export interface MessagePart {
-  type: "plain" | "image" | "record" | "file" | "video" | "reply" | "tool_call";
-  text?: string; // for plain
-  attachment_id?: string; // for image, record, file, video
-  filename?: string; // for file (filename from backend)
-  message_id?: number; // for reply (PlatformSessionHistoryMessage.id)
-  tool_calls?: ToolCall[]; // for tool_call
-  // embedded fields - 加载后填充
-  embedded_url?: string; // blob URL for image, record
-  embedded_file?: FileInfo; // for file (保留 attachment_id 用于按需下载)
-  selected_text?: string; // for reply - 被引用消息的内容
-}
+export type MessagePart =
+  | {
+      type: "plain";
+      text?: string;
+      embedded_url?: string;
+      embedded_file?: FileInfo;
+    }
+  | {
+      type: "image" | "record" | "file" | "video";
+      attachment_id?: string;
+      filename?: string;
+      embedded_url?: string;
+      embedded_file?: FileInfo;
+    }
+  | {
+      type: "reply";
+      message_id: number;
+      selected_text?: string;
+      embedded_url?: string;
+      embedded_file?: FileInfo;
+    }
+  | {
+      type: "tool_call";
+      tool_calls?: ToolCall[];
+      embedded_url?: string;
+      embedded_file?: FileInfo;
+    };
 
 // 引用信息 (用于发送消息时)
 export interface ReplyInfo {
   messageId: number;
   selectedText?: string; // 选中的文本内容（可选）
+}
+
+// 引用项
+export interface RefItem {
+  favicon?: string;
+  title: string;
+  url?: string;
+  snippet?: string;
+}
+
+// 引用集合
+export interface Refs {
+  used: RefItem[];
 }
 
 // 简化的消息内容结构
@@ -62,6 +90,7 @@ export interface MessageContent {
   reasoning?: string; // reasoning content (for bot)
   isLoading?: boolean; // loading state
   agentStats?: AgentStats; // agent 统计信息 (for bot)
+  refs?: Refs; // 引用信息
 }
 
 export interface Message {

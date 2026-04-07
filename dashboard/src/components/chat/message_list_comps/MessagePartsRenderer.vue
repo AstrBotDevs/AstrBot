@@ -1,6 +1,6 @@
 <template>
   <template
-    v-for="(renderPart, renderIndex) in getRenderParts(parts)"
+    v-for="(renderPart, renderIndex) in getRenderParts(parts as MessagePart[])"
     :key="renderPart.key"
   >
     <!-- Grouped Tool Calls (consecutive tool_call parts) -->
@@ -81,25 +81,6 @@
         :typewriter="false"
         :is-dark="isDark"
         :monaco-options="{ theme: isDark ? 'vs-dark' : 'vs-light' }"
-      />
-    </div>
-
-    <!-- Text (Markdown) -->
-    <div
-      v-else-if="
-        renderPart.type === 'part' &&
-        renderPart.part?.type === 'plain' &&
-        renderPart.part?.text?.trim()
-      "
-      :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"
-      class="markdown-content"
-    >
-      <MarkdownRender
-        custom-id="message-list"
-        :custom-html-tags="['ref']"
-        :content="renderPart.part?.text"
-        :typewriter="false"
-        :is-dark="isDark"
       />
     </div>
 
@@ -220,6 +201,7 @@ import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { MarkdownRender } from "markstream-vue";
 import IPythonToolBlock from "./IPythonToolBlock.vue";
 import ToolCallItem from "./ToolCallItem.vue";
+import type { FileInfo, MessagePart, ToolCall } from "@/composables/useMessages";
 
 const props = defineProps({
   parts: {
@@ -244,17 +226,17 @@ const emit = defineEmits(["open-image-preview", "download-file"]);
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 
-const emitOpenImage = (url) => {
+const emitOpenImage = (url: any) => {
   emit("open-image-preview", url);
 };
 
-const emitDownloadFile = (file) => {
+const emitDownloadFile = (file: FileInfo) => {
   emit("download-file", file);
 };
 
-const isMarkdownCodeFence = (text) => /^(```|~~~)/.test(text.trim());
+const isMarkdownCodeFence = (text: string) => /^(```|~~~)/.test(text.trim());
 
-const looksLikeStandaloneHtml = (text) => {
+const looksLikeStandaloneHtml = (text: string) => {
   const normalized = text.trim();
   if (!normalized) return false;
   if (!/(<!doctype\s+html|<html\b|<head\b|<body\b)/i.test(normalized))
@@ -264,13 +246,13 @@ const looksLikeStandaloneHtml = (text) => {
   );
 };
 
-const normalizeMarkdownContent = (text) => {
+const normalizeMarkdownContent = (text: string) => {
   if (typeof text !== "string") return text;
   if (isMarkdownCodeFence(text) || !looksLikeStandaloneHtml(text)) return text;
   return `\`\`\`\`html\n${text}\n\`\`\`\``;
 };
 
-const formatDuration = (seconds) => {
+const formatDuration = (seconds: number) => {
   if (seconds < 1) {
     return `${Math.round(seconds * 1000)}ms`;
   }
@@ -282,12 +264,12 @@ const formatDuration = (seconds) => {
   return `${minutes}m ${secs}s`;
 };
 
-const getElapsedTime = (startTs) => {
+const getElapsedTime = (startTs: number) => {
   const elapsed = props.currentTime - startTs;
   return formatDuration(elapsed);
 };
 
-const formatToolResult = (result) => {
+const formatToolResult = (result: string) => {
   if (!result) return "";
   if (typeof result === "string") {
     try {
@@ -300,7 +282,7 @@ const formatToolResult = (result) => {
   return JSON.stringify(result, null, 2);
 };
 
-const formatToolArgs = (args) => {
+const formatToolArgs = (args: string) => {
   if (!args) return "";
   if (typeof args === "string") {
     try {
@@ -313,20 +295,26 @@ const formatToolArgs = (args) => {
   return JSON.stringify(args, null, 2);
 };
 
-const isIPythonTool = (toolCall) => {
+const isIPythonTool = (toolCall: ToolCall) => {
   return (
     toolCall.name === "astrbot_execute_ipython" ||
     toolCall.name === "astrbot_execute_python"
   );
 };
 
-const getRenderParts = (messageParts) => {
+const getRenderParts = (messageParts: MessagePart[]) => {
   if (!Array.isArray(messageParts)) return [];
-  const rendered = [];
-  let pendingToolCalls = [];
+  const rendered: Array<{
+    type: "tool_group" | "ipython" | "part";
+    toolCalls?: ToolCall[];
+    toolCall?: ToolCall;
+    part?: MessagePart;
+    key: string;
+  }> = [];
+  let pendingToolCalls: ToolCall[] = [];
   let groupIndex = 0;
 
-  const flushPending = (endIndex) => {
+  const flushPending = (endIndex: number) => {
     if (!pendingToolCalls.length) return;
     rendered.push({
       type: "tool_group",
