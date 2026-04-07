@@ -889,11 +889,23 @@ class ProviderOpenAIOfficial(Provider):
             and not has_reasoning_output
             and not llm_response.tools_call_args
         ):
-            logger.error(f"OpenAI completion has no usable output: {completion}.")
-            raise EmptyModelOutputError(
-                "OpenAI completion has no usable output. "
-                f"response_id={completion.id}, finish_reason={choice.finish_reason}"
-            )
+            # Some models (e.g. GPT-5 series) complete normally but put all
+            # tokens into internal reasoning, leaving content/reasoning_content
+            # both None.  When finish_reason is "stop" this is not an error.
+            if choice.finish_reason == "stop":
+                logger.warning(
+                    f"OpenAI completion returned no visible content "
+                    f"(response_id={completion.id}, model={completion.model}). "
+                    f"The model may have used internal reasoning only."
+                )
+                if not llm_response.result_chain:
+                    llm_response.result_chain = MessageChain().message("")
+            else:
+                logger.error(f"OpenAI completion has no usable output: {completion}.")
+                raise EmptyModelOutputError(
+                    "OpenAI completion has no usable output. "
+                    f"response_id={completion.id}, finish_reason={choice.finish_reason}"
+                )
 
         llm_response.raw_completion = completion
         llm_response.id = completion.id
