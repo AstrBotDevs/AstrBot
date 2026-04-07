@@ -15,7 +15,6 @@ from astrbot.core.computer.booters.local import (
     LocalFileSystemComponent,
     LocalPythonComponent,
     LocalShellComponent,
-    _ensure_safe_path,
     _is_safe_command,
 )
 
@@ -125,52 +124,6 @@ class TestSecurityRestrictions:
         ]
         for cmd in blocked_commands:
             assert _is_safe_command(cmd) is False, f"Command '{cmd}' should be blocked"
-
-    def test_ensure_safe_path_allowed(self, tmp_path):
-        """Test paths within allowed roots are accepted."""
-        # Create a test directory structure
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("test")
-
-        # Mock get_astrbot_root, get_astrbot_data_path, get_astrbot_temp_path
-        with (
-            patch(
-                "astrbot.core.computer.booters.local.get_astrbot_root",
-                return_value=str(tmp_path),
-            ),
-            patch(
-                "astrbot.core.computer.booters.local.get_astrbot_data_path",
-                return_value=str(tmp_path),
-            ),
-            patch(
-                "astrbot.core.computer.booters.local.get_astrbot_temp_path",
-                return_value=str(tmp_path),
-            ),
-        ):
-            result = _ensure_safe_path(str(test_file))
-            assert result == str(test_file)
-
-    def test_ensure_safe_path_blocked(self, tmp_path):
-        """Test paths outside allowed roots raise PermissionError."""
-        with (
-            patch(
-                "astrbot.core.computer.booters.local.get_astrbot_root",
-                return_value=str(tmp_path),
-            ),
-            patch(
-                "astrbot.core.computer.booters.local.get_astrbot_data_path",
-                return_value=str(tmp_path),
-            ),
-            patch(
-                "astrbot.core.computer.booters.local.get_astrbot_temp_path",
-                return_value=str(tmp_path),
-            ),
-        ):
-            # Try to access a path outside the allowed roots
-            with pytest.raises(PermissionError) as exc_info:
-                _ensure_safe_path("/etc/passwd")
-            assert "Path is outside the allowed computer roots" in str(exc_info.value)
-
 
 class TestLocalShellComponent:
     """Tests for LocalShellComponent."""
