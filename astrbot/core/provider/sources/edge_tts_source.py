@@ -4,14 +4,13 @@ import subprocess
 import uuid
 
 import anyio
-import edge_tts
+import edge_tts  # type: ignore
 
 from astrbot.core import logger
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 """
 edge_tts 方式,能够免费､快速生成语音,使用需要先安装edge-tts库
@@ -65,7 +64,7 @@ class ProviderEdgeTTS(TTSProvider):
             await communicate.save(mp3_path)
 
             try:
-                from pyffmpeg import FFmpeg
+                from pyffmpeg import FFmpeg  # type: ignore
 
                 ff = FFmpeg()
                 ff.convert(input_file=mp3_path, output_file=wav_path)

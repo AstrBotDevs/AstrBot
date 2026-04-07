@@ -3,10 +3,9 @@ import os
 import aiohttp
 
 from astrbot import logger
-
-from ..entities import ProviderType, RerankResult
-from ..provider import RerankProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider.entities import ProviderType, RerankResult
+from astrbot.core.provider.provider import RerankProvider
+from astrbot.core.provider.register import register_provider_adapter
 
 
 class BailianRerankError(Exception):
@@ -32,6 +31,8 @@ class BailianNetworkError(BailianRerankError):
 )
 class BailianRerankProvider(RerankProvider):
     """阿里云百炼文本重排序适配器."""
+
+    QWEN3_RERANK_MODEL = "qwen3-rerank"
 
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
@@ -61,7 +62,7 @@ class BailianRerankProvider(RerankProvider):
             "Content-Type": "application/json",
         }
 
-        self.client = aiohttp.ClientSession(
+        self.client: aiohttp.ClientSession | None = aiohttp.ClientSession(
             headers=headers, timeout=aiohttp.ClientTimeout(total=self.timeout)
         )
 
@@ -83,19 +84,35 @@ class BailianRerankProvider(RerankProvider):
         Returns:
             请求载荷字典
         """
+        normalized_model = self.model.strip().lower()
+        normalized_top_n = top_n if top_n is not None and top_n > 0 else None
+
+        # qwen3-rerank follows a model-specific payload:
+        # query/documents/top_n/instruct should be at the top level.
+        if normalized_model == self.QWEN3_RERANK_MODEL:
+            payload = {
+                "model": self.model,
+                "query": query,
+                "documents": documents,
+            }
+            if normalized_top_n is not None:
+                payload["top_n"] = normalized_top_n
+            if self.instruct:
+                payload["instruct"] = self.instruct
+            if self.return_documents:
+                logger.warning(
+                    "qwen3-rerank does not support return_documents; "
+                    "this option will be ignored."
+                )
+            return payload
+
         base = {"model": self.model, "input": {"query": query, "documents": documents}}
 
         params = {
             k: v
             for k, v in [
-                ("top_n", top_n if top_n is not None and top_n > 0 else None),
+                ("top_n", normalized_top_n),
                 ("return_documents", True if self.return_documents else None),
-                (
-                    "instruct",
-                    self.instruct
-                    if self.instruct and self.model == "qwen3-rerank"
-                    else None,
-                ),
             ]
             if v is not None
         }
@@ -124,7 +141,8 @@ class BailianRerankProvider(RerankProvider):
                 f"百炼 API 错误: {data.get('code')} – {data.get('message', '')}"
             )
 
-        results = data.get("output", {}).get("results", [])
+        # 兼容旧版 API (output.results) 和新版 compatible API (results)
+        results = (data.get("output") or {}).get("results") or data.get("results") or []
         if not results:
             logger.warning(f"百炼 Rerank 返回空结果: {data}")
             return []

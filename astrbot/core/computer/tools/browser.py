@@ -6,21 +6,13 @@ from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.computer.computer_client import get_booter
 
-from ..computer_client import get_booter
+from .permissions import check_admin_permission
 
 
 def _to_json(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
-
-
-def _ensure_admin(context: ContextWrapper[AstrAgentContext]) -> str | None:
-    if context.context.event.role != "admin":
-        return (
-            "error: Permission denied. Browser and skill lifecycle tools are only allowed "
-            "for admin users."
-        )
-    return None
 
 
 async def _get_browser_component(context: ContextWrapper[AstrAgentContext]) -> Any:
@@ -67,23 +59,24 @@ class BrowserExecTool(FunctionTool):
         }
     )
 
-    async def call(
+    async def call(  # type: ignore[override]
         self,
         context: ContextWrapper[AstrAgentContext],
-        cmd: str,
+        cmd: str = "",
         timeout: int = 30,
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
         include_trace: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
+        if err := check_admin_permission(context, "Using browser tools"):
             return err
         try:
             browser = await _get_browser_component(context)
             result = await browser.exec(
                 cmd=cmd,
-                timeout=timeout,
+                timeout_seconds=timeout,
                 description=description,
                 tags=tags,
                 learn=learn,
@@ -129,24 +122,25 @@ class BrowserBatchExecTool(FunctionTool):
         }
     )
 
-    async def call(
+    async def call(  # type: ignore[override]
         self,
         context: ContextWrapper[AstrAgentContext],
-        commands: list[str],
+        commands: list[str] | None = None,
         timeout: int = 60,
         stop_on_error: bool = True,
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
         include_trace: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
+        if err := check_admin_permission(context, "Using browser tools"):
             return err
         try:
             browser = await _get_browser_component(context)
             result = await browser.exec_batch(
                 commands=commands,
-                timeout=timeout,
+                timeout_seconds=timeout,
                 stop_on_error=stop_on_error,
                 description=description,
                 tags=tags,
@@ -177,23 +171,24 @@ class RunBrowserSkillTool(FunctionTool):
         }
     )
 
-    async def call(
+    async def call(  # type: ignore[override]
         self,
         context: ContextWrapper[AstrAgentContext],
-        skill_key: str,
+        skill_key: str = "",
         timeout: int = 60,
         stop_on_error: bool = True,
         include_trace: bool = False,
         description: str | None = None,
         tags: str | None = None,
+        **kwargs: Any,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
+        if err := check_admin_permission(context, "Using browser tools"):
             return err
         try:
             browser = await _get_browser_component(context)
             result = await browser.run_skill(
                 skill_key=skill_key,
-                timeout=timeout,
+                timeout_seconds=timeout,
                 stop_on_error=stop_on_error,
                 include_trace=include_trace,
                 description=description,

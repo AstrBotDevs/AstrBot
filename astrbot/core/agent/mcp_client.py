@@ -1,10 +1,27 @@
+"""
+MCP client - DEPRECATED
+
+.. deprecated::
+    This module has been moved to :mod:`astrbot._internal.mcp`.
+    Please update your imports accordingly.
+
+    Old import (deprecated):
+        from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+
+    New import:
+        from astrbot._internal.mcp import MCPClient, MCPTool
+
+This file exists solely for backward compatibility and will be removed in a future version.
+"""
+
 import asyncio
 import logging
 import os
 import sys
+import warnings
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Generic
+from typing import Any, Generic, TextIO
 
 from tenacity import (
     before_sleep_log,
@@ -14,13 +31,20 @@ from tenacity import (
     wait_exponential,
 )
 
-from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.utils.log_pipe import LogPipe
 
 from .run_context import TContext
 from .tool import FunctionTool
 
+logger = logging.getLogger("astrbot")
+
+warnings.warn(
+    "astrbot.core.agent.mcp_client has been moved to astrbot._internal.mcp. "
+    "Please update your imports.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 try:
     import anyio
     import mcp
@@ -38,6 +62,26 @@ except (ModuleNotFoundError, ImportError):
     )
 
 
+class TenacityLogger:
+    """Wraps a logging.Logger to satisfy tenacity's LoggerProtocol."""
+
+    __slots__ = ("_logger",)
+    _logger: logging.Logger
+
+    def __init__(self, logger: logging.Logger) -> None:
+        self._logger = logger
+
+    def log(
+        self,
+        level: int,
+        msg: str,
+        /,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        self._logger.log(level, msg, *args, **kwargs)
+
+
 def _prepare_config(config: dict) -> dict:
     """Prepare configuration, handle nested format"""
     if config.get("mcpServers"):
@@ -51,16 +95,27 @@ def _prepare_stdio_env(config: dict) -> dict:
     """Preserve Windows executable resolution for stdio subprocesses."""
     if sys.platform != "win32":
         return config
-
-    pathext = os.environ.get("PATHEXT")
-    if not pathext:
-        return config
-
     prepared = config.copy()
     env = dict(prepared.get("env") or {})
-    env.setdefault("PATHEXT", pathext)
+    env = _merge_environment_variables(env)
     prepared["env"] = env
     return prepared
+
+
+def _merge_environment_variables(env: dict) -> dict:
+    """合并环境变量，处理Windows不区分大小写的情况"""
+    merged = env.copy()
+
+    # 将用户环境变量转换为统一的大小写形式便于比较
+    user_keys_lower = {k.lower(): k for k in merged.keys()}
+
+    for sys_key, sys_value in os.environ.items():
+        sys_key_lower = sys_key.lower()
+        if sys_key_lower not in user_keys_lower:
+            # 使用系统环境变量中的原始大小写
+            merged[sys_key] = sys_value
+
+    return merged
 
 
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
@@ -182,14 +237,13 @@ class MCPClient:
 
         cfg = _prepare_config(mcp_server_config.copy())
 
-        def logging_callback(
-            msg: str | mcp.types.LoggingMessageNotificationParams,
+        async def logging_callback(
+            params: mcp.types.LoggingMessageNotificationParams,
         ) -> None:
             # Handle MCP service error logs
-            if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
-                if msg.level in ("warning", "error", "critical", "alert", "emergency"):
-                    log_msg = f"[{msg.level.upper()}] {msg.data!s}"
-                    self.server_errlogs.append(log_msg)
+            if params.level in ("warning", "error", "critical", "alert", "emergency"):
+                log_msg = f"[{params.level.upper()}] {params.data!s}"
+                self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
@@ -211,19 +265,21 @@ class MCPClient:
                     timeout=cfg.get("timeout", 5),
                     sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
                 )
-                streams = await self.exit_stack.enter_async_context(
+                read_stream, write_stream = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
 
                 # Create a new client session
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
-                self.session = await self.exit_stack.enter_async_context(
+                session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
-                        *streams,
+                        read_stream=read_stream,
+                        write_stream=write_stream,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
-                    ),
+                        logging_callback=logging_callback,
+                    )
                 )
+                self.session = session
             else:
                 timeout = timedelta(seconds=cfg.get("timeout", 30))
                 sse_read_timeout = timedelta(
@@ -242,14 +298,15 @@ class MCPClient:
 
                 # Create a new client session
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
-                self.session = await self.exit_stack.enter_async_context(
+                session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
-                    ),
+                        logging_callback=logging_callback,
+                    )
                 )
+                self.session = session
 
         else:
             cfg = _prepare_stdio_env(cfg)
@@ -270,23 +327,32 @@ class MCPClient:
                         log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                         self.server_errlogs.append(log_msg)
 
+            log_pipe = self.exit_stack.enter_context(
+                LogPipe(
+                    level=logging.INFO,
+                    logger=logger,
+                    identifier=f"MCPServer-{name}",
+                    callback=callback,
+                )
+            )
+            errlog_stream: TextIO = self.exit_stack.enter_context(
+                os.fdopen(os.dup(log_pipe.fileno()), "w")
+            )
             stdio_transport = await self.exit_stack.enter_async_context(
                 mcp.stdio_client(
                     server_params,
-                    errlog=LogPipe(
-                        level=logging.INFO,
-                        logger=logger,
-                        identifier=f"MCPServer-{name}",
-                        callback=callback,
-                    ),  # type: ignore
+                    errlog=errlog_stream,
                 ),
             )
-            self.process_pid = self._extract_stdio_process_pid(self._streams_context)
+            self.process_pid = self._extract_stdio_process_pid(stdio_transport)
 
             # Create a new client session
-            self.session = await self.exit_stack.enter_async_context(
+            session = await self.exit_stack.enter_async_context(
                 mcp.ClientSession(*stdio_transport),
             )
+            self.session = session
+
+        assert self.session is not None
         await self.session.initialize()
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
@@ -372,7 +438,7 @@ class MCPClient:
             retry=retry_if_exception_type(anyio.ClosedResourceError),
             stop=stop_after_attempt(2),
             wait=wait_exponential(multiplier=1, min=1, max=3),
-            before_sleep=before_sleep_log(logger, logging.WARNING),
+            before_sleep=before_sleep_log(TenacityLogger(logger), logging.WARNING),
             reraise=True,
         )
         async def _call_with_retry():

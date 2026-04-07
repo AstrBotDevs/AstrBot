@@ -1,9 +1,9 @@
 import { defineStore } from "pinia";
 import config from "@/config";
 import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
+import vuetify from "@/plugins/vuetify";
 
-export const useCustomizerStore = defineStore({
-  id: "customizer",
+export const useCustomizerStore = defineStore("customizer", {
   state: () => ({
     Sidebar_drawer: config.Sidebar_drawer,
     Customizer_drawer: config.Customizer_drawer,
@@ -32,6 +32,12 @@ export const useCustomizerStore = defineStore({
     SET_UI_THEME(payload: string) {
       this.uiTheme = payload;
       localStorage.setItem("uiTheme", payload);
+
+      if (typeof vuetify.theme?.change === "function") {
+        vuetify.theme.change(payload);
+      } else if (vuetify.theme?.global) {
+        vuetify.theme.global.name.value = payload;
+      }
     },
     SET_VIEW_MODE(payload: "bot" | "chat") {
       this.viewMode = payload;
@@ -41,19 +47,19 @@ export const useCustomizerStore = defineStore({
       this.autoSwitchTheme = payload;
       localStorage.setItem("autoSwitchTheme", String(payload));
     },
-    // 新增：手动切换主题（同时关闭自动同步）
+    // 手动切换主题（同时关闭自动同步）
     TOGGLE_DARK_MODE() {
-      // 手动切换时禁用自动同步
       this.SET_AUTO_SYNC(false);
       const newTheme = this.isDarkTheme ? LIGHT_THEME_NAME : DARK_THEME_NAME;
       this.SET_UI_THEME(newTheme);
     },
-    // 新增：应用系统主题（用于自动同步）
+    // 应用系统主题（用于自动同步）
     APPLY_SYSTEM_THEME() {
       if (typeof window === "undefined") return;
-      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const themeToApply = isDark ? DARK_THEME_NAME : LIGHT_THEME_NAME;
-      this.SET_UI_THEME(themeToApply);
+      const prefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)",
+      ).matches;
+      this.SET_UI_THEME(prefersDark ? DARK_THEME_NAME : LIGHT_THEME_NAME);
     },
     TOGGLE_CHAT_SIDEBAR() {
       this.chatSidebarOpen = !this.chatSidebarOpen;

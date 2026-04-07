@@ -9,80 +9,25 @@ This module provides:
 
 from __future__ import annotations
 
-import binascii
-import hashlib
 import json
 import zoneinfo
 from collections.abc import Callable
 from typing import Any
 
-import argon2.exceptions as argon2_exceptions
 import click
-from argon2 import PasswordHasher
 
+from astrbot.cli.i18n import t
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import astrbot_paths
-
-_PASSWORD_HASHER = PasswordHasher()
-
-
-PBKDF2_SALT = b"astrbot-dashboard"
-PBKDF2_ITER = 200_000
-
+from astrbot.core.utils.auth_password import (
+    _is_argon2_hash,
+    _is_pbkdf2_hash,
+    hash_dashboard_password,
+    is_legacy_dashboard_password,
+    validate_dashboard_password,
+)
 
 # --- Password hashing & validation utilities ---
-
-
-def hash_dashboard_password_secure(value: str) -> str:
-    """
-    Hash the dashboard password for storage.
-
-    Stored format:
-        $argon2id$... (if Argon2 available) or pbkdf2_sha256 fallback.
-    """
-    if _PASSWORD_HASHER is not None:
-        try:
-            return _PASSWORD_HASHER.hash(value)
-        except Exception as e:
-            raise click.ClickException(
-                f"Failed to hash password securely (argon2): {e!s}"
-            )
-
-    dk = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), PBKDF2_SALT, PBKDF2_ITER)
-    return f"pbkdf2_sha256${PBKDF2_ITER}${binascii.hexlify(PBKDF2_SALT).decode()}${dk.hex()}"
-
-
-def verify_dashboard_password(value: str, stored_hash: str) -> bool:
-    """
-    Verify a plaintext password `value` against a stored hash.
-
-    Supported format:
-    - Argon2 encoded string: $argon2id$...
-    - PBKDF2 encoded string: pbkdf2_sha256$...
-    """
-    if not stored_hash:
-        return False
-
-    if stored_hash.startswith("$argon2"):
-        try:
-            return _PASSWORD_HASHER.verify(stored_hash, value)
-        except argon2_exceptions.VerifyMismatchError:
-            return False
-        except Exception as e:
-            raise click.ClickException(f"Password verification failure (argon2): {e!s}")
-
-    if stored_hash.startswith("pbkdf2_sha256$"):
-        try:
-            _, iters_s, salt_hex, digest_hex = stored_hash.split("$", 3)
-            iters = int(iters_s)
-            salt = binascii.unhexlify(salt_hex)
-            expected = digest_hex.lower()
-            dk = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), salt, iters)
-            return dk.hex() == expected
-        except Exception:
-            return False
-
-    return False
 
 
 def is_dashboard_password_hash(value: str) -> bool:
@@ -91,17 +36,7 @@ def is_dashboard_password_hash(value: str) -> bool:
     """
     if not isinstance(value, str) or not value:
         return False
-    return value.startswith("$argon2") or value.startswith("pbkdf2_sha256$")
-
-
-def is_legacy_dashboard_password_hash(value: str) -> bool:
-    """
-    Return True when `value` looks like an old dashboard password hash format.
-    """
-    if not isinstance(value, str) or not value:
-        return False
-    value_l = value.lower()
-    return len(value_l) in {32, 64} and all(ch in "0123456789abcdef" for ch in value_l)
+    return _is_argon2_hash(value) or _is_pbkdf2_hash(value)
 
 
 # --- Validators for CLI configuration items ---
@@ -111,9 +46,7 @@ def _validate_log_level(value: str) -> str:
     value_up = value.upper()
     allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
     if value_up not in allowed:
-        raise click.ClickException(
-            "Log level must be one of DEBUG/INFO/WARNING/ERROR/CRITICAL"
-        )
+        raise click.ClickException(t("config_log_level_invalid"))
     return value_up
 
 
@@ -121,40 +54,40 @@ def _validate_dashboard_port(value: str) -> int:
     try:
         port = int(value)
     except ValueError:
-        raise click.ClickException("Port must be a number")
+        raise click.ClickException(t("config_port_must_be_number")) from None
     if port < 1 or port > 65535:
-        raise click.ClickException("Port must be in range 1-65535")
+        raise click.ClickException(t("config_port_range_invalid"))
     return port
 
 
 def _validate_dashboard_username(value: str) -> str:
     if value is None or value.strip() == "":
-        raise click.ClickException("Username cannot be empty")
+        raise click.ClickException(t("config_username_empty"))
     return value.strip()
 
 
 def _validate_dashboard_password(value: str) -> str:
     if value is None or value == "":
-        raise click.ClickException("Password cannot be empty")
+        raise click.ClickException(t("config_password_empty"))
+    try:
+        validate_dashboard_password(value)
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
     # Return the canonical stored representation.
-    return hash_dashboard_password_secure(value)
+    return hash_dashboard_password(value)
 
 
 def _validate_timezone(value: str) -> str:
     try:
         zoneinfo.ZoneInfo(value)
-    except Exception:
-        raise click.ClickException(
-            f"Invalid timezone: {value}. Please use a valid IANA timezone name"
-        )
+    except Exception as e:
+        raise click.ClickException(t("config_timezone_invalid", value=value)) from e
     return value
 
 
 def _validate_callback_api_base(value: str) -> str:
     if not (value.startswith("http://") or value.startswith("https://")):
-        raise click.ClickException(
-            "Callback API base must start with http:// or https://"
-        )
+        raise click.ClickException(t("config_callback_invalid"))
     return value
 
 
@@ -193,7 +126,7 @@ def _load_config() -> dict[str, Any]:
     try:
         return json.loads(config_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as e:
-        raise click.ClickException(f"Failed to parse config file: {e!s}")
+        raise click.ClickException(f"Failed to parse config file: {e!s}") from e
 
 
 def _save_config(config: dict[str, Any]) -> None:
@@ -251,7 +184,7 @@ def set_dashboard_credentials(
         if isinstance(password_hash, str) and is_dashboard_password_hash(password_hash):
             _set_nested_item(config, "dashboard.password", password_hash)
         else:
-            if is_legacy_dashboard_password_hash(password_hash):
+            if is_legacy_dashboard_password(password_hash):
                 raise click.ClickException(
                     "Storing legacy dashboard password hashes is no longer supported. "
                     "Please provide the plaintext password (it will be hashed securely), "
@@ -300,18 +233,14 @@ def set_config(key: str, value: str) -> None:
         _save_config(config)
 
         click.echo(f"Config updated: {key}")
-        if key == "dashboard.password":
-            click.echo("  Old value: ********")
-            click.echo("  New value: ********")
-        else:
-            click.echo(f"  Old value: {old_value}")
-            click.echo(f"  New value: {validated_value}")
+        click.echo(f"  Old value: {old_value}")
+        click.echo(f"  New value: {validated_value}")
     except KeyError:
         raise click.ClickException(f"Unknown config key: {key}")
     except click.ClickException:
         raise
     except Exception as e:
-        raise click.UsageError(f"Failed to set config: {e!s}")
+        raise click.UsageError(f"Failed to set config: {e!s}") from e
 
 
 @conf.command(name="get")
@@ -329,7 +258,7 @@ def get_config(key: str | None = None) -> None:
         except KeyError:
             raise click.ClickException(f"Unknown config key: {key}")
         except Exception as e:
-            raise click.UsageError(f"Failed to get config: {e!s}")
+            raise click.UsageError(f"Failed to get config: {e!s}") from e
     else:
         click.echo("Current config:")
         for k in CONFIG_VALIDATORS:
@@ -367,7 +296,7 @@ def set_dashboard_password(username: str | None, password: str | None) -> None:
         if isinstance(password, str) and is_dashboard_password_hash(password):
             password_hash = password
         else:
-            if is_legacy_dashboard_password_hash(password):
+            if is_legacy_dashboard_password(password):
                 raise click.ClickException(
                     "Providing legacy dashboard password hashes is no longer supported. "
                     "Please supply the plaintext password (it will be hashed securely), "

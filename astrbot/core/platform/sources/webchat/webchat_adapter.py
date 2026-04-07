@@ -3,7 +3,7 @@ import os
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from astrbot import logger
 from astrbot.core import db_helper
@@ -60,19 +60,14 @@ class QueueListener:
 @register_platform_adapter("webchat", "webchat")
 class WebChatAdapter(Platform):
     def __init__(
-        self,
-        platform_config: dict,
-        platform_settings: dict,
-        event_queue: asyncio.Queue,
+        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
     ) -> None:
         super().__init__(platform_config, event_queue)
-
         self.settings = platform_settings
         self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         self.attachments_dir = Path(get_astrbot_data_path()) / "attachments"
         os.makedirs(self.imgs_dir, exist_ok=True)
         self.attachments_dir.mkdir(parents=True, exist_ok=True)
-
         self.metadata = PlatformMetadata(
             name="webchat",
             description="webchat",
@@ -83,9 +78,7 @@ class WebChatAdapter(Platform):
         self._webchat_queue_mgr = webchat_queue_mgr
 
     async def send_by_session(
-        self,
-        session: MessageSesion,
-        message_chain: MessageChain,
+        self, session: MessageSesion, message_chain: MessageChain
     ) -> None:
         conversation_id = _extract_conversation_id(session.session_id)
         active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
@@ -95,10 +88,7 @@ class WebChatAdapter(Platform):
             req_id for req_id in active_request_ids if not req_id.startswith("ws_sub_")
         ]
         target_request_ids = stream_request_ids or active_request_ids
-
         if not target_request_ids:
-            # No active streams to consume this proactive message.
-            # Persist directly and return to avoid creating an unused queue.
             try:
                 await self._save_proactive_message(conversation_id, message_chain)
             except Exception as e:
@@ -108,7 +98,6 @@ class WebChatAdapter(Platform):
                 )
             await super().send_by_session(session, message_chain)
             return
-
         for request_id in target_request_ids:
             await WebChatMessageEvent._send(
                 request_id,
@@ -117,10 +106,6 @@ class WebChatAdapter(Platform):
                 streaming=True,
                 emit_complete=True,
             )
-
-        # If only passive subscription queues exist for this conversation,
-        # keep a proactive save as a fallback since they are not tied to
-        # the normal streaming persistence path.
         if not stream_request_ids:
             try:
                 await self._save_proactive_message(conversation_id, message_chain)
@@ -129,13 +114,10 @@ class WebChatAdapter(Platform):
                     f"[WebChatAdapter] Failed to save proactive message: {e}",
                     exc_info=True,
                 )
-
         await super().send_by_session(session, message_chain)
 
     async def _save_proactive_message(
-        self,
-        conversation_id: str,
-        message_chain: MessageChain,
+        self, conversation_id: str, message_chain: MessageChain
     ) -> None:
         message_parts = await message_chain_to_storage_message_parts(
             message_chain,
@@ -144,7 +126,6 @@ class WebChatAdapter(Platform):
         )
         if not message_parts:
             return
-
         await db_helper.insert_platform_message_history(
             platform_id="webchat",
             user_id=conversation_id,
@@ -159,10 +140,7 @@ class WebChatAdapter(Platform):
         return await db_helper.get_platform_message_history_by_id(message_id)
 
     async def _parse_message_parts(
-        self,
-        message_parts: list,
-        depth: int = 0,
-        max_depth: int = 1,
+        self, message_parts: list, depth: int = 0, max_depth: int = 1
     ) -> tuple[list, list[str]]:
         """解析消息段列表,返回消息组件列表和纯文本列表
 
@@ -181,12 +159,10 @@ class WebChatAdapter(Platform):
             history = await self._get_message_history(message_id)
             if not history or not history.content:
                 return None
-
             reply_parts = history.content.get("message", [])
             if not isinstance(reply_parts, list):
                 return None
-
-            return reply_parts, history.sender_id, history.sender_name
+            return (reply_parts, history.sender_id, history.sender_name)
 
         components, text_parts, _ = await parse_webchat_message_parts(
             message_parts,
@@ -198,27 +174,19 @@ class WebChatAdapter(Platform):
             max_reply_depth=max_depth,
             cast_reply_id_to_str=False,
         )
-        return components, text_parts
+        return (components, text_parts)
 
     async def convert_message(self, data: tuple) -> AstrBotMessage:
         username, cid, payload = data
-
         abm = AstrBotMessage()
         abm.self_id = "webchat"
         abm.sender = MessageMember(username, username)
-
         abm.type = MessageType.FRIEND_MESSAGE
-
         abm.session_id = f"webchat!{username}!{cid}"
-
         abm.message_id = payload.get("message_id")
-
-        # 处理消息段列表
         message_parts = payload.get("message", [])
         abm.message, message_str_parts = await self._parse_message_parts(message_parts)
-
         logger.debug(f"WebChatAdapter: {abm.message}")
-
         abm.timestamp = int(time.time())
         abm.message_str = "".join(message_str_parts)
         abm.raw_message = data
@@ -242,15 +210,13 @@ class WebChatAdapter(Platform):
             platform_meta=self.meta(),
             session_id=message.session_id,
         )
-
-        _, _, payload = cast(tuple[Any, Any, dict[str, Any]], message.raw_message)
+        _, _, payload = message.raw_message
         message_event.set_extra("selected_provider", payload.get("selected_provider"))
         message_event.set_extra("selected_model", payload.get("selected_model"))
         message_event.set_extra(
             "enable_streaming", payload.get("enable_streaming", True)
         )
         message_event.set_extra("action_type", payload.get("action_type"))
-
         self.commit_event(message_event)
 
     async def terminate(self) -> None:

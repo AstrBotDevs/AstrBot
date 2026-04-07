@@ -3,7 +3,7 @@ import re
 
 class CommandTokens:
     def __init__(self) -> None:
-        self.tokens = []
+        self.tokens: list[str] = []
         self.len = 0
 
     def get(self, idx: int) -> str | None:
@@ -13,7 +13,7 @@ class CommandTokens:
 
 
 class CommandParserMixin:
-    def parse_commands(self, message: str):
+    def parse_commands(self, message: str) -> CommandTokens:
         cmd_tokens = CommandTokens()
         cmd_tokens.tokens = re.split(r"\s+", message)
         cmd_tokens.len = len(cmd_tokens.tokens)

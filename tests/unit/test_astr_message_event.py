@@ -211,7 +211,7 @@ class TestGetMessageInfo:
     def test_get_sender_name_coerces_non_string(self, platform_meta, astrbot_message):
         """Test get_sender_name stringifies non-string nickname values."""
         astrbot_message.sender = MessageMember(user_id="user123", nickname=None)
-        astrbot_message.sender.nickname = 12345
+        astrbot_message.sender.nickname = "12345"
         event = ConcreteAstrMessageEvent(
             message_str="test",
             message_obj=astrbot_message,
@@ -268,7 +268,8 @@ class TestGetMessageOutline:
         )
         outline = event.get_message_outline()
         # AtAll format is "[At:all]" in the actual implementation
-        assert "[At:" in outline and "all" in outline.lower()
+        assert "[At:" in outline
+        assert "all" in outline.lower()
 
     def test_outline_with_face(self, platform_meta, astrbot_message):
         """Test outline with Face component."""
@@ -651,6 +652,15 @@ class TestSendTyping:
         await astr_message_event.send_typing()
 
 
+class TestStopTyping:
+    """Tests for stop_typing method."""
+
+    @pytest.mark.asyncio
+    async def test_stop_typing_default_empty(self, astr_message_event):
+        """Test stop_typing default implementation is empty."""
+        await astr_message_event.stop_typing()
+
+
 class TestReact:
     """Tests for react method."""
 
@@ -772,10 +782,12 @@ class TestDefensiveGetattr:
 
     def test_get_message_type_with_non_enum_type(self, astr_message_event):
         """get_message_type should handle message_obj.type that is not a MessageType."""
+
         class DummyMessage:
             def __init__(self):
                 self.type = "not_an_enum"
                 self.message = []
+
         astr_message_event.message_obj = DummyMessage()
         message_type = astr_message_event.get_message_type()
         assert isinstance(message_type, MessageType)

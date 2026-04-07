@@ -75,7 +75,7 @@ class RecursiveCharacterChunker(BaseChunker):
 
                 # 递归合并分割后的文本块
                 final_chunks = []
-                current_chunk = []
+                current_chunk: list[str] = []
                 current_chunk_length = 0
 
                 for split in splits:

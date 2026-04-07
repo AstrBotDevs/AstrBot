@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
-import { normalizeTextInput } from '@/utils/inputValue';
+import { computed } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { normalizeTextInput } from "@/utils/inputValue";
 
-const { tm } = useModuleI18n('features/command');
+const { tm } = useModuleI18n("features/command");
 
 // Props
 const props = defineProps<{
@@ -20,53 +20,45 @@ const props = defineProps<{
 
 // Emits
 const emit = defineEmits<{
-  (e: 'update:pluginFilter', value: string): void;
-  (e: 'update:typeFilter', value: string): void;
-  (e: 'update:permissionFilter', value: string): void;
-  (e: 'update:statusFilter', value: string): void;
-  (e: 'update:showSystemPlugins', value: boolean): void;
-  (e: 'update:searchQuery', value: string): void;
+  (e: "update:pluginFilter", value: string): void;
+  (e: "update:typeFilter", value: string): void;
+  (e: "update:permissionFilter", value: string): void;
+  (e: "update:statusFilter", value: string): void;
+  (e: "update:showSystemPlugins", value: boolean): void;
+  (e: "update:searchQuery", value: string): void;
 }>();
 
 // Computed items for selects
 const pluginItems = computed(() => [
-  { title: tm('filters.all'), value: 'all' },
-  ...props.availablePlugins.map(p => ({ title: p, value: p }))
+  { title: tm("filters.all"), value: "all" },
+  ...props.availablePlugins.map((p) => ({ title: p, value: p })),
 ]);
 
 const typeItems = [
-  { title: tm('filters.all'), value: 'all' },
-  { title: tm('type.group'), value: 'group' },
-  { title: tm('type.command'), value: 'command' },
-  { title: tm('type.subCommand'), value: 'sub_command' }
+  { title: tm("filters.all"), value: "all" },
+  { title: tm("type.group"), value: "group" },
+  { title: tm("type.command"), value: "command" },
+  { title: tm("type.subCommand"), value: "sub_command" },
 ];
 
 const permissionItems = [
-  { title: tm('filters.all'), value: 'all' },
-  { title: tm('permission.everyone'), value: 'everyone' },
-  { title: tm('permission.admin'), value: 'admin' }
+  { title: tm("filters.all"), value: "all" },
+  { title: tm("permission.everyone"), value: "everyone" },
+  { title: tm("permission.admin"), value: "admin" },
 ];
 
 const statusItems = [
-  { title: tm('filters.all'), value: 'all' },
-  { title: tm('filters.enabled'), value: 'enabled' },
-  { title: tm('filters.disabled'), value: 'disabled' },
-  { title: tm('filters.conflict'), value: 'conflict' }
+  { title: tm("filters.all"), value: "all" },
+  { title: tm("filters.enabled"), value: "enabled" },
+  { title: tm("filters.disabled"), value: "disabled" },
+  { title: tm("filters.conflict"), value: "conflict" },
 ];
-
 </script>
 
 <template>
   <!-- 过滤器行 -->
-  <v-row
-    class="mb-4"
-    align="center"
-  >
-    <v-col
-      cols="12"
-      sm="6"
-      md="3"
-    >
+  <v-row class="mb-4" align="center">
+    <v-col cols="12" sm="6" md="3">
       <v-select
         :model-value="pluginFilter"
         :items="pluginItems"
@@ -77,11 +69,7 @@ const statusItems = [
         @update:model-value="emit('update:pluginFilter', $event)"
       />
     </v-col>
-    <v-col
-      cols="12"
-      sm="6"
-      md="2"
-    >
+    <v-col cols="12" sm="6" md="2">
       <v-select
         :model-value="typeFilter"
         :items="typeItems"
@@ -92,11 +80,7 @@ const statusItems = [
         @update:model-value="emit('update:typeFilter', $event)"
       />
     </v-col>
-    <v-col
-      cols="12"
-      sm="6"
-      md="2"
-    >
+    <v-col cols="12" sm="6" md="2">
       <v-select
         :model-value="permissionFilter"
         :items="permissionItems"
@@ -107,11 +91,7 @@ const statusItems = [
         @update:model-value="emit('update:permissionFilter', $event)"
       />
     </v-col>
-    <v-col
-      cols="12"
-      sm="6"
-      md="2"
-    >
+    <v-col cols="12" sm="6" md="2">
       <v-select
         :model-value="statusFilter"
         :items="statusItems"
@@ -126,7 +106,15 @@ const statusItems = [
 
   <!-- 搜索栏 + 统计信息行 -->
   <div class="mb-4 d-flex flex-wrap align-center ga-4">
-    <div style="min-width: 200px; max-width: 350px; flex: 1; border: 1px solid #B9B9B9; border-radius: 16px;">
+    <div
+      style="
+        min-width: 200px;
+        max-width: 350px;
+        flex: 1;
+        border: 1px solid #b9b9b9;
+        border-radius: 16px;
+      "
+    >
       <v-text-field
         :model-value="searchQuery"
         density="compact"
@@ -137,16 +125,14 @@ const statusItems = [
         flat
         hide-details
         single-line
-        @update:model-value="emit('update:searchQuery', normalizeTextInput($event))"
+        @update:model-value="
+          emit('update:searchQuery', normalizeTextInput($event))
+        "
       />
     </div>
     <div class="d-flex align-center ga-4">
       <slot name="stats" />
-      <v-divider
-        vertical
-        class="mx-1"
-        style="height: 20px;"
-      />
+      <v-divider vertical class="mx-1" style="height: 20px" />
       <v-checkbox
         :model-value="effectiveShowSystemPlugins"
         :label="tm('filters.showSystemPlugins')"
@@ -157,11 +143,8 @@ const statusItems = [
         @update:model-value="emit('update:showSystemPlugins', !!$event)"
       >
         <template #label>
-          <span class="text-body-2">{{ tm('filters.showSystemPlugins') }}</span>
-          <v-tooltip
-            v-if="hasSystemPluginConflict"
-            location="top"
-          >
+          <span class="text-body-2">{{ tm("filters.showSystemPlugins") }}</span>
+          <v-tooltip v-if="hasSystemPluginConflict" location="top">
             <template #activator="{ props: tooltipProps }">
               <v-icon
                 v-bind="tooltipProps"
@@ -172,7 +155,7 @@ const statusItems = [
                 mdi-alert-circle
               </v-icon>
             </template>
-            {{ tm('filters.systemPluginConflictHint') }}
+            {{ tm("filters.systemPluginConflictHint") }}
           </v-tooltip>
         </template>
       </v-checkbox>
@@ -185,7 +168,7 @@ const statusItems = [
   flex: none;
 }
 
-.system-plugin-checkbox :deep(.v-selection-control) {
+.system-plugin-checkbox ::v-deep(.v-selection-control) {
   min-height: auto;
 }
 </style>

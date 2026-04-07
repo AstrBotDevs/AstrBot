@@ -1,4 +1,4 @@
-from ..message import Message
+from astrbot.core.agent.message import Message
 
 
 class ContextTruncator:

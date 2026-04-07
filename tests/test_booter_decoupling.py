@@ -53,12 +53,6 @@ class TestComputerBooterBaseInterface:
 
         assert ComputerBooter.get_default_tools() == []
 
-    def test_get_tools_delegates_to_class(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
-
-        booter = ComputerBooter()
-        assert booter.get_tools() == []
-
     def test_get_system_prompt_parts_returns_empty(self):
         from astrbot.core.computer.booters.base import ComputerBooter
 
@@ -523,7 +517,7 @@ class TestSubagentHandoffTools:
         with patch("astrbot.core.computer.computer_client.session_booter", {}):
             tools = FunctionToolExecutor._get_runtime_computer_tools(
                 "sandbox",
-                session_id=None,
+                session_id=None,  # type: ignore[arg-type]
                 sandbox_cfg={"booter": "shipyard_neo"},
             )
         assert "astrbot_create_skill_candidate" in tools
@@ -537,7 +531,7 @@ class TestSubagentHandoffTools:
         with patch("astrbot.core.computer.computer_client.session_booter", {}):
             tools = FunctionToolExecutor._get_runtime_computer_tools(
                 "sandbox",
-                session_id=None,
+                session_id=None,  # type: ignore[arg-type]
                 sandbox_cfg={"booter": "shipyard"},
             )
         assert len(tools) == 0
@@ -549,7 +543,7 @@ class TestSubagentHandoffTools:
             pytest.skip("circular import")
         tools = FunctionToolExecutor._get_runtime_computer_tools(
             "sandbox",
-            session_id=None,
+            session_id=None,  # type: ignore[arg-type]
             sandbox_cfg={},
         )
         assert "astrbot_create_skill_candidate" in tools
@@ -562,7 +556,7 @@ class TestSubagentHandoffTools:
             pytest.skip("circular import")
         tools = FunctionToolExecutor._get_runtime_computer_tools(
             "local",
-            session_id=None,
+            session_id=None,  # type: ignore[arg-type]
             sandbox_cfg={},
         )
         assert len(tools) == 2

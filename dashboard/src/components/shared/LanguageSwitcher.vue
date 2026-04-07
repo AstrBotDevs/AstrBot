@@ -1,33 +1,49 @@
 <template>
-  <StyledMenu
-    offset="12"
-    location="bottom center"
-  >
+  <StyledMenu offset="12" location="bottom center">
     <template #activator="{ props: activatorProps }">
       <v-btn
         v-bind="activatorProps"
-        :variant="(props.variant === 'header' || props.variant === 'chatbox') ? 'flat' : 'text'"
-        :color="(props.variant === 'header' || props.variant === 'chatbox') ? 'var(--v-theme-surface)' : undefined"
-        :rounded="(props.variant === 'header' || props.variant === 'chatbox') ? 'sm' : undefined"
+        :variant="
+          props.variant === 'header' || props.variant === 'chatbox'
+            ? 'flat'
+            : 'text'
+        "
+        :color="
+          props.variant === 'header' || props.variant === 'chatbox'
+            ? 'var(--v-theme-surface)'
+            : undefined
+        "
+        :rounded="
+          props.variant === 'header' || props.variant === 'chatbox'
+            ? 'sm'
+            : undefined
+        "
         icon
         size="small"
-        :class="['language-switcher', `language-switcher--${props.variant}`, (props.variant === 'header' || props.variant === 'chatbox') ? 'action-btn' : '']"
+        :class="[
+          'language-switcher',
+          `language-switcher--${props.variant}`,
+          props.variant === 'header' || props.variant === 'chatbox'
+            ? 'action-btn'
+            : '',
+        ]"
       >
-        <v-icon 
+        <v-icon
           size="18"
-          :color="props.variant === 'default' ? 'rgb(var(--v-theme-primary))' : undefined"
+          :color="
+            props.variant === 'default'
+              ? 'rgb(var(--v-theme-primary))'
+              : undefined
+          "
         >
           mdi-translate
         </v-icon>
-        <v-tooltip
-          activator="parent"
-          location="top"
-        >
-          {{ t('core.common.language') }}
+        <v-tooltip activator="parent" location="top">
+          {{ t("core.common.language") }}
         </v-tooltip>
       </v-btn>
     </template>
-    
+
     <v-list-item
       v-for="lang in languages"
       :key="lang.code"
@@ -46,35 +62,39 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useI18n, useLanguageSwitcher } from '@/i18n/composables'
-import type { Locale } from '@/i18n/types'
-import StyledMenu from '@/components/shared/StyledMenu.vue'
+import { computed } from "vue";
+import { useI18n, useLanguageSwitcher } from "@/i18n/composables";
+import type { Locale } from "@/i18n/types";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
 
 // 定义props来控制样式变体
-const props = withDefaults(defineProps<{
-  variant?: 'default' | 'header' | 'chatbox'
-}>(), {
-  variant: 'default'
-})
+const props = withDefaults(
+  defineProps<{
+    variant?: "default" | "header" | "chatbox";
+  }>(),
+  {
+    variant: "default",
+  },
+);
 
 // 使用新的i18n系统
-const { t } = useI18n()
-const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher()
+const { t } = useI18n();
+const { languageOptions, currentLanguage, switchLanguage, locale } =
+  useLanguageSwitcher();
 
-const languages = computed(() => 
-  languageOptions.value.map(lang => ({
+const languages = computed(() =>
+  languageOptions.value.map((lang) => ({
     code: lang.value,
     name: lang.label,
-    flag: lang.flag
-  }))
-)
+    flag: lang.flag,
+  })),
+);
 
-const currentLocale = computed(() => locale.value)
+const currentLocale = computed(() => locale.value);
 
 const changeLanguage = async (langCode: string) => {
-  await switchLanguage(langCode as Locale)
-}
+  await switchLanguage(langCode as Locale);
+};
 </script>
 
 <style scoped>
@@ -107,5 +127,4 @@ const changeLanguage = async (langCode: string) => {
 .language-switcher--chatbox {
   /* 继承action-btn样式，与工具栏主题按钮保持一致 */
 }
-
-</style> 
+</style>

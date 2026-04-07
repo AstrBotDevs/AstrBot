@@ -1,11 +1,11 @@
 from collections.abc import AsyncGenerator
 
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.star_handler import StarHandlerMetadata
 
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
 from .method.agent_request import AgentRequestSubStage
 from .method.star_request import StarRequestSubStage
 
@@ -31,7 +31,7 @@ class ProcessStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[None, None]:
         """处理事件"""
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers",
@@ -46,16 +46,16 @@ class ProcessStage(Stage):
                     _t = False
                     async for _ in self.agent_sub_stage.process(event):
                         _t = True
-                        yield
+                        yield None
                     if not _t:
-                        yield
+                        yield None
                 else:
-                    yield
+                    yield None
 
         if self.sdk_plugin_bridge is not None and not event.is_stopped():
             sdk_result = await self.sdk_plugin_bridge.dispatch_message(event)
             if sdk_result.sent_message or sdk_result.stopped:
-                yield
+                yield None
 
         # 调用 LLM 相关请求
         if not self.ctx.astrbot_config["provider_settings"].get("enable", True):
@@ -77,4 +77,4 @@ class ProcessStage(Stage):
             # 是否有过发送操作 and 是否是被 @ 或者通过唤醒前缀
             if (effective_result and not event.is_stopped()) or not effective_result:
                 async for _ in self.agent_sub_stage.process(event):
-                    yield
+                    yield None

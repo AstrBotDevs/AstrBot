@@ -54,21 +54,22 @@ class SubAgentRoute(Route):
 
             # Backward/forward compatibility: ensure each agent contains provider_id.
             # None means follow global/default provider settings.
-            if isinstance(data.get("agents"), list):
-                for a in data["agents"]:
+            agents_list = data.get("agents")
+            if isinstance(agents_list, list):
+                for a in agents_list:
                     if isinstance(a, dict):
                         a.setdefault("provider_id", None)
                         a.setdefault("persona_id", None)
-            return jsonify(Response().ok(data=data).__dict__)
+            return jsonify(Response().ok(data=data).to_json())
         except Exception as e:
             logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"获取 subagent 配置失败: {e!s}").__dict__)
+            return jsonify(Response().error(f"获取 subagent 配置失败: {e!s}").to_json())
 
     async def update_config(self):
         try:
             data = await request.json
             if not isinstance(data, dict):
-                return jsonify(Response().error("配置必须为 JSON 对象").__dict__)
+                return jsonify(Response().error("配置必须为 JSON 对象").to_json())
 
             cfg = self.core_lifecycle.astrbot_config
             cfg["subagent_orchestrator"] = data
@@ -82,10 +83,10 @@ class SubAgentRoute(Route):
             if orch is not None:
                 await orch.reload_from_config(data)
 
-            return jsonify(Response().ok(message="保存成功").__dict__)
+            return jsonify(Response().ok(message="保存成功").to_json())
         except Exception as e:
             logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"保存 subagent 配置失败: {e!s}").__dict__)
+            return jsonify(Response().error(f"保存 subagent 配置失败: {e!s}").to_json())
 
     async def get_available_tools(self):
         """Return all registered tools (name/description/parameters/active/origin).
@@ -93,14 +94,18 @@ class SubAgentRoute(Route):
         UI can use this to build a multi-select list for subagent tool assignment.
         """
         try:
-            tool_mgr = self.core_lifecycle.provider_manager.llm_tools
+            prov_mgr = self.core_lifecycle.provider_manager
+            if prov_mgr is None:
+                return Response().error("Provider manager not available").to_json()
+            tool_mgr = prov_mgr.llm_tools
             tools_dict = []
             for tool in tool_mgr.func_list:
                 # Prevent recursive routing: subagents should not be able to select
                 # the handoff (transfer_to_*) tools as their own mounted tools.
                 if isinstance(tool, HandoffTool):
                     continue
-                if tool.handler_module_path == "core.subagent_orchestrator":
+                tool_handler_module_path = getattr(tool, "handler_module_path", None)
+                if tool_handler_module_path == "core.subagent_orchestrator":
                     continue
                 tools_dict.append(
                     {
@@ -108,10 +113,10 @@ class SubAgentRoute(Route):
                         "description": tool.description,
                         "parameters": tool.parameters,
                         "active": tool.active,
-                        "handler_module_path": tool.handler_module_path,
+                        "handler_module_path": tool_handler_module_path,
                     }
                 )
-            return jsonify(Response().ok(data=tools_dict).__dict__)
+            return jsonify(Response().ok(data=tools_dict).to_json())
         except Exception as e:
             logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"获取可用工具失败: {e!s}").__dict__)
+            return jsonify(Response().error(f"获取可用工具失败: {e!s}").to_json())

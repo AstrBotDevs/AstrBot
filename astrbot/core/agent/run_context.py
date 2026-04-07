@@ -17,6 +17,12 @@ class ContextWrapper(Generic[TContext]):
     messages: list[Message] = Field(default_factory=list)
     """This field stores the llm message context for the agent run, agent runners will maintain this field automatically."""
     tool_call_timeout: int = 120  # Default tool call timeout in seconds
+    session_manager: Any = None
+    """
+    Optional session manager (ToolSessionManager) for stateful tool execution.
+    When provided, stateful tools can maintain state across
+    conversation turns within the same session (UMO).
+    """
 
 
 NoContext = ContextWrapper[None]

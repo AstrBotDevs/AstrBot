@@ -20,7 +20,7 @@ from .booters.constants import BOOTER_BOXLITE, BOOTER_SHIPYARD, BOOTER_SHIPYARD_
 from .booters.local import LocalBooter
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.tool import FunctionTool
+    from astrbot.core.agent.tool import ToolSchema
 
 session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None
@@ -430,9 +430,9 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             len(managed),
         )
     finally:
-        if zip_path.exists():
+        if await zip_path.exists():
             try:
-                zip_path.unlink()
+                await zip_path.unlink()
             except Exception:
                 logger.warning(
                     "[Computer] sandbox_sync phase=cleanup status=failed path=%s",
@@ -578,7 +578,7 @@ def _get_booter_class(booter_type: str) -> type[ComputerBooter] | None:
     return None
 
 
-def get_sandbox_tools(session_id: str) -> list[FunctionTool]:
+def get_sandbox_tools(session_id: str) -> list[ToolSchema]:
     """Return precise tool list from a booted session, or [] if not booted."""
     booter = session_booter.get(session_id)
     if booter is None:
@@ -618,7 +618,7 @@ def get_sandbox_capabilities(session_id: str) -> tuple[str, ...] | None:
     return caps
 
 
-def get_default_sandbox_tools(sandbox_cfg: dict) -> list[FunctionTool]:
+def get_default_sandbox_tools(sandbox_cfg: dict) -> list[ToolSchema]:
     """Return conservative (pre-boot) tool list based on config. No instance needed."""
     booter_type = sandbox_cfg.get("booter", BOOTER_SHIPYARD_NEO)
     cls = _get_booter_class(booter_type)

@@ -6,12 +6,11 @@ from typing import Any
 
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook, call_handler
+from astrbot.core.pipeline.process_stage.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
-
-from ...context import PipelineContext, call_event_hook, call_handler
-from ..stage import Stage
 
 
 class StarRequestSubStage(Stage):
@@ -81,7 +80,7 @@ class StarRequestSubStage(Stage):
                 if not event.is_stopped() and event.is_at_or_wake_command:
                     ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常:{e}"
                     event.set_result(MessageEventResult().message(ret))
-                    yield
+                    yield None
                     event.clear_result()
 
                 event.stop_event()

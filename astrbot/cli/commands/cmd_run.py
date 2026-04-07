@@ -14,22 +14,22 @@ Core:
 - `PYTHON`: Python executable path override (for local code execution).
 
 Dashboard / Backend:
-- `ASTRBOT_DASHBOARD_ENABLE` / `DASHBOARD_ENABLE`: Enable/Disable Dashboard.
-- `ASTRBOT_HOST` / `DASHBOARD_HOST`: Dashboard bind host.
-- `ASTRBOT_PORT` / `DASHBOARD_PORT`: Dashboard bind port.
+- `ASTRBOT_DASHBOARD_ENABLE`: Enable/Disable Dashboard.
+- `ASTRBOT_HOST`: Dashboard bind host.
+- `ASTRBOT_PORT`: Dashboard bind port.
 
-Backend-standard SSL names (preferred for server):
-- `ASTRBOT_SSL_ENABLE` / `DASHBOARD_SSL_ENABLE`: Enable SSL for API.
-- `ASTRBOT_SSL_CERT` / `DASHBOARD_SSL_CERT`: SSL Certificate path for backend.
-- `ASTRBOT_SSL_KEY` / `DASHBOARD_SSL_KEY`: SSL Key path for backend.
-- `ASTRBOT_SSL_CA_CERTS` / `DASHBOARD_SSL_CA_CERTS`: SSL CA Certs path for backend.
-
-Legacy compatibility:
-- The CLI will set both `ASTRBOT_SSL_*` and the legacy `DASHBOARD_SSL_*` names to remain compatible.
+SSL (AstrBot-standard names):
+- `ASTRBOT_SSL_ENABLE`: Enable SSL for API.
+- `ASTRBOT_SSL_CERT`: SSL Certificate path for backend.
+- `ASTRBOT_SSL_KEY`: SSL Key path for backend.
+- `ASTRBOT_SSL_CA_CERTS`: SSL CA Certs path for backend.
 
 Network:
 - `http_proxy` / `https_proxy`: Proxy URL.
 - `no_proxy`: No proxy list.
+
+Internationalization:
+- `ASTRBOT_CLI_LANG`: CLI interface language (zh/en).
 
 Integrations:
 - `DASHSCOPE_API_KEY`: Alibaba DashScope API Key (for Rerank).
@@ -56,7 +56,10 @@ from filelock import FileLock, Timeout
 from astrbot.cli.utils import DashboardManager
 from astrbot.runtime_bootstrap import initialize_runtime_bootstrap
 
-initialize_runtime_bootstrap()
+# Python version check: require 3.12 or 3.13
+if not (sys.version_info.major == 3 and sys.version_info.minor in (12, 13)):
+    sys.exit(1)
+
 # Regular expression to find bash-like parameter expansions:
 # ${VAR:-default} or ${VAR}
 _PARAM_EXPAND_RE = re.compile(r"\$\{([^}:]+?)(:-([^}]*))?\}")
@@ -164,6 +167,7 @@ def run(
     debug: bool,
 ) -> None:
     """Run AstrBot"""
+    initialize_runtime_bootstrap()
     try:
         if debug:
             log_level = "DEBUG"
@@ -195,24 +199,6 @@ def run(
             # after this point and will take precedence.
             load_dotenv(dotenv_path=str(svc_path), override=True)
 
-        # Normalize environment variables for backward compatibility
-        # If legacy env vars are set but the preferred new ones aren't, copy them over.
-        env_map = {
-            # Dashboard legacy -> standardized dashboard-prefixed
-            "DASHBOARD_ENABLE": "ASTRBOT_DASHBOARD_ENABLE",
-            "DASHBOARD_HOST": "ASTRBOT_HOST",
-            "DASHBOARD_PORT": "ASTRBOT_PORT",
-            "DASHBOARD_SSL_ENABLE": "ASTRBOT_SSL_ENABLE",
-            "DASHBOARD_SSL_CERT": "ASTRBOT_SSL_CERT",
-            "DASHBOARD_SSL_KEY": "ASTRBOT_SSL_KEY",
-            "DASHBOARD_SSL_CA_CERTS": "ASTRBOT_SSL_CA_CERTS",
-            # Some packages used alternate names
-            "ASTRBOT_DASHBOARD_SSL_CERT": "ASTRBOT_SSL_CERT",
-        }
-        for legacy, new in env_map.items():
-            if legacy in os.environ and new not in os.environ:
-                os.environ[new] = os.environ[legacy]
-
         # Mark CLI execution
         os.environ["ASTRBOT_CLI"] = "1"
 
@@ -242,29 +228,20 @@ def run(
         # Host/Port precedence: CLI args > parsed service config/env/.env > defaults.
         if port is not None:
             os.environ["ASTRBOT_PORT"] = port
-            os.environ["DASHBOARD_PORT"] = port  # legacy
-        # If CLI didn't provide port but env/.env provided ASTRBOT_DASHBOARD_PORT, leave it as-is.
 
         if host is not None:
             os.environ["ASTRBOT_HOST"] = host
-            os.environ["DASHBOARD_HOST"] = host  # legacy
-        # If CLI didn't provide host but env/.env provided ASTRBOT_DASHBOARD_HOST, leave it as-is.
 
-        # CLI-provided SSL paths should set backend-standard env names (preferred),
-        # and also set legacy/dashboard names for compatibility.
+        # CLI-provided SSL paths should set backend-standard env names.
         if ssl_cert is not None:
             os.environ["ASTRBOT_SSL_CERT"] = ssl_cert
-            os.environ["DASHBOARD_SSL_CERT"] = ssl_cert
         if ssl_key is not None:
             os.environ["ASTRBOT_SSL_KEY"] = ssl_key
-            os.environ["DASHBOARD_SSL_KEY"] = ssl_key
         if ssl_ca is not None:
             os.environ["ASTRBOT_SSL_CA_CERTS"] = ssl_ca
-            os.environ["DASHBOARD_SSL_CA_CERTS"] = ssl_ca
 
         # Dashboard enable is derived from CLI flag (--backend-only). CLI decision should win.
         os.environ["ASTRBOT_DASHBOARD_ENABLE"] = str(not backend_only)
-        os.environ["DASHBOARD_ENABLE"] = str(not backend_only)  # legacy
 
         os.environ["ASTRBOT_LOG_LEVEL"] = log_level
 
@@ -332,18 +309,86 @@ def run(
         lock_file = astrbot_root / "astrbot.lock"
         lock = FileLock(lock_file, timeout=5)
         with lock.acquire():
-            click.echo("AstrBot is running...")
-            if backend_only:
-                click.echo("Visit the dashboard at : https://dash.astrbot.men/")
-                click.echo("Backend Requests : localhost or based on https")
 
-            asyncio.run(run_astrbot(astrbot_root))
+            async def run_with_logging() -> None:
+                from astrbot.core import LogBroker, LogManager, db_helper, logger
+                from astrbot.core.initial_loader import InitialLoader
+
+                if (
+                    os.environ.get(
+                        "ASTRBOT_DASHBOARD_ENABLE",
+                        os.environ.get("DASHBOARD_ENABLE"),
+                    )
+                    == "True"
+                ):
+                    await DashboardManager().ensure_installed(astrbot_root)
+
+                log_broker = LogBroker()
+                LogManager.set_queue_handler(logger, log_broker)
+
+                # Register a stdout subscriber for real-time log streaming
+                log_queue = log_broker.register()
+
+                db = db_helper
+                initial_loader = InitialLoader(db, log_broker)
+
+                # Start a task to stream logs to stdout
+                async def stream_logs() -> None:
+                    """Stream logs from LogBroker to stdout."""
+                    while True:
+                        try:
+                            log_entry = await asyncio.wait_for(
+                                log_queue.get(), timeout=0.5
+                            )
+                            # Format: [LEVEL] message
+                            level = log_entry.get("level_name", "INFO")
+                            message = log_entry.get("message", "")
+                            if message:
+                                level_color = {
+                                    "DEBUG": "cyan",
+                                    "INFO": "green",
+                                    "WARNING": "yellow",
+                                    "ERROR": "red",
+                                    "CRITICAL": "red",
+                                }.get(level, "white")
+                                click.secho(
+                                    f"[{level}]",
+                                    fg=level_color,
+                                    bold=False,
+                                    nl=False,
+                                )
+                                click.echo(f" {message}")
+                        except asyncio.TimeoutError:
+                            continue
+                        except asyncio.CancelledError:
+                            break
+
+                # Start streaming task
+                stream_task = asyncio.create_task(stream_logs())
+
+                try:
+                    await initial_loader.start()
+                finally:
+                    stream_task.cancel()
+                    try:
+                        await stream_task
+                    except asyncio.CancelledError:
+                        pass
+
+            click.echo("AstrBot is running... (streaming logs)")
+            if backend_only:
+                click.echo("Dashboard: https://dash.astrbot.men/")
+                click.echo("Backend: localhost or based on https")
+
+            asyncio.run(run_with_logging())
     except KeyboardInterrupt:
         click.echo("AstrBot has been shut down.")
     except Timeout:
         raise click.ClickException(
             "Cannot acquire lock file. Please check if another instance is running"
-        )
+        ) from None
     except Exception as e:
         # Keep original traceback visible for diagnostics
-        raise click.ClickException(f"Runtime error: {e}\n{traceback.format_exc()}")
+        raise click.ClickException(
+            f"Runtime error: {e}\n{traceback.format_exc()}"
+        ) from e

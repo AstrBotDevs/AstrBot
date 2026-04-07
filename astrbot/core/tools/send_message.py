@@ -39,7 +39,6 @@ class MessageComponent(TypedDict, total=False):
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
     description: str = "Directly send message to the user. Only use this tool when you need to proactively message the user. Otherwise you can directly output the reply in the conversation."
-
     parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
@@ -51,7 +50,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         "type": "object",
                         "additionalProperties": {"type": "string"},
                     },
-                },
+                }
             },
             "required": ["messages"],
         }
@@ -67,65 +66,55 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         bool: indicates whether the file was downloaded from sandbox.
         """
         if await anyio.Path(path).exists():
-            return path, False
-
-        # Try to check if the file exists in the sandbox
+            return (path, False)
         try:
             sb = await get_booter(
-                context.context.context,
-                context.context.event.unified_msg_origin,
+                context.context.context, context.context.event.unified_msg_origin
             )
-            # Use shell to check if the file exists in sandbox
             import shlex
 
             result = await sb.shell.exec(
                 f"test -f {shlex.quote(path)} && echo '_&exists_'"
             )
             if "_&exists_" in json.dumps(result):
-                # Download the file from sandbox
                 name = anyio.Path(path).name
                 local_path = os.path.join(
                     get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
                 )
                 await sb.download_file(path, local_path)
                 logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
-                return local_path, True
+                return (local_path, True)
         except Exception as e:
             logger.warning(f"Failed to check/download file from sandbox: {e}")
-
-        # Return the original path (will likely fail later, but that's expected)
-        return path, False
+        return (path, False)
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
     ) -> ToolExecResult:
-        session: str | MessageSession = kwargs.get("session") or context.context.event.unified_msg_origin
+        session: str | MessageSession = (
+            kwargs.get("session") or context.context.event.unified_msg_origin
+        )
         messages: list[dict[str, Any]] | None = kwargs.get("messages")
-
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
-
         components: list[Comp.BaseMessageComponent] = []
-
         for idx, msg in enumerate(messages):
             if not isinstance(msg, dict):
                 return f"error: messages[{idx}] should be an object."
-
-            if "type" not in msg:
+            msg_dict: dict[str, Any] = msg
+            if "type" not in msg_dict:
                 return f"error: messages[{idx}].type is required."
-            msg_type = str(msg["type"]).lower()
-
+            msg_type = str(msg_dict["type"]).lower()
             _file_from_sandbox = False
-
             try:
                 if msg_type == "plain":
-                    text = str(msg.get("text", "")).strip()
+                    text = str(msg_dict.get("text", "")).strip()
                     if not text:
                         return f"error: messages[{idx}].text is required for plain component."
                     components.append(Comp.Plain(text=text))
                 elif msg_type == "image":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     if path:
                         (
                             local_path,
@@ -137,8 +126,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for image component."
                 elif msg_type == "record":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     if path:
                         (
                             local_path,
@@ -150,8 +139,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for record component."
                 elif msg_type == "video":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     if path:
                         (
                             local_path,
@@ -163,10 +152,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for video component."
                 elif msg_type == "file":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     name = (
-                        msg.get("text")
+                        msg_dict.get("text")
                         or (os.path.basename(path) if path else "")
                         or (os.path.basename(url) if url else "")
                         or "file"
@@ -182,21 +171,16 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for file component."
                 elif msg_type == "mention_user":
-                    mention_user_id = msg.get("mention_user_id")
+                    mention_user_id = msg_dict.get("mention_user_id")
                     if not mention_user_id:
                         return f"error: messages[{idx}].mention_user_id is required for mention_user component."
-                    components.append(
-                        Comp.At(
-                            qq=mention_user_id,
-                        ),
-                    )
+                    components.append(Comp.At(qq=mention_user_id))
                 else:
                     return (
                         f"error: unsupported message type '{msg_type}' at index {idx}."
                     )
             except Exception as exc:
                 return f"error: failed to build messages[{idx}] component: {exc}"
-
         try:
             target_session = (
                 MessageSession.from_str(session)
@@ -205,12 +189,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             )
         except Exception as e:
             return f"error: invalid session: {e}"
-
         await context.context.context.send_message(
-            target_session,
-            MessageChain(chain=components),
+            target_session, MessageChain(chain=components)
         )
-
         return f"Message sent to session {target_session}"
 
 

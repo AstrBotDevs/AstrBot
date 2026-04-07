@@ -21,15 +21,12 @@
           @click.stop="toggleExpand"
         >
           <v-icon size="16">
-            {{ isExpanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+            {{ isExpanded ? "mdi-chevron-down" : "mdi-chevron-right" }}
           </v-icon>
         </v-btn>
-        <div
-          v-else
-          class="expand-placeholder"
-        />
+        <div v-else class="expand-placeholder" />
         <v-icon :color="currentFolderId === folder.folder_id ? 'primary' : ''">
-          {{ isExpanded ? 'mdi-folder-open' : 'mdi-folder' }}
+          {{ isExpanded ? "mdi-folder-open" : "mdi-folder" }}
         </v-icon>
       </template>
       <v-list-item-title class="text-truncate">
@@ -61,121 +58,133 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, type PropType } from 'vue';
-import type { FolderTreeNode } from './types';
+import { defineComponent, type PropType } from "vue";
+import type { FolderTreeNode } from "./types";
 
 export default defineComponent({
-    name: 'BaseFolderTreeNode',
-    props: {
-        folder: {
-            type: Object as PropType<FolderTreeNode>,
-            required: true
-        },
-        depth: {
-            type: Number,
-            default: 0
-        },
-        currentFolderId: {
-            type: String as PropType<string | null>,
-            default: null
-        },
-        searchQuery: {
-            type: String,
-            default: ''
-        },
-        expandedFolderIds: {
-            type: Array as PropType<string[]>,
-            default: () => []
-        },
-        acceptDropTypes: {
-            type: Array as PropType<string[]>,
-            default: () => []
-        }
+  name: "BaseFolderTreeNode",
+  props: {
+    folder: {
+      type: Object as PropType<FolderTreeNode>,
+      required: true,
     },
-    emits: ['folder-click', 'folder-context-menu', 'item-dropped', 'toggle-expansion', 'set-expansion'],
-    data() {
-        return {
-            isDragOver: false
-        };
+    depth: {
+      type: Number,
+      default: 0,
     },
-    computed: {
-        hasChildren(): boolean {
-            return this.folder.children && this.folder.children.length > 0;
-        },
-        isExpanded(): boolean {
-            return this.expandedFolderIds.includes(this.folder.folder_id);
-        }
+    currentFolderId: {
+      type: String as PropType<string | null>,
+      default: null,
     },
-    watch: {
-        searchQuery: {
-            immediate: true,
-            handler(newQuery: string) {
-                // 搜索时自动展开匹配的节点
-                if (newQuery && this.hasChildren) {
-                    this.$emit('set-expansion', { folderId: this.folder.folder_id, expanded: true });
-                }
-            }
-        }
+    searchQuery: {
+      type: String,
+      default: "",
     },
-    methods: {
-        toggleExpand() {
-            this.$emit('toggle-expansion', this.folder.folder_id);
-        },
-        handleContextMenu(event: MouseEvent) {
-            this.$emit('folder-context-menu', { event, folder: this.folder });
-        },
-        handleDragOver(event: DragEvent) {
-            if (!event.dataTransfer) return;
-            event.dataTransfer.dropEffect = 'move';
-            this.isDragOver = true;
-        },
-        handleDragLeave() {
-            this.isDragOver = false;
-        },
-        handleDrop(event: DragEvent) {
-            this.isDragOver = false;
-            if (!event.dataTransfer) return;
-            
-            try {
-                const data = JSON.parse(event.dataTransfer.getData('application/json'));
-                if (this.acceptDropTypes.length === 0 || this.acceptDropTypes.includes(data.type)) {
-                    this.$emit('item-dropped', {
-                        item_id: data.id || data.persona_id || data.item_id,
-                        item_type: data.type,
-                        target_folder_id: this.folder.folder_id,
-                        source_data: data
-                    });
-                }
-            } catch (e) {
-                console.error('Failed to parse drop data:', e);
-            }
+    expandedFolderIds: {
+      type: Array as PropType<string[]>,
+      default: () => [],
+    },
+    acceptDropTypes: {
+      type: Array as PropType<string[]>,
+      default: () => [],
+    },
+  },
+  emits: [
+    "folder-click",
+    "folder-context-menu",
+    "item-dropped",
+    "toggle-expansion",
+    "set-expansion",
+  ],
+  data() {
+    return {
+      isDragOver: false,
+    };
+  },
+  computed: {
+    hasChildren(): boolean {
+      return this.folder.children && this.folder.children.length > 0;
+    },
+    isExpanded(): boolean {
+      return this.expandedFolderIds.includes(this.folder.folder_id);
+    },
+  },
+  watch: {
+    searchQuery: {
+      immediate: true,
+      handler(newQuery: string) {
+        // 搜索时自动展开匹配的节点
+        if (newQuery && this.hasChildren) {
+          this.$emit("set-expansion", {
+            folderId: this.folder.folder_id,
+            expanded: true,
+          });
         }
-    }
+      },
+    },
+  },
+  methods: {
+    toggleExpand() {
+      this.$emit("toggle-expansion", this.folder.folder_id);
+    },
+    handleContextMenu(event: MouseEvent) {
+      this.$emit("folder-context-menu", { event, folder: this.folder });
+    },
+    handleDragOver(event: DragEvent) {
+      if (!event.dataTransfer) return;
+      event.dataTransfer.dropEffect = "move";
+      this.isDragOver = true;
+    },
+    handleDragLeave() {
+      this.isDragOver = false;
+    },
+    handleDrop(event: DragEvent) {
+      this.isDragOver = false;
+      if (!event.dataTransfer) return;
+
+      try {
+        const data = JSON.parse(event.dataTransfer.getData("application/json"));
+        if (
+          this.acceptDropTypes.length === 0 ||
+          this.acceptDropTypes.includes(data.type)
+        ) {
+          this.$emit("item-dropped", {
+            item_id: data.id || data.persona_id || data.item_id,
+            item_type: data.type,
+            target_folder_id: this.folder.folder_id,
+            source_data: data,
+          });
+        }
+      } catch (e) {
+        console.error("Failed to parse drop data:", e);
+      }
+    },
+  },
 });
 </script>
 
 <style scoped>
 .base-folder-tree-node {
-    width: 100%;
+  width: 100%;
 }
 
 .folder-item {
-    min-height: 36px;
-    transition: all 0.2s ease;
+  min-height: 36px;
+  transition: all 0.2s ease;
 }
 
 .folder-item.drag-over {
-    background-color: rgba(var(--v-theme-primary), 0.15);
-    border: 2px dashed rgb(var(--v-theme-primary));
-    border-radius: 8px;
+  background-color: rgba(var(--v-theme-primary), 0.15);
+  border: 2px dashed rgb(var(--v-theme-primary));
+  border-radius: 8px;
 }
 
 .expand-btn {
-    margin-right: 4px;
+  margin-right: 4px;
 }
 
 .expand-placeholder {
-    width: 28px;
-    flex-shrink: 0;
+  width: 28px;
+  flex-shrink: 0;
 }
 </style>

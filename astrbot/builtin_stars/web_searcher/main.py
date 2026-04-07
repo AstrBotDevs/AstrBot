@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 import uuid
+from typing import ClassVar
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -14,11 +15,21 @@ from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
 from .engines import HEADERS, USER_AGENTS, SearchResult
 from .engines.bing import Bing
+from .engines.comet import Comet
+from .engines.duckduckgo import DuckDuckGo
+from .engines.google import Google
 from .engines.sogo import Sogo
+from .provider_routing import (
+    DEFAULT_WEB_SEARCH_PROVIDER,
+    build_default_engine_order,
+    normalize_websearch_provider,
+    normalize_websearch_provider_for_tools,
+    validate_default_engine_registry,
+)
 
 
 class Main(star.Star):
-    TOOLS = [
+    TOOLS: ClassVar[list[str]] = [
         "web_search",
         "fetch_url",
         "web_search_tavily",
@@ -57,8 +68,22 @@ class Main(star.Star):
                     provider_settings["websearch_bocha_key"] = []
                 cfg.save_config()
 
+        self.google_search = Google()
         self.bing_search = Bing()
+        self.ddg_search = DuckDuckGo()
+        self.comet_search = Comet()
         self.sogo_search = Sogo()
+        self.default_search_engines = {
+            engine.NAME: engine
+            for engine in (
+                self.google_search,
+                self.bing_search,
+                self.ddg_search,
+                self.comet_search,
+                self.sogo_search,
+            )
+        }
+        validate_default_engine_registry(self.default_search_engines)
         self.baidu_initialized = False
 
     async def _tidy_text(self, text: str) -> str:
@@ -105,23 +130,29 @@ class Main(star.Star):
         self,
         query,
         num_results: int = 5,
+        preferred_provider: str = DEFAULT_WEB_SEARCH_PROVIDER,
     ) -> list[SearchResult]:
-        results = []
-        try:
-            results = await self.bing_search.search(query, num_results)
-        except Exception as e:
-            logger.error(f"bing search error: {e}, try the next one...")
-        if len(results) == 0:
-            logger.debug("search bing failed")
+        for engine_name in build_default_engine_order(preferred_provider):
+            engine = self.default_search_engines.get(engine_name)
+            if not engine:
+                continue
             try:
-                results = await self.sogo_search.search(query, num_results)
+                results = await engine.search(query, num_results)
             except Exception as e:
-                logger.error(f"sogo search error: {e}")
-        if len(results) == 0:
-            logger.debug("search sogo failed")
-            return []
+                logger.error(
+                    f"{engine_name} search error: {e}, try the next one...",
+                )
+                continue
 
-        return results
+            if results:
+                logger.info(
+                    f"web_searcher - provider `{engine_name}` success: {len(results)} results",
+                )
+                return results
+
+            logger.debug(f"search {engine_name} returned no results")
+
+        return []
 
     async def _get_tavily_key(self, cfg: AstrBotConfig) -> str:
         """并发安全的从列表中获取并轮换Tavily API密钥｡"""
@@ -213,8 +244,17 @@ class Main(star.Star):
         logger.info(f"web_searcher - search_from_search_engine: {query}")
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         websearch_link = cfg["provider_settings"].get("web_search_link", False)
-
-        results = await self._web_search_default(query, max_results)
+        preferred_provider = normalize_websearch_provider(
+            cfg.get("provider_settings", {}).get(
+                "websearch_provider",
+                DEFAULT_WEB_SEARCH_PROVIDER,
+            ),
+        )
+        results = await self._web_search_default(
+            query,
+            max_results,
+            preferred_provider=preferred_provider,
+        )
         if not results:
             return "Error: web searcher does not return any results."
 
@@ -547,11 +587,17 @@ class Main(star.Star):
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         prov_settings = cfg.get("provider_settings", {})
         websearch_enable = prov_settings.get("web_search", False)
-        provider = prov_settings.get("websearch_provider", "default")
+        raw_provider = prov_settings.get(
+            "websearch_provider",
+            DEFAULT_WEB_SEARCH_PROVIDER,
+        )
+        branch_provider, is_known_provider = normalize_websearch_provider_for_tools(
+            raw_provider
+        )
 
         tool_set = req.func_tool
         if isinstance(tool_set, FunctionToolManager):
-            req.func_tool = tool_set.get_full_tool_set()
+            req.func_tool = tool_set.get_full_tool_set()  # type: ignore
             tool_set = req.func_tool
 
         if not tool_set:
@@ -564,34 +610,39 @@ class Main(star.Star):
             return
 
         func_tool_mgr = self.context.get_llm_tool_manager()
-        if provider == "default":
+        if branch_provider == "default":
+            if not is_known_provider:
+                logger.warning(
+                    "Unsupported websearch_provider `%s`, fallback to default search tool branch.",
+                    raw_provider,
+                )
             web_search_t = func_tool_mgr.get_func("web_search")
             fetch_url_t = func_tool_mgr.get_func("fetch_url")
             if web_search_t and web_search_t.active:
-                tool_set.add_tool(web_search_t)
+                tool_set.add_tool(web_search_t)  # type: ignore[arg-type]
             if fetch_url_t and fetch_url_t.active:
-                tool_set.add_tool(fetch_url_t)
+                tool_set.add_tool(fetch_url_t)  # type: ignore[arg-type]
             tool_set.remove_tool("web_search_tavily")
             tool_set.remove_tool("tavily_extract_web_page")
             tool_set.remove_tool("AIsearch")
             tool_set.remove_tool("web_search_bocha")
-        elif provider == "tavily":
+        elif branch_provider == "tavily":
             web_search_tavily = func_tool_mgr.get_func("web_search_tavily")
             tavily_extract_web_page = func_tool_mgr.get_func("tavily_extract_web_page")
             if web_search_tavily and web_search_tavily.active:
-                tool_set.add_tool(web_search_tavily)
+                tool_set.add_tool(web_search_tavily)  # type: ignore[arg-type]
             if tavily_extract_web_page and tavily_extract_web_page.active:
-                tool_set.add_tool(tavily_extract_web_page)
+                tool_set.add_tool(tavily_extract_web_page)  # type: ignore[arg-type]
             tool_set.remove_tool("web_search")
             tool_set.remove_tool("fetch_url")
             tool_set.remove_tool("AIsearch")
             tool_set.remove_tool("web_search_bocha")
-        elif provider == "baidu_ai_search":
+        elif branch_provider == "baidu_ai_search":
             try:
                 await self.ensure_baidu_ai_search_mcp(event.unified_msg_origin)
                 aisearch_tool = func_tool_mgr.get_func("AIsearch")
                 if aisearch_tool and aisearch_tool.active:
-                    tool_set.add_tool(aisearch_tool)
+                    tool_set.add_tool(aisearch_tool)  # type: ignore[arg-type]
                 tool_set.remove_tool("web_search")
                 tool_set.remove_tool("fetch_url")
                 tool_set.remove_tool("web_search_tavily")
@@ -599,10 +650,10 @@ class Main(star.Star):
                 tool_set.remove_tool("web_search_bocha")
             except Exception as e:
                 logger.error(f"Cannot Initialize Baidu AI Search MCP Server: {e}")
-        elif provider == "bocha":
+        elif branch_provider == "bocha":
             web_search_bocha = func_tool_mgr.get_func("web_search_bocha")
             if web_search_bocha and web_search_bocha.active:
-                tool_set.add_tool(web_search_bocha)
+                tool_set.add_tool(web_search_bocha)  # type: ignore[arg-type]
             tool_set.remove_tool("web_search")
             tool_set.remove_tool("fetch_url")
             tool_set.remove_tool("AIsearch")

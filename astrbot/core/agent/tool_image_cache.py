@@ -7,7 +7,7 @@ import base64
 import os
 import time
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -35,16 +35,20 @@ class ToolImageCache:
     Images are stored in data/temp/tool_images/ and can be retrieved by file path.
     """
 
-    _instance: ClassVar["ToolImageCache | None"] = None
+    _instance: ClassVar[Self | None] = None
     CACHE_DIR_NAME: ClassVar[str] = "tool_images"
     # Cache expiry time in seconds (1 hour)
     CACHE_EXPIRY: ClassVar[int] = 3600
+    _initialized: bool
+    _cache_dir: str
 
-    def __new__(cls) -> "ToolImageCache":
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
+    def __new__(cls) -> Self:
+        instance = cls._instance
+        if instance is None:
+            instance = super().__new__(cls)
+            instance._initialized = False
+            cls._instance = instance
+        return instance
 
     def __init__(self) -> None:
         if self._initialized:

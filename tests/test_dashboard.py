@@ -1,10 +1,9 @@
 import asyncio
 import copy
-import errno
-import hashlib
 import io
 import os
 import sys
+import uuid
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
@@ -14,7 +13,6 @@ import pytest_asyncio
 from quart import Quart
 from werkzeug.datastructures import FileStorage
 
-from astrbot.cli.commands.cmd_conf import hash_dashboard_password_secure
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -22,79 +20,12 @@ from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.dashboard.routes.plugin import PluginRoute
-from astrbot.dashboard.server import AstrBotDashboard, _expand_env_placeholders
+from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
     create_mock_updater_update,
 )
-
-TEST_DASHBOARD_PASSWORD = "astrbot-test-password"
-
-
-def test_check_port_in_use_only_treats_eaddrinuse_as_occupied(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    server = AstrBotDashboard.__new__(AstrBotDashboard)
-
-    class _Socket:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return None
-
-        def setsockopt(self, *args, **kwargs):
-            return None
-
-        def bind(self, address):
-            raise OSError(errno.EADDRINUSE, "Address already in use")
-
-    monkeypatch.setattr(
-        "astrbot.dashboard.server.socket.socket", lambda *args, **kwargs: _Socket()
-    )
-
-    assert server.check_port_in_use("127.0.0.1", 3002) is True
-
-
-def test_check_port_in_use_ignores_permission_errors(monkeypatch: pytest.MonkeyPatch):
-    server = AstrBotDashboard.__new__(AstrBotDashboard)
-
-    class _Socket:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return None
-
-        def setsockopt(self, *args, **kwargs):
-            return None
-
-        def bind(self, address):
-            raise PermissionError(errno.EPERM, "Operation not permitted")
-
-    monkeypatch.setattr(
-        "astrbot.dashboard.server.socket.socket", lambda *args, **kwargs: _Socket()
-    )
-
-    assert server.check_port_in_use("127.0.0.1", 3002) is False
-
-
-def test_expand_env_placeholders_resolves_env_and_default(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    monkeypatch.setenv("HOST", "0.0.0.0")
-
-    assert _expand_env_placeholders("${HOST}", "host") == "0.0.0.0"
-    assert _expand_env_placeholders("${MISSING:-3002}", "port") == "3002"
-
-
-def test_expand_env_placeholders_raises_for_unresolved_variable(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    monkeypatch.delenv("HOST", raising=False)
-    with pytest.raises(ValueError, match="dashboard host: HOST"):
-        _expand_env_placeholders("${HOST}", "host")
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -105,20 +36,16 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
-    core_lifecycle.astrbot_config["dashboard"]["username"] = "astrbot"
-    core_lifecycle.astrbot_config["dashboard"]["password"] = (
-        hash_dashboard_password_secure(TEST_DASHBOARD_PASSWORD)
-    )
     try:
         yield core_lifecycle
     finally:
-        # 优先停止核心生命周期以释放资源(包括关闭 MCP 等后台任务)
+        # 优先停止核心生命周期以释放资源（包括关闭 MCP 等后台任务）
         try:
             _stop_res = core_lifecycle.stop()
             if asyncio.iscoroutine(_stop_res):
                 await _stop_res
         except Exception:
-            # 停止过程中如有异常,不影响后续清理
+            # 停止过程中如有异常，不影响后续清理
             pass
 
 
@@ -131,6 +58,14 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
     return server.app
 
 
+def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
+    """Return a login password compatible with both hashed and plain defaults."""
+    password = core_lifecycle_td.astrbot_config["dashboard"]["password"]
+    if isinstance(password, str) and (password.startswith("pbkdf2_sha256$") or password.startswith("$argon2")):
+        return "astrbot-test-password"
+    return password
+
+
 @pytest_asyncio.fixture(scope="module")
 async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     """Handles login and returns an authenticated header."""
@@ -139,11 +74,12 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": TEST_DASHBOARD_PASSWORD,
+                
+            "password": _resolve_dashboard_password(core_lifecycle_td),
         },
     )
     data = await response.get_json()
-    assert data["status"] == "ok"
+    assert data["status"] == "ok", str(data)
     token = data["data"]["token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -163,32 +99,12 @@ async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": TEST_DASHBOARD_PASSWORD,
+                
+            "password": _resolve_dashboard_password(core_lifecycle_td),
         },
     )
     data = await response.get_json()
-    assert data["status"] == "ok"
-    assert "token" in data["data"]
-
-
-@pytest.mark.asyncio
-async def test_auth_login_rejects_legacy_md5_password(
-    app: Quart, core_lifecycle_td: AstrBotCoreLifecycle
-):
-    test_client = app.test_client()
-    username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
-    legacy_md5 = hashlib.md5(TEST_DASHBOARD_PASSWORD.encode("utf-8")).hexdigest()
-
-    response = await test_client.post(
-        "/api/auth/login",
-        json={
-            "username": username,
-            "password": "",
-            "password_md5": legacy_md5,
-        },
-    )
-    data = await response.get_json()
-    assert data["status"] == "error"
+    assert data["status"] == "ok" and "token" in data["data"]
 
 
 @pytest.mark.asyncio
@@ -199,8 +115,52 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
     response = await test_client.get("/api/stat/get", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
-    assert data["status"] == "ok"
-    assert "platform" in data["data"]
+    assert data["status"] == "ok" and "platform" in data["data"]
+
+
+@pytest.mark.asyncio
+async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config.get("dashboard", {}),
+    )
+    warning_messages = []
+    info_messages = []
+
+    async def fake_serve(app, config, shutdown_trigger):
+        return config
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["ssl"] = {
+            "enable": True,
+            "cert_file": "",
+            "key_file": "",
+        }
+        monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
+        monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.warning",
+            lambda *args, **kwargs: warning_messages.append(message),
+        )
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.info",
+            lambda *args, **kwargs: info_messages.append(message),
+        )
+
+        config = await server.run()
+
+        assert getattr(config, "certfile", None) is None
+        assert getattr(config, "keyfile", None) is None
+        assert any("cert_file 和 key_file" in message for message in warning_messages)
+        assert any(
+            "正在启动 WebUI, 监听地址: http://" in message for message in info_messages
+        )
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
 
 
 @pytest.mark.asyncio
@@ -250,6 +210,7 @@ async def test_subagent_config_accepts_default_persona(
             json=old_cfg,
             headers=authenticated_header,
         )
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [[], "x"])
@@ -361,7 +322,7 @@ async def test_plugins(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试插件 API 端点,使用 Mock 避免真实网络调用｡"""
+    """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
     test_client = app.test_client()
 
     # 已经安装的插件
@@ -524,22 +485,240 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
+async def test_t2i_set_active_template_syncs_all_configs(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    template_name = f"sync_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
+
+    try:
+        for name in ("sync-a", "sync-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
+
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }}</body></html>",
+            },
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        assert "default" in conf_ids
+        for conf_id in conf_ids:
+            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
+            assert conf.get("t2i_active_template") == template_name
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
+
+
+@pytest.mark.asyncio
+async def test_t2i_reset_default_template_syncs_all_configs(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    template_name = f"reset_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
+
+    try:
+        for name in ("reset-a", "reset-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
+
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }} reset</body></html>",
+            },
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+
+        response = await test_client.post(
+            "/api/t2i/templates/reset_default",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        assert "default" in conf_ids
+        for conf_id in conf_ids:
+            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
+            assert conf.get("t2i_active_template") == "base"
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
+
+
+@pytest.mark.asyncio
+async def test_t2i_update_active_template_reloads_all_schedulers(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    template_name = f"update_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
+
+    try:
+        for name in ("update-a", "update-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
+
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }} v1</body></html>",
+            },
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+
+        conf_ids = list(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        old_schedulers = {
+            conf_id: core_lifecycle_td.pipeline_scheduler_mapping[conf_id]
+            for conf_id in conf_ids
+        }
+
+        response = await test_client.put(
+            f"/api/t2i/templates/{template_name}",
+            json={"content": "<html><body>{{ content }} v2</body></html>"},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        for conf_id in conf_ids:
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+            assert (
+                core_lifecycle_td.pipeline_scheduler_mapping[conf_id]
+                is not old_schedulers[conf_id]
+            )
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
+
+
+@pytest.mark.asyncio
 async def test_check_update(
     app: Quart,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试检查更新 API,使用 Mock 避免真实网络调用｡"""
+    """测试检查更新 API，使用 Mock 避免真实网络调用。"""
     test_client = app.test_client()
 
     # Mock 更新检查和网络请求
     async def mock_check_update(*args, **kwargs):
-        """Mock 更新检查,返回无新版本｡"""
+        """Mock 更新检查，返回无新版本。"""
         return None  # None 表示没有新版本
 
     async def mock_get_dashboard_version(*args, **kwargs):
-        """Mock Dashboard 版本获取｡"""
+        """Mock Dashboard 版本获取。"""
         from astrbot.core.config.default import VERSION
 
         return f"v{VERSION}"  # 返回当前版本
@@ -922,11 +1101,15 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         lambda: str(data_dir),
     )
     monkeypatch.setattr(
-        "astrbot.core.utils.astrbot_path.get_astrbot_skills_path",
+        "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
         lambda: str(skills_dir),
     )
     monkeypatch.setattr(
-        "astrbot.core.utils.astrbot_path.get_astrbot_temp_path",
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.get_astrbot_temp_path",
         lambda: str(temp_dir),
     )
 

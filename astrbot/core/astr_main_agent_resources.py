@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import uuid
+from typing import Any
 
 import anyio
 from pydantic import Field
@@ -82,12 +83,13 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
 @dataclass
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
-    description: str = (
-        "Send message to the user. "
-        "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
-        "Use this tool to send media files (`image`, `record`, `video`, `file`), "
-        "or when you need to proactively message the user(such as cron job). For normal text replies, you can output directly."
-    )
+    description: str = """Send message to the user. Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`.
+
+**IMPORTANT**: This tool is designed for:
+1. Sending media files (`image`, `record`, `video`, `file`) in any conversation
+2. Proactive messaging scenarios (e.g., cron jobs, background task notifications)
+
+**Do NOT use this tool for normal text replies in regular conversations** - just output your text directly instead. Using this tool for text in normal conversations will cause duplicate messages (once via tool, once via normal response)."""
 
     parameters: dict = Field(
         default_factory=lambda: {
@@ -167,21 +169,22 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return path, False
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
     ) -> ToolExecResult:
         session = kwargs.get("session") or context.context.event.unified_msg_origin
-        messages = kwargs.get("messages")
+        messages_raw: list[dict[str, Any]] | None = kwargs.get("messages")
 
-        if not isinstance(messages, list) or not messages:
+        if not isinstance(messages_raw, list) or not messages_raw:
             return "error: messages parameter is empty or invalid."
 
         components: list[Comp.BaseMessageComponent] = []
 
-        for idx, msg in enumerate(messages):
+        for idx, msg in enumerate(messages_raw):
             if not isinstance(msg, dict):
                 return f"error: messages[{idx}] should be an object."
 
-            msg_type = str(msg.get("type", "")).lower()
+            msg_dict: dict[str, Any] = msg  # type: ignore
+            msg_type = str(msg_dict.get("type", "")).lower()
             if not msg_type:
                 return f"error: messages[{idx}].type is required."
 
@@ -189,13 +192,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
             try:
                 if msg_type == "plain":
-                    text = str(msg.get("text", "")).strip()
+                    text = str(msg_dict.get("text", "")).strip()
                     if not text:
                         return f"error: messages[{idx}].text is required for plain component."
                     components.append(Comp.Plain(text=text))
                 elif msg_type == "image":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     if path:
                         (
                             local_path,
@@ -207,8 +210,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for image component."
                 elif msg_type == "record":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     if path:
                         (
                             local_path,
@@ -220,8 +223,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for record component."
                 elif msg_type == "video":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     if path:
                         (
                             local_path,
@@ -233,10 +236,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for video component."
                 elif msg_type == "file":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = msg_dict.get("path")
+                    url = msg_dict.get("url")
                     name = (
-                        msg.get("text")
+                        msg_dict.get("text")
                         or (os.path.basename(path) if path else "")
                         or (os.path.basename(url) if url else "")
                         or "file"
@@ -244,7 +247,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if path:
                         (
                             local_path,
-                            file_from_sandbox,
+                            _file_from_sandbox,
                         ) = await self._resolve_path_from_sandbox(context, path)
                         components.append(Comp.File(name=name, file=local_path))
                     elif url:
@@ -252,7 +255,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for file component."
                 elif msg_type == "mention_user":
-                    mention_user_id = msg.get("mention_user_id")
+                    mention_user_id = msg_dict.get("mention_user_id")
                     if not mention_user_id:
                         return f"error: messages[{idx}].mention_user_id is required for mention_user component."
                     components.append(
@@ -326,7 +329,7 @@ async def retrieve_knowledge_base(
         # 如果配置为空列表,明确表示不使用知识库
         if not kb_ids:
             logger.info(f"[知识库] 会话 {umo} 已被配置为不使用知识库")
-            return
+            return None
 
         top_k = session_config.get("top_k", 5)
 
@@ -347,7 +350,7 @@ async def retrieve_knowledge_base(
             )
 
         if not kb_names:
-            return
+            return None
 
         logger.debug(f"[知识库] 使用会话级配置,知识库数量: {len(kb_names)}")
     else:
@@ -358,13 +361,13 @@ async def retrieve_knowledge_base(
     top_k_fusion = config.get("kb_fusion_top_k", 20)
 
     if not kb_names:
-        return
+        return None
 
     all_kbs = [await kb_mgr.get_kb_by_name(kb) for kb in kb_names]
 
     if check_all_kb(all_kbs):
         logger.debug("所配置的所有知识库全为空, 跳过检索过程")
-        return
+        return None
 
     logger.debug(f"[知识库] 开始检索知识库,数量: {len(kb_names)}, top_k={top_k}")
 
@@ -376,13 +379,14 @@ async def retrieve_knowledge_base(
     )
 
     if not kb_context:
-        return
+        return None
 
     formatted = kb_context.get("context_text", "")
     if formatted:
         results = kb_context.get("results", [])
         logger.debug(f"[知识库] 为会话 {umo} 注入了 {len(results)} 条相关知识块")
         return formatted
+    return None
 
 
 KNOWLEDGE_BASE_QUERY_TOOL = KnowledgeBaseQueryTool()

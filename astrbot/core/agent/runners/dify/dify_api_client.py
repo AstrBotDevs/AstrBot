@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 import anyio
-from aiohttp import ClientResponse, ClientSession, FormData
+from aiohttp import ClientResponse, ClientSession, ClientTimeout, FormData
 
 from astrbot.core import logger
 
@@ -36,32 +36,37 @@ class DifyAPIClient:
         self.api_key = api_key
         self.api_base = api_base
         self.session = ClientSession(trust_env=True)
-        self.headers = {
+        self.headers: dict[str, str] = {
             "Authorization": f"Bearer {self.api_key}",
         }
 
     async def chat_messages(
         self,
-        inputs: dict,
+        inputs: dict[str, object],
         query: str,
         user: str,
         response_mode: str = "streaming",
         conversation_id: str = "",
-        files: list[dict[str, Any]] | None = None,
+        files: list[dict[str, object]] | None = None,
         request_timeout: float = 60,
     ) -> AsyncGenerator[dict[str, Any], None]:
         if files is None:
             files = []
         url = f"{self.api_base}/chat-messages"
-        payload = locals()
-        payload.pop("self")
-        payload.pop("request_timeout")
+        payload: dict[str, object] = {
+            "inputs": inputs,
+            "query": query,
+            "user": user,
+            "response_mode": response_mode,
+            "conversation_id": conversation_id,
+            "files": files,
+        }
         logger.info(f"chat_messages payload: {payload}")
         async with self.session.post(
             url,
             json=payload,
             headers=self.headers,
-            timeout=request_timeout,
+            timeout=ClientTimeout(total=request_timeout),
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
@@ -73,24 +78,27 @@ class DifyAPIClient:
 
     async def workflow_run(
         self,
-        inputs: dict,
+        inputs: dict[str, object],
         user: str,
         response_mode: str = "streaming",
-        files: list[dict[str, Any]] | None = None,
+        files: list[dict[str, object]] | None = None,
         request_timeout: float = 60,
     ):
         if files is None:
             files = []
         url = f"{self.api_base}/workflows/run"
-        payload = locals()
-        payload.pop("self")
-        payload.pop("request_timeout")
+        payload: dict[str, object] = {
+            "inputs": inputs,
+            "user": user,
+            "response_mode": response_mode,
+            "files": files,
+        }
         logger.info(f"workflow_run payload: {payload}")
         async with self.session.post(
             url,
             json=payload,
             headers=self.headers,
-            timeout=request_timeout,
+            timeout=ClientTimeout(total=request_timeout),
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
@@ -162,11 +170,11 @@ class DifyAPIClient:
     async def get_chat_convs(self, user: str, limit: int = 20):
         # conversations. GET
         url = f"{self.api_base}/conversations"
-        payload = {
+        params: dict[str, str | int] = {
             "user": user,
             "limit": limit,
         }
-        async with self.session.get(url, params=payload, headers=self.headers) as resp:
+        async with self.session.get(url, params=params, headers=self.headers) as resp:
             return await resp.json()
 
     async def delete_chat_conv(self, user: str, conversation_id: str):

@@ -1,8 +1,9 @@
 import random
 import urllib.parse
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout
 from bs4 import BeautifulSoup, Tag
 
 HEADERS = {
@@ -42,7 +43,7 @@ class SearchEngine:
     """搜索引擎爬虫基类"""
 
     def __init__(self) -> None:
-        self.TIMEOUT = 10
+        self.TIMEOUT = ClientTimeout(total=10)
         self.page = 1
         self.headers = HEADERS
 
@@ -95,6 +96,12 @@ class SearchEngine:
             soup = BeautifulSoup(resp, "html.parser")
             links = soup.select(self._set_selector("links"))
             results = []
+            try:
+                text_selector = self._set_selector("text")
+            except (KeyError, NotImplementedError):
+                # Keep backward compatibility with engines that only expose
+                # title/url/link selectors and do not provide snippets.
+                text_selector = ""
             for link in links:
                 # Safely get the title text (select_one may return None)
                 title_elem = link.select_one(self._set_selector("title"))
@@ -104,9 +111,36 @@ class SearchEngine:
 
                 url_tag = link.select_one(self._set_selector("url"))
                 snippet = ""
+                if text_selector:
+                    text_elem = link.select_one(text_selector)
+                    if text_elem is not None:
+                        snippet = self.tidy_text(text_elem.get_text())
                 if title and url_tag:
                     url = self._get_url(url_tag)
+                    if not url:
+                        continue
+                    if url.startswith("//"):
+                        url = f"https:{url}"
                     results.append(SearchResult(title=title, url=url, snippet=snippet))
             return results[:num_results] if len(results) > num_results else results
         except Exception as e:
             raise e
+
+    async def _search_with_result_filter(
+        self,
+        query: str,
+        num_results: int,
+        predicate: Callable[[SearchResult], bool],
+    ) -> list[SearchResult]:
+        if num_results <= 0:
+            return []
+
+        rough_results = await SearchEngine.search(self, query, max(num_results * 2, 10))
+        final_results: list[SearchResult] = []
+        for result in rough_results:
+            if not predicate(result):
+                continue
+            final_results.append(result)
+            if len(final_results) >= num_results:
+                break
+        return final_results

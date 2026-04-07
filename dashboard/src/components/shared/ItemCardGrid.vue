@@ -1,14 +1,8 @@
 <template>
   <div>
     <v-row v-if="items.length === 0">
-      <v-col
-        cols="12"
-        class="text-center pa-8"
-      >
-        <v-icon
-          size="64"
-          color="grey-lighten-1"
-        >
+      <v-col cols="12" class="text-center pa-8">
+        <v-icon size="64" color="grey-lighten-1">
           {{ emptyIcon }}
         </v-icon>
         <p class="text-grey mt-4">
@@ -28,48 +22,50 @@
       >
         <v-card
           class="item-card hover-elevation"
-          style="padding: 4px;"
+          style="padding: 4px"
           elevation="0"
         >
           <div
             class="item-status-indicator"
-            :class="{'active': getItemEnabled(item)}"
+            :class="{ active: getItemEnabled(item) }"
           />
-          <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
-            <span
-              class="text-h2 text-truncate"
-              :title="getItemTitle(item)"
-            >{{ getItemTitle(item) }}</span>
+          <v-card-title
+            class="d-flex justify-space-between align-center pb-1 pt-3"
+          >
+            <span class="text-h2 text-truncate" :title="getItemTitle(item)">{{
+              getItemTitle(item)
+            }}</span>
             <v-tooltip location="top">
               <template #activator="{ props }">
-                <v-switch 
-                  color="primary" 
-                  hide-details 
-                  density="compact" 
+                <v-switch
+                  color="primary"
+                  hide-details
+                  density="compact"
                   :model-value="getItemEnabled(item)"
-                  v-bind="props" 
+                  v-bind="props"
                   @update:model-value="toggleEnabled(item)"
                 />
               </template>
-              <span>{{ getItemEnabled(item) ? t('core.common.itemCard.enabled') : t('core.common.itemCard.disabled') }}</span>
+              <span>{{
+                getItemEnabled(item)
+                  ? t("core.common.itemCard.enabled")
+                  : t("core.common.itemCard.disabled")
+              }}</span>
             </v-tooltip>
           </v-card-title>
-          
+
           <v-card-text>
-            <slot
-              name="item-details"
-              :item="item"
-            />
+            <slot name="item-details" :item="item" />
           </v-card-text>
-          
-          <v-card-actions style="margin: 8px;">
+
+          <v-card-actions style="margin: 8px">
             <v-btn
-              variant="outlined" 
+              variant="outlined"
               color="error"
               rounded="xl"
               @click="$emit('delete', item)"
             >
-              {{ t('core.common.itemCard.delete') }}
+              {{ t("core.common.itemCard.delete") }}
             </v-btn>
             <v-btn
               variant="tonal"
@@ -77,7 +73,7 @@
               rounded="xl"
               @click="$emit('edit', item)"
             >
-              {{ t('core.common.itemCard.edit') }}
+              {{ t("core.common.itemCard.edit") }}
             </v-btn>
             <v-spacer />
           </v-card-actions>
@@ -85,7 +81,7 @@
           <div
             v-if="bglogo"
             class="d-flex justify-end align-center"
-            style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2;"
+            style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2"
           >
             <v-img
               :src="bglogo"
@@ -101,46 +97,46 @@
   </div>
 </template>
 
-<script>
-import { useI18n } from '@/i18n/composables';
+<script lang="ts">
+import { useI18n } from "@/i18n/composables";
 
 export default {
-  name: 'ItemCardGrid',
+  name: "ItemCardGrid",
   props: {
     items: {
       type: Array,
-      required: true
+      required: true,
     },
     titleField: {
       type: String,
-      default: 'id'
+      default: "id",
     },
     enabledField: {
       type: String,
-      default: 'enable'
+      default: "enable",
     },
     emptyIcon: {
       type: String,
-      default: 'mdi-alert-circle-outline'
+      default: "mdi-alert-circle-outline",
     },
     emptyText: {
       type: String,
-      default: null
+      default: null,
     },
     bglogo: {
       type: String,
-      default: null
-    }
+      default: null,
+    },
   },
-  emits: ['toggle-enabled', 'delete', 'edit'],
+  emits: ["toggle-enabled", "delete", "edit"],
   setup() {
     const { t } = useI18n();
     return { t };
   },
   computed: {
     displayEmptyText() {
-      return this.emptyText || this.t('core.common.itemCard.noData');
-    }
+      return this.emptyText || this.t("core.common.itemCard.noData");
+    },
   },
   methods: {
     getItemTitle(item) {
@@ -150,14 +146,13 @@ export default {
       return item[this.enabledField];
     },
     toggleEnabled(item) {
-      this.$emit('toggle-enabled', item);
-    }
-  }
-}
+      this.$emit("toggle-enabled", item);
+    },
+  },
+};
 </script>
 
 <style>
-
 .item-card {
   position: relative;
   border-radius: 18px;

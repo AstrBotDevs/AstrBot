@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, AsyncGenerator, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,12 +11,13 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from astrbot.core.agent.agent import Agent
-from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
 
@@ -39,7 +40,7 @@ class MockProvider(Provider):
     async def get_models(self) -> list[str]:
         return ["test_model"]
 
-    async def text_chat(self, **kwargs) -> LLMResponse:
+    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[override]
         self.call_count += 1
 
         # 检查工具是否被禁用
@@ -71,7 +72,7 @@ class MockProvider(Provider):
             usage=TokenUsage(input_other=10, output=5),
         )
 
-    async def text_chat_stream(self, **kwargs):
+    async def text_chat_stream(self, **kwargs) -> AsyncGenerator[LLMResponse, None]:  # type: ignore[override]
         response = await self.text_chat(**kwargs)
         response.is_chunk = True
         yield response
@@ -83,40 +84,34 @@ class MockToolExecutor:
     """模拟工具执行器"""
 
     @classmethod
-    def execute(cls, tool, run_context, **tool_args):
-        async def generator():
-            # 模拟工具返回结果,使用正确的类型
-            from mcp.types import CallToolResult, TextContent
+    async def execute(cls, tool, run_context, **tool_args):
+        # 模拟工具返回结果,使用正确的类型
+        from mcp.types import CallToolResult, TextContent
 
-            result = CallToolResult(
-                content=[TextContent(type="text", text="工具执行结果")]
-            )
-            yield result
-
-        return generator()
+        result = CallToolResult(
+            content=[TextContent(type="text", text="工具执行结果")]
+        )
+        yield result
 
 
 class MockMixedContentToolExecutor:
     """模拟返回图片 + 文本的工具执行器"""
 
     @classmethod
-    def execute(cls, tool, run_context, **tool_args):
-        async def generator():
-            from mcp.types import CallToolResult, ImageContent, TextContent
+    async def execute(cls, tool, run_context, **tool_args):
+        from mcp.types import CallToolResult, ImageContent, TextContent
 
-            result = CallToolResult(
-                content=[
-                    ImageContent(
-                        type="image",
-                        data="dGVzdA==",
-                        mimeType="image/png",
-                    ),
-                    TextContent(type="text", text="直播间标题：新游首发：零~红蝶~"),
-                ]
-            )
-            yield result
-
-        return generator()
+        result = CallToolResult(
+            content=[
+                ImageContent(
+                    type="image",
+                    data="dGVzdA==",
+                    mimeType="image/png",
+                ),
+                TextContent(type="text", text="直播间标题:新游首发:零~红蝶~"),
+            ]
+        )
+        yield result
 
 
 class MockFailingProvider(MockProvider):
@@ -131,6 +126,22 @@ class MockErrProvider(MockProvider):
         return LLMResponse(
             role="err",
             completion_text="primary provider returned error",
+        )
+
+
+class MockEmptyOutputThenSuccessProvider(MockProvider):
+    def __init__(self, failures_before_success: int = 1):
+        super().__init__()
+        self.failures_before_success = failures_before_success
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        if self.call_count <= self.failures_before_success:
+            raise EmptyModelOutputError("model returned no usable output")
+        return LLMResponse(
+            role="assistant",
+            completion_text="这是重试后的最终回答",
+            usage=TokenUsage(input_other=10, output=5),
         )
 
 
@@ -172,6 +183,32 @@ class MockToolCallProvider(MockProvider):
             tools_call_name=[self.tool_name],
             tools_call_args=[self.tool_args],
             tools_call_ids=[f"call_{self.tool_name}"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class SequentialToolProvider(MockProvider):
+    def __init__(self, tool_sequence: list[str]):
+        super().__init__()
+        self.tool_sequence = tool_sequence
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > len(self.tool_sequence):
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+        tool_name = self.tool_sequence[self.call_count - 1]
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            tools_call_name=[tool_name],
+            tools_call_args=[{"query": f"step-{self.call_count}"}],
+            tools_call_ids=[f"call_{self.call_count}"],
             usage=TokenUsage(input_other=10, output=5),
         )
 
@@ -465,7 +502,7 @@ async def test_hooks_called_with_max_step(
 async def test_tool_result_includes_all_calltoolresult_content(
     runner, mock_provider, provider_request, mock_hooks, monkeypatch
 ):
-    """工具返回多个 content 项时，tool result 应包含全部内容。"""
+    """工具返回多个 content 项时,tool result 应包含全部内容｡"""
 
     from astrbot.core.agent.tool_image_cache import tool_image_cache
 
@@ -509,7 +546,7 @@ async def test_tool_result_includes_all_calltoolresult_content(
 
     content = str(tool_messages[0].content)
     assert "Image returned and cached at path='/tmp/call_123_0.png'." in content
-    assert "直播间标题：新游首发：零~红蝶~" in content
+    assert "直播间标题:新游首发:零~红蝶~" in content
     assert saved_images == [
         {
             "base64_data": "dGVzdA==",
@@ -519,6 +556,122 @@ async def test_tool_result_includes_all_calltoolresult_content(
             "mime_type": "image/png",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_same_tool_consecutive_results_include_escalating_guidance(
+    runner, mock_tool_executor, mock_hooks
+):
+    provider = SequentialToolProvider(["test_tool"] * 5)
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="请连续执行工具",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(6):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == 5
+
+    tool_contents = [str(message.content) for message in tool_messages]
+    runner_cls = type(runner)
+    level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+    )
+    level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
+    )
+    level_3_notice = runner_cls.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD,
+    )
+
+    assert level_1_notice not in tool_contents[0]
+    assert level_2_notice not in tool_contents[0]
+    assert level_1_notice in tool_contents[1]
+    assert level_2_notice in tool_contents[2]
+    assert level_3_notice in tool_contents[4]
+
+
+@pytest.mark.asyncio
+async def test_same_tool_streak_resets_after_switching_tools(
+    runner, mock_tool_executor, mock_hooks
+):
+    provider = SequentialToolProvider(
+        ["test_tool", "other_tool", "test_tool", "test_tool"]
+    )
+    tool_a = FunctionTool(
+        name="test_tool",
+        description="测试工具 A",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    tool_b = FunctionTool(
+        name="other_tool",
+        description="测试工具 B",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="切换工具后再重复",
+        func_tool=ToolSet(tools=[tool_a, tool_b]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == 4
+
+    tool_contents = [str(message.content) for message in tool_messages]
+    runner_cls = type(runner)
+    level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+    )
+    level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
+    )
+
+    assert level_1_notice not in tool_contents[0]
+    assert level_1_notice not in tool_contents[1]
+    assert level_1_notice not in tool_contents[2]
+    assert level_2_notice not in tool_contents[2]
+    assert level_1_notice in tool_contents[3]
 
 
 @pytest.mark.asyncio
@@ -576,6 +729,67 @@ async def test_fallback_provider_used_when_primary_returns_err(
     assert final_resp.role == "assistant"
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == 1
+    assert fallback_provider.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_empty_output_is_retried_before_succeeding(
+    runner, provider_request, mock_tool_executor, mock_hooks, monkeypatch
+):
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MAX_S", 0)
+
+    provider = MockEmptyOutputThenSuccessProvider(failures_before_success=1)
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "assistant"
+    assert final_resp.completion_text == "这是重试后的最终回答"
+    assert provider.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
+    runner, provider_request, mock_tool_executor, mock_hooks, monkeypatch
+):
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MAX_S", 0)
+
+    primary_provider = MockEmptyOutputThenSuccessProvider(
+        failures_before_success=runner.EMPTY_OUTPUT_RETRY_ATTEMPTS
+    )
+    fallback_provider = MockProvider()
+    fallback_provider.should_call_tools = False
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "assistant"
+    assert final_resp.completion_text == "这是我的最终回答"
+    assert primary_provider.call_count == runner.EMPTY_OUTPUT_RETRY_ATTEMPTS
     assert fallback_provider.call_count == 1
 
 
@@ -785,7 +999,7 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 
 @pytest.mark.asyncio
 async def test_skills_like_requery_passes_extra_user_content_parts():
-    """skills-like 模式 re-query 时应传递 extra_user_content_parts（如 image_caption）"""
+    """skills-like 模式 re-query 时应传递 extra_user_content_parts(如 image_caption)"""
     from astrbot.core.agent.message import TextPart
 
     captured_kwargs = {}
@@ -794,7 +1008,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
         async def text_chat(self, **kwargs) -> LLMResponse:
             self.call_count += 1
             if self.call_count == 1:
-                # 第一次调用：返回工具选择（light schema）
+                # 第一次调用:返回工具选择(light schema)
                 return LLMResponse(
                     role="assistant",
                     completion_text="选择工具",
@@ -804,7 +1018,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                     usage=TokenUsage(input_other=10, output=5),
                 )
             if self.call_count == 2:
-                # 第二次调用：re-query with param schema
+                # 第二次调用:re-query with param schema
                 captured_kwargs.update(kwargs)
                 return LLMResponse(
                     role="assistant",
@@ -814,7 +1028,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                     tools_call_ids=["call_2"],
                     usage=TokenUsage(input_other=10, output=5),
                 )
-            # 后续调用：正常回复
+            # 后续调用:正常回复
             return LLMResponse(
                 role="assistant",
                 completion_text="最终回复",
@@ -849,7 +1063,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
         run_context=run_context,
         tool_executor=cast(Any, MockToolExecutor()),
         agent_hooks=MockHooks(),
-        tool_schema_mode="skills_like",
+        tool_schema_mode="lazy_load",
     )
 
     async for _ in runner.step():
@@ -885,7 +1099,9 @@ async def test_follow_up_accepted_when_active_and_not_stopping(
 
     ticket = runner.follow_up(message_text="valid follow-up message")
 
-    assert ticket is not None, "Follow-up should be accepted when runner is active and not stopping"
+    assert ticket is not None, (
+        "Follow-up should be accepted when runner is active and not stopping"
+    )
     assert ticket.text == "valid follow-up message"
     assert ticket.consumed is False
     assert ticket in runner._pending_follow_ups

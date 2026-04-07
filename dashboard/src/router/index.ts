@@ -1,17 +1,13 @@
-import { createRouter, createWebHashHistory } from 'vue-router';
-import MainRoutes from './MainRoutes';
-import AuthRoutes from './AuthRoutes';
-import ChatBoxRoutes from './ChatBoxRoutes';
-import { useAuthStore } from '@/stores/auth';
-import { useRouterLoadingStore } from '@/stores/routerLoading';
+import { createRouter, createWebHashHistory } from "vue-router";
+import MainRoutes from "./MainRoutes";
+import AuthRoutes from "./AuthRoutes";
+import ChatBoxRoutes from "./ChatBoxRoutes";
+import { useAuthStore } from "@/stores/auth";
+import { useRouterLoadingStore } from "@/stores/routerLoading";
 
 export const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
-  routes: [
-    MainRoutes,
-    AuthRoutes,
-    ChatBoxRoutes
-  ]
+  routes: [MainRoutes, AuthRoutes, ChatBoxRoutes],
 });
 
 interface AuthStore {
@@ -22,29 +18,29 @@ interface AuthStore {
   has_token(): boolean;
 }
 
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, from) => {
   if (from.name && from.path !== to.path) {
     const loadingStore = useRouterLoadingStore();
     loadingStore.start();
   }
 
-  const publicPages = ['/auth/login'];
+  const publicPages = ["/auth/login"];
   const authRequired = !publicPages.includes(to.path);
   const auth: AuthStore = useAuthStore();
 
   // 如果用户已登录且试图访问登录页面，则重定向到首页
-  if (to.path === '/auth/login' && auth.has_token()) {
-    return next(auth.returnUrl || '/');
+  if (to.path === "/auth/login" && auth.has_token()) {
+    return auth.returnUrl || "/";
   }
 
   if (to.matched.some((record) => record.meta.requiresAuth)) {
     if (authRequired && !auth.has_token()) {
       auth.returnUrl = to.fullPath;
-      return next('/auth/login');
-    } else next();
-  } else {
-    next();
+      return "/auth/login";
+    }
   }
+
+  return true;
 });
 
 router.afterEach(() => {

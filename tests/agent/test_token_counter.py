@@ -17,8 +17,8 @@ from astrbot.core.agent.message import (
 counter = EstimateTokenCounter()
 
 
-def _msg(role: str, content) -> Message:
-    return Message(role=role, content=content)
+def _msg(role: str, content: str | list) -> Message:
+    return Message(role=role, content=content)  # type: ignore[arg-type]
 
 
 class TestTextCounting:

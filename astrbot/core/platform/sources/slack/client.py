@@ -4,7 +4,6 @@ import hmac
 import json
 import logging
 from collections.abc import Callable
-from typing import cast
 
 from quart import Quart, Response, request
 from slack_sdk.socket_mode.aiohttp import SocketModeClient
@@ -34,14 +33,10 @@ class SlackWebhookClient:
         self.port = port
         self.path = path
         self.event_handler = event_handler
-
         self.app = Quart(__name__)
         self._setup_routes()
-
-        # 禁用 Quart 的默认日志输出
         logging.getLogger("quart.app").setLevel(logging.WARNING)
         logging.getLogger("quart.serving").setLevel(logging.WARNING)
-
         self.shutdown_event = asyncio.Event()
 
     def _setup_routes(self) -> None:
@@ -67,16 +62,12 @@ class SlackWebhookClient:
             Response 对象或字典
         """
         try:
-            # 获取请求体和头部
-            body = cast(bytes, await req.get_data())
+            body = await req.get_data()
             event_data = json.loads(body.decode("utf-8"))
-
-            # Verify Slack request signature
             timestamp = req.headers.get("X-Slack-Request-Timestamp")
             signature = req.headers.get("X-Slack-Signature")
             if not timestamp or not signature:
                 return Response("Missing headers", status=400)
-            # Calculate the HMAC signature
             sig_basestring = f"v0:{timestamp}:{body.decode('utf-8')}"
             my_signature = (
                 "v0="
@@ -86,21 +77,15 @@ class SlackWebhookClient:
                     hashlib.sha256,
                 ).hexdigest()
             )
-            # Verify the signature
             if not hmac.compare_digest(my_signature, signature):
                 logger.warning("Slack request signature verification failed")
                 return Response("Invalid signature", status=400)
             logger.info(f"Received Slack event: {event_data}")
-
-            # 处理 URL 验证事件
             if event_data.get("type") == "url_verification":
                 return {"challenge": event_data.get("challenge")}
-            # 处理事件
             if self.event_handler and event_data.get("type") == "event_callback":
                 await self.event_handler(event_data)
-
             return Response("", status=200)
-
         except Exception as e:
             logger.error(f"处理 Slack 事件时出错: {e}")
             return Response("Internal Server Error", status=500)
@@ -108,9 +93,8 @@ class SlackWebhookClient:
     async def start(self) -> None:
         """启动 Webhook 服务器"""
         logger.info(
-            f"Slack Webhook 服务器启动中,监听 {self.host}:{self.port}{self.path}...",
+            f"Slack Webhook 服务器启动中,监听 {self.host}:{self.port}{self.path}..."
         )
-
         await self.app.run_task(
             host=self.host,
             port=self.port,
@@ -148,29 +132,19 @@ class SlackSocketClient:
         try:
             if self.socket_client is None:
                 raise RuntimeError("Socket client is not initialized")
-
-            # 确认收到事件
             response = SocketModeResponse(envelope_id=req.envelope_id)
             await self.socket_client.send_socket_mode_response(response)
-
-            # 处理事件
             if self.event_handler:
                 await self.event_handler(req)
-
         except Exception as e:
             logger.error(f"处理 Socket Mode 事件时出错: {e}")
 
     async def start(self) -> None:
         """启动 Socket Mode 连接"""
         self.socket_client = SocketModeClient(
-            app_token=self.app_token,
-            logger=logger,
-            web_client=self.web_client,
+            app_token=self.app_token, logger=logger, web_client=self.web_client
         )
-
-        # 注册事件处理器
         self.socket_client.socket_mode_request_listeners.append(self._handle_events)
-
         logger.info("Slack Socket Mode 客户端启动中...")
         await self.socket_client.connect()
 

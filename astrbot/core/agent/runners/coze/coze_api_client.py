@@ -145,7 +145,7 @@ class CozeAPIClient:
         session = await self._ensure_session()
         url = f"{self.api_base}/v3/chat"
 
-        payload = {
+        payload: dict[str, Any] = {
             "bot_id": bot_id,
             "user_id": user_id,
             "stream": stream,
@@ -299,7 +299,6 @@ if __name__ == "__main__":
             async with await anyio.open_file("README.md", "rb") as f:
                 file_data = await f.read()
             file_id = await client.upload_file(file_data)
-            print(f"Uploaded file_id: {file_id}")
             async for event in client.chat_messages(
                 bot_id=bot_id,
                 user_id="test_user",
@@ -318,7 +317,7 @@ if __name__ == "__main__":
                 ],
                 stream=True,
             ):
-                print(f"Event: {event}")
+                pass
 
         finally:
             await client.close()

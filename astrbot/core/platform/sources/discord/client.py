@@ -35,11 +35,11 @@ class DiscordBotClient(discord.Bot):
     async def on_ready(self) -> None:
         """当机器人成功连接并准备就绪时触发"""
         if self.user is None:
-            logger.error("[Discord] 客户端未正确加载用户信息 (self.user is None)")
+            logger.error("[Discord] Bot user not loaded correctly (self.user is None)")
             return
 
-        logger.info(f"[Discord] 已作为 {self.user} (ID: {self.user.id}) 登录")
-        logger.info("[Discord] 客户端已准备就绪｡")
+        logger.info(f"[Discord] Logged in as {self.user} (ID: {self.user.id})")
+        logger.info("[Discord] Client is ready.")
 
         if self.on_ready_once_callback and not self._ready_once_fired:
             self._ready_once_fired = True
@@ -47,7 +47,7 @@ class DiscordBotClient(discord.Bot):
                 await self.on_ready_once_callback()
             except Exception as e:
                 logger.error(
-                    f"[Discord] on_ready_once_callback 执行失败: {e}",
+                    f"[Discord] Failed to execute on_ready_once_callback: {e}",
                     exc_info=True,
                 )
 
@@ -99,7 +99,7 @@ class DiscordBotClient(discord.Bot):
             return
 
         logger.debug(
-            f"[Discord] 收到原始消息 from {message.author.name}: {message.content}",
+            f"[Discord] Received raw message from {message.author.name}: {message.content}",
         )
 
         if self.on_message_received:

@@ -145,7 +145,9 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
             trust_env=True,
             connector=connector,
         ) as session:
-            async with session.get(url, timeout=1800) as resp:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=1800)
+            ) as resp:
                 if resp.status != 200:
                     raise Exception(f"下载文件失败: {resp.status}")
                 total_size = int(resp.headers.get("content-length", 0))
@@ -187,7 +189,11 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, ssl=ssl_context, timeout=120) as resp:
+            async with session.get(
+                url,
+                ssl=ssl_context,
+                timeout=aiohttp.ClientTimeout(total=120),
+            ) as resp:
                 total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
                 start_time = time.time()
@@ -247,7 +253,7 @@ async def get_public_ip_address() -> list[IPv4Address | IPv6Address]:
 
     async def fetch(session: aiohttp.ClientSession, url: str):
         try:
-            async with session.get(url, timeout=3) as resp:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=3)) as resp:
                 if resp.status == 200:
                     raw_ip = (await resp.text()).strip()
                     ip = ip_address(raw_ip)

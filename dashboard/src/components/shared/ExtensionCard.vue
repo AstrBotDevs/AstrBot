@@ -58,7 +58,9 @@ const supportPlatforms = computed(() => {
 });
 
 const supportPlatformDisplayNames = computed(() =>
-  supportPlatforms.value.map((platformId) => getPlatformDisplayName(platformId)),
+  supportPlatforms.value.map((platformId) =>
+    getPlatformDisplayName(platformId),
+  ),
 );
 
 const astrbotVersionRequirement = computed(() => {
@@ -66,6 +68,20 @@ const astrbotVersionRequirement = computed(() => {
   return typeof versionSpec === "string" && versionSpec.trim().length
     ? versionSpec.trim()
     : "";
+});
+
+// 作者显示（兼容多种字段名）
+const authorDisplay = computed(() => {
+  const ext = props.extension || {};
+  if (typeof ext.author === "string" && ext.author.trim()) return ext.author;
+  if (Array.isArray(ext.authors) && ext.authors.length)
+    return ext.authors.join(", ");
+  if (typeof ext.author_name === "string" && ext.author_name.trim())
+    return ext.author_name;
+  if (typeof ext.owner === "string" && ext.owner.trim()) return ext.owner;
+  if (ext.author && typeof ext.author === "object" && ext.author.name)
+    return ext.author.name;
+  return "";
 });
 
 const logoLoadFailed = ref(false);
@@ -137,7 +153,6 @@ const viewReadme = () => {
 const viewChangelog = () => {
   emit("view-changelog", props.extension);
 };
-
 </script>
 
 <template>
@@ -148,25 +163,15 @@ const viewChangelog = () => {
     height="100%"
     :style="{
       position: 'relative',
-      backgroundColor:
-        !useCustomizerStore().isDarkTheme
-          ? marketMode
-            ? '#f8f0dd'
-            : '#ffffff'
-          : '#282833',
-      color:
-        !useCustomizerStore().isDarkTheme
-          ? '#000000dd'
-          : '#ffffff',
+      backgroundColor: !useCustomizerStore().isDarkTheme
+        ? marketMode
+          ? '#f8f0dd'
+          : '#ffffff'
+        : '#282833',
+      color: !useCustomizerStore().isDarkTheme ? '#000000dd' : '#ffffff',
     }"
   >
-    <v-card-text
-      style="
-        padding: 16px;
-        padding-bottom: 0px;
-        width: 100%;
-      "
-    >
+    <v-card-text style="padding: 16px; padding-bottom: 0px; width: 100%">
       <div style="overflow-x: auto; width: 100%">
         <div style="width: 100%; margin-bottom: 24px">
           <div class="extension-title-row">
@@ -178,7 +183,7 @@ const viewChangelog = () => {
                 location="top"
                 :text="
                   extension.display_name?.length &&
-                    extension.display_name !== extension.name
+                  extension.display_name !== extension.name
                     ? `${extension.display_name} (${extension.name})`
                     : extension.name
                 "
@@ -187,11 +192,12 @@ const viewChangelog = () => {
                   <span
                     v-bind="titleTooltipProps"
                     class="extension-title__text"
-                  >{{
-                    extension.display_name?.length
-                      ? extension.display_name
-                      : extension.name
-                  }}</span>
+                    >{{
+                      extension.display_name?.length
+                        ? extension.display_name
+                        : extension.name
+                    }}</span
+                  >
                 </template>
               </v-tooltip>
               <v-tooltip
@@ -209,45 +215,57 @@ const viewChangelog = () => {
                     @click.stop="updateExtension"
                   />
                 </template>
-                <span>{{ tm("card.status.hasUpdate") }}:
-                  {{ extension.online_version }}</span>
+                <span
+                  >{{ tm("card.status.hasUpdate") }}:
+                  {{ extension.online_version }}</span
+                >
               </v-tooltip>
             </p>
 
             <template v-if="!marketMode">
               <v-tooltip location="left">
-                <template v-slot:activator="{ props: tooltipProps }">
-                          <div class="extension-switch-wrap" @click.stop>
-                            <div v-bind="tooltipProps" style="display:inline-flex; align-items:center;">
-                              <v-switch
-                                :model-value="extension.activated"
-                                color="success"
-                                density="compact"
-                                hide-details
-                                inset
-                                @update:model-value="toggleActivation"
-                              ></v-switch>
-                            </div>
+                <template #activator="{ props: tooltipProps }">
+                  <div class="extension-switch-wrap" @click.stop>
+                    <div
+                      v-bind="tooltipProps"
+                      style="display: inline-flex; align-items: center"
+                    >
+                      <v-switch
+                        :model-value="extension.activated"
+                        color="success"
+                        density="compact"
+                        hide-details
+                        inset
+                        @update:model-value="toggleActivation"
+                      />
+                    </div>
 
-                            <v-tooltip location="top" :text="pinned ? tm('buttons.unpin') : tm('buttons.pin')">
-                              <template #activator="{ props: pinProps }">
-                                <v-btn
-                                  v-bind="pinProps"
-                                  icon
-                                  size="small"
-                                  variant="tonal"
-                                  :color="pinned ? 'primary' : 'secondary'"
-                                  class="ml-2"
-                                  @click.stop="togglePin"
-                                >
-                                  <v-icon size="18">{{ pinned ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
-                                </v-btn>
-                              </template>
-                            </v-tooltip>
-                          </div>
+                    <v-tooltip
+                      location="top"
+                      :text="pinned ? tm('buttons.unpin') : tm('buttons.pin')"
+                    >
+                      <template #activator="{ props: pinProps }">
+                        <v-btn
+                          v-bind="pinProps"
+                          icon
+                          size="small"
+                          variant="tonal"
+                          :color="pinned ? 'primary' : 'secondary'"
+                          class="ml-2"
+                          @click.stop="togglePin"
+                        >
+                          <v-icon size="18">
+                            {{ pinned ? "mdi-pin" : "mdi-pin-outline" }}
+                          </v-icon>
+                        </v-btn>
+                      </template>
+                    </v-tooltip>
+                  </div>
                 </template>
                 <span>{{
-                  extension.activated ? tm("buttons.disable") : tm("buttons.enable")
+                  extension.activated
+                    ? tm("buttons.disable")
+                    : tm("buttons.enable")
                 }}</span>
               </v-tooltip>
             </template>
@@ -293,9 +311,7 @@ const viewChangelog = () => {
 
                     <v-list-item v-if="marketMode && extension?.installed">
                       <v-list-item-title class="text--disabled">
-                        {{
-                          tm("status.installed")
-                        }}
+                        {{ tm("status.installed") }}
                       </v-list-item-title>
                     </v-list-item>
                   </v-list>
@@ -311,20 +327,13 @@ const viewChangelog = () => {
                 :alt="extension.name"
                 class="extension-logo"
                 @error="logoLoadFailed = true"
-              >
+              />
             </div>
 
             <div class="extension-meta-group">
               <div class="extension-chip-group d-flex flex-wrap">
-                <v-chip
-                  color="primary"
-                  label
-                  size="small"
-                >
-                  <v-icon
-                    icon="mdi-source-branch"
-                    start
-                  />
+                <v-chip color="primary" label size="small">
+                  <v-icon icon="mdi-source-branch" start />
                   {{ extension.version }}
                 </v-chip>
                 <v-chip
@@ -335,10 +344,7 @@ const viewChangelog = () => {
                   style="cursor: pointer"
                   @click="updateExtension"
                 >
-                  <v-icon
-                    icon="mdi-arrow-up-bold"
-                    start
-                  />
+                  <v-icon icon="mdi-arrow-up-bold" start />
                   {{ extension.online_version }}
                 </v-chip>
                 <v-chip
@@ -349,10 +355,7 @@ const viewChangelog = () => {
                   style="cursor: pointer"
                   @click="viewHandlers"
                 >
-                  <v-icon
-                    icon="mdi-cogs"
-                    start
-                  />
+                  <v-icon icon="mdi-cogs" start />
                   {{ extension.handlers?.length
                   }}{{ tm("card.status.handlersCount") }}
                 </v-chip>
@@ -366,6 +369,10 @@ const viewChangelog = () => {
                   {{ tag === "danger" ? tm("tags.danger") : tag }}
                 </v-chip>
                 <PluginPlatformChip :platforms="supportPlatforms" />
+                <v-chip v-if="authorDisplay" color="info" label size="small">
+                  <v-icon icon="mdi-account" start></v-icon>
+                  {{ authorDisplay }}
+                </v-chip>
                 <v-chip
                   v-if="astrbotVersionRequirement"
                   color="secondary"
@@ -389,16 +396,10 @@ const viewChangelog = () => {
       </div>
     </v-card-text>
 
-    <v-card-actions
-      class="extension-actions"
-      @click.stop
-    >
+    <v-card-actions class="extension-actions" @click.stop>
       <template v-if="!marketMode">
         <v-spacer />
-        <v-tooltip
-          location="top"
-          :text="tm('buttons.viewDocs')"
-        >
+        <v-tooltip location="top" :text="tm('buttons.viewDocs')">
           <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
@@ -411,10 +412,7 @@ const viewChangelog = () => {
           </template>
         </v-tooltip>
 
-        <v-tooltip
-          location="top"
-          :text="tm('card.actions.pluginConfig')"
-        >
+        <v-tooltip location="top" :text="tm('card.actions.pluginConfig')">
           <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
@@ -445,10 +443,7 @@ const viewChangelog = () => {
           </template>
         </v-tooltip>
 
-        <v-tooltip
-          location="top"
-          :text="tm('card.actions.reloadPlugin')"
-        >
+        <v-tooltip location="top" :text="tm('card.actions.reloadPlugin')">
           <template #activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
@@ -461,10 +456,7 @@ const viewChangelog = () => {
           </template>
         </v-tooltip>
 
-        <StyledMenu
-          location="top end"
-          offset="8"
-        >
+        <StyledMenu location="top end" offset="8">
           <template #activator="{ props: menuProps }">
             <v-btn
               v-bind="menuProps"
@@ -509,11 +501,7 @@ const viewChangelog = () => {
         </StyledMenu>
       </template>
       <template v-else>
-        <v-btn
-          color="primary"
-          size="small"
-          @click="viewReadme"
-        >
+        <v-btn color="primary" size="small" @click="viewReadme">
           {{ tm("buttons.viewDocs") }}
         </v-btn>
       </template>
@@ -591,7 +579,7 @@ const viewChangelog = () => {
   flex-shrink: 0;
 }
 
-.extension-switch-wrap :deep(.v-switch) {
+.extension-switch-wrap ::v-deep(.v-switch) {
   margin: 0;
 }
 

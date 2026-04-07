@@ -44,9 +44,9 @@ logo_tmpl = r"""
 
 
 def check_env() -> None:
-    if not (sys.version_info.major == 3 and sys.version_info.minor >= 10):
-        logger.error("请使用 Python3.10+ 运行本项目｡")
-        exit()
+    # Python version check: require 3.12 or 3.13
+    if not (sys.version_info.major == 3 and sys.version_info.minor in (12, 13)):
+        sys.exit(1)
 
     astrbot_root = get_astrbot_root()
     if astrbot_root not in sys.path:

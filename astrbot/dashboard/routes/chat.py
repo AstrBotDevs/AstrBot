@@ -5,10 +5,9 @@ import re
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import cast
+from typing import Any
 
 import anyio
-from quart import Response as QuartResponse
 from quart import g, make_response, request, send_file
 
 from astrbot.core import logger, sp
@@ -22,11 +21,14 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     webchat_message_parts_have_content,
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
+from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 from .route import Response, Route, RouteContext
+
+SSE_HEARTBEAT = ": heartbeat\n\n"
 
 
 @asynccontextmanager
@@ -42,14 +44,14 @@ async def _poll_webchat_stream_result(back_queue, username: str):
     try:
         result = await asyncio.wait_for(back_queue.get(), timeout=1)
     except asyncio.TimeoutError:
-        return None, False
+        return (None, False)
     except asyncio.CancelledError:
         logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接｡")
-        return None, True
+        return (None, True)
     except Exception as e:
         logger.error(f"WebChat stream error: {e}")
-        return None, False
-    return result, False
+        return (None, False)
+    return (result, False)
 
 
 def _resolve_path(path: str) -> Path:
@@ -57,6 +59,8 @@ def _resolve_path(path: str) -> Path:
 
 
 class ChatRoute(Route):
+    platform_history_mgr: PlatformMessageHistoryManager
+
     def __init__(
         self,
         context: RouteContext,
@@ -85,81 +89,69 @@ class ChatRoute(Route):
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
         self.legacy_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.attachments_dir, exist_ok=True)
-
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
         self.conv_mgr = core_lifecycle.conversation_manager
-        self.platform_history_mgr = core_lifecycle.platform_message_history_manager
+        mgr = core_lifecycle.platform_message_history_manager
+        assert mgr is not None
+        self.platform_history_mgr = mgr
         self.db = db
         self.umop_config_router = core_lifecycle.umop_config_router
-
+        assert self.umop_config_router
         self.running_convs: dict[str, bool] = {}
 
     async def get_file(self):
         filename = request.args.get("filename")
         if not filename:
-            return Response().error("Missing key: filename").__dict__
-
+            return Response().error("Missing key: filename").to_json()
         try:
             file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
             resolved_file_path = _resolve_path(file_path)
             resolved_base_dir = _resolve_path(self.attachments_dir)
-
             if not await anyio.Path(resolved_file_path).exists():
-                # try legacy
                 file_path = os.path.join(
                     self.legacy_img_dir, os.path.basename(filename)
                 )
                 if await anyio.Path(file_path).exists():
                     resolved_file_path = _resolve_path(file_path)
                     resolved_base_dir = _resolve_path(self.legacy_img_dir)
-
             try:
                 resolved_file_path.relative_to(resolved_base_dir)
             except ValueError:
-                return Response().error("Invalid file path").__dict__
-
+                return Response().error("Invalid file path").to_json()
             filename_ext = os.path.splitext(filename)[1].lower()
             if filename_ext == ".wav":
                 return await send_file(str(resolved_file_path), mimetype="audio/wav")
             if filename_ext[1:] in self.supported_imgs:
                 return await send_file(str(resolved_file_path), mimetype="image/jpeg")
             return await send_file(str(resolved_file_path))
-
         except (FileNotFoundError, OSError):
-            return Response().error("File access error").__dict__
+            return Response().error("File access error").to_json()
 
     async def get_attachment(self):
         """Get attachment file by attachment_id."""
         attachment_id = request.args.get("attachment_id")
         if not attachment_id:
-            return Response().error("Missing key: attachment_id").__dict__
-
+            return Response().error("Missing key: attachment_id").to_json()
         try:
             attachment = await self.db.get_attachment_by_id(attachment_id)
             if not attachment:
-                return Response().error("Attachment not found").__dict__
-
+                return Response().error("Attachment not found").to_json()
             file_path = attachment.path
             resolved_file_path = _resolve_path(file_path)
-
             return await send_file(
                 str(resolved_file_path), mimetype=attachment.mime_type
             )
-
         except (FileNotFoundError, OSError):
-            return Response().error("File access error").__dict__
+            return Response().error("File access error").to_json()
 
     async def post_file(self):
         """Upload a file and create an attachment record, return attachment_id."""
         post_data = await request.files
         if "file" not in post_data:
-            return Response().error("Missing key: file").__dict__
-
+            return Response().error("Missing key: file").to_json()
         file = post_data["file"]
         filename = file.filename or f"{uuid.uuid4()!s}"
         content_type = file.content_type or "application/octet-stream"
-
-        # 根据 content_type 判断文件类型并添加扩展名
         if content_type.startswith("image"):
             attach_type = "image"
         elif content_type.startswith("audio"):
@@ -168,22 +160,14 @@ class ChatRoute(Route):
             attach_type = "video"
         else:
             attach_type = "file"
-
         path = os.path.join(self.attachments_dir, filename)
         await file.save(path)
-
-        # 创建 attachment 记录
         attachment = await self.db.insert_attachment(
-            path=path,
-            type=attach_type,
-            mime_type=content_type,
+            path=path, type=attach_type, mime_type=content_type
         )
-
         if not attachment:
-            return Response().error("Failed to create attachment").__dict__
-
+            return Response().error("Failed to create attachment").to_json()
         filename = os.path.basename(attachment.path)
-
         return (
             Response()
             .ok(
@@ -193,15 +177,13 @@ class ChatRoute(Route):
                     "type": attach_type,
                 }
             )
-            .__dict__
+            .to_json()
         )
 
     async def _build_user_message_parts(self, message: str | list) -> list[dict]:
         """构建用户消息的部分列表｡"""
         return await build_webchat_message_parts(
-            message,
-            get_attachment_by_id=self.db.get_attachment_by_id,
-            strict=False,
+            message, get_attachment_by_id=self.db.get_attachment_by_id, strict=False
         )
 
     async def _create_attachment_from_file(
@@ -229,14 +211,12 @@ class ChatRoute(Route):
             包含 used 列表的字典,记录被引用的搜索结果
         """
         supported = ["web_search_tavily", "web_search_bocha"]
-        # 从 accumulated_parts 中找到所有 web_search_tavily 的工具调用结果
         web_search_results = {}
         tool_call_parts = [
             p
             for p in accumulated_parts
             if p.get("type") == "tool_call" and p.get("tool_calls")
         ]
-
         for part in tool_call_parts:
             for tool_call in part["tool_calls"]:
                 if tool_call.get("name") not in supported or not tool_call.get(
@@ -254,16 +234,11 @@ class ChatRoute(Route):
                             }
                 except (json.JSONDecodeError, KeyError):
                     pass
-
         if not web_search_results:
             return {}
-
-        # 从文本中提取所有 <ref>xxx</ref> 标签并去重
         ref_indices = {
-            m.strip() for m in re.findall(r"<ref>(.*?)</ref>", accumulated_text)
+            m.strip() for m in re.findall("<ref>(.*?)</ref>", accumulated_text)
         }
-
-        # 构建被引用的结果列表
         used_refs = []
         for ref_index in ref_indices:
             if ref_index not in web_search_results:
@@ -272,7 +247,6 @@ class ChatRoute(Route):
             if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
                 payload["favicon"] = favicon
             used_refs.append(payload)
-
         return {"used": used_refs} if used_refs else {}
 
     async def _save_bot_message(
@@ -289,15 +263,13 @@ class ChatRoute(Route):
         bot_message_parts.extend(media_parts)
         if text:
             bot_message_parts.append({"type": "plain", "text": text})
-
-        new_his = {"type": "bot", "message": bot_message_parts}
+        new_his: dict[str, Any] = {"type": "bot", "message": bot_message_parts}
         if reasoning:
             new_his["reasoning"] = reasoning
         if agent_stats:
             new_his["agent_stats"] = agent_stats
         if refs:
             new_his["refs"] = refs
-
         record = await self.platform_history_mgr.insert(
             platform_id="webchat",
             user_id=webchat_conv_id,
@@ -309,43 +281,34 @@ class ChatRoute(Route):
 
     async def chat(self, post_data: dict | None = None):
         username = g.get("username", "guest")
-
         if post_data is None:
             post_data = await request.json
         if post_data is None:
-            return Response().error("Missing JSON body").__dict__
+            return Response().error("Missing JSON body").to_json()
         if "message" not in post_data and "files" not in post_data:
-            return Response().error("Missing key: message or files").__dict__
-
+            return Response().error("Missing key: message or files").to_json()
         if "session_id" not in post_data and "conversation_id" not in post_data:
             return (
-                Response().error("Missing key: session_id or conversation_id").__dict__
+                Response().error("Missing key: session_id or conversation_id").to_json()
             )
-
         message = post_data["message"]
         session_id = post_data.get("session_id", post_data.get("conversation_id"))
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
-
         if not session_id:
-            return Response().error("session_id is empty").__dict__
-
+            return Response().error("session_id is empty").to_json()
         webchat_conv_id = session_id
-
-        # 构建用户消息段(包含 path 用于传递给 adapter)
         message_parts = await self._build_user_message_parts(message)
         if not webchat_message_parts_have_content(message_parts):
             return (
                 Response()
                 .error("Message content is empty (reply only is not allowed)")
-                .__dict__
+                .to_json()
             )
-
         message_id = str(uuid.uuid4())
         back_queue = webchat_queue_mgr.get_or_create_back_queue(
-            message_id,
-            webchat_conv_id,
+            message_id, webchat_conv_id
         )
 
         async def stream():
@@ -357,14 +320,12 @@ class ChatRoute(Route):
             agent_stats = {}
             refs = {}
             try:
-                # Emit session_id first so clients can bind the stream immediately.
                 session_info = {
                     "type": "session_id",
                     "data": None,
                     "session_id": webchat_conv_id,
                 }
                 yield f"data: {json.dumps(session_info, ensure_ascii=False)}\n\n"
-
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
                         result, should_break = await _poll_webchat_stream_result(
@@ -374,20 +335,19 @@ class ChatRoute(Route):
                             client_disconnected = True
                             break
                         if not result:
+                            if not client_disconnected:
+                                yield SSE_HEARTBEAT
                             continue
-
                         if (
                             "message_id" in result
                             and result["message_id"] != message_id
                         ):
                             logger.warning("webchat stream message_id mismatch")
                             continue
-
                         result_text = result["data"]
                         msg_type = result.get("type")
                         streaming = result.get("streaming", False)
                         chain_type = result.get("chain_type")
-
                         if chain_type == "agent_stats":
                             stats_info = {
                                 "type": "agent_stats",
@@ -396,8 +356,6 @@ class ChatRoute(Route):
                             yield f"data: {json.dumps(stats_info, ensure_ascii=False)}\n\n"
                             agent_stats = stats_info["data"]
                             continue
-
-                        # 发送 SSE 数据
                         try:
                             if not client_disconnected:
                                 yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
@@ -407,22 +365,18 @@ class ChatRoute(Route):
                                     f"[WebChat] 用户 {username} 断开聊天长连接｡ {e}"
                                 )
                             client_disconnected = True
-
                         try:
                             if not client_disconnected:
                                 await asyncio.sleep(0.05)
                         except asyncio.CancelledError:
                             logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接｡")
                             client_disconnected = True
-
-                        # 累积消息部分
                         if msg_type == "plain":
                             chain_type = result.get("chain_type")
                             if chain_type == "tool_call":
                                 tool_call = json.loads(result_text)
                                 tool_calls[tool_call.get("id")] = tool_call
                                 if accumulated_text:
-                                    # 如果累积了文本,则先保存文本
                                     accumulated_parts.append(
                                         {"type": "plain", "text": accumulated_text}
                                     )
@@ -461,39 +415,29 @@ class ChatRoute(Route):
                             if part:
                                 accumulated_parts.append(part)
                         elif msg_type == "file":
-                            # 格式: [FILE]filename
                             filename = result_text.replace("[FILE]", "")
                             part = await self._create_attachment_from_file(
                                 filename, "file"
                             )
                             if part:
                                 accumulated_parts.append(part)
-
-                        # 消息结束处理
                         if msg_type == "end":
                             break
-                        elif (
-                            (streaming and msg_type == "complete") or not streaming
-                            # or msg_type == "break"
-                        ):
+                        elif streaming and msg_type == "complete" or not streaming:
                             if (
                                 chain_type == "tool_call"
                                 or chain_type == "tool_call_result"
                             ):
                                 continue
-
-                            # 提取 web_search_tavily 引用
                             try:
                                 refs = self._extract_web_search_refs(
-                                    accumulated_text,
-                                    accumulated_parts,
+                                    accumulated_text, accumulated_parts
                                 )
                             except Exception as e:
                                 logger.exception(
                                     f"Failed to extract web search refs: {e}",
                                     exc_info=True,
                                 )
-
                             saved_record = await self._save_bot_message(
                                 webchat_conv_id,
                                 accumulated_text,
@@ -502,8 +446,7 @@ class ChatRoute(Route):
                                 agent_stats,
                                 refs,
                             )
-                            # 发送保存的消息信息给前端
-                            if saved_record and not client_disconnected:
+                            if saved_record and (not client_disconnected):
                                 saved_info = {
                                     "type": "message_saved",
                                     "data": {
@@ -520,7 +463,6 @@ class ChatRoute(Route):
                             accumulated_parts = []
                             accumulated_text = ""
                             accumulated_reasoning = ""
-                            # tool_calls = {}
                             agent_stats = {}
                             refs = {}
             except BaseException as e:
@@ -528,7 +470,6 @@ class ChatRoute(Route):
             finally:
                 webchat_queue_mgr.remove_back_queue(message_id)
 
-        # 将消息放入会话特定的队列
         chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id)
         await chat_queue.put(
             (
@@ -541,11 +482,9 @@ class ChatRoute(Route):
                     "enable_streaming": enable_streaming,
                     "message_id": message_id,
                 },
-            ),
+            )
         )
-
         message_parts_for_storage = strip_message_parts_path_fields(message_parts)
-
         await self.platform_history_mgr.insert(
             platform_id="webchat",
             user_id=webchat_conv_id,
@@ -553,131 +492,106 @@ class ChatRoute(Route):
             sender_id=username,
             sender_name=username,
         )
-
-        response = cast(
-            QuartResponse,
-            await make_response(
-                stream(),
-                {
-                    "Content-Type": "text/event-stream",
-                    "Cache-Control": "no-cache",
-                    "Transfer-Encoding": "chunked",
-                    "Connection": "keep-alive",
-                },
-            ),
+        response = await make_response(
+            stream(),
+            {
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "Transfer-Encoding": "chunked",
+                "Connection": "keep-alive",
+            },
         )
-        response.timeout = None  # fix SSE auto disconnect issue
+        response.timeout = None
         return response
 
     async def stop_session(self):
         """Stop active agent runs for a session."""
         post_data = await request.json
         if post_data is None:
-            return Response().error("Missing JSON body").__dict__
-
+            return Response().error("Missing JSON body").to_json()
         session_id = post_data.get("session_id")
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
-
+            return Response().error("Missing key: session_id").to_json()
         username = g.get("username", "guest")
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(f"Session {session_id} not found").to_json()
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
-
+            return Response().error("Permission denied").to_json()
         message_type = (
             MessageType.GROUP_MESSAGE.value
             if session.is_group
             else MessageType.FRIEND_MESSAGE.value
         )
-        umo = (
-            f"{session.platform_id}:{message_type}:"
-            f"{session.platform_id}!{username}!{session_id}"
-        )
+        umo = f"{session.platform_id}:{message_type}:{session.platform_id}!{username}!{session_id}"
         stopped_count = active_event_registry.request_agent_stop_all(umo)
-
-        return Response().ok(data={"stopped_count": stopped_count}).__dict__
+        return Response().ok(data={"stopped_count": stopped_count}).to_json()
 
     async def _delete_session_internal(self, session, username: str) -> None:
         """Delete a single session and all its related data."""
         session_id = session.session_id
-
-        # 删除该会话下的所有对话
         message_type = "GroupMessage" if session.is_group else "FriendMessage"
         unified_msg_origin = f"{session.platform_id}:{message_type}:{session.platform_id}!{username}!{session_id}"
-        await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
-
-        # 获取消息历史中的所有附件 ID 并删除附件
-        history_list = await self.platform_history_mgr.get(
+        conv_mgr = self.conv_mgr
+        assert conv_mgr is not None
+        await conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
+        mgr = self.platform_history_mgr
+        assert mgr is not None
+        history_list = await mgr.get(
             platform_id=session.platform_id,
             user_id=session_id,
             page=1,
-            page_size=100000,  # 获取足够多的记录
+            page_size=100000,
         )
         attachment_ids = self._extract_attachment_ids(history_list)
         if attachment_ids:
             await self._delete_attachments(attachment_ids)
-
-        # 删除消息历史
-        await self.platform_history_mgr.delete(
-            platform_id=session.platform_id,
-            user_id=session_id,
-            offset_sec=99999999,
+        await mgr.delete(
+            platform_id=session.platform_id, user_id=session_id, offset_sec=99999999
         )
-
-        # 删除与会话关联的配置路由
         try:
-            await self.umop_config_router.delete_route(unified_msg_origin)
+            router = self.umop_config_router
+            assert router is not None
+            await router.delete_route(unified_msg_origin)
         except ValueError as exc:
             logger.warning(
                 "Failed to delete UMO route %s during session cleanup: %s",
                 unified_msg_origin,
                 exc,
             )
-
-        # 清理队列(仅对 webchat)
         if session.platform_id == "webchat":
             webchat_queue_mgr.remove_queues(session_id)
-
-        # 删除会话
         await self.db.delete_platform_session(session_id)
 
     async def delete_webchat_session(self):
         """Delete a Platform session and all its related data."""
         session_id = request.args.get("session_id")
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error("Missing key: session_id").to_json()
         username = g.get("username", "guest")
-
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(f"Session {session_id} not found").to_json()
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
-
+            return Response().error("Permission denied").to_json()
         await self._delete_session_internal(session, username)
-
-        return Response().ok().__dict__
+        return Response().ok().to_json()
 
     async def batch_delete_sessions(self):
         """Batch delete multiple Platform sessions."""
         post_data = await request.json
         if post_data is None:
-            return Response().error("Missing JSON body").__dict__
+            return Response().error("Missing JSON body").to_json()
         if not isinstance(post_data, dict):
-            return Response().error("Invalid JSON body: expected object").__dict__
-
+            return Response().error("Invalid JSON body: expected object").to_json()
         session_ids = post_data.get("session_ids")
         if not session_ids or not isinstance(session_ids, list):
-            return Response().error("Missing or invalid key: session_ids").__dict__
-
+            return Response().error("Missing or invalid key: session_ids").to_json()
         username = g.get("username", "guest")
         sessions = await self.db.get_platform_sessions_by_ids(session_ids)
         sessions_by_id = {session.session_id: session for session in sessions}
         deleted_count = 0
         failed_items = []
-
         for sid in session_ids:
             session = sessions_by_id.get(sid)
             if not session:
@@ -686,7 +600,6 @@ class ChatRoute(Route):
             if session.creator != username:
                 failed_items.append({"session_id": sid, "reason": "permission denied"})
                 continue
-
             try:
                 await self._delete_session_internal(session, username)
                 deleted_count += 1
@@ -694,7 +607,6 @@ class ChatRoute(Route):
             except Exception:
                 logger.warning("Failed to delete session %s", sid)
                 failed_items.append({"session_id": sid, "reason": "internal_error"})
-
         return (
             Response()
             .ok(
@@ -704,7 +616,7 @@ class ChatRoute(Route):
                     "failed_items": failed_items,
                 }
             )
-            .__dict__
+            .to_json()
         )
 
     def _extract_attachment_ids(self, history_list) -> list[str]:
@@ -735,8 +647,6 @@ class ChatRoute(Route):
                     )
         except Exception as e:
             logger.warning(f"Failed to get attachments: {e}")
-
-        # 批量删除数据库记录
         try:
             await self.db.delete_attachments(attachment_ids)
         except Exception as e:
@@ -745,17 +655,10 @@ class ChatRoute(Route):
     async def new_session(self):
         """Create a new Platform session (default: webchat)."""
         username = g.get("username", "guest")
-
-        # 获取可选的 platform_id 参数,默认为 webchat
         platform_id = request.args.get("platform_id", "webchat")
-
-        # 创建新会话
         session = await self.db.create_platform_session(
-            creator=username,
-            platform_id=platform_id,
-            is_group=0,
+            creator=username, platform_id=platform_id, is_group=0
         )
-
         return (
             Response()
             .ok(
@@ -764,29 +667,23 @@ class ChatRoute(Route):
                     "platform_id": session.platform_id,
                 }
             )
-            .__dict__
+            .to_json()
         )
 
     async def get_sessions(self):
         """Get all Platform sessions for the current user."""
         username = g.get("username", "guest")
-
-        # 获取可选的 platform_id 参数
         platform_id = request.args.get("platform_id")
-
         sessions, _ = await self.db.get_platform_sessions_by_creator_paginated(
             creator=username,
             platform_id=platform_id,
             page=1,
-            page_size=100,  # 暂时返回前100个
+            page_size=100,
             exclude_project_sessions=True,
         )
-
-        # 转换为字典格式
         sessions_data = []
         for item in sessions:
             session = item["session"]
-
             sessions_data.append(
                 {
                     "session_id": session.session_id,
@@ -798,75 +695,53 @@ class ChatRoute(Route):
                     "updated_at": to_utc_isoformat(session.updated_at),
                 }
             )
-
-        return Response().ok(data=sessions_data).__dict__
+        return Response().ok(data=sessions_data).to_json()
 
     async def get_session(self):
         """Get session information and message history by session_id."""
         session_id = request.args.get("session_id")
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
-
-        # 获取会话信息以确定 platform_id
+            return Response().error("Missing key: session_id").to_json()
         session = await self.db.get_platform_session_by_id(session_id)
         platform_id = session.platform_id if session else "webchat"
-
-        # 获取项目信息(如果会话属于某个项目)
         username = g.get("username", "guest")
         project_info = await self.db.get_project_by_session(
             session_id=session_id, creator=username
         )
-
-        # Get platform message history using session_id
-        history_ls = await self.platform_history_mgr.get(
-            platform_id=platform_id,
-            user_id=session_id,
-            page=1,
-            page_size=1000,
+        mgr = self.platform_history_mgr
+        assert mgr is not None
+        history_ls = await mgr.get(
+            platform_id=platform_id, user_id=session_id, page=1, page_size=1000
         )
-
         history_res = [history.model_dump() for history in history_ls]
-
-        response_data = {
+        response_data: dict[str, Any] = {
             "history": history_res,
             "is_running": self.running_convs.get(session_id, False),
         }
-
-        # 如果会话属于项目,添加项目信息
         if project_info:
             response_data["project"] = {
                 "project_id": project_info.project_id,
                 "title": project_info.title,
                 "emoji": project_info.emoji,
             }
-
-        return Response().ok(data=response_data).__dict__
+        return Response().ok(data=response_data).to_json()
 
     async def update_session_display_name(self):
         """Update a Platform session's display name."""
         post_data = await request.json
-
         session_id = post_data.get("session_id")
         display_name = post_data.get("display_name")
-
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error("Missing key: session_id").to_json()
         if display_name is None:
-            return Response().error("Missing key: display_name").__dict__
-
+            return Response().error("Missing key: display_name").to_json()
         username = g.get("username", "guest")
-
-        # 验证会话是否存在且属于当前用户
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(f"Session {session_id} not found").to_json()
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
-
-        # 更新 display_name
+            return Response().error("Permission denied").to_json()
         await self.db.update_platform_session(
-            session_id=session_id,
-            display_name=display_name,
+            session_id=session_id, display_name=display_name
         )
-
-        return Response().ok().__dict__
+        return Response().ok().to_json()

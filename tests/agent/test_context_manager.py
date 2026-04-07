@@ -75,7 +75,7 @@ class TestContextManager:
         """Test initialization with LLM-based compression."""
         mock_provider = MockProvider()
         config = ContextConfig(
-            llm_compress_provider=mock_provider,  # type: ignore
+            llm_compress_provider=mock_provider,  # type: ignore[arg-type]
             llm_compress_keep_recent=5,
             llm_compress_instruction="Summarize the conversation",
         )
@@ -560,7 +560,7 @@ class TestContextManager:
         manager = ContextManager(config)
 
         # Verify the default threshold is 0.82
-        assert manager.compressor.compression_threshold == 0.82
+        assert manager.compressor.compression_threshold == 0.82  # type: ignore[attr-defined]
 
         # Test threshold logic
         messages = [self.create_message("user", "x" * 81)]  # ~24 tokens
@@ -665,7 +665,7 @@ class TestContextManager:
         """Test LLM compression using MockProvider."""
         mock_provider = MockProvider()
         config = ContextConfig(
-            llm_compress_provider=mock_provider,  # type: ignore
+            llm_compress_provider=mock_provider,  # type: ignore[arg-type]
             llm_compress_keep_recent=3,
             llm_compress_instruction="请总结对话内容",
             max_context_tokens=100,

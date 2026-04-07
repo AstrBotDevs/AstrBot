@@ -1,158 +1,206 @@
 <template>
-  <div style="height: 100%; overflow-y: scroll">
-    <!-- Proxy Settings -->
-    <!-- <div class="text-h6 mb-2">{{ tm('network.title') }}</div> -->
-
-    <v-list lines="two" subheader>
-      <v-list-subheader>{{ tm("network.title") }}</v-list-subheader>
-
-      <v-list-item
-        :subtitle="tm('network.proxy.subtitle')"
-        :title="tm('network.proxy.title')"
-      >
+  <div class="settings-page">
+    <!-- Network Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-earth</v-icon>
+        {{ tm("network.title") }}
+      </v-card-title>
+      <v-card-text>
         <ProxySelector />
-      </v-list-item>
+      </v-card-text>
+    </v-card>
 
-      <v-list-item
-        :subtitle="tm('network.server.subtitle')"
-        :title="tm('network.server.title')"
-      >
-        <!-- <div class="text-caption text-medium-emphasis mb-2">
-            {{ tm('network.server.description') }}
-        </div> -->
-        <v-row class="mt-2">
-          <v-col cols="12">
-            <div>
-              <!-- <v-text-field
-                v-model="apiBaseUrl"
-                :label="tm('network.server.label')"
-                variant="outlined"
-                density="compact"
-                hide-details
-                class="flex-grow-1"
-            ></v-text-field>
-            <v-btn color="primary" class="ml-2" @click="saveApiUrl">
-                {{ tm('common.save') }}
-            </v-btn> -->
+    <!-- Sidebar Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-menu</v-icon>
+        {{ tm("sidebar.title") }}
+      </v-card-title>
+      <v-card-subtitle>{{ tm("sidebar.customize.subtitle") }}</v-card-subtitle>
+      <v-card-text>
+        <SidebarCustomizer />
+      </v-card-text>
+    </v-card>
 
-              <div class="mb-2">
-                <div class="d-flex align-center justify-space-between mb-1">
-                  <div class="text-caption text-medium-emphasis">
-                    {{ tm("network.server.presets") }}
-                  </div>
-                  <v-btn
-                    size="x-small"
-                    variant="text"
-                    prepend-icon="mdi-plus"
-                    @click="showAddPreset = !showAddPreset"
-                  >
-                    {{ tm("network.server.preset.add") }}
-                  </v-btn>
-                </div>
-
-                <v-expand-transition>
-                  <div
-                    v-if="showAddPreset"
-                    class="mb-2 pa-2 bg-grey-lighten-4 rounded"
-                  >
-                    <v-text-field
-                      v-model="newPresetName"
-                      :label="tm('network.server.preset.name')"
-                      density="compact"
-                      hide-details
-                      class="mb-2"
-                      variant="outlined"
-                      bg-color="white"
-                    />
-                    <v-text-field
-                      v-model="newPresetUrl"
-                      :label="tm('network.server.preset.url')"
-                      density="compact"
-                      hide-details
-                      class="mb-2"
-                      variant="outlined"
-                      bg-color="white"
-                    />
-                    <v-btn
-                      size="small"
-                      block
-                      color="primary"
-                      variant="flat"
-                      @click="savePreset"
-                    >
-                      {{ tm("network.server.preset.add") }}
-                    </v-btn>
-                  </div>
-                </v-expand-transition>
-
-                <v-chip-group column>
-                  <v-chip
-                    v-for="preset in apiStore.presets"
-                    :key="preset.name"
-                    size="small"
-                    :variant="apiBaseUrl === preset.url ? 'flat' : 'tonal'"
-                    :color="apiBaseUrl === preset.url ? 'primary' : undefined"
-                    :closable="isCustomPreset(preset.name)"
-                    @click="apiBaseUrl = preset.url"
-                    @click:close="apiStore.removePreset(preset.name)"
-                  >
-                    {{ preset.name }}
-                  </v-chip>
-                </v-chip-group>
-              </div>
-              <v-text-field
-                v-model="apiBaseUrl"
-                :label="tm('network.server.label')"
-                :placeholder="tm('network.server.placeholder')"
-                :hint="tm('network.server.hint')"
-                persistent-hint
-                hide-details="auto"
-                variant="outlined"
-                density="compact"
+    <!-- Theme Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-palette</v-icon>
+        {{ tm("theme.customize.title") }}
+      </v-card-title>
+      <v-card-subtitle>{{ tm("theme.subtitle") }}</v-card-subtitle>
+      <v-card-text>
+        <!-- Row 1: Preset selector + theme mode -->
+        <div class="d-flex flex-wrap align-center ga-4 mb-4 ml-3">
+          <v-select
+            v-model="selectedThemePreset"
+            :items="presetOptions"
+            :label="tm('theme.customize.preset')"
+            hide-details
+            variant="outlined"
+            density="compact"
+            style="min-width: 200px; max-width: 280px"
+            @update:model-value="applyThemePreset"
+          />
+          <v-btn-toggle
+            v-model="themeMode"
+            mandatory
+            density="compact"
+            color="primary"
+          >
+            <v-btn value="light" size="small">
+              <v-icon class="mr-1" size="18">mdi-white-balance-sunny</v-icon>
+              {{ tm("theme.customize.light") }}
+            </v-btn>
+            <v-btn value="dark" size="small">
+              <v-icon class="mr-1" size="18">mdi-moon-waning-crescent</v-icon>
+              {{ tm("theme.customize.dark") }}
+            </v-btn>
+            <v-btn value="auto" size="small">
+              <v-icon class="mr-1" size="18">mdi-sync</v-icon>
+              {{ tm("theme.customize.auto") }}
+            </v-btn>
+          </v-btn-toggle>
+          <v-tooltip location="top">
+            <template #activator="{ props }">
+              <v-icon v-bind="props" size="16" color="primary" class="ml-1"
+                >mdi-help-circle-outline</v-icon
               >
-                <template #append>
-                  <v-btn
-                    size="small"
-                    color="primary"
-                    variant="tonal"
-                    @click="saveApiUrl"
-                  >
-                    {{ tm("network.server.save") }}
-                  </v-btn>
-                </template>
-              </v-text-field>
-            </div>
-          </v-col>
-        </v-row>
-      </v-list-item>
+            </template>
+            <span>{{ tm("theme.customize.autoSwitchDesc") }}</span>
+          </v-tooltip>
+        </div>
 
-      <v-list-subheader>{{ tm("apiKey.title") }}</v-list-subheader>
-
-      <v-list-item :subtitle="tm('apiKey.subtitle')">
-        <template #title>
-          <div class="d-flex align-center">
-            <span>{{ tm("apiKey.manageTitle") }}</span>
-            <v-tooltip location="top">
-              <template #activator="{ props }">
-                <v-btn
-                  v-bind="props"
-                  icon
-                  size="x-small"
-                  variant="text"
-                  class="ml-2"
-                  :aria-label="tm('apiKey.docsLink')"
-                  href="https://docs.astrbot.app/dev/openapi.html"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <v-icon size="18"> mdi-help-circle-outline </v-icon>
-                </v-btn>
-              </template>
-              <span>{{ tm("apiKey.docsLink") }}</span>
-            </v-tooltip>
+        <!-- Row 2: Color pickers + reset -->
+        <v-card variant="outlined" class="pa-3">
+          <div class="text-body-2 text-medium-emphasis mb-3">
+            {{ tm("theme.customize.colors") }}
           </div>
-        </template>
-        <v-row class="mt-2" dense>
+          <div class="d-flex flex-wrap align-center ga-4">
+            <div class="d-flex align-center ga-3">
+              <v-text-field
+                v-model="primaryColor"
+                type="color"
+                :label="tm('theme.customize.primary')"
+                hide-details
+                variant="outlined"
+                density="compact"
+                style="width: 140px"
+              />
+              <div
+                class="color-preview"
+                :style="{ backgroundColor: primaryColor }"
+              />
+            </div>
+            <div class="d-flex align-center ga-3">
+              <v-text-field
+                v-model="secondaryColor"
+                type="color"
+                :label="tm('theme.customize.secondary')"
+                hide-details
+                variant="outlined"
+                density="compact"
+                style="width: 140px"
+              />
+              <div
+                class="color-preview"
+                :style="{ backgroundColor: secondaryColor }"
+              />
+            </div>
+            <v-btn
+              size="small"
+              variant="tonal"
+              color="primary"
+              @click="resetThemeColors"
+            >
+              <v-icon class="mr-1" size="16">mdi-restore</v-icon>
+              {{ tm("theme.customize.reset") }}
+            </v-btn>
+          </div>
+        </v-card>
+      </v-card-text>
+    </v-card>
+
+    <!-- System Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-cog</v-icon>
+        {{ tm("system.title") }}
+      </v-card-title>
+      <v-card-text>
+        <div class="d-flex flex-wrap ga-3 mb-4">
+          <div>
+            <div class="text-body-2 mb-1">{{ tm("system.backup.title") }}</div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ tm("system.backup.subtitle") }}
+            </div>
+            <v-btn color="primary" size="small" @click="openBackupDialog">
+              <v-icon class="mr-1" size="16">mdi-backup-restore</v-icon>
+              {{ tm("system.backup.button") }}
+            </v-btn>
+          </div>
+          <v-divider vertical class="mx-2 mx-md-4" />
+          <div>
+            <div class="text-body-2 mb-1">{{ tm("system.restart.title") }}</div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ tm("system.restart.subtitle") }}
+            </div>
+            <v-btn color="error" size="small" @click="restartAstrBot">
+              <v-icon class="mr-1" size="16">mdi-restart</v-icon>
+              {{ tm("system.restart.button") }}
+            </v-btn>
+          </div>
+          <v-divider vertical class="mx-2 mx-md-4" />
+          <div>
+            <div class="text-body-2 mb-1">
+              {{ tm("system.migration.title") }}
+            </div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ tm("system.migration.subtitle") }}
+            </div>
+            <v-btn
+              color="primary"
+              size="small"
+              variant="outlined"
+              @click="startMigration"
+            >
+              <v-icon class="mr-1" size="16">mdi-database-import</v-icon>
+              {{ tm("system.migration.button") }}
+            </v-btn>
+          </div>
+        </div>
+        <StorageCleanupPanel />
+      </v-card-text>
+    </v-card>
+
+    <!-- API Key Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-key</v-icon>
+        {{ tm("apiKey.manageTitle") }}
+        <v-tooltip location="top">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              icon
+              size="x-small"
+              variant="text"
+              class="ml-2"
+              :aria-label="tm('apiKey.docsLink')"
+              href="https://docs.astrbot.app/dev/openapi.html"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <v-icon size="18">mdi-help-circle-outline</v-icon>
+            </v-btn>
+          </template>
+          <span>{{ tm("apiKey.docsLink") }}</span>
+        </v-tooltip>
+      </v-card-title>
+      <v-card-subtitle>{{ tm("apiKey.subtitle") }}</v-card-subtitle>
+      <v-card-text>
+        <v-row density="compact">
           <v-col cols="12" md="4">
             <v-text-field
               v-model="newApiKeyName"
@@ -172,24 +220,23 @@
               hide-details
             />
           </v-col>
-          <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
-            <v-alert type="warning" variant="tonal" density="comfortable">
-              {{ tm("apiKey.permanentWarning") }}
-            </v-alert>
-          </v-col>
           <v-col cols="12" md="5" class="d-flex align-center">
             <v-btn
               color="primary"
               :loading="apiKeyCreating"
               @click="createApiKey"
             >
-              <v-icon class="mr-2"> mdi-key-plus </v-icon>
+              <v-icon class="mr-2">mdi-key-plus</v-icon>
               {{ tm("apiKey.create") }}
             </v-btn>
           </v-col>
-
+          <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
+            <v-alert type="warning" variant="tonal" density="comfortable">
+              {{ tm("apiKey.permanentWarning") }}
+            </v-alert>
+          </v-col>
           <v-col cols="12">
-            <div class="text-caption text-medium-emphasis mb-1">
+            <div class="text-caption text-medium-emphasis mb-2">
               {{ tm("apiKey.scopes") }}
             </div>
             <v-chip-group v-model="newApiKeyScopes" multiple>
@@ -208,7 +255,6 @@
               </v-chip>
             </v-chip-group>
           </v-col>
-
           <v-col v-if="createdApiKeyPlaintext" cols="12">
             <v-alert type="warning" variant="tonal">
               <div class="d-flex align-center justify-space-between flex-wrap">
@@ -219,8 +265,8 @@
                   color="primary"
                   @click="copyCreatedApiKey"
                 >
-                  <v-icon class="mr-1"> mdi-content-copy </v-icon
-                  >{{ tm("apiKey.copy") }}
+                  <v-icon class="mr-1">mdi-content-copy</v-icon>
+                  {{ tm("apiKey.copy") }}
                 </v-btn>
               </div>
               <code style="word-break: break-all">{{
@@ -228,7 +274,6 @@
               }}</code>
             </v-alert>
           </v-col>
-
           <v-col cols="12">
             <v-table density="compact">
               <thead>
@@ -296,163 +341,8 @@
             </v-table>
           </v-col>
         </v-row>
-      </v-list-item>
-
-      <v-list-item
-        :subtitle="tm('system.migration.subtitle')"
-        :title="tm('system.migration.title')"
-      >
-        <v-btn style="margin-top: 16px" color="primary" @click="startMigration">
-          {{ tm("system.migration.button") }}
-        </v-btn>
-      </v-list-item>
-
-      <v-list-subheader>{{ tm("sidebar.title") }}</v-list-subheader>
-
-      <v-list-item
-        :subtitle="tm('sidebar.customize.subtitle')"
-        :title="tm('sidebar.customize.title')"
-      >
-        <SidebarCustomizer />
-      </v-list-item>
-
-      <v-list-subheader>{{ tm("style.title") }}</v-list-subheader>
-
-      <v-list-item
-        :subtitle="tm('style.color.subtitle')"
-        :title="tm('style.color.title')"
-      >
-        <template #append />
-
-        <v-row class="mt-2" dense>
-          <v-col cols="12" md="4">
-            <v-text-field
-              v-model="primaryColor"
-              :label="tm('style.color.primary')"
-              variant="outlined"
-              density="compact"
-              hide-details
-            >
-              <template #append-inner>
-                <div
-                  :style="{
-                    backgroundColor: primaryColor,
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '4px',
-                    border: '1px solid #ccc',
-                  }"
-                  class="mr-2"
-                />
-              </template>
-            </v-text-field>
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-text-field
-              v-model="secondaryColor"
-              :label="tm('style.color.secondary')"
-              variant="outlined"
-              density="compact"
-              hide-details
-            >
-              <template #append-inner>
-                <div
-                  :style="{
-                    backgroundColor: secondaryColor,
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '4px',
-                    border: '1px solid #ccc',
-                  }"
-                  class="mr-2"
-                />
-              </template>
-            </v-text-field>
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-btn color="primary" block @click="applyThemeColors">
-              <v-icon start> mdi-pencil-ruler </v-icon>
-              {{ t("core.common.save") }}
-            </v-btn>
-          </v-col>
-        </v-row>
-      </v-list-item>
-
-      <v-list-item
-        :subtitle="tm('style.autoSync.subtitle')"
-        :title="tm('style.autoSync.title')"
-      >
-        <v-switch
-          v-model="autoThemeSwitcher"
-          :label="tm('style.autoSync.label')"
-          color="primary"
-          hide-details
-          class="ml-3"
-        />
-      </v-list-item>
-
-      <v-list-subheader>{{ tm("backup.title") }}</v-list-subheader>
-
-      <v-list-item
-        :subtitle="tm('backup.subtitle')"
-        :title="tm('backup.operate')"
-      >
-        <div class="d-flex align-center mt-2">
-          <v-btn
-            variant="tonal"
-            prepend-icon="mdi-backup-restore"
-            @click="openBackupDialog"
-          >
-            {{ tm("backup.open") }}
-          </v-btn>
-        </div>
-      </v-list-item>
-
-      <v-list-item :subtitle="tm('reset.subtitle')" :title="tm('reset.title')">
-        <div class="d-flex align-center mt-2">
-          <v-btn
-            color="error"
-            variant="tonal"
-            prepend-icon="mdi-refresh"
-            @click="resetThemeColors"
-          >
-            {{ tm("reset.button") }}
-          </v-btn>
-        </div>
-      </v-list-item>
-
-      <v-list-item
-        :subtitle="tm('system.restart.subtitle')"
-        :title="tm('system.restart.title')"
-      >
-        <div class="d-flex align-center mt-2">
-          <v-btn
-            color="warning"
-            variant="tonal"
-            prepend-icon="mdi-restart"
-            @click="restartAstrBot"
-          >
-            {{ tm("system.restart.button") }}
-          </v-btn>
-        </div>
-      </v-list-item>
-
-      <v-list-item
-        :subtitle="tm('system.logout.subtitle')"
-        :title="tm('system.logout.title')"
-      >
-        <div class="d-flex align-center mt-2">
-          <v-btn
-            color="error"
-            variant="tonal"
-            prepend-icon="mdi-export"
-            @click="logout"
-          >
-            {{ tm("system.logout.button") }}
-          </v-btn>
-        </div>
-      </v-list-item>
-    </v-list>
+      </v-card-text>
+    </v-card>
   </div>
 
   <WaitingForRestart ref="wfr" />
@@ -460,339 +350,454 @@
   <BackupDialog ref="backupDialog" />
 </template>
 
-<script setup>
-import { ref, onMounted, computed, watch } from "vue";
-import { useTheme } from "vuetify";
-import { useCustomizerStore } from "@/stores/customizer";
-import { useCommonStore } from "@/stores/common";
-import { useApiStore } from "@/stores/api";
-import { useAuthStore } from "@/stores/auth";
-import ProxySelector from "@/components/shared/ProxySelector.vue";
-import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from "vue";
+import axios, { AxiosError } from "@/utils/request";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
+import ProxySelector from "@/components/shared/ProxySelector.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
+import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
 import BackupDialog from "@/components/shared/BackupDialog.vue";
-import axios, { getApiBaseUrlValidationError } from "@/utils/request";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { useToast } from "@/utils/toast";
+import StorageCleanupPanel from "@/components/shared/StorageCleanupPanel.vue";
+import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
+import { useModuleI18n } from "@/i18n/composables";
+import { useTheme } from "vuetify";
+import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
+import {
+  LIGHT_THEME_NAME,
+  DARK_THEME_NAME,
+  ThemeMode,
+} from "@/theme/constants";
+import { useToastStore } from "@/stores/toast";
+import { useCustomizerStore } from "@/stores/customizer";
+import {
+  ApiKey,
+  ApiKeyActionResponse,
+  ApiKeyCreatePayload,
+  ApiKeyCreateResponse,
+  ApiKeyExpiresDays,
+  ApiKeyListResponse,
+} from "@/types/api";
 
-const { t } = useI18n();
 const { tm } = useModuleI18n("features/settings");
-const toastStore = useToast();
-
-/* const i18n = {
-    network: {
-        title: 'Network Settings',
-        proxy: {
-            title: 'Proxy',
-            subtitle: 'Configure proxy for network requests',
-        },
-        server: {
-            title: 'Server URL',
-            subtitle: 'Configure backend server URL',
-            label: 'Backend URL',
-            description: 'Set the URL of your AstrBot backend server.',
-            hint: 'e.g. http://localhost:6185',
-        }
-    },
-    common: {
-        save: 'Save',
-    }
-} */
-
+const toastStore = useToastStore();
 const theme = useTheme();
-const apiStore = useApiStore();
-const authStore = useAuthStore();
-
-const apiBaseUrl = ref(apiStore.apiBaseUrl);
-
-const showAddPreset = ref(false);
-const newPresetName = ref("");
-const newPresetUrl = ref("");
-
-const savePreset = () => {
-  if (newPresetName.value && newPresetUrl.value) {
-    apiStore.addPreset({
-      name: newPresetName.value,
-      url: newPresetUrl.value,
-    });
-    newPresetName.value = "";
-    newPresetUrl.value = "";
-    showAddPreset.value = false;
-  }
-};
-
-const isCustomPreset = (name) => {
-  return !apiStore.configPresets.some((p) => p.name === name);
-};
-
-const saveApiUrl = () => {
-  const validationError = getApiBaseUrlValidationError(apiBaseUrl.value);
-  if (validationError) {
-    toastStore.error(validationError);
-    return;
-  }
-
-  apiStore.setApiBaseUrl(apiBaseUrl.value);
-  window.location.reload();
-};
-
-const getStoredColor = (key, defaultColor) => {
-  const stored = localStorage.getItem(key);
-  return stored ? stored : defaultColor;
-};
-
-// Initialize with stored values or current theme values
-const primaryColor = ref(
-  getStoredColor("themePrimary", theme.themes.value.PurpleTheme.colors.primary),
-);
-const secondaryColor = ref(
-  getStoredColor(
-    "themeSecondary",
-    theme.themes.value.PurpleTheme.colors.secondary,
-  ),
-);
-
-const resolveThemes = ["PurpleTheme", "PurpleThemeDark"];
-
-// Watch for store changes to update local refs if reset happens elsewhere
 const customizer = useCustomizerStore();
 
-const applyThemeColors = () => {
-  const themes = theme.themes.value;
-
-  resolveThemes.forEach((name) => {
-    const themeDef = themes[name];
-    if (themeDef) {
-      themeDef.colors.primary = primaryColor.value;
-      themeDef.colors.secondary = secondaryColor.value;
-      // Also update dark variants if needed, or keep them same/derived
-      if (themeDef.colors.darkprimary)
-        themeDef.colors.darkprimary = primaryColor.value;
-      if (themeDef.colors.darksecondary)
-        themeDef.colors.darksecondary = secondaryColor.value;
-    }
-  });
-
-  // Save to localStorage
-  localStorage.setItem("themePrimary", primaryColor.value);
-  localStorage.setItem("themeSecondary", secondaryColor.value);
-
-  // Force update CustomizerStore to trigger reactivity if needed
-  // (Optional, depending on if other components react to store or Vuetify theme)
-  customizer.setTheme(customizer.actTheme); // Re-set to trigger updates?
-
-  toastStore.success(tm("common.saved"));
-};
-
-const autoThemeSwitcher = computed({
-  get: () => customizer.autoSwitchTheme,
-  set: (value) => {
-    customizer.SET_AUTO_SYNC(value);
-    if (value) {
+// Theme mode toggle (light/dark/auto)
+const themeMode = computed({
+  get() {
+    if (customizer.autoSwitchTheme) return "auto";
+    return customizer.isDarkTheme ? "dark" : "light";
+  },
+  set(mode: ThemeMode) {
+    if (mode === "auto") {
+      customizer.SET_AUTO_SYNC(true);
       customizer.APPLY_SYSTEM_THEME();
+      return;
     }
+
+    customizer.SET_AUTO_SYNC(false);
+    const newTheme = mode === "dark" ? DARK_THEME_NAME : LIGHT_THEME_NAME;
+    customizer.SET_UI_THEME(newTheme);
   },
 });
+
+const getStoredColor = (key: string, fallback: string) => {
+  const stored =
+    typeof window !== "undefined" ? localStorage.getItem(key) : null;
+  return stored || fallback;
+};
+
+const primaryColor = ref(
+  getStoredColor("themePrimary", BlueBusinessLightTheme.colors.primary),
+);
+const secondaryColor = ref(
+  getStoredColor("themeSecondary", BlueBusinessLightTheme.colors.secondary),
+);
+
+// Theme presets based on MD3 color system
+const themePresets = [
+  {
+    id: "blue-business",
+    name: "活力商务蓝",
+    nameEn: "Business Blue",
+    primary: "#005FB0",
+    secondary: "#565E71",
+    tertiary: "#006B5B",
+  },
+  {
+    id: "purple-default",
+    name: "优雅紫",
+    nameEn: "Elegant Purple",
+    primary: "#6750A4",
+    secondary: "#625B71",
+    tertiary: "#7D5260",
+  },
+  {
+    id: "teal-fresh",
+    name: "自然清新绿",
+    nameEn: "Nature Green",
+    primary: "#386A20",
+    secondary: "#55624C",
+    tertiary: "#19686A",
+  },
+  {
+    id: "orange-warm",
+    name: "温暖橙棕",
+    nameEn: "Warm Orange",
+    primary: "#9C4323",
+    secondary: "#77574E",
+    tertiary: "#6C5D2F",
+  },
+  {
+    id: "ocean-breeze",
+    name: "海洋清风",
+    nameEn: "Ocean Breeze",
+    primary: "#0077B6",
+    secondary: "#4A5568",
+    tertiary: "#00B4D8",
+  },
+  {
+    id: "rose-romantic",
+    name: "浪漫玫瑰",
+    nameEn: "Romantic Rose",
+    primary: "#BE185D",
+    secondary: "#9F1239",
+    tertiary: "#DB2777",
+  },
+];
+
+// Get stored preset or default to blue-business name
+const selectedThemePreset = ref(
+  localStorage.getItem("themePreset") || themePresets[0].name,
+);
+
+// Simple array for dropdown display
+const presetOptions = themePresets.map((p) => p.name);
+
+const applyThemePreset = (presetName: string) => {
+  const preset = themePresets.find((p) => p.name === presetName);
+  if (!preset) return;
+
+  // Store the preset selection (store by name for display consistency)
+  localStorage.setItem("themePreset", presetName);
+  selectedThemePreset.value = presetName;
+
+  // Update primary and secondary colors
+  primaryColor.value = preset.primary;
+  secondaryColor.value = preset.secondary;
+  localStorage.setItem("themePrimary", preset.primary);
+  localStorage.setItem("themeSecondary", preset.secondary);
+
+  // Apply to themes
+  applyThemeColors(preset.primary, preset.secondary);
+
+  toastStore.add({
+    message: tm("theme.customize.presetApplied") || "主题已应用",
+    color: "success",
+  });
+};
+
+const resolveThemes = () => {
+  if (theme?.themes?.value) return theme.themes.value;
+  if (theme?.global?.themes?.value) return theme.global.themes.value;
+  return null;
+};
+
+const applyThemeColors = (primary: string, secondary: string) => {
+  const themes = resolveThemes();
+  if (!themes) return;
+  [LIGHT_THEME_NAME, DARK_THEME_NAME].forEach((name) => {
+    const themeDef = themes[name];
+    if (!themeDef?.colors) return;
+    if (primary) themeDef.colors.primary = primary;
+    if (secondary) themeDef.colors.secondary = secondary;
+    if (primary && themeDef.colors.darkprimary)
+      themeDef.colors.darkprimary = primary;
+    if (secondary && themeDef.colors.darksecondary)
+      themeDef.colors.darksecondary = secondary;
+  });
+};
+
+applyThemeColors(primaryColor.value, secondaryColor.value);
+
+watch(primaryColor, (value) => {
+  if (!value) return;
+  localStorage.setItem("themePrimary", value);
+  applyThemeColors(value, secondaryColor.value);
+});
+
+watch(secondaryColor, (value) => {
+  if (!value) return;
+  localStorage.setItem("themeSecondary", value);
+  applyThemeColors(primaryColor.value, value);
+});
+
+const resetThemeColors = () => {
+  primaryColor.value = BlueBusinessLightTheme.colors.primary;
+  secondaryColor.value = BlueBusinessLightTheme.colors.secondary;
+  localStorage.removeItem("themePrimary");
+  localStorage.removeItem("themeSecondary");
+  applyThemeColors(primaryColor.value, secondaryColor.value);
+};
 
 const wfr = ref(null);
 const migrationDialog = ref(null);
 const backupDialog = ref(null);
-const apiKeys = ref([]);
+const apiKeys = ref<ApiKey[]>([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref("");
-const newApiKeyExpiresInDays = ref(30);
-const newApiKeyScopes = ref(["chat"]);
+const newApiKeyExpiresInDays = ref<ApiKeyExpiresDays>(30);
+const newApiKeyScopes = ref(["chat", "config", "file", "im"]);
 const createdApiKeyPlaintext = ref("");
 const apiKeyExpiryOptions = computed(() => [
-  { title: tm("apiKey.expiry.7days"), value: 7 },
-  { title: tm("apiKey.expiry.30days"), value: 30 },
-  { title: tm("apiKey.expiry.90days"), value: 90 },
-  { title: tm("apiKey.expiry.180days"), value: 180 },
-  { title: tm("apiKey.expiry.365days"), value: 365 },
-  // { title: tm('apiKey.expiry.permanent'), value: 'permanent' },
+  { title: tm("apiKey.expiryOptions.day1"), value: 1 },
+  { title: tm("apiKey.expiryOptions.day7"), value: 7 },
+  { title: tm("apiKey.expiryOptions.day30"), value: 30 },
+  { title: tm("apiKey.expiryOptions.day90"), value: 90 },
+  { title: tm("apiKey.expiryOptions.permanent"), value: "permanent" },
 ]);
 
 const availableScopes = [
-  { value: "chat", label: "Chat (chat)" },
-  { value: "file", label: "File (file)" },
-  { value: "config", label: "Config (config)" },
-  { value: "im", label: "IM (im)" },
+  { value: "chat", label: "chat" },
+  { value: "config", label: "config" },
+  { value: "file", label: "file" },
+  { value: "im", label: "im" },
 ];
 
-const showToast = (message, type = "success") => {
-  // 简单的 toast 实现，或者使用你的 toastStore
-  if (toastStore) {
-    if (type === "success") toastStore.success(message);
-    else if (type === "error") toastStore.error(message);
-  } else {
-    alert(message);
-  }
+const showToast = (message: string, color = "success") => {
+  toastStore.add({
+    message,
+    color,
+    timeout: 3000,
+  });
 };
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return "-";
-  const dt = new Date(dateStr);
+const formatDate = (value: string | null) => {
+  if (!value) return "-";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return "-";
   return dt.toLocaleString();
 };
 
 const loadApiKeys = async () => {
   try {
-    const res = await axios.get("/api/v1/apikeys");
-    if (res.data.data) {
-      apiKeys.value = res.data.data;
+    const res = await axios.get<ApiKeyListResponse>("/api/apikey/list");
+    if (res.data.status !== "ok") {
+      showToast(res.data.message || tm("apiKey.messages.loadFailed"), "error");
+      return;
     }
-  } catch (e) {
-    console.error(e);
-    // showToast(tm('apiKey.loadFailed'), 'error');
+    apiKeys.value = res.data.data;
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      showToast(
+        e?.response?.data?.message || tm("apiKey.messages.loadFailed"),
+        "error",
+      );
+    } else {
+      console.error("An unexpected error occurred while loading API keys:", e);
+      showToast(tm("apiKey.messages.loadFailed"), "error");
+    }
   }
 };
 
-const tryExecCommandCopy = (text) => {
-  let textArea = document.createElement("textarea");
-  textArea.value = text;
-  textArea.style.position = "fixed";
-  textArea.style.left = "-9999px";
-  textArea.style.top = "0";
-  document.body.appendChild(textArea);
-  textArea.focus();
-  textArea.select();
-
-  return new Promise((resolve, reject) => {
-    let successful = false;
+const tryExecCommandCopy = (text: string): boolean => {
+  let textArea: HTMLTextAreaElement | null = null;
+  try {
+    if (typeof document === "undefined" || !document.body) return false;
+    textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.setAttribute("readonly", "");
+    textArea.style.position = "fixed";
+    textArea.style.opacity = "0";
+    textArea.style.pointerEvents = "none";
+    textArea.style.left = "-9999px";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, text.length);
+    // Fallback to deprecated execCommand for older browsers
+    return document.execCommand("copy");
+  } catch (_) {
+    return false;
+  } finally {
     try {
-      successful = document.execCommand("copy");
-    } catch (err) {
-      console.warn("execCommand copy failed", err);
+      if (textArea?.parentNode) {
+        textArea.parentNode.removeChild(textArea);
+      }
+    } catch (_) {
+      // ignore cleanup errors
     }
-    document.body.removeChild(textArea);
-    if (successful) {
-      resolve();
-    } else {
-      reject(new Error("execCommand failed"));
-    }
-  });
+  }
 };
 
-const copyTextToClipboard = async (text) => {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
+const copyTextToClipboard = async (text: string): Promise<boolean> => {
+  if (!text) return false;
+
+  // 由于execCommand被弃用，改用推荐的Clipboard API，但仍保留execCommand作为兼容性回退
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(text);
-    } catch (err) {
-      // fallback
-      await tryExecCommandCopy(text);
+      return true;
+    } catch (_) {
+      // Clipboard API failed, try fallback method
     }
-  } else {
-    await tryExecCommandCopy(text);
   }
+
+  // 回退到execCommand方法，兼容不支持Clipboard API的环境
+  return tryExecCommandCopy(text);
 };
 
 const copyCreatedApiKey = async () => {
-  try {
-    await copyTextToClipboard(createdApiKeyPlaintext.value);
-    showToast(tm("common.copied"));
-  } catch (e) {
-    showToast(tm("common.copyFailed"), "error");
+  if (!createdApiKeyPlaintext.value) return;
+  const ok = await copyTextToClipboard(createdApiKeyPlaintext.value);
+  if (ok) {
+    showToast(tm("apiKey.messages.copySuccess"), "success");
+  } else {
+    showToast(tm("apiKey.messages.copyFailed"), "error");
   }
 };
 
 const createApiKey = async () => {
-  if (!newApiKeyName.value) {
-    showToast(tm("apiKey.nameRequired"), "error");
-    return;
-  }
+  const selectedScopes = availableScopes
+    .map((scope) => scope.value)
+    .filter((scope) => newApiKeyScopes.value.includes(scope));
 
-  // 如果全选了所有 scope，可以传 '*'，或者后端自己判断
-  // 这里简单处理，传列表
-  const selectedScopes = newApiKeyScopes.value;
   if (selectedScopes.length === 0) {
-    showToast(tm("apiKey.scopeRequired"), "error");
+    showToast(tm("apiKey.messages.scopeRequired"), "warning");
     return;
   }
-
   apiKeyCreating.value = true;
   try {
-    const payload = {
+    const payload: ApiKeyCreatePayload = {
       name: newApiKeyName.value,
       scopes: selectedScopes,
-      expires_in_days:
-        newApiKeyExpiresInDays.value === "permanent"
-          ? null
-          : newApiKeyExpiresInDays.value,
     };
-
-    const res = await axios.post("/api/v1/apikeys", payload);
-    if (res.data.code === 0) {
-      createdApiKeyPlaintext.value = res.data.data.api_key; // 只显示一次
-      showToast(tm("apiKey.createSuccess"));
-      newApiKeyName.value = "";
-      newApiKeyScopes.value = ["chat"];
-      await loadApiKeys();
-    } else {
-      showToast(res.data.message || tm("apiKey.createFailed"), "error");
+    if (newApiKeyExpiresInDays.value !== "permanent") {
+      payload.expires_in_days = Number(newApiKeyExpiresInDays.value);
     }
-  } catch (e) {
-    showToast(tm("apiKey.createFailed"), "error");
-    console.error(e);
+    const res = await axios.post<ApiKeyCreateResponse>(
+      "/api/apikey/create",
+      payload,
+    );
+    if (res.data.status !== "ok") {
+      showToast(
+        res.data.message || tm("apiKey.messages.createFailed"),
+        "error",
+      );
+      return;
+    }
+    createdApiKeyPlaintext.value = res.data.data?.api_key || "";
+    newApiKeyName.value = "";
+    newApiKeyExpiresInDays.value = 30;
+    showToast(tm("apiKey.messages.createSuccess"), "success");
+    await loadApiKeys();
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      showToast(
+        e?.response?.data?.message || tm("apiKey.messages.createFailed"),
+        "error",
+      );
+    } else {
+      console.error("An unexpected error occurred while creating API key:", e);
+      showToast(tm("apiKey.messages.createFailed"), "error");
+    }
   } finally {
     apiKeyCreating.value = false;
   }
 };
 
-const revokeApiKey = async (keyId) => {
+const revokeApiKey = async (keyId: string) => {
   try {
-    const res = await axios.post(`/api/v1/apikeys/${keyId}/revoke`);
-    if (res.data.code === 0) {
-      showToast(tm("apiKey.revokeSuccess"));
-      await loadApiKeys();
+    const res = await axios.post<ApiKeyActionResponse>("/api/apikey/revoke", {
+      key_id: keyId,
+    });
+    if (res.data.status !== "ok") {
+      showToast(
+        res.data.message || tm("apiKey.messages.revokeFailed"),
+        "error",
+      );
+      return;
     }
-  } catch (e) {
-    showToast(tm("apiKey.revokeFailed"), "error");
+    showToast(tm("apiKey.messages.revokeSuccess"), "success");
+    await loadApiKeys();
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      showToast(
+        e?.response?.data?.message || tm("apiKey.messages.revokeFailed"),
+        "error",
+      );
+    } else {
+      console.error("An unexpected error occurred while revoking API key:", e);
+      showToast(tm("apiKey.messages.revokeFailed"), "error");
+    }
   }
 };
 
-const deleteApiKey = async (keyId) => {
-  if (!confirm(tm("common.deleteConfirm"))) return;
+const deleteApiKey = async (keyId: string) => {
   try {
-    const res = await axios.delete(`/api/v1/apikeys/${keyId}`);
-    if (res.data.code === 0) {
-      showToast(tm("apiKey.deleteSuccess"));
-      await loadApiKeys();
+    const res = await axios.post<ApiKeyActionResponse>("/api/apikey/delete", {
+      key_id: keyId,
+    });
+    if (res.data.status !== "ok") {
+      showToast(
+        res.data.message || tm("apiKey.messages.deleteFailed"),
+        "error",
+      );
+      return;
     }
-  } catch (e) {
-    showToast(tm("apiKey.deleteFailed"), "error");
+    showToast(tm("apiKey.messages.deleteSuccess"), "success");
+    await loadApiKeys();
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      showToast(
+        e?.response?.data?.message || tm("apiKey.messages.deleteFailed"),
+        "error",
+      );
+    } else {
+      console.error("An unexpected error occurred while deleting API key:", e);
+      showToast(tm("apiKey.messages.deleteFailed"), "error");
+    }
   }
 };
 
 const restartAstrBot = async () => {
-  const commonStore = useCommonStore();
-  commonStore.restartAstrBot();
-  wfr.value.dialog = true;
-};
-
-const logout = () => {
-  if (confirm(t("core.common.dialog.confirmMessage"))) {
-    authStore.logout();
+  try {
+    await restartAstrBotRuntime(wfr.value);
+  } catch (error: unknown) {
+    if (error instanceof AxiosError) {
+      showToast(
+        error?.response?.data?.message || tm("apiKey.messages.restartFailed"),
+        "error",
+      );
+    } else {
+      console.error(
+        "An unexpected error occurred while restarting AstrBot:",
+        error,
+      );
+      showToast(tm("apiKey.messages.restartFailed"), "error");
+    }
   }
 };
 
 const startMigration = async () => {
   if (migrationDialog.value) {
-    const result = await migrationDialog.value.open();
-    if (result) {
-      // Migration started or completed
+    try {
+      const result = await migrationDialog.value.open();
+      if (result.success) {
+        console.info("Migration completed successfully:", result.message);
+      }
+    } catch (error) {
+      console.error("Migration dialog error:", error);
     }
   }
 };
 
 const openBackupDialog = () => {
-  backupDialog.value.open();
-};
-
-const resetThemeColors = () => {
-  localStorage.removeItem("themePrimary");
-  localStorage.removeItem("themeSecondary");
-  window.location.reload();
+  if (backupDialog.value) {
+    backupDialog.value.open();
+  }
 };
 
 onMounted(() => {

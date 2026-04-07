@@ -21,6 +21,7 @@ from astrbot.core.db.po import (
     PlatformSession,
     PlatformStat,
     Preference,
+    ProviderStat,
     SessionProjectRelation,
     Stats,
 )
@@ -38,6 +39,7 @@ class BaseDatabase(abc.ABC):
         # second write is attempted.  Setting timeout=30 tells SQLite to
         # wait up to 30 s for the lock, which is enough to ride out brief
         # write bursts from concurrent agent/metrics/session operations.
+        self.inited = False
         is_sqlite = "sqlite" in self.DATABASE_URL
         connect_args = {"timeout": 30} if is_sqlite else {}
         self.engine = create_async_engine(
@@ -103,6 +105,21 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def get_platform_stats(self, offset_sec: int = 86400) -> list[PlatformStat]:
         """Get platform statistics within the specified offset in seconds and group by platform_id."""
+        ...
+
+    @abc.abstractmethod
+    async def insert_provider_stat(
+        self,
+        *,
+        umo: str,
+        provider_id: str,
+        provider_model: str | None = None,
+        conversation_id: str | None = None,
+        status: str = "completed",
+        stats: dict | None = None,
+        agent_type: str = "internal",
+    ) -> ProviderStat:
+        """Insert a per-response provider stat record."""
         ...
 
     @abc.abstractmethod

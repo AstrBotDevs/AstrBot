@@ -68,21 +68,24 @@ class SatoriPlatformEvent(AstrMessageEvent):
         session_id: str,
         adapter: "SatoriPlatformAdapter",
     ) -> None:
-        # 更新平台元数据
-        if adapter.logins:
+        if adapter and hasattr(adapter, "logins") and adapter.logins:
             current_login = adapter.logins[0]
             platform_name = current_login.platform or "satori"
             user_id = current_login.user.id if current_login.user else None
             if not platform_meta.id and user_id:
                 platform_meta.id = f"{platform_name}({user_id})"
-
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.adapter = adapter
         self.platform = None
         self.user_id = None
         self.referrer = None
-        if isinstance(message_obj.raw_message, dict):
-            login = message_obj.raw_message.get("login", {})
+        if (
+            hasattr(message_obj, "raw_message")
+            and message_obj.raw_message
+            and isinstance(message_obj.raw_message, dict)
+        ):
+            raw_message = message_obj.raw_message
+            login = raw_message.get("login", {})
             self.platform = login.get("platform")
             user = login.get("user", {})
             self.user_id = user.get("id") if user else None
@@ -98,7 +101,6 @@ class SatoriPlatformEvent(AstrMessageEvent):
     ):
         try:
             content_parts = []
-
             for component in message.chain:
                 component_content = await cls._convert_component_to_satori(
                     component,
@@ -138,7 +140,6 @@ class SatoriPlatformEvent(AstrMessageEvent):
             if result:
                 return result
             return None
-
         except Exception as e:
             logger.error(f"Satori 消息发送异常: {e}")
             return None
@@ -146,7 +147,6 @@ class SatoriPlatformEvent(AstrMessageEvent):
     async def send(self, message: MessageChain) -> None:
         platform = getattr(self, "platform", None)
         user_id = getattr(self, "user_id", None)
-
         if not platform or not user_id:
             if self.adapter.logins:
                 current_login = self.adapter.logins[0]
@@ -155,19 +155,16 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
         try:
             content_parts = []
-
             for component in message.chain:
                 component_content = await self._convert_component_to_satori(component)
                 content_parts.append(component_content)
 
                 # 特殊处理 Node 和 Nodes 组件
                 if isinstance(component, Node):
-                    # 单个转发节点
                     node_content = await self._convert_node_to_satori(component)
                     content_parts.append(node_content)
 
                 elif isinstance(component, Nodes):
-                    # 合并转发消息
                     node_content = await self._convert_nodes_to_satori(component)
                     content_parts.append(node_content)
 
@@ -190,13 +187,11 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 logger.error("Satori 消息发送失败")
         except Exception as e:
             logger.error(f"Satori 消息发送异常: {e}")
-
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         try:
-            content_parts = []
-
+            content_parts: list[str] = []
             async for chain in generator:
                 if isinstance(chain, MessageChain):
                     if chain.type == "break":
@@ -206,7 +201,6 @@ class SatoriPlatformEvent(AstrMessageEvent):
                             await self.send(temp_chain)
                             content_parts = []
                         continue
-
                     for component in chain.chain:
                         if isinstance(component, Plain):
                             content_parts.append(component.text)
@@ -219,15 +213,12 @@ class SatoriPlatformEvent(AstrMessageEvent):
                             await self.send(MessageChain([component]))
                         else:
                             content_parts.append(str(component))
-
             if content_parts:
                 content = "".join(content_parts)
                 temp_chain = MessageChain([Plain(text=content)])
                 await self.send(temp_chain)
-
         except Exception as e:
             logger.error(f"Satori 流式消息发送异常: {e}")
-
         return await super().send_streaming(generator, use_fallback)
 
     @staticmethod
@@ -321,7 +312,6 @@ class SatoriPlatformEvent(AstrMessageEvent):
         """将多个转发节点转换为 Satori 格式的合并转发"""
         try:
             node_parts = []
-
             for node in nodes.nodes:
                 node_content = await cls._convert_node_to_satori(node)
                 node_parts.append(node_content)

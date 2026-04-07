@@ -37,8 +37,12 @@ class KnowledgeBaseRoute(Route):
         self.kb_db = None
         self.session_config_db = None  # 会话配置数据库
         self.retrieval_manager = None
-        self.upload_progress = {}  # 存储上传进度 {task_id: {status, file_index, file_total, stage, current, total}}
-        self.upload_tasks = {}  # 存储后台上传任务 {task_id: {"status", "result", "error"}}
+        self.upload_progress: dict[
+            str, Any
+        ] = {}  # 存储上传进度 {task_id: {status, file_index, file_total, stage, current, total}}
+        self.upload_tasks: dict[
+            str, Any
+        ] = {}  # 存储后台上传任务 {task_id: {"status", "result", "error"}}
 
         # 注册路由
         self.routes = {
@@ -316,7 +320,12 @@ class KnowledgeBaseRoute(Route):
             # 转换为字典列表
             kb_list = []
             for kb in kbs:
-                kb_list.append(kb.model_dump())
+                kb_dict = kb.model_dump()
+                # include init_error from KBHelper if present
+                kb_helper = await kb_manager.get_kb(kb.kb_id)
+                if kb_helper and kb_helper.init_error:
+                    kb_dict["init_error"] = kb_helper.init_error
+                kb_list.append(kb_dict)
 
             return (
                 Response()

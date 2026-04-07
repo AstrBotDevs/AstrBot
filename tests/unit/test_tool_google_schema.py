@@ -30,7 +30,7 @@ def load_tool_module():
     sys.modules[message_result_module.__name__] = message_result_module
 
     run_context_module = types.ModuleType("astrbot.core.agent.run_context")
-    run_context_module.TContext = TypeVar("TContext")
+    run_context_module.TContext = TypeVar("TContext")  # type: ignore[invalid-legacy-type-variable]
 
     class ContextWrapper(Generic[run_context_module.TContext]):
         pass

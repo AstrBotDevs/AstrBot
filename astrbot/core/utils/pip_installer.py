@@ -202,7 +202,7 @@ def _package_specs_override_index(package_specs: list[str]) -> bool:
 class _StreamingLogWriter(io.TextIOBase):
     def __init__(self, log_func, *, max_lines: int | None = None) -> None:
         self._log_func = log_func
-        self._lines = deque(maxlen=max_lines or _MAX_PIP_OUTPUT_LINES)
+        self._lines: deque[str] = deque(maxlen=max_lines or _MAX_PIP_OUTPUT_LINES)
         self._buffer = ""
 
     def write(self, text: str) -> int:

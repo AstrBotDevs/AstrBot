@@ -7,7 +7,7 @@ import sys
 import time
 from asyncio import Queue
 from collections import deque
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from loguru import logger as _raw_loguru_logger
 
@@ -38,7 +38,7 @@ class _RecordEnricherFilter(logging.Filter):
 class _QueueAnsiColorFilter(logging.Filter):
     """Attach ANSI color prefix for WebUI console rendering."""
 
-    _LEVEL_COLOR = {
+    _LEVEL_COLOR: ClassVar[dict[str, str]] = {
         "DEBUG": "\u001b[1;34m",
         "INFO": "\u001b[1;36m",
         "WARNING": "\u001b[1;33m",
@@ -153,11 +153,11 @@ class LogBroker:
     """日志代理类,用于缓存和分发日志消息｡"""
 
     def __init__(self) -> None:
-        self.log_cache = deque(maxlen=CACHED_SIZE)
+        self.log_cache: deque[dict[str, Any]] = deque(maxlen=CACHED_SIZE)
         self.subscribers: list[Queue] = []
 
     def register(self) -> Queue:
-        q = Queue(maxsize=CACHED_SIZE + 10)
+        q: Queue[dict[str, Any]] = Queue(maxsize=CACHED_SIZE + 10)
         self.subscribers.append(q)
         return q
 
@@ -199,7 +199,7 @@ class LogManager:
     _console_sink_id: int | None = None
     _file_sink_id: int | None = None
     _trace_sink_id: int | None = None
-    _NOISY_LOGGER_LEVELS: dict[str, int] = {
+    _NOISY_LOGGER_LEVELS: ClassVar[dict[str, int]] = {
         "aiosqlite": logging.WARNING,
         "filelock": logging.WARNING,
         "asyncio": logging.WARNING,

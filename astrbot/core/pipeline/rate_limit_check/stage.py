@@ -1,6 +1,5 @@
 import asyncio
 from collections import defaultdict, deque
-from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
 
 from astrbot.core import logger
@@ -42,7 +41,7 @@ class RateLimitStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         """检查并处理限流逻辑｡如果触发限流,流水线会 stall 并在窗口期后自动恢复｡
 
         Args:
@@ -79,7 +78,8 @@ class RateLimitStage(Stage):
                         logger.info(
                             f"会话 {session_id} 被限流｡根据限流策略,此请求已被丢弃,直到限额于 {stall_duration:.2f} 秒后重置｡",
                         )
-                        return event.stop_event()
+                        event.stop_event()
+                        return
 
     def _remove_expired_timestamps(
         self,

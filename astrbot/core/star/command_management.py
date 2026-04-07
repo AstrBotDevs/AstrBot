@@ -156,7 +156,9 @@ async def update_command_permission(
         raise ValueError("未找到指令所属插件")
 
     # 1. Update Persistent Config (alter_cmd)
-    alter_cmd_cfg = await sp.global_get("alter_cmd", {})
+    alter_cmd_cfg: dict[str, dict[str, Any]] = (
+        await sp.global_get("alter_cmd", {}) or {}
+    )
     plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
     cfg = plugin_.get(handler.handler_name, {})
     cfg["permission"] = permission_type
@@ -487,10 +489,10 @@ def _set_filter_aliases(
     filter_ref: CommandFilter | CommandGroupFilter,
     aliases: list[str],
 ) -> None:
-    current_aliases = getattr(filter_ref, "alias", set())
+    current_aliases: set[str] = getattr(filter_ref, "alias", set())
     if set(aliases) == current_aliases:
         return
-    setattr(filter_ref, "alias", set(aliases))
+    filter_ref.alias = set(aliases)
     if hasattr(filter_ref, "_cmpl_cmd_names"):
         filter_ref._cmpl_cmd_names = None
 
@@ -513,7 +515,7 @@ def _is_command_in_use(
 
 
 def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
-    result = {
+    result: dict[str, Any] = {
         "handler_full_name": desc.handler_full_name,
         "handler_name": desc.handler_name,
         "plugin": desc.plugin_name,

@@ -1,7 +1,10 @@
 import httpx
+import pytest
 
 import astrbot.core.provider.sources.anthropic_source as anthropic_source
 import astrbot.core.provider.sources.kimi_code_source as kimi_code_source
+from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.provider.entities import LLMResponse
 
 
 class _FakeAsyncAnthropic:
@@ -33,9 +36,9 @@ def test_anthropic_provider_injects_custom_headers_into_http_client(monkeypatch)
         "User-Agent": "custom-agent/1.0",
         "X-Test-Header": "123",
     }
-    assert isinstance(provider.client.kwargs["http_client"], httpx.AsyncClient)
-    assert provider.client.kwargs["http_client"].headers["User-Agent"] == "custom-agent/1.0"
-    assert provider.client.kwargs["http_client"].headers["X-Test-Header"] == "123"
+    assert isinstance(provider.client.kwargs["http_client"], httpx.AsyncClient)  # type: ignore[attr-defined]
+    assert provider.client.kwargs["http_client"].headers["User-Agent"] == "custom-agent/1.0"  # type: ignore[attr-defined]
+    assert provider.client.kwargs["http_client"].headers["X-Test-Header"] == "123"  # type: ignore[attr-defined]
 
 
 def test_kimi_code_provider_sets_defaults_and_preserves_custom_headers(monkeypatch):
@@ -57,10 +60,10 @@ def test_kimi_code_provider_sets_defaults_and_preserves_custom_headers(monkeypat
         "User-Agent": kimi_code_source.KIMI_CODE_USER_AGENT,
         "X-Trace-Id": "trace-1",
     }
-    assert provider.client.kwargs["http_client"].headers["User-Agent"] == (
+    assert provider.client.kwargs["http_client"].headers["User-Agent"] == (  # type: ignore[attr-defined]
         kimi_code_source.KIMI_CODE_USER_AGENT
     )
-    assert provider.client.kwargs["http_client"].headers["X-Trace-Id"] == "trace-1"
+    assert provider.client.kwargs["http_client"].headers["X-Trace-Id"] == "trace-1"  # type: ignore[attr-defined]
 
 
 def test_kimi_code_provider_restores_required_user_agent_when_blank(monkeypatch):
@@ -79,3 +82,14 @@ def test_kimi_code_provider_restores_required_user_agent_when_blank(monkeypatch)
     assert provider.custom_headers == {
         "User-Agent": kimi_code_source.KIMI_CODE_USER_AGENT,
     }
+
+
+def test_anthropic_empty_output_raises_empty_model_output_error():
+    llm_response = LLMResponse(role="assistant")
+
+    with pytest.raises(EmptyModelOutputError):
+        anthropic_source.ProviderAnthropic._ensure_usable_response(
+            llm_response,
+            completion_id="msg_empty",
+            stop_reason="end_turn",
+        )

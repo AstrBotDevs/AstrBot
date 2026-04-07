@@ -23,10 +23,10 @@ def _get_aiohttp():
 class FontManager:
     """字体管理类,负责加载和缓存字体"""
 
-    _font_cache = {}
+    _font_cache: dict[int, ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
 
     @classmethod
-    def get_font(cls, size: int) -> ImageFont.FreeTypeFont|ImageFont.ImageFont:
+    def get_font(cls, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         """获取指定大小的字体,优先从缓存获取"""
         if size in cls._font_cache:
             return cls._font_cache[size]
@@ -86,7 +86,7 @@ class TextMeasurer:
         text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont, max_width: int
     ) -> list[str]:
         """将文本拆分为多行,确保每行不超过指定宽度"""
-        lines = []
+        lines: list[str] = []
         if not text:
             return lines
 
@@ -712,7 +712,7 @@ class MarkdownParser:
 
     @staticmethod
     async def parse(text: str) -> list[MarkdownElement]:
-        elements = []
+        elements: list[MarkdownElement] = []
         lines = text.split("\n")
 
         i = 0

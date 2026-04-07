@@ -10,6 +10,7 @@ import anyio
 
 from astrbot.core.db.po import Attachment
 from astrbot.core.message.components import (
+    BaseMessageComponent,
     File,
     Image,
     Json,
@@ -59,7 +60,7 @@ async def parse_webchat_message_parts(
         tuple[list, list[str], bool]:
             (components, plain_text_parts, has_non_reply_content)
     """
-    components = []
+    components: list[BaseMessageComponent] = []
     text_parts: list[str] = []
     has_content = False
 
@@ -243,7 +244,7 @@ def webchat_message_parts_to_message_chain(
     *,
     strict: bool = False,
 ) -> MessageChain:
-    components = []
+    components: list[BaseMessageComponent] = []
     has_content = False
 
     for part in message_parts:
@@ -372,8 +373,8 @@ async def message_chain_to_storage_message_parts(
     insert_attachment: AttachmentInserter,
     attachments_dir: str | Path,
 ) -> list[dict]:
-    target_dir = anyio.Path(attachments_dir)
-    await target_dir.mkdir(parents=True, exist_ok=True)
+    target_dir = Path(attachments_dir)
+    await anyio.Path(target_dir).mkdir(parents=True, exist_ok=True)
 
     parts: list[dict] = []
     for comp in message_chain.chain:

@@ -36,11 +36,11 @@ class CommandRoute(Route):
             "disabled": len([cmd for cmd in commands if not cmd["enabled"]]),
             "conflicts": len([cmd for cmd in commands if cmd.get("has_conflict")]),
         }
-        return Response().ok({"items": commands, "summary": summary}).__dict__
+        return Response().ok({"items": commands, "summary": summary}).to_json()
 
     async def get_conflicts(self):
         conflicts = await list_command_conflicts()
-        return Response().ok(conflicts).__dict__
+        return Response().ok(conflicts).to_json()
 
     async def toggle_command(self):
         data = await request.get_json()
@@ -48,7 +48,7 @@ class CommandRoute(Route):
         enabled = data.get("enabled")
 
         if handler_full_name is None or enabled is None:
-            return Response().error("handler_full_name 与 enabled 均为必填｡").__dict__
+            return Response().error("handler_full_name 与 enabled 均为必填｡").to_json()
 
         if isinstance(enabled, str):
             enabled = enabled.lower() in ("1", "true", "yes", "on")
@@ -56,10 +56,10 @@ class CommandRoute(Route):
         try:
             await toggle_command_service(handler_full_name, bool(enabled))
         except ValueError as exc:
-            return Response().error(str(exc)).__dict__
+            return Response().error(str(exc)).to_json()
 
         payload = await _get_command_payload(handler_full_name)
-        return Response().ok(payload).__dict__
+        return Response().ok(payload).to_json()
 
     async def rename_command(self):
         data = await request.get_json()
@@ -68,15 +68,15 @@ class CommandRoute(Route):
         aliases = data.get("aliases")
 
         if not handler_full_name or not new_name:
-            return Response().error("handler_full_name 与 new_name 均为必填｡").__dict__
+            return Response().error("handler_full_name 与 new_name 均为必填｡").to_json()
 
         try:
             await rename_command_service(handler_full_name, new_name, aliases=aliases)
         except ValueError as exc:
-            return Response().error(str(exc)).__dict__
+            return Response().error(str(exc)).to_json()
 
         payload = await _get_command_payload(handler_full_name)
-        return Response().ok(payload).__dict__
+        return Response().ok(payload).to_json()
 
     async def update_permission(self):
         data = await request.get_json()
@@ -85,16 +85,16 @@ class CommandRoute(Route):
 
         if not handler_full_name or not permission:
             return (
-                Response().error("handler_full_name 与 permission 均为必填｡").__dict__
+                Response().error("handler_full_name 与 permission 均为必填｡").to_json()
             )
 
         try:
             await update_command_permission_service(handler_full_name, permission)
         except ValueError as exc:
-            return Response().error(str(exc)).__dict__
+            return Response().error(str(exc)).to_json()
 
         payload = await _get_command_payload(handler_full_name)
-        return Response().ok(payload).__dict__
+        return Response().ok(payload).to_json()
 
 
 async def _get_command_payload(handler_full_name: str):

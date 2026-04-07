@@ -9,11 +9,10 @@ from httpx import AsyncClient
 from pydantic import BaseModel, conint
 
 from astrbot import logger
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 
 class ServeReferenceAudio(BaseModel):
@@ -131,15 +130,22 @@ class ProviderFishAudioTTSAPI(TTSProvider):
                     f"请确保ID是32位十六进制字符串(例如: 626bb6d3f3364c9cbc3aa6a67300a664)｡"
                     f"您可以从 https://fish.audio/zh-CN/discovery 获取有效的模型ID｡",
                 )
-            reference_id = self.reference_id.strip()
+            resolved_reference_id = self.reference_id.strip()
         else:
             # 回退到原来的角色名称查询逻辑
-            reference_id = await self._get_reference_id_by_character(self.character)
+            fetched_reference_id = await self._get_reference_id_by_character(
+                self.character
+            )
+            if fetched_reference_id is None:
+                raise ValueError(
+                    f"未找到 FishAudio 角色 '{self.character}' 对应的参考模型ID｡"
+                )
+            resolved_reference_id = fetched_reference_id
 
         return ServeTTSRequest(
             text=text,
             format="wav",
-            reference_id=reference_id,
+            reference_id=resolved_reference_id,
         )
 
     async def get_audio(self, text: str) -> str:

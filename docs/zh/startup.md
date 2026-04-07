@@ -229,7 +229,7 @@ astrbot run --debug --log-level DEBUG
 
 ## 下一步
 
-- [配置模型提供商](../providers/llm.md)
-- [安装插件](../use/plugin.md)
-- [使用技能](../use/skills.md)
+- [配置模型提供商](providers/llm.md)
+- [安装插件](use/plugin.md)
+- [使用技能](use/skills.md)
 - [部署到服务器](./deploy/astrbot/docker.md)

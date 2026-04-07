@@ -161,7 +161,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
 
     run_context = _build_run_context()
     await FunctionToolExecutor._do_handoff_background(
-        tool=_DummyTool(),
+        tool=_DummyTool(),  # type: ignore[arg-type]
         run_context=run_context,
         task_id="task-id",
         input="hello",

@@ -10,13 +10,17 @@ from dataclasses import dataclass
 from typing import Any
 
 from astrbot.api import logger
+from astrbot.core.computer.olayer import (
+    FileSystemComponent,
+    PythonComponent,
+    ShellComponent,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_root,
     get_astrbot_temp_path,
 )
 
-from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
 
 _BLOCKED_COMMAND_PATTERNS = [

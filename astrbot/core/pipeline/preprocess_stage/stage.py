@@ -1,14 +1,13 @@
 import asyncio
 import random
 import traceback
-from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
+from astrbot.core.utils.media_utils import ensure_wav
 
 
 @register_stage
@@ -24,7 +23,7 @@ class PreProcessStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         """在处理事件之前的预处理"""
         # 平台特异配置:platform_specific.<platform>.pre_ack_emoji
         supported = {"telegram", "lark", "discord"}
@@ -64,6 +63,21 @@ class PreProcessStage(Stage):
                             logger.debug(f"路径映射: {url} -> {component.url}")
                     message_chain[idx] = component
 
+        # In here, we convert all Record components to wav format and update the file path.
+        message_chain = event.get_messages()
+        for idx, component in enumerate(message_chain):
+            if isinstance(component, Record):
+                try:
+                    original_path = await component.convert_to_file_path()
+                    record_path = await ensure_wav(original_path)
+                    if record_path != original_path:
+                        event.track_temporary_local_file(record_path)
+                    component.file = record_path
+                    component.path = record_path
+                    message_chain[idx] = component
+                except Exception as e:
+                    logger.warning(f"Voice processing failed: {e}")
+
         # STT
         if self.stt_settings.get("enable", False):
             # TODO: 独立
@@ -76,8 +90,8 @@ class PreProcessStage(Stage):
                 return
             message_chain = event.get_messages()
             for idx, component in enumerate(message_chain):
-                if isinstance(component, Record) and component.url:
-                    path = component.url.removeprefix("file://")
+                if isinstance(component, Record):
+                    path = await component.convert_to_file_path()
                     retry = 5
                     for i in range(retry):
                         try:

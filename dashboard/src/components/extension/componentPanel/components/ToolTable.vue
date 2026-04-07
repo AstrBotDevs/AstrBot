@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
-import type { ToolItem } from '../types';
+import { computed } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import type { ToolItem } from "../types";
 
-const { tm: tmTool } = useModuleI18n('features/tooluse');
-const { tm: tmCommand } = useModuleI18n('features/command');
+const { tm: tmTool } = useModuleI18n("features/tooluse");
+const { tm: tmCommand } = useModuleI18n("features/command");
 
 const props = defineProps<{
   items: ToolItem[];
@@ -12,20 +12,41 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'toggle-tool', tool: ToolItem): void;
+  (e: "toggle-tool", tool: ToolItem): void;
 }>();
 
 const toolHeaders = computed(() => [
-  { title: tmTool('functionTools.title'), key: 'name', minWidth: '160px' },
-  { title: tmTool('functionTools.description'), key: 'description' },
-  { title: tmTool('functionTools.table.origin'), key: 'origin', sortable: false, width: '120px' },
-  { title: tmTool('functionTools.table.originName'), key: 'origin_name', sortable: false, width: '160px' },
-  { title: tmCommand('status.enabled'), key: 'active', sortable: false, width: '120px' },
-  { title: tmTool('functionTools.table.actions'), key: 'actions', sortable: false, width: '120px' }
+  { title: tmTool("functionTools.title"), key: "name", minWidth: "160px" },
+  { title: tmTool("functionTools.description"), key: "description" },
+  {
+    title: tmTool("functionTools.table.origin"),
+    key: "origin",
+    sortable: false,
+    width: "120px",
+  },
+  {
+    title: tmTool("functionTools.table.originName"),
+    key: "origin_name",
+    sortable: false,
+    width: "160px",
+  },
+  {
+    title: tmCommand("status.enabled"),
+    key: "active",
+    sortable: false,
+    width: "120px",
+  },
+  {
+    title: tmTool("functionTools.table.actions"),
+    key: "actions",
+    sortable: false,
+    width: "120px",
+  },
 ]);
 
-const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.properties || {});
-const isInternal = (tool: ToolItem) => tool.source === 'internal';
+const parameterEntries = (tool: ToolItem) =>
+  Object.entries(tool.parameters?.properties || {});
+const isInternal = (tool: ToolItem) => tool.source === "internal";
 </script>
 
 <template>
@@ -49,7 +70,13 @@ const isInternal = (tool: ToolItem) => tool.source === 'internal';
             class="mr-2"
             size="18"
           >
-            {{ isInternal(item) ? 'mdi-lock-outline' : (item.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant') }}
+            {{
+              isInternal(item)
+                ? "mdi-lock-outline"
+                : item.name.includes(":")
+                  ? "mdi-server-network"
+                  : "mdi-function-variant"
+            }}
           </v-icon>
           <div>
             <div class="text-subtitle-1 font-weight-medium">
@@ -62,9 +89,14 @@ const isInternal = (tool: ToolItem) => tool.source === 'internal';
       <template #item.description="{ item }">
         <div
           class="text-body-2 text-medium-emphasis"
-          style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+          style="
+            max-width: 320px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          "
         >
-          {{ item.description || '-' }}
+          {{ item.description || "-" }}
         </div>
       </template>
 
@@ -75,16 +107,21 @@ const isInternal = (tool: ToolItem) => tool.source === 'internal';
           color="info"
           class="text-caption font-weight-medium"
         >
-          {{ item.origin || '-' }}
+          {{ item.origin || "-" }}
         </v-chip>
       </template>
 
       <template #item.origin_name="{ item }">
         <div
           class="text-body-2 text-medium-emphasis"
-          style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+          style="
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          "
         >
-          {{ item.origin_name || '-' }}
+          {{ item.origin_name || "-" }}
         </div>
       </template>
 
@@ -105,7 +142,11 @@ const isInternal = (tool: ToolItem) => tool.source === 'internal';
           class="font-weight-medium"
           :variant="item.active ? 'flat' : 'outlined'"
         >
-          {{ item.active ? tmCommand('status.enabled') : tmCommand('status.disabled') }}
+          {{
+            item.active
+              ? tmCommand("status.enabled")
+              : tmCommand("status.disabled")
+          }}
         </v-chip>
       </template>
 
@@ -119,73 +160,54 @@ const isInternal = (tool: ToolItem) => tool.source === 'internal';
           inset
           @update:model-value="emit('toggle-tool', item)"
         />
-        <span
-          v-else
-          class="text-caption text-grey"
-        >—</span>
+        <span v-else class="text-caption text-grey">—</span>
       </template>
 
       <template #no-data>
         <div class="text-center pa-8">
-          <v-icon
-            size="64"
-            color="info"
-            class="mb-4"
-          >
+          <v-icon size="64" color="info" class="mb-4">
             mdi-function-variant
           </v-icon>
           <div class="text-h5 mb-2">
-            {{ tmTool('functionTools.empty') }}
+            {{ tmTool("functionTools.empty") }}
           </div>
         </div>
       </template>
 
       <template #expanded-row="{ item }">
-        <td
-          :colspan="toolHeaders.length + 1"
-          class="pa-4"
-        >
+        <td :colspan="toolHeaders.length + 1" class="pa-4">
           <div class="d-flex align-start ga-4">
-            <v-icon
-              size="20"
-              color="primary"
-            >
-              mdi-code-json
-            </v-icon>
+            <v-icon size="20" color="primary"> mdi-code-json </v-icon>
             <div class="flex-1">
               <div class="text-subtitle-2 font-weight-medium mb-2">
-                {{ tmTool('functionTools.parameters') }}
+                {{ tmTool("functionTools.parameters") }}
               </div>
               <div
                 v-if="parameterEntries(item).length === 0"
                 class="text-caption text-medium-emphasis"
               >
-                {{ tmTool('functionTools.noParameters') }}
+                {{ tmTool("functionTools.noParameters") }}
               </div>
-              <v-table
-                v-else
-                density="compact"
-                class="param-table"
-              >
+              <v-table v-else density="compact" class="param-table">
                 <thead>
                   <tr>
                     <th class="text-left text-caption text-medium-emphasis">
-                      {{ tmTool('functionTools.table.paramName') }}
+                      {{ tmTool("functionTools.table.paramName") }}
                     </th>
                     <th
                       class="text-left text-caption text-medium-emphasis"
-                      style="width: 140px;"
+                      style="width: 140px"
                     >
-                      {{ tmTool('functionTools.table.type') }}
+                      {{ tmTool("functionTools.table.type") }}
                     </th>
                     <th class="text-left text-caption text-medium-emphasis">
-                      {{ tmTool('functionTools.table.description') }}
+                      {{ tmTool("functionTools.table.description") }}
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr
-                    v-for="([paramName, param]) in parameterEntries(item)"
+                    v-for="[paramName, param] in parameterEntries(item)"
                     :key="paramName"
                   >
                     <td class="font-weight-medium text-body-2">
@@ -197,11 +219,11 @@ const isInternal = (tool: ToolItem) => tool.source === 'internal';
                         color="primary"
                         class="text-caption"
                       >
-                        {{ param?.type || '-' }}
+                        {{ param?.type || "-" }}
                       </v-chip>
                     </td>
                     <td class="text-body-2 text-medium-emphasis">
-                      {{ param?.description || '-' }}
+                      {{ param?.description || "-" }}
                     </td>
                   </tr>
                 </tbody>
@@ -220,7 +242,7 @@ const isInternal = (tool: ToolItem) => tool.source === 'internal';
   border-radius: 8px;
 }
 
-.tool-table :deep(.v-data-table__td) {
+.tool-table ::v-deep(.v-data-table__td) {
   vertical-align: middle;
 }
 

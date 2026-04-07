@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
 import random
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from urllib.parse import quote
 
 import aiohttp
@@ -37,7 +38,7 @@ class WeixinOCClient:
             self._http_session = aiohttp.ClientSession(timeout=timeout)
 
     async def close(self) -> None:
-        if self._http_session is not None and not self._http_session.closed:
+        if self._http_session is not None and (not self._http_session.closed):
             await self._http_session.close()
             self._http_session = None
 
@@ -57,24 +58,18 @@ class WeixinOCClient:
         return f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
 
     def _build_cdn_upload_url(self, upload_param: str, file_key: str) -> str:
-        return (
-            f"{self.cdn_base_url}/upload?"
-            f"encrypted_query_param={quote(upload_param)}&filekey={quote(file_key)}"
-        )
+        return f"{self.cdn_base_url}/upload?encrypted_query_param={quote(upload_param)}&filekey={quote(file_key)}"
 
     def _build_cdn_download_url(self, encrypted_query_param: str) -> str:
-        return (
-            f"{self.cdn_base_url}/download?"
-            f"encrypted_query_param={quote(encrypted_query_param)}"
-        )
+        return f"{self.cdn_base_url}/download?encrypted_query_param={quote(encrypted_query_param)}"
 
     @staticmethod
     def aes_padded_size(size: int) -> int:
-        return size + (16 - (size % 16) or 16)
+        return size + (16 - size % 16 or 16)
 
     @staticmethod
     def pkcs7_pad(data: bytes, block_size: int = 16) -> bytes:
-        pad_len = block_size - (len(data) % block_size)
+        pad_len = block_size - len(data) % block_size
         if pad_len == 0:
             pad_len = block_size
         return data + bytes([pad_len]) * pad_len
@@ -89,6 +84,20 @@ class WeixinOCClient:
         if data[-pad_len:] != bytes([pad_len]) * pad_len:
             return data
         return data[:-pad_len]
+
+    @staticmethod
+    def _build_media_cipher(key: bytes):
+        return AES.new(key, AES.MODE_ECB)
+
+    @classmethod
+    def encrypt_cdn_payload(cls, data: bytes, key: bytes) -> bytes:
+        cipher = cls._build_media_cipher(key)
+        return cipher.encrypt(cls.pkcs7_pad(data))
+
+    @classmethod
+    def decrypt_cdn_payload(cls, encrypted: bytes, key: bytes) -> bytes:
+        cipher = cls._build_media_cipher(key)
+        return cls.pkcs7_unpad(cipher.decrypt(encrypted))
 
     @staticmethod
     def parse_media_aes_key(aes_key_value: str) -> bytes:
@@ -108,12 +117,21 @@ class WeixinOCClient:
 
     async def upload_to_cdn(
         self,
+        upload_full_url: str,
         upload_param: str,
         file_key: str,
         aes_key_hex: str,
         media_path: Path,
     ) -> str:
-        raw_data = media_path.read_bytes()
+        if upload_full_url:
+            cdn_url = upload_full_url
+        elif upload_param:
+            cdn_url = self._build_cdn_upload_url(upload_param, file_key)
+        else:
+            raise ValueError(
+                "CDN upload URL missing (need upload_full_url or upload_param)"
+            )
+        raw_data = await asyncio.to_thread(media_path.read_bytes)
         logger.debug(
             "weixin_oc(%s): prepare CDN upload file=%s size=%s md5=%s filekey=%s",
             self.adapter_id,
@@ -122,21 +140,18 @@ class WeixinOCClient:
             hashlib.md5(raw_data).hexdigest(),
             file_key,
         )
-        cipher = AES.new(bytes.fromhex(aes_key_hex), AES.MODE_ECB)
-        encrypted = cipher.encrypt(self.pkcs7_pad(raw_data))
+        key = bytes.fromhex(aes_key_hex)
+        encrypted = self.encrypt_cdn_payload(raw_data, key)
         logger.debug(
             "weixin_oc(%s): encrypt done aes_key_len=%s plain_size=%s cipher_size=%s",
             self.adapter_id,
-            len(bytes.fromhex(aes_key_hex)),
+            len(key),
             len(raw_data),
             len(encrypted),
         )
-
         await self.ensure_http_session()
         assert self._http_session is not None
         timeout = aiohttp.ClientTimeout(total=self.api_timeout_ms / 1000)
-        cdn_url = self._build_cdn_upload_url(upload_param, file_key)
-
         async with self._http_session.post(
             cdn_url,
             data=encrypted,
@@ -173,8 +188,7 @@ class WeixinOCClient:
         assert self._http_session is not None
         timeout = aiohttp.ClientTimeout(total=self.api_timeout_ms / 1000)
         async with self._http_session.get(
-            self._build_cdn_download_url(encrypted_query_param),
-            timeout=timeout,
+            self._build_cdn_download_url(encrypted_query_param), timeout=timeout
         ) as resp:
             if resp.status >= 400:
                 detail = await resp.text()
@@ -184,14 +198,11 @@ class WeixinOCClient:
             return await resp.read()
 
     async def download_and_decrypt_media(
-        self,
-        encrypted_query_param: str,
-        aes_key_value: str,
+        self, encrypted_query_param: str, aes_key_value: str
     ) -> bytes:
         encrypted = await self.download_cdn_bytes(encrypted_query_param)
         key = self.parse_media_aes_key(aes_key_value)
-        cipher = AES.new(key, AES.MODE_ECB)
-        return self.pkcs7_unpad(cipher.decrypt(encrypted))
+        return self.decrypt_cdn_payload(encrypted, key)
 
     async def request_json(
         self,
@@ -211,7 +222,6 @@ class WeixinOCClient:
         merged_headers = self._build_base_headers(token_required=token_required)
         if headers:
             merged_headers.update(headers)
-
         async with self._http_session.request(
             method,
             self._resolve_url(endpoint),
@@ -225,4 +235,35 @@ class WeixinOCClient:
                 raise RuntimeError(f"{method} {endpoint} failed: {resp.status} {text}")
             if not text:
                 return {}
-            return cast(dict[str, Any], json.loads(text))
+            return json.loads(text)
+
+    async def get_typing_config(
+        self, user_id: str, context_token: str
+    ) -> dict[str, Any]:
+        return await self.request_json(
+            "POST",
+            "ilink/bot/getconfig",
+            payload={
+                "ilink_user_id": user_id,
+                "context_token": context_token,
+                "base_info": {"channel_version": "astrbot"},
+            },
+            token_required=True,
+            timeout_ms=self.api_timeout_ms,
+        )
+
+    async def send_typing_state(
+        self, user_id: str, typing_ticket: str, *, cancel: bool
+    ) -> dict[str, Any]:
+        return await self.request_json(
+            "POST",
+            "ilink/bot/sendtyping",
+            payload={
+                "ilink_user_id": user_id,
+                "typing_ticket": typing_ticket,
+                "status": 2 if cancel else 1,
+                "base_info": {"channel_version": "astrbot"},
+            },
+            token_required=True,
+            timeout_ms=self.api_timeout_ms,
+        )

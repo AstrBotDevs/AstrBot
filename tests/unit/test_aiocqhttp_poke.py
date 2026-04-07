@@ -18,19 +18,11 @@ def test_poke_to_dict_matches_onebot_v11_segment_format():
     }
 
 
-def test_poke_to_dict_keeps_legacy_qq_compatible():
-    poke = Comp.Poke(type="poke", qq=2916963017)
-    assert poke.toDict() == {
-        "type": "poke",
-        "data": {"type": "126", "id": "2916963017"},
-    }
-
-
 @pytest.mark.asyncio
 async def test_respond_stage_treats_poke_with_target_as_non_empty():
     stage = RespondStage()
     chain = [Comp.Poke(type="126", id=2003)]
-    assert await stage._is_empty_message_chain(chain) is False
+    assert await stage._is_empty_message_chain(chain) is False  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio

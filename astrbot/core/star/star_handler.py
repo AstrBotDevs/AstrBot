@@ -27,7 +27,7 @@ class StarHandlerRegistry(Generic[T]):
 
     def _print_handlers(self) -> None:
         for handler in self._handlers:
-            print(handler.handler_full_name)
+            pass
 
     @overload
     def get_handlers_by_event_type(

@@ -84,7 +84,7 @@ async def test_extract_quoted_message_images_no_reply_component():
         get_group_id=lambda: "",
     )
 
-    images = await extract_quoted_message_images(event)
+    images = await extract_quoted_message_images(event)  # type: ignore[arg-type]
     assert images == []
 
 
@@ -103,7 +103,7 @@ async def test_extract_quoted_message_text_reply_without_id_does_not_call_get_ms
         get_group_id=lambda: "",
     )
 
-    text = await extract_quoted_message_text(event)
+    text = await extract_quoted_message_text(event)  # type: ignore[arg-type]
     assert text == "quoted content"
 
 
@@ -188,7 +188,7 @@ async def test_extract_quoted_message_text_forward_placeholder_variants_trigger_
     )
 
     text = await extract_quoted_message_text(event)
-    assert "Bob: [Image]world" in text
+    assert "Bob: [Image]world" in text  # type: ignore[operator]
 
 
 @pytest.mark.asyncio
@@ -204,7 +204,7 @@ async def test_extract_quoted_message_text_mixed_placeholder_does_not_trigger_fa
         get_group_id=lambda: "",
     )
 
-    text = await extract_quoted_message_text(event)
+    text = await extract_quoted_message_text(event)  # type: ignore[arg-type]
     assert text is not None
     assert "[Forward Message]" in text
     assert "real text" in text
@@ -244,7 +244,7 @@ async def test_extract_quoted_message_text_multimsg_malformed_config_does_not_ra
         },
     )
 
-    text = await extract_quoted_message_text(event)
+    text = await extract_quoted_message_text(event)  # type: ignore[arg-type]
     assert text == "still works"
 
 
@@ -350,7 +350,7 @@ async def test_extract_quoted_message_images_non_image_local_path_is_ignored(tmp
         get_group_id=lambda: "",
     )
 
-    images = await extract_quoted_message_images(event)
+    images = await extract_quoted_message_images(event)  # type: ignore[arg-type]
     assert images == []
 
 
@@ -486,7 +486,7 @@ async def test_extract_quoted_message_nested_forward_id_is_resolved():
         },
     )
 
-    text = await extract_quoted_message_text(event)
+    text = await extract_quoted_message_text(event)  # type: ignore[arg-type]
     assert text is not None
     assert "Bob: deep" in text
 

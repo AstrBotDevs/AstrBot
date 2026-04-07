@@ -2,9 +2,12 @@ from . import USER_AGENT_BING, SearchEngine
 
 
 class Bing(SearchEngine):
+    NAME = "bing"
+
     def __init__(self) -> None:
         super().__init__()
-        self.base_urls = ["https://cn.bing.com", "https://www.bing.com"]
+        # Prefer international Bing first, keep cn endpoint as compatibility fallback.
+        self.base_urls = ["https://www.bing.com", "https://cn.bing.com"]
         self.headers.update({"User-Agent": USER_AGENT_BING})
 
     def _set_selector(self, selector: str):

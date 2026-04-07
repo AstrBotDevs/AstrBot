@@ -674,7 +674,7 @@ class TestModalitiesFix:
 
         module._modalities_fix(mock_provider, req)
 
-        assert "[图片]" in req.prompt
+        assert "[Image]" in req.prompt
         assert req.image_urls == []
 
     def test_modalities_fix_tool_not_supported(self, mock_provider):
@@ -840,6 +840,7 @@ class TestPluginToolFix:
 
             module._plugin_tool_fix(mock_event, req)
 
+        assert req.func_tool is not None
         assert "mcp_tool" in req.func_tool.names()
         assert "plugin_tool" in req.func_tool.names()
 

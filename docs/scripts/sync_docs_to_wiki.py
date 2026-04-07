@@ -470,7 +470,7 @@ def extract_title(content: str, source_path: str) -> str:
 
 def build_language_index(language: str, page_names: set[str]) -> str:
     config = LANG_CONFIG[language]
-    lines = [config["index_title"], "", config["index_intro"], ""]
+    lines: list[str] = [config["index_title"], "", config["index_intro"], ""]
 
     for label, page_name in config["index_links"]:
         if page_name in page_names:
@@ -481,7 +481,7 @@ def build_language_index(language: str, page_names: set[str]) -> str:
 
 def build_home_page(language: str) -> str:
     config = LANG_CONFIG[language]
-    lines = ["# AstrBot Wiki", "", config["home_intro"], ""]
+    lines: list[str] = ["# AstrBot Wiki", "", config["home_intro"], ""]
     for label, target in config["home_links"]:
         lines.append(f"- [{label}]({target})")
     return normalize_content("\n".join(lines))

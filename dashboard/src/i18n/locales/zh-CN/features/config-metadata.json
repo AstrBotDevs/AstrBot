@@ -165,8 +165,8 @@
             "description": "沙箱环境驱动器"
           },
           "bwrap_rw_binds": {
-            "description": "Bubblewrap 额外读写挂载目录",
-            "hint": "Bubblewrap 沙箱额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写。"
+            "description": "Bubblewrap 读写挂载目录",
+            "hint": "额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写，整个宿主机系统默认是只读挂载于沙箱内的相同位置）。"
           },
           "bwrap_ro_binds": {
             "description": "Bubblewrap 额外只读挂载目录",
@@ -203,10 +203,6 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Ship 会话复用上限",
             "hint": "决定了一个实例承载的最大会话数量。"
-          },
-          "bwrap_rw_binds": {
-            "description": "Bubblewrap 读写挂载目录",
-            "hint": "额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写，整个宿主机系统默认是只读挂载于沙箱内的相同位置）。"
           }
         }
       }
@@ -1044,8 +1040,8 @@
       "dashboard": {
         "ssl": {
           "enable": {
-            "description": "启用 WebUI HTTPS",
-            "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。"
+            "description": "启用 AstrBot 面板 HTTPS",
+            "hint": "启用后，AstrBot 面板 将直接使用 HTTPS 提供服务。"
           },
           "cert_file": {
             "description": "SSL 证书文件路径",
@@ -1089,7 +1085,11 @@
       },
       "rerank_api_base": {
         "description": "重排序模型 API Base URL",
-        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。"
+        "hint": "最终请求路径由 Base URL 和路径后缀拼接而成（默认为 /v1/rerank）。"
+      },
+      "rerank_api_suffix": {
+        "description": "API URL 路径后缀",
+        "hint": "追加到 base_url 后的路径后缀，如 /v1/rerank。留空则不追加。"
       },
       "rerank_api_key": {
         "description": "API Key",
@@ -1106,6 +1106,24 @@
         "description": "自定义排序任务类型说明",
         "hint": "仅在使用 qwen3-rerank 模型时生效。建议使用英文撰写。"
       },
+      "nvidia_rerank_api_base": {
+          "description": "API Base URL"
+      },
+      "nvidia_rerank_api_key": {
+          "description": "API Key"
+      },
+      "nvidia_rerank_model": {
+          "description": "重排序模型名称",
+          "hint": "请参照NVIDIA Docs中模型名称填写。"
+      },
+      "nvidia_rerank_model_endpoint": {
+          "description": "自定义模型端点",
+          "hint": "自定义URL末尾端点，默认为 /reranking"
+      },
+      "nvidia_rerank_truncate": {
+          "description": "文本截断策略",
+          "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。"
+      },
       "launch_model_if_not_running": {
         "description": "模型未运行时自动启动",
         "hint": "如果模型当前未在 Xinference 服务中运行，是否尝试自动启动它。在生产环境中建议关闭。"
@@ -1116,6 +1134,7 @@
         "labels": [
           "文本",
           "图像",
+          "音频",
           "工具使用"
         ]
       },
@@ -1251,7 +1270,7 @@
         "description": "API Base URL"
       },
       "openai_embedding": {
-        "hint": "OpenAI Embedding 会在请求时自动补上 /v1。"
+        "hint": "如果测试不通过，可以尝试添加 /v1 在末尾以兼容部分 OpenAI API 版本。"
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding 无需手动添加 /v1beta。"
@@ -1471,15 +1490,15 @@
       },
       "mimo-tts-style-prompt": {
         "description": "风格提示词",
-        "hint": "用于控制生成语音的说话风格、语气或情绪，例如温柔、活泼、沉稳等。可留空。"
+        "hint": "会以 <style>...</style> 标签形式添加到待合成文本开头，用于控制语速、情绪、角色或风格，例如 开心、变快、孙悟空、悄悄话。可留空。"
       },
       "mimo-tts-dialect": {
         "description": "方言",
-        "hint": "指定生成语音时使用的方言或口音，例如四川话、粤语口音等。可留空。"
+        "hint": "会与风格提示词一起写入开头的 <style>...</style> 标签中，例如 东北话、四川话、河南话、粤语。可留空。"
       },
       "mimo-tts-seed-text": {
         "description": "种子文本",
-        "hint": "用于引导音色和说话方式的参考文本，会影响生成语音的表达风格。"
+        "hint": "作为可选的 user 消息发送，用于辅助调节语气和风格，不会拼接到待合成文本中。"
       },
       "fishaudio-tts-character": {
         "description": "character",

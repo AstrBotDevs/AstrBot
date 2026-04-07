@@ -22,6 +22,7 @@ class PlatformAdapterType(enum.Flag):
     SATORI = enum.auto()
     MISSKEY = enum.auto()
     LINE = enum.auto()
+    MATRIX = enum.auto()
     ALL = (
         AIOCQHTTP
         | QQOFFICIAL
@@ -38,6 +39,7 @@ class PlatformAdapterType(enum.Flag):
         | SATORI
         | MISSKEY
         | LINE
+        | MATRIX
     )
 
 
@@ -57,6 +59,7 @@ ADAPTER_NAME_2_TYPE = {
     "satori": PlatformAdapterType.SATORI,
     "misskey": PlatformAdapterType.MISSKEY,
     "line": PlatformAdapterType.LINE,
+    "matrix": PlatformAdapterType.MATRIX,
 }
 
 

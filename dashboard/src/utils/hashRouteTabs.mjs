@@ -1,12 +1,16 @@
-import { EXTENSION_ROUTE_NAME } from '../router/routeConstants.mjs';
+import { EXTENSION_ROUTE_NAME } from "../router/routeConstants.mjs";
 
 export function getValidHashTab(routeHash, validTabs) {
-  const hash = String(routeHash || '');
-  const tab = hash.includes('#') ? hash.slice(hash.lastIndexOf('#') + 1) : hash;
+  const hash = String(routeHash || "");
+  const tab = hash.includes("#") ? hash.slice(hash.lastIndexOf("#") + 1) : hash;
   return validTabs.includes(tab) ? tab : null;
 }
 
-export function createTabRouteLocation(route, tab, fallbackRouteName = EXTENSION_ROUTE_NAME) {
+export function createTabRouteLocation(
+  route,
+  tab,
+  fallbackRouteName = EXTENSION_ROUTE_NAME,
+) {
   const query = route?.query ? { ...route.query } : {};
   const params = route?.params ? { ...route.params } : undefined;
 
@@ -40,7 +44,7 @@ export async function replaceTabRoute(router, route, tab, logger = console) {
     await router.replace(createTabRouteLocation(route, tab));
     return true;
   } catch (error) {
-    logger.warn?.('Failed to update extension tab route:', error);
+    logger.warn?.("Failed to update extension tab route:", error);
     return false;
   }
 }

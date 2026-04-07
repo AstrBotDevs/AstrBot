@@ -12,11 +12,10 @@ from httpx import AsyncClient, Timeout
 
 from astrbot import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 TEMP_DIR = Path(get_astrbot_temp_path()) / "azure_tts"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -124,8 +123,8 @@ class AzureNativeProvider(TTSProvider):
             f"https://{self.region}.tts.speech.microsoft.com/cognitiveservices/v1"
         )
         self._client: AsyncClient | None = None
-        self.token = None
-        self.token_expire = 0
+        self.token: str | None = None
+        self.token_expire: float = 0.0
         self.voice_params = {
             "voice": provider_config.get("azure_tts_voice", "zh-CN-YunxiaNeural"),
             "style": provider_config.get("azure_tts_style", "cheerful"),

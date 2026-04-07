@@ -24,7 +24,26 @@ from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queu
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
-from .route import Route, RouteContext
+from .route import (
+    Route,
+    RouteContext,
+    get_runtime_guard_message,
+    is_runtime_request_ready,
+)
+
+
+class _QueueTimeoutSentinel:
+    pass
+
+
+_QUEUE_TIMEOUT = _QueueTimeoutSentinel()
+
+
+class _ReceiveTimeoutSentinel:
+    pass
+
+
+_RECEIVE_TIMEOUT = _ReceiveTimeoutSentinel()
 
 
 class LiveChatSession:
@@ -120,6 +139,7 @@ class LiveChatRoute(Route):
         self.db = db
         self.plugin_manager = core_lifecycle.plugin_manager
         self.platform_history_mgr = core_lifecycle.platform_message_history_manager
+        assert self.platform_history_mgr
         self.sessions: dict[str, LiveChatSession] = {}
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
         self.legacy_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
@@ -136,6 +156,49 @@ class LiveChatRoute(Route):
     async def unified_chat_ws(self) -> None:
         """Unified Chat WebSocket 处理器(支持 ct=live/chat)"""
         await self._unified_ws_loop(force_ct=None)
+
+    async def _ensure_runtime_ready(self) -> bool:
+        if is_runtime_request_ready(self.core_lifecycle):
+            return True
+        await websocket.close(
+            1013,
+            get_runtime_guard_message(self.core_lifecycle),
+        )
+        return False
+
+    async def _recv_ws_json_guarded(
+        self,
+        *,
+        wait_timeout: float = 1.0,
+    ) -> dict[str, Any] | _ReceiveTimeoutSentinel | None:
+        if not await self._ensure_runtime_ready():
+            return None
+        try:
+            message = await asyncio.wait_for(
+                websocket.receive_json(),
+                timeout=wait_timeout,
+            )
+        except asyncio.TimeoutError:
+            return _RECEIVE_TIMEOUT
+        if not await self._ensure_runtime_ready():
+            return None
+        return message
+
+    async def _guarded_queue_get(
+        self,
+        back_queue: asyncio.Queue,
+        *,
+        wait_timeout: float,
+    ) -> dict[str, Any] | _QueueTimeoutSentinel | None:
+        if not await self._ensure_runtime_ready():
+            return None
+        try:
+            result = await asyncio.wait_for(back_queue.get(), timeout=wait_timeout)
+        except asyncio.TimeoutError:
+            return _QUEUE_TIMEOUT
+        if not await self._ensure_runtime_ready():
+            return None
+        return result
 
     async def _unified_ws_loop(self, force_ct: str | None = None) -> None:
         """统一 WebSocket 循环"""
@@ -157,6 +220,9 @@ class LiveChatRoute(Route):
             await websocket.close(1008, "Invalid token")
             return
 
+        if not await self._ensure_runtime_ready():
+            return
+
         session_id = f"webchat_live!{username}!{uuid.uuid4()}"
         live_session = LiveChatSession(session_id, username)
         self.sessions[session_id] = live_session
@@ -165,7 +231,11 @@ class LiveChatRoute(Route):
 
         try:
             while True:
-                message = await websocket.receive_json()
+                message = await self._recv_ws_json_guarded()
+                if isinstance(message, _ReceiveTimeoutSentinel):
+                    continue
+                if message is None:
+                    return
                 ct = force_ct or message.get("ct", "live")
                 if ct == "chat":
                     await self._handle_chat_message(live_session, message)
@@ -249,8 +319,8 @@ class LiveChatRoute(Route):
         text: str,
         media_parts: list,
         reasoning: str,
-        agent_stats: dict,
-        refs: dict,
+        agent_stats: dict[str, Any],
+        refs: dict[str, Any],
     ):
         """保存 bot 消息到历史记录｡"""
         bot_message_parts = []
@@ -258,7 +328,7 @@ class LiveChatRoute(Route):
         if text:
             bot_message_parts.append({"type": "plain", "text": text})
 
-        new_his = {"type": "bot", "message": bot_message_parts}
+        new_his: dict[str, Any] = {"type": "bot", "message": bot_message_parts}
         if reasoning:
             new_his["reasoning"] = reasoning
         if agent_stats:
@@ -266,7 +336,9 @@ class LiveChatRoute(Route):
         if refs:
             new_his["refs"] = refs
 
-        return await self.platform_history_mgr.insert(
+        mgr = self.platform_history_mgr
+        assert mgr is not None
+        return await mgr.insert(
             platform_id="webchat",
             user_id=webchat_conv_id,
             content=new_his,
@@ -289,7 +361,11 @@ class LiveChatRoute(Route):
         )
         try:
             while True:
-                result = await back_queue.get()
+                result = await self._guarded_queue_get(back_queue, wait_timeout=1)
+                if isinstance(result, _QueueTimeoutSentinel):
+                    continue
+                if result is None:
+                    break
                 if not result:
                     continue
                 await self._send_chat_payload(session, {"ct": "chat", **result})
@@ -470,7 +546,9 @@ class LiveChatRoute(Route):
             )
 
             message_parts_for_storage = strip_message_parts_path_fields(message_parts)
-            await self.platform_history_mgr.insert(
+            mgr = self.platform_history_mgr
+            assert mgr is not None
+            await mgr.insert(
                 platform_id="webchat",
                 user_id=session_id,
                 content={"type": "user", "message": message_parts_for_storage},
@@ -483,17 +561,20 @@ class LiveChatRoute(Route):
             accumulated_reasoning = ""
             tool_calls = {}
             agent_stats = {}
-            refs = {}
+            refs: dict[str, Any] = {}
 
             while True:
+                if not await self._ensure_runtime_ready():
+                    break
                 if session.should_interrupt:
                     session.should_interrupt = False
                     break
 
-                try:
-                    result = await asyncio.wait_for(back_queue.get(), timeout=1)
-                except asyncio.TimeoutError:
+                result = await self._guarded_queue_get(back_queue, wait_timeout=1)
+                if isinstance(result, _QueueTimeoutSentinel):
                     continue
+                if result is None:
+                    break
 
                 if not result:
                     continue
@@ -724,7 +805,14 @@ class LiveChatRoute(Route):
             session.should_interrupt = False
 
             # 1. STT - 语音转文字
-            ctx = self.plugin_manager.context
+            pm = self.plugin_manager
+            if pm is None or pm.context is None:
+                logger.error("[Live Chat] Plugin manager not available")
+                await websocket.send_json(
+                    {"t": "error", "data": "Plugin manager not available"}
+                )
+                return
+            ctx = pm.context
             stt_provider = ctx.provider_manager.stt_provider_insts[0]
 
             if not stt_provider:
@@ -773,6 +861,8 @@ class LiveChatRoute(Route):
 
             try:
                 while True:
+                    if not await self._ensure_runtime_ready():
+                        break
                     if session.should_interrupt:
                         # 用户打断,停止处理
                         logger.info("[Live Chat] 检测到用户打断")
@@ -789,10 +879,14 @@ class LiveChatRoute(Route):
                                 break
                         break
 
-                    try:
-                        result = await asyncio.wait_for(back_queue.get(), timeout=0.5)
-                    except asyncio.TimeoutError:
+                    result = await self._guarded_queue_get(
+                        back_queue,
+                        wait_timeout=0.5,
+                    )
+                    if isinstance(result, _QueueTimeoutSentinel):
                         continue
+                    if result is None:
+                        break
 
                     if not result:
                         continue

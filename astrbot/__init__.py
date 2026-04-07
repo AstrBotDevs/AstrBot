@@ -9,6 +9,11 @@ __all__ = ["logger"]
 
 
 def __getattr__(name: str) -> Any:
+    if name == "cli":
+        from astrbot.cli.__main__ import cli
+
+        return cli()
+
     if name == "logger":
         from .core import logger
 

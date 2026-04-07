@@ -10,17 +10,21 @@ import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
 
 try:
-    from dashscope.aigc.multimodal_conversation import MultiModalConversation
+    from dashscope.aigc.multimodal_conversation import (
+        MultiModalConversation,
+    )
+
+    _MultiModalConversationType: type = MultiModalConversation
 except (
     ImportError
 ):  # pragma: no cover - older dashscope versions without Qwen TTS support
-    MultiModalConversation = None
+    MultiModalConversation = None  # type: ignore
+    _MultiModalConversationType = None  # type: ignore
 
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -81,7 +85,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             logging.warning(
                 "No voice specified for Qwen TTS model, using default 'Cherry'.",
             )
-        return MultiModalConversation.call(**kwargs)
+        return MultiModalConversation.call(**kwargs)  # type: ignore[call-arg]
 
     async def _synthesize_with_qwen_tts(
         self,

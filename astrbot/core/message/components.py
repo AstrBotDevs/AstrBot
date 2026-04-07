@@ -28,6 +28,7 @@ import os
 import sys
 import uuid
 from enum import Enum
+from typing import Any
 
 import anyio
 
@@ -73,7 +74,6 @@ class ComponentType(str, Enum):
     Music = "Music"
     Json = "Json"
     Unknown = "Unknown"
-    WechatEmoji = "WechatEmoji"  # Wechat 下的 emoji 表情包
 
 
 class BaseMessageComponent(BaseModel):
@@ -100,7 +100,6 @@ class BaseMessageComponent(BaseModel):
 class Plain(BaseMessageComponent):
     type: ComponentType = ComponentType.Plain
     text: str
-    convert: bool | None = True
 
     def __init__(self, text: str, convert: bool = True, **_) -> None:
         super().__init__(text=text, convert=convert, **_)
@@ -123,15 +122,11 @@ class Face(BaseMessageComponent):
 class Record(BaseMessageComponent):
     type: ComponentType = ComponentType.Record
     file: str | None = ""
-    magic: bool | None = False
     url: str | None = ""
-    cache: bool | None = True
-    proxy: bool | None = True
-    timeout: int | None = 0
     # Original text content (e.g. TTS source text), used as caption in fallback scenarios
     text: str | None = None
     # 额外
-    path: str | None
+    path: str | None = None
 
     def __init__(self, file: str | None, **_) -> None:
         for k in _:
@@ -233,7 +228,6 @@ class Video(BaseMessageComponent):
     type: ComponentType = ComponentType.Video
     file: str
     cover: str | None = ""
-    c: int | None = 2
     # 额外
     path: str | None = ""
 
@@ -410,14 +404,9 @@ class Image(BaseMessageComponent):
     type: ComponentType = ComponentType.Image
     file: str | None = ""
     _type: str | None = ""
-    subType: int | None = 0
     url: str | None = ""
-    cache: bool | None = True
-    id: int | None = 40000
-    c: int | None = 2
     # 额外
     path: str | None = ""
-    file_unique: str | None = ""  # 某些平台可能有图片缓存的唯一标识
 
     def __init__(self, file: str | None, **_) -> None:
         super().__init__(file=file, **_)
@@ -661,7 +650,7 @@ class Nodes(BaseMessageComponent):
 
     async def to_dict(self) -> dict:
         """将 Nodes 转换为字典格式,适用于 OneBot JSON 格式"""
-        ret = {"messages": []}
+        ret: dict[str, list[dict[str, Any]]] = {"messages": []}
         for node in self.nodes:
             d = await node.to_dict()
             ret["messages"].append(d)
@@ -848,16 +837,6 @@ class File(BaseMessageComponent):
         }
 
 
-class WechatEmoji(BaseMessageComponent):
-    type: ComponentType = ComponentType.WechatEmoji
-    md5: str | None = ""
-    md5_len: int | None = 0
-    cdnurl: str | None = ""
-
-    def __init__(self, **_) -> None:
-        super().__init__(**_)
-
-
 ComponentTypes = {
     # Basic Message Segments
     "plain": Plain,
@@ -883,5 +862,4 @@ ComponentTypes = {
     "nodes": Nodes,
     "json": Json,
     "unknown": Unknown,
-    "WechatEmoji": WechatEmoji,
 }

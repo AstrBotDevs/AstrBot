@@ -49,7 +49,7 @@ class TestShipyardNeoBooterCapabilities:
         caps = booter.capabilities
         assert isinstance(caps, tuple)
         with pytest.raises(AttributeError):
-            caps.append("mutated")  # type: ignore[attr-defined]
+            caps.append("mutated")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -70,7 +70,7 @@ def _make_req():
 def _import_apply_sandbox_tools():
     """Import _apply_sandbox_tools, skipping if circular-import fails."""
     try:
-        from astrbot.core.astr_main_agent import _apply_sandbox_tools
+        from astrbot.core.astr_main_agent import _apply_sandbox_tools  # type: ignore[import]
 
         return _apply_sandbox_tools
     except ImportError:
@@ -321,16 +321,20 @@ class TestResolveProfile:
 
 
 class TestBaseComputerBooter:
-    """Verify base class defaults."""
+    """Verify base class defaults via subclass."""
 
     def test_capabilities_default_none(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
+        """Test that ComputerBooter base capabilities returns None by default."""
+        from astrbot.core.computer.booters.shipyard import ShipyardBooter
 
-        booter = ComputerBooter()
+        # ShipyardBooter is not abstract, can be instantiated to test defaults
+        booter = ShipyardBooter.__new__(ShipyardBooter)
         assert booter.capabilities is None
 
     def test_browser_default_none(self):
-        from astrbot.core.computer.booters.base import ComputerBooter
+        """Test that ComputerBooter base browser returns None by default."""
+        from astrbot.core.computer.booters.shipyard import ShipyardBooter
 
-        booter = ComputerBooter()
+        # ShipyardBooter is not abstract, can be instantiated to test defaults
+        booter = ShipyardBooter.__new__(ShipyardBooter)
         assert booter.browser is None

@@ -8,16 +8,21 @@ from shipyard import ShipyardClient, Spec
 from astrbot.api import logger
 
 if TYPE_CHECKING:
-    from astrbot.core.agent.tool import FunctionTool
+    from astrbot.core.agent.tool import ToolSchema
 
-from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
+from astrbot.core.computer.olayer import (
+    FileSystemComponent,
+    PythonComponent,
+    ShellComponent,
+)
+
 from .base import ComputerBooter
 
 
 class ShipyardBooter(ComputerBooter):
     @classmethod
     @functools.cache
-    def _default_tools(cls) -> tuple[FunctionTool, ...]:
+    def _default_tools(cls) -> tuple[ToolSchema, ...]:
         from astrbot.core.computer.tools import (
             ExecuteShellTool,
             FileDownloadTool,
@@ -25,7 +30,7 @@ class ShipyardBooter(ComputerBooter):
             PythonTool,
         )
 
-        return (
+        return (  # type: ignore[return-value]
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),
@@ -33,7 +38,7 @@ class ShipyardBooter(ComputerBooter):
         )
 
     @classmethod
-    def get_default_tools(cls) -> list[FunctionTool]:
+    def get_default_tools(cls) -> list[ToolSchema]:
         return list(cls._default_tools())
 
     def __init__(

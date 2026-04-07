@@ -63,8 +63,8 @@ async def test_get_text_converts_opus_files_to_wav_before_transcription(
         assert not converted_path.exists()
 
         create_mock = provider.client.audio.transcriptions.create
-        create_mock.assert_awaited_once()
-        file_arg = create_mock.await_args.kwargs["file"]
+        create_mock.assert_awaited_once()  # type: ignore[attr-defined]
+        file_arg = create_mock.await_args.kwargs["file"]  # type: ignore[attr-defined]
         assert file_arg[0] == "audio.wav"
         assert file_arg[1].name.endswith(".wav")
         file_arg[1].close()

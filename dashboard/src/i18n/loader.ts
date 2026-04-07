@@ -17,7 +17,7 @@ export interface ModuleInfo {
 export class I18nLoader {
   private cache: Map<string, any> = new Map();
   private moduleRegistry: Map<string, ModuleInfo> = new Map();
-  
+
   constructor() {
     this.registerModules();
   }
@@ -28,50 +28,59 @@ export class I18nLoader {
   private registerModules(): void {
     const modules = [
       // 核心模块
-      { name: 'core/common', path: 'core/common.json' },
-      { name: 'core/actions', path: 'core/actions.json' },
-      { name: 'core/status', path: 'core/status.json' },
-      { name: 'core/navigation', path: 'core/navigation.json' },
-      { name: 'core/header', path: 'core/header.json' },
-      { name: 'core/shared', path: 'core/shared.json' },
-      
+      { name: "core/common", path: "core/common.json" },
+      { name: "core/actions", path: "core/actions.json" },
+      { name: "core/status", path: "core/status.json" },
+      { name: "core/navigation", path: "core/navigation.json" },
+      { name: "core/header", path: "core/header.json" },
+      { name: "core/shared", path: "core/shared.json" },
+
       // 功能模块
-      { name: 'features/chat', path: 'features/chat.json' },
-      { name: 'features/extension', path: 'features/extension.json' },
-      { name: 'features/conversation', path: 'features/conversation.json' },
-      { name: 'features/session-management', path: 'features/session-management.json' },
-      { name: 'features/tooluse', path: 'features/tool-use.json' },
-      { name: 'features/provider', path: 'features/provider.json' },
-      { name: 'features/platform', path: 'features/platform.json' },
-      { name: 'features/config', path: 'features/config.json' },
-      { name: 'features/config-metadata', path: 'features/config-metadata.json' },
-      { name: 'features/console', path: 'features/console.json' },
-      { name: 'features/trace', path: 'features/trace.json' },
-      { name: 'features/about', path: 'features/about.json' },
-      { name: 'features/settings', path: 'features/settings.json' },
-      { name: 'features/auth', path: 'features/auth.json' },
-      { name: 'features/chart', path: 'features/chart.json' },
-      { name: 'features/dashboard', path: 'features/dashboard.json' },
-      { name: 'features/cron', path: 'features/cron.json' },
-      { name: 'features/subagent', path: 'features/subagent.json' },
-      { name: 'features/alkaid/index', path: 'features/alkaid/index.json' },
-      { name: 'features/alkaid/knowledge-base', path: 'features/alkaid/knowledge-base.json' },
-      { name: 'features/alkaid/memory', path: 'features/alkaid/memory.json' },
-      { name: 'features/persona', path: 'features/persona.json' },
-      { name: 'features/migration', path: 'features/migration.json' },
-      { name: 'features/welcome', path: 'features/welcome.json' },
-      
+      { name: "features/chat", path: "features/chat.json" },
+      { name: "features/extension", path: "features/extension.json" },
+      { name: "features/conversation", path: "features/conversation.json" },
+      {
+        name: "features/session-management",
+        path: "features/session-management.json",
+      },
+      { name: "features/tooluse", path: "features/tool-use.json" },
+      { name: "features/provider", path: "features/provider.json" },
+      { name: "features/platform", path: "features/platform.json" },
+      { name: "features/config", path: "features/config.json" },
+      {
+        name: "features/config-metadata",
+        path: "features/config-metadata.json",
+      },
+      { name: "features/console", path: "features/console.json" },
+      { name: "features/trace", path: "features/trace.json" },
+      { name: "features/about", path: "features/about.json" },
+      { name: "features/settings", path: "features/settings.json" },
+      { name: "features/auth", path: "features/auth.json" },
+      { name: "features/chart", path: "features/chart.json" },
+      { name: "features/dashboard", path: "features/dashboard.json" },
+      { name: "features/cron", path: "features/cron.json" },
+      { name: "features/subagent", path: "features/subagent.json" },
+      { name: "features/alkaid/index", path: "features/alkaid/index.json" },
+      {
+        name: "features/alkaid/knowledge-base",
+        path: "features/alkaid/knowledge-base.json",
+      },
+      { name: "features/alkaid/memory", path: "features/alkaid/memory.json" },
+      { name: "features/persona", path: "features/persona.json" },
+      { name: "features/migration", path: "features/migration.json" },
+      { name: "features/welcome", path: "features/welcome.json" },
+
       // 消息模块
-      { name: 'messages/errors', path: 'messages/errors.json' },
-      { name: 'messages/success', path: 'messages/success.json' },
-      { name: 'messages/validation', path: 'messages/validation.json' }
+      { name: "messages/errors", path: "messages/errors.json" },
+      { name: "messages/success", path: "messages/success.json" },
+      { name: "messages/validation", path: "messages/validation.json" },
     ];
 
-    modules.forEach(module => {
+    modules.forEach((module) => {
       this.moduleRegistry.set(module.name, {
         name: module.name,
         path: module.path,
-        loaded: false
+        loaded: false,
       });
     });
   }
@@ -81,7 +90,7 @@ export class I18nLoader {
    */
   async loadModule(locale: string, moduleName: string): Promise<any> {
     const cacheKey = `${locale}:${moduleName}`;
-    
+
     // 检查缓存
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey);
@@ -101,7 +110,7 @@ export class I18nLoader {
 
       // 缓存结果
       this.cache.set(cacheKey, data);
-      
+
       // 更新模块信息
       moduleInfo.loaded = true;
       moduleInfo.data = data;
@@ -109,21 +118,21 @@ export class I18nLoader {
       return data;
     } catch (error) {
       console.error(`加载模块 ${moduleName} 失败:`, error);
-      
+
       // 回退方案：尝试使用fetch（开发环境）
       try {
         const modulePath = `/src/i18n/locales/${locale}/${moduleInfo.path}`;
         const response = await fetch(modulePath);
-        
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        
+
         const data = await response.json();
 
         // 缓存结果
         this.cache.set(cacheKey, data);
-        
+
         // 更新模块信息
         moduleInfo.loaded = true;
         moduleInfo.data = data;
@@ -142,15 +151,18 @@ export class I18nLoader {
   private async loadModules(
     locale: string,
     prefix: string,
-    overrideList: string[] = []
+    overrideList: string[] = [],
   ): Promise<any> {
     // 使用覆盖列表或从注册表中筛选符合前缀的模块名
-    const moduleNames = overrideList.length > 0
-      ? overrideList
-      : Array.from(this.moduleRegistry.keys()).filter(key => key.startsWith(prefix));
+    const moduleNames =
+      overrideList.length > 0
+        ? overrideList
+        : Array.from(this.moduleRegistry.keys()).filter((key) =>
+            key.startsWith(prefix),
+          );
 
     const results = await Promise.all(
-      moduleNames.map(module => this.loadModule(locale, module))
+      moduleNames.map((module) => this.loadModule(locale, module)),
     );
 
     return this.mergeModules(results, moduleNames);
@@ -160,21 +172,21 @@ export class I18nLoader {
    * 加载核心模块（最高优先级）
    */
   async loadCoreModules(locale: string): Promise<any> {
-    return this.loadModules(locale, 'core');
+    return this.loadModules(locale, "core");
   }
 
   /**
    * 加载功能模块
    */
   async loadFeatureModules(locale: string, features?: string[]): Promise<any> {
-    return this.loadModules(locale, 'features', features || []);
+    return this.loadModules(locale, "features", features || []);
   }
 
   /**
    * 加载消息模块
    */
   async loadMessageModules(locale: string): Promise<any> {
-    return this.loadModules(locale, 'messages');
+    return this.loadModules(locale, "messages");
   }
 
   /**
@@ -184,13 +196,13 @@ export class I18nLoader {
     const [core, features, messages] = await Promise.all([
       this.loadCoreModules(locale),
       this.loadFeatureModules(locale),
-      this.loadMessageModules(locale)
+      this.loadMessageModules(locale),
     ]);
 
     return {
       ...core,
       ...features,
-      ...messages
+      ...messages,
     };
   }
 
@@ -207,11 +219,11 @@ export class I18nLoader {
   private mergeModules(modules: any[], moduleNames: string[]): any {
     const result: any = {};
     const pathRegistry = new Map<string, string>();
-    
+
     modules.forEach((module, index) => {
       const moduleName = moduleNames[index];
-      const nameParts = moduleName.split('/');
-      
+      const nameParts = moduleName.split("/");
+
       // 构建嵌套对象结构（对所有模块统一处理）
       let current = result;
       for (let i = 0; i < nameParts.length - 1; i++) {
@@ -220,19 +232,21 @@ export class I18nLoader {
         }
         current = current[nameParts[i]];
       }
-      
+
       // 冲突检测：检查最终键是否已存在
       const finalKey = nameParts[nameParts.length - 1];
-      const fullPath = nameParts.join('.');
-      
+      const fullPath = nameParts.join(".");
+
       if (current[finalKey] && pathRegistry.has(fullPath)) {
         const existingModule = pathRegistry.get(fullPath);
-        console.warn(`⚠️ I18n模块路径冲突: "${fullPath}" 已被模块 "${existingModule}" 占用，模块 "${moduleName}" 可能会覆盖部分键值`);
+        console.warn(
+          `⚠️ I18n模块路径冲突: "${fullPath}" 已被模块 "${existingModule}" 占用，模块 "${moduleName}" 可能会覆盖部分键值`,
+        );
       }
-      
+
       // 记录路径和模块名的映射
       pathRegistry.set(fullPath, moduleName);
-      
+
       // 设置最终值（保持原有的浅合并行为）
       current[finalKey] = { ...current[finalKey], ...module };
     });
@@ -244,14 +258,10 @@ export class I18nLoader {
    * 预加载关键模块
    */
   async preloadEssentials(locale: string): Promise<void> {
-    const essentials = [
-      'core/common',
-      'core/navigation',
-      'features/chat'
-    ];
+    const essentials = ["core/common", "core/navigation", "features/chat"];
 
     await Promise.all(
-      essentials.map(module => this.loadModule(locale, module))
+      essentials.map((module) => this.loadModule(locale, module)),
     );
   }
 
@@ -261,7 +271,9 @@ export class I18nLoader {
   clearCache(locale?: string): void {
     if (locale) {
       // 清理特定语言的缓存
-      const keys = Array.from(this.cache.keys()).filter((key: string) => key.startsWith(`${locale}:`));
+      const keys = Array.from(this.cache.keys()).filter((key: string) =>
+        key.startsWith(`${locale}:`),
+      );
       keys.forEach((key: string) => this.cache.delete(key));
     } else {
       // 清理所有缓存
@@ -274,12 +286,12 @@ export class I18nLoader {
    */
   getLoadingStatus(): { total: number; loaded: number; modules: ModuleInfo[] } {
     const modules = Array.from(this.moduleRegistry.values());
-    const loaded = modules.filter(m => m.loaded).length;
-    
+    const loaded = modules.filter((m) => m.loaded).length;
+
     return {
       total: modules.length,
       loaded,
-      modules
+      modules,
     };
   }
 
@@ -289,14 +301,12 @@ export class I18nLoader {
   async reloadModule(locale: string, moduleName: string): Promise<any> {
     const cacheKey = `${locale}:${moduleName}`;
     this.cache.delete(cacheKey);
-    
+
     const moduleInfo = this.moduleRegistry.get(moduleName);
     if (moduleInfo) {
       moduleInfo.loaded = false;
     }
-    
+
     return this.loadModule(locale, moduleName);
   }
-
-
-} 
+}

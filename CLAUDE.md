@@ -107,12 +107,81 @@ Stars are plugins in `astrbot/builtin_stars/`:
 - Use decorators for command handlers: `@star.on_command`, `@star.on_message`, etc.
 - Access via `context` object
 
+### Stateful Tool Execution (Session Lifecycle)
+
+Tools can maintain state across conversation turns within a session via `ToolSessionManager`.
+
+**Key classes:**
+- `ToolSessionManager` (`astrbot/core/agent/tool_session_manager.py`) — central manager, keyed by `(umo, tool_name)`
+- `ToolSessionState` — dict-like per-tool session state with `set_persistent(key)` support
+- `FunctionTool.is_stateful` — opt-in flag for stateful tools
+- `FunctionTool.get_session_state(umo)` — get/create session state dict
+
+**Usage in a tool:**
+```python
+@dataclass
+class MyTool(FunctionTool):
+    is_stateful = True  # declare stateful
+
+    async def call(self, context, **kwargs):
+        umo = context.context.event.unified_msg_origin
+        state = self.get_session_state(umo)
+        state["counter"] = state.get("counter", 0) + 1
+        # Mark to survive session clear:
+        state.set_persistent("persistent_data")
+```
+
+**Architecture flow:**
+```
+AgentContextWrapper(session_manager=ToolSessionManager())
+    → ToolLoopAgentRunner.run_context.session_manager
+    → executor.execute(..., session_manager=run_context.session_manager)
+    → tool.call(context)  # context.session_manager available
+```
+
 ## Testing
 
 1. Tests go in `tests/` directory
 2. Use `pytest` with `pytest-asyncio`
 3. Coverage target: `uv run pytest --cov=astrbot tests/`
 4. Test files: `test_*.py` or `*_test.py`
+
+### Code Quality Scoring Test
+
+The project enforces a **code quality score** via `tests/test_code_quality_typing.py`. All agents must treat this as a hard constraint when modifying code.
+
+**Run the test:**
+```bash
+uv run pytest tests/test_code_quality_typing.py -v
+```
+
+**Scoring rules (target: 100/100, threshold for PASS: 80/100):**
+
+| Pattern | Cost |
+|---------|------|
+| `cast(Any, ...)` | -1 pt each |
+| `# type: ignore` | -0.5 pt each |
+| **BAD** `# type: ignore[...]` (unresolved-import, class-alias, no-name-module, attr-defined, etc.) | **-3 pt each** |
+| `bare except:` (no exception type) | -0.5 pt each |
+| Duplicate code block (5+ identical lines, ≥2 occurrences) | -2 pt each |
+
+**Why bad type: ignore is heavily penalized:**
+- `# type: ignore[unresolved-import]` — hides missing module/stub issues
+- `# type: ignore[class-alias]` — hides improper type alias patterns
+- `# type: ignore[attr-defined]` — hides missing attribute errors
+- These are **workarounds, not fixes** — they paper over real type errors
+
+**Scoring formula:**
+```
+score = max(0, 100 - cast_any - type_ignore*0.5 - bad_type_ignore*3 - bare_except*0.5 - dup_blocks*2)
+```
+
+**Agent rules when modifying code:**
+1. **Do not add** `# type: ignore[unresolved-import]` or `# type: ignore[class-alias]` — fix the underlying issue instead
+2. **Do not use** `cast(Any, ...)` to suppress type errors — use proper type annotations
+3. **Do not add** bare `except:` clauses — use `except SomeSpecificException:`
+4. **Do not copy-paste** 5+ line blocks — extract to a shared helper function
+5. Before committing, run the scoring test and ensure score ≥ 80
 
 ## Git Conventions
 

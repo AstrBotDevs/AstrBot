@@ -6,9 +6,9 @@ import hashlib
 import io
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 import qrcode as qrcode_lib
@@ -31,7 +31,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from .weixin_oc_client import WeixinOCClient
 from .weixin_oc_event import WeixinOCMessageEvent
 
-if TYPE_CHECKING:  # pragma: no cover - typing-only helper
+if TYPE_CHECKING:
     pass
 
 
@@ -49,11 +49,18 @@ class OpenClawLoginSession:
     error: str | None = None
 
 
-@register_platform_adapter(
-    "weixin_oc",
-    "个人微信",
-    support_streaming_message=False,
-)
+@dataclass
+class TypingSessionState:
+    ticket: str | None = None
+    ticket_context_token: str | None = None
+    refresh_after: float = 0.0
+    keepalive_task: asyncio.Task | None = None
+    cancel_task: asyncio.Task | None = None
+    owners: set[str] = field(default_factory=set)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
+@register_platform_adapter("weixin_oc", "个人微信", support_streaming_message=False)
 class WeixinOCAdapter(Platform):
     IMAGE_ITEM_TYPE = 2
     VOICE_ITEM_TYPE = 3
@@ -64,49 +71,47 @@ class WeixinOCAdapter(Platform):
     FILE_UPLOAD_TYPE = 3
 
     def __init__(
-        self,
-        platform_config: dict,
-        platform_settings: dict,
-        event_queue: asyncio.Queue,
+        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
     ) -> None:
         super().__init__(platform_config, event_queue)
-
         self.settings = platform_settings
         self.base_url = str(
             platform_config.get("weixin_oc_base_url", "https://ilinkai.weixin.qq.com")
         ).rstrip("/")
         self.bot_type = str(platform_config.get("weixin_oc_bot_type", "3"))
         self.qr_poll_interval = max(
-            1,
-            int(platform_config.get("weixin_oc_qr_poll_interval", 1)),
+            1, int(platform_config.get("weixin_oc_qr_poll_interval", 1))
         )
         self.long_poll_timeout_ms = int(
-            platform_config.get("weixin_oc_long_poll_timeout_ms", 35_000),
+            platform_config.get("weixin_oc_long_poll_timeout_ms", 35000)
         )
         self.api_timeout_ms = int(
-            platform_config.get("weixin_oc_api_timeout_ms", 15_000),
+            platform_config.get("weixin_oc_api_timeout_ms", 15000)
         )
         self.cdn_base_url = str(
             platform_config.get(
-                "weixin_oc_cdn_base_url",
-                "https://novac2c.cdn.weixin.qq.com/c2c",
+                "weixin_oc_cdn_base_url", "https://novac2c.cdn.weixin.qq.com/c2c"
             )
         ).rstrip("/")
-
         self.metadata = PlatformMetadata(
             name="weixin_oc",
             description="个人微信",
-            id=cast(str, self.config.get("id", "weixin_oc")),
+            id=self.config.get("id", "weixin_oc"),
             support_streaming_message=False,
         )
-
         self._shutdown_event = asyncio.Event()
         self._login_session: OpenClawLoginSession | None = None
         self._sync_buf = ""
         self._qr_expired_count = 0
         self._context_tokens: dict[str, str] = {}
+        self._typing_states: dict[str, TypingSessionState] = {}
         self._last_inbound_error = ""
-
+        self._typing_keepalive_interval_s = max(
+            1, int(platform_config.get("weixin_oc_typing_keepalive_interval", 5))
+        )
+        self._typing_ticket_ttl_s = max(
+            5, int(platform_config.get("weixin_oc_typing_ticket_ttl", 60))
+        )
         self.token = str(platform_config.get("weixin_oc_token", "")).strip() or None
         self.account_id = (
             str(platform_config.get("weixin_oc_account_id", "")).strip() or None
@@ -119,11 +124,9 @@ class WeixinOCAdapter(Platform):
             api_timeout_ms=self.api_timeout_ms,
             token=self.token,
         )
-
         if self.token:
             logger.info(
-                "weixin_oc adapter %s loaded with token from config.",
-                self.meta().id,
+                "weixin_oc adapter %s loaded with token from config.", self.meta().id
             )
 
     def _sync_client_state(self) -> None:
@@ -131,6 +134,288 @@ class WeixinOCAdapter(Platform):
         self.client.cdn_base_url = self.cdn_base_url
         self.client.api_timeout_ms = self.api_timeout_ms
         self.client.token = self.token
+
+    def _get_typing_state(self, user_id: str) -> TypingSessionState:
+        state = self._typing_states.get(user_id)
+        if state is None:
+            state = TypingSessionState()
+            self._typing_states[user_id] = state
+        return state
+
+    def _typing_supported_for(self, user_id: str) -> bool:
+        if not self.token:
+            return False
+        return bool(self._context_tokens.get(user_id))
+
+    async def _cancel_task_safely(
+        self,
+        task: asyncio.Task | None,
+        *,
+        log_message: str | None = None,
+        log_args: tuple[Any, ...] = (),
+    ) -> None:
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            if log_message is not None:
+                logger.warning(log_message, *log_args, exc_info=True)
+
+    async def _ensure_typing_ticket(
+        self, user_id: str, state: TypingSessionState
+    ) -> str | None:
+        now = time.monotonic()
+        context_token = self._context_tokens.get(user_id)
+        if not context_token:
+            return None
+        if (
+            state.ticket
+            and state.ticket_context_token == context_token
+            and (state.refresh_after > now)
+        ):
+            return state.ticket
+        payload = await self.client.get_typing_config(user_id, context_token)
+        if int(payload.get("ret") or 0) != 0:
+            logger.warning(
+                "weixin_oc(%s): getconfig failed for %s: %s",
+                self.meta().id,
+                user_id,
+                payload.get("errmsg", ""),
+            )
+            return None
+        ticket = str(payload.get("typing_ticket", "")).strip()
+        if not ticket:
+            return None
+        state.ticket = ticket
+        state.ticket_context_token = context_token
+        state.refresh_after = time.monotonic() + self._typing_ticket_ttl_s
+        return ticket
+
+    async def _send_typing_state(
+        self, user_id: str, ticket: str, *, cancel: bool
+    ) -> None:
+        payload = await self.client.send_typing_state(user_id, ticket, cancel=cancel)
+        if int(payload.get("ret") or 0) != 0:
+            raise RuntimeError(
+                f"sendtyping failed for {user_id}: {payload.get('errmsg', '')}"
+            )
+
+    async def _run_typing_keepalive(self, user_id: str) -> None:
+        restart_needed = False
+        try:
+            await self._typing_keepalive_loop(user_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            state = self._typing_states.get(user_id)
+            if state is not None:
+                async with state.lock:
+                    state.refresh_after = 0.0
+                    restart_needed = bool(state.owners) and (
+                        not self._shutdown_event.is_set()
+                    )
+            logger.warning(
+                "weixin_oc(%s): typing keepalive failed for %s: %s",
+                self.meta().id,
+                user_id,
+                e,
+            )
+        finally:
+            state = self._typing_states.get(user_id)
+            current_task = asyncio.current_task()
+            if state is not None and state.keepalive_task is current_task:
+                state.keepalive_task = None
+        if not restart_needed:
+            return
+        await asyncio.sleep(self._typing_keepalive_interval_s)
+        state = self._typing_states.get(user_id)
+        if state is None or self._shutdown_event.is_set():
+            return
+        async with state.lock:
+            if not state.owners or state.keepalive_task is not None:
+                return
+            state.keepalive_task = asyncio.create_task(
+                self._run_typing_keepalive(user_id)
+            )
+
+    async def _typing_keepalive_loop(self, user_id: str) -> None:
+        while not self._shutdown_event.is_set():
+            await asyncio.sleep(self._typing_keepalive_interval_s)
+            state = self._typing_states.get(user_id)
+            if state is None:
+                return
+            async with state.lock:
+                if not state.owners:
+                    return
+                try:
+                    ticket = await self._ensure_typing_ticket(user_id, state)
+                except Exception as e:
+                    state.refresh_after = 0.0
+                    logger.warning(
+                        "weixin_oc(%s): refresh typing ticket failed for %s: %s",
+                        self.meta().id,
+                        user_id,
+                        e,
+                    )
+                    continue
+                if not ticket:
+                    continue
+                try:
+                    await self._send_typing_state(user_id, ticket, cancel=False)
+                except Exception as e:
+                    state.refresh_after = 0.0
+                    logger.warning(
+                        "weixin_oc(%s): typing keepalive send failed for %s: %s",
+                        self.meta().id,
+                        user_id,
+                        e,
+                    )
+
+    async def _delayed_cancel_typing(self, user_id: str, ticket: str) -> None:
+        await asyncio.sleep(0)
+        state = self._typing_states.get(user_id)
+        if state is None:
+            return
+        current_task = asyncio.current_task()
+        async with state.lock:
+            if state.cancel_task is not current_task:
+                return
+            if state.owners or state.keepalive_task is not None:
+                state.cancel_task = None
+                return
+        try:
+            await self._send_typing_state(user_id, ticket, cancel=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(
+                "weixin_oc(%s): cancel typing failed for %s: %s",
+                self.meta().id,
+                user_id,
+                e,
+            )
+        finally:
+            state = self._typing_states.get(user_id)
+            if state is None:
+                return
+            async with state.lock:
+                if state.cancel_task is current_task:
+                    state.cancel_task = None
+
+    async def start_typing(self, user_id: str, owner_id: str) -> None:
+        state = self._get_typing_state(user_id)
+        cancel_task: asyncio.Task | None = None
+        async with state.lock:
+            if owner_id in state.owners:
+                return
+            if not self._typing_supported_for(user_id):
+                return
+            if state.cancel_task is not None and (not state.cancel_task.done()):
+                cancel_task = state.cancel_task
+                cancel_task.cancel()
+                state.cancel_task = None
+            try:
+                ticket = await self._ensure_typing_ticket(user_id, state)
+            except Exception as e:
+                logger.warning(
+                    "weixin_oc(%s): ensure typing ticket failed for %s: %s",
+                    self.meta().id,
+                    user_id,
+                    e,
+                )
+                return
+            if not ticket:
+                return
+            state.ticket = ticket
+            state.owners.add(owner_id)
+            if state.keepalive_task is not None and (not state.keepalive_task.done()):
+                return
+            try:
+                await self._send_typing_state(user_id, ticket, cancel=False)
+            except Exception as e:
+                state.refresh_after = 0.0
+                logger.warning(
+                    "weixin_oc(%s): send typing failed for %s: %s",
+                    self.meta().id,
+                    user_id,
+                    e,
+                )
+            task = asyncio.create_task(self._run_typing_keepalive(user_id))
+            state.keepalive_task = task
+        if cancel_task is not None:
+            await self._cancel_task_safely(
+                cancel_task,
+                log_message="weixin_oc(%s): ignored error from cancelled typing task",
+                log_args=(self.meta().id,),
+            )
+
+    async def stop_typing(self, user_id: str, owner_id: str) -> None:
+        state = self._typing_states.get(user_id)
+        if state is None:
+            return
+        task: asyncio.Task | None = None
+        async with state.lock:
+            if owner_id not in state.owners:
+                return
+            state.owners.remove(owner_id)
+            if state.owners:
+                return
+            task = state.keepalive_task
+            state.keepalive_task = None
+        await self._cancel_task_safely(
+            task,
+            log_message="weixin_oc(%s): typing keepalive stop failed for %s",
+            log_args=(self.meta().id, user_id),
+        )
+        async with state.lock:
+            if state.owners:
+                return
+            ticket = state.ticket
+            if ticket:
+                if state.cancel_task is None or state.cancel_task.done():
+                    state.cancel_task = asyncio.create_task(
+                        self._delayed_cancel_typing(user_id, ticket)
+                    )
+
+    async def _cleanup_typing_tasks(self) -> None:
+        tasks: list[asyncio.Task] = []
+        cancels: list[tuple[str, str]] = []
+        for user_id, state in list(self._typing_states.items()):
+            if state.ticket and (
+                state.owners
+                or state.keepalive_task is not None
+                or state.cancel_task is not None
+            ):
+                cancels.append((user_id, state.ticket))
+            state.owners.clear()
+            if state.keepalive_task is not None and (not state.keepalive_task.done()):
+                tasks.append(state.keepalive_task)
+                state.keepalive_task.cancel()
+                state.keepalive_task = None
+            if state.cancel_task is not None and (not state.cancel_task.done()):
+                tasks.append(state.cancel_task)
+                state.cancel_task.cancel()
+                state.cancel_task = None
+        for task in tasks:
+            await self._cancel_task_safely(
+                task,
+                log_message="weixin_oc(%s): typing cleanup failed",
+                log_args=(self.meta().id,),
+            )
+        for user_id, ticket in cancels:
+            try:
+                await self._send_typing_state(user_id, ticket, cancel=True)
+            except Exception as e:
+                logger.warning(
+                    "weixin_oc(%s): typing cleanup cancel failed for %s: %s",
+                    self.meta().id,
+                    user_id,
+                    e,
+                )
 
     def _load_account_state(self) -> None:
         if not self.token:
@@ -153,7 +438,6 @@ class WeixinOCAdapter(Platform):
         self.config["weixin_oc_account_id"] = self.account_id or ""
         self.config["weixin_oc_sync_buf"] = self._sync_buf
         self.config["weixin_oc_base_url"] = self.base_url
-
         for platform in astrbot_config.get("platform", []):
             if not isinstance(platform, dict):
                 continue
@@ -166,7 +450,6 @@ class WeixinOCAdapter(Platform):
             platform["weixin_oc_sync_buf"] = self._sync_buf
             platform["weixin_oc_base_url"] = self.base_url
             break
-
         self._sync_client_state()
         astrbot_config.save_config()
 
@@ -175,7 +458,7 @@ class WeixinOCAdapter(Platform):
     ) -> bool:
         if not login_session:
             return False
-        return (time.time() - login_session.started_at) * 1000 < 5 * 60_000
+        return (time.time() - login_session.started_at) * 1000 < 5 * 60000
 
     def _resolve_inbound_media_dir(self) -> Path:
         media_dir = Path(get_astrbot_temp_path())
@@ -188,16 +471,10 @@ class WeixinOCAdapter(Platform):
         return normalized or fallback_name
 
     def _save_inbound_media(
-        self,
-        content: bytes,
-        *,
-        prefix: str,
-        file_name: str,
-        fallback_suffix: str,
+        self, content: bytes, *, prefix: str, file_name: str, fallback_suffix: str
     ) -> Path:
         normalized_name = self._normalize_inbound_filename(
-            file_name,
-            f"{prefix}{fallback_suffix}",
+            file_name, f"{prefix}{fallback_suffix}"
         )
         stem = Path(normalized_name).stem or prefix
         suffix = Path(normalized_name).suffix or fallback_suffix
@@ -210,12 +487,7 @@ class WeixinOCAdapter(Platform):
 
     @staticmethod
     def _build_plain_text_item(text: str) -> dict[str, Any]:
-        return {
-            "type": 1,
-            "text_item": {
-                "text": text,
-            },
-        }
+        return {"type": 1, "text_item": {"text": text}}
 
     async def _prepare_media_item(
         self,
@@ -225,13 +497,12 @@ class WeixinOCAdapter(Platform):
         item_type: int,
         file_name: str,
     ) -> dict[str, Any]:
-        raw_bytes = media_path.read_bytes()
+        raw_bytes = await asyncio.to_thread(media_path.read_bytes)
         raw_size = len(raw_bytes)
         raw_md5 = hashlib.md5(raw_bytes).hexdigest()
         file_key = uuid.uuid4().hex
         aes_key_hex = uuid.uuid4().bytes.hex()
         ciphertext_size = self.client.aes_padded_size(raw_size)
-
         payload = await self.client.request_json(
             "POST",
             "ilink/bot/getuploadurl",
@@ -244,9 +515,7 @@ class WeixinOCAdapter(Platform):
                 "filesize": ciphertext_size,
                 "no_need_thumb": True,
                 "aeskey": aes_key_hex,
-                "base_info": {
-                    "channel_version": "astrbot",
-                },
+                "base_info": {"channel_version": "astrbot"},
             },
             token_required=True,
             timeout_ms=self.api_timeout_ms,
@@ -263,14 +532,9 @@ class WeixinOCAdapter(Platform):
             len(str(payload.get("upload_param", ""))),
         )
         upload_param = str(payload.get("upload_param", "")).strip()
-        if not upload_param:
-            raise RuntimeError("getuploadurl returned empty upload_param")
-
+        upload_full_url = str(payload.get("upload_full_url", "")).strip()
         encrypted_query_param = await self.client.upload_to_cdn(
-            upload_param,
-            file_key,
-            aes_key_hex,
-            media_path,
+            upload_full_url, upload_param, file_key, aes_key_hex, media_path
         )
         logger.debug(
             "weixin_oc(%s): prepared media item type=%s file=%s user=%s mid_size=%s upload_param_len=%s query_len=%s",
@@ -282,31 +546,22 @@ class WeixinOCAdapter(Platform):
             len(upload_param),
             len(encrypted_query_param),
         )
-
         aes_key_b64 = base64.b64encode(aes_key_hex.encode("utf-8")).decode("utf-8")
         media_payload = {
             "encrypt_query_param": encrypted_query_param,
             "aes_key": aes_key_b64,
             "encrypt_type": 1,
         }
-
         if item_type == self.IMAGE_ITEM_TYPE:
             return {
                 "type": self.IMAGE_ITEM_TYPE,
-                "image_item": {
-                    "media": media_payload,
-                    "mid_size": ciphertext_size,
-                },
+                "image_item": {"media": media_payload, "mid_size": ciphertext_size},
             }
         if item_type == self.VIDEO_ITEM_TYPE:
             return {
                 "type": self.VIDEO_ITEM_TYPE,
-                "video_item": {
-                    "media": media_payload,
-                    "video_size": ciphertext_size,
-                },
+                "video_item": {"media": media_payload, "video_size": ciphertext_size},
             }
-
         file_len = str(raw_size)
         return {
             "type": self.FILE_ITEM_TYPE,
@@ -318,14 +573,12 @@ class WeixinOCAdapter(Platform):
         }
 
     async def _resolve_inbound_media_component(
-        self,
-        item: dict[str, Any],
+        self, item: dict[str, Any]
     ) -> Image | Video | File | Record | None:
         item_type = int(item.get("type") or 0)
-
         if item_type == self.IMAGE_ITEM_TYPE:
-            image_item = cast(dict[str, Any], item.get("image_item", {}) or {})
-            media = cast(dict[str, Any], image_item.get("media", {}) or {})
+            image_item = item.get("image_item", {}) or {}
+            media = image_item.get("media", {}) or {}
             encrypted_query_param = str(media.get("encrypt_query_param", "")).strip()
             if not encrypted_query_param:
                 return None
@@ -338,8 +591,7 @@ class WeixinOCAdapter(Platform):
                 aes_key_value = str(media.get("aes_key", "")).strip()
             if aes_key_value:
                 content = await self.client.download_and_decrypt_media(
-                    encrypted_query_param,
-                    aes_key_value,
+                    encrypted_query_param, aes_key_value
                 )
             else:
                 content = await self.client.download_cdn_bytes(encrypted_query_param)
@@ -350,17 +602,15 @@ class WeixinOCAdapter(Platform):
                 fallback_suffix=".jpg",
             )
             return Image.fromFileSystem(str(image_path))
-
         if item_type == self.VIDEO_ITEM_TYPE:
-            video_item = cast(dict[str, Any], item.get("video_item", {}) or {})
-            media = cast(dict[str, Any], video_item.get("media", {}) or {})
+            video_item = item.get("video_item", {}) or {}
+            media = video_item.get("media", {}) or {}
             encrypted_query_param = str(media.get("encrypt_query_param", "")).strip()
             aes_key_value = str(media.get("aes_key", "")).strip()
             if not encrypted_query_param or not aes_key_value:
                 return None
             content = await self.client.download_and_decrypt_media(
-                encrypted_query_param,
-                aes_key_value,
+                encrypted_query_param, aes_key_value
             )
             video_path = self._save_inbound_media(
                 content,
@@ -369,21 +619,18 @@ class WeixinOCAdapter(Platform):
                 fallback_suffix=".mp4",
             )
             return Video.fromFileSystem(str(video_path))
-
         if item_type == self.FILE_ITEM_TYPE:
-            file_item = cast(dict[str, Any], item.get("file_item", {}) or {})
-            media = cast(dict[str, Any], file_item.get("media", {}) or {})
+            file_item = item.get("file_item", {}) or {}
+            media = file_item.get("media", {}) or {}
             encrypted_query_param = str(media.get("encrypt_query_param", "")).strip()
             aes_key_value = str(media.get("aes_key", "")).strip()
             if not encrypted_query_param or not aes_key_value:
                 return None
             file_name = self._normalize_inbound_filename(
-                str(file_item.get("file_name", "")).strip(),
-                "file.bin",
+                str(file_item.get("file_name", "")).strip(), "file.bin"
             )
             content = await self.client.download_and_decrypt_media(
-                encrypted_query_param,
-                aes_key_value,
+                encrypted_query_param, aes_key_value
             )
             file_path = self._save_inbound_media(
                 content,
@@ -392,17 +639,15 @@ class WeixinOCAdapter(Platform):
                 fallback_suffix=".bin",
             )
             return File(name=file_name, file=str(file_path))
-
         if item_type == self.VOICE_ITEM_TYPE:
-            voice_item = cast(dict[str, Any], item.get("voice_item", {}) or {})
-            media = cast(dict[str, Any], voice_item.get("media", {}) or {})
+            voice_item = item.get("voice_item", {}) or {}
+            media = voice_item.get("media", {}) or {}
             encrypted_query_param = str(media.get("encrypt_query_param", "")).strip()
             aes_key_value = str(media.get("aes_key", "")).strip()
             if not encrypted_query_param or not aes_key_value:
                 return None
             content = await self.client.download_and_decrypt_media(
-                encrypted_query_param,
-                aes_key_value,
+                encrypted_query_param, aes_key_value
             )
             voice_path = self._save_inbound_media(
                 content,
@@ -411,7 +656,6 @@ class WeixinOCAdapter(Platform):
                 fallback_suffix=".silk",
             )
             return Record.fromFileSystem(str(voice_path))
-
         return None
 
     async def _resolve_media_file_path(
@@ -427,26 +671,24 @@ class WeixinOCAdapter(Platform):
         except Exception as e:
             logger.warning("weixin_oc(%s): media resolve failed: %s", self.meta().id, e)
             return None
-
         if not path:
             return None
         media_path = Path(path)
-        if not media_path.exists() or not media_path.is_file():
+        path_exists = await asyncio.to_thread(media_path.exists)
+        path_is_file = await asyncio.to_thread(media_path.is_file)
+        if not path_exists or not path_is_file:
             return None
         return media_path
 
     async def _send_items_to_session(
-        self,
-        user_id: str,
-        item_list: list[dict[str, Any]],
+        self, user_id: str, item_list: list[dict[str, Any]]
     ) -> bool:
         if not self.token:
             logger.warning("weixin_oc(%s): missing token, skip send", self.meta().id)
             return False
         if not item_list:
             logger.warning(
-                "weixin_oc(%s): empty message payload is ignored",
-                self.meta().id,
+                "weixin_oc(%s): empty message payload is ignored", self.meta().id
             )
             return False
         context_token = self._context_tokens.get(user_id)
@@ -461,9 +703,7 @@ class WeixinOCAdapter(Platform):
             "POST",
             "ilink/bot/sendmessage",
             payload={
-                "base_info": {
-                    "channel_version": "astrbot",
-                },
+                "base_info": {"channel_version": "astrbot"},
                 "msg": {
                     "from_user_id": "",
                     "to_user_id": user_id,
@@ -480,10 +720,7 @@ class WeixinOCAdapter(Platform):
         return True
 
     async def _send_media_segment(
-        self,
-        user_id: str,
-        segment: Image | Video | File,
-        text: str | None = None,
+        self, user_id: str, segment: Image | Video | File, text: str | None = None
     ) -> bool:
         if not self.token:
             logger.warning(
@@ -497,7 +734,6 @@ class WeixinOCAdapter(Platform):
                 self.meta().id,
             )
             return False
-
         item_type = self.IMAGE_ITEM_TYPE
         upload_media_type = self.IMAGE_UPLOAD_TYPE
         if isinstance(segment, Video):
@@ -506,7 +742,6 @@ class WeixinOCAdapter(Platform):
         elif isinstance(segment, File):
             item_type = self.FILE_ITEM_TYPE
             upload_media_type = self.FILE_UPLOAD_TYPE
-
         file_name = (
             segment.name
             if isinstance(segment, File) and segment.name
@@ -514,20 +749,14 @@ class WeixinOCAdapter(Platform):
         )
         try:
             media_item = await self._prepare_media_item(
-                user_id,
-                media_path,
-                upload_media_type,
-                item_type,
-                file_name,
+                user_id, media_path, upload_media_type, item_type, file_name
             )
         except Exception as e:
             logger.error("weixin_oc(%s): prepare media failed: %s", self.meta().id, e)
             return False
-
         if text:
             await self._send_items_to_session(
-                user_id,
-                [self._build_plain_text_item(text)],
+                user_id, [self._build_plain_text_item(text)]
             )
         return await self._send_items_to_session(user_id, [media_item])
 
@@ -536,20 +765,13 @@ class WeixinOCAdapter(Platform):
         params = {"bot_type": self.bot_type}
         logger.info("weixin_oc(%s): request QR code from %s", self.meta().id, endpoint)
         data = await self.client.request_json(
-            "GET",
-            endpoint,
-            params=params,
-            token_required=False,
-            timeout_ms=15_000,
+            "GET", endpoint, params=params, token_required=False, timeout_ms=15000
         )
         qrcode = str(data.get("qrcode", "")).strip()
         qrcode_url = str(data.get("qrcode_img_content", "")).strip()
         if not qrcode or not qrcode_url:
             raise RuntimeError("qrcode response missing qrcode or qrcode_img_content")
-        qr_console_url = (
-            f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data="
-            f"{quote(qrcode_url)}"
-        )
+        qr_console_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={quote(qrcode_url)}"
         logger.info(
             "weixin_oc(%s): QR session started, qr_link=%s 请使用手机微信扫码登录,二维码有效期 5 分钟,过期后会自动刷新｡",
             self.meta().id,
@@ -611,7 +833,6 @@ class WeixinOCAdapter(Platform):
             new_session = await self._start_login_session()
             self._login_session = new_session
             return
-
         if status == "confirmed":
             bot_token = data.get("bot_token")
             account_id = data.get("ilink_bot_id")
@@ -681,9 +902,7 @@ class WeixinOCAdapter(Platform):
                 media_component = await self._resolve_inbound_media_component(item)
             except Exception as e:
                 logger.warning(
-                    "weixin_oc(%s): resolve inbound media failed: %s",
-                    self.meta().id,
-                    e,
+                    "weixin_oc(%s): resolve inbound media failed: %s", self.meta().id, e
                 )
                 media_component = None
             if media_component is not None:
@@ -695,23 +914,20 @@ class WeixinOCAdapter(Platform):
         if not from_user_id:
             logger.debug("weixin_oc: skip message with empty from_user_id.")
             return
-
         context_token = str(msg.get("context_token", "")).strip()
         if context_token:
             self._context_tokens[from_user_id] = context_token
-
-        item_list = cast(list[dict[str, Any]], msg.get("item_list", []))
+        item_list = msg.get("item_list", [])
         components = await self._item_list_to_components(item_list)
         text = self._message_text_from_item_list(item_list)
         message_id = str(msg.get("message_id") or msg.get("msg_id") or uuid.uuid4().hex)
         create_time = msg.get("create_time_ms") or msg.get("create_time")
-        if isinstance(create_time, (int, float)) and create_time > 1_000_000_000_000:
+        if isinstance(create_time, (int, float)) and create_time > 1000000000000:
             ts = int(float(create_time) / 1000)
         elif isinstance(create_time, (int, float)):
             ts = int(create_time)
         else:
             ts = int(time.time())
-
         abm = AstrBotMessage()
         abm.self_id = self.meta().id
         abm.sender = MessageMember(user_id=from_user_id, nickname=from_user_id)
@@ -722,7 +938,6 @@ class WeixinOCAdapter(Platform):
         abm.message_str = text
         abm.timestamp = ts
         abm.raw_message = msg
-
         self.commit_event(
             WeixinOCMessageEvent(
                 message_str=text,
@@ -738,9 +953,7 @@ class WeixinOCAdapter(Platform):
             "POST",
             "ilink/bot/getupdates",
             payload={
-                "base_info": {
-                    "channel_version": "astrbot",
-                },
+                "base_info": {"channel_version": "astrbot"},
                 "get_updates_buf": self._sync_buf,
             },
             token_required=True,
@@ -766,11 +979,9 @@ class WeixinOCAdapter(Platform):
                 self._last_inbound_error,
             )
             return
-
         if data.get("get_updates_buf"):
             self._sync_buf = str(data.get("get_updates_buf"))
             await self._save_account_state()
-
         for msg in data.get("msgs", []) if isinstance(data.get("msgs"), list) else []:
             if self._shutdown_event.is_set():
                 return
@@ -792,19 +1003,15 @@ class WeixinOCAdapter(Platform):
             text = self._message_chain_to_text(MessageChain(_components or []))
         if not text:
             logger.warning(
-                "weixin_oc(%s): message without plain text is ignored",
-                self.meta().id,
+                "weixin_oc(%s): message without plain text is ignored", self.meta().id
             )
             return False
         return await self._send_items_to_session(
-            user_id,
-            [self._build_plain_text_item(text)],
+            user_id, [self._build_plain_text_item(text)]
         )
 
     async def send_by_session(
-        self,
-        session: MessageSesion,
-        message_chain: MessageChain,
+        self, session: MessageSesion, message_chain: MessageChain
     ) -> None:
         target_user = session.session_id
         pending_text = ""
@@ -813,27 +1020,21 @@ class WeixinOCAdapter(Platform):
             if isinstance(segment, Plain):
                 pending_text += segment.text
                 continue
-
             if isinstance(segment, (Image, Video, File)):
                 has_supported_segment = True
                 await self._send_media_segment(
-                    target_user,
-                    segment,
-                    text=pending_text.strip() or None,
+                    target_user, segment, text=pending_text.strip() or None
                 )
                 pending_text = ""
                 continue
-
             logger.debug(
                 "weixin_oc(%s): unsupported outbound segment type %s",
                 self.meta().id,
                 type(segment).__name__,
             )
-
         if pending_text:
             has_supported_segment = True
             await self._send_to_session(target_user, pending_text.strip())
-
         if not has_supported_segment:
             logger.warning(
                 "weixin_oc(%s): outbound message ignored, no supported segments",
@@ -860,17 +1061,14 @@ class WeixinOCAdapter(Platform):
                             )
                             await asyncio.sleep(5)
                             continue
-
                     current_login = self._login_session
                     if current_login is None:
                         continue
-
                     try:
                         await self._poll_qr_status(current_login)
                     except asyncio.TimeoutError:
                         logger.debug(
-                            "weixin_oc(%s): qr status long-poll timeout",
-                            self.meta().id,
+                            "weixin_oc(%s): qr status long-poll timeout", self.meta().id
                         )
                     except Exception as e:
                         logger.error(
@@ -880,7 +1078,6 @@ class WeixinOCAdapter(Platform):
                         )
                         current_login.error = str(e)
                         await asyncio.sleep(2)
-
                     if self.token:
                         logger.info(
                             "weixin_oc(%s): login confirmed, account=%s",
@@ -888,23 +1085,35 @@ class WeixinOCAdapter(Platform):
                             self.account_id or "",
                         )
                         continue
-
                     if current_login.error:
                         await asyncio.sleep(2)
                     else:
                         await asyncio.sleep(self.qr_poll_interval)
                     continue
-
-                await self._poll_inbound_updates()
+                try:
+                    await self._poll_inbound_updates()
+                except asyncio.TimeoutError:
+                    logger.debug(
+                        "weixin_oc(%s): inbound long-poll timeout", self.meta().id
+                    )
+                except Exception as e:
+                    logger.error(
+                        "weixin_oc(%s): poll inbound updates failed, will retry after 5 seconds: %s",
+                        self.meta().id,
+                        e,
+                    )
+                    await asyncio.sleep(5)
         except asyncio.CancelledError:
             raise
         except Exception as e:
             logger.exception("weixin_oc(%s): run failed: %s", self.meta().id, e)
         finally:
+            await self._cleanup_typing_tasks()
             await self.client.close()
 
     async def terminate(self) -> None:
         self._shutdown_event.set()
+        await self._cleanup_typing_tasks()
 
     def get_stats(self) -> dict:
         stat = super().get_stats()

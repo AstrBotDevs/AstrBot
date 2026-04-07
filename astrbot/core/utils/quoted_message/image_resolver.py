@@ -43,7 +43,7 @@ def _build_image_resolve_actions(
         group_id = event.get_group_id()
     except Exception:
         group_id = None
-    group_id_value = group_id
+    group_id_value: int | str | None = group_id
     if isinstance(group_id, str) and group_id.isdigit():
         group_id_value = int(group_id)
 

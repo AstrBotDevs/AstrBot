@@ -1,18 +1,16 @@
 import asyncio
 import math
 import random
-from collections.abc import AsyncGenerator
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger
 from astrbot.core.message.components import BaseMessageComponent, ComponentType
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
-
-from ..context import PipelineContext, call_event_hook
-from ..stage import Stage, register_stage
 
 
 @register_stage
@@ -32,7 +30,6 @@ class RespondStage(Stage):
         Comp.Node: lambda comp: bool(comp.content),  # 转发节点
         Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
         Comp.File: lambda comp: bool(comp.file_ or comp.url),
-        Comp.WechatEmoji: lambda comp: comp.md5 is not None,  # 微信表情
         Comp.Json: lambda comp: bool(comp.data),  # Json 卡片
         Comp.Share: lambda comp: bool(comp.url) or bool(comp.title),
         Comp.Music: lambda comp: (
@@ -44,7 +41,7 @@ class RespondStage(Stage):
             comp.lat is not None and comp.lon is not None
         ),  # 位置
         Comp.Contact: lambda comp: bool(comp._type and comp.id),  # 推荐好友 or 群
-        Comp.Shake: lambda _: True,  # 窗口抖动(戳一戳)
+        Comp.Shake: lambda _: True,  # 窗口抖动（戳一戳）
         Comp.Dice: lambda _: True,  # 掷骰子魔法表情
         Comp.RPS: lambda _: True,  # 猜拳魔法表情
         Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
@@ -118,12 +115,8 @@ class RespondStage(Stage):
             return True
 
         for comp in chain:
-            comp_type = type(comp)
-
-            # 检查组件类型是否在字典中
-            if comp_type in self._component_validators:
-                if self._component_validators[comp_type](comp):
-                    return False
+            if self._has_meaningful_content(comp):
+                return False
 
         # 如果所有组件都为空
         return True
@@ -170,7 +163,7 @@ class RespondStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         result = event.get_result()
         if result is None:
             return

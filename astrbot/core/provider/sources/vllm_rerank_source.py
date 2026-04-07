@@ -1,10 +1,9 @@
 import aiohttp
 
 from astrbot import logger
-
-from ..entities import ProviderType, RerankResult
-from ..provider import RerankProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider.entities import ProviderType, RerankResult
+from astrbot.core.provider.provider import RerankProvider
+from astrbot.core.provider.register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -20,13 +19,18 @@ class VLLMRerankProvider(RerankProvider):
         self.auth_key = provider_config.get("rerank_api_key", "")
         self.base_url = provider_config.get("rerank_api_base", "http://127.0.0.1:8000")
         self.base_url = self.base_url.rstrip("/")
+        self.api_suffix = provider_config.get("rerank_api_suffix", "/v1/rerank")
+        if self.api_suffix is None:
+            self.api_suffix = "/v1/rerank"
+        if self.api_suffix and not self.api_suffix.startswith("/"):
+            self.api_suffix = "/" + self.api_suffix
         self.timeout = provider_config.get("timeout", 20)
         self.model = provider_config.get("rerank_model", "BAAI/bge-reranker-base")
 
         h = {}
         if self.auth_key:
             h["Authorization"] = f"Bearer {self.auth_key}"
-        self.client = aiohttp.ClientSession(
+        self.client: aiohttp.ClientSession | None = aiohttp.ClientSession(
             headers=h,
             timeout=aiohttp.ClientTimeout(total=self.timeout),
         )
@@ -45,8 +49,9 @@ class VLLMRerankProvider(RerankProvider):
         if top_n is not None:
             payload["top_n"] = top_n
         assert self.client is not None
+        rerank_url = f"{self.base_url}{self.api_suffix}"
         async with self.client.post(
-            f"{self.base_url}/v1/rerank",
+            rerank_url,
             json=payload,
         ) as response:
             response_data = await response.json()

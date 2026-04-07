@@ -25,6 +25,7 @@ class AgentRequestSubStage(Stage):
                 self.prov_wake_prefix = self.prov_wake_prefix[len(bwp) :]
 
         agent_runner_type = self.config["provider_settings"]["agent_runner_type"]
+        self.agent_sub_stage: InternalAgentSubStage | ThirdPartyAgentSubStage
         if agent_runner_type == "local":
             self.agent_sub_stage = InternalAgentSubStage()
         else:
@@ -44,5 +45,5 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        async for resp in self.agent_sub_stage.process(event):
-            yield resp
+        async for _ in self.agent_sub_stage.process(event):
+            yield None

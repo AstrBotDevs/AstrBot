@@ -467,7 +467,7 @@ class SQLiteDatabase:
                 ORDER BY updated_at DESC
                 LIMIT ? OFFSET ?
             """
-            query_params = params + [page_size, offset]
+            query_params = [*params, page_size, offset]
 
             # 获取分页数据
             c.execute(data_sql, query_params)

@@ -9,7 +9,7 @@ from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_PROVIDER_TYPE,
 )
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
-from astrbot.core.message.components import Image
+from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -24,6 +24,7 @@ from astrbot.core.persona_error_reply import (
 if TYPE_CHECKING:
     from astrbot.core.agent.runners.base import BaseAgentRunner
     from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.agent.tool_session_manager import ToolSessionManager
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.pipeline.context import PipelineContext, call_event_hook
 from astrbot.core.pipeline.stage import Stage
@@ -60,7 +61,7 @@ async def run_third_party_agent(
     类似于 run_agent 函数,但专门处理第三方 agent runner
     """
     try:
-        async for resp in runner.step_until_done(max_step=30):  # type: ignore[misc]
+        async for resp in runner.step_until_done(max_step=30):
             if resp.type == "streaming_delta":
                 if stream_to_general:
                     continue
@@ -231,7 +232,7 @@ class ThirdPartyAgentSubStage(Stage):
             .set_result_content_type(ResultContentType.STREAMING_RESULT)
             .set_async_stream(_stream_runner_chain()),
         )
-        yield
+        yield None
 
         if runner.done():
             final_chain, is_runner_error = aggregator.finalize(
@@ -278,12 +279,12 @@ class ThirdPartyAgentSubStage(Stage):
             ),
         )
         # Second yield keeps scheduler progress consistent after final result update.
-        yield
+        yield None
 
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
         if self.provider_wake_prefix and not event.message_str.startswith(
@@ -312,8 +313,11 @@ class ThirdPartyAgentSubStage(Stage):
             if isinstance(comp, Image):
                 image_path = await comp.convert_to_base64()
                 req.image_urls.append(image_path)
+            elif isinstance(comp, Record):
+                audio_path = await comp.convert_to_file_path()
+                req.audio_urls.append(audio_path)
 
-        if not req.prompt and not req.image_urls:
+        if not req.prompt and not req.image_urls and not req.audio_urls:
             return
 
         custom_error_message = await self._resolve_persona_custom_error_message(event)
@@ -344,7 +348,9 @@ class ThirdPartyAgentSubStage(Stage):
                 DifyAgentRunner,
             )
 
-            runner = DifyAgentRunner[AstrAgentContext]()
+            runner: BaseAgentRunner[AstrAgentContext] = DifyAgentRunner[
+                AstrAgentContext
+            ]()
         elif self.runner_type == "coze":
             from astrbot.core.agent.runners.coze.coze_agent_runner import (
                 CozeAgentRunner,
@@ -401,12 +407,25 @@ class ThirdPartyAgentSubStage(Stage):
                 stream_watchdog_task.cancel()
 
         try:
+            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+
+            provider = self.ctx.plugin_manager.context.get_using_provider(
+                umo=event.unified_msg_origin,
+            )
+            if provider is None:
+                raise ValueError(
+                    "No active provider is available for third-party runner"
+                )
+
             await runner.reset(
+                provider=provider,
                 request=req,
                 run_context=AgentContextWrapper(
                     context=astr_agent_ctx,
                     tool_call_timeout=120,
+                    session_manager=ToolSessionManager(),
                 ),
+                tool_executor=FunctionToolExecutor(),
                 agent_hooks=MAIN_AGENT_HOOKS,
                 provider_config=self.prov_cfg,
                 streaming=streaming_response,
@@ -425,7 +444,7 @@ class ThirdPartyAgentSubStage(Stage):
                     close_runner_once=close_runner_once,
                     mark_stream_consumed=mark_stream_consumed,
                 ):
-                    yield
+                    yield None
             else:
                 async for _ in self._handle_non_streaming_response(
                     runner=runner,
@@ -433,7 +452,7 @@ class ThirdPartyAgentSubStage(Stage):
                     stream_to_general=stream_to_general,
                     custom_error_message=custom_error_message,
                 ):
-                    yield
+                    yield None
         finally:
             if (
                 stream_watchdog_task

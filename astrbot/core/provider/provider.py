@@ -2,7 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import TypeAlias, Union, cast
+from typing import Literal, TypeAlias, Union
 
 import aiofiles
 import anyio
@@ -19,11 +19,7 @@ from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
 Providers: TypeAlias = Union[
-    "Provider",
-    "STTProvider",
-    "TTSProvider",
-    "EmbeddingProvider",
-    "RerankProvider",
+    "Provider", "STTProvider", "TTSProvider", "EmbeddingProvider", "RerankProvider"
 ]
 
 
@@ -69,11 +65,7 @@ class AbstractProvider(abc.ABC):
 class Provider(AbstractProvider):
     """Chat Provider"""
 
-    def __init__(
-        self,
-        provider_config: dict,
-        provider_settings: dict,
-    ) -> None:
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config)
         self.provider_settings = provider_settings
 
@@ -101,12 +93,14 @@ class Provider(AbstractProvider):
         prompt: str | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         func_tool: ToolSet | None = None,
         contexts: list[Message] | list[dict] | None = None,
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果｡会使用当前的模型进行对话｡
@@ -115,15 +109,18 @@ class Provider(AbstractProvider):
             prompt: 提示词,和 contexts 二选一使用,如果都指定,则会将 prompt(以及可能的 image_urls) 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
+            audio_urls: 音频 URL 列表，也支持本地路径
             tools: tool set
             contexts: 上下文,和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果｡参考: https://platform.openai.com/docs/guides/function-calling
-            extra_user_content_parts: 额外的内容块列表,用于在用户消息后添加额外的文本块(如系统提醒､指令等)
+            tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
+            extra_user_content_parts: 额外的内容块列表,用于在用户消息后添加额外的文本块(如系统提醒｡指令等)
             kwargs: 其他参数
 
         Notes:
-            - 如果传入了 image_urls,将会在对话时附上图片｡如果模型不支持图片输入,将会抛出错误｡
-            - 如果传入了 tools,将会使用 tools 进行 Function-calling｡如果模型不支持 Function-calling,将会抛出错误｡
+            - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
+            - 如果传入了 audio_urls，将会在对话时附上音频。如果模型不支持音频输入，将会抛出错误或降级处理。
+            - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
         ...
@@ -133,11 +130,14 @@ class Provider(AbstractProvider):
         prompt: str | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         func_tool: ToolSet | None = None,
         contexts: list[Message] | list[dict] | None = None,
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果｡会使用当前的模型进行对话｡在生成的最后会返回一次完整的结果｡
@@ -146,18 +146,22 @@ class Provider(AbstractProvider):
             prompt: 提示词,和 contexts 二选一使用,如果都指定,则会将 prompt(以及可能的 image_urls) 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
+            audio_urls: 音频 URL 列表，也支持本地路径
             tools: tool set
             contexts: 上下文,和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果｡参考: https://platform.openai.com/docs/guides/function-calling
+            tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
+            extra_user_content_parts: 额外的内容块列表,用于在用户消息后添加额外的文本块(如系统提醒｡指令等)
             kwargs: 其他参数
 
         Notes:
-            - 如果传入了 image_urls,将会在对话时附上图片｡如果模型不支持图片输入,将会抛出错误｡
-            - 如果传入了 tools,将会使用 tools 进行 Function-calling｡如果模型不支持 Function-calling,将会抛出错误｡
+            - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
+            - 如果传入了 audio_urls，将会在对话时附上音频。如果模型不支持音频输入，将会抛出错误或降级处理。
+            - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
-        if False:  # pragma: no cover - make this an async generator for typing
-            yield cast(LLMResponse, None)
+        if False:
+            yield None
         raise NotImplementedError()
 
     async def pop_record(self, context: list) -> None:
@@ -171,13 +175,11 @@ class Provider(AbstractProvider):
             poped += 1
             if poped == 2:
                 break
-
         for idx in reversed(indexs_to_pop):
             context.pop(idx)
 
     def _ensure_message_to_dicts(
-        self,
-        messages: list[dict] | list[Message] | None,
+        self, messages: list[dict] | list[Message] | None
     ) -> list[dict]:
         """Convert a list of Message objects to a list of dictionaries."""
         if not messages:
@@ -188,12 +190,9 @@ class Provider(AbstractProvider):
                 dicts.append(message.model_dump())
             else:
                 dicts.append(message)
-
         return dicts
 
     async def test(self, test_timeout: float = 45.0) -> None:
-        # Use anyio.fail_after to enforce timeout in async context.
-        # This avoids direct asyncio.wait_for usage inside async functions.
         with anyio.fail_after(test_timeout):
             await self.text_chat(prompt="REPLY `PONG` ONLY")
 
@@ -211,9 +210,7 @@ class STTProvider(AbstractProvider):
 
     async def test(self) -> None:
         sample_audio_path = os.path.join(
-            get_astrbot_path(),
-            "samples",
-            "stt_health_check.wav",
+            get_astrbot_path(), "samples", "stt_health_check.wav"
         )
         await self.get_text(sample_audio_path)
 
@@ -260,45 +257,31 @@ class TTSProvider(AbstractProvider):
             - 音频数据应该是 WAV 格式的 bytes
         """
         accumulated_text = ""
-
         while True:
             text_part = await text_queue.get()
-
             if text_part is None:
-                # 输入结束,处理累积的文本
                 if accumulated_text:
                     try:
-                        # 调用原有的 get_audio 方法获取音频文件路径
                         audio_path = await self.get_audio(accumulated_text)
-                        # 读取音频文件内容
                         async with aiofiles.open(audio_path, "rb") as f:
                             audio_data = await f.read()
                         await audio_queue.put((accumulated_text, audio_data))
                     except Exception:
-                        # 出错时也要发送 None 结束标记
                         pass
-                # 发送结束标记
                 await audio_queue.put(None)
                 break
-
             accumulated_text += text_part
 
     async def test(self) -> None:
         audio_path = await self.get_audio("hi")
-
-        # 检查生成的音频文件是否有效
         audio_path_obj = anyio.Path(audio_path)
         if not await audio_path_obj.exists():
             raise Exception("TTS test failed: audio file was not created")
-
         file_size = (await audio_path_obj.stat()).st_size
         if file_size == 0:
             raise Exception(
-                "TTS test failed: generated audio file is empty (0 bytes). "
-                "Please check your TTS provider configuration, especially required parameters like group_id for MiniMax."
+                "TTS test failed: generated audio file is empty (0 bytes). Please check your TTS provider configuration, especially required parameters like group_id for MiniMax."
             )
-
-        # 清理测试文件
         try:
             os.remove(audio_path)
         except Exception:
@@ -369,12 +352,10 @@ class EmbeddingProvider(AbstractProvider):
                         return
                     except Exception as e:
                         if attempt == max_retries - 1:
-                            # 最后一次重试失败,记录失败的批次
                             failed_batches.append((batch_idx, batch_texts))
                             raise Exception(
-                                f"批次 {batch_idx} 处理失败,已重试 {max_retries} 次: {e!s}",
+                                f"批次 {batch_idx} 处理失败,已重试 {max_retries} 次: {e!s}"
                             )
-                        # 等待一段时间后重试,使用指数退避
                         await asyncio.sleep(2**attempt)
 
         tasks = []
@@ -382,18 +363,13 @@ class EmbeddingProvider(AbstractProvider):
             batch_texts = texts[i : i + batch_size]
             batch_idx = i // batch_size
             tasks.append(process_batch(batch_idx, batch_texts))
-
-        # 收集所有任务的结果,包括失败的任务
         results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # 检查是否有失败的任务
         errors = [r for r in results if isinstance(r, Exception)]
         if errors:
             error_msg = (
                 f"有 {len(errors)} 个批次处理失败: {'; '.join(str(e) for e in errors)}"
             )
             raise Exception(error_msg)
-
         return all_embeddings
 
 
@@ -405,10 +381,7 @@ class RerankProvider(AbstractProvider):
 
     @abc.abstractmethod
     async def rerank(
-        self,
-        query: str,
-        documents: list[str],
-        top_n: int | None = None,
+        self, query: str, documents: list[str], top_n: int | None = None
     ) -> list[RerankResult]:
         """获取查询和文档的重排序分数"""
         ...

@@ -56,4 +56,4 @@ Runs on `http://localhost:3000` by default.
 ## PR instructions
 
 1. Title format: use conventional commit messages
-2. Use English to write PR title and descriptions.
+2. Use English to write PR title and descriptions./<

@@ -4,23 +4,25 @@ import queue
 import re
 import sys
 import threading
-import typing as T
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from dashscope import Application
 from dashscope.app.application_response import ApplicationResponse
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger, sp
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.response import AgentResponseData
+from astrbot.core.agent.run_context import ContextWrapper, TContext
+from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgentRunner
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-
-from ...hooks import BaseAgentRunHooks
-from ...response import AgentResponseData
-from ...run_context import ContextWrapper, TContext
-from ..base import AgentResponse, AgentState, BaseAgentRunner
+from astrbot.core.provider.provider import Provider
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -34,19 +36,32 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
         self,
+        provider: Provider,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
+        tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
-        provider_config: dict,
-        **kwargs: T.Any,
+        streaming: bool = False,
+        enforce_max_turns: int = -1,
+        llm_compress_instruction: str | None = None,
+        llm_compress_keep_recent: int = 0,
+        llm_compress_provider: Provider | None = None,
+        truncate_turns: int = 1,
+        custom_token_counter: Any = None,
+        custom_compressor: Any = None,
+        tool_schema_mode: str | None = "full",
+        fallback_providers: list[Provider] | None = None,
+        provider_config: dict | None = None,
+        **kwargs: Any,
     ) -> None:
         self.req = request
-        self.streaming = kwargs.get("streaming", False)
-        self.final_llm_resp = None
+        self.streaming = streaming
+        self.final_llm_resp: LLMResponse | None = None
         self._state = AgentState.IDLE
         self.agent_hooks = agent_hooks
         self.run_context = run_context
 
+        provider_config = provider_config or {}
         self.api_key = provider_config.get("dashscope_api_key", "")
         if not self.api_key:
             raise Exception("阿里云百炼 API Key 不能为空｡")
@@ -116,15 +131,13 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             )
 
     @override
-    async def step_until_done(
-        self, max_step: int = 3
-    ) -> T.AsyncGenerator[AgentResponse, None]:
+    async def step_until_done(self, max_step: int):
         while not self.done():
             async for resp in self.step():
                 yield resp
 
     def _consume_sync_generator(
-        self, response: T.Any, response_queue: queue.Queue
+        self, response: Any, response_queue: queue.Queue
     ) -> None:
         """在线程中消费同步generator,将结果放入队列
 
@@ -180,7 +193,8 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
-        chunk_text = chunk.output.get("text", "") or ""
+        chunk_text_value = chunk.output.get("text", "")
+        chunk_text = chunk_text_value if isinstance(chunk_text_value, str) else ""
         # RAG 引用脚标格式化
         chunk_text = re.sub(r"<ref>\[(\d+)\]</ref>", r"[\1]", chunk_text)
 
@@ -193,7 +207,10 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             )
 
         # 获取文档引用
-        doc_references = chunk.output.get("doc_references", None)
+        raw_doc_references = chunk.output.get("doc_references")
+        doc_references = (
+            raw_doc_references if isinstance(raw_doc_references, list) else None
+        )
 
         return output_text, doc_references, response
 
@@ -238,15 +255,17 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             default="",
         )
         # 获得会话变量
-        payload_vars = self.variables.copy()
-        session_var = await sp.get_async(
-            scope="umo",
-            scope_id=session_id,
-            key="session_variables",
-            default={},
+        payload_vars: dict = self.variables.copy()
+        session_var: dict = (
+            await sp.get_async(
+                scope="umo",
+                scope_id=session_id,
+                key="session_variables",
+                default={},
+            )
+            or {}
         )
         payload_vars.update(session_var)
-
         if (
             self.dashscope_app_type in ["agent", "dialog-workflow"]
             and not self.has_rag_options()
@@ -278,8 +297,8 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             return payload
 
     async def _handle_streaming_response(
-        self, response: T.Any, session_id: str
-    ) -> T.AsyncGenerator[AgentResponse, None]:
+        self, response: Any, session_id: str
+    ) -> AsyncGenerator[AgentResponse, None]:
         """处理流式响应
 
         Args:
@@ -289,7 +308,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             AgentResponse 对象
 
         """
-        response_queue = queue.Queue()
+        response_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
         consumer_thread = threading.Thread(
             target=self._consume_sync_generator,
             args=(response, response_queue),
@@ -311,6 +330,10 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             if item_type == "done":
                 break
             elif item_type == "error":
+                if not isinstance(item_data, BaseException):
+                    raise RuntimeError(
+                        f"Unexpected Dashscope error payload: {item_data!r}"
+                    )
                 raise item_data
             elif item_type == "data":
                 chunk = item_data
@@ -319,14 +342,14 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
                 (
                     output_text,
                     chunk_doc_refs,
-                    response,
+                    agent_response,
                 ) = await self._process_stream_chunk(chunk, output_text)
 
-                if response:
-                    if response.type == "err":
-                        yield response
+                if agent_response:
+                    if agent_response.type == "err":
+                        yield agent_response
                         return
-                    yield response
+                    yield agent_response
 
                 if chunk_doc_refs:
                     doc_references = chunk_doc_refs
@@ -352,11 +375,12 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
         # 创建最终响应
         chain = MessageChain(chain=[Comp.Plain(output_text)])
-        self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
+        final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
+        self.final_llm_resp = final_llm_resp
         self._transition_state(AgentState.DONE)
 
         try:
-            await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
+            await self.agent_hooks.on_agent_done(self.run_context, final_llm_resp)
         except Exception as e:
             logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 

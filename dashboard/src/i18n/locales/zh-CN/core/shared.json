@@ -60,6 +60,7 @@
     "confirmSelection": "确认选择",
     "selectPersonaPool": "选择人格池...",
     "rootFolder": "全部人格",
+    "editPersona": "编辑人格",
     "emptyFolder": "此文件夹为空"
   },
   "personaQuickPreview": {

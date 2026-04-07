@@ -8,9 +8,9 @@ from typing import Protocol, runtime_checkable
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.utils.error_redaction import safe_error
 
-from ..persona_mgr import PersonaManager
 from .entities import ProviderType
 from .provider import (
     EmbeddingProvider,
@@ -256,6 +256,8 @@ class ProviderManager:
                     provider = self.provider_insts[0] if self.provider_insts else None
             elif provider_type == ProviderType.SPEECH_TO_TEXT:
                 provider_id = config["provider_stt_settings"].get("provider_id")
+                if not config["provider_stt_settings"].get("enable"):
+                    return None
                 if not provider_id:
                     return None
                 provider = self.inst_map.get(provider_id)
@@ -265,6 +267,8 @@ class ProviderManager:
                     )
             elif provider_type == ProviderType.TEXT_TO_SPEECH:
                 provider_id = config["provider_tts_settings"].get("provider_id")
+                if not config["provider_tts_settings"].get("enable"):
+                    return None
                 if not provider_id:
                     return None
                 provider = self.inst_map.get(provider_id)
@@ -369,6 +373,8 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
+            case "longcat_chat_completion":
+                from .sources.longcat_source import ProviderLongCat as ProviderLongCat
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
             case "groq_chat_completion":
@@ -482,6 +488,10 @@ class ProviderManager:
             case "bailian_rerank":
                 from .sources.bailian_rerank_source import (
                     BailianRerankProvider as BailianRerankProvider,
+                )
+            case "nvidia_rerank":
+                from .sources.nvidia_rerank_source import (
+                    NvidiaRerankProvider as NvidiaRerankProvider,
                 )
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
@@ -742,25 +752,26 @@ class ProviderManager:
             logger.info(
                 f"终止 {provider_id} 提供商适配器({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)}) ...",
             )
+            provider_inst = self.inst_map[provider_id]
 
-            if self.inst_map[provider_id] in self.provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, Provider):
                     self.provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.stt_provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.stt_provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, STTProvider):
                     self.stt_provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.tts_provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.tts_provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, TTSProvider):
                     self.tts_provider_insts.remove(prov_inst)
 
-            if self.inst_map[provider_id] == self.curr_provider_inst:
+            if provider_inst == self.curr_provider_inst:
                 self.curr_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_stt_provider_inst:
+            if provider_inst == self.curr_stt_provider_inst:
                 self.curr_stt_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_tts_provider_inst:
+            if provider_inst == self.curr_tts_provider_inst:
                 self.curr_tts_provider_inst = None
 
             inst = self.inst_map[provider_id]
@@ -836,6 +847,35 @@ class ProviderManager:
             # sync in-memory config for API queries (e.g., embedding provider list)
             self.providers_config = astrbot_config["provider"]
 
+    def _get_all_provider_instances(self) -> list[Providers]:
+        seen: set[int] = set()
+        instances: list[Providers] = []
+        for provider_inst in [
+            *self.provider_insts,
+            *self.stt_provider_insts,
+            *self.tts_provider_insts,
+            *self.embedding_provider_insts,
+            *self.rerank_provider_insts,
+            *self.inst_map.values(),
+        ]:
+            marker = id(provider_inst)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            instances.append(provider_inst)
+        return instances
+
+    def _clear_loaded_instances(self) -> None:
+        self.provider_insts = []
+        self.stt_provider_insts = []
+        self.tts_provider_insts = []
+        self.embedding_provider_insts = []
+        self.rerank_provider_insts = []
+        self.inst_map = {}
+        self.curr_provider_inst = None
+        self.curr_stt_provider_inst = None
+        self.curr_tts_provider_inst = None
+
     async def terminate(self) -> None:
         if self._mcp_init_task and not self._mcp_init_task.done():
             self._mcp_init_task.cancel()
@@ -844,9 +884,20 @@ class ProviderManager:
             except asyncio.CancelledError:
                 pass
 
-        for provider_inst in self.provider_insts:
-            if isinstance(provider_inst, SupportsTerminate):
+        self._mcp_init_task = None
+        provider_instances = self._get_all_provider_instances()
+        self._clear_loaded_instances()
+
+        for provider_inst in provider_instances:
+            if not isinstance(provider_inst, SupportsTerminate):
+                continue
+            try:
                 await provider_inst.terminate()
+            except Exception:
+                logger.error(
+                    "Error while terminating provider instance",
+                    exc_info=True,
+                )
         try:
             await self.llm_tools.disable_mcp_server()
         except Exception:

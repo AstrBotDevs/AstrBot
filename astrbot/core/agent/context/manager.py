@@ -1,6 +1,6 @@
 from astrbot import logger
+from astrbot.core.agent.message import Message
 
-from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
 from .token_counter import EstimateTokenCounter
