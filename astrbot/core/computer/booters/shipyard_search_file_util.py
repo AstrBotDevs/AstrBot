@@ -5,6 +5,27 @@ from typing import Any
 
 from ..olayer import ShellComponent
 
+_MAX_SEARCH_LINE_COLUMNS = 1000
+
+
+def _truncate_long_lines(text: str) -> str:
+    output_lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        line_ending = ""
+        line_body = line
+        if line.endswith("\r\n"):
+            line_body = line[:-2]
+            line_ending = "\r\n"
+        elif line.endswith("\n") or line.endswith("\r"):
+            line_body = line[:-1]
+            line_ending = line[-1]
+
+        if len(line_body) > _MAX_SEARCH_LINE_COLUMNS:
+            line_body = line_body[:_MAX_SEARCH_LINE_COLUMNS]
+
+        output_lines.append(f"{line_body}{line_ending}")
+    return "".join(output_lines)
+
 
 def _build_rg_command(
     *,
@@ -14,7 +35,15 @@ def _build_rg_command(
     after_context: int | None,
     before_context: int | None,
 ) -> list[str]:
-    command = ["rg", "--color=never", "-n", "-e", pattern]
+    command = [
+        "rg",
+        "--color=never",
+        "-n",
+        "--max-columns",
+        str(_MAX_SEARCH_LINE_COLUMNS),
+        "-e",
+        pattern,
+    ]
     if glob:
         command.extend(["-g", glob])
     if after_context is not None:
@@ -104,7 +133,7 @@ async def search_files_via_shell(
         before_context=before_context,
     )
     result = await shell.exec(command, timeout=timeout)
-    stdout = str(result.get("stdout", "") or "")
+    stdout = _truncate_long_lines(str(result.get("stdout", "") or ""))
     stderr = str(result.get("stderr", "") or "")
     exit_code = result.get("exit_code")
     if exit_code in (0, None):

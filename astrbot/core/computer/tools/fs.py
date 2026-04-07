@@ -51,6 +51,7 @@ from astrbot.core.utils.astrbot_path import (
 
 from ..computer_client import get_booter
 from .permissions import check_admin_permission
+from .tool_utils.file_read import read_file_tool_result
 
 
 def _normalize_umo_for_workspace(umo: str) -> str:
@@ -175,12 +176,12 @@ class FileReadTool(FunctionTool):
                 },
                 "offset": {
                     "type": "integer",
-                    "description": "Line offset to start reading from. Defaults to 0.",
+                    "description": "Optional line offset to start reading from. 0-based index.",
                     "minimum": 0,
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Maximum number of lines to read. Defaults to 4000.",
+                    "description": "Optional maximum number of lines to read.",
                     "minimum": 1,
                 },
             },
@@ -226,23 +227,12 @@ class FileReadTool(FunctionTool):
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
-            result = await sb.fs.read_file(
+            return await read_file_tool_result(
+                sb,
                 path=normalized_path,
-                encoding="utf-8",
                 offset=offset,
                 limit=limit,
             )
-            if not result.get("success", False):
-                error_detail = str(result.get("error", "") or "").strip()
-                return (
-                    "Error reading file: "
-                    f"{error_detail or 'unknown filesystem read error'}"
-                )
-
-            content = str(result.get("content", "") or "")
-            if not content:
-                return "No content found at the requested line offset."
-            return content or ""
         except PermissionError as exc:
             return f"Error: {exc}"
         except Exception as exc:
@@ -438,7 +428,7 @@ class GrepTool(FunctionTool):
                 },
                 "result_limit": {
                     "type": "integer",
-                    "description": "Maximum number of result groups returned by the tool. Defaults to 50.",
+                    "description": "Maximum number of result groups returned by the tool. Defaults to 100.",
                     "minimum": 1,
                 },
             },
@@ -544,7 +534,7 @@ class GrepTool(FunctionTool):
         pattern: str,
         path: str | None = None,
         glob: str | None = None,
-        result_limit: int = 50,
+        result_limit: int = 100,
         **kwargs,
     ) -> ToolExecResult:
         normalized_pattern = pattern.strip()

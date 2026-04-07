@@ -16,6 +16,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
+from .shipyard_search_file_util import _truncate_long_lines
 
 _BLOCKED_COMMAND_PATTERNS = [
     " rm -rf ",
@@ -236,7 +237,7 @@ class LocalFileSystemComponent(FileSystemComponent):
                 before_context=before_context,
                 line_number=True,
             )
-            return {"success": True, "content": "".join(results)}
+            return {"success": True, "content": _truncate_long_lines("".join(results))}
 
         return await asyncio.to_thread(_run)
 

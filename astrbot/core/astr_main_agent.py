@@ -1350,7 +1350,15 @@ async def build_main_agent(
         )
 
         if config.computer_use_runtime == "local":
-            tool_prompt += f"\nCurrent workspace you can use: `{os.path.join(get_astrbot_workspaces_path(), event.unified_msg_origin)}`\n"
+            from astrbot.core.computer.tools.fs import _normalize_umo_for_workspace
+
+            normalized_umo = _normalize_umo_for_workspace(event.unified_msg_origin)
+            tool_prompt += (
+                f"\nCurrent workspace you can use: "
+                f"`{os.path.join(get_astrbot_workspaces_path(), normalized_umo)}`\n"
+                "Unless the user explicitly specifies a different directory, "
+                "perform all file-related operations in this workspace.\n"
+            )
 
         req.system_prompt += f"\n{tool_prompt}\n"
 
