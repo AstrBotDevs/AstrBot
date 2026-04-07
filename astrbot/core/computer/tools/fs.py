@@ -151,6 +151,16 @@ def _normalize_rw_path(
     return normalized_path
 
 
+def _decode_escaped_text(value: str) -> str:
+    """Decode common escaped control sequences used in tool arguments."""
+    return (
+        value.replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\r", "\r")
+        .replace("\\t", "\t")
+    )
+
+
 @dataclass
 class FileReadTool(FunctionTool):
     name: str = "astrbot_file_read_tool"
@@ -359,14 +369,16 @@ class FileEditTool(FunctionTool):
             )
             if not normalized_path:
                 raise ValueError("`path` must be a non-empty string.")
+            normalized_old = _decode_escaped_text(old)
+            normalized_new = _decode_escaped_text(new)
             sb = await get_booter(
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
             result = await sb.fs.edit_file(
                 path=normalized_path,
-                old_string=old,
-                new_string=new,
+                old_string=normalized_old,
+                new_string=normalized_new,
                 replace_all=replace_all,
                 encoding="utf-8",
             )

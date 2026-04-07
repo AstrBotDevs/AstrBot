@@ -1350,7 +1350,7 @@ async def build_main_agent(
         )
 
         if config.computer_use_runtime == "local":
-            tool_prompt += f"Current workspace you can use: `{os.path.join(get_astrbot_workspaces_path(), event.unified_msg_origin)}`\n"
+            tool_prompt += f"\nCurrent workspace you can use: `{os.path.join(get_astrbot_workspaces_path(), event.unified_msg_origin)}`\n"
 
         req.system_prompt += f"\n{tool_prompt}\n"
 
