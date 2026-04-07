@@ -782,7 +782,7 @@ class WeixinOCAdapter(Platform):
         context_token = self._context_tokens.get(user_id)
         if not context_token:
             logger.warning(
-                "weixin_oc(%s): context token missing for %s, skip send",
+                "weixin_oc(%s): context token missing for %s, skip send. You should send one message to refresh context_token.",
                 self.meta().id,
                 user_id,
             )
