@@ -31,6 +31,7 @@ from astrbot.core.astr_main_agent_resources import (
     FILE_DOWNLOAD_TOOL,
     FILE_EDIT_TOOL,
     FILE_UPLOAD_TOOL,
+    FILE_WRITE_TOOL,
     GET_EXECUTION_HISTORY_TOOL,
     GET_SKILL_PAYLOAD_TOOL,
     GREP_TOOL,
@@ -70,6 +71,7 @@ from astrbot.core.tools.cron_tools import (
     DELETE_CRON_JOB_TOOL,
     LIST_CRON_JOBS_TOOL,
 )
+from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.media_utils import (
@@ -289,6 +291,7 @@ def _apply_local_env_tools(req: ProviderRequest) -> None:
     req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
     req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
     req.func_tool.add_tool(READ_FILE_TOOL)
+    req.func_tool.add_tool(FILE_WRITE_TOOL)
     req.func_tool.add_tool(FILE_EDIT_TOOL)
     req.func_tool.add_tool(GREP_TOOL)
     req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
@@ -998,6 +1001,7 @@ def _apply_sandbox_tools(
     req.func_tool.add_tool(FILE_UPLOAD_TOOL)
     req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
     req.func_tool.add_tool(READ_FILE_TOOL)
+    req.func_tool.add_tool(FILE_WRITE_TOOL)
     req.func_tool.add_tool(FILE_EDIT_TOOL)
     req.func_tool.add_tool(GREP_TOOL)
     if booter == "shipyard_neo":
@@ -1344,6 +1348,10 @@ async def build_main_agent(
             if config.tool_schema_mode == "full"
             else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
         )
+
+        if config.computer_use_runtime == "local":
+            tool_prompt += f"Current workspace you can use: `{os.path.join(get_astrbot_workspaces_path(), event.unified_msg_origin)}`\n"
+
         req.system_prompt += f"\n{tool_prompt}\n"
 
     action_type = event.get_extra("action_type")

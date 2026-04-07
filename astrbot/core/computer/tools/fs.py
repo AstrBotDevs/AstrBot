@@ -1,27 +1,34 @@
 """Filesystem tool audit.
 
 Tool exposure from the main agent:
-- Local runtime exposes `astrbot_read_file_tool`, `astrbot_file_edit_tool`,
-  and `astrbot_grep_tool`.
+- Local runtime exposes `astrbot_read_file_tool`, `astrbot_file_write_tool`,
+  `astrbot_file_edit_tool`, and `astrbot_grep_tool`.
 - Sandbox runtime exposes `astrbot_upload_file`, `astrbot_download_file`,
-  `astrbot_read_file_tool`, `astrbot_file_edit_tool`, and `astrbot_grep_tool`.
+  `astrbot_read_file_tool`, `astrbot_file_write_tool`,
+  `astrbot_file_edit_tool`, and `astrbot_grep_tool`.
 
 Behavior when `provider_settings.computer_use_require_admin=True`:
-- Admin + local: read/edit/grep are not path-restricted by this module; access
-  depends on the local runtime implementation and host OS permissions. Upload
-  and download tools are defined here, but `LocalBooter` does not implement
-  them and the main agent does not expose them in local mode.
-- Member + local: read/edit/grep are restricted to `data/skills`,
+- Admin + local: read/write/edit/grep are not path-restricted by this module;
+  access depends on the local runtime implementation and host OS permissions.
+  Upload and download tools are defined here, but `LocalBooter` does not
+  implement them and the main agent does not expose them in local mode.
+- Member + local: read/write/edit/grep are restricted to `data/skills`,
   `data/workspaces/{normalized_umo}`, and `/tmp/.astrbot`. Upload/download are
   denied by `check_admin_permission` if invoked.
-- Admin + sandbox: read/edit/grep are not path-restricted by this module;
+- Admin + sandbox: read/write/edit/grep are not path-restricted by this
+  module;
   sandbox filesystem boundaries are enforced by the sandbox runtime. Upload and
   download are allowed.
-- Member + sandbox: read/edit/grep are also not path-restricted by this module.
-  Upload/download are denied by `check_admin_permission` if invoked.
+- Member + sandbox: read/write/edit/grep are also not path-restricted by this
+  module. Upload/download are denied by `check_admin_permission` if invoked.
 
 When `computer_use_require_admin=False`, member behavior in this module matches
 admin behavior.
+
+Local path resolution rule:
+- In local runtime, relative paths are resolved under
+  `data/workspaces/{normalized_umo}`.
+- In sandbox runtime, relative paths are passed through unchanged.
 """
 
 import os
@@ -61,75 +68,78 @@ def _restricted_env_path_labels(umo: str) -> list[str]:
     ]
 
 
+def _workspace_root(umo: str) -> Path:
+    """Root directory for relative paths in local runtime"""
+    normalized_umo = _normalize_umo_for_workspace(umo)
+    return (Path(get_astrbot_workspaces_path()) / normalized_umo).resolve(strict=False)
+
+
 def _read_allowed_roots(umo: str) -> tuple[Path, ...]:
     """Non-admin users can only read files within these directories (and their subdirectories)"""
-    normalized_umo = _normalize_umo_for_workspace(umo)
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
-        (Path(get_astrbot_workspaces_path()) / normalized_umo).resolve(strict=False),
+        _workspace_root(umo),
         Path("/tmp/.astrbot").resolve(strict=False),
     )
 
 
-def _is_restricted_env(context: ContextWrapper[AstrAgentContext]) -> bool:
+def _is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
     cfg = context.context.context.get_config(
         umo=context.context.event.unified_msg_origin
     )
     provider_settings = cfg.get("provider_settings", {})
     runtime = str(provider_settings.get("computer_use_runtime", "local"))
-    if runtime != "local":
+    return runtime == "local"
+
+
+def _is_restricted_env(context: ContextWrapper[AstrAgentContext]) -> bool:
+    if not _is_local_runtime(context):
         return False
+    cfg = context.context.context.get_config(
+        umo=context.context.event.unified_msg_origin
+    )
+    provider_settings = cfg.get("provider_settings", {})
     require_admin = provider_settings.get("computer_use_require_admin", True)
     return require_admin and context.context.event.role != "admin"
 
 
-def _resolve_user_path(path: str) -> Path:
+def _resolve_tool_path(path: str, *, local_env: bool, umo: str) -> str:
+    normalized_path = path.strip()
+    if not normalized_path:
+        return normalized_path
+    candidate = Path(normalized_path).expanduser()
+    if candidate.is_absolute():
+        return str(candidate.resolve(strict=False))
+    if local_env:
+        return str((_workspace_root(umo) / candidate).resolve(strict=False))
+    return normalized_path
+
+
+def _resolve_user_path(path: str, *, local_env: bool, umo: str) -> Path:
     candidate = Path(path).expanduser()
     if candidate.is_absolute():
         return candidate.resolve(strict=False)
+    if local_env:
+        return (_workspace_root(umo) / candidate).resolve(strict=False)
     return (Path.cwd() / candidate).resolve(strict=False)
 
 
 def _is_path_within_allowed_roots(path: str, umo: str) -> bool:
-    resolved = _resolve_user_path(path)
+    resolved = _resolve_user_path(path, local_env=True, umo=umo)
     return any(
         resolved == allowed_root or resolved.is_relative_to(allowed_root)
         for allowed_root in _read_allowed_roots(umo)
     )
 
 
-def _normalize_search_paths(
-    path: str | None,
-    *,
-    restricted: bool,
-    umo: str,
-) -> list[str]:
-    normalized = [path] if path else []
-    if not normalized:
-        return _restricted_env_path_labels(umo) if restricted else ["."]
-
-    if restricted:
-        disallowed = [
-            path for path in normalized if not _is_path_within_allowed_roots(path, umo)
-        ]
-        if disallowed:
-            allowed = ", ".join(_restricted_env_path_labels(umo))
-            blocked = ", ".join(disallowed)
-            raise PermissionError(
-                "Read access is restricted for this user. "
-                f"Allowed directories: {allowed}. Blocked paths: {blocked}."
-            )
-
-    return normalized
-
-
-def _normalize_read_path(
+def _normalize_rw_path(
     path: str,
     *,
     restricted: bool,
+    local_env: bool,
     umo: str,
 ) -> str:
-    normalized_path = path.strip()
+    normalized_path = _resolve_tool_path(path, local_env=local_env, umo=umo)
     if not normalized_path:
         raise ValueError("`path` must be a non-empty string.")
     if restricted and not _is_path_within_allowed_roots(normalized_path, umo):
@@ -141,79 +151,9 @@ def _normalize_read_path(
     return normalized_path
 
 
-def _resolve_context_options(
-    after_context: int | None,
-    before_context: int | None,
-    context: int | None,
-) -> tuple[int | None, int | None]:
-    if context is not None and context < 0:
-        raise ValueError("`-C` must be greater than or equal to 0.")
-    if after_context is not None and after_context < 0:
-        raise ValueError("`-A` must be greater than or equal to 0.")
-    if before_context is not None and before_context < 0:
-        raise ValueError("`-B` must be greater than or equal to 0.")
-
-    resolved_after = context if after_context is None else after_context
-    resolved_before = context if before_context is None else before_context
-    return resolved_after, resolved_before
-
-
-def _split_output_groups(output: str, *, has_context: bool) -> list[str]:
-    if not output.strip():
-        return []
-
-    if not has_context:
-        return [f"{line}\n" for line in output.splitlines() if line.strip()]
-
-    groups: list[str] = []
-    current: list[str] = []
-
-    for line in output.splitlines(keepends=True):
-        if line.strip() == "--":
-            if current:
-                groups.append("".join(current))
-                current = []
-            continue
-        if not line.strip():
-            continue
-        current.append(line)
-
-    if current:
-        groups.append("".join(current))
-    return groups
-
-
-def _apply_result_limit(
-    output: str,
-    *,
-    result_limit: int,
-    has_context: bool,
-) -> str:
-    if result_limit < 1:
-        raise ValueError("`result_limit` must be greater than or equal to 1.")
-
-    groups = _split_output_groups(output, has_context=has_context)
-    if len(groups) <= result_limit:
-        return output if output.strip() else "No matches found."
-
-    limited_output = "".join(groups[:result_limit]).rstrip()
-    return f"{limited_output}\n\n[Truncated to first {result_limit} result groups.]"
-
-
-def _validate_read_window(
-    offset: int | None,
-    limit: int | None,
-) -> tuple[int | None, int | None]:
-    if offset is not None and offset < 0:
-        raise ValueError("`offset` must be greater than or equal to 0.")
-    if limit is not None and limit < 1:
-        raise ValueError("`limit` must be greater than or equal to 1.")
-    return offset, limit
-
-
 @dataclass
-class ReadFileTool(FunctionTool):
-    name: str = "astrbot_read_file_tool"
+class FileReadTool(FunctionTool):
+    name: str = "astrbot_file_read_tool"
     description: str = "read file content."
     parameters: dict = field(
         default_factory=lambda: {
@@ -221,22 +161,33 @@ class ReadFileTool(FunctionTool):
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Path of the file to read.",
+                    "description": "Path of the file to read. If relative, will be in workspace root.",
                 },
                 "offset": {
                     "type": "integer",
-                    "description": "Character offset to start reading from. Defaults to 0.",
+                    "description": "Line offset to start reading from. Defaults to 0.",
                     "minimum": 0,
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Maximum number of characters to read. Defaults to 4000.",
+                    "description": "Maximum number of lines to read. Defaults to 4000.",
                     "minimum": 1,
                 },
             },
             "required": ["path"],
         }
     )
+
+    def _validate_read_window(
+        self,
+        offset: int | None,
+        limit: int | None,
+    ) -> tuple[int | None, int | None]:
+        if offset is not None and offset < 0:
+            raise ValueError("`offset` must be greater than or equal to 0.")
+        if limit is not None and limit < 1:
+            raise ValueError("`limit` must be greater than or equal to 1.")
+        return offset, limit
 
     async def call(
         self,
@@ -245,14 +196,22 @@ class ReadFileTool(FunctionTool):
         offset: int | None = None,
         limit: int | None = None,
     ) -> ToolExecResult:
+        local_env = _is_local_runtime(context)
         restricted = _is_restricted_env(context)
         try:
-            normalized_path = _normalize_read_path(
-                path,
-                restricted=restricted,
-                umo=context.context.event.unified_msg_origin,
+            normalized_path = (
+                _normalize_rw_path(
+                    path,
+                    restricted=restricted,
+                    local_env=local_env,
+                    umo=context.context.event.unified_msg_origin,
+                )
+                if local_env
+                else path.strip()
             )
-            offset, limit = _validate_read_window(offset, limit)
+            if not normalized_path:
+                raise ValueError("`path` must be a non-empty string.")
+            offset, limit = self._validate_read_window(offset, limit)
             sb = await get_booter(
                 context.context.context,
                 context.context.event.unified_msg_origin,
@@ -272,13 +231,79 @@ class ReadFileTool(FunctionTool):
 
             content = str(result.get("content", "") or "")
             if not content:
-                return "No content found at the requested offset."
+                return "No content found at the requested line offset."
             return content or ""
         except PermissionError as exc:
             return f"Error: {exc}"
         except Exception as exc:
             logger.error(f"Error reading file: {exc}")
             return f"Error reading file: {exc}"
+
+
+@dataclass
+class FileWriteTool(FunctionTool):
+    name: str = "astrbot_file_write_tool"
+    description: str = "Write UTF-8 text content to a file."
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Path of the file to write. If relative, will be in workspace root.",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The content to write to the file",
+                },
+            },
+            "required": ["path", "content"],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        path: str,
+        content: str,
+    ) -> ToolExecResult:
+        local_env = _is_local_runtime(context)
+        restricted = _is_restricted_env(context)
+        try:
+            normalized_path = (
+                _normalize_rw_path(
+                    path,
+                    restricted=restricted,
+                    local_env=local_env,
+                    umo=context.context.event.unified_msg_origin,
+                )
+                if local_env
+                else path.strip()
+            )
+            if not normalized_path:
+                raise ValueError("`path` must be a non-empty string.")
+            sb = await get_booter(
+                context.context.context,
+                context.context.event.unified_msg_origin,
+            )
+            result = await sb.fs.write_file(
+                path=normalized_path,
+                content=content,
+                mode="w",
+                encoding="utf-8",
+            )
+            if not result.get("success", False):
+                error_detail = str(result.get("error", "") or "").strip()
+                return (
+                    "Error writing file: "
+                    f"{error_detail or 'unknown filesystem write error'}"
+                )
+            return f"File written successfully: {normalized_path}"
+        except PermissionError as exc:
+            return f"Error: {exc}"
+        except Exception as exc:
+            logger.error(f"Error writing file: {exc}")
+            return f"Error writing file: {exc}"
 
 
 @dataclass
@@ -291,7 +316,7 @@ class FileEditTool(FunctionTool):
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Path of the file to edit.",
+                    "description": "Path of the file to edit. If relative, will be in workspace root.",
                 },
                 "old": {
                     "type": "string",
@@ -319,13 +344,21 @@ class FileEditTool(FunctionTool):
         replace_all: bool = False,
     ) -> ToolExecResult:
         umo = str(context.context.event.unified_msg_origin)
+        local_env = _is_local_runtime(context)
         restricted = _is_restricted_env(context)
         try:
-            normalized_path = _normalize_read_path(
-                path,
-                restricted=restricted,
-                umo=umo,
+            normalized_path = (
+                _normalize_rw_path(
+                    path,
+                    restricted=restricted,
+                    local_env=local_env,
+                    umo=umo,
+                )
+                if local_env
+                else path.strip()
             )
+            if not normalized_path:
+                raise ValueError("`path` must be a non-empty string.")
             sb = await get_booter(
                 context.context.context,
                 context.context.event.unified_msg_origin,
@@ -370,7 +403,7 @@ class GrepTool(FunctionTool):
                 },
                 "path": {
                     "type": "string",
-                    "description": "File or directory to search in (rg PATH).",
+                    "description": "File or directory to search in (rg PATH). If relative, will be in workspace root.",
                 },
                 "glob": {
                     "type": "string",
@@ -401,6 +434,98 @@ class GrepTool(FunctionTool):
         }
     )
 
+    def _resolve_context_options(
+        self,
+        after_context: int | None,
+        before_context: int | None,
+        context: int | None,
+    ) -> tuple[int | None, int | None]:
+        if context is not None and context < 0:
+            raise ValueError("`-C` must be greater than or equal to 0.")
+        if after_context is not None and after_context < 0:
+            raise ValueError("`-A` must be greater than or equal to 0.")
+        if before_context is not None and before_context < 0:
+            raise ValueError("`-B` must be greater than or equal to 0.")
+
+        resolved_after = context if after_context is None else after_context
+        resolved_before = context if before_context is None else before_context
+        return resolved_after, resolved_before
+
+    def _split_output_groups(self, output: str, *, has_context: bool) -> list[str]:
+        if not output.strip():
+            return []
+
+        if not has_context:
+            return [f"{line}\n" for line in output.splitlines() if line.strip()]
+
+        groups: list[str] = []
+        current: list[str] = []
+
+        for line in output.splitlines(keepends=True):
+            if line.strip() == "--":
+                if current:
+                    groups.append("".join(current))
+                    current = []
+                continue
+            if not line.strip():
+                continue
+            current.append(line)
+
+        if current:
+            groups.append("".join(current))
+        return groups
+
+    def _apply_result_limit(
+        self,
+        output: str,
+        *,
+        result_limit: int,
+        has_context: bool,
+    ) -> str:
+        if result_limit < 1:
+            raise ValueError("`result_limit` must be greater than or equal to 1.")
+
+        groups = self._split_output_groups(output, has_context=has_context)
+        if len(groups) <= result_limit:
+            return output if output.strip() else "No matches found."
+
+        limited_output = "".join(groups[:result_limit]).rstrip()
+        return f"{limited_output}\n\n[Truncated to first {result_limit} result groups.]"
+
+    def _normalize_search_paths(
+        self,
+        path: str | None,
+        *,
+        restricted: bool,
+        local_env: bool,
+        umo: str,
+    ) -> list[str]:
+        normalized = (
+            [_resolve_tool_path(path, local_env=local_env, umo=umo)] if path else []
+        )
+        if not normalized:
+            if restricted:
+                return [str(root) for root in _read_allowed_roots(umo)]
+            if local_env:
+                return [str(_workspace_root(umo))]
+            return ["."]
+
+        if restricted:
+            disallowed = [
+                path
+                for path in normalized
+                if not _is_path_within_allowed_roots(path, umo)
+            ]
+            if disallowed:
+                allowed = ", ".join(_restricted_env_path_labels(umo))
+                blocked = ", ".join(disallowed)
+                raise PermissionError(
+                    "Read access is restricted for this user. "
+                    f"Allowed directories: {allowed}. Blocked paths: {blocked}."
+                )
+
+        return normalized
+
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
@@ -414,14 +539,20 @@ class GrepTool(FunctionTool):
         if not normalized_pattern:
             return "Error: `pattern` must be a non-empty string."
 
+        local_env = _is_local_runtime(context)
         restricted = _is_restricted_env(context)
         try:
-            search_paths = _normalize_search_paths(
-                path,
-                restricted=restricted,
-                umo=context.context.event.unified_msg_origin,
+            search_paths = (
+                self._normalize_search_paths(
+                    path,
+                    restricted=restricted,
+                    local_env=local_env,
+                    umo=context.context.event.unified_msg_origin,
+                )
+                if local_env
+                else ([path.strip()] if path and path.strip() else ["."])
             )
-            after_context, before_context = _resolve_context_options(
+            after_context, before_context = self._resolve_context_options(
                 kwargs.get("-A"),
                 kwargs.get("-B"),
                 kwargs.get("-C"),
@@ -451,7 +582,7 @@ class GrepTool(FunctionTool):
                 if content:
                     contents.append(content)
 
-            return _apply_result_limit(
+            return self._apply_result_limit(
                 "".join(contents),
                 result_limit=result_limit,
                 has_context=has_context,

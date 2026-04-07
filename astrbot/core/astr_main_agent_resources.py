@@ -22,7 +22,9 @@ from astrbot.core.computer.tools import (
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
+    FileReadTool,
     FileUploadTool,
+    FileWriteTool,
     GetExecutionHistoryTool,
     GetSkillPayloadTool,
     GrepTool,
@@ -31,7 +33,6 @@ from astrbot.core.computer.tools import (
     LocalPythonTool,
     PromoteSkillCandidateTool,
     PythonTool,
-    ReadFileTool,
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
     SyncSkillReleaseTool,
@@ -503,7 +504,8 @@ PYTHON_TOOL = PythonTool()
 LOCAL_PYTHON_TOOL = LocalPythonTool()
 FILE_UPLOAD_TOOL = FileUploadTool()
 FILE_DOWNLOAD_TOOL = FileDownloadTool()
-READ_FILE_TOOL = ReadFileTool()
+READ_FILE_TOOL = FileReadTool()
+FILE_WRITE_TOOL = FileWriteTool()
 FILE_EDIT_TOOL = FileEditTool()
 GREP_TOOL = GrepTool()
 BROWSER_EXEC_TOOL = BrowserExecTool()

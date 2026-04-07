@@ -34,6 +34,18 @@ _BLOCKED_COMMAND_PATTERNS = [
 ]
 
 
+def _slice_content_by_lines(
+    content: str,
+    *,
+    offset: int | None = None,
+    limit: int | None = None,
+) -> str:
+    lines = content.splitlines(keepends=True)
+    start = 0 if offset is None else offset
+    selected = lines[start:] if limit is None else lines[start : start + limit]
+    return "".join(selected)
+
+
 def _is_safe_command(command: str) -> bool:
     cmd = f" {command.strip().lower()} "
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
@@ -196,13 +208,13 @@ class LocalFileSystemComponent(FileSystemComponent):
                 raw_content,
                 preferred_encoding=encoding,
             )
-            start = 0 if offset is None else offset
-            content_slice = (
-                content[start:] if limit is None else content[start : start + limit]
-            )
             return {
                 "success": True,
-                "content": content_slice,
+                "content": _slice_content_by_lines(
+                    content,
+                    offset=offset,
+                    limit=limit,
+                ),
             }
 
         return await asyncio.to_thread(_run)

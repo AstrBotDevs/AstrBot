@@ -23,6 +23,7 @@ from astrbot.core.astr_main_agent_resources import (
     FILE_DOWNLOAD_TOOL,
     FILE_EDIT_TOOL,
     FILE_UPLOAD_TOOL,
+    FILE_WRITE_TOOL,
     GREP_TOOL,
     LOCAL_EXECUTE_SHELL_TOOL,
     LOCAL_PYTHON_TOOL,
@@ -188,6 +189,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 FILE_UPLOAD_TOOL.name: FILE_UPLOAD_TOOL,
                 FILE_DOWNLOAD_TOOL.name: FILE_DOWNLOAD_TOOL,
                 READ_FILE_TOOL.name: READ_FILE_TOOL,
+                FILE_WRITE_TOOL.name: FILE_WRITE_TOOL,
                 FILE_EDIT_TOOL.name: FILE_EDIT_TOOL,
                 GREP_TOOL.name: GREP_TOOL,
             }
@@ -196,6 +198,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 LOCAL_EXECUTE_SHELL_TOOL.name: LOCAL_EXECUTE_SHELL_TOOL,
                 LOCAL_PYTHON_TOOL.name: LOCAL_PYTHON_TOOL,
                 READ_FILE_TOOL.name: READ_FILE_TOOL,
+                FILE_WRITE_TOOL.name: FILE_WRITE_TOOL,
                 FILE_EDIT_TOOL.name: FILE_EDIT_TOOL,
                 GREP_TOOL.name: GREP_TOOL,
             }

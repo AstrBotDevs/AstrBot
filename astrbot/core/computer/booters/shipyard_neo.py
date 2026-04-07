@@ -34,6 +34,18 @@ def _maybe_model_dump(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _slice_content_by_lines(
+    content: str,
+    *,
+    offset: int | None = None,
+    limit: int | None = None,
+) -> str:
+    lines = content.splitlines(keepends=True)
+    start = 0 if offset is None else offset
+    selected = lines[start:] if limit is None else lines[start : start + limit]
+    return "".join(selected)
+
+
 class NeoPythonComponent(PythonComponent):
     def __init__(self, sandbox: Sandbox) -> None:
         self._sandbox = sandbox
@@ -168,14 +180,14 @@ class NeoFileSystemComponent(FileSystemComponent):
     ) -> dict[str, Any]:
         _ = encoding
         content = await self._sandbox.filesystem.read_file(path)
-        start = 0 if offset is None else offset
-        content_slice = (
-            content[start:] if limit is None else content[start : start + limit]
-        )
         return {
             "success": True,
             "path": path,
-            "content": content_slice,
+            "content": _slice_content_by_lines(
+                content,
+                offset=offset,
+                limit=limit,
+            ),
         }
 
     async def search_files(

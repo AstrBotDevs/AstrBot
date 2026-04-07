@@ -19,7 +19,7 @@ class FileSystemComponent(Protocol):
         offset: int | None = None,
         limit: int | None = None,
     ) -> dict[str, Any]:
-        """Read file content"""
+        """Read file content by line window"""
         ...
 
     async def search_files(
