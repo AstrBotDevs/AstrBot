@@ -1,5 +1,4 @@
 import asyncio
-import datetime
 import inspect
 import json
 import time
@@ -352,6 +351,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         # 构建子代理的 system_prompt，添加 skills 提示词和公共上下文
         subagent_system_prompt = tool.agent.instructions or ""
+        subagent_system_prompt = f"# Role\nYour name is {agent_name}(used for tool calling)\n{subagent_system_prompt}\n"
         if agent_name:
             try:
                 from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
@@ -362,7 +362,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     umo, agent_name, runtime
                 )
                 if skills_prompt:
-                    subagent_system_prompt += f"\n\n# Available Skills\n{skills_prompt}"
+                    subagent_system_prompt += f"{skills_prompt}" + "\n"
                     logger.info(f"[SubAgentSkills] Injected skills for {agent_name}")
 
                 # 注入公共上下文
@@ -376,10 +376,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     )
 
                 # 注入时间信息
-                current_time = (
-                    datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
+                time_prompt = DynamicSubAgentManager.build_time_prompt(umo)
+                subagent_system_prompt += time_prompt
+
+                # 注入工作目录
+                workdir_prompt = DynamicSubAgentManager.build_workdir_prompt(
+                    umo, agent_name
                 )
-                subagent_system_prompt += f"Current datetime: {current_time}"
+                subagent_system_prompt += workdir_prompt
+
+                # 注入行为规范
+                rule_prompt = DynamicSubAgentManager.build_rule_prompt(umo)
+                subagent_system_prompt += rule_prompt
 
             except Exception:
                 pass

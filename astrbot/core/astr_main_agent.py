@@ -1042,6 +1042,7 @@ def _apply_enhanced_subagent_tools(
         dynamic_subagent_prompt = DynamicSubAgentManager.build_dynamic_subagent_prompt(
             session_id
         )
+
         req.system_prompt = f"{req.system_prompt or ''}\n{dynamic_subagent_prompt}\n"
         # Register existing handoff tools from config
         plugin_context = getattr(event, "_plugin_context", None)
