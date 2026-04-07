@@ -1514,6 +1514,10 @@
         "description": "Notes for local Whisper deployment",
         "hint": "Before enabling, install the openai-whisper library (NVIDIA users download ~2GB mainly for torch and cuda; CPU users download ~1GB), and install ffmpeg. Otherwise STT will not work."
       },
+      "whisper_device": {
+        "description": "Inference device",
+        "hint": "Whisper inference device. Apple Silicon can use mps; other environments should use cpu. If mps is selected but unavailable, AstrBot will fall back to cpu."
+      },
       "id": {
         "description": "ID"
       },

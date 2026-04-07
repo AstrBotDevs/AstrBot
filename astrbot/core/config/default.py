@@ -1556,6 +1556,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "id": "whisper_selfhost",
                         "model": "tiny",
+                        "whisper_device": "cpu",
                     },
                     "SenseVoice(Local)": {
                         "type": "sensevoice_stt_selfhost",
@@ -2554,6 +2555,12 @@ CONFIG_METADATA_2 = {
                         "description": "本地部署 Whisper 模型须知",
                         "type": "string",
                         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
+                    },
+                    "whisper_device": {
+                        "description": "推理设备",
+                        "type": "string",
+                        "hint": "Whisper 推理设备。Apple Silicon 可选 mps；其他环境建议使用 cpu。若指定 mps 但当前环境不可用，将自动回退到 cpu。",
+                        "options": ["cpu", "mps"],
                     },
                     "id": {
                         "description": "ID",
