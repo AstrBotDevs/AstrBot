@@ -12,6 +12,10 @@ from typing import Any
 from python_ripgrep import search
 
 from astrbot.api import logger
+from astrbot.core.computer.file_read_utils import (
+    detect_text_encoding,
+    read_local_text_range_sync,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
@@ -33,18 +37,6 @@ _BLOCKED_COMMAND_PATTERNS = [
     " kill -9 ",
     " killall ",
 ]
-
-
-def _slice_content_by_lines(
-    content: str,
-    *,
-    offset: int | None = None,
-    limit: int | None = None,
-) -> str:
-    lines = content.splitlines(keepends=True)
-    start = 0 if offset is None else offset
-    selected = lines[start:] if limit is None else lines[start : start + limit]
-    return "".join(selected)
 
 
 def _is_safe_command(command: str) -> bool:
@@ -203,16 +195,16 @@ class LocalFileSystemComponent(FileSystemComponent):
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = os.path.abspath(path)
-            with open(abs_path, "rb") as f:
-                raw_content = f.read()
-            content = _decode_bytes_with_fallback(
-                raw_content,
-                preferred_encoding=encoding,
-            )
+            detected_encoding = encoding
+            if encoding == "utf-8":
+                with open(abs_path, "rb") as f:
+                    raw_sample = f.read(8192)
+                detected_encoding = detect_text_encoding(raw_sample) or encoding
             return {
                 "success": True,
-                "content": _slice_content_by_lines(
-                    content,
+                "content": read_local_text_range_sync(
+                    abs_path,
+                    encoding=detected_encoding,
                     offset=offset,
                     limit=limit,
                 ),

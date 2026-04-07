@@ -9,9 +9,9 @@ from mcp.types import CallToolResult, ImageContent
 from PIL import Image
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.computer import file_read_utils
 from astrbot.core.computer.booters.local import LocalBooter
 from astrbot.core.computer.tools import fs as fs_tools
-from astrbot.core.computer.tools.tool_utils import file_read as file_read_utils
 
 
 def _make_context(
@@ -101,7 +101,7 @@ async def test_file_read_tool_rejects_large_full_text_read_before_local_stream_r
     async def _unexpected_read(*args, **kwargs):
         raise AssertionError("full file read should be rejected before streaming")
 
-    monkeypatch.setattr(file_read_utils, "_read_local_text_range", _unexpected_read)
+    monkeypatch.setattr(file_read_utils, "read_local_text_range", _unexpected_read)
 
     result = await fs_tools.FileReadTool().call(
         _make_context(),

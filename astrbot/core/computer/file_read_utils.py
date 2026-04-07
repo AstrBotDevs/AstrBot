@@ -12,8 +12,6 @@ import mcp
 from astrbot.core.agent.context.token_counter import EstimateTokenCounter
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolExecResult
-from astrbot.core.computer.booters.base import ComputerBooter
-from astrbot.core.computer.booters.local import LocalBooter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
@@ -21,6 +19,8 @@ from astrbot.core.utils.media_utils import (
     IMAGE_COMPRESS_DEFAULT_QUALITY,
     _compress_image_sync,
 )
+
+from .booters.base import ComputerBooter
 
 _MAX_FILE_READ_BYTES = 128 * 1024
 _MAX_FILE_READ_TOKENS = 25_000
@@ -135,6 +135,85 @@ print(
 """.strip()
 
 
+def _looks_like_text(decoded: str) -> bool:
+    if not decoded:
+        return True
+
+    disallowed = 0
+    printable = 0
+    for char in decoded:
+        if char in "\n\r\t\f\b":
+            printable += 1
+            continue
+        if char.isprintable():
+            printable += 1
+        code = ord(char)
+        if (0 <= code < 32) or (127 <= code < 160):
+            disallowed += 1
+
+    total = max(len(decoded), 1)
+    return disallowed / total <= 0.02 and printable / total >= 0.85
+
+
+def detect_text_encoding(sample: bytes) -> str | None:
+    if not sample:
+        return "utf-8"
+
+    if b"\x00" in sample and not sample.startswith(_UTF_BOMS):
+        odd_bytes = sample[1::2]
+        even_bytes = sample[0::2]
+        odd_zero_ratio = odd_bytes.count(0) / max(len(odd_bytes), 1)
+        even_zero_ratio = even_bytes.count(0) / max(len(even_bytes), 1)
+        if odd_zero_ratio < 0.8 and even_zero_ratio < 0.8:
+            return None
+
+    for encoding in _TEXT_ENCODINGS:
+        try:
+            decoded = sample.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        if _looks_like_text(decoded):
+            return encoding
+
+    return None
+
+
+def read_local_text_range_sync(
+    path: str,
+    *,
+    encoding: str,
+    offset: int | None,
+    limit: int | None,
+) -> str:
+    lines: list[str] = []
+    start = 0 if offset is None else offset
+    end = None if limit is None else start + limit
+    with open(path, encoding=encoding, newline="") as file_obj:
+        for index, line in enumerate(file_obj):
+            if index < start:
+                continue
+            if end is not None and index >= end:
+                break
+            lines.append(line)
+    return "".join(lines)
+
+
+async def read_local_text_range(
+    path: str,
+    *,
+    encoding: str,
+    offset: int | None,
+    limit: int | None,
+) -> str:
+    return await to_thread(
+        read_local_text_range_sync,
+        path,
+        encoding=encoding,
+        offset=offset,
+        limit=limit,
+    )
+
+
 async def _exec_python_json(
     booter: ComputerBooter,
     script: str,
@@ -175,29 +254,6 @@ async def _probe_local_file(path: str) -> dict[str, str | int]:
             "size_bytes": file_path.stat().st_size,
             "sample_b64": base64.b64encode(sample).decode("ascii"),
         }
-
-    return await to_thread(_run)
-
-
-async def _read_local_text_range(
-    path: str,
-    *,
-    encoding: str,
-    offset: int | None,
-    limit: int | None,
-) -> str:
-    def _run() -> str:
-        lines: list[str] = []
-        start = 0 if offset is None else offset
-        end = None if limit is None else start + limit
-        with Path(path).open("r", encoding=encoding, newline="") as file_obj:
-            for index, line in enumerate(file_obj):
-                if index < start:
-                    continue
-                if end is not None and index >= end:
-                    break
-                lines.append(line)
-        return "".join(lines)
 
     return await to_thread(_run)
 
@@ -264,49 +320,6 @@ def _looks_like_known_binary(sample: bytes) -> bool:
     return any(sample.startswith(prefix) for prefix in _BINARY_MAGIC_PREFIXES)
 
 
-def _looks_like_text(decoded: str) -> bool:
-    if not decoded:
-        return True
-
-    disallowed = 0
-    printable = 0
-    for char in decoded:
-        if char in "\n\r\t\f\b":
-            printable += 1
-            continue
-        if char.isprintable():
-            printable += 1
-        code = ord(char)
-        if (0 <= code < 32) or (127 <= code < 160):
-            disallowed += 1
-
-    total = max(len(decoded), 1)
-    return disallowed / total <= 0.02 and printable / total >= 0.85
-
-
-def _detect_text_encoding(sample: bytes) -> str | None:
-    if not sample:
-        return "utf-8"
-
-    if b"\x00" in sample and not sample.startswith(_UTF_BOMS):
-        odd_bytes = sample[1::2]
-        even_bytes = sample[0::2]
-        odd_zero_ratio = odd_bytes.count(0) / max(len(odd_bytes), 1)
-        even_zero_ratio = even_bytes.count(0) / max(len(even_bytes), 1)
-        if odd_zero_ratio < 0.8 and even_zero_ratio < 0.8:
-            return None
-
-    for encoding in _TEXT_ENCODINGS:
-        try:
-            decoded = sample.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-        if _looks_like_text(decoded):
-            return encoding
-
-    return None
-
-
 def _probe_file(sample: bytes, *, size_bytes: int) -> FileProbe:
     if image_mime := _detect_image_mime(sample):
         return FileProbe(
@@ -324,7 +337,7 @@ def _probe_file(sample: bytes, *, size_bytes: int) -> FileProbe:
             size_bytes=size_bytes,
         )
 
-    if encoding := _detect_text_encoding(sample):
+    if encoding := detect_text_encoding(sample):
         return FileProbe(
             kind="text",
             encoding=encoding,
@@ -375,11 +388,12 @@ def _validate_full_text_read_request(probe: FileProbe) -> str | None:
 async def read_file_tool_result(
     booter: ComputerBooter,
     *,
+    local_mode: bool,
     path: str,
     offset: int | None,
     limit: int | None,
 ) -> ToolExecResult:
-    if isinstance(booter, LocalBooter):
+    if local_mode:
         probe_payload = await _probe_local_file(path)
     else:
         probe_payload = await _exec_python_json(
@@ -396,7 +410,7 @@ async def read_file_tool_result(
         return "Error reading file: binary files are not supported by this tool."
 
     if probe.kind == "image":
-        if isinstance(booter, LocalBooter):
+        if local_mode:
             image_payload = await _read_local_image_base64(path)
         else:
             image_payload = await _exec_python_json(
@@ -424,20 +438,18 @@ async def read_file_tool_result(
             ]
         )
 
-    if isinstance(booter, LocalBooter):
-        if offset is None and limit is None:
-            if validation_error := _validate_full_text_read_request(probe):
-                return validation_error
-        content = await _read_local_text_range(
+    if offset is None and limit is None:
+        if validation_error := _validate_full_text_read_request(probe):
+            return validation_error
+
+    if local_mode:
+        content = await read_local_text_range(
             path,
             encoding=probe.encoding or "utf-8",
             offset=offset,
             limit=limit,
         )
     else:
-        if offset is None and limit is None:
-            if validation_error := _validate_full_text_read_request(probe):
-                return validation_error
         text_payload = await _exec_python_json(
             booter,
             _build_text_read_script(
@@ -449,6 +461,7 @@ async def read_file_tool_result(
             action="text read",
         )
         content = str(text_payload.get("content", "") or "")
+
     if not content:
         return "No content found at the requested line offset."
 

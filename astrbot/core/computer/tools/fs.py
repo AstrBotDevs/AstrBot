@@ -42,6 +42,7 @@ from astrbot.api.event import MessageChain
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.computer.file_read_utils import read_file_tool_result
 from astrbot.core.message.components import File
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_skills_path,
@@ -51,7 +52,6 @@ from astrbot.core.utils.astrbot_path import (
 
 from ..computer_client import get_booter
 from .permissions import check_admin_permission
-from .tool_utils.file_read import read_file_tool_result
 
 
 def _normalize_umo_for_workspace(umo: str) -> str:
@@ -229,6 +229,7 @@ class FileReadTool(FunctionTool):
             )
             return await read_file_tool_result(
                 sb,
+                local_mode=local_env,
                 path=normalized_path,
                 offset=offset,
                 limit=limit,
