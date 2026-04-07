@@ -1,11 +1,12 @@
 [project]
 name = "AstrBot"
-version = "4.22.2"
+version = "4.22.3"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
+license = { text = "AGPL-3.0-or-later" }
 requires-python = ">=3.12"
 
-keywords = ["Astrbot", "Astrbot Module", "Astrbot Plugin"]
+keywords = ["AstrBot", "Agent", "Chatbot", "IM"]
 
 dependencies = [
   "aiocqhttp>=1.4.4",
@@ -65,6 +66,7 @@ dependencies = [
   "shipyard-python-sdk>=0.2.4",
   "shipyard-neo-sdk>=0.2.0",
   "python-socks>=2.8.0",
+  "pysocks>=1.7.1",
   "packaging>=24.2",
 ]
 
@@ -79,6 +81,9 @@ dev = [
 
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
+
+[project.urls]
+Repository = "https://github.com/AstrBotDevs/AstrBot"
 
 [tool.ruff]
 exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]

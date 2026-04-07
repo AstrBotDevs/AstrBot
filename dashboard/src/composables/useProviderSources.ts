@@ -290,6 +290,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return inputs.includes('image')
   }
 
+  function supportsAudioInput(meta: any) {
+    const inputs = meta?.modalities?.input || []
+    return inputs.includes('audio')
+  }
+
   function supportsToolCall(meta: any) {
     return Boolean(meta?.tool_call)
   }
@@ -543,11 +548,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     let modalities: string[]
 
     if (!metadata) {
-      modalities = ['text', 'image', 'tool_use']
+      modalities = ['text', 'image', 'audio', 'tool_use']
     } else {
       modalities = ['text']
       if (supportsImageInput(metadata)) {
         modalities.push('image')
+      }
+      if (supportsAudioInput(metadata)) {
+        modalities.push('audio')
       }
       if (supportsToolCall(metadata)) {
         modalities.push('tool_use')
@@ -687,6 +695,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     getSourceDisplayName,
     getModelMetadata,
     supportsImageInput,
+    supportsAudioInput,
     supportsToolCall,
     supportsReasoning,
     formatContextLimit,

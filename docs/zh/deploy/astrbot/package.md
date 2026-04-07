@@ -8,6 +8,11 @@
 
 `uv` 支持 Linux、Windows、macOS。
 
+## 注意事项
+
+> [!WARNING]
+> 通过 `uv` 部署的 AstrBot **不支持在 WebUI 中进行版本升级**。如需更新，请在命令行中执行 `uv tool upgrade astrbot`。
+
 ## 安装并启动
 
 ```bash

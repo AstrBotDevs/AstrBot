@@ -50,7 +50,6 @@ class TelegramPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
-        self.client_self_id = uuid.uuid4().hex[:8]
 
         base_url = self.config.get(
             "telegram_api_base_url",
@@ -336,6 +335,8 @@ class TelegramPlatformAdapter(Platform):
             return None
 
         def _apply_caption() -> None:
+            if not update.message:
+                return
             if update.message.caption:
                 message.message_str = update.message.caption
                 message.message.append(Comp.Plain(message.message_str))
@@ -458,9 +459,9 @@ class TelegramPlatformAdapter(Platform):
             )
             path_wav = await convert_audio_to_wav(temp_path, path_wav)
 
-            message.message = [
-                Comp.Record(file=path_wav, url=path_wav),
-            ]
+            record = Comp.Record(file=path_wav, url=path_wav)
+            record.path = path_wav
+            message.message = [record]
 
         elif update.message.photo:
             photo = update.message.photo[-1]  # get the largest photo

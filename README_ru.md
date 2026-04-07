@@ -92,6 +92,9 @@ astrbot run
 uv tool upgrade astrbot
 ```
 
+> [!WARNING]
+> AstrBot, развёрнутый через `uv`, **не поддерживает обновление через WebUI**. Для обновления выполните указанную выше команду из командной строки.
+
 ### Развёртывание Docker
 
 Для пользователей, знакомых с контейнерами и которым нужен более стабильный и подходящий для production способ, мы рекомендуем разворачивать AstrBot через Docker / Docker Compose.
@@ -184,6 +187,7 @@ yay -S astrbot-git
 | Coze | Платформы LLMOps |
 | OpenAI Whisper | Сервисы распознавания речи |
 | SenseVoice | Сервисы распознавания речи |
+| Xiaomi MiMo Omni | Сервисы распознавания речи |
 | OpenAI TTS | Сервисы синтеза речи |
 | Gemini TTS | Сервисы синтеза речи |
 | GPT-Sovits-Inference | Сервисы синтеза речи |
@@ -193,6 +197,7 @@ yay -S astrbot-git
 | Alibaba Cloud Bailian TTS | Сервисы синтеза речи |
 | Azure TTS | Сервисы синтеза речи |
 | Minimax TTS | Сервисы синтеза речи |
+| Xiaomi MiMo TTS | Сервисы синтеза речи |
 | Volcano Engine TTS | Сервисы синтеза речи |
 
 ## ❤️ Вклад в проект
