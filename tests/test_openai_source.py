@@ -1142,6 +1142,7 @@ async def test_query_injects_reasoning_effort_none_for_ollama(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_parse_openai_completion_raises_empty_model_output_error():
+    """Empty output with non-stop finish_reason should raise."""
     provider = _make_provider()
     try:
         completion = ChatCompletion.model_validate(
@@ -1159,7 +1160,7 @@ async def test_parse_openai_completion_raises_empty_model_output_error():
                             "refusal": None,
                             "tool_calls": None,
                         },
-                        "finish_reason": "stop",
+                        "finish_reason": "length",
                     }
                 ],
                 "usage": {
@@ -1172,6 +1173,44 @@ async def test_parse_openai_completion_raises_empty_model_output_error():
 
         with pytest.raises(EmptyModelOutputError):
             await provider._parse_openai_completion(completion, tools=None)
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_parse_openai_completion_empty_content_finish_stop_no_error():
+    """Empty output with finish_reason=stop should return gracefully (GPT-5 etc.)."""
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_validate(
+            {
+                "id": "chatcmpl-empty-stop",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "gpt-5.4",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "refusal": None,
+                            "tool_calls": None,
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 13,
+                    "completion_tokens": 18,
+                    "total_tokens": 31,
+                },
+            }
+        )
+
+        resp = await provider._parse_openai_completion(completion, tools=None)
+        assert resp.role == "assistant"
+        assert resp.result_chain is not None
     finally:
         await provider.terminate()
 
