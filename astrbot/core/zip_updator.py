@@ -112,6 +112,16 @@ class RepoZipUpdator:
         """Semver 版本比较"""
         return VersionComparator.compare_version(v1, v2)
 
+    def _is_prerelease_version(self, version: str) -> bool:
+        """Check if a version string is a prerelease version."""
+        return bool(
+            re.search(
+                r"[\-_.]?(alpha|beta|rc|dev)[\-_.]?\d*$",
+                version,
+                re.IGNORECASE,
+            )
+        )
+
     async def check_update(
         self,
         url: str,
@@ -120,13 +130,16 @@ class RepoZipUpdator:
     ) -> ReleaseInfo | None:
         update_data = await self.fetch_release_info(url)
 
+        # Check if current version is a prerelease
+        current_is_prerelease = self._is_prerelease_version(current_version)
+
         sel_release_data = None
         if consider_prerelease:
             tag_name = update_data[0]["tag_name"]
             sel_release_data = update_data[0]
         else:
             for data in update_data:
-                # 跳过带有 alpha､beta 等预发布标签的版本
+                # Skip prerelease versions when not considering them
                 if re.search(
                     r"[\-_.]?(alpha|beta|rc|dev)[\-_.]?\d*$",
                     data["tag_name"],
@@ -140,6 +153,13 @@ class RepoZipUpdator:
         if not sel_release_data or not tag_name:
             logger.error("未找到合适的发布版本")
             return None
+
+        # If current version is a prerelease and we're comparing against stable,
+        # check if current version is already newer than the latest stable
+        if current_is_prerelease and not self._is_prerelease_version(tag_name):
+            if self.compare_version(current_version, tag_name) >= 0:
+                # Current prerelease version is >= latest stable, no update needed
+                return None
 
         if self.compare_version(current_version, tag_name) >= 0:
             return None
