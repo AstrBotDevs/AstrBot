@@ -87,3 +87,4 @@ dashboard/src/assets/mdi-subset/*.woff2
 node_modules
 
 *pinokio*
+dashboard/pnpm-lock.yaml
