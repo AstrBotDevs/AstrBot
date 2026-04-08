@@ -4,13 +4,20 @@ import asyncio
 import os
 import traceback
 import uuid
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import aiofiles
-from quart import request
+import jwt
+from quart import request, send_file
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.knowledge_base.package_io import (
+    KnowledgeBasePackageExporter,
+    KnowledgeBasePackageImporter,
+)
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -37,6 +44,12 @@ class KnowledgeBaseRoute(Route):
         self.retrieval_manager = None
         self.upload_progress = {}  # 存储上传进度 {task_id: {status, file_index, file_total, stage, current, total}}
         self.upload_tasks = {}  # 存储后台上传任务 {task_id: {"status", "result", "error"}}
+        self.package_tasks = {}
+        self.package_progress = {}
+        self.package_export_dir = Path(get_astrbot_temp_path()) / "kb_package_exports"
+        self.package_upload_dir = Path(get_astrbot_temp_path()) / "kb_package_uploads"
+        self.package_export_dir.mkdir(parents=True, exist_ok=True)
+        self.package_upload_dir.mkdir(parents=True, exist_ok=True)
 
         # 注册路由
         self.routes = {
@@ -63,6 +76,13 @@ class KnowledgeBaseRoute(Route):
             # "/kb/media/delete": ("POST", self.delete_media),
             # 检索
             "/kb/retrieve": ("POST", self.retrieve),
+            # 知识库包
+            "/kb/package/export": ("POST", self.export_kb_package),
+            "/kb/package/upload": ("POST", self.upload_kb_package),
+            "/kb/package/check": ("POST", self.check_kb_package),
+            "/kb/package/import": ("POST", self.import_kb_package),
+            "/kb/package/progress": ("GET", self.get_kb_package_progress),
+            "/kb/package/download": ("GET", self.download_kb_package),
         }
         self.register_routes()
 
@@ -124,6 +144,77 @@ class KnowledgeBaseRoute(Route):
                 stage=stage,
                 current=current,
                 total=total,
+            )
+
+        return _callback
+
+    def _init_package_task(self, task_id: str, task_type: str, status: str = "pending"):
+        self.package_tasks[task_id] = {
+            "type": task_type,
+            "status": status,
+            "result": None,
+            "error": None,
+        }
+        self.package_progress[task_id] = {
+            "status": status,
+            "stage": "waiting",
+            "current": 0,
+            "total": 100,
+            "message": "",
+        }
+
+    def _set_package_task_result(
+        self,
+        task_id: str,
+        status: str,
+        result: dict | None = None,
+        error: str | None = None,
+    ) -> None:
+        if task_id in self.package_tasks:
+            self.package_tasks[task_id]["status"] = status
+            self.package_tasks[task_id]["result"] = result
+            self.package_tasks[task_id]["error"] = error
+        if task_id in self.package_progress:
+            self.package_progress[task_id]["status"] = status
+
+    def _update_package_progress(
+        self,
+        task_id: str,
+        *,
+        status: str | None = None,
+        stage: str | None = None,
+        current: int | None = None,
+        total: int | None = None,
+        message: str | None = None,
+    ) -> None:
+        if task_id not in self.package_progress:
+            return
+        progress = self.package_progress[task_id]
+        if status is not None:
+            progress["status"] = status
+        if stage is not None:
+            progress["stage"] = stage
+        if current is not None:
+            progress["current"] = current
+        if total is not None:
+            progress["total"] = total
+        if message is not None:
+            progress["message"] = message
+
+    def _make_package_progress_callback(self, task_id: str):
+        async def _callback(
+            stage: str,
+            current: int,
+            total: int,
+            message: str = "",
+        ) -> None:
+            self._update_package_progress(
+                task_id,
+                status="processing",
+                stage=stage,
+                current=current,
+                total=total,
+                message=message,
             )
 
         return _callback
@@ -1271,3 +1362,285 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"后台上传URL任务 {task_id} 失败: {e}")
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
+
+    @staticmethod
+    def _secure_package_filename(filename: str) -> str:
+        filename = filename.replace("\\", "/")
+        filename = os.path.basename(filename)
+        filename = filename.replace("..", "_")
+        safe_name = []
+        for char in filename:
+            if char.isalnum() or char in {"_", "-", "."}:
+                safe_name.append(char)
+            else:
+                safe_name.append("_")
+        result = "".join(safe_name).strip(".")
+        return result or "knowledge_base_package.zip"
+
+    @staticmethod
+    def _generate_unique_package_filename(original_filename: str) -> str:
+        name, ext = os.path.splitext(original_filename)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"{name}_{timestamp}{ext or '.zip'}"
+
+    async def _background_export_kb_package_task(
+        self, task_id: str, kb_id: str
+    ) -> None:
+        try:
+            self._update_package_progress(
+                task_id,
+                status="processing",
+                stage="init",
+                current=0,
+                total=100,
+                message="正在初始化...",
+            )
+            exporter = KnowledgeBasePackageExporter(self._get_kb_manager())
+            zip_path = await exporter.export_kb(
+                kb_id=kb_id,
+                output_dir=self.package_export_dir.as_posix(),
+                progress_callback=self._make_package_progress_callback(task_id),
+            )
+            self._set_package_task_result(
+                task_id,
+                "completed",
+                result={
+                    "filename": os.path.basename(zip_path),
+                    "path": zip_path,
+                    "size": os.path.getsize(zip_path),
+                },
+            )
+        except Exception as e:
+            logger.error(f"后台导出知识库包任务 {task_id} 失败: {e}")
+            logger.error(traceback.format_exc())
+            self._set_package_task_result(task_id, "failed", error=str(e))
+
+    async def _background_import_kb_package_task(
+        self,
+        task_id: str,
+        zip_path: str,
+        kb_name: str,
+        embedding_provider_id: str,
+        rerank_provider_id: str | None,
+    ) -> None:
+        try:
+            self._update_package_progress(
+                task_id,
+                status="processing",
+                stage="init",
+                current=0,
+                total=100,
+                message="正在初始化...",
+            )
+            importer = KnowledgeBasePackageImporter(self._get_kb_manager())
+            kb = await importer.import_kb(
+                zip_path=zip_path,
+                kb_name=kb_name,
+                embedding_provider_id=embedding_provider_id,
+                rerank_provider_id=rerank_provider_id,
+                progress_callback=self._make_package_progress_callback(task_id),
+            )
+            self._set_package_task_result(
+                task_id,
+                "completed",
+                result={"knowledge_base": kb.model_dump()},
+            )
+        except Exception as e:
+            logger.error(f"后台导入知识库包任务 {task_id} 失败: {e}")
+            logger.error(traceback.format_exc())
+            self._set_package_task_result(task_id, "failed", error=str(e))
+
+    async def export_kb_package(self):
+        try:
+            data = await request.json
+            kb_id = data.get("kb_id") if data else None
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+
+            kb_helper = await self._get_kb_manager().get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+
+            task_id = str(uuid.uuid4())
+            self._init_package_task(task_id, "export", "pending")
+            asyncio.create_task(self._background_export_kb_package_task(task_id, kb_id))
+            return (
+                Response()
+                .ok(
+                    {
+                        "task_id": task_id,
+                        "kb_id": kb_id,
+                        "message": "knowledge base package export task created",
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"导出知识库包失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"导出知识库包失败: {e!s}").__dict__
+
+    async def upload_kb_package(self):
+        try:
+            files = await request.files
+            if "file" not in files:
+                return Response().error("缺少知识库包文件").__dict__
+
+            uploaded_file = files["file"]
+            if not uploaded_file.filename:
+                return Response().error("缺少文件名").__dict__
+
+            safe_name = self._secure_package_filename(uploaded_file.filename)
+            filename = self._generate_unique_package_filename(safe_name)
+            save_path = self.package_upload_dir / filename
+
+            await uploaded_file.save(save_path)
+            return Response().ok({"filename": filename}).__dict__
+        except Exception as e:
+            logger.error(f"上传知识库包失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"上传知识库包失败: {e!s}").__dict__
+
+    async def check_kb_package(self):
+        try:
+            data = await request.json
+            filename = data.get("filename") if data else None
+            if not filename:
+                return Response().error("缺少参数 filename").__dict__
+
+            if ".." in filename or "/" in filename or "\\" in filename:
+                return Response().error("无效的文件名").__dict__
+
+            zip_path = self.package_upload_dir / filename
+            if not zip_path.exists():
+                return Response().error("知识库包不存在").__dict__
+
+            importer = KnowledgeBasePackageImporter(self._get_kb_manager())
+            result = importer.pre_check(zip_path.as_posix())
+            return Response().ok(result.to_dict()).__dict__
+        except Exception as e:
+            logger.error(f"预检查知识库包失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"预检查知识库包失败: {e!s}").__dict__
+
+    async def import_kb_package(self):
+        try:
+            data = await request.json
+            filename = data.get("filename") if data else None
+            confirmed = data.get("confirmed", False) if data else False
+            kb_name = data.get("kb_name", "").strip() if data else ""
+            embedding_provider_id = data.get("embedding_provider_id") if data else None
+            rerank_provider_id = (
+                data.get("rerank_provider_id") or None if data else None
+            )
+
+            if not filename:
+                return Response().error("缺少参数 filename").__dict__
+            if not confirmed:
+                return Response().error("请先确认导入。").__dict__
+            if not kb_name:
+                return Response().error("缺少参数 kb_name").__dict__
+            if not embedding_provider_id:
+                return Response().error("缺少参数 embedding_provider_id").__dict__
+            if ".." in filename or "/" in filename or "\\" in filename:
+                return Response().error("无效的文件名").__dict__
+
+            zip_path = self.package_upload_dir / filename
+            if not zip_path.exists():
+                return Response().error("知识库包不存在").__dict__
+
+            task_id = str(uuid.uuid4())
+            self._init_package_task(task_id, "import", "pending")
+            asyncio.create_task(
+                self._background_import_kb_package_task(
+                    task_id=task_id,
+                    zip_path=zip_path.as_posix(),
+                    kb_name=kb_name,
+                    embedding_provider_id=embedding_provider_id,
+                    rerank_provider_id=rerank_provider_id,
+                )
+            )
+            return (
+                Response()
+                .ok(
+                    {
+                        "task_id": task_id,
+                        "message": "knowledge base package import task created",
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"导入知识库包失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"导入知识库包失败: {e!s}").__dict__
+
+    async def get_kb_package_progress(self):
+        try:
+            task_id = request.args.get("task_id")
+            if not task_id:
+                return Response().error("缺少参数 task_id").__dict__
+            if task_id not in self.package_tasks:
+                return Response().error("找不到该任务").__dict__
+
+            task_info = self.package_tasks[task_id]
+            response_data = {
+                "task_id": task_id,
+                "type": task_info["type"],
+                "status": task_info["status"],
+            }
+            if task_info["status"] == "processing" and task_id in self.package_progress:
+                response_data["progress"] = self.package_progress[task_id]
+            if task_info["status"] == "completed":
+                response_data["result"] = task_info["result"]
+            if task_info["status"] == "failed":
+                response_data["error"] = task_info["error"]
+            return Response().ok(response_data).__dict__
+        except Exception as e:
+            logger.error(f"获取知识库包任务进度失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取知识库包任务进度失败: {e!s}").__dict__
+
+    async def download_kb_package(self):
+        try:
+            filename = request.args.get("filename")
+            token = request.args.get("token")
+            if not filename:
+                return Response().error("缺少参数 filename").__dict__
+            if not token:
+                return Response().error("缺少参数 token").__dict__
+            if ".." in filename or "/" in filename or "\\" in filename:
+                return Response().error("无效的文件名").__dict__
+
+            jwt_secret = self.config.get("dashboard", {}).get("jwt_secret")
+            if not jwt_secret:
+                return Response().error("服务器配置错误").__dict__
+
+            jwt.decode(
+                token,
+                jwt_secret,
+                algorithms=["HS256"],
+                options={
+                    "require": ["exp"],
+                    "verify_signature": True,
+                    "verify_exp": True,
+                },
+            )
+
+            file_path = self.package_export_dir / filename
+            if not file_path.exists():
+                return Response().error("知识库包不存在").__dict__
+
+            return await send_file(
+                file_path,
+                as_attachment=True,
+                attachment_filename=filename,
+            )
+        except jwt.ExpiredSignatureError:
+            return Response().error("Token 过期").__dict__
+        except jwt.InvalidTokenError:
+            return Response().error("Token 无效").__dict__
+        except Exception as e:
+            logger.error(f"下载知识库包失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"下载知识库包失败: {e!s}").__dict__

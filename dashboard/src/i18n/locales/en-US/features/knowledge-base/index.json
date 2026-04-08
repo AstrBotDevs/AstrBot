@@ -5,6 +5,7 @@
     "title": "My Knowledge Bases",
     "subtitle": "Manage all your knowledge base collections",
     "create": "Create Knowledge Base",
+    "importPackage": "Import Knowledge Base",
     "refresh": "Refresh List",
     "empty": "No knowledge bases",
     "loading": "Loading...",
@@ -12,6 +13,37 @@
     "chunks": "Chunks",
     "sessionConfig": "Session Config",
     "initError": "Initialization Failed"
+  },
+  "packageImport": {
+    "title": "Import Knowledge Base Package",
+    "description": "Upload an exported knowledge base package. Importing creates a new knowledge base and rewrites internal bindings.",
+    "fileLabel": "Select Package (.zip)",
+    "uploadAndCheck": "Upload and Check",
+    "checking": "Checking package...",
+    "packageSummary": "Package Summary",
+    "documents": "{count} documents",
+    "chunks": "{count} chunks",
+    "exportedAt": "Exported At",
+    "version": "AstrBot Version",
+    "embeddingSource": "Source Embedding Provider",
+    "rerankSource": "Source Rerank Provider",
+    "dimension": "{count} dimensions",
+    "notSet": "Not Set",
+    "nameLabel": "Imported Knowledge Base Name",
+    "embeddingProvider": "Local Embedding Provider",
+    "rerankProvider": "Local Rerank Provider",
+    "embeddingHint": "Choose an embedding provider with the required dimension of {count}.",
+    "confirmImport": "Confirm Import",
+    "processing": "Importing knowledge base...",
+    "completed": "Knowledge base imported",
+    "cancel": "Cancel",
+    "close": "Close",
+    "invalidPackage": "Invalid knowledge base package",
+    "importFailed": "Failed to import knowledge base",
+    "importBlocked": "This knowledge base package cannot be imported until the issues above are resolved.",
+    "versionMajorDiff": "Package version is {backup} while current environment is {current}. Major versions are incompatible, so import is blocked.",
+    "versionMinorDiff": "Package version is {backup} while current environment is {current}. Import is allowed with compatibility warning.",
+    "versionMatch": "Package version is compatible with the current environment."
   },
   "card": {
     "edit": "Edit",
@@ -63,6 +95,7 @@
     "updateFailed": "Failed to update",
     "deleteSuccess": "Knowledge base deleted successfully",
     "deleteFailed": "Failed to delete",
-    "loadError": "Failed to load knowledge base list"
+    "loadError": "Failed to load knowledge base list",
+    "importPackageSuccess": "Knowledge base imported successfully"
   }
 }

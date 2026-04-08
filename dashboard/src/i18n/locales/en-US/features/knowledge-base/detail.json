@@ -114,5 +114,17 @@
     "saveSuccess": "Settings saved successfully",
     "saveFailed": "Failed to save settings",
     "tips": "Tip: Modifying retrieval settings will affect subsequent knowledge base queries."
+  },
+  "packageExport": {
+    "title": "Export Knowledge Base",
+    "description": "Export the current knowledge base as a standalone package including vector indexes, metadata, and media files.",
+    "includes": "Included: knowledge base settings, document metadata, vector index, document store, and media files.",
+    "button": "Export Knowledge Base",
+    "processing": "Exporting knowledge base...",
+    "completed": "Knowledge base package exported",
+    "download": "Download Package",
+    "reset": "Export Again",
+    "retry": "Retry",
+    "failed": "Failed to export knowledge base package"
   }
 }

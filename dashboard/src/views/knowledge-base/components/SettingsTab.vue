@@ -158,12 +158,15 @@
       </v-card>
     </v-dialog>
   </div>
+
+  <KBPackageExportCard :kb="kb" />
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
+import KBPackageExportCard from './KBPackageExportCard.vue'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
 

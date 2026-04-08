@@ -5,6 +5,7 @@
         "title": "Мои базы знаний",
         "subtitle": "Все доступные коллекции знаний",
         "create": "Создать базу",
+        "importPackage": "Импорт базы",
         "refresh": "Обновить",
         "empty": "Баз знаний пока нет",
         "loading": "Загрузка...",
@@ -12,6 +13,37 @@
         "chunks": "фрагм.",
         "sessionConfig": "Профиль",
         "initError": "Ошибка инициализации"
+    },
+    "packageImport": {
+        "title": "Импорт пакета базы знаний",
+        "description": "Загрузите экспортированный пакет базы знаний. При импорте будет создана новая база с переназначением внутренних связей.",
+        "fileLabel": "Выберите пакет (.zip)",
+        "uploadAndCheck": "Загрузить и проверить",
+        "checking": "Проверяем пакет...",
+        "packageSummary": "Сводка пакета",
+        "documents": "{count} документов",
+        "chunks": "{count} фрагментов",
+        "exportedAt": "Время экспорта",
+        "version": "Версия AstrBot",
+        "embeddingSource": "Источник embedding",
+        "rerankSource": "Источник rerank",
+        "dimension": "{count} измерений",
+        "notSet": "Не задано",
+        "nameLabel": "Название новой базы знаний",
+        "embeddingProvider": "Локальный embedding provider",
+        "rerankProvider": "Локальный rerank provider",
+        "embeddingHint": "Выберите embedding provider с размерностью {count}.",
+        "confirmImport": "Подтвердить импорт",
+        "processing": "Импортируем базу знаний...",
+        "completed": "Импорт завершен",
+        "cancel": "Отмена",
+        "close": "Закрыть",
+        "invalidPackage": "Некорректный пакет базы знаний",
+        "importFailed": "Не удалось импортировать базу знаний",
+        "importBlocked": "Этот пакет базы знаний пока нельзя импортировать: сначала устраните указанные выше проблемы.",
+        "versionMajorDiff": "Версия пакета {backup}, текущая среда {current}. Основные версии несовместимы, импорт невозможен.",
+        "versionMinorDiff": "Версия пакета {backup}, текущая среда {current}. Импорт разрешен, но возможны различия.",
+        "versionMatch": "Версия пакета совместима с текущей средой."
     },
     "card": {
         "edit": "Изменить",
@@ -63,6 +95,7 @@
         "updateFailed": "Ошибка обновления",
         "deleteSuccess": "Удалено успешно",
         "deleteFailed": "Ошибка удаления",
-        "loadError": "Не удалось загрузить список"
+        "loadError": "Не удалось загрузить список",
+        "importPackageSuccess": "База знаний успешно импортирована"
     }
 }

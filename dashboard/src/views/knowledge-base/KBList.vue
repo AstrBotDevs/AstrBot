@@ -15,6 +15,9 @@
       <v-btn prepend-icon="mdi-plus" color="primary" variant="elevated" @click="showCreateDialog = true">
         {{ t('list.create') }}
       </v-btn>
+      <v-btn prepend-icon="mdi-folder-import" variant="tonal" @click="showPackageImportDialog = true">
+        {{ t('list.importPackage') }}
+      </v-btn>
       <v-btn prepend-icon="mdi-refresh" variant="tonal" @click="loadKnowledgeBases" :loading="loading">
         {{ t('list.refresh') }}
       </v-btn>
@@ -202,6 +205,13 @@
       {{ snackbar.text }}
     </v-snackbar>
 
+    <KBPackageImportDialog
+      v-model="showPackageImportDialog"
+      :embedding-providers="embeddingProviders"
+      :rerank-providers="rerankProviders"
+      @imported="handlePackageImported"
+    />
+
     <div class="position-absolute" style="bottom: 0px; right: 16px;">
       <small @click="router.push('/alkaid/knowledge-base')"><a style="text-decoration: underline; cursor: pointer;">切换到旧版知识库</a></small>
     </div>
@@ -214,6 +224,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
+import KBPackageImportDialog from './components/KBPackageImportDialog.vue'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/index')
 const router = useRouter()
@@ -234,6 +245,7 @@ const pendingEmbeddingProvider = ref<string | null>(null)
 const showCreateDialog = ref(false)
 const showEmojiPicker = ref(false)
 const showDeleteDialog = ref(false)
+const showPackageImportDialog = ref(false)
 
 // Snackbar 通知
 const snackbar = ref({
@@ -431,6 +443,11 @@ const closeCreateDialog = () => {
     rerank_provider_id: null
   }
   formRef.value?.reset()
+}
+
+const handlePackageImported = async () => {
+  showSnackbar(t('messages.importPackageSuccess'))
+  await loadKnowledgeBases()
 }
 
 // 选择 emoji
