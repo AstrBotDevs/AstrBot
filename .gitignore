@@ -85,3 +85,5 @@ dashboard/src/assets/mdi-subset/*.woff2
 .planning
 *cache
 node_modules
+
+*pinokio*
