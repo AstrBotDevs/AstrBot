@@ -224,7 +224,12 @@ class ChatRoute(Route):
         Returns:
             包含 used 列表的字典，记录被引用的搜索结果
         """
-        supported = ["web_search_tavily", "web_search_bocha"]
+        supported = [
+            "web_search_baidu",
+            "web_search_tavily",
+            "web_search_bocha",
+            "web_search_brave",
+        ]
         # 从 accumulated_parts 中找到所有 web_search_tavily 的工具调用结果
         web_search_results = {}
         tool_call_parts = [

@@ -106,9 +106,10 @@ DEFAULT_CONFIG = {
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
-        "websearch_provider": "default",
+        "websearch_provider": "tavily",
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
+        "websearch_brave_key": [],
         "websearch_baidu_app_builder_key": "",
         "web_search_link": False,
         "display_reasoning_text": False,
@@ -1556,6 +1557,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "id": "whisper_selfhost",
                         "model": "tiny",
+                        "whisper_device": "cpu",
                     },
                     "SenseVoice(Local)": {
                         "type": "sensevoice_stt_selfhost",
@@ -2555,6 +2557,12 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
                     },
+                    "whisper_device": {
+                        "description": "推理设备",
+                        "type": "string",
+                        "hint": "Whisper 推理设备。Apple Silicon 可选 mps；其他环境建议使用 cpu。若指定 mps 但当前环境不可用，将自动回退到 cpu。",
+                        "options": ["cpu", "mps"],
+                    },
                     "id": {
                         "description": "ID",
                         "type": "string",
@@ -3166,7 +3174,12 @@ CONFIG_METADATA_3 = {
                     "provider_settings.websearch_provider": {
                         "description": "网页搜索提供商",
                         "type": "string",
-                        "options": ["default", "tavily", "baidu_ai_search", "bocha"],
+                        "options": [
+                            "tavily",
+                            "baidu_ai_search",
+                            "bocha",
+                            "brave",
+                        ],
                         "condition": {
                             "provider_settings.web_search": True,
                         },
@@ -3188,6 +3201,16 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。",
                         "condition": {
                             "provider_settings.websearch_provider": "bocha",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_brave_key": {
+                        "description": "Brave Search API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "brave",
                             "provider_settings.web_search": True,
                         },
                     },

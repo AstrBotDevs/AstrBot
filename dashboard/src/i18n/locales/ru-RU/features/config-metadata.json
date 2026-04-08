@@ -121,6 +121,10 @@
                     "description": "API-ключ BoCha",
                     "hint": "Можно добавить несколько ключей для ротации."
                 },
+                "websearch_brave_key": {
+                    "description": "API-ключ Brave Search",
+                    "hint": "Можно добавить несколько ключей для ротации."
+                },
                 "websearch_baidu_app_builder_key": {
                     "description": "API-ключ Baidu Qianfan APP Builder",
                     "hint": "Ссылка: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -1510,6 +1514,10 @@
             "whisper_hint": {
                 "description": "Заметки по локальному развертыванию Whisper",
                 "hint": "Перед включением установите openai-whisper и ffmpeg."
+            },
+            "whisper_device": {
+                "description": "Устройство инференса",
+                "hint": "Устройство для инференса Whisper. На Apple Silicon можно выбрать mps; в остальных средах рекомендуется cpu. Если выбран mps, но он недоступен, AstrBot автоматически переключится на cpu."
             },
             "id": {
                 "description": "ID провайдера"
