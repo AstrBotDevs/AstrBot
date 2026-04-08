@@ -80,6 +80,7 @@ from .._internal.invocation_context import (
 from .._internal.sdk_logger import logger
 from ..context import CancelToken
 from ..errors import AstrBotError, ErrorCodes
+from ..protocol.codec import JsonProtocolCodec, MsgpackProtocolCodec, ProtocolCodec
 from ..protocol.messages import (
     CancelMessage,
     ErrorPayload,
@@ -89,7 +90,6 @@ from ..protocol.messages import (
     InvokeMessage,
     PeerInfo,
     ResultMessage,
-    parse_message,
 )
 from .capability_router import StreamExecution
 
@@ -101,9 +101,33 @@ CancelHandler = Callable[[str], Awaitable[None]]
 
 SUPPORTED_PROTOCOL_VERSIONS_METADATA_KEY = "supported_protocol_versions"
 NEGOTIATED_PROTOCOL_VERSION_METADATA_KEY = "negotiated_protocol_version"
-# 入站消息字符数上限（8 MB）。超过此阈值的协议消息会被直接拒绝，
+WIRE_CODEC_METADATA_KEY = "wire_codec"
+# 入站消息字节数上限（8 MB）。超过此阈值的协议消息会被直接拒绝，
 # 避免恶意或异常的巨型消息耗尽内存或阻塞解析
-MAX_INBOUND_MESSAGE_CHARS = 8 * 1024 * 1024
+MAX_INBOUND_MESSAGE_BYTES = 8 * 1024 * 1024
+
+
+def _wire_codec_name(codec: ProtocolCodec) -> str:
+    if isinstance(codec, JsonProtocolCodec):
+        return "json"
+    if isinstance(codec, MsgpackProtocolCodec):
+        return "msgpack"
+    return type(codec).__name__
+
+
+def _validate_wire_codec_metadata(
+    metadata: dict[str, Any],
+    *,
+    expected_wire_codec: str,
+) -> None:
+    remote_wire_codec = metadata.get(WIRE_CODEC_METADATA_KEY)
+    if not isinstance(remote_wire_codec, str) or not remote_wire_codec:
+        raise AstrBotError.protocol_error("wire_codec metadata missing")
+    if remote_wire_codec != expected_wire_codec:
+        raise AstrBotError.protocol_error(
+            "wire_codec mismatch: "
+            f"expected {expected_wire_codec}, got {remote_wire_codec}"
+        )
 
 
 def _dedupe_protocol_versions(
@@ -179,18 +203,14 @@ class Peer:
         peer_info: PeerInfo,
         protocol_version: str = "1.0",
         supported_protocol_versions: Sequence[str] | None = None,
+        wire_codec: ProtocolCodec | None = None,
     ) -> None:
-        """创建一个协议对等端实例。
-
-        Args:
-            transport: 底层传输实现，负责发送字符串消息并回调入站消息。
-            peer_info: 当前端点对外声明的身份信息。
-            protocol_version: 当前端点首选的协议版本，用于初始化握手。
-            supported_protocol_versions: 当前端点可接受的协议版本列表。
-        """
+        """创建一个协议对等端实例。"""
         self.transport = transport
         self.peer_info = peer_info
         self.protocol_version = protocol_version
+        self.wire_codec = wire_codec or MsgpackProtocolCodec()
+        self.wire_codec_name = _wire_codec_name(self.wire_codec)
         self.supported_protocol_versions = _dedupe_protocol_versions(
             supported_protocol_versions,
             preferred_version=protocol_version,
@@ -368,6 +388,7 @@ class Peer:
         handshake_metadata[SUPPORTED_PROTOCOL_VERSIONS_METADATA_KEY] = list(
             self.supported_protocol_versions
         )
+        handshake_metadata[WIRE_CODEC_METADATA_KEY] = self.wire_codec_name
         future: asyncio.Future[ResultMessage] = (
             asyncio.get_running_loop().create_future()
         )
@@ -406,6 +427,10 @@ class Peer:
             raise AstrBotError.protocol_version_mismatch(
                 f"对端返回了当前端点不支持的协商协议版本：{negotiated_protocol_version}"
             )
+        _validate_wire_codec_metadata(
+            output.metadata,
+            expected_wire_codec=self.wire_codec_name,
+        )
         self.remote_peer = output.peer
         self.remote_capabilities = output.capabilities
         self.remote_capability_map = {item.name: item for item in output.capabilities}
@@ -545,17 +570,17 @@ class Peer:
         if self._unusable:
             raise AstrBotError.protocol_error("连接已进入不可用状态")
 
-    async def _handle_raw_message(self, payload: str) -> None:
+    async def _handle_raw_message(self, payload: bytes) -> None:
         """解析原始消息并分发到对应的消息处理分支。"""
         try:
             # 入站消息大小检查：拒绝巨型消息，防止 OOM 和解析阻塞
-            if len(payload) > MAX_INBOUND_MESSAGE_CHARS:
+            if len(payload) > MAX_INBOUND_MESSAGE_BYTES:
                 raise AstrBotError.protocol_error(
                     f"协议消息过大，已拒绝处理："
                     f"当前 {len(payload) / 1024 / 1024:.1f} MB，"
-                    f"上限 {MAX_INBOUND_MESSAGE_CHARS / 1024 / 1024:.0f} MB"
+                    f"上限 {MAX_INBOUND_MESSAGE_BYTES / 1024 / 1024:.0f} MB"
                 )
-            message = parse_message(payload)
+            message = self.wire_codec.decode_message(payload)
             if isinstance(message, ResultMessage):
                 await self._handle_result(message)
                 return
@@ -653,6 +678,14 @@ class Peer:
                 ),
             )
             return
+        try:
+            _validate_wire_codec_metadata(
+                self.remote_metadata,
+                expected_wire_codec=self.wire_codec_name,
+            )
+        except AstrBotError as exc:
+            await self._reject_initialize(message, exc)
+            return
 
         self.negotiated_protocol_version = negotiated_protocol_version
         self.remote_metadata[NEGOTIATED_PROTOCOL_VERSION_METADATA_KEY] = (
@@ -660,6 +693,14 @@ class Peer:
         )
         output = await self._initialize_handler(message)
         response_metadata = dict(output.metadata)
+        try:
+            _validate_wire_codec_metadata(
+                response_metadata,
+                expected_wire_codec=self.wire_codec_name,
+            )
+        except AstrBotError as exc:
+            await self._reject_initialize(message, exc)
+            return
         response_metadata[NEGOTIATED_PROTOCOL_VERSION_METADATA_KEY] = (
             negotiated_protocol_version
         )
@@ -849,4 +890,5 @@ class Peer:
 
     async def _send(self, message) -> None:
         """序列化协议消息并通过底层传输发送出去。"""
-        await self.transport.send(message.model_dump_json(exclude_none=True))
+        encoded_message = self.wire_codec.encode_message(message)
+        await self.transport.send(encoded_message)

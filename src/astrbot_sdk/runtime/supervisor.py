@@ -49,6 +49,7 @@ from .._internal.plugin_ids import (
 )
 from .._internal.sdk_logger import logger
 from ..errors import AstrBotError
+from ..protocol.codec import JsonProtocolCodec, MsgpackProtocolCodec, ProtocolCodec
 from ..protocol.descriptors import CapabilityDescriptor
 from ..protocol.messages import EventMessage, InitializeOutput, PeerInfo
 from .capability_router import CapabilityRouter, StreamExecution
@@ -172,6 +173,16 @@ def _group_records_by_plugin(
     return grouped
 
 
+def _wire_codec_cli_name(codec: ProtocolCodec) -> str:
+    if isinstance(codec, MsgpackProtocolCodec):
+        return "msgpack"
+    if isinstance(codec, JsonProtocolCodec):
+        return "json"
+    raise ValueError(
+        f"unsupported wire codec for local worker subprocess: {type(codec).__name__}"
+    )
+
+
 class WorkerSession:
     def __init__(
         self,
@@ -183,6 +194,7 @@ class WorkerSession:
         env_manager: PluginEnvironmentManager,
         capability_router: CapabilityRouter,
         on_closed: Callable[[], None] | None = None,
+        wire_codec: ProtocolCodec | None = None,
     ) -> None:
         target_count = sum(item is not None for item in (plugin, group, remote_worker))
         if target_count != 1:
@@ -218,6 +230,7 @@ class WorkerSession:
         self.env_manager = env_manager
         self.capability_router = capability_router
         self.on_closed = on_closed
+        self.wire_codec = wire_codec or MsgpackProtocolCodec()
         self.peer: Peer | None = None
         self.handlers = []
         self.provided_capabilities: list[CapabilityDescriptor] = []
@@ -235,6 +248,7 @@ class WorkerSession:
         self.peer = Peer(
             transport=transport,
             peer_info=PeerInfo(name="astrbot-core", role="core", version="s5r"),
+            wire_codec=self.wire_codec,
         )
         self.peer.set_initialize_handler(self._handle_initialize)
         self.peer.set_invoke_handler(self._handle_capability_invoke)
@@ -390,6 +404,7 @@ class WorkerSession:
                 )
 
     def _worker_command(self) -> tuple[Path, list[str], str]:
+        wire_codec = _wire_codec_cli_name(self.wire_codec)
         if self.group is not None:
             prepare_group = getattr(self.env_manager, "prepare_group_environment", None)
             if callable(prepare_group):
@@ -403,6 +418,8 @@ class WorkerSession:
                     "-m",
                     "astrbot_sdk",
                     "worker",
+                    "--wire-codec",
+                    wire_codec,
                     "--group-metadata",
                     str(self.group.metadata_path),
                 ],
@@ -419,6 +436,8 @@ class WorkerSession:
                 "-m",
                 "astrbot_sdk",
                 "worker",
+                "--wire-codec",
+                wire_codec,
                 "--plugin-dir",
                 str(plugin.plugin_dir),
             ],
@@ -514,12 +533,15 @@ class WorkerSession:
         await self.peer.cancel(request_id)
 
     async def _handle_initialize(self, _message) -> InitializeOutput:
+        if self.peer is None:
+            raise RuntimeError("worker session is not running")
         return InitializeOutput(
             peer=PeerInfo(name="astrbot-supervisor", role="core", version="s5r"),
             capabilities=self.capability_router.all_descriptors(),
             metadata={
                 "worker_id": self.worker_id,
                 "plugins": [plugin.name for plugin in self.plugins],
+                "wire_codec": self.peer.wire_codec_name,
             },
         )
 
@@ -550,16 +572,19 @@ class SupervisorRuntime:
         plugins_dir: Path,
         env_manager: PluginEnvironmentManager | None = None,
         workers_manifest: Path | None = None,
+        wire_codec: ProtocolCodec | None = None,
     ) -> None:
         self.transport = transport
         self.plugins_dir = plugins_dir.resolve()
         self.repo_root = Path(__file__).resolve().parents[3]
         self.env_manager = env_manager or PluginEnvironmentManager(self.repo_root)
         self.workers_manifest = workers_manifest.resolve() if workers_manifest else None
+        self.wire_codec = wire_codec or MsgpackProtocolCodec()
         self.capability_router = CapabilityRouter()
         self.peer = Peer(
             transport=self.transport,
             peer_info=PeerInfo(name="astrbot-supervisor", role="plugin", version="s5r"),
+            wire_codec=self.wire_codec,
         )
         self.peer.set_invoke_handler(self._handle_upstream_invoke)
         self.peer.set_cancel_handler(self._handle_upstream_cancel)
@@ -904,6 +929,7 @@ class SupervisorRuntime:
                             repo_root=self.repo_root,
                             env_manager=self.env_manager,
                             capability_router=self.capability_router,
+                            wire_codec=self.wire_codec,
                             on_closed=lambda worker_id=group.id: (
                                 self._handle_worker_closed(worker_id)
                             ),
@@ -917,6 +943,7 @@ class SupervisorRuntime:
                             repo_root=self.repo_root,
                             env_manager=self.env_manager,
                             capability_router=self.capability_router,
+                            wire_codec=self.wire_codec,
                             on_closed=lambda worker_id=plugin.name: (
                                 self._handle_worker_closed(worker_id)
                             ),
@@ -929,6 +956,7 @@ class SupervisorRuntime:
                         repo_root=self.repo_root,
                         env_manager=self.env_manager,
                         capability_router=self.capability_router,
+                        wire_codec=self.wire_codec,
                         on_closed=lambda worker_id=remote_worker.id: (
                             self._handle_worker_closed(worker_id)
                         ),

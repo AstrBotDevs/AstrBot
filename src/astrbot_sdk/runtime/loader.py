@@ -70,6 +70,8 @@ import typing
 from dataclasses import dataclass, field, replace
 from importlib import import_module
 from pathlib import Path
+from collections.abc import Sequence
+from importlib.machinery import ModuleSpec, PathFinder
 from typing import Any, Literal, TypeAlias, TypeVar, cast
 
 import yaml
@@ -265,7 +267,7 @@ class _PluginScopedAliasLoader(importlib.abc.Loader):
         self.alias_name = alias_name
         self.target_name = target_name
 
-    def create_module(self, spec: importlib.machinery.ModuleSpec) -> types.ModuleType:
+    def create_module(self, spec: ModuleSpec) -> types.ModuleType:
         del spec
         module = sys.modules.get(self.target_name)
         if not isinstance(module, types.ModuleType):
@@ -281,9 +283,10 @@ class _PluginScopedMetaPathFinder(importlib.abc.MetaPathFinder):
     def find_spec(
         self,
         fullname: str,
-        path: list[str] | None = None,
+        path: Sequence[str] | None = None,
         target: types.ModuleType | None = None,
-    ) -> importlib.machinery.ModuleSpec | None:
+        /,
+    ) -> ModuleSpec | None:
         del path, target
         namespace = _plugin_import_namespace_for_current_caller()
         if namespace is None:
@@ -298,13 +301,13 @@ class _PluginScopedMetaPathFinder(importlib.abc.MetaPathFinder):
             if not isinstance(parent_module, types.ModuleType):
                 parent_module = import_module(parent_name)
             parent_search_path = getattr(parent_module, "__path__", None)
-        target_spec = importlib.machinery.PathFinder.find_spec(
+        target_spec = PathFinder.find_spec(
             rewritten_name,
             parent_search_path,
         )
         if target_spec is None:
             return None
-        alias_spec = importlib.machinery.ModuleSpec(
+        alias_spec = ModuleSpec(
             fullname,
             _PluginScopedAliasLoader(
                 alias_name=fullname,
@@ -1236,6 +1239,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
         _purge_plugin_bytecode(plugin.plugin_dir)
         _purge_plugin_package(namespace.package_name)
         _purge_plugin_modules(plugin.plugin_dir)
+        _prepare_plugin_import(plugin.plugin_dir)
         _ensure_plugin_package(namespace)
         importlib.invalidate_caches()
 
@@ -1332,7 +1336,7 @@ def _ensure_plugin_package(namespace: _PluginImportNamespace) -> types.ModuleTyp
     module.__package__ = namespace.package_name
     module.__path__ = [str(namespace.plugin_dir)]
     module.__loader__ = None
-    spec = importlib.machinery.ModuleSpec(
+    spec = ModuleSpec(
         namespace.package_name,
         loader=None,
         is_package=True,
@@ -1341,6 +1345,12 @@ def _ensure_plugin_package(namespace: _PluginImportNamespace) -> types.ModuleTyp
     module.__spec__ = spec
     sys.modules[namespace.package_name] = module
     return module
+
+
+def _prepare_plugin_import(plugin_dir: Path) -> None:
+    plugin_path = str(plugin_dir.resolve())
+    sys.path[:] = [entry for entry in sys.path if entry != plugin_path]
+    sys.path.insert(0, plugin_path)
 
 
 def _module_belongs_to_plugin(module: Any, plugin_dir: Path) -> bool:

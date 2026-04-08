@@ -66,7 +66,9 @@ from ..protocol.descriptors import (
 from ..schedule import ScheduleContext
 from ..session_waiter import (
     SessionWaiterManager,
+    _mark_session_waiter_background_task,
     _mark_session_waiter_handler_task,
+    _unmark_session_waiter_background_task,
     _unmark_session_waiter_handler_task,
 )
 from ..star import Star
@@ -83,7 +85,28 @@ from .loader import LoadedHandler
 @dataclass(slots=True)
 class _ActiveConversation:
     session: ConversationSession
+    task: Any
+
+
+@dataclass(slots=True)
+class _ManagedConversationTask:
     task: asyncio.Task[Any]
+    cleanup: Any
+
+    def __await__(self):
+        return self._wait().__await__()
+
+    async def _wait(self) -> Any:
+        try:
+            return await self.task
+        finally:
+            self.cleanup()
+
+    def cancel(self) -> bool:
+        return self.task.cancel()
+
+    def done(self) -> bool:
+        return self.task.done()
 
 
 @dataclass(slots=True)
@@ -609,19 +632,28 @@ class HandlerDispatcher:
             finally:
                 if conversation.state == ConversationState.ACTIVE:
                     conversation.close(ConversationState.COMPLETED)
-                current = self._conversations.get(key)
-                if current is not None and current.session is conversation:
-                    self._conversations.pop(key, None)
 
-        task = await ctx.register_task(
-            _runner(),
-            f"conversation:{loaded.descriptor.id}",
-        )
+        def _cleanup_conversation() -> None:
+            current = self._conversations.get(key)
+            if current is not None and current.session is conversation:
+                self._conversations.pop(key, None)
+
+        task = asyncio.create_task(_runner())
         conversation.bind_owner_task(task)
+        managed_task = _ManagedConversationTask(
+            task=task, cleanup=_cleanup_conversation
+        )
         self._conversations[key] = _ActiveConversation(
             session=conversation,
-            task=task,
+            task=managed_task,
         )
+        _mark_session_waiter_background_task(task)
+
+        def _on_done(done_task: asyncio.Task[Any]) -> None:
+            _cleanup_conversation()
+            _unmark_session_waiter_background_task(done_task)
+
+        task.add_done_callback(_on_done)
         return summary
 
     async def _run_conversation_task(

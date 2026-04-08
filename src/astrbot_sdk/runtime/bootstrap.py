@@ -19,6 +19,12 @@ import sys
 from pathlib import Path
 from typing import IO
 
+from astrbot_sdk.protocol.codec import (
+    JsonProtocolCodec,
+    MsgpackProtocolCodec,
+    ProtocolCodec,
+)
+
 from .loader import PluginEnvironmentManager
 from .supervisor import (
     SupervisorRuntime,
@@ -50,6 +56,16 @@ __all__ = [
 ]
 
 
+def _resolve_wire_codec(wire_codec: str | ProtocolCodec | None = None) -> ProtocolCodec:
+    if isinstance(wire_codec, ProtocolCodec):
+        return wire_codec
+    if wire_codec is None or wire_codec == "msgpack":
+        return MsgpackProtocolCodec()
+    if wire_codec == "json":
+        return JsonProtocolCodec()
+    raise ValueError(f"unsupported wire codec: {wire_codec}")
+
+
 async def run_supervisor(
     *,
     plugins_dir: Path = Path("plugins"),
@@ -57,17 +73,20 @@ async def run_supervisor(
     stdout: IO[str] | None = None,
     env_manager: PluginEnvironmentManager | None = None,
     workers_manifest: Path | None = None,
+    wire_codec: str | ProtocolCodec | None = None,
 ) -> None:
     transport_stdin, transport_stdout, original_stdout = _prepare_stdio_transport(
         stdin,
         stdout,
     )
     transport = StdioTransport(stdin=transport_stdin, stdout=transport_stdout)
+    resolved_wire_codec = _resolve_wire_codec(wire_codec)
     runtime = SupervisorRuntime(
         transport=transport,
         plugins_dir=plugins_dir,
         env_manager=env_manager,
         workers_manifest=workers_manifest,
+        wire_codec=resolved_wire_codec,
     )
 
     try:
@@ -87,6 +106,7 @@ async def run_plugin_worker(
     group_metadata: Path | None = None,
     stdin: IO[str] | None = None,
     stdout: IO[str] | None = None,
+    wire_codec: str | ProtocolCodec | None = None,
 ) -> None:
     if plugin_dir is None and group_metadata is None:
         raise ValueError("plugin_dir or group_metadata is required")
@@ -98,16 +118,22 @@ async def run_plugin_worker(
         stdout,
     )
     transport = StdioTransport(stdin=transport_stdin, stdout=transport_stdout)
+    resolved_wire_codec = _resolve_wire_codec(wire_codec)
     if group_metadata is not None:
         runtime = GroupWorkerRuntime(
             group_metadata_path=group_metadata,
             transport=transport,
+            wire_codec=resolved_wire_codec,
         )
     else:
         # 前置互斥校验已保证单插件模式下 plugin_dir 一定存在；这里显式收窄，
         # 避免把入口层的 Optional 继续传播到单插件运行时。
         assert plugin_dir is not None
-        runtime = PluginWorkerRuntime(plugin_dir=plugin_dir, transport=transport)
+        runtime = PluginWorkerRuntime(
+            plugin_dir=plugin_dir,
+            transport=transport,
+            wire_codec=resolved_wire_codec,
+        )
     try:
         await runtime.start()
         stop_event = asyncio.Event()
@@ -129,8 +155,10 @@ async def run_websocket_server(
     tls_ca_file: Path | None = None,
     tls_cert_file: Path | None = None,
     tls_key_file: Path | None = None,
+    wire_codec: str | ProtocolCodec | None = None,
 ) -> None:
     resolved_plugin_dirs = [path.resolve() for path in (plugin_dirs or [Path.cwd()])]
+    resolved_wire_codec = _resolve_wire_codec(wire_codec)
     if tls_ca_file is None or tls_cert_file is None or tls_key_file is None:
         raise ValueError(
             "tls_ca_file, tls_cert_file, and tls_key_file are required for websocket workers"
@@ -153,6 +181,7 @@ async def run_websocket_server(
             plugin_dir=resolved_plugin_dirs[0],
             worker_id=resolved_worker_id,
             transport=transport,
+            wire_codec=resolved_wire_codec,
         )
     else:
         if resolved_worker_id is None:
@@ -161,6 +190,7 @@ async def run_websocket_server(
             plugin_dirs=resolved_plugin_dirs,
             worker_id=resolved_worker_id,
             transport=transport,
+            wire_codec=resolved_wire_codec,
         )
     try:
         await runtime.start()

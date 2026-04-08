@@ -1,7 +1,7 @@
 """传输层抽象模块。
 
 定义 Transport 抽象基类及其实现，负责底层的消息传输。
-传输层只关心"发送字符串"和"接收字符串"，不处理协议细节。
+传输层只关心"发送 opaque bytes"和"接收 opaque bytes"，不处理协议细节。
 传输实现：
     Transport: 抽象基类，定义 start/stop/send/wait_closed 接口
     StdioTransport: 标准输入输出传输
@@ -35,13 +35,13 @@
     # 统一接口
     transport.set_message_handler(my_handler)
     await transport.start()
-    await transport.send(json_string)
+    await transport.send(json_bytes)
     await transport.stop()
 
-`Transport` 只处理“字符串发出去 / 字符串收进来”这件事，不做协议解析，也不关心
+`Transport` 只处理“opaque bytes 发出去 / opaque bytes 收进来”这件事，不做协议解析，也不关心
 能力、handler 或迁移适配策略。当前实现包括：
 
-- `StdioTransport`: 子进程或文件对象上的按行文本传输
+- `StdioTransport`: 子进程或文件对象上的长度前缀字节帧传输
 - `WebSocketServerTransport`: 单连接 WebSocket 服务端
 - `WebSocketClientTransport`: WebSocket 客户端
 
@@ -60,7 +60,7 @@ from typing import IO, Any
 
 from .._internal.sdk_logger import logger
 
-MessageHandler = Callable[[str], Awaitable[None]]
+MessageHandler = Callable[[bytes], Awaitable[None]]
 STDIO_SUBPROCESS_STREAM_LIMIT = 8 * 1024 * 1024
 
 
@@ -102,8 +102,8 @@ def _get_web():
     return web
 
 
-def _frame_stdio_payload(payload: str) -> bytes:
-    body = payload.encode("utf-8")
+def _frame_stdio_payload(payload: bytes | bytearray | memoryview) -> bytes:
+    body = bytes(payload)
     return f"{len(body)}\n".encode("ascii") + body
 
 
@@ -121,7 +121,6 @@ def _parse_stdio_header(raw_header: bytes) -> int:
     return size
 
 
-# TODO 一个更好的解决方案？
 def _is_windows_access_denied(error: BaseException) -> bool:
     return (
         sys.platform == "win32"
@@ -136,7 +135,7 @@ class Transport(ABC):
         self._closed = asyncio.Event()
 
     def set_message_handler(self, handler: MessageHandler) -> None:
-        """注册收到原始字符串消息后的回调。"""
+        """注册收到原始字节帧后的回调。"""
         self._handler = handler
 
     @abstractmethod
@@ -148,19 +147,19 @@ class Transport(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def send(self, payload: str) -> None:
+    async def send(self, payload: bytes) -> None:
         raise NotImplementedError
 
     async def wait_closed(self) -> None:
         """等待传输层进入关闭状态。"""
         await self._closed.wait()
 
-    async def _dispatch(self, payload: str) -> None:
-        """把收到的原始载荷转交给上层处理器。"""
+    async def _dispatch(self, payload: bytes) -> None:
+        """把收到的原始字节载荷转交给上层处理器。"""
         if self._handler is not None:
             await self._handler(payload)
 
-    async def _dispatch_safely(self, payload: str, *, source: str) -> None:
+    async def _dispatch_safely(self, payload: bytes, *, source: str) -> None:
         """安全地分发一帧消息：捕获所有非取消异常，避免单帧处理错误拖垮整个读循环。"""
         try:
             await self._dispatch(payload)
@@ -253,7 +252,7 @@ class StdioTransport(Transport):
             self._process = None
         self._closed.set()
 
-    async def send(self, payload: str) -> None:
+    async def send(self, payload: bytes) -> None:
         frame = _frame_stdio_payload(payload)
         if self._process is not None:
             if self._process.stdin is None:
@@ -289,7 +288,7 @@ class StdioTransport(Transport):
                     raw = await self._process.stdout.readexactly(payload_size)
                     # 使用 _dispatch_safely 而非 _dispatch，确保上层的单帧处理错误不会终结读循环
                     await self._dispatch_safely(
-                        raw.decode("utf-8"),
+                        raw,
                         source="stdio-process",
                     )
                 except asyncio.CancelledError:
@@ -298,13 +297,6 @@ class StdioTransport(Transport):
                     # 帧被截断说明子进程已经异常退出，读循环应终止
                     logger.warning("STDIO subprocess frame truncated before completion")
                     break
-                except UnicodeDecodeError as exc:
-                    # UTF-8 解码失败：跳过本帧继续，避免二进制脏数据导致整个连接断开
-                    logger.warning(
-                        "Skipping STDIO subprocess frame with invalid UTF-8 payload: {}",
-                        exc,
-                    )
-                    continue
                 except ValueError as exc:
                     # header 解析失败后无法再可靠定位后续帧边界；继续读取只会让协议流长期失同步。
                     logger.warning(
@@ -332,7 +324,7 @@ class StdioTransport(Transport):
                     if len(raw) != payload_size:
                         raise EOFError("STDIO frame truncated before payload completed")
                     await self._dispatch_safely(
-                        raw.decode("utf-8"),
+                        raw,
                         source="stdio-file",
                     )
                 except asyncio.CancelledError:
@@ -341,13 +333,6 @@ class StdioTransport(Transport):
                     # 流被截断意味着上游已关闭，读循环应终止
                     logger.warning("{}", exc)
                     break
-                except UnicodeDecodeError as exc:
-                    # UTF-8 解码失败：跳过本帧继续，保留连接可用
-                    logger.warning(
-                        "Skipping STDIO file frame with invalid UTF-8 payload: {}",
-                        exc,
-                    )
-                    continue
                 except ValueError as exc:
                     # 文件模式同样无法从坏 header 中恢复到下一帧边界；直接终止读取更安全。
                     logger.warning(
@@ -413,13 +398,13 @@ class WebSocketServerTransport(Transport):
             self._runner = None
         self._closed.set()
 
-    async def send(self, payload: str) -> None:
+    async def send(self, payload: bytes) -> None:
         if self._ws is None or self._ws.closed:
             await asyncio.wait_for(self._connected.wait(), timeout=30.0)
         if self._ws is None or self._ws.closed:
             raise RuntimeError("WebSocket 尚未连接")
         async with self._write_lock:
-            await self._ws.send_str(payload)
+            await self._ws.send_bytes(payload)
 
     async def _handle_socket(self, request) -> Any:
         web = _get_web()
@@ -439,22 +424,12 @@ class WebSocketServerTransport(Transport):
         try:
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
-                    # 文本帧直接分发，无需编解码
                     await self._dispatch_safely(
-                        msg.data, source="websocket-server-text"
+                        msg.data.encode("utf-8"), source="websocket-server-text"
                     )
                 elif msg.type == aiohttp.WSMsgType.BINARY:
-                    # 二进制帧需要先尝试 UTF-8 解码；解码失败只跳过本帧，不断开连接
-                    try:
-                        payload = msg.data.decode("utf-8")
-                    except UnicodeDecodeError as exc:
-                        logger.warning(
-                            "Skipping websocket server binary frame with invalid UTF-8 payload: {}",
-                            exc,
-                        )
-                        continue
                     await self._dispatch_safely(
-                        payload,
+                        bytes(msg.data),
                         source="websocket-server-binary",
                     )
                 elif msg.type == aiohttp.WSMsgType.ERROR:
@@ -522,10 +497,10 @@ class WebSocketClientTransport(Transport):
         self._session = None
         self._closed.set()
 
-    async def send(self, payload: str) -> None:
+    async def send(self, payload: bytes) -> None:
         if self._ws is None or self._ws.closed:
             raise RuntimeError("WebSocket client 尚未连接")
-        await self._ws.send_str(payload)
+        await self._ws.send_bytes(payload)
 
     async def _read_loop(self) -> None:
         assert self._ws is not None
@@ -534,20 +509,11 @@ class WebSocketClientTransport(Transport):
             async for msg in self._ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     await self._dispatch_safely(
-                        msg.data, source="websocket-client-text"
+                        msg.data.encode("utf-8"), source="websocket-client-text"
                     )
                 elif msg.type == aiohttp.WSMsgType.BINARY:
-                    # 与 server 端一致：二进制帧解码失败仅跳过本帧，保持连接存活
-                    try:
-                        payload = msg.data.decode("utf-8")
-                    except UnicodeDecodeError as exc:
-                        logger.warning(
-                            "Skipping websocket client binary frame with invalid UTF-8 payload: {}",
-                            exc,
-                        )
-                        continue
                     await self._dispatch_safely(
-                        payload,
+                        bytes(msg.data),
                         source="websocket-client-binary",
                     )
                 elif msg.type == aiohttp.WSMsgType.ERROR:

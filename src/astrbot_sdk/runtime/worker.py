@@ -35,6 +35,7 @@ from .._internal.invocation_context import caller_plugin_scope
 from .._internal.sdk_logger import logger
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
+from ..protocol.codec import MsgpackProtocolCodec, ProtocolCodec
 from ..protocol.messages import PeerInfo
 from .handler_dispatcher import CapabilityDispatcher, HandlerDispatcher
 from .loader import (
@@ -173,6 +174,7 @@ class GroupWorkerRuntime:
         group_metadata_path: Path | None = None,
         plugin_dirs: list[Path] | None = None,
         worker_id: str | None = None,
+        wire_codec: ProtocolCodec | None = None,
     ) -> None:
         if group_metadata_path is None and not plugin_dirs:
             raise ValueError("group_metadata_path or plugin_dirs is required")
@@ -194,9 +196,11 @@ class GroupWorkerRuntime:
         self.plugins = plugins
         self.worker_id = str(worker_id or default_worker_id)
         self.transport = transport
+        self.wire_codec = wire_codec or MsgpackProtocolCodec()
         self.peer = Peer(
             transport=self.transport,
             peer_info=PeerInfo(name=self.worker_id, role="plugin", version="s5r"),
+            wire_codec=self.wire_codec,
         )
         self.skipped_plugins: dict[str, str] = {}
         self.issues: list[PluginDiscoveryIssue] = []
@@ -419,14 +423,17 @@ class PluginWorkerRuntime:
         plugin_dir: Path,
         transport,
         worker_id: str | None = None,
+        wire_codec: ProtocolCodec | None = None,
     ) -> None:
         self.plugin = load_plugin_spec(plugin_dir)
         self.worker_id = str(worker_id or self.plugin.name)
         self.transport = transport
+        self.wire_codec = wire_codec or MsgpackProtocolCodec()
         self.loaded_plugin = load_plugin(self.plugin)
         self.peer = Peer(
             transport=self.transport,
             peer_info=PeerInfo(name=self.worker_id, role="plugin", version="s5r"),
+            wire_codec=self.wire_codec,
         )
         self.dispatcher = HandlerDispatcher(
             plugin_id=self.plugin.name,

@@ -849,14 +849,13 @@ class Context:
                 return
             try:
                 done_task.result()
-            except Exception as exc:
+            except Exception:
                 exception_logger = getattr(self.logger, "exception", None)
                 if callable(exception_logger):
                     exception_logger(
-                        "SDK background task failed: plugin_id={} desc={} error={}",
+                        "SDK background task failed: plugin_id={} desc={}",
                         self.plugin_id,
                         task_desc,
-                        str(exc),
                     )
 
         background_task.add_done_callback(_on_done)
