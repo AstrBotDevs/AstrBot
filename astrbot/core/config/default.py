@@ -106,7 +106,7 @@ DEFAULT_CONFIG = {
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
-        "websearch_provider": "default",
+        "websearch_provider": "tavily",
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
@@ -3175,7 +3175,6 @@ CONFIG_METADATA_3 = {
                         "description": "网页搜索提供商",
                         "type": "string",
                         "options": [
-                            "default",
                             "tavily",
                             "baidu_ai_search",
                             "bocha",
