@@ -60,6 +60,8 @@ The default AstrBot configuration is as follows:
         "web_search": False,
         "websearch_provider": "default",
         "websearch_tavily_key": [],
+        "websearch_bocha_key": [],
+        "websearch_brave_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -286,15 +288,26 @@ Whether to enable AstrBot's built-in web search capability. Default is `false`. 
 
 #### `provider_settings.websearch_provider`
 
-Web search provider type. Default is `default`. Currently supports `default` and `tavily`.
+Web search provider type. Default is `default`. Currently supports `default`, `tavily`, `bocha`, `baidu_ai_search`, and `brave`.
 
 - `default`: Works best when Google is accessible. If Google fails, it tries Bing and Sogou in order.
 
 - `tavily`: Uses the Tavily search engine.
+- `bocha`: Uses the BoCha search engine.
+- `baidu_ai_search`: Uses Baidu AI Search (MCP).
+- `brave`: Uses Brave Search API.
 
 #### `provider_settings.websearch_tavily_key`
 
 API Key list for the Tavily search engine. Required when using `tavily` as the web search provider.
+
+#### `provider_settings.websearch_bocha_key`
+
+API Key list for the BoCha search engine. Required when using `bocha` as the web search provider.
+
+#### `provider_settings.websearch_brave_key`
+
+API Key list for the Brave search engine. Required when using `brave` as the web search provider.
 
 #### `provider_settings.web_search_link`
 

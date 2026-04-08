@@ -24,6 +24,7 @@ class Main(star.Star):
         "web_search_tavily",
         "tavily_extract_web_page",
         "web_search_bocha",
+        "web_search_brave",
     ]
 
     def __init__(self, context: star.Context) -> None:
@@ -33,6 +34,8 @@ class Main(star.Star):
 
         self.bocha_key_index = 0
         self.bocha_key_lock = asyncio.Lock()
+        self.brave_key_index = 0
+        self.brave_key_lock = asyncio.Lock()
 
         # 将 str 类型的 key 迁移至 list[str]，并保存
         cfg = self.context.get_config()
@@ -55,6 +58,14 @@ class Main(star.Star):
                     provider_settings["websearch_bocha_key"] = [bocha_key]
                 else:
                     provider_settings["websearch_bocha_key"] = []
+                cfg.save_config()
+
+            brave_key = provider_settings.get("websearch_brave_key")
+            if isinstance(brave_key, str):
+                if brave_key:
+                    provider_settings["websearch_brave_key"] = [brave_key]
+                else:
+                    provider_settings["websearch_brave_key"] = []
                 cfg.save_config()
 
         self.bing_search = Bing()
@@ -430,6 +441,50 @@ class Main(star.Star):
                     results.append(result)
                 return results
 
+    async def _get_brave_key(self, cfg: AstrBotConfig) -> str:
+        """并发安全的从列表中获取并轮换 Brave API 密钥。"""
+        brave_keys = cfg.get("provider_settings", {}).get("websearch_brave_key", [])
+
+        async with self.brave_key_lock:
+            key = brave_keys[self.brave_key_index]
+            self.brave_key_index = (self.brave_key_index + 1) % len(brave_keys)
+            return key
+
+    async def _web_search_brave(
+        self,
+        cfg: AstrBotConfig,
+        payload: dict,
+    ) -> list[SearchResult]:
+        """使用 Brave 搜索引擎进行搜索"""
+        brave_key = await self._get_brave_key(cfg)
+        url = "https://api.search.brave.com/res/v1/web/search"
+        header = {
+            "Accept": "application/json",
+            "X-Subscription-Token": brave_key,
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.get(
+                url,
+                params=payload,
+                headers=header,
+            ) as response:
+                if response.status != 200:
+                    reason = await response.text()
+                    raise Exception(
+                        f"Brave web search failed: {reason}, status: {response.status}",
+                    )
+                data = await response.json()
+                rows = data.get("web", {}).get("results", [])
+                results = []
+                for item in rows:
+                    result = SearchResult(
+                        title=item.get("title", ""),
+                        url=item.get("url", ""),
+                        snippet=item.get("description", ""),
+                    )
+                    results.append(result)
+                return results
+
     @llm_tool("web_search_bocha")
     async def search_from_bocha(
         self,
@@ -537,6 +592,64 @@ class Main(star.Star):
         ret = json.dumps({"results": ret_ls}, ensure_ascii=False)
         return ret
 
+    @llm_tool("web_search_brave")
+    async def search_from_brave(
+        self,
+        event: AstrMessageEvent,
+        query: str,
+        count: int = 10,
+        country: str = "US",
+        search_lang: str = "zh-hans",
+        freshness: str = "",
+    ) -> str:
+        """
+        A web search tool based on Brave Search API.
+
+        Args:
+            query(string): Required. Search query.
+            count(number): Optional. Number of results to return. Range: 1–20. Default is 10.
+            country(string): Optional. Country code for region-specific results (e.g., "US", "CN").
+            search_lang(string): Optional. Brave language code (e.g., "zh-hans", "en", "en-gb").
+            freshness(string): Optional. "day", "week", "month", "year".
+        """
+        logger.info(f"web_searcher - search_from_brave: {query}")
+        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        if not cfg.get("provider_settings", {}).get("websearch_brave_key", []):
+            raise ValueError("Error: Brave API key is not configured in AstrBot.")
+
+        if count < 1:
+            count = 1
+        if count > 20:
+            count = 20
+
+        payload = {
+            "q": query,
+            "count": count,
+            "country": country,
+            "search_lang": search_lang,
+        }
+        if freshness in ["day", "week", "month", "year"]:
+            payload["freshness"] = freshness
+
+        results = await self._web_search_brave(cfg, payload)
+        if not results:
+            return "Error: Brave web searcher does not return any results."
+
+        ret_ls = []
+        ref_uuid = str(uuid.uuid4())[:4]
+        for idx, result in enumerate(results, 1):
+            index = f"{ref_uuid}.{idx}"
+            ret_ls.append(
+                {
+                    "title": f"{result.title}",
+                    "url": f"{result.url}",
+                    "snippet": f"{result.snippet}",
+                    "index": index,
+                }
+            )
+        ret = json.dumps({"results": ret_ls}, ensure_ascii=False)
+        return ret
+
     @filter.on_llm_request(priority=-10000)
     async def edit_web_search_tools(
         self,
@@ -575,6 +688,7 @@ class Main(star.Star):
             tool_set.remove_tool("tavily_extract_web_page")
             tool_set.remove_tool("AIsearch")
             tool_set.remove_tool("web_search_bocha")
+            tool_set.remove_tool("web_search_brave")
         elif provider == "tavily":
             web_search_tavily = func_tool_mgr.get_func("web_search_tavily")
             tavily_extract_web_page = func_tool_mgr.get_func("tavily_extract_web_page")
@@ -586,6 +700,7 @@ class Main(star.Star):
             tool_set.remove_tool("fetch_url")
             tool_set.remove_tool("AIsearch")
             tool_set.remove_tool("web_search_bocha")
+            tool_set.remove_tool("web_search_brave")
         elif provider == "baidu_ai_search":
             try:
                 await self.ensure_baidu_ai_search_mcp(event.unified_msg_origin)
@@ -597,6 +712,7 @@ class Main(star.Star):
                 tool_set.remove_tool("web_search_tavily")
                 tool_set.remove_tool("tavily_extract_web_page")
                 tool_set.remove_tool("web_search_bocha")
+                tool_set.remove_tool("web_search_brave")
             except Exception as e:
                 logger.error(f"Cannot Initialize Baidu AI Search MCP Server: {e}")
         elif provider == "bocha":
@@ -608,3 +724,14 @@ class Main(star.Star):
             tool_set.remove_tool("AIsearch")
             tool_set.remove_tool("web_search_tavily")
             tool_set.remove_tool("tavily_extract_web_page")
+            tool_set.remove_tool("web_search_brave")
+        elif provider == "brave":
+            web_search_brave = func_tool_mgr.get_func("web_search_brave")
+            if web_search_brave and web_search_brave.active:
+                tool_set.add_tool(web_search_brave)
+            tool_set.remove_tool("web_search")
+            tool_set.remove_tool("fetch_url")
+            tool_set.remove_tool("AIsearch")
+            tool_set.remove_tool("web_search_tavily")
+            tool_set.remove_tool("tavily_extract_web_page")
+            tool_set.remove_tool("web_search_bocha")
