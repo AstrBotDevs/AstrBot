@@ -42,6 +42,7 @@ from astrbot.api.event import MessageChain
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.file_read_utils import read_file_tool_result
 from astrbot.core.message.components import File
 from astrbot.core.utils.astrbot_path import (
@@ -50,7 +51,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_workspaces_path,
 )
 
-from ..computer_client import get_booter
+from ..registry import builtin_tool
 from .permissions import check_admin_permission
 
 
@@ -162,6 +163,7 @@ def _decode_escaped_text(value: str) -> str:
     )
 
 
+@builtin_tool
 @dataclass
 class FileReadTool(FunctionTool):
     name: str = "astrbot_file_read_tool"
@@ -241,6 +243,7 @@ class FileReadTool(FunctionTool):
             return f"Error reading file: {exc}"
 
 
+@builtin_tool
 @dataclass
 class FileWriteTool(FunctionTool):
     name: str = "astrbot_file_write_tool"
@@ -307,6 +310,7 @@ class FileWriteTool(FunctionTool):
             return f"Error writing file: {exc}"
 
 
+@builtin_tool
 @dataclass
 class FileEditTool(FunctionTool):
     name: str = "astrbot_file_edit_tool"
@@ -392,6 +396,7 @@ class FileEditTool(FunctionTool):
             return f"Error editing file: {exc}"
 
 
+@builtin_tool
 @dataclass
 class GrepTool(FunctionTool):
     name: str = "astrbot_grep_tool"
@@ -597,6 +602,7 @@ class GrepTool(FunctionTool):
             return f"Error searching files: {exc}"
 
 
+@builtin_tool
 @dataclass
 class FileUploadTool(FunctionTool):
     name: str = "astrbot_upload_file"
@@ -662,6 +668,7 @@ class FileUploadTool(FunctionTool):
             return f"Error uploading file: {str(e)}"
 
 
+@builtin_tool
 @dataclass
 class FileDownloadTool(FunctionTool):
     name: str = "astrbot_download_file"

@@ -4,8 +4,10 @@ from types import SimpleNamespace
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.computer.tools.browser import BrowserExecTool
-from astrbot.core.computer.tools.neo_skills import GetExecutionHistoryTool
+from astrbot.core.tools.computer_tools.shipyard_neo.browser import BrowserExecTool
+from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
+    GetExecutionHistoryTool,
+)
 
 
 class _FakeBrowser:
@@ -49,7 +51,7 @@ async def test_browser_tool_allows_non_admin_when_admin_requirement_disabled(
         return SimpleNamespace(browser=_FakeBrowser())
 
     monkeypatch.setattr(
-        "astrbot.core.computer.tools.browser.get_booter",
+        "astrbot.core.tools.computer_tools.shipyard_neo.browser.get_booter",
         _fake_get_booter,
     )
 
@@ -72,7 +74,7 @@ async def test_neo_skill_tool_allows_non_admin_when_admin_requirement_disabled(
         )
 
     monkeypatch.setattr(
-        "astrbot.core.computer.tools.neo_skills.get_booter",
+        "astrbot.core.tools.computer_tools.shipyard_neo.neo_skills.get_booter",
         _fake_get_booter,
     )
 

@@ -20,34 +20,10 @@ from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
-    ANNOTATE_EXECUTION_TOOL,
-    BROWSER_BATCH_EXEC_TOOL,
-    BROWSER_EXEC_TOOL,
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
-    CREATE_SKILL_CANDIDATE_TOOL,
-    CREATE_SKILL_PAYLOAD_TOOL,
-    EVALUATE_SKILL_CANDIDATE_TOOL,
-    EXECUTE_SHELL_TOOL,
-    FILE_DOWNLOAD_TOOL,
-    FILE_EDIT_TOOL,
-    FILE_UPLOAD_TOOL,
-    FILE_WRITE_TOOL,
-    GET_EXECUTION_HISTORY_TOOL,
-    GET_SKILL_PAYLOAD_TOOL,
-    GREP_TOOL,
-    LIST_SKILL_CANDIDATES_TOOL,
-    LIST_SKILL_RELEASES_TOOL,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
-    LOCAL_EXECUTE_SHELL_TOOL,
-    LOCAL_PYTHON_TOOL,
-    PROMOTE_SKILL_CANDIDATE_TOOL,
-    PYTHON_TOOL,
-    READ_FILE_TOOL,
-    ROLLBACK_SKILL_RELEASE_TOOL,
-    RUN_BROWSER_SKILL_TOOL,
     SANDBOX_MODE_PROMPT,
-    SYNC_SKILL_RELEASE_TOOL,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
@@ -63,6 +39,31 @@ from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
+from astrbot.core.tools.computer_tools import (
+    AnnotateExecutionTool,
+    BrowserBatchExecTool,
+    BrowserExecTool,
+    CreateSkillCandidateTool,
+    CreateSkillPayloadTool,
+    EvaluateSkillCandidateTool,
+    ExecuteShellTool,
+    FileDownloadTool,
+    FileEditTool,
+    FileReadTool,
+    FileUploadTool,
+    FileWriteTool,
+    GetExecutionHistoryTool,
+    GetSkillPayloadTool,
+    GrepTool,
+    ListSkillCandidatesTool,
+    ListSkillReleasesTool,
+    LocalPythonTool,
+    PromoteSkillCandidateTool,
+    PythonTool,
+    RollbackSkillReleaseTool,
+    RunBrowserSkillTool,
+    SyncSkillReleaseTool,
+)
 from astrbot.core.tools.cron_tools import (
     CreateActiveCronTool,
     DeleteCronJobTool,
@@ -299,15 +300,16 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
         req.prompt = f"{prefix}{req.prompt}"
 
 
-def _apply_local_env_tools(req: ProviderRequest) -> None:
+def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
-    req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
-    req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
-    req.func_tool.add_tool(READ_FILE_TOOL)
-    req.func_tool.add_tool(FILE_WRITE_TOOL)
-    req.func_tool.add_tool(FILE_EDIT_TOOL)
-    req.func_tool.add_tool(GREP_TOOL)
+    tool_mgr = plugin_context.get_llm_tool_manager()
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
     req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
 
 
@@ -994,7 +996,10 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
 
 
 def _apply_sandbox_tools(
-    config: MainAgentBuildConfig, req: ProviderRequest, session_id: str
+    config: MainAgentBuildConfig,
+    req: ProviderRequest,
+    session_id: str,
+    plugin_context: Context,
 ) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
@@ -1010,14 +1015,15 @@ def _apply_sandbox_tools(
         os.environ["SHIPYARD_ENDPOINT"] = ep
         os.environ["SHIPYARD_ACCESS_TOKEN"] = at
 
-    req.func_tool.add_tool(EXECUTE_SHELL_TOOL)
-    req.func_tool.add_tool(PYTHON_TOOL)
-    req.func_tool.add_tool(FILE_UPLOAD_TOOL)
-    req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
-    req.func_tool.add_tool(READ_FILE_TOOL)
-    req.func_tool.add_tool(FILE_WRITE_TOOL)
-    req.func_tool.add_tool(FILE_EDIT_TOOL)
-    req.func_tool.add_tool(GREP_TOOL)
+    tool_mgr = plugin_context.get_llm_tool_manager()
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(PythonTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileUploadTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileDownloadTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
     if booter == "shipyard_neo":
         # Neo-specific path rule: filesystem tools operate relative to sandbox
         # workspace root. Do not prepend "/workspace".
@@ -1053,22 +1059,22 @@ def _apply_sandbox_tools(
         # Browser tools: only register if profile supports browser
         # (or if capabilities are unknown because sandbox hasn't booted yet)
         if sandbox_capabilities is None or "browser" in sandbox_capabilities:
-            req.func_tool.add_tool(BROWSER_EXEC_TOOL)
-            req.func_tool.add_tool(BROWSER_BATCH_EXEC_TOOL)
-            req.func_tool.add_tool(RUN_BROWSER_SKILL_TOOL)
+            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserExecTool))
+            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserBatchExecTool))
+            req.func_tool.add_tool(tool_mgr.get_builtin_tool(RunBrowserSkillTool))
 
         # Neo-specific tools (always available for shipyard_neo)
-        req.func_tool.add_tool(GET_EXECUTION_HISTORY_TOOL)
-        req.func_tool.add_tool(ANNOTATE_EXECUTION_TOOL)
-        req.func_tool.add_tool(CREATE_SKILL_PAYLOAD_TOOL)
-        req.func_tool.add_tool(GET_SKILL_PAYLOAD_TOOL)
-        req.func_tool.add_tool(CREATE_SKILL_CANDIDATE_TOOL)
-        req.func_tool.add_tool(LIST_SKILL_CANDIDATES_TOOL)
-        req.func_tool.add_tool(EVALUATE_SKILL_CANDIDATE_TOOL)
-        req.func_tool.add_tool(PROMOTE_SKILL_CANDIDATE_TOOL)
-        req.func_tool.add_tool(LIST_SKILL_RELEASES_TOOL)
-        req.func_tool.add_tool(ROLLBACK_SKILL_RELEASE_TOOL)
-        req.func_tool.add_tool(SYNC_SKILL_RELEASE_TOOL)
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetExecutionHistoryTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnnotateExecutionTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillPayloadTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetSkillPayloadTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillCandidateTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillCandidatesTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(EvaluateSkillCandidateTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(PromoteSkillCandidateTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillReleasesTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
 
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
@@ -1358,9 +1364,9 @@ async def build_main_agent(
         _apply_llm_safety_mode(config, req)
 
     if config.computer_use_runtime == "sandbox":
-        _apply_sandbox_tools(config, req, req.session_id)
+        _apply_sandbox_tools(config, req, req.session_id, plugin_context)
     elif config.computer_use_runtime == "local":
-        _apply_local_env_tools(req)
+        _apply_local_env_tools(req, plugin_context)
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(
@@ -1398,7 +1404,9 @@ async def build_main_agent(
         )
 
         if config.computer_use_runtime == "local":
-            from astrbot.core.computer.tools.fs import _normalize_umo_for_workspace
+            from astrbot.core.tools.computer_tools.fs import (
+                _normalize_umo_for_workspace,
+            )
 
             normalized_umo = _normalize_umo_for_workspace(event.unified_msg_origin)
             tool_prompt += (

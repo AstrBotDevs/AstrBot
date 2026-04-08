@@ -6,9 +6,9 @@ from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
-
-from ..computer_client import get_booter
-from .permissions import check_admin_permission
+from astrbot.core.computer.computer_client import get_booter
+from astrbot.core.tools.computer_tools.permissions import check_admin_permission
+from astrbot.core.tools.registry import builtin_tool
 
 
 def _to_json(data: Any) -> str:
@@ -29,6 +29,7 @@ async def _get_browser_component(context: ContextWrapper[AstrAgentContext]) -> A
     return browser
 
 
+@builtin_tool
 @dataclass
 class BrowserExecTool(FunctionTool):
     name: str = "astrbot_execute_browser"
@@ -86,6 +87,7 @@ class BrowserExecTool(FunctionTool):
             return f"Error executing browser command: {str(e)}"
 
 
+@builtin_tool
 @dataclass
 class BrowserBatchExecTool(FunctionTool):
     name: str = "astrbot_execute_browser_batch"
@@ -150,6 +152,7 @@ class BrowserBatchExecTool(FunctionTool):
             return f"Error executing browser batch command: {str(e)}"
 
 
+@builtin_tool
 @dataclass
 class RunBrowserSkillTool(FunctionTool):
     name: str = "astrbot_run_browser_skill"
