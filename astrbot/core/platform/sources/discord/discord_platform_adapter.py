@@ -1,7 +1,7 @@
 import asyncio
 import re
 import sys
-from typing import Any
+from typing import Any, cast
 
 import discord
 from discord.abc import GuildChannel, Messageable, PrivateChannel
@@ -390,7 +390,9 @@ class DiscordPlatformAdapter(Platform):
     async def _collect_and_register_commands(self) -> None:
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] Collecting and registering slash commands...")
-        registered_commands = []
+        registered_commands: list[str] = []
+
+        # Register legacy commands
         for cmd_name, description in self.collect_commands():
             callback = self._create_dynamic_callback(cmd_name)
             options = [
@@ -410,6 +412,9 @@ class DiscordPlatformAdapter(Platform):
             )
             self.client.add_application_command(slash_command)
             registered_commands.append(cmd_name)
+
+        # Register SDK bridge commands
+        await self._register_sdk_commands(registered_commands)
 
         if registered_commands:
             logger.info(
@@ -452,65 +457,53 @@ class DiscordPlatformAdapter(Platform):
                     )
                 command_dict.setdefault(cmd_name, description)
 
+        # SDK bridge commands are registered in _register_sdk_commands()
+        return list(command_dict.items())
+
+    async def _register_sdk_commands(self, registered_commands: list[str]) -> None:
+        """注册 SDK bridge 的原生命令到 Discord。"""
         sdk_bridge = getattr(self, "sdk_plugin_bridge", None)
-        if sdk_bridge is not None:
-            for item in sdk_bridge.list_native_command_candidates("discord"):
-                cmd_name = str(item.get("name", "")).strip()
-                if not cmd_name:
-                    continue
-                if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
-                    logger.debug(f"[Discord] 跳过不符合规范的 SDK 指令: {cmd_name}")
-                    continue
-                description = str(item.get("description") or "").strip()
-                if not description:
-                    if item.get("is_group"):
-                        description = f"Command group: {cmd_name}"
-                    else:
-                        description = f"Command: {cmd_name}"
-                if len(description) > 100:
-                    description = f"{description[:97]}..."
-                if cmd_name in command_dict:
-                    logger.warning(
-                        f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
-                        f"'{command_dict[cmd_name]}'"
-                    )
-                command_dict.setdefault(cmd_name, description)
+        if sdk_bridge is None:
+            return
 
-                # 创建动态回调
-                callback = self._create_dynamic_callback(cmd_name)
-
-                # 创建一个通用的参数选项来接收所有文本输入
-                options = [
-                    discord.Option(
-                        name="params",
-                        description="指令的所有参数",
-                        type=discord.SlashCommandOptionType.string,
-                        required=False,
-                    ),
-                ]
-
-                # 创建SlashCommand
-                slash_command = discord.SlashCommand(
-                    name=cmd_name,
-                    description=description,
-                    func=callback,
-                    options=options,
-                    guild_ids=[self.guild_id] if self.guild_id else None,
-                )
-                self.client.add_application_command(slash_command)
-                registered_commands.append(cmd_name)
-
-        if registered_commands:
-            logger.info(
-                f"[Discord] Ready to sync {len(registered_commands)} commands: {', '.join(registered_commands)}",
+        sdk_cmd_count = 0
+        for item in sdk_bridge.list_native_command_candidates("discord"):
+            cmd_name = str(item.get("name", "")).strip()
+            if not cmd_name:
+                continue
+            if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
+                logger.debug(f"[Discord] 跳过不符合规范的 SDK 指令: {cmd_name}")
+                continue
+            description = str(item.get("description") or "").strip()
+            if not description:
+                if item.get("is_group"):
+                    description = f"Command group: {cmd_name}"
+                else:
+                    description = f"Command: {cmd_name}"
+            if len(description) > 100:
+                description = f"{description[:97]}..."
+            callback = self._create_dynamic_callback(cmd_name)
+            options = [
+                discord.Option(
+                    name="params",
+                    description="指令的所有参数",
+                    type=discord.SlashCommandOptionType.string,
+                    required=False,
+                ),
+            ]
+            slash_command = discord.SlashCommand(
+                name=cmd_name,
+                description=description,
+                func=callback,
+                options=options,
+                guild_ids=[self.guild_id] if self.guild_id else None,
             )
-        else:
-            logger.info("[Discord] No commands found for registration.")
+            self.client.add_application_command(slash_command)
+            registered_commands.append(cmd_name)
+            sdk_cmd_count += 1
 
-        # 使用 Pycord 的方法同步指令
-        # 注意：这可能需要一些时间，并且有频率限制
-        await self.client.sync_commands()
-        logger.info("[Discord] Command synchronization completed.")
+        if sdk_cmd_count > 0:
+            logger.info(f"[Discord] Registered {sdk_cmd_count} SDK bridge commands.")
 
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
