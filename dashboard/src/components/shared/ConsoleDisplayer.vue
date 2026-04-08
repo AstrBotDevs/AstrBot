@@ -36,14 +36,14 @@ export default {
       autoScroll: true,
       isFullscreen: false,
       logColorAnsiMap: {
-        '\u001b[1;34m': 'color: #39C5BB; font-weight: bold;',
-        '\u001b[1;36m': 'color: #00FFFF; font-weight: bold;',
-        '\u001b[1;33m': 'color: #FFFF00; font-weight: bold;',
-        '\u001b[31m': 'color: #FF0000;',
-        '\u001b[1;31m': 'color: #FF0000; font-weight: bold;',
+        '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
+        '\u001b[1;36m': 'color: #72c4cc; font-weight: bold;',
+        '\u001b[1;33m': 'color: #d4b95e; font-weight: bold;',
+        '\u001b[31m': 'color: #d46a6a;',
+        '\u001b[1;31m': 'color: #e06060; font-weight: bold;',
         '\u001b[0m': 'color: inherit; font-weight: normal;',
-        '\u001b[32m': 'color: #00FF00;',
-        'default': 'color: #FFFFFF;'
+        '\u001b[32m': 'color: #6cc070;',
+        'default': 'color: #c8c8c8;'
       },
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
       selectedLevels: [0, 1, 2, 3, 4],

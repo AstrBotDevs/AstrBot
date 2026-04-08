@@ -45,4 +45,35 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   color: var(--astrbot-code-color);
 }
 
+// Dark mode global overrides
+.v-theme--PurpleThemeDark {
+  // Override code text color for dark mode
+  --astrbot-code-color: rgb(var(--v-theme-on-surface-variant));
 
+  // Soften flat primary buttons for dark mode
+  .v-btn--variant-flat.bg-primary {
+    background-color: rgba(var(--v-theme-primary), 0.85) !important;
+  }
+
+  // Timeline dots: use a muted version
+  .v-timeline-item .v-timeline-divider__dot .v-timeline-divider__inner-dot {
+    opacity: 0.85;
+  }
+
+  // Use a darker scrim for overlays and dialogs in dark mode.
+  .v-overlay__scrim {
+    background-color: rgba(var(--v-theme-background), 0.72) !important;
+    opacity: 1 !important;
+  }
+
+  // Ensure dialog/card surfaces use the dark surface color
+  .v-overlay__content > .v-card {
+    background-color: rgb(var(--v-theme-surface)) !important;
+  }
+
+  // Links inside markdown - slightly muted
+  .markdown-content a,
+  .markstream-vue a {
+    color: rgb(var(--v-theme-primary));
+  }
+}
