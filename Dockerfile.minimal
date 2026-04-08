@@ -13,41 +13,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     libffi-dev \
     libssl-dev \
-    ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
+# Install uv and create virtual environment
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uv/bin/uv
-
-# Copy requirements
 COPY requirements.txt .
+RUN /uv/bin/uv venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Install dependencies using uv
-RUN /uv/bin/uv pip install --system --no-cache -r requirements.txt && \
-    /uv/bin/uv pip install --system --no-cache socksio pilk
+# Install dependencies
+RUN /uv/bin/uv pip install --no-cache -r requirements.txt socksio pilk
 
 # Runtime stage
 FROM python:3.12-slim
 
 WORKDIR /AstrBot
 
-# Install runtime dependencies (only essential ones)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    bash \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Copy Python packages from builder
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
 COPY . /AstrBot/
-
-# Cleanup Python cache
-RUN find . -type f -name '*.pyc' -delete && \
-    find . -type d -name '__pycache__' -delete
 
 EXPOSE 6185
 
