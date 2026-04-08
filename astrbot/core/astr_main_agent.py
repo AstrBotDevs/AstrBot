@@ -67,6 +67,14 @@ from astrbot.core.tools.cron_tools import (
     DELETE_CRON_JOB_TOOL,
     LIST_CRON_JOBS_TOOL,
 )
+from astrbot.core.tools.web_search_tools import (
+    TAVILY_EXTRACT_WEB_PAGE_TOOL,
+    WEB_SEARCH_BAIDU_TOOL,
+    WEB_SEARCH_BOCHA_TOOL,
+    WEB_SEARCH_BRAVE_TOOL,
+    WEB_SEARCH_TAVILY_TOOL,
+    normalize_legacy_web_search_config,
+)
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.media_utils import (
@@ -1054,6 +1062,33 @@ def _proactive_cron_job_tools(req: ProviderRequest) -> None:
     req.func_tool.add_tool(LIST_CRON_JOBS_TOOL)
 
 
+async def _apply_web_search_tools(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    plugin_context: Context,
+) -> None:
+    cfg = plugin_context.get_config(umo=event.unified_msg_origin)
+    normalize_legacy_web_search_config(cfg)
+    prov_settings = cfg.get("provider_settings", {})
+
+    if not prov_settings.get("web_search", False):
+        return
+
+    if req.func_tool is None:
+        req.func_tool = ToolSet()
+
+    provider = prov_settings.get("websearch_provider", "tavily")
+    if provider == "tavily":
+        req.func_tool.add_tool(WEB_SEARCH_TAVILY_TOOL)
+        req.func_tool.add_tool(TAVILY_EXTRACT_WEB_PAGE_TOOL)
+    elif provider == "bocha":
+        req.func_tool.add_tool(WEB_SEARCH_BOCHA_TOOL)
+    elif provider == "brave":
+        req.func_tool.add_tool(WEB_SEARCH_BRAVE_TOOL)
+    elif provider == "baidu_ai_search":
+        req.func_tool.add_tool(WEB_SEARCH_BAIDU_TOOL)
+
+
 def _get_compress_provider(
     config: MainAgentBuildConfig, plugin_context: Context
 ) -> Provider | None:
@@ -1295,6 +1330,7 @@ async def build_main_agent(
 
     _modalities_fix(provider, req)
     _plugin_tool_fix(event, req)
+    await _apply_web_search_tools(event, req, plugin_context)
     _sanitize_context_by_modalities(config, provider, req)
 
     if config.llm_safety_mode:
