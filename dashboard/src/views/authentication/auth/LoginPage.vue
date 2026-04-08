@@ -192,7 +192,7 @@ onMounted(() => {
         </div>
       </v-card-title>
       <v-card-text>
-        <AuthLogin />
+        <AuthLogin @open-server-config="serverConfigDialog = true" />
       </v-card-text>
     </v-card>
 
