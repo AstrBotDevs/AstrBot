@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import uuid
 
 from pydantic import Field
@@ -84,7 +85,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
-            result = await sb.shell.exec(f"test -f {path} && echo '_&exists_'")
+            quoted_path = shlex.quote(path)
+            result = await sb.shell.exec(f"test -f {quoted_path} && echo '_&exists_'")
             if "_&exists_" in json.dumps(result):
                 name = os.path.basename(path)
                 local_path = os.path.join(
