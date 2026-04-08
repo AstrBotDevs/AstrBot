@@ -11,6 +11,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from astrbot.core import logger, sp
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.tools.registry import builtin_tool
 
 WEB_SEARCH_TOOL_NAMES = [
     "web_search_baidu",
@@ -275,6 +276,7 @@ async def _baidu_search(
             ]
 
 
+@builtin_tool
 @pydantic_dataclass
 class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_tavily"
@@ -357,6 +359,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
+@builtin_tool
 @pydantic_dataclass
 class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "tavily_extract_web_page"
@@ -403,6 +406,7 @@ class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
         return ret or "Error: Tavily web searcher does not return any results."
 
 
+@builtin_tool
 @pydantic_dataclass
 class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_bocha"
@@ -466,6 +470,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
+@builtin_tool
 @pydantic_dataclass
 class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_brave"
@@ -523,6 +528,7 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
+@builtin_tool
 @pydantic_dataclass
 class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_baidu"
@@ -585,18 +591,12 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-WEB_SEARCH_TAVILY_TOOL = TavilyWebSearchTool()
-TAVILY_EXTRACT_WEB_PAGE_TOOL = TavilyExtractWebPageTool()
-WEB_SEARCH_BOCHA_TOOL = BochaWebSearchTool()
-WEB_SEARCH_BRAVE_TOOL = BraveWebSearchTool()
-WEB_SEARCH_BAIDU_TOOL = BaiduWebSearchTool()
-
 __all__ = [
-    "WEB_SEARCH_BAIDU_TOOL",
-    "WEB_SEARCH_BOCHA_TOOL",
-    "WEB_SEARCH_BRAVE_TOOL",
-    "WEB_SEARCH_TAVILY_TOOL",
-    "TAVILY_EXTRACT_WEB_PAGE_TOOL",
+    "BaiduWebSearchTool",
+    "BochaWebSearchTool",
+    "BraveWebSearchTool",
+    "TavilyExtractWebPageTool",
+    "TavilyWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",
     "normalize_legacy_web_search_config",
 ]

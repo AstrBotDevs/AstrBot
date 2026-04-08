@@ -102,6 +102,10 @@ const handleUpdatePermission = async (cmd: CommandItem, permission: 'admin' | 'm
 };
 
 const handleToggleTool = async (tool: ToolItem) => {
+  if (tool.readonly) {
+    toast(tmTool('messages.toggleToolReadonly'), 'info');
+    return;
+  }
   const previous = tool.active;
   tool.active = !tool.active;
   try {
@@ -263,19 +267,6 @@ watch(viewMode, async (mode) => {
                   hide-details
                   clearable
                 />
-              </div>
-              <div class="d-flex align-center ga-2">
-                <div class="d-flex align-center">
-                  <v-icon size="18" color="primary" class="mr-1">mdi-function-variant</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.total') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-primary">{{ filteredTools.length }}</span>
-                </div>
-                <v-divider vertical class="mx-1" style="height: 20px;" />
-                <div class="d-flex align-center">
-                  <v-icon size="18" color="success" class="mr-1">mdi-check-circle-outline</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('status.enabled') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-success">{{ filteredTools.filter(t => t.active).length }}</span>
-                </div>
               </div>
             </div>
 

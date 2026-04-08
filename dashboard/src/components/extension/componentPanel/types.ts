@@ -94,10 +94,10 @@ export interface ToolItem {
   name: string;
   description: string;
   active: boolean;
+  readonly?: boolean;
   parameters?: {
     properties?: Record<string, ToolParameter>;
   };
   origin?: string;
   origin_name?: string;
 }
-

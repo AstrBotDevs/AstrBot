@@ -17,6 +17,12 @@ from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.tools.registry import (
+    ensure_builtin_tools_loaded,
+    get_builtin_tool_class,
+    get_builtin_tool_name,
+    iter_builtin_tool_classes,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
@@ -207,8 +213,12 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 class FunctionToolManager:
     def __init__(self) -> None:
         self.func_list: list[FuncTool] = []
+        """All tools include mcp tools and plugin tools, except astrbot builtin tools."""
+        self.builtin_func_list: dict[type[FuncTool], FuncTool] = {}
+        """All astrbot builtin tools, keyed by their class. Values are instantiated tool objects, created on demand."""
+
         self._mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
-        """MCP 服务运行时状态（唯一事实来源）"""
+        """MCP runtime metadata, keyed by server name. Updated atomically on MCP lifecycle changes."""
         self._mcp_server_runtime_view = MappingProxyType(self._mcp_server_runtime)
         self._mcp_client_dict_view = _MCPClientDictView(self._mcp_server_runtime)
         self._timeout_mismatch_warned = False
@@ -320,7 +330,49 @@ class FunctionToolManager:
         for f in reversed(self.func_list):
             if f.name == name:
                 return f
+        if isinstance(name, str):
+            try:
+                builtin_tool = self.get_builtin_tool(name)
+            except KeyError:
+                return None
+            if getattr(builtin_tool, "active", True):
+                return builtin_tool
+            return builtin_tool
         return None
+
+    def get_builtin_tool(self, tool: str | type[FuncTool]) -> FuncTool:
+        ensure_builtin_tools_loaded()
+
+        if isinstance(tool, str):
+            tool_cls = get_builtin_tool_class(tool)
+            if tool_cls is None:
+                raise KeyError(f"Builtin tool {tool} is not registered.")
+        elif isinstance(tool, type) and issubclass(tool, FunctionTool):
+            tool_cls = tool
+            if get_builtin_tool_name(tool_cls) is None:
+                raise KeyError(
+                    f"Builtin tool class {tool_cls.__module__}.{tool_cls.__name__} is not registered.",
+                )
+        else:
+            raise TypeError("tool must be a builtin tool name or FunctionTool class.")
+
+        cached_tool = self.builtin_func_list.get(tool_cls)
+        if cached_tool is not None:
+            return cached_tool
+
+        builtin_tool = tool_cls()  # type: ignore
+        self.builtin_func_list[tool_cls] = builtin_tool
+        return builtin_tool
+
+    def iter_builtin_tools(self) -> list[FuncTool]:
+        ensure_builtin_tools_loaded()
+        return [
+            self.get_builtin_tool(tool_cls) for tool_cls in iter_builtin_tool_classes()
+        ]
+
+    def is_builtin_tool(self, name: str) -> bool:
+        ensure_builtin_tools_loaded()
+        return get_builtin_tool_class(name) is not None
 
     def get_full_tool_set(self) -> ToolSet:
         """获取完整工具集

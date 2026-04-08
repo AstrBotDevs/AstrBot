@@ -275,8 +275,8 @@ class CronJobManager:
         )
         from astrbot.core.astr_main_agent_resources import (
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
-            SEND_MESSAGE_TO_USER_TOOL,
         )
+        from astrbot.core.tools.message_tools import SendMessageToUserTool
 
         try:
             session = (
@@ -342,7 +342,9 @@ class CronJobManager:
         )
         if not req.func_tool:
             req.func_tool = ToolSet()
-        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+        req.func_tool.add_tool(
+            self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
+        )
 
         result = await build_main_agent(
             event=cron_event, plugin_context=self.ctx, config=config, req=req

@@ -45,6 +45,7 @@
       "required": "Required",
       "origin": "Origin",
       "originName": "Origin Name",
+      "readonly": "Read-only",
       "actions": "Actions"
     }
   },
@@ -153,6 +154,7 @@
     "configParseError": "Configuration parse error: {error}",
     "noAvailableConfig": "No available configuration",
     "toggleToolSuccess": "Tool status toggled successfully!",
+    "toggleToolReadonly": "Builtin tools are read-only and cannot be enabled or disabled.",
     "toggleToolError": "Failed to toggle tool status: {error}",
     "testError": "Test connection failed: {error}"
   }

@@ -428,10 +428,20 @@ class ToolsRoute(Route):
     async def get_tool_list(self):
         """Get all registered tools."""
         try:
-            tools = self.tool_mgr.func_list
+            tools = list(self.tool_mgr.func_list)
+            existing_names = {tool.name for tool in tools}
+            for tool in self.tool_mgr.iter_builtin_tools():
+                if tool.name not in existing_names:
+                    tools.append(tool)
+
             tools_dict = []
             for tool in tools:
-                if isinstance(tool, MCPTool):
+                readonly = False
+                if self.tool_mgr.is_builtin_tool(tool.name):
+                    origin = "builtin"
+                    origin_name = "AstrBot Core"
+                    readonly = True
+                elif isinstance(tool, MCPTool):
                     origin = "mcp"
                     origin_name = tool.mcp_server_name
                 elif tool.handler_module_path and star_map.get(
@@ -451,6 +461,7 @@ class ToolsRoute(Route):
                     "active": tool.active,
                     "origin": origin,
                     "origin_name": origin_name,
+                    "readonly": readonly,
                 }
                 tools_dict.append(tool_info)
             return Response().ok(data=tools_dict).__dict__
@@ -469,6 +480,13 @@ class ToolsRoute(Route):
                 return (
                     Response()
                     .error("Missing required parameters: name or activate")
+                    .__dict__
+                )
+
+            if self.tool_mgr.is_builtin_tool(tool_name):
+                return (
+                    Response()
+                    .error("Builtin tools are read-only and cannot be toggled.")
                     .__dict__
                 )
 

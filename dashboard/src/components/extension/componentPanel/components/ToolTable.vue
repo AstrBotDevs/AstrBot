@@ -4,7 +4,6 @@ import { useModuleI18n } from '@/i18n/composables';
 import type { ToolItem } from '../types';
 
 const { tm: tmTool } = useModuleI18n('features/tooluse');
-const { tm: tmCommand } = useModuleI18n('features/command');
 
 const props = defineProps<{
   items: ToolItem[];
@@ -16,11 +15,10 @@ const emit = defineEmits<{
 }>();
 
 const toolHeaders = computed(() => [
-  { title: tmTool('functionTools.title'), key: 'name', minWidth: '160px' },
+  { title: tmTool('functionTools.title'), key: 'name', minWidth: '240px' },
   { title: tmTool('functionTools.description'), key: 'description' },
   { title: tmTool('functionTools.table.origin'), key: 'origin', sortable: false, width: '120px' },
   { title: tmTool('functionTools.table.originName'), key: 'origin_name', sortable: false, width: '160px' },
-  { title: tmCommand('status.enabled'), key: 'active', sortable: false, width: '120px' },
   { title: tmTool('functionTools.table.actions'), key: 'actions', sortable: false, width: '120px' }
 ]);
 
@@ -39,13 +37,8 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
       :loading="props.loading"
     >
       <template #item.name="{ item }">
-        <div class="d-flex align-center py-2">
-          <v-icon color="primary" class="mr-2" size="18">
-            {{ item.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
-          </v-icon>
-          <div>
-            <div class="text-subtitle-1 font-weight-medium">{{ item.name }}</div>
-          </div>
+        <div class="py-2">
+          <div class="tool-name text-body-2 font-weight-medium">{{ item.name }}</div>
         </div>
       </template>
 
@@ -56,7 +49,7 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
       </template>
 
       <template #item.origin="{ item }">
-        <v-chip size="small" variant="tonal" color="info" class="text-caption font-weight-medium">
+        <v-chip size="x-small" variant="tonal" color="info" class="text-caption font-weight-medium">
           {{ item.origin || '-' }}
         </v-chip>
       </template>
@@ -67,14 +60,10 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
         </div>
       </template>
 
-      <template #item.active="{ item }">
-        <v-chip :color="item.active ? 'success' : 'error'" size="small" class="font-weight-medium" :variant="item.active ? 'flat' : 'outlined'">
-          {{ item.active ? tmCommand('status.enabled') : tmCommand('status.disabled') }}
-        </v-chip>
-      </template>
-
       <template #item.actions="{ item }">
+        <span v-if="item.readonly" class="text-medium-emphasis">-</span>
         <v-switch
+          v-else
           :model-value="item.active"
           color="primary"
           density="compact"
@@ -140,5 +129,10 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
 
 .tool-table :deep(.v-data-table__td) {
   vertical-align: middle;
+}
+
+.tool-name {
+  font-size: 0.9rem;
+  line-height: 1.35;
 }
 </style>
