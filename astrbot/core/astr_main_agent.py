@@ -36,6 +36,7 @@ from astrbot.core.persona_error_reply import (
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider.register import llm_tools
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
@@ -999,7 +1000,6 @@ def _apply_sandbox_tools(
     config: MainAgentBuildConfig,
     req: ProviderRequest,
     session_id: str,
-    plugin_context: Context,
 ) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
@@ -1015,7 +1015,7 @@ def _apply_sandbox_tools(
         os.environ["SHIPYARD_ENDPOINT"] = ep
         os.environ["SHIPYARD_ACCESS_TOKEN"] = at
 
-    tool_mgr = plugin_context.get_llm_tool_manager()
+    tool_mgr = llm_tools
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(PythonTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileUploadTool))
@@ -1364,7 +1364,7 @@ async def build_main_agent(
         _apply_llm_safety_mode(config, req)
 
     if config.computer_use_runtime == "sandbox":
-        _apply_sandbox_tools(config, req, req.session_id, plugin_context)
+        _apply_sandbox_tools(config, req, req.session_id)
     elif config.computer_use_runtime == "local":
         _apply_local_env_tools(req, plugin_context)
 

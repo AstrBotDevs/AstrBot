@@ -1501,7 +1501,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(config, req, "session-123", mock_context)
+        module._apply_sandbox_tools(config, req, "session-123")
 
         assert req.func_tool is not None
         assert isinstance(req.func_tool, ToolSet)
@@ -1516,7 +1516,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(config, req, "session-123", mock_context)
+        module._apply_sandbox_tools(config, req, "session-123")
 
         tool_names = req.func_tool.names()
         assert "astrbot_execute_shell" in tool_names
@@ -1534,7 +1534,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123", mock_context)
+        module._apply_sandbox_tools(config, req, "session-123")
 
         assert "sandboxed environment" in req.system_prompt
 
@@ -1555,7 +1555,7 @@ class TestApplySandboxTools:
         monkeypatch.delenv("SHIPYARD_ENDPOINT", raising=False)
         monkeypatch.delenv("SHIPYARD_ACCESS_TOKEN", raising=False)
 
-        module._apply_sandbox_tools(config, req, "session-123", mock_context)
+        module._apply_sandbox_tools(config, req, "session-123")
 
         assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
         assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
@@ -1575,7 +1575,7 @@ class TestApplySandboxTools:
         req = ProviderRequest(prompt="Test", func_tool=None)
 
         with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123", mock_context)
+            module._apply_sandbox_tools(config, req, "session-123")
 
         mock_logger.error.assert_called_once()
         assert (
@@ -1598,7 +1598,7 @@ class TestApplySandboxTools:
         req = ProviderRequest(prompt="Test", func_tool=None)
 
         with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123", mock_context)
+            module._apply_sandbox_tools(config, req, "session-123")
 
         mock_logger.error.assert_called_once()
 
@@ -1616,7 +1616,7 @@ class TestApplySandboxTools:
         existing_toolset.add_tool(existing_tool)
         req = ProviderRequest(prompt="Test", func_tool=existing_toolset)
 
-        module._apply_sandbox_tools(config, req, "session-123", mock_context)
+        module._apply_sandbox_tools(config, req, "session-123")
 
         assert "existing_tool" in req.func_tool.names()
         assert "astrbot_execute_shell" in req.func_tool.names()
@@ -1631,7 +1631,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123", mock_context)
+        module._apply_sandbox_tools(config, req, "session-123")
 
         assert req.system_prompt.startswith("Base prompt")
         assert "sandboxed environment" in req.system_prompt
@@ -1646,7 +1646,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt=None)
 
-        module._apply_sandbox_tools(config, req, "session-123", mock_context)
+        module._apply_sandbox_tools(config, req, "session-123")
 
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
