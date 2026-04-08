@@ -14,7 +14,7 @@ jobs:
     if: github.repository == 'AstrBotDevs/AstrBot' && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     strategy:
-      matrix:
+      matrix: &docker_matrix
         include:
           - type: standard
             file: Dockerfile
@@ -116,14 +116,7 @@ jobs:
       HAS_GHCR_TOKEN: ${{ secrets.GHCR_GITHUB_TOKEN != '' }}
 
     strategy:
-      matrix:
-        include:
-          - type: standard
-            file: Dockerfile
-            tag_suffix: ""
-          - type: minimal
-            file: Dockerfile.minimal
-            tag_suffix: "-minimal"
+      matrix: *docker_matrix
 
     steps:
       - name: Checkout
