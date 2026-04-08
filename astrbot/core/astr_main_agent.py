@@ -32,7 +32,6 @@ from astrbot.core.astr_main_agent_resources import (
     FILE_UPLOAD_TOOL,
     GET_EXECUTION_HISTORY_TOOL,
     GET_SKILL_PAYLOAD_TOOL,
-    KNOWLEDGE_BASE_QUERY_TOOL,
     LIST_SKILL_CANDIDATES_TOOL,
     LIST_SKILL_RELEASES_TOOL,
     LIVE_MODE_SYSTEM_PROMPT,
@@ -44,11 +43,9 @@ from astrbot.core.astr_main_agent_resources import (
     ROLLBACK_SKILL_RELEASE_TOOL,
     RUN_BROWSER_SKILL_TOOL,
     SANDBOX_MODE_PROMPT,
-    SEND_MESSAGE_TO_USER_TOOL,
     SYNC_SKILL_RELEASE_TOOL,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
-    retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Record, Reply
@@ -63,9 +60,22 @@ from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.cron_tools import (
-    CREATE_CRON_JOB_TOOL,
-    DELETE_CRON_JOB_TOOL,
-    LIST_CRON_JOBS_TOOL,
+    CreateActiveCronTool,
+    DeleteCronJobTool,
+    ListCronJobsTool,
+)
+from astrbot.core.tools.knowledge_base_tools import (
+    KnowledgeBaseQueryTool,
+    retrieve_knowledge_base,
+)
+from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.web_search_tools import (
+    BaiduWebSearchTool,
+    BochaWebSearchTool,
+    BraveWebSearchTool,
+    TavilyExtractWebPageTool,
+    TavilyWebSearchTool,
+    normalize_legacy_web_search_config,
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
@@ -220,7 +230,11 @@ async def _apply_kb(
     else:
         if req.func_tool is None:
             req.func_tool = ToolSet()
-        req.func_tool.add_tool(KNOWLEDGE_BASE_QUERY_TOOL)
+        req.func_tool.add_tool(
+            plugin_context.get_llm_tool_manager().get_builtin_tool(
+                KnowledgeBaseQueryTool
+            )
+        )
 
 
 async def _apply_file_extract(
@@ -1140,12 +1154,41 @@ def _apply_sandbox_tools(
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 
-def _proactive_cron_job_tools(req: ProviderRequest) -> None:
+def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
-    req.func_tool.add_tool(CREATE_CRON_JOB_TOOL)
-    req.func_tool.add_tool(DELETE_CRON_JOB_TOOL)
-    req.func_tool.add_tool(LIST_CRON_JOBS_TOOL)
+    tool_mgr = plugin_context.get_llm_tool_manager()
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateActiveCronTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeleteCronJobTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListCronJobsTool))
+
+
+async def _apply_web_search_tools(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    plugin_context: Context,
+) -> None:
+    cfg = plugin_context.get_config(umo=event.unified_msg_origin)
+    normalize_legacy_web_search_config(cfg)
+    prov_settings = cfg.get("provider_settings", {})
+
+    if not prov_settings.get("web_search", False):
+        return
+
+    if req.func_tool is None:
+        req.func_tool = ToolSet()
+
+    tool_mgr = plugin_context.get_llm_tool_manager()
+    provider = prov_settings.get("websearch_provider", "tavily")
+    if provider == "tavily":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(TavilyWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(TavilyExtractWebPageTool))
+    elif provider == "bocha":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BochaWebSearchTool))
+    elif provider == "brave":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BraveWebSearchTool))
+    elif provider == "baidu_ai_search":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
 
 
 def _get_compress_provider(
@@ -1389,6 +1432,7 @@ async def build_main_agent(
 
     _modalities_fix(provider, req)
     _plugin_tool_fix(event, req)
+    await _apply_web_search_tools(event, req, plugin_context)
     _sanitize_context_by_modalities(config, provider, req)
 
     if config.llm_safety_mode:
@@ -1410,12 +1454,16 @@ async def build_main_agent(
     )
 
     if config.add_cron_tools:
-        _proactive_cron_job_tools(req)
+        _proactive_cron_job_tools(req, plugin_context)
 
     if event.platform_meta.support_proactive_message:
         if req.func_tool is None:
             req.func_tool = ToolSet()
-        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+        req.func_tool.add_tool(
+            plugin_context.get_llm_tool_manager().get_builtin_tool(
+                SendMessageToUserTool
+            )
+        )
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()

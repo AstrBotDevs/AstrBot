@@ -12,7 +12,7 @@
       </v-btn>
     </template>
     
-    <v-card>
+    <v-card class="t2i-template-editor">
       <v-card-title class="d-flex align-center justify-space-between">
         <span>{{ tm('t2iTemplateEditor.dialogTitle') }}</span>
         <v-spacer></v-spacer>
@@ -558,5 +558,11 @@ code {
   padding: 2px 4px;
   border-radius: 3px;
   font-size: 0.875em;
+}
+</style>
+
+<style>
+.v-theme--PurpleThemeDark .t2i-template-editor .preview-container {
+  background-color: rgb(var(--v-theme-surface));
 }
 </style>

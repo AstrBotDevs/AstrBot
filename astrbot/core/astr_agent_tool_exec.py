@@ -26,7 +26,6 @@ from astrbot.core.astr_main_agent_resources import (
     LOCAL_EXECUTE_SHELL_TOOL,
     LOCAL_PYTHON_TOOL,
     PYTHON_TOOL,
-    SEND_MESSAGE_TO_USER_TOOL,
 )
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
@@ -38,6 +37,7 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
@@ -778,7 +778,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
         if not req.func_tool:
             req.func_tool = ToolSet()
-        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+        req.func_tool.add_tool(
+            ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
+        )
 
         result = await build_main_agent(
             event=cron_event, plugin_context=ctx, config=config, req=req
