@@ -79,6 +79,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import _builtin_schemas as builtin_schemas
+from .codec import JsonProtocolCodec, MsgpackProtocolCodec, ProtocolCodec  # noqa: F401
 from .descriptors import (  # noqa: F401
     BUILTIN_CAPABILITY_SCHEMAS,
     CapabilityDescriptor,
@@ -124,16 +125,19 @@ _DIRECT_EXPORTS = [
     "EventMessage",
     "FilterSpec",
     "HandlerDescriptor",
+    "JsonProtocolCodec",
     "InitializeMessage",
     "InitializeOutput",
     "InvokeMessage",
     "LocalFilterRefSpec",
     "MessageTrigger",
     "MessageTypeFilterSpec",
+    "MsgpackProtocolCodec",
     "ParamSpec",
     "PeerInfo",
     "PlatformFilterSpec",
     "Permissions",
+    "ProtocolCodec",
     "ProtocolMessage",
     "ResultMessage",
     "ScheduleTrigger",
@@ -157,4 +161,4 @@ def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_BUILTIN_SCHEMA_EXPORTS))
 
 
-__all__ = list(dict.fromkeys([*_DIRECT_EXPORTS, *_BUILTIN_SCHEMA_EXPORTS]))
+__all__ = list(dict.fromkeys([*_DIRECT_EXPORTS, *_BUILTIN_SCHEMA_EXPORTS]))  # pyright: ignore[reportUnsupportedDunderAll]

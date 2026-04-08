@@ -187,7 +187,7 @@ def _run_entrypoint(
     try:
         runner()
     except (click.Abort, KeyboardInterrupt):
-        click.echo("\n创建插件已优雅地中断。", err=True)
+        click.echo("\n已中断操作", err=True)
         raise SystemExit(130)
     except Exception as exc:
         _handle_cli_entrypoint_failure(exc, context=context)
@@ -1182,6 +1182,7 @@ def _run_websocket_worker_entrypoint(
     tls_ca_file: Path,
     tls_cert_file: Path,
     tls_key_file: Path,
+    wire_codec: str,
 ) -> None:
     resolved_plugin_dirs = list(plugin_dirs) if plugin_dirs else [Path.cwd()]
     _run_async_entrypoint(
@@ -1194,6 +1195,7 @@ def _run_websocket_worker_entrypoint(
             tls_ca_file=tls_ca_file,
             tls_cert_file=tls_cert_file,
             tls_key_file=tls_key_file,
+            wire_codec=wire_codec,
         ),
         log_message=f"启动 WebSocket Worker，端口：{port}",
         context={
@@ -1234,10 +1236,18 @@ def cli(ctx, verbose: bool) -> None:
     type=str,
     help="Redirect runtime protocol stdout to console, silent, or a file path",
 )
+@click.option(
+    "--wire-codec",
+    type=click.Choice(["msgpack", "json"]),
+    default="msgpack",
+    show_default=True,
+    help="Wire codec for runtime protocol",
+)
 def run(
     plugins_dir: Path,
     workers_manifest: Path | None,
     protocol_stdout: str | None,
+    wire_codec: str,
 ) -> None:
     """Start the plugin supervisor over stdio."""
     transport_stdout, opened_stdout = _resolve_protocol_stdout(protocol_stdout)
@@ -1247,6 +1257,7 @@ def run(
                 plugins_dir=plugins_dir,
                 stdout=transport_stdout,
                 workers_manifest=workers_manifest,
+                wire_codec=wire_codec,
             ),
             log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
             context={
@@ -1403,10 +1414,18 @@ def dev(
     type=str,
     help="Redirect runtime protocol stdout to console, silent, or a file path",
 )
+@click.option(
+    "--wire-codec",
+    type=click.Choice(["msgpack", "json"]),
+    default="msgpack",
+    show_default=True,
+    help="Wire codec for runtime protocol",
+)
 def worker(
     plugin_dir: Path | None,
     group_metadata: Path | None,
     protocol_stdout: str | None,
+    wire_codec: str,
 ) -> None:
     """Internal command used by the supervisor to start a worker."""
     if plugin_dir is None and group_metadata is None:
@@ -1422,11 +1441,13 @@ def worker(
         entrypoint = run_plugin_worker(
             group_metadata=group_metadata,
             stdout=transport_stdout,
+            wire_codec=wire_codec,
         )
     else:
         entrypoint = run_plugin_worker(
             plugin_dir=plugin_dir,
             stdout=transport_stdout,
+            wire_codec=wire_codec,
         )
     try:
         _run_async_entrypoint(
@@ -1467,6 +1488,13 @@ def worker(
     required=True,
     type=click.Path(file_okay=True, dir_okay=False, exists=True, path_type=Path),
 )
+@click.option(
+    "--wire-codec",
+    type=click.Choice(["msgpack", "json"]),
+    default="msgpack",
+    show_default=True,
+    help="Wire codec for runtime protocol",
+)
 def serve_worker(
     worker_id: str | None,
     plugin_dirs: tuple[Path, ...],
@@ -1476,6 +1504,7 @@ def serve_worker(
     tls_ca_file: Path,
     tls_cert_file: Path,
     tls_key_file: Path,
+    wire_codec: str,
 ) -> None:
     """Serve one or more plugins as a standalone websocket worker."""
     _run_websocket_worker_entrypoint(
@@ -1487,6 +1516,7 @@ def serve_worker(
         tls_ca_file=tls_ca_file,
         tls_cert_file=tls_cert_file,
         tls_key_file=tls_key_file,
+        wire_codec=wire_codec,
     )
 
 
@@ -1516,6 +1546,13 @@ def serve_worker(
     required=True,
     type=click.Path(file_okay=True, dir_okay=False, exists=True, path_type=Path),
 )
+@click.option(
+    "--wire-codec",
+    type=click.Choice(["msgpack", "json"]),
+    default="msgpack",
+    show_default=True,
+    help="Wire codec for runtime protocol",
+)
 def websocket(
     worker_id: str | None,
     plugin_dirs: tuple[Path, ...],
@@ -1525,6 +1562,7 @@ def websocket(
     tls_ca_file: Path,
     tls_cert_file: Path,
     tls_key_file: Path,
+    wire_codec: str,
 ) -> None:
     """Deprecated websocket runtime wrapper for standalone worker scenarios."""
     logger.warning("'astr websocket' is deprecated; use 'astr serve-worker' instead")
@@ -1537,4 +1575,5 @@ def websocket(
         tls_ca_file=tls_ca_file,
         tls_cert_file=tls_cert_file,
         tls_key_file=tls_key_file,
+        wire_codec=wire_codec,
     )
