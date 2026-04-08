@@ -34,7 +34,7 @@
     "markstream-vue": "^0.0.9",
     "mermaid": "^11.14.0",
     "monaco-editor": "^0.55.1",
-    "pinia": "3.0.0",
+    "pinia": "^3.0.4",
     "pinyin-pro": "^3.28.0",
     "qrcode": "^1.5.4",
     "shiki": "^3.23.0",
