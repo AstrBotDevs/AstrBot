@@ -425,8 +425,6 @@ class ProviderGoogleGenAI(Provider):
                         "content": message["content"],
                     },
                 )
-                if part.function_response:
-                    part.function_response.id = message["tool_call_id"]
 
                 parts = [part]
                 append_or_extend(gemini_contents, parts, types.UserContent)
