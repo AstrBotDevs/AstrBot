@@ -4,7 +4,7 @@ import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import axios from "@/utils/request";
 import DOMPurify from "dompurify";
-import "highlight.js/styles/github-dark.css";
+import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
 
 // 1. 在 setup 作用域创建 MarkdownIt 实例

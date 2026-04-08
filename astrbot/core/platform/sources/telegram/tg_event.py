@@ -333,6 +333,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             message_thread_id: 可选,目标消息线程 ID
             parse_mode: 可选,消息文本的解析模式
         """
+        if not text or not text.strip():
+            return
+
         kwargs: dict[str, Any] = {}
         if message_thread_id:
             kwargs["message_thread_id"] = int(message_thread_id)

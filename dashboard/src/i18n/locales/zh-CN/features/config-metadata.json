@@ -123,6 +123,10 @@
           "description": "BoCha API Key",
           "hint": "可添加多个 Key 进行轮询。"
         },
+        "websearch_brave_key": {
+          "description": "Brave Search API Key",
+          "hint": "可添加多个 Key 进行轮询。"
+        },
         "websearch_baidu_app_builder_key": {
           "description": "百度千帆智能云 APP Builder API Key",
           "hint": "参考:[https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -565,6 +569,18 @@
       "telegram_token": {
         "description": "Bot Token",
         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
+      },
+      "mattermost_url": {
+        "description": "Mattermost URL",
+        "hint": "Mattermost 服务地址，例如 https://chat.example.com。"
+      },
+      "mattermost_bot_token": {
+        "description": "Mattermost Bot Token",
+        "hint": "在 Mattermost 中创建 Bot 账户后生成的访问令牌。"
+      },
+      "mattermost_reconnect_delay": {
+        "description": "Mattermost 重连延迟",
+        "hint": "WebSocket 断开后的重连等待时间，单位为秒。默认 5 秒。"
       },
       "type": {
         "description": "适配器类型"
@@ -1511,6 +1527,10 @@
       "whisper_hint": {
         "description": "本地部署 Whisper 模型须知",
         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。"
+      },
+      "whisper_device": {
+        "description": "推理设备",
+        "hint": "Whisper 推理设备。Apple Silicon 可选 mps；其他环境建议使用 cpu。若指定 mps 但当前环境不可用，将自动回退到 cpu。"
       },
       "id": {
         "description": "ID"

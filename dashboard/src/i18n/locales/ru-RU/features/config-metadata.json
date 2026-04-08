@@ -121,6 +121,10 @@
                     "description": "API-ключ BoCha",
                     "hint": "Можно добавить несколько ключей для ротации."
                 },
+                "websearch_brave_key": {
+                    "description": "API-ключ Brave Search",
+                    "hint": "Можно добавить несколько ключей для ротации."
+                },
                 "websearch_baidu_app_builder_key": {
                     "description": "API-ключ Baidu Qianfan APP Builder",
                     "hint": "Ссылка: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -563,6 +567,18 @@
             "telegram_token": {
                 "description": "Токен бота",
                 "hint": "Если вы находитесь в материковом Китае, установите прокси или измените api_base в разделе «Другие настройки»."
+            },
+            "mattermost_url": {
+                "description": "URL Mattermost",
+                "hint": "Адрес сервиса Mattermost, например https://chat.example.com."
+            },
+            "mattermost_bot_token": {
+                "description": "Bot Token Mattermost",
+                "hint": "Токен доступа, созданный после добавления bot-аккаунта в Mattermost."
+            },
+            "mattermost_reconnect_delay": {
+                "description": "Задержка переподключения Mattermost",
+                "hint": "Сколько секунд ждать перед переподключением после разрыва WebSocket. По умолчанию 5 секунд."
             },
             "type": {
                 "description": "Тип адаптера"
@@ -1510,6 +1526,10 @@
             "whisper_hint": {
                 "description": "Заметки по локальному развертыванию Whisper",
                 "hint": "Перед включением установите openai-whisper и ffmpeg."
+            },
+            "whisper_device": {
+                "description": "Устройство инференса",
+                "hint": "Устройство для инференса Whisper. На Apple Silicon можно выбрать mps; в остальных средах рекомендуется cpu. Если выбран mps, но он недоступен, AstrBot автоматически переключится на cpu."
             },
             "id": {
                 "description": "ID провайдера"
