@@ -15,6 +15,7 @@ from collections.abc import Callable
 from typing import Any
 
 import click
+from filelock import FileLock, Timeout
 
 from astrbot.cli.i18n import t
 from astrbot.core.config.default import DEFAULT_CONFIG
@@ -274,6 +275,23 @@ def get_config(key: str | None = None) -> None:
                 pass
 
 
+def _check_astrbot_not_running() -> None:
+    """Refuse to proceed if astrbot is currently running (lock file held)."""
+    lock_file = astrbot_paths.root / "astrbot.lock"
+    if not lock_file.exists():
+        return
+    lock = FileLock(lock_file, timeout=1)
+    try:
+        lock.acquire()
+    except Timeout:
+        raise click.ClickException(
+            "AstrBot is currently running. "
+            "Please stop it first before changing the password via CLI."
+        ) from None
+    else:
+        lock.release()
+
+
 @conf.command(name="admin")
 @click.option("-u", "--username", type=str, help="Update admain username as well")
 @click.option(
@@ -290,6 +308,7 @@ def set_dashboard_password(username: str | None, password: str | None) -> None:
     - Plaintext password (recommended): it will be hashed securely before storage.
     - Argon2 encoded hash (advanced): stored as-is.
     """
+    _check_astrbot_not_running()
     config = _load_config()
 
     if password is not None:
