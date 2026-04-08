@@ -894,9 +894,11 @@ class ProviderOpenAIOfficial(Provider):
             # both None.  When finish_reason is "stop" this is not an error.
             if choice.finish_reason == "stop":
                 logger.warning(
-                    f"OpenAI completion returned no visible content "
-                    f"(response_id={completion.id}, model={completion.model}). "
-                    f"The model may have used internal reasoning only."
+                    "OpenAI completion returned no visible content "
+                    f"(response_id={completion.id}, model={completion.model}, "
+                    f"choice_index={choice.index}, finish_reason={choice.finish_reason}, "
+                    "marker=internal_reasoning_only). "
+                    "The model may have used internal reasoning only."
                 )
                 if not llm_response.result_chain:
                     llm_response.result_chain = MessageChain().message("")
