@@ -58,7 +58,7 @@ The default AstrBot configuration is as follows:
         "provider_pool": ["*"],  # "*" means use all available providers
         "wake_prefix": "",
         "web_search": False,
-        "websearch_provider": "default",
+        "websearch_provider": "tavily",
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
@@ -288,9 +288,7 @@ Whether to enable AstrBot's built-in web search capability. Default is `false`. 
 
 #### `provider_settings.websearch_provider`
 
-Web search provider type. Default is `default`. Currently supports `default`, `tavily`, `bocha`, `baidu_ai_search`, and `brave`.
-
-- `default`: Works best when Google is accessible. If Google fails, it tries Bing and Sogou in order.
+Web search provider type. Default is `tavily`. Currently supports `tavily`, `bocha`, `baidu_ai_search`, and `brave`.
 
 - `tavily`: Uses the Tavily search engine.
 - `bocha`: Uses the BoCha search engine.
