@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { getApiBaseUrl, setApiBaseUrl } from "@/utils/request";
+import { getApiBaseUrl, setApiBaseUrl, normalizeConfiguredApiBaseUrl } from "@/utils/request";
 
 export type ApiPreset = {
   name: string;
@@ -41,18 +41,18 @@ export const useApiStore = defineStore("api", {
      * @param url 后端地址，例如 http://localhost:6185
      */
     setApiBaseUrl(url: string) {
-      // 移除尾部斜杠，确保一致性
-      const cleanUrl = url ? url.replace(/\/+$/, "") : "";
+      // Normalize: prepend https:// if missing, strip trailing slashes
+      const normalized = normalizeConfiguredApiBaseUrl(url);
 
-      this.apiBaseUrl = cleanUrl;
+      this.apiBaseUrl = normalized;
 
-      if (cleanUrl) {
-        localStorage.setItem("apiBaseUrl", cleanUrl);
+      if (normalized) {
+        localStorage.setItem("apiBaseUrl", normalized);
       } else {
         localStorage.removeItem("apiBaseUrl");
       }
 
-      setApiBaseUrl(cleanUrl);
+      setApiBaseUrl(normalized);
     },
 
     /**

@@ -16,7 +16,7 @@ const isDark = computed(
 );
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
-import { getApiBaseUrlValidationError } from "@/utils/request";
+import { getApiBaseUrlValidationError, normalizeConfiguredApiBaseUrl } from "@/utils/request";
 
 const cardVisible = ref(false);
 const router = useRouter();
@@ -28,7 +28,7 @@ const { tm: t } = useModuleI18n("features/auth");
 const toast = useToast();
 
 const serverConfigDialog = ref(false);
-const apiUrl = ref(apiStore.apiBaseUrl);
+const apiUrl = ref(normalizeConfiguredApiBaseUrl(apiStore.apiBaseUrl));
 
 // URL parameter handling for shareable config
 function applyUrlParams() {
@@ -36,10 +36,11 @@ function applyUrlParams() {
   const apiUrlParam = params.get("api_url");
   const usernameParam = params.get("username");
   if (apiUrlParam) {
-    apiUrl.value = apiUrlParam;
-    const validationError = getApiBaseUrlValidationError(apiUrlParam);
+    const normalized = normalizeConfiguredApiBaseUrl(apiUrlParam);
+    apiUrl.value = normalized;
+    const validationError = getApiBaseUrlValidationError(normalized);
     if (!validationError) {
-      apiStore.setApiBaseUrl(apiUrlParam);
+      apiStore.setApiBaseUrl(normalized);
     }
   }
   if (usernameParam) {
@@ -71,13 +72,14 @@ const newPresetName = ref("");
 const newPresetUrl = ref("");
 
 function saveApiUrl() {
-  const validationError = getApiBaseUrlValidationError(apiUrl.value);
+  const normalized = normalizeConfiguredApiBaseUrl(apiUrl.value);
+  const validationError = getApiBaseUrlValidationError(normalized);
   if (validationError) {
     toast.error(validationError);
     return;
   }
 
-  apiStore.setApiBaseUrl(apiUrl.value);
+  apiStore.setApiBaseUrl(normalized);
   serverConfigDialog.value = false;
   window.location.reload();
 }

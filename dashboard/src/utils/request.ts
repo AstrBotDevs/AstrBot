@@ -68,7 +68,12 @@ function normalizeBaseUrl(baseUrl: string | null | undefined): string {
 export function normalizeConfiguredApiBaseUrl(
   baseUrl: string | null | undefined,
 ): string {
-  return normalizeBaseUrl(baseUrl);
+  const cleaned = normalizeBaseUrl(baseUrl);
+  // Prepend https:// if it doesn't already have a protocol
+  if (cleaned && !/^https?:\/\//i.test(cleaned)) {
+    return `https://${cleaned}`;
+  }
+  return cleaned;
 }
 
 export function getApiBaseUrlValidationError(
@@ -97,7 +102,7 @@ export function getApiBaseUrl(): string {
 }
 
 export function setApiBaseUrl(baseUrl: string | null | undefined): string {
-  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  const normalizedBaseUrl = normalizeConfiguredApiBaseUrl(baseUrl);
   service.defaults.baseURL = normalizedBaseUrl;
   return normalizedBaseUrl;
 }
