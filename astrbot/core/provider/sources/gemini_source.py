@@ -215,7 +215,8 @@ class ProviderGoogleGenAI(Provider):
             ]
 
         tool_config = None
-        if tools and tool_list:
+        has_func_decl = tool_list and any(t.function_declarations for t in tool_list)
+        if has_func_decl:
             tool_config = types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(
                     mode=(
