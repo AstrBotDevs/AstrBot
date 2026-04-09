@@ -123,7 +123,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     parse_mode="MarkdownV2",
                     **cast(Any, payload),
                 )
-            except Exception as e:
+            except (ValueError, BadRequest) as e:
                 logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
                 await client.send_message(text=chunk, **cast(Any, payload))
 
