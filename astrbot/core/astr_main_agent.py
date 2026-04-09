@@ -9,6 +9,7 @@ import platform
 import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
@@ -64,6 +65,7 @@ from astrbot.core.tools.computer_tools import (
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
     SyncSkillReleaseTool,
+    _normalize_umo_for_workspace,
 )
 from astrbot.core.tools.cron_tools import (
     CreateActiveCronTool,
@@ -299,6 +301,44 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
         req.prompt = prefix.replace("{{prompt}}", req.prompt)
     else:
         req.prompt = f"{prefix}{req.prompt}"
+
+
+def _get_workspace_path_for_umo(umo: str) -> Path:
+    normalized_umo = _normalize_umo_for_workspace(umo)
+    return Path(get_astrbot_workspaces_path()) / normalized_umo
+
+
+def _apply_workspace_extra_prompt(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+) -> None:
+    extra_prompt_path = _get_workspace_path_for_umo(event.unified_msg_origin) / (
+        "EXTRA_PROMPT.md"
+    )
+    if not extra_prompt_path.is_file():
+        return
+
+    try:
+        extra_prompt = extra_prompt_path.read_text(encoding="utf-8").strip()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to read workspace extra prompt for umo=%s from %s: %s",
+            event.unified_msg_origin,
+            extra_prompt_path,
+            exc,
+        )
+        return
+
+    if not extra_prompt:
+        return
+
+    req.system_prompt = (
+        f"{req.system_prompt or ''}\n"
+        "[Workspace Extra Prompt]\n"
+        "The following instructions are loaded from the current workspace "
+        "`EXTRA_PROMPT.md` file.\n"
+        f"{extra_prompt}\n"
+    )
 
 
 def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> None:
@@ -781,6 +821,7 @@ async def _decorate_llm_request(
     if tz is None:
         tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
+    _apply_workspace_extra_prompt(event, req)
 
 
 def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
@@ -1404,14 +1445,9 @@ async def build_main_agent(
         )
 
         if config.computer_use_runtime == "local":
-            from astrbot.core.tools.computer_tools.fs import (
-                _normalize_umo_for_workspace,
-            )
-
-            normalized_umo = _normalize_umo_for_workspace(event.unified_msg_origin)
             tool_prompt += (
                 f"\nCurrent workspace you can use: "
-                f"`{os.path.join(get_astrbot_workspaces_path(), normalized_umo)}`\n"
+                f"`{_get_workspace_path_for_umo(event.unified_msg_origin)}`\n"
                 "Unless the user explicitly specifies a different directory, "
                 "perform all file-related operations in this workspace.\n"
             )
