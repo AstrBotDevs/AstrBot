@@ -52,7 +52,7 @@ def _patch_qq_botpy_formdata() -> None:
 
 _patch_qq_botpy_formdata()
 
-# Retry decorator for QQ Official API transient errors (HTTP 500/504, 429)
+# Retry decorator for QQ Official API transient errors (HTTP 500/504)
 _qqofficial_retry = retry(
     retry=retry_if_exception_type(
         (
@@ -564,7 +564,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     ttl=result.get("ttl", 0),
                 )
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
-            logger.error(f"上传媒体文件失败，已重试3次: {file_source}")
+            logger.error(f"上传媒体文件失败，共尝试3次后放弃: {file_source}")
         except Exception as e:
             logger.error(f"上传请求错误: {e}")
 
