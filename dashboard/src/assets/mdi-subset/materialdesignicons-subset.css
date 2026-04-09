@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 248 icons */
+/* Auto-generated MDI subset – 256 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -128,16 +128,20 @@
   content: "\F00ED";
 }
 
+.mdi-calendar-blank-outline::before {
+  content: "\F0B66";
+}
+
 .mdi-calendar-edit::before {
   content: "\F08A7";
 }
 
-.mdi-calendar-plus::before {
-  content: "\F00F3";
+.mdi-calendar-multiple::before {
+  content: "\F00F1";
 }
 
-.mdi-calendar-range::before {
-  content: "\F0679";
+.mdi-calendar-plus::before {
+  content: "\F00F3";
 }
 
 .mdi-chat::before {
@@ -202,6 +206,10 @@
 
 .mdi-chevron-up::before {
   content: "\F0143";
+}
+
+.mdi-chip::before {
+  content: "\F061A";
 }
 
 .mdi-circle::before {
@@ -284,8 +292,16 @@
   content: "\F0193";
 }
 
+.mdi-content-save-outline::before {
+  content: "\F0818";
+}
+
 .mdi-creation::before {
   content: "\F0674";
+}
+
+.mdi-creation-outline::before {
+  content: "\F1C2B";
 }
 
 .mdi-cursor-default-click::before {
@@ -640,6 +656,10 @@
   content: "\F164E";
 }
 
+.mdi-message-outline::before {
+  content: "\F0365";
+}
+
 .mdi-message-text::before {
   content: "\F0369";
 }
@@ -662,6 +682,10 @@
 
 .mdi-minus-box::before {
   content: "\F0375";
+}
+
+.mdi-music-note-outline::before {
+  content: "\F0F74";
 }
 
 .mdi-note-text-outline::before {
@@ -816,6 +840,10 @@
   content: "\F16A7";
 }
 
+.mdi-robot-outline::before {
+  content: "\F167A";
+}
+
 .mdi-send::before {
   content: "\F048A";
 }
@@ -930,6 +958,10 @@
 
 .mdi-timeline-text-outline::before {
   content: "\F0BD4";
+}
+
+.mdi-timer-outline::before {
+  content: "\F051B";
 }
 
 .mdi-tools::before {

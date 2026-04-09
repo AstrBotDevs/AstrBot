@@ -4,12 +4,12 @@ import re
 import time
 import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import aiofiles
 
 from astrbot.core import logger
 from astrbot.core.db.vec_db.base import BaseVecDB
-from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
     EmbeddingProvider,
@@ -26,6 +26,9 @@ from .models import KBDocument, KBMedia, KnowledgeBase
 from .parsers.url_parser import extract_text_from_url
 from .parsers.util import select_parser
 from .prompts import TEXT_REPAIR_SYSTEM_PROMPT
+
+if TYPE_CHECKING:
+    from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
 
 class RateLimiter:
@@ -108,6 +111,7 @@ Text chunk to process:
 class KBHelper:
     vec_db: BaseVecDB
     kb: KnowledgeBase
+    init_error: str | None
 
     def __init__(
         self,
@@ -122,6 +126,7 @@ class KBHelper:
         self.prov_mgr = provider_manager
         self.kb_root_dir = kb_root_dir
         self.chunker = chunker
+        self.init_error = None
 
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
         self.kb_medias_dir = Path(self.kb_dir) / "medias" / self.kb.kb_id
@@ -148,21 +153,30 @@ class KBHelper:
     async def get_rp(self) -> RerankProvider | None:
         if not self.kb.rerank_provider_id:
             return None
-        rp: RerankProvider = await self.prov_mgr.get_provider_by_id(
+        rp: RerankProvider | None = await self.prov_mgr.get_provider_by_id(
             self.kb.rerank_provider_id,
         )  # type: ignore
         if not rp:
-            raise ValueError(
-                f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider",
+            logger.warning(
+                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 的 Rerank Provider({self.kb.rerank_provider_id}) 不可用，将跳过重排序。",
             )
+            return None
         return rp
 
-    async def _ensure_vec_db(self) -> FaissVecDB:
+    async def _ensure_vec_db(self) -> "FaissVecDB":
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
         ep = await self.get_ep()
-        rp = await self.get_rp()
+        rp: RerankProvider | None = None
+        try:
+            rp = await self.get_rp()
+        except Exception as e:
+            logger.warning(
+                f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
+            )
+
+        from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
         vec_db = FaissVecDB(
             doc_store_path=str(self.kb_dir / "doc.db"),
@@ -172,6 +186,8 @@ class KBHelper:
         )
         await vec_db.initialize()
         self.vec_db = vec_db
+        # Clear stale init_error once initialization succeeds.
+        self.init_error = None
         return vec_db
 
     async def delete_vec_db(self) -> None:
@@ -183,7 +199,7 @@ class KBHelper:
             shutil.rmtree(self.kb_dir)
 
     async def terminate(self) -> None:
-        if self.vec_db:
+        if hasattr(self, "vec_db") and self.vec_db:
             await self.vec_db.close()
 
     async def upload_document(

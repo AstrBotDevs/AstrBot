@@ -92,6 +92,9 @@ astrbot run
 uv tool upgrade astrbot
 ```
 
+> [!WARNING]
+> 透過 `uv` 部署的 AstrBot **不支援在 WebUI 中進行版本升級**。如需更新，請透過命令列執行上述命令。
+
 ### Docker 部署
 
 對於熟悉容器、希望獲得更穩定且更適合正式環境部署方式的使用者，我們推薦使用 Docker / Docker Compose 部署 AstrBot。
@@ -184,6 +187,7 @@ yay -S astrbot-git
 | Coze | LLMOps 平台 |
 | OpenAI Whisper | 語音轉文字服務 |
 | SenseVoice | 語音轉文字服務 |
+| Xiaomi MiMo Omni | 語音轉文字服務 |
 | OpenAI TTS | 文字轉語音服務 |
 | Gemini TTS | 文字轉語音服務 |
 | GPT-Sovits-Inference | 文字轉語音服務 |
@@ -193,6 +197,7 @@ yay -S astrbot-git
 | 阿里雲百煉 TTS | 文字轉語音服務 |
 | Azure TTS | 文字轉語音服務 |
 | Minimax TTS | 文字轉語音服務 |
+| Xiaomi MiMo TTS | 文字轉語音服務 |
 | 火山引擎 TTS | 文字轉語音服務 |
 
 ## ❤️ 貢獻

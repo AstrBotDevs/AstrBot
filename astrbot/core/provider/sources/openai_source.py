@@ -5,6 +5,7 @@ import inspect
 import json
 import random
 import re
+import uuid
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
@@ -24,11 +25,20 @@ from PIL import UnidentifiedImageError
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import ContentPart, ImageURLPart, Message, TextPart
+from astrbot.core.agent.message import (
+    AudioURLPart,
+    ContentPart,
+    ImageURLPart,
+    Message,
+    TextPart,
+)
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
-from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.io import download_file, download_image_by_url
+from astrbot.core.utils.media_utils import ensure_wav
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
     is_connection_error,
@@ -149,7 +159,10 @@ class ProviderOpenAIOfficial(Provider):
             if not isinstance(content, list):
                 continue
             for item in content:
-                if isinstance(item, dict) and item.get("type") == "image_url":
+                if isinstance(item, dict) and item.get("type") in {
+                    "image_url",
+                    "audio_url",
+                }:
                     return True
         return False
 
@@ -366,24 +379,103 @@ class ProviderOpenAIOfficial(Provider):
             image_detail = None
         return url, image_detail
 
-    async def _transform_content_part(self, part: dict) -> dict:
-        url, image_detail = self._extract_image_part_info(part)
-        if not url:
-            return part
+    def _extract_audio_part_info(self, part: dict) -> str | None:
+        if not isinstance(part, dict) or part.get("type") != "audio_url":
+            return None
 
+        audio_url_data = part.get("audio_url")
+        if not isinstance(audio_url_data, dict):
+            logger.warning("音频内容块格式无效，将保留原始内容。")
+            return None
+
+        url = audio_url_data.get("url")
+        if not isinstance(url, str) or not url:
+            logger.warning("音频内容块缺少有效路径，将保留原始内容。")
+            return None
+
+        return url
+
+    async def _audio_ref_to_local_path(self, audio_ref: str) -> tuple[str, list[Path]]:
+        cleanup_paths: list[Path] = []
+        if audio_ref.startswith("http"):
+            suffix = Path(urlparse(audio_ref).path).suffix or ".wav"
+            temp_dir = Path(get_astrbot_temp_path())
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            target_path = temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
+            await download_file(audio_ref, str(target_path))
+            cleanup_paths.append(target_path)
+            return str(target_path), cleanup_paths
+        if audio_ref.startswith("file://"):
+            return self._file_uri_to_path(audio_ref), cleanup_paths
+        return audio_ref, cleanup_paths
+
+    async def _resolve_audio_part(self, audio_ref: str) -> dict | None:
+        cleanup_paths: list[Path] = []
         try:
-            resolved_part = await self._resolve_image_part(
-                url, image_detail=image_detail
-            )
+            audio_path, cleanup_paths = await self._audio_ref_to_local_path(audio_ref)
+            suffix = Path(audio_path).suffix.lower()
+            if suffix == ".mp3":
+                audio_format = "mp3"
+            else:
+                converted_audio_path = await ensure_wav(audio_path)
+                if converted_audio_path != audio_path:
+                    cleanup_paths.append(Path(converted_audio_path))
+                audio_path = converted_audio_path
+                audio_format = "wav"
+            audio_bytes = Path(audio_path).read_bytes()
         except Exception as exc:
-            logger.warning(
-                "图片 %s 预处理失败，将保留原始内容。错误: %s",
-                url,
-                exc,
-            )
+            logger.warning("音频 %s 预处理失败，将忽略。错误: %s", audio_ref, exc)
+            return None
+        finally:
+            for cleanup_path in cleanup_paths:
+                try:
+                    cleanup_path.unlink(missing_ok=True)
+                except Exception as cleanup_exc:
+                    logger.warning(
+                        "Failed to cleanup %s: %s",
+                        cleanup_path,
+                        cleanup_exc,
+                    )
+
+        return {
+            "type": "input_audio",
+            "input_audio": {
+                "data": base64.b64encode(audio_bytes).decode("utf-8"),
+                "format": audio_format,
+            },
+        }
+
+    async def _transform_content_part(self, part: dict) -> dict:
+        if not isinstance(part, dict):
             return part
 
-        return resolved_part or part
+        if part.get("type") == "image_url":
+            url, image_detail = self._extract_image_part_info(part)
+            if not url:
+                return part
+
+            try:
+                resolved_part = await self._resolve_image_part(
+                    url, image_detail=image_detail
+                )
+            except Exception as exc:
+                logger.warning(
+                    "图片 %s 预处理失败，将保留原始内容。错误: %s",
+                    url,
+                    exc,
+                )
+                return part
+
+            return resolved_part or part
+
+        if part.get("type") == "audio_url":
+            audio_ref = self._extract_audio_part_info(part)
+            if not audio_ref:
+                return part
+            resolved_part = await self._resolve_audio_part(audio_ref)
+            return resolved_part or part
+
+        return part
 
     async def _materialize_message_image_parts(self, message: dict) -> dict:
         content = message.get("content")
@@ -558,6 +650,7 @@ class ProviderOpenAIOfficial(Provider):
             )
             if tool_list:
                 payloads["tools"] = tool_list
+                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         # 不在默认参数中的参数放在 extra_body 中
         extra_body = {}
@@ -576,6 +669,27 @@ class ProviderOpenAIOfficial(Provider):
         self._apply_provider_specific_extra_body_overrides(extra_body)
 
         model = payloads.get("model", "").lower()
+
+        if "messages" in payloads and isinstance(payloads["messages"], list):
+            cleaned_messages = []
+            for idx, msg in enumerate(payloads["messages"]):
+                # 过滤空的 assistant 消息，防止严格 API（如 Moonshot）返回 400 错误
+                if msg.get("role") == "assistant":
+                    content = msg.get("content")
+                    tool_calls = msg.get("tool_calls")
+
+                    # 情况1: 空/null content 且无 tool_calls -> 过滤掉
+                    if not tool_calls and (content == "" or content is None):
+                        logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
+                        continue
+
+                    # 情况2: 空 content 但有 tool_calls -> 设为 None (符合 OpenAI 规范)
+                    if content == "" and tool_calls:
+                        msg["content"] = None
+
+                cleaned_messages.append(msg)
+
+            payloads["messages"] = cleaned_messages
 
         completion = await self.client.chat.completions.create(
             **payloads,
@@ -610,6 +724,7 @@ class ProviderOpenAIOfficial(Provider):
             )
             if tool_list:
                 payloads["tools"] = tool_list
+                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         # 不在默认参数中的参数放在 extra_body 中
         extra_body = {}
@@ -632,6 +747,7 @@ class ProviderOpenAIOfficial(Provider):
             **payloads,
             stream=True,
             extra_body=extra_body,
+            stream_options={"include_usage": True},
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
@@ -639,12 +755,10 @@ class ProviderOpenAIOfficial(Provider):
         state = ChatCompletionStreamState()
 
         async for chunk in stream:
-            if not chunk.choices:
-                continue
-            choice = chunk.choices[0]
-            delta = choice.delta
+            choice = chunk.choices[0] if chunk.choices else None
+            delta = choice.delta if choice else None
 
-            if dtcs := delta.tool_calls:
+            if delta and (dtcs := delta.tool_calls):
                 for idx, tc in enumerate(dtcs):
                     # siliconflow workaround
                     if tc.function and tc.function.arguments:
@@ -674,7 +788,7 @@ class ProviderOpenAIOfficial(Provider):
                 _y = True
             if chunk.usage:
                 llm_response.usage = self._extract_usage(chunk.usage)
-            elif choice_usage := getattr(choice, "usage", None):
+            elif choice and (choice_usage := getattr(choice, "usage", None)):
                 # Workaround for some providers that only return usage in choices[].usage, e.g. MoonshotAI
                 # See https://github.com/AstrBotDevs/AstrBot/issues/6614
                 llm_response.usage = self._extract_usage(choice_usage)
@@ -710,7 +824,10 @@ class ProviderOpenAIOfficial(Provider):
     def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
         ptd = getattr(usage, "prompt_tokens_details", None)
         cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
-        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+        cached = (
+            cached if isinstance(cached, int) else 0
+        )  # ptd.cached_tokens 可能为None
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0  # 安全
         completion_tokens = getattr(usage, "completion_tokens", 0) or 0
         cached = cached or 0
         prompt_tokens = prompt_tokens or 0
@@ -818,7 +935,9 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = LLMResponse("assistant")
 
         if not completion.choices:
-            raise Exception("API 返回的 completion 为空。")
+            raise EmptyModelOutputError(
+                f"OpenAI completion has no choices. response_id={completion.id}"
+            )
         choice = completion.choices[0]
 
         # parse the text completion
@@ -836,6 +955,10 @@ class ProviderOpenAIOfficial(Provider):
             # Also clean up orphan </think> tags that may leak from some models
             completion_text = re.sub(r"</think>\s*$", "", completion_text).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
+        elif refusal := getattr(choice.message, "refusal", None):
+            refusal_text = self._normalize_content(refusal)
+            if refusal_text:
+                llm_response.result_chain = MessageChain().message(refusal_text)
 
         # parse the reasoning content if any
         # the priority is higher than the <think> tag extraction
@@ -883,9 +1006,18 @@ class ProviderOpenAIOfficial(Provider):
             raise Exception(
                 "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
             )
-        if llm_response.completion_text is None and not llm_response.tools_call_args:
-            logger.error(f"API 返回的 completion 无法解析：{completion}。")
-            raise Exception(f"API 返回的 completion 无法解析：{completion}。")
+        has_text_output = bool((llm_response.completion_text or "").strip())
+        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        if (
+            not has_text_output
+            and not has_reasoning_output
+            and not llm_response.tools_call_args
+        ):
+            logger.error(f"OpenAI completion has no usable output: {completion}.")
+            raise EmptyModelOutputError(
+                "OpenAI completion has no usable output. "
+                f"response_id={completion.id}, finish_reason={choice.finish_reason}"
+            )
 
         llm_response.raw_completion = completion
         llm_response.id = completion.id
@@ -899,6 +1031,7 @@ class ProviderOpenAIOfficial(Provider):
         self,
         prompt: str | None,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         contexts: list[dict] | list[Message] | None = None,
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
@@ -912,7 +1045,10 @@ class ProviderOpenAIOfficial(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_user_content_parts
+                prompt or "",
+                image_urls,
+                audio_urls,
+                extra_user_content_parts,
             )
         context_query = copy.deepcopy(self._ensure_message_to_dicts(contexts))
         if new_record:
@@ -945,6 +1081,9 @@ class ProviderOpenAIOfficial(Provider):
 
     def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
+        model = payloads.get("model", "").lower()
+        is_gemini = "gemini" in model
+
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
@@ -956,10 +1095,23 @@ class ProviderOpenAIOfficial(Provider):
                         reasoning_content += str(part.get("think"))
                     else:
                         new_content.append(part)
-                message["content"] = new_content
-                # reasoning key is "reasoning_content"
+                # Some providers (Grok, etc.) reject empty content lists.
+                # When all parts were think blocks, fall back to None.
+                message["content"] = new_content or None
                 if reasoning_content:
                     message["reasoning_content"] = reasoning_content
+
+            # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
+            # 纯文本会触发 400 Invalid argument，需要包一层 JSON。
+            if is_gemini and message.get("role") == "tool":
+                content = message.get("content", "")
+                if isinstance(content, str):
+                    try:
+                        json.loads(content)
+                    except (json.JSONDecodeError, ValueError):
+                        message["content"] = json.dumps(
+                            {"result": content}, ensure_ascii=False
+                        )
 
     async def _handle_api_error(
         self,
@@ -1083,17 +1235,20 @@ class ProviderOpenAIOfficial(Provider):
         prompt=None,
         session_id=None,
         image_urls=None,
+        audio_urls=None,
         func_tool=None,
         contexts=None,
         system_prompt=None,
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> LLMResponse:
         payloads, context_query = await self._prepare_chat_payload(
             prompt,
             image_urls,
+            audio_urls,
             contexts,
             system_prompt,
             tool_calls_result,
@@ -1101,6 +1256,8 @@ class ProviderOpenAIOfficial(Provider):
             extra_user_content_parts=extra_user_content_parts,
             **kwargs,
         )
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         llm_response = None
         max_retries = 10
@@ -1152,23 +1309,28 @@ class ProviderOpenAIOfficial(Provider):
         prompt=None,
         session_id=None,
         image_urls=None,
+        audio_urls=None,
         func_tool=None,
         contexts=None,
         system_prompt=None,
         tool_calls_result=None,
         model=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话，与服务商交互并逐步返回结果"""
         payloads, context_query = await self._prepare_chat_payload(
             prompt,
             image_urls,
+            audio_urls,
             contexts,
             system_prompt,
             tool_calls_result,
             model=model,
             **kwargs,
         )
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         max_retries = 10
         available_api_keys = self.api_keys.copy()
@@ -1248,6 +1410,7 @@ class ProviderOpenAIOfficial(Provider):
         self,
         text: str,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
@@ -1260,7 +1423,9 @@ class ProviderOpenAIOfficial(Provider):
             content_blocks.append({"type": "text", "text": text})
         elif image_urls:
             # 如果没有文本但有图片，添加占位文本
-            content_blocks.append({"type": "text", "text": "[图片]"})
+            content_blocks.append({"type": "text", "text": "[Image]"})
+        elif audio_urls:
+            content_blocks.append({"type": "text", "text": "[Audio]"})
         elif extra_user_content_parts:
             # 如果只有额外内容块，也需要添加占位文本
             content_blocks.append({"type": "text", "text": " "})
@@ -1276,6 +1441,10 @@ class ProviderOpenAIOfficial(Provider):
                     )
                     if image_part:
                         content_blocks.append(image_part)
+                elif isinstance(part, AudioURLPart):
+                    audio_part = await self._resolve_audio_part(part.audio_url.url)
+                    if audio_part:
+                        content_blocks.append(audio_part)
                 else:
                     raise ValueError(f"不支持的额外内容块类型: {type(part)}")
 
@@ -1286,11 +1455,18 @@ class ProviderOpenAIOfficial(Provider):
                 if image_part:
                     content_blocks.append(image_part)
 
+        if audio_urls:
+            for audio_path in audio_urls:
+                audio_part = await self._resolve_audio_part(audio_path)
+                if audio_part:
+                    content_blocks.append(audio_part)
+
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts
             and not image_urls
+            and not audio_urls
             and len(content_blocks) == 1
             and content_blocks[0]["type"] == "text"
         ):

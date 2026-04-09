@@ -26,6 +26,9 @@ from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 from .route import Response, Route, RouteContext
 
+# SSE heartbeat message to keep the connection alive during long-running operations
+SSE_HEARTBEAT = ": heartbeat\n\n"
+
 
 @asynccontextmanager
 async def track_conversation(convs: dict, conv_id: str):
@@ -40,6 +43,9 @@ async def _poll_webchat_stream_result(back_queue, username: str):
     try:
         result = await asyncio.wait_for(back_queue.get(), timeout=1)
     except asyncio.TimeoutError:
+        # Return a sentinel so the caller can send an SSE heartbeat to
+        # keep the connection alive during long-running operations (e.g.
+        # context compression with reasoning models).  See #6938.
         return None, False
     except asyncio.CancelledError:
         logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
@@ -218,7 +224,12 @@ class ChatRoute(Route):
         Returns:
             包含 used 列表的字典，记录被引用的搜索结果
         """
-        supported = ["web_search_tavily", "web_search_bocha"]
+        supported = [
+            "web_search_baidu",
+            "web_search_tavily",
+            "web_search_bocha",
+            "web_search_brave",
+        ]
         # 从 accumulated_parts 中找到所有 web_search_tavily 的工具调用结果
         web_search_results = {}
         tool_call_parts = [
@@ -364,6 +375,11 @@ class ChatRoute(Route):
                             client_disconnected = True
                             break
                         if not result:
+                            # Send an SSE comment as keep-alive so the client
+                            # doesn't time out during slow backend ops like
+                            # context compression with reasoning models (#6938).
+                            if not client_disconnected:
+                                yield SSE_HEARTBEAT
                             continue
 
                         if (
