@@ -15,6 +15,36 @@ from tests.fixtures.mocks.telegram import create_mock_telegram_modules
 
 _TELEGRAM_PLATFORM_ADAPTER = None
 _TELEGRAM_PLATFORM_EVENT = None
+_TELEGRAM_MODULES: dict[str, object] = {}
+
+
+def _build_telegram_patched_modules():
+    mocks = create_mock_telegram_modules()
+    return {
+        "telegram": mocks["telegram"],
+        "telegram.constants": mocks["telegram"].constants,
+        "telegram.error": mocks["telegram"].error,
+        "telegram.ext": mocks["telegram.ext"],
+        "telegramify_markdown": mocks["telegramify_markdown"],
+        "apscheduler": mocks["apscheduler"],
+        "apscheduler.schedulers": mocks["apscheduler"].schedulers,
+        "apscheduler.schedulers.asyncio": mocks["apscheduler"].schedulers.asyncio,
+        "apscheduler.schedulers.background": mocks["apscheduler"].schedulers.background,
+    }
+
+
+def _load_telegram_module(module_name: str):
+    module = _TELEGRAM_MODULES.get(module_name)
+    if module is not None:
+        return module
+
+    with patch.dict(sys.modules, _build_telegram_patched_modules()):
+        sys.modules.pop(module_name, None)
+        module = importlib.import_module(module_name)
+
+    sys.modules[module_name] = module
+    _TELEGRAM_MODULES[module_name] = module
+    return module
 
 
 def _load_telegram_adapter():
@@ -22,25 +52,9 @@ def _load_telegram_adapter():
     if _TELEGRAM_PLATFORM_ADAPTER is not None:
         return _TELEGRAM_PLATFORM_ADAPTER
 
-    mocks = create_mock_telegram_modules()
-    patched_modules = {
-        "telegram": mocks["telegram"],
-        "telegram.constants": mocks["telegram"].constants,
-        "telegram.error": mocks["telegram"].error,
-        "telegram.ext": mocks["telegram.ext"],
-        "telegramify_markdown": mocks["telegramify_markdown"],
-        "apscheduler": mocks["apscheduler"],
-        "apscheduler.schedulers": mocks["apscheduler"].schedulers,
-        "apscheduler.schedulers.asyncio": mocks["apscheduler"].schedulers.asyncio,
-        "apscheduler.schedulers.background": mocks["apscheduler"].schedulers.background,
-    }
-    with patch.dict(sys.modules, patched_modules):
-        sys.modules.pop("astrbot.core.platform.sources.telegram.tg_adapter", None)
-        module = importlib.import_module(
-            "astrbot.core.platform.sources.telegram.tg_adapter"
-        )
-        _TELEGRAM_PLATFORM_ADAPTER = module.TelegramPlatformAdapter
-        return _TELEGRAM_PLATFORM_ADAPTER
+    module = _load_telegram_module("astrbot.core.platform.sources.telegram.tg_adapter")
+    _TELEGRAM_PLATFORM_ADAPTER = module.TelegramPlatformAdapter
+    return _TELEGRAM_PLATFORM_ADAPTER
 
 
 def _load_telegram_platform_event():
@@ -48,25 +62,9 @@ def _load_telegram_platform_event():
     if _TELEGRAM_PLATFORM_EVENT is not None:
         return _TELEGRAM_PLATFORM_EVENT
 
-    mocks = create_mock_telegram_modules()
-    patched_modules = {
-        "telegram": mocks["telegram"],
-        "telegram.constants": mocks["telegram"].constants,
-        "telegram.error": mocks["telegram"].error,
-        "telegram.ext": mocks["telegram.ext"],
-        "telegramify_markdown": mocks["telegramify_markdown"],
-        "apscheduler": mocks["apscheduler"],
-        "apscheduler.schedulers": mocks["apscheduler"].schedulers,
-        "apscheduler.schedulers.asyncio": mocks["apscheduler"].schedulers.asyncio,
-        "apscheduler.schedulers.background": mocks["apscheduler"].schedulers.background,
-    }
-    with patch.dict(sys.modules, patched_modules):
-        sys.modules.pop("astrbot.core.platform.sources.telegram.tg_event", None)
-        module = importlib.import_module(
-            "astrbot.core.platform.sources.telegram.tg_event"
-        )
-        _TELEGRAM_PLATFORM_EVENT = module.TelegramPlatformEvent
-        return _TELEGRAM_PLATFORM_EVENT
+    module = _load_telegram_module("astrbot.core.platform.sources.telegram.tg_event")
+    _TELEGRAM_PLATFORM_EVENT = module.TelegramPlatformEvent
+    return _TELEGRAM_PLATFORM_EVENT
 
 
 def _build_context() -> MagicMock:
@@ -197,12 +195,14 @@ async def test_telegram_final_segment_splits_long_plaintext_when_markdown_fails(
     client = MagicMock()
     client.send_message = AsyncMock()
     event = TelegramPlatformEvent("msg", MagicMock(), MagicMock(), "session", client)
-    markdownify = event._send_final_segment.__func__.__globals__["telegramify_markdown"]
 
     delta = "B" * (TelegramPlatformEvent.MAX_MESSAGE_LENGTH + 18)
     payload = {"chat_id": "123456"}
 
-    with patch.object(markdownify, "markdownify", side_effect=Exception("boom")):
+    with patch(
+        "astrbot.core.platform.sources.telegram.tg_event.telegramify_markdown.markdownify",
+        side_effect=Exception("boom"),
+    ):
         await event._send_final_segment(delta, payload)
 
     assert client.send_message.await_count == 2
