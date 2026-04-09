@@ -59,7 +59,13 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         platform_name = run_context.context.event.get_platform_name()
         if (
             platform_name == "webchat"
-            and tool.name in ["web_search_tavily", "web_search_bocha"]
+            and tool.name
+            in [
+                "web_search_baidu",
+                "web_search_tavily",
+                "web_search_bocha",
+                "web_search_brave",
+            ]
             and len(run_context.messages) > 0
             and tool_result
             and len(tool_result.content)

@@ -488,6 +488,7 @@ const isChristmas = computed(() => {
 });
 
 // 语言切换相关
+const mainMenuOpen = ref(false);
 const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
 const languages = computed(() => 
   languageOptions.value.map(lang => ({
@@ -499,6 +500,7 @@ const languages = computed(() =>
 const currentLocale = computed(() => locale.value);
 const changeLanguage = async (langCode: string) => {
   await switchLanguage(langCode as Locale);
+  mainMenuOpen.value = false;
 };
 
 onMounted(async () => {
@@ -591,7 +593,7 @@ onMounted(async () => {
 
 
     <!-- 功能菜单 -->
-    <StyledMenu offset="12" location="bottom end">
+    <StyledMenu v-model="mainMenuOpen" offset="12" location="bottom end">
       <template v-slot:activator="{ props: activatorProps }">
         <v-btn
           v-bind="activatorProps"
@@ -632,8 +634,8 @@ onMounted(async () => {
 
       <!-- 语言切换分组 -->
       <v-menu
+        open-on-click
         :open-on-hover="!$vuetify.display.xs"
-        :open-on-click="$vuetify.display.xs"
         :open-delay="!$vuetify.display.xs ? 60 : 0"
         :close-delay="!$vuetify.display.xs ? 120 : 0"
         :location="$vuetify.display.xs ? 'bottom' : 'start center'"
@@ -642,6 +644,7 @@ onMounted(async () => {
         <template v-slot:activator="{ props: languageMenuProps }">
           <v-list-item
             v-bind="languageMenuProps"
+            @click.stop
             class="styled-menu-item language-group-trigger"
             rounded="md"
           >

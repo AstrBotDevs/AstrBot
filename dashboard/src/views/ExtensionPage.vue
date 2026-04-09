@@ -153,7 +153,7 @@ const {
 </script>
 
 <template>
-  <v-row>
+  <v-row class="extension-page">
     <v-col cols="12" md="12">
       <v-card variant="flat" style="background-color: transparent">
         <!-- 标签页 -->
@@ -866,5 +866,11 @@ const {
 .fab-button:hover {
   transform: translateY(-4px) scale(1.05);
   box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+}
+</style>
+
+<style>
+.v-theme--PurpleThemeDark .extension-page .plugin-handler-item {
+  background-color: rgb(var(--v-theme-mcpCardBg));
 }
 </style>
