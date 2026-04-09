@@ -469,13 +469,13 @@ class ProviderOpenAIOfficial(Provider):
         self.set_model(model)
 
         self.reasoning_key = "reasoning_content"
-    
+
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
-        
+
         return create_proxy_client("OpenAI", proxy)
-        
+
     def _create_openai_client(self) -> AsyncOpenAI | AsyncAzureOpenAI:
         """创建 OpenAI/Azure 客户端实例，将初始化逻辑解耦以便复用。"""
         if "api_version" in self.provider_config:
@@ -1192,6 +1192,7 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self._ensure_client()
+                self.chosen_api_key = chosen_key
                 self.client.api_key = chosen_key
                 llm_response = await self._query(payloads, func_tool)
                 break
@@ -1264,6 +1265,7 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self._ensure_client()
+                self.chosen_api_key = chosen_key
                 self.client.api_key = chosen_key
                 async for response in self._query_stream(payloads, func_tool):
                     yield response
@@ -1325,6 +1327,7 @@ class ProviderOpenAIOfficial(Provider):
         return self.api_keys
 
     def set_key(self, key) -> None:
+        self.chosen_api_key = key
         self._ensure_client()
         self.client.api_key = key
 
