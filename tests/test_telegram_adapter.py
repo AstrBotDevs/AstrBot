@@ -14,6 +14,7 @@ from tests.fixtures.helpers import (
 from tests.fixtures.mocks.telegram import create_mock_telegram_modules
 
 _TELEGRAM_PLATFORM_ADAPTER = None
+_TELEGRAM_PLATFORM_EVENT = None
 
 
 def _load_telegram_adapter():
@@ -35,9 +36,37 @@ def _load_telegram_adapter():
     }
     with patch.dict(sys.modules, patched_modules):
         sys.modules.pop("astrbot.core.platform.sources.telegram.tg_adapter", None)
-        module = importlib.import_module("astrbot.core.platform.sources.telegram.tg_adapter")
+        module = importlib.import_module(
+            "astrbot.core.platform.sources.telegram.tg_adapter"
+        )
         _TELEGRAM_PLATFORM_ADAPTER = module.TelegramPlatformAdapter
         return _TELEGRAM_PLATFORM_ADAPTER
+
+
+def _load_telegram_platform_event():
+    global _TELEGRAM_PLATFORM_EVENT
+    if _TELEGRAM_PLATFORM_EVENT is not None:
+        return _TELEGRAM_PLATFORM_EVENT
+
+    mocks = create_mock_telegram_modules()
+    patched_modules = {
+        "telegram": mocks["telegram"],
+        "telegram.constants": mocks["telegram"].constants,
+        "telegram.error": mocks["telegram"].error,
+        "telegram.ext": mocks["telegram.ext"],
+        "telegramify_markdown": mocks["telegramify_markdown"],
+        "apscheduler": mocks["apscheduler"],
+        "apscheduler.schedulers": mocks["apscheduler"].schedulers,
+        "apscheduler.schedulers.asyncio": mocks["apscheduler"].schedulers.asyncio,
+        "apscheduler.schedulers.background": mocks["apscheduler"].schedulers.background,
+    }
+    with patch.dict(sys.modules, patched_modules):
+        sys.modules.pop("astrbot.core.platform.sources.telegram.tg_event", None)
+        module = importlib.import_module(
+            "astrbot.core.platform.sources.telegram.tg_event"
+        )
+        _TELEGRAM_PLATFORM_EVENT = module.TelegramPlatformEvent
+        return _TELEGRAM_PLATFORM_EVENT
 
 
 def _build_context() -> MagicMock:
@@ -71,8 +100,7 @@ async def test_telegram_document_caption_populates_message_text_and_plain():
     assert result.message_str == "@alice 请总结这份文档"
     assert any(isinstance(component, Comp.File) for component in result.message)
     assert any(
-        isinstance(component, Comp.Plain)
-        and component.text == "@alice 请总结这份文档"
+        isinstance(component, Comp.Plain) and component.text == "@alice 请总结这份文档"
         for component in result.message
     )
     assert any(
@@ -140,3 +168,47 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
     assert result.message[0].file == str(wav_path)
     assert result.message[0].path == str(wav_path)
     assert result.message[0].url == str(wav_path)
+
+
+@pytest.mark.asyncio
+async def test_telegram_final_segment_splits_long_markdown_messages():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_message = AsyncMock()
+    event = TelegramPlatformEvent("msg", MagicMock(), MagicMock(), "session", client)
+
+    delta = "A" * (TelegramPlatformEvent.MAX_MESSAGE_LENGTH + 32)
+    payload = {"chat_id": "123456"}
+
+    await event._send_final_segment(delta, payload)
+
+    assert client.send_message.await_count == 2
+    first_call = client.send_message.await_args_list[0].kwargs
+    second_call = client.send_message.await_args_list[1].kwargs
+    assert len(first_call["text"]) == TelegramPlatformEvent.MAX_MESSAGE_LENGTH
+    assert len(second_call["text"]) == 32
+    assert first_call["parse_mode"] == "MarkdownV2"
+    assert second_call["parse_mode"] == "MarkdownV2"
+
+
+@pytest.mark.asyncio
+async def test_telegram_final_segment_splits_long_plaintext_when_markdown_fails():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    client.send_message = AsyncMock()
+    event = TelegramPlatformEvent("msg", MagicMock(), MagicMock(), "session", client)
+    markdownify = event._send_final_segment.__func__.__globals__["telegramify_markdown"]
+
+    delta = "B" * (TelegramPlatformEvent.MAX_MESSAGE_LENGTH + 18)
+    payload = {"chat_id": "123456"}
+
+    with patch.object(markdownify, "markdownify", side_effect=Exception("boom")):
+        await event._send_final_segment(delta, payload)
+
+    assert client.send_message.await_count == 2
+    first_call = client.send_message.await_args_list[0].kwargs
+    second_call = client.send_message.await_args_list[1].kwargs
+    assert len(first_call["text"]) == TelegramPlatformEvent.MAX_MESSAGE_LENGTH
+    assert len(second_call["text"]) == 18
+    assert "parse_mode" not in first_call
+    assert "parse_mode" not in second_call
