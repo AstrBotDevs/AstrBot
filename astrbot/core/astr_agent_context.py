@@ -14,7 +14,7 @@ class AstrAgentContext:
     """The star context instance"""
     event: AstrMessageEvent
     """The message event associated with the agent context."""
-    extra: dict[str, str] = Field(default_factory=dict)
+    extra: dict[str, any] = Field(default_factory=dict)
     """Customized extra data."""
 
 

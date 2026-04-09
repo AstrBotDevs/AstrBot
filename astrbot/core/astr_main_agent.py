@@ -1449,8 +1449,7 @@ async def build_main_agent(
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(
-        context=plugin_context,
-        event=event,
+        context=plugin_context, event=event, extra={"main_agent_runner": agent_runner}
     )
 
     if config.add_cron_tools:

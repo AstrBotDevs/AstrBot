@@ -25,8 +25,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 class DynamicSubAgentConfig:
     name: str
     system_prompt: str = ""
-    tools: list | None = None
-    skills: list | None = None
+    tools: set | None = None
+    skills: set | None = None
     provider_id: str | None = None
     description: str = ""
     workdir: str | None = None
@@ -650,7 +650,7 @@ If you have to use the result of a background task, use `wait_for_subagent(subag
 
     @classmethod
     def get_session(cls, session_id: str) -> DynamicSubAgentSession | None:
-        return cls._sessions.get(session_id)
+        return cls._sessions.get(session_id, None)
 
     @classmethod
     def get_or_create_session(cls, session_id: str) -> DynamicSubAgentSession:
@@ -685,20 +685,19 @@ If you have to use the result of a background task, use `wait_for_subagent(subag
         # When shared_context is enabled, the send_shared_context tool is allocated regardless of whether the main agent allocates the tool to the subagent
         if session.shared_context_enabled:
             if config.tools is None:
-                config.tools = []
-            if "send_shared_context_for_main_agent" in config.tools:
-                config.tools.remove("send_shared_context_for_main_agent")
-            config.tools.append("send_shared_context")
+                config.tools = {}
+            config.tools.discard("send_shared_context_for_main_agent")
+            config.tools.add("send_shared_context")
         if "astrbot_execute_python" not in config.tools:
-            config.tools.append("astrbot_execute_python")
+            config.tools.add("astrbot_execute_python")
         if "astrbot_execute_shell" not in config.tools:
-            config.tools.append("astrbot_execute_shell")
+            config.tools.add("astrbot_execute_shell")
 
         session.subagents[config.name] = config
         agent = Agent(
             name=config.name,
             instructions=config.system_prompt,
-            tools=config.tools,
+            tools=list(config.tools),
         )
         handoff_tool = HandoffTool(
             agent=agent,
@@ -1246,7 +1245,6 @@ class CreateDynamicSubAgentTool(FunctionTool):
         tools = kwargs.get("tools")
         skills = kwargs.get("skills")
         workdir = kwargs.get("workdir")
-
         # 检查工作路径是否非法
         if not self._check_path_safety(workdir):
             workdir = get_astrbot_temp_path()
@@ -1255,8 +1253,8 @@ class CreateDynamicSubAgentTool(FunctionTool):
         config = DynamicSubAgentConfig(
             name=name,
             system_prompt=system_prompt,
-            tools=tools,
-            skills=skills,
+            tools=set(tools),
+            skills=set(skills),
             workdir=workdir,
         )
 
