@@ -10,8 +10,12 @@ from astrbot.core.computer.computer_client import get_booter
 from ..registry import builtin_tool
 from .permissions import check_admin_permission
 
+_COMPUTER_RUNTIME_TOOL_CONFIG = {
+    "provider_settings.computer_use_runtime": ("local", "sandbox"),
+}
 
-@builtin_tool
+
+@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class ExecuteShellTool(FunctionTool):
     name: str = "astrbot_execute_shell"

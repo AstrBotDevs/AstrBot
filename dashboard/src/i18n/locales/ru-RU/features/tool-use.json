@@ -47,6 +47,15 @@
             "originName": "Имя источника",
             "readonly": "Только чтение",
             "actions": "Действия"
+        },
+        "configTags": {
+            "tooltipTitle": "Этот инструмент включен в файле конфигурации {config}, потому что:",
+            "conditions": {
+                "truthy": "{key} включен",
+                "equals": "{key} = {expected}",
+                "in": "{key} соответствует {expected}",
+                "fallback": "Текущее значение {key}: {actual}"
+            }
         }
     },
     "marketplace": {

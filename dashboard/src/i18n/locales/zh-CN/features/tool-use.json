@@ -47,6 +47,15 @@
       "originName": "来源名称",
       "readonly": "只读",
       "actions": "操作"
+    },
+    "configTags": {
+      "tooltipTitle": "该工具在配置文件 {config} 中启用，因为：",
+      "conditions": {
+        "truthy": "启用了 {key}",
+        "equals": "{key} = {expected}",
+        "in": "{key} 命中了 {expected}",
+        "fallback": "{key} 当前值为 {actual}"
+      }
     }
   },
   "marketplace": {

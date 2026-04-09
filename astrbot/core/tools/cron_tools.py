@@ -9,6 +9,10 @@ from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.tools.registry import builtin_tool
 
+_CRON_TOOL_CONFIG = {
+    "provider_settings.proactive_capability.add_cron_tools": True,
+}
+
 
 def _extract_job_session(job: Any) -> str | None:
     payload = getattr(job, "payload", None)
@@ -18,7 +22,7 @@ def _extract_job_session(job: Any) -> str | None:
     return str(session) if session is not None else None
 
 
-@builtin_tool
+@builtin_tool(config=_CRON_TOOL_CONFIG)
 @dataclass
 class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
     name: str = "create_future_task"
@@ -107,7 +111,7 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
         return f"Scheduled future task {job.job_id} ({job.name}) {suffix}."
 
 
-@builtin_tool
+@builtin_tool(config=_CRON_TOOL_CONFIG)
 @dataclass
 class DeleteCronJobTool(FunctionTool[AstrAgentContext]):
     name: str = "delete_future_task"
@@ -144,7 +148,7 @@ class DeleteCronJobTool(FunctionTool[AstrAgentContext]):
         return f"Deleted cron job {job_id}."
 
 
-@builtin_tool
+@builtin_tool(config=_CRON_TOOL_CONFIG)
 @dataclass
 class ListCronJobsTool(FunctionTool[AstrAgentContext]):
     name: str = "list_future_tasks"

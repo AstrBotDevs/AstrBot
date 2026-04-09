@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import type { ToolItem } from '../types';
+import type { BuiltinToolConfigTag, ToolConfigCondition, ToolItem } from '../types';
 
 const { tm: tmTool } = useModuleI18n('features/tooluse');
 
@@ -15,7 +15,7 @@ const emit = defineEmits<{
 }>();
 
 const toolHeaders = computed(() => [
-  { title: tmTool('functionTools.title'), key: 'name', minWidth: '240px' },
+  { title: tmTool('functionTools.title'), key: 'name', minWidth: '320px' },
   { title: tmTool('functionTools.description'), key: 'description' },
   { title: tmTool('functionTools.table.origin'), key: 'origin', sortable: false, width: '120px' },
   { title: tmTool('functionTools.table.originName'), key: 'origin_name', sortable: false, width: '160px' },
@@ -23,6 +23,52 @@ const toolHeaders = computed(() => [
 ]);
 
 const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.properties || {});
+
+const formatConfigValue = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return value.map(item => String(item)).join(', ');
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+  if (value === null || value === undefined || value === '') {
+    return '-';
+  }
+  return String(value);
+};
+
+const formatCondition = (condition: ToolConfigCondition) => {
+  if (condition.message) {
+    return condition.message;
+  }
+
+  switch (condition.operator) {
+    case 'truthy':
+      return tmTool('functionTools.configTags.conditions.truthy', {
+        key: condition.key
+      });
+    case 'equals':
+      return tmTool('functionTools.configTags.conditions.equals', {
+        key: condition.key,
+        expected: formatConfigValue(condition.expected)
+      });
+    case 'in':
+      return tmTool('functionTools.configTags.conditions.in', {
+        key: condition.key,
+        expected: formatConfigValue(condition.expected)
+      });
+    default:
+      return tmTool('functionTools.configTags.conditions.fallback', {
+        key: condition.key,
+        actual: formatConfigValue(condition.actual)
+      });
+  }
+};
+
+const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
+  if (tool.origin !== 'builtin') return [];
+  return (tool.builtin_config_tags || []).filter(tag => tag.enabled);
+};
 </script>
 
 <template>
@@ -38,7 +84,39 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
     >
       <template #item.name="{ item }">
         <div class="py-2">
-          <div class="tool-name text-body-2 font-weight-medium">{{ item.name }}</div>
+          <div class="d-flex flex-wrap align-center ga-1">
+            <div class="tool-name text-body-2 font-weight-medium">{{ item.name }}</div>
+            <v-tooltip
+              v-for="tag in enabledConfigTags(item)"
+              :key="`${item.name}-${tag.conf_id}`"
+              location="top"
+            >
+              <template #activator="{ props: tooltipProps }">
+                <v-chip
+                  v-bind="tooltipProps"
+                  size="x-small"
+                  variant="tonal"
+                  color="secondary"
+                  class="text-caption font-weight-medium"
+                >
+                  {{ tag.conf_name }}
+                </v-chip>
+              </template>
+
+              <div class="tool-config-tooltip">
+                <div class="text-body-2 font-weight-medium mb-2">
+                  {{ tmTool('functionTools.configTags.tooltipTitle', { config: tag.conf_name }) }}
+                </div>
+                <div
+                  v-for="(condition, index) in tag.matched_conditions"
+                  :key="`${tag.conf_id}-${index}-${condition.key}`"
+                  class="text-body-2 text-medium-emphasis mb-1"
+                >
+                  {{ formatCondition(condition) }}
+                </div>
+              </div>
+            </v-tooltip>
+          </div>
         </div>
       </template>
 
@@ -134,5 +212,17 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
 .tool-name {
   font-size: 0.9rem;
   line-height: 1.35;
+}
+
+.tool-config-tooltip {
+  max-width: 360px;
+  padding: 4px 0;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.tool-config-tooltip :deep(.text-body-2),
+.tool-config-tooltip :deep(.text-medium-emphasis),
+.tool-config-tooltip :deep(.font-weight-medium) {
+  color: inherit !important;
 }
 </style>

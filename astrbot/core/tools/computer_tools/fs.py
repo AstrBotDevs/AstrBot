@@ -54,6 +54,13 @@ from astrbot.core.utils.astrbot_path import (
 from ..registry import builtin_tool
 from .permissions import check_admin_permission
 
+_COMPUTER_RUNTIME_TOOL_CONFIG = {
+    "provider_settings.computer_use_runtime": ("local", "sandbox"),
+}
+_SANDBOX_RUNTIME_TOOL_CONFIG = {
+    "provider_settings.computer_use_runtime": "sandbox",
+}
+
 
 def _normalize_umo_for_workspace(umo: str) -> str:
     normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", umo.strip())
@@ -163,7 +170,7 @@ def _decode_escaped_text(value: str) -> str:
     )
 
 
-@builtin_tool
+@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileReadTool(FunctionTool):
     name: str = "astrbot_file_read_tool"
@@ -243,7 +250,7 @@ class FileReadTool(FunctionTool):
             return f"Error reading file: {exc}"
 
 
-@builtin_tool
+@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileWriteTool(FunctionTool):
     name: str = "astrbot_file_write_tool"
@@ -310,7 +317,7 @@ class FileWriteTool(FunctionTool):
             return f"Error writing file: {exc}"
 
 
-@builtin_tool
+@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileEditTool(FunctionTool):
     name: str = "astrbot_file_edit_tool"
@@ -396,7 +403,7 @@ class FileEditTool(FunctionTool):
             return f"Error editing file: {exc}"
 
 
-@builtin_tool
+@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class GrepTool(FunctionTool):
     name: str = "astrbot_grep_tool"
@@ -602,7 +609,7 @@ class GrepTool(FunctionTool):
             return f"Error searching files: {exc}"
 
 
-@builtin_tool
+@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileUploadTool(FunctionTool):
     name: str = "astrbot_upload_file"
@@ -668,7 +675,7 @@ class FileUploadTool(FunctionTool):
             return f"Error uploading file: {str(e)}"
 
 
-@builtin_tool
+@builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileDownloadTool(FunctionTool):
     name: str = "astrbot_download_file"

@@ -10,6 +10,11 @@ from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.tools.computer_tools.permissions import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
 
+_SHIPYARD_NEO_TOOL_CONFIG = {
+    "provider_settings.computer_use_runtime": "sandbox",
+    "provider_settings.sandbox.booter": "shipyard_neo",
+}
+
 
 def _to_json(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
@@ -29,7 +34,7 @@ async def _get_browser_component(context: ContextWrapper[AstrAgentContext]) -> A
     return browser
 
 
-@builtin_tool
+@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
 @dataclass
 class BrowserExecTool(FunctionTool):
     name: str = "astrbot_execute_browser"
@@ -87,7 +92,7 @@ class BrowserExecTool(FunctionTool):
             return f"Error executing browser command: {str(e)}"
 
 
-@builtin_tool
+@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
 @dataclass
 class BrowserBatchExecTool(FunctionTool):
     name: str = "astrbot_execute_browser_batch"
@@ -152,7 +157,7 @@ class BrowserBatchExecTool(FunctionTool):
             return f"Error executing browser batch command: {str(e)}"
 
 
-@builtin_tool
+@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
 @dataclass
 class RunBrowserSkillTool(FunctionTool):
     name: str = "astrbot_run_browser_skill"
