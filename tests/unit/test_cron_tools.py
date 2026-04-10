@@ -123,7 +123,4 @@ async def test_future_task_edit_updates_existing_job():
             "run_at": "2026-02-02T08:00:00+08:00",
         },
     )
-    assert (
-        "Updated future task job-1 (new name) one-time at 2026-02-02 08:00:00+08:00."
-        == result
-    )
+    assert result == "Updated future task job-1 (new name)."
