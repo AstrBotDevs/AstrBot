@@ -45,6 +45,7 @@ from astrbot.core.utils.network_utils import (
     log_connection_failure,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.provider.register import register_provider_adapter
 
 
 @register_provider_adapter(

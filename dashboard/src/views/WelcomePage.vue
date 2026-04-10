@@ -446,10 +446,14 @@ async function checkAndSaveBackend() {
     if ((platformConfigData.value.platform || []).length > 0) {
       platformStepState.value = "completed";
     }
-  } catch (error) {
+  } catch (error: any) {
     setApiBaseUrl(originalBase);
     backendStepState.value = "pending";
-    showError(`Failed to connect to backend: ${error}`);
+    if (error?.response?.status === 401) {
+      showError("无访问权限！请点击右上角退出登录！");
+    } else {
+      showError(`Failed to connect to backend: ${error}`);
+    }
   } finally {
     checkingBackend.value = false;
   }

@@ -164,7 +164,17 @@ def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
 
 
 def prompt_dashboard_password(prompt: str = "Dashboard password") -> str:
+    # 显示密码规则提示
+    click.echo()
+    click.echo("密码规则：")
+    click.echo("  - 至少 12 个字符")
+    click.echo("  - 必须包含至少一个大写字母")
+    click.echo("  - 必须包含至少一个小写字母")
+    click.echo("  - 必须包含至少一个数字")
+    click.echo()
+
     password = click.prompt(prompt, hide_input=True, confirmation_prompt=True, type=str)
+    click.echo(f"密码长度: {len(password)} 字符")
     return _validate_dashboard_password(password)
 
 

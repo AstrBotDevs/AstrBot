@@ -26,6 +26,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file, download_image_by_url
 from astrbot.core.utils.media_utils import ensure_wav
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
+from astrbot.core.provider.register import register_provider_adapter
 
 
 class SuppressNonTextPartsWarning(logging.Filter):

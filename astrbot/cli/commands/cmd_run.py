@@ -378,10 +378,34 @@ def run(
                     except asyncio.CancelledError:
                         pass
 
-            click.echo("AstrBot is running... (streaming logs)")
+            click.echo()
+            click.echo("=" * 60)
+            click.echo("AstrBot 启动中...")
+            click.echo("=" * 60)
+            click.echo()
+
             if backend_only:
-                click.echo("Dashboard: https://dash.astrbot.men/")
-                click.echo("Backend: localhost or based on https")
+                click.echo("[模式] 仅后端模式（无本地 Dashboard）")
+                click.echo()
+                click.echo("[提示] 可以通过以下方式访问 WebUI：")
+                click.echo("  - 使用远程服务器的在线 Dashboard")
+                click.echo("  - 地址: http://服务器IP:6185")
+                click.echo()
+            else:
+                dashboard_url = f"http://{host or 'localhost'}:{port or '6185'}"
+                click.echo(f"[模式] 完整模式（含本地 Dashboard）")
+                click.echo()
+                click.echo(f"[Dashboard] 请访问: {dashboard_url}")
+                click.echo()
+                click.echo("!" * 60)
+                click.echo("安全提示：")
+                click.echo("  HTTPS 前端只能安全连接 localhost 的 HTTP 后端")
+                click.echo("  不支持远程 + HTTP 后端（不安全）")
+                click.echo("!" * 60)
+                click.echo()
+
+            click.echo("正在启动服务...（日志输出中）")
+            click.echo()
 
             asyncio.run(run_with_logging())
     except KeyboardInterrupt:
