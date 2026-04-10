@@ -158,7 +158,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE = (
         "Truncated tool output preview shown above. "
         "The tool output was too large to include directly and was written to "
-        "`{overflow_path}`. Use {read_tool_hint} with a narrower window to inspect it."
+        "`{overflow_path}`. Use {read_tool_hint} to inspect it. "
+        "Use a narrower window when reading large files."
     )
 
     def _get_persona_custom_error_message(self) -> str | None:
