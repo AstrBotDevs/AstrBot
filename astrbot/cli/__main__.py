@@ -77,9 +77,7 @@ def cli() -> None:
     """Astrbot
     Agentic IM Chatbot infrastructure that integrates lots of IM platforms, LLMs, plugins and AI feature, and can be your openclaw alternative. ✨
     """
-    click.echo(logo_tmpl)
-    click.echo(t("cli_welcome"))
-    click.echo(t("cli_version", version=__version__))
+    pass
 
 
 @click.command()
