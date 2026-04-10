@@ -35,9 +35,6 @@
               <div
                 class="message-bubble user-bubble"
                 :class="{ 'has-audio': hasAudio(msg.content.message) }"
-                :style="{
-                  backgroundColor: 'var(--v-theme-chatMessageBubble)',
-                }"
               >
                 <!-- 遍历 message parts -->
                 <template
@@ -59,10 +56,10 @@
                   </div>
 
                   <!-- 纯文本 -->
-                  <pre
-                    v-else-if="part.type === 'plain' && part.text"
+                  <div 
+                    v-else-if="part.type === 'plain' && part.text" 
                     class="bubble-text"
-                    >{{ part.text }}</pre
+                    >{{ part.text }}</div
                   >
 
                   <!-- 图片附件 -->
@@ -169,6 +166,9 @@
                   </div>
                 </template>
               </div>
+              <!-- 透明头像占位 -->
+              <v-avatar class="user-avatar">
+              </v-avatar>
             </div>
 
             <!-- Bot Messages -->
@@ -417,6 +417,18 @@ interface WebSearchResult {
   url: string;
   title: string;
   snippet: string;
+}
+
+// 类型谓词：检查是否为纯文本类型的MessagePart
+function isPlainPart(part: unknown): part is MessagePart & { type: "plain"; text: string } {
+  return (
+    !!part &&
+    typeof part === "object" &&
+    (part as any).type === "plain" &&
+    "text" in part &&
+    typeof (part as any).text === "string" &&
+    !!(part as any).text
+  );
 }
 
 enableKatex();
@@ -703,7 +715,7 @@ export default {
       let content = "";
       if (Array.isArray(replyMsg.content.message)) {
         const textParts = replyMsg.content.message
-          .filter((part) => part.type === "plain" && "text" in part && part.text)
+          .filter(isPlainPart)
           .map((part) => part.text);
         content = textParts.join("");
       }
@@ -850,13 +862,7 @@ export default {
       }
 
       const textContents = messageParts
-        .filter(
-          (part) =>
-            part &&
-            typeof part === "object" &&
-            part.type === "plain" &&
-            part.text,
-        )
+        .filter(isPlainPart)
         .map((part) => part.text);
 
       let textToCopy = textContents.join("\n");
@@ -1292,14 +1298,36 @@ export default {
 .messages-container {
   height: 100%;
   max-height: 100%;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  padding: 16px;
+  overflow: hidden; /* 改为hidden，让虚拟滚动接管滚动 */
+  padding: 8px 16px 16px;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 虚拟滚动容器样式 */
+.message-list :deep(.v-virtual-scroll) {
+  height: 100%;
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--v-theme-border) transparent;
+}
+
+.message-list :deep(.v-virtual-scroll)::-webkit-scrollbar {
+  width: 8px;
+}
+
+.message-list :deep(.v-virtual-scroll)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.message-list :deep(.v-virtual-scroll)::-webkit-scrollbar-thumb {
+  background-color: var(--v-theme-border);
+  border-radius: 4px;
 }
 
 .loading-overlay {
@@ -1358,25 +1386,31 @@ export default {
 
 @media (max-width: 768px) {
   .messages-container {
-    padding: 8px;
+    padding: 4px 8px 8px;
   }
 
   .message-list {
     max-width: 100%;
+    padding: 0 8px;
   }
 
   .message-item {
     padding: 0;
+    margin-bottom: 8px;
   }
 
   .message-bubble {
     padding: 2px 12px;
   }
 
+  .user-message,
+  .bot-message {
+    gap: 8px;
+  }
+
   .bot-message {
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
     width: 100%;
   }
 
@@ -1385,21 +1419,60 @@ export default {
     width: 100% !important;
   }
 
+  .user-bubble,
+  .bot-bubble {
+    max-width: 95% !important;
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
   .bot-bubble {
     width: 100% !important;
-    max-width: 100% !important;
+  }
+
+  .user-avatar {
+    margin-top: 8px;
+    margin-right: 8px;
   }
 
   .bot-avatar {
-    margin-left: 4px;
+    margin-top: 8px;
+    margin-left: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .messages-container {
+    padding: 2px 4px 4px;
+  }
+
+  .message-list {
+    padding: 0 4px;
+  }
+
+  .user-bubble,
+  .bot-bubble {
+    max-width: 98% !important;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .message-item {
+    margin-bottom: 6px;
   }
 }
 
 /* 消息列表样式 */
 .message-list {
-  max-width: 900px;
+  max-width: 100%;
   margin: 0 auto;
   width: 100%;
+  padding: 0 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .message-item {
@@ -1412,6 +1485,7 @@ export default {
   justify-content: flex-end;
   align-items: flex-start;
   gap: 12px;
+  margin-left: auto;
 }
 
 .bot-message {
@@ -1425,7 +1499,8 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  max-width: 80%;
+  max-width: 85%;
+  width: 100%;
   position: relative;
 }
 
@@ -1560,7 +1635,13 @@ export default {
   padding: 12px 18px;
   font-size: 15px;
   max-width: 60%;
+  width: fit-content;
+  background-color: rgba(var(--v-theme-primary), 0.08);
   border-radius: 1.5rem;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+  margin-right: 16px;
 }
 
 .bot-bubble {
@@ -1568,7 +1649,11 @@ export default {
   color: var(--v-theme-on-surface);
   font-size: 16px;
   max-width: 100%;
-  padding-left: 12px;
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 1.5rem;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .user-avatar,
