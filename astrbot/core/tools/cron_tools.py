@@ -7,6 +7,7 @@ from pydantic.dataclasses import dataclass
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.tools.registry import builtin_tool
 
 
 def _extract_job_session(job: Any) -> str | None:
@@ -17,6 +18,7 @@ def _extract_job_session(job: Any) -> str | None:
     return str(session) if session is not None else None
 
 
+@builtin_tool
 @dataclass
 class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
     name: str = "create_future_task"
@@ -105,6 +107,7 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
         return f"Scheduled future task {job.job_id} ({job.name}) {suffix}."
 
 
+@builtin_tool
 @dataclass
 class DeleteCronJobTool(FunctionTool[AstrAgentContext]):
     name: str = "delete_future_task"
@@ -141,6 +144,7 @@ class DeleteCronJobTool(FunctionTool[AstrAgentContext]):
         return f"Deleted cron job {job_id}."
 
 
+@builtin_tool
 @dataclass
 class ListCronJobsTool(FunctionTool[AstrAgentContext]):
     name: str = "list_future_tasks"
@@ -180,14 +184,7 @@ class ListCronJobsTool(FunctionTool[AstrAgentContext]):
         return "\n".join(lines)
 
 
-CREATE_CRON_JOB_TOOL = CreateActiveCronTool()
-DELETE_CRON_JOB_TOOL = DeleteCronJobTool()
-LIST_CRON_JOBS_TOOL = ListCronJobsTool()
-
 __all__ = [
-    "CREATE_CRON_JOB_TOOL",
-    "DELETE_CRON_JOB_TOOL",
-    "LIST_CRON_JOBS_TOOL",
     "CreateActiveCronTool",
     "DeleteCronJobTool",
     "ListCronJobsTool",

@@ -201,8 +201,10 @@ setCustomComponents('message-list', {
 });
 
 const WEB_SEARCH_REFERENCE_TOOLS = Object.freeze([
+    'web_search_baidu',
     'web_search_tavily',
     'web_search_bocha',
+    'web_search_brave',
     'web_search_exa',
     'exa_find_similar'
 ]);
@@ -430,7 +432,6 @@ export default {
                 if (msg.content.type !== 'bot' || !Array.isArray(msg.content.message)) {
                     return;
                 }
-
                 const refs = this.getMessageRefs(msg.content);
                 if (!refs?.used?.length) {
                     return;

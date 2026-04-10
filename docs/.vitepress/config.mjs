@@ -98,6 +98,7 @@ export default defineConfig({
               { text: "Telegram", link: "/telegram" },
               { text: "LINE", link: "/line" },
               { text: "Slack", link: "/slack" },
+              { text: "Mattermost", link: "/mattermost" },
               { text: "Misskey", link: "/misskey" },
               { text: "Discord", link: "/discord" },
               { text: "KOOK", link: "/kook" },
@@ -336,6 +337,7 @@ export default defineConfig({
               { text: "Telegram", link: "/telegram" },
               { text: "LINE", link: "/line" },
               { text: "Slack", link: "/slack" },
+              { text: "Mattermost", link: "/mattermost" },
               { text: "Misskey", link: "/misskey" },
               { text: "Discord", link: "/discord" },
               {

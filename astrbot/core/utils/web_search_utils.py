@@ -4,8 +4,10 @@ from typing import Any
 from urllib.parse import urlparse
 
 WEB_SEARCH_REFERENCE_TOOLS = (
+    "web_search_baidu",
     "web_search_tavily",
     "web_search_bocha",
+    "web_search_brave",
     "web_search_exa",
     "exa_find_similar",
 )

@@ -216,7 +216,7 @@ const emitDeleteSource = (source) => emit('delete-provider-source', source)
 }
 
 .provider-sources-mobile {
-  padding: 14px 18px 0;
+  padding: 16px;
 }
 
 .provider-sources-list-wrap {
@@ -224,7 +224,6 @@ const emitDeleteSource = (source) => emit('delete-provider-source', source)
 }
 
 .provider-source-list {
-  max-height: calc(100vh - 335px);
   overflow-y: auto;
   padding: 0;
   background: transparent;

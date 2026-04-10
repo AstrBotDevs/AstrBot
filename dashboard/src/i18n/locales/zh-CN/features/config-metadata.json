@@ -127,6 +127,10 @@
           "description": "BoCha API Key",
           "hint": "可添加多个 Key 进行轮询。"
         },
+        "websearch_brave_key": {
+          "description": "Brave Search API Key",
+          "hint": "可添加多个 Key 进行轮询。"
+        },
         "websearch_baidu_app_builder_key": {
           "description": "百度千帆智能云 APP Builder API Key",
           "hint": "参考:[https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -569,6 +573,18 @@
       "telegram_token": {
         "description": "Bot Token",
         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
+      },
+      "mattermost_url": {
+        "description": "Mattermost URL",
+        "hint": "Mattermost 服务地址，例如 https://chat.example.com。"
+      },
+      "mattermost_bot_token": {
+        "description": "Mattermost Bot Token",
+        "hint": "在 Mattermost 中创建 Bot 账户后生成的访问令牌。"
+      },
+      "mattermost_reconnect_delay": {
+        "description": "Mattermost 重连延迟",
+        "hint": "WebSocket 断开后的重连等待时间，单位为秒。默认 5 秒。"
       },
       "type": {
         "description": "适配器类型"
@@ -1089,7 +1105,11 @@
       },
       "rerank_api_base": {
         "description": "重排序模型 API Base URL",
-        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。"
+        "hint": "最终请求路径由 Base URL 和路径后缀拼接而成（默认为 /v1/rerank）。"
+      },
+      "rerank_api_suffix": {
+        "description": "API URL 路径后缀",
+        "hint": "追加到 base_url 后的路径后缀，如 /v1/rerank。留空则不追加。"
       },
       "rerank_api_key": {
         "description": "API Key",
@@ -1106,6 +1126,24 @@
         "description": "自定义排序任务类型说明",
         "hint": "仅在使用 qwen3-rerank 模型时生效。建议使用英文撰写。"
       },
+      "nvidia_rerank_api_base": {
+          "description": "API Base URL"
+      },
+      "nvidia_rerank_api_key": {
+          "description": "API Key"
+      },
+      "nvidia_rerank_model": {
+          "description": "重排序模型名称",
+          "hint": "请参照NVIDIA Docs中模型名称填写。"
+      },
+      "nvidia_rerank_model_endpoint": {
+          "description": "自定义模型端点",
+          "hint": "自定义URL末尾端点，默认为 /reranking"
+      },
+      "nvidia_rerank_truncate": {
+          "description": "文本截断策略",
+          "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。"
+      },
       "launch_model_if_not_running": {
         "description": "模型未运行时自动启动",
         "hint": "如果模型当前未在 Xinference 服务中运行，是否尝试自动启动它。在生产环境中建议关闭。"
@@ -1116,6 +1154,7 @@
         "labels": [
           "文本",
           "图像",
+          "音频",
           "工具使用"
         ]
       },
@@ -1492,6 +1531,10 @@
       "whisper_hint": {
         "description": "本地部署 Whisper 模型须知",
         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。"
+      },
+      "whisper_device": {
+        "description": "推理设备",
+        "hint": "Whisper 推理设备。Apple Silicon 可选 mps；其他环境建议使用 cpu。若指定 mps 但当前环境不可用，将自动回退到 cpu。"
       },
       "id": {
         "description": "ID"

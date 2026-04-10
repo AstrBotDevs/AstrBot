@@ -60,6 +60,9 @@
               <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
                 mdi-eye-outline
               </v-icon>
+              <v-icon v-if="supportsAudioInput(entry.metadata)" size="14" color="grey">
+                mdi-music-note-outline
+              </v-icon>
               <v-icon v-if="supportsToolCall(entry.metadata)" size="14" color="grey">
                 mdi-wrench
               </v-icon>
@@ -129,6 +132,9 @@
               <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
                 mdi-eye-outline
               </v-icon>
+              <v-icon v-if="supportsAudioInput(entry.metadata)" size="14" color="grey">
+                mdi-music-note-outline
+              </v-icon>
               <v-icon v-if="supportsToolCall(entry.metadata)" size="14" color="grey">
                 mdi-wrench
               </v-icon>
@@ -186,6 +192,10 @@ const props = defineProps({
     default: false
   },
   supportsImageInput: {
+    type: Function,
+    required: true
+  },
+  supportsAudioInput: {
     type: Function,
     required: true
   },

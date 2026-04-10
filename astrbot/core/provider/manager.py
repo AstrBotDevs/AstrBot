@@ -244,6 +244,8 @@ class ProviderManager:
                     provider = self.provider_insts[0] if self.provider_insts else None
             elif provider_type == ProviderType.SPEECH_TO_TEXT:
                 provider_id = config["provider_stt_settings"].get("provider_id")
+                if not config["provider_stt_settings"].get("enable"):
+                    return None
                 if not provider_id:
                     return None
                 provider = self.inst_map.get(provider_id)
@@ -253,6 +255,8 @@ class ProviderManager:
                     )
             elif provider_type == ProviderType.TEXT_TO_SPEECH:
                 provider_id = config["provider_tts_settings"].get("provider_id")
+                if not config["provider_tts_settings"].get("enable"):
+                    return None
                 if not provider_id:
                     return None
                 provider = self.inst_map.get(provider_id)
@@ -357,6 +361,8 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
+            case "longcat_chat_completion":
+                from .sources.longcat_source import ProviderLongCat as ProviderLongCat
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
             case "groq_chat_completion":
@@ -470,6 +476,10 @@ class ProviderManager:
             case "bailian_rerank":
                 from .sources.bailian_rerank_source import (
                     BailianRerankProvider as BailianRerankProvider,
+                )
+            case "nvidia_rerank":
+                from .sources.nvidia_rerank_source import (
+                    NvidiaRerankProvider as NvidiaRerankProvider,
                 )
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
