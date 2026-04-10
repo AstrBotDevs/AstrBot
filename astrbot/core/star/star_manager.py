@@ -137,7 +137,10 @@ async def _install_requirements_with_precheck(
             requirements_path,
             fallback_reason,
         )
-        await pip_installer.install(requirements_path=requirements_path)
+        await pip_installer.install(
+            requirements_path=requirements_path,
+            allow_target_upgrade=bool(install_plan.version_mismatch_names),
+        )
         return
 
     logger.info(
@@ -148,7 +151,10 @@ async def _install_requirements_with_precheck(
     with _temporary_filtered_requirements_file(
         install_lines=install_plan.install_lines,
     ) as filtered_requirements_path:
-        await pip_installer.install(requirements_path=filtered_requirements_path)
+        await pip_installer.install(
+            requirements_path=filtered_requirements_path,
+            allow_target_upgrade=bool(install_plan.version_mismatch_names),
+        )
 
 
 class PluginManager:
@@ -338,11 +344,30 @@ class PluginManager:
         module_str: str,
         root_dir_name: str,
         requirements_path: str,
+        *,
+        reserved: bool = False,
     ) -> ModuleType:
+        can_prefer_installed_dependencies = False
+        if os.path.exists(requirements_path) and not reserved:
+            install_plan = plan_missing_requirements_install(requirements_path)
+            can_prefer_installed_dependencies = (
+                install_plan is not None and not install_plan.version_mismatch_names
+            )
+
+        if can_prefer_installed_dependencies:
+            try:
+                pip_installer.prefer_installed_dependencies(
+                    requirements_path=requirements_path
+                )
+            except Exception as preload_exc:
+                logger.info(
+                    f"插件 {root_dir_name} 预加载已安装依赖失败，将继续常规导入: {preload_exc!s}"
+                )
+
         try:
             return __import__(path, fromlist=[module_str])
         except (ModuleNotFoundError, ImportError) as import_exc:
-            if os.path.exists(requirements_path):
+            if can_prefer_installed_dependencies:
                 try:
                     logger.info(
                         f"插件 {root_dir_name} 导入失败，尝试从已安装依赖恢复: {import_exc!s}"
@@ -788,6 +813,7 @@ class PluginManager:
                         module_str=module_str,
                         root_dir_name=root_dir_name,
                         requirements_path=requirements_path,
+                        reserved=reserved,
                     )
                 except Exception as e:
                     error_trace = traceback.format_exc()
