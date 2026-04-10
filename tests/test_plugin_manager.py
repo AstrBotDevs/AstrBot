@@ -607,6 +607,63 @@ async def test_import_plugin_skips_preloading_when_requirements_version_mismatch
 
 
 @pytest.mark.asyncio
+async def test_import_plugin_reinstalls_when_version_mismatch_import_fails(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("networkx>=3\n", encoding="utf-8")
+    events = []
+    sentinel_module = object()
+    import_attempts = {"count": 0}
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
+        lambda *, requirements_path: events.append(("prefer", requirements_path)),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: MissingRequirementsPlan(
+            missing_names=frozenset({"networkx"}),
+            install_lines=("networkx>=3",),
+            version_mismatch_names=frozenset({"networkx"}),
+        ),
+    )
+
+    async def mock_check_plugin_dept_update(*, target_plugin=None):
+        events.append(("reinstall", target_plugin))
+
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_check_plugin_dept_update",
+        mock_check_plugin_dept_update,
+    )
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        del globals, locals, level
+        import_attempts["count"] += 1
+        events.append(("import", name, tuple(fromlist), import_attempts["count"]))
+        if import_attempts["count"] == 1:
+            raise ModuleNotFoundError("networkx")
+        return sentinel_module
+
+    monkeypatch.setattr(star_manager_module, "__import__", fake_import, raising=False)
+
+    imported_module = await plugin_manager_pm._import_plugin_with_dependency_recovery(
+        path="data.plugins.helloworld.main",
+        module_str="main",
+        root_dir_name=TEST_PLUGIN_DIR,
+        requirements_path=str(requirements_path),
+    )
+
+    assert imported_module is sentinel_module
+    assert events == [
+        ("import", "data.plugins.helloworld.main", ("main",), 1),
+        ("reinstall", TEST_PLUGIN_DIR),
+        ("import", "data.plugins.helloworld.main", ("main",), 2),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_import_plugin_skips_preloading_when_requirement_precheck_is_unavailable(
     plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
 ):
