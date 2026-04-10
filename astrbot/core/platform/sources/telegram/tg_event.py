@@ -124,7 +124,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     **cast(Any, payload),
                 )
             except (ValueError, BadRequest) as e:
-                logger.warning(f"Failed to convert message to Markdown，using normal text: {e!s}")
+                logger.warning(
+                    f"Failed to convert message to Markdown，using normal text: {e!s}"
+                )
                 await client.send_message(text=chunk, **cast(Any, payload))
 
     @classmethod
