@@ -1107,10 +1107,7 @@ export default {
         this.scrollTimer = null;
       }
       // 清理 elapsed time 计时器
-      if (this.elapsedTimeTimer) {
-        clearInterval(this.elapsedTimeTimer);
-        this.elapsedTimeTimer = null;
-      }
+      this.stopElapsedTimeTimer();
       // 清理窗口大小变化监听器
       window.removeEventListener("resize", this.updateContainerHeight);
     },
@@ -1676,7 +1673,7 @@ export default {
   font-size: 15px;
   max-width: 60%;
   width: fit-content;
-  background-color: rgba(var(--v-theme-primary), 0.08);
+  background-color: rgba(var(--v-theme-primary-rgb), 0.08);
   border-radius: 1.5rem;
   word-break: break-word;
   overflow-wrap: break-word;
