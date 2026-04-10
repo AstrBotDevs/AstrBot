@@ -395,7 +395,9 @@ class PluginManager:
                 requirements_path=requirements_path
             )
             module = __import__(path, fromlist=[module_str])
-            logger.info(f"插件 {root_dir_name} 已从 site-packages 恢复依赖，跳过重新安装。")
+            logger.info(
+                f"插件 {root_dir_name} 已从 site-packages 恢复依赖，跳过重新安装。"
+            )
             return module
         except Exception as recover_exc:
             logger.info(
@@ -443,7 +445,9 @@ class PluginManager:
                 )
                 if recovered_module is not None:
                     return recovered_module
-            elif recovery_state.mode is ImportDependencyRecoveryMode.REINSTALL_ON_FAILURE:
+            elif (
+                recovery_state.mode is ImportDependencyRecoveryMode.REINSTALL_ON_FAILURE
+            ):
                 assert recovery_state.install_plan is not None
                 logger.info(
                     "插件 %s 预检查检测到版本不匹配，跳过已安装依赖恢复: %s",
