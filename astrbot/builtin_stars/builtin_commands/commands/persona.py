@@ -45,7 +45,7 @@ class PersonaCommands:
                         children,
                         all_personas,
                         depth + 1,
-                    )
+                    ),
                 )
 
         return lines

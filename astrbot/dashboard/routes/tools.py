@@ -16,7 +16,6 @@ DEFAULT_MCP_CONFIG: dict[str, Any] = {"mcpServers": {}}
 class EmptyMcpServersError(ValueError):
     """Raised when mcpServers is empty."""
 
-    pass
 
 
 def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
@@ -24,6 +23,7 @@ def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
 
     Raises:
         ValueError: Invalid configuration
+
     """
     if not isinstance(mcp_servers_value, dict):
         raise ValueError("mcpServers must be a JSON object")
@@ -32,14 +32,14 @@ def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
     extracted = list(mcp_servers_value.values())[0]
     if not isinstance(extracted, dict):
         raise ValueError(
-            "Invalid mcpServers format. Ensure each key in mcpServers is a server name, and each value is an object containing fields like command/url."
+            "Invalid mcpServers format. Ensure each key in mcpServers is a server name, and each value is an object containing fields like command/url.",
         )
     return extracted
 
 
 class ToolsRoute(Route):
     def __init__(
-        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle
+        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
@@ -77,13 +77,13 @@ class ToolsRoute(Route):
             mcp_servers = config.get("mcpServers", {})
             if not isinstance(mcp_servers, dict):
                 logger.warning(
-                    f"Invalid MCP server config type: {type(mcp_servers).__name__}. Expected object/dict; skipped all MCP servers."
+                    f"Invalid MCP server config type: {type(mcp_servers).__name__}. Expected object/dict; skipped all MCP servers.",
                 )
                 mcp_servers = {}
             for name, server_config in mcp_servers.items():
                 if not isinstance(server_config, dict):
                     logger.warning(
-                        f"Invalid config for MCP server '{name}' (type: {type(server_config).__name__}); skipped."
+                        f"Invalid config for MCP server '{name}' (type: {type(server_config).__name__}); skipped.",
                     )
                     continue
                 server_info = {
@@ -120,7 +120,7 @@ class ToolsRoute(Route):
                     if key == "mcpServers":
                         try:
                             server_config = _extract_mcp_server_config(
-                                server_data["mcpServers"]
+                                server_data["mcpServers"],
                             )
                         except ValueError as e:
                             return Response().error(f"{e!s}").to_json()
@@ -145,7 +145,7 @@ class ToolsRoute(Route):
             if self.tool_mgr.save_mcp_config(config):
                 try:
                     await self.tool_mgr.enable_mcp_server(
-                        name, server_config, init_timeout=30
+                        name, server_config, init_timeout=30,
                     )
                 except TimeoutError:
                     rollback_ok = self._rollback_mcp_server(name)
@@ -196,7 +196,7 @@ class ToolsRoute(Route):
                     if key == "mcpServers":
                         try:
                             server_config = _extract_mcp_server_config(
-                                server_data["mcpServers"]
+                                server_data["mcpServers"],
                             )
                         except ValueError as e:
                             return Response().error(f"{e!s}").to_json()
@@ -221,13 +221,13 @@ class ToolsRoute(Route):
                     ):
                         try:
                             await self.tool_mgr.disable_mcp_server(
-                                old_name, shutdown_timeout=10
+                                old_name, shutdown_timeout=10,
                             )
                         except TimeoutError as e:
                             return (
                                 Response()
                                 .error(
-                                    f"Timed out while disabling MCP server {old_name} before enabling: {e!s}"
+                                    f"Timed out while disabling MCP server {old_name} before enabling: {e!s}",
                                 )
                                 .to_json()
                             )
@@ -236,13 +236,13 @@ class ToolsRoute(Route):
                             return (
                                 Response()
                                 .error(
-                                    f"Failed to disable MCP server {old_name} before enabling: {e!s}"
+                                    f"Failed to disable MCP server {old_name} before enabling: {e!s}",
                                 )
                                 .to_json()
                             )
                     try:
                         await self.tool_mgr.enable_mcp_server(
-                            name, config["mcpServers"][name], init_timeout=30
+                            name, config["mcpServers"][name], init_timeout=30,
                         )
                     except TimeoutError:
                         return (
@@ -333,7 +333,7 @@ class ToolsRoute(Route):
                     return (
                         Response()
                         .error(
-                            "Only one MCP server configuration can be tested at a time"
+                            "Only one MCP server configuration can be tested at a time",
                         )
                         .to_json()
                     )
@@ -377,7 +377,7 @@ class ToolsRoute(Route):
                     origin = "internal"
                     origin_name = "AstrBot"
                 elif getattr(tool, "handler_module_path", None) and star_map.get(
-                    getattr(tool, "handler_module_path", None)
+                    getattr(tool, "handler_module_path", None),
                 ):
                     handler_path = getattr(tool, "handler_module_path", None)
                     star = star_map[handler_path]

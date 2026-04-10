@@ -46,11 +46,10 @@ class MockShipyardSandboxClient:
             ) as response:
                 if response.status == 200:
                     return await response.json()
-                else:
-                    error_text = await response.text()
-                    raise Exception(
-                        f"Failed to exec operation: {response.status} {error_text}"
-                    )
+                error_text = await response.text()
+                raise Exception(
+                    f"Failed to exec operation: {response.status} {error_text}",
+                )
 
     async def upload_file(self, path: str, remote_path: str) -> dict:
         """Upload a file to the sandbox"""
@@ -85,18 +84,17 @@ class MockShipyardSandboxClient:
                             "message": "File uploaded successfully",
                             "file_path": remote_path,
                         }
-                    else:
-                        error_text = await response.text()
-                        logger.warning(
-                            "[Computer] file_upload_failed booter=boxlite error=http_status status=%s remote_path=%s",
-                            response.status,
-                            remote_path,
-                        )
-                        return {
-                            "success": False,
-                            "error": f"Server returned {response.status}: {error_text}",
-                            "message": "File upload failed",
-                        }
+                    error_text = await response.text()
+                    logger.warning(
+                        "[Computer] file_upload_failed booter=boxlite error=http_status status=%s remote_path=%s",
+                        response.status,
+                        remote_path,
+                    )
+                    return {
+                        "success": False,
+                        "error": f"Server returned {response.status}: {error_text}",
+                        "message": "File upload failed",
+                    }
 
         except aiohttp.ClientError as e:
             logger.error("[Computer] file_upload_failed booter=boxlite error=%s", e)
@@ -127,7 +125,7 @@ class MockShipyardSandboxClient:
             }
         except Exception as exc:
             logger.exception(
-                "[Computer] file_upload_failed booter=boxlite error=unexpected"
+                "[Computer] file_upload_failed booter=boxlite error=unexpected",
             )
             return {
                 "success": False,
@@ -186,7 +184,7 @@ class BoxliteBooter(ComputerBooter):
                 {
                     "host_port": random_port,
                     "guest_port": 8123,
-                }
+                },
             ],
         )
         await self.box.start()
@@ -196,7 +194,7 @@ class BoxliteBooter(ComputerBooter):
             self.box.id,
         )
         self.mocked = MockShipyardSandboxClient(
-            sb_url=f"http://127.0.0.1:{random_port}"
+            sb_url=f"http://127.0.0.1:{random_port}",
         )
         self._fs = ShipyardFileSystemComponent(
             client=self.mocked,  # type: ignore[arg-type]

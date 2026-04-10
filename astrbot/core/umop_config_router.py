@@ -111,8 +111,8 @@ class UmopConfigRouter:
 
         Raises:
             ValueError: 当 umo 格式不正确时抛出
-        """
 
+        """
         if self._split_umo(umo) is None:
             raise ValueError(
                 "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",

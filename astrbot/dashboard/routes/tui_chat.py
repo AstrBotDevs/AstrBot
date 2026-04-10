@@ -124,7 +124,7 @@ class TUIChatRoute(Route):
             file_path = attachment.path
             resolved_file_path = _resolve_path(file_path)
             return await send_file(
-                str(resolved_file_path), mimetype=attachment.mime_type
+                str(resolved_file_path), mimetype=attachment.mime_type,
             )
         except (FileNotFoundError, OSError):
             return Response().error("File access error").to_json()
@@ -148,7 +148,7 @@ class TUIChatRoute(Route):
         path = os.path.join(self.attachments_dir, filename)
         await file.save(path)
         attachment = await self.db.insert_attachment(
-            path=path, type=attach_type, mime_type=content_type
+            path=path, type=attach_type, mime_type=content_type,
         )
         if not attachment:
             return Response().error("Failed to create attachment").to_json()
@@ -160,7 +160,7 @@ class TUIChatRoute(Route):
                     "attachment_id": attachment.attachment_id,
                     "filename": filename,
                     "type": attach_type,
-                }
+                },
             )
             .to_json()
         )
@@ -168,11 +168,11 @@ class TUIChatRoute(Route):
     async def _build_user_message_parts(self, message: str | list) -> list[dict]:
         """Build user message parts list."""
         return await build_webchat_message_parts(
-            message, get_attachment_by_id=self.db.get_attachment_by_id, strict=False
+            message, get_attachment_by_id=self.db.get_attachment_by_id, strict=False,
         )
 
     async def _create_attachment_from_file(
-        self, filename: str, attach_type: str
+        self, filename: str, attach_type: str,
     ) -> dict | None:
         """Create attachment from local file and return message part."""
         return await create_attachment_part_from_existing_file(
@@ -262,7 +262,7 @@ class TUIChatRoute(Route):
                 async with track_conversation(self.running_convs, tui_conv_id):
                     while True:
                         result, should_break = await _poll_tui_stream_result(
-                            back_queue, username
+                            back_queue, username,
                         )
                         if should_break:
                             client_disconnected = True
@@ -307,7 +307,7 @@ class TUIChatRoute(Route):
                                 tool_calls[tool_call.get("id")] = tool_call
                                 if accumulated_text:
                                     accumulated_parts.append(
-                                        {"type": "plain", "text": accumulated_text}
+                                        {"type": "plain", "text": accumulated_text},
                                     )
                                     accumulated_text = ""
                             elif chain_type == "tool_call_result":
@@ -320,7 +320,7 @@ class TUIChatRoute(Route):
                                         {
                                             "type": "tool_call",
                                             "tool_calls": [tool_calls[tc_id]],
-                                        }
+                                        },
                                     )
                                     tool_calls.pop(tc_id, None)
                             elif chain_type == "reasoning":
@@ -332,27 +332,27 @@ class TUIChatRoute(Route):
                         elif msg_type == "image":
                             filename = result_text.replace("[IMAGE]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "image"
+                                filename, "image",
                             )
                             if part:
                                 accumulated_parts.append(part)
                         elif msg_type == "record":
                             filename = result_text.replace("[RECORD]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "record"
+                                filename, "record",
                             )
                             if part:
                                 accumulated_parts.append(part)
                         elif msg_type == "file":
                             filename = result_text.replace("[FILE]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "file"
+                                filename, "file",
                             )
                             if part:
                                 accumulated_parts.append(part)
                         if msg_type == "end":
                             break
-                        elif streaming and msg_type == "complete" or not streaming:
+                        elif (streaming and msg_type == "complete") or not streaming:
                             if (
                                 chain_type == "tool_call"
                                 or chain_type == "tool_call_result"
@@ -372,7 +372,7 @@ class TUIChatRoute(Route):
                                     "data": {
                                         "id": saved_record.id,
                                         "created_at": to_utc_isoformat(
-                                            saved_record.created_at
+                                            saved_record.created_at,
                                         ),
                                     },
                                 }
@@ -402,7 +402,7 @@ class TUIChatRoute(Route):
                     "enable_streaming": enable_streaming,
                     "message_id": message_id,
                 },
-            )
+            ),
         )
         message_parts_for_storage = strip_message_parts_path_fields(message_parts)
         mgr = self.platform_history_mgr
@@ -469,13 +469,13 @@ class TUIChatRoute(Route):
         if attachment_ids:
             await self._delete_attachments(attachment_ids)
         await mgr.delete(
-            platform_id=session.platform_id, user_id=session_id, offset_sec=99999999
+            platform_id=session.platform_id, user_id=session_id, offset_sec=99999999,
         )
         try:
             router = self.umop_config_router
             if router is None:
                 logger.warning(
-                    "UMOP config router not available during session cleanup"
+                    "UMOP config router not available during session cleanup",
                 )
             else:
                 await router.delete_route(unified_msg_origin)
@@ -539,7 +539,7 @@ class TUIChatRoute(Route):
                     "deleted_count": deleted_count,
                     "failed_count": len(failed_items),
                     "failed_items": failed_items,
-                }
+                },
             )
             .to_json()
         )
@@ -568,7 +568,7 @@ class TUIChatRoute(Route):
                     await anyio.Path(attachment.path).unlink()
                 except OSError as e:
                     logger.warning(
-                        f"Failed to delete attachment file {attachment.path}: {e}"
+                        f"Failed to delete attachment file {attachment.path}: {e}",
                     )
         except Exception as e:
             logger.warning(f"Failed to get attachments: {e}")
@@ -581,7 +581,7 @@ class TUIChatRoute(Route):
         """Create a new Platform session for TUI."""
         username = g.get("username", "guest")
         session = await self.db.create_platform_session(
-            creator=username, platform_id="tui", is_group=0
+            creator=username, platform_id="tui", is_group=0,
         )
         return (
             Response()
@@ -589,7 +589,7 @@ class TUIChatRoute(Route):
                 data={
                     "session_id": session.session_id,
                     "platform_id": session.platform_id,
-                }
+                },
             )
             .to_json()
         )
@@ -617,7 +617,7 @@ class TUIChatRoute(Route):
                     "is_group": session.is_group,
                     "created_at": to_utc_isoformat(session.created_at),
                     "updated_at": to_utc_isoformat(session.updated_at),
-                }
+                },
             )
         return Response().ok(data=sessions_data).to_json()
 
@@ -630,12 +630,12 @@ class TUIChatRoute(Route):
         platform_id = session.platform_id if session else "tui"
         username = g.get("username", "guest")
         project_info = await self.db.get_project_by_session(
-            session_id=session_id, creator=username
+            session_id=session_id, creator=username,
         )
         mgr = self.platform_history_mgr
         assert mgr is not None
         history_ls = await mgr.get(
-            platform_id=platform_id, user_id=session_id, page=1, page_size=1000
+            platform_id=platform_id, user_id=session_id, page=1, page_size=1000,
         )
         history_res = [history.model_dump() for history in history_ls]
         response_data: dict[str, Any] = {
@@ -666,6 +666,6 @@ class TUIChatRoute(Route):
         if session.creator != username:
             return Response().error("Permission denied").to_json()
         await self.db.update_platform_session(
-            session_id=session_id, display_name=display_name
+            session_id=session_id, display_name=display_name,
         )
         return Response().ok().to_json()

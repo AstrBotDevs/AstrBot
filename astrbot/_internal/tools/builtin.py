@@ -1,5 +1,4 @@
-"""
-Builtin tools for AstrBot - re-exports from core.tools for backward compatibility.
+"""Builtin tools for AstrBot - re-exports from core.tools for backward compatibility.
 
 This module re-exports the builtin tools (cron, send_message, kb_query) from
 the deprecated core.tools module for backward compatibility.

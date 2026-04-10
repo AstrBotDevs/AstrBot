@@ -68,6 +68,7 @@ def get_backup_directories() -> dict[str, str]:
 
     Returns:
         dict: 键为备份文件中的目录名称,值为目录的绝对路径
+
     """
     return {
         "plugins": get_astrbot_plugin_path(),  # 插件本体

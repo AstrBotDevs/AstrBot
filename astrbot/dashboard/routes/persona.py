@@ -47,7 +47,7 @@ class PersonaRoute(Route):
             folder_id = request.args.get("folder_id")
             if folder_id is not None:
                 personas = await self.persona_mgr.get_personas_by_folder(
-                    folder_id if folder_id else None
+                    folder_id if folder_id else None,
                 )
             else:
                 personas = await self.persona_mgr.get_all_personas()
@@ -217,7 +217,7 @@ class PersonaRoute(Route):
 
             if has_custom_error_message:
                 if custom_error_message is not None and not isinstance(
-                    custom_error_message, str
+                    custom_error_message, str,
                 ):
                     return Response().error("自定义报错回复信息必须是字符串").to_json()
                 if isinstance(custom_error_message, str):

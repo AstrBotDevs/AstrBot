@@ -123,7 +123,7 @@ class ProviderVolcengineTTS(TTSProvider):
         # Keep the request metadata useful for debugging without exposing secrets.
         logger.debug(f"请求 URL: {self.api_base}")
         logger.debug(
-            f"请求体: {json.dumps(loggable_payload, ensure_ascii=False)[:100]}..."
+            f"请求体: {json.dumps(loggable_payload, ensure_ascii=False)[:100]}...",
         )
 
         try:

@@ -20,7 +20,7 @@ class StorageCleaner:
     TARGET_LOGS = "logs"
     TARGET_CACHE = "cache"
     VALID_TARGETS: ClassVar[frozenset[str]] = frozenset(
-        {TARGET_LOGS, TARGET_CACHE, "all"}
+        {TARGET_LOGS, TARGET_CACHE, "all"},
     )
 
     def __init__(

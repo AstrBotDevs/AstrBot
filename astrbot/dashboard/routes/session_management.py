@@ -50,7 +50,7 @@ class SessionManagementRoute(Route):
         self.register_routes()
 
     async def _get_umo_rules(
-        self, page: int = 1, page_size: int = 10, search: str = ""
+        self, page: int = 1, page_size: int = 10, search: str = "",
     ) -> tuple[dict, int]:
         """获取所有带有自定义规则的 umo 及其规则内容（支持分页和搜索）。
 
@@ -68,6 +68,7 @@ class SessionManagementRoute(Route):
 
         Returns:
             tuple[dict, int]: (umo_rules, total) - 分页后的 umo 规则和总数
+
         """
         umo_rules: dict[str, Any] = {}
         async with self.db_helper.get_db() as session:
@@ -75,7 +76,7 @@ class SessionManagementRoute(Route):
                 select(Preference).where(
                     col(Preference.scope) == "umo",
                     col(Preference.key).in_(AVAILABLE_SESSION_RULE_KEYS),
-                )
+                ),
             )
             prefs = result.scalars().all()
             for pref in prefs:
@@ -120,14 +121,12 @@ class SessionManagementRoute(Route):
             page = request.args.get("page", 1, type=int)
             page_size = request.args.get("page_size", 10, type=int)
             search = request.args.get("search", "", type=str).strip()
-            if page < 1:
-                page = 1
+            page = max(page, 1)
             if page_size < 1:
                 page_size = 10
-            if page_size > 100:
-                page_size = 100
+            page_size = min(page_size, 100)
             umo_rules, total = await self._get_umo_rules(
-                page=page, page_size=page_size, search=search
+                page=page, page_size=page_size, search=search,
             )
             rules_list = []
             for umo, rules in umo_rules.items():
@@ -199,7 +198,7 @@ class SessionManagementRoute(Route):
                         "available_plugins": available_plugins,
                         "available_kbs": available_kbs,
                         "available_rule_keys": AVAILABLE_SESSION_RULE_KEYS,
-                    }
+                    },
                 )
                 .to_json()
             )
@@ -264,11 +263,10 @@ class SessionManagementRoute(Route):
                     .ok({"message": f"规则 {rule_key} 已删除", "umo": umo})
                     .to_json()
                 )
-            else:
-                await sp.clear_async("umo", umo)
-                return (
-                    Response().ok({"message": "所有规则已删除", "umo": umo}).to_json()
-                )
+            await sp.clear_async("umo", umo)
+            return (
+                Response().ok({"message": "所有规则已删除", "umo": umo}).to_json()
+            )
         except Exception as e:
             logger.error(f"删除会话规则失败: {e!s}")
             return Response().error(f"删除会话规则失败: {e!s}").to_json()
@@ -302,7 +300,7 @@ class SessionManagementRoute(Route):
                     async with self.db_helper.get_db() as session:
                         session: AsyncSession
                         result = await session.execute(
-                            select(ConversationV2.user_id).distinct()
+                            select(ConversationV2.user_id).distinct(),
                         )
                         all_umos = [row[0] for row in result.fetchall()]
                     if scope == "group":
@@ -348,16 +346,15 @@ class SessionManagementRoute(Route):
                             "message": f"{message}，{len(failed_umos)} 条删除失败",
                             "success_count": success_count,
                             "failed_umos": failed_umos,
-                        }
+                        },
                     )
                     .to_json()
                 )
-            else:
-                return (
-                    Response()
-                    .ok({"message": message, "success_count": success_count})
-                    .to_json()
-                )
+            return (
+                Response()
+                .ok({"message": message, "success_count": success_count})
+                .to_json()
+            )
         except Exception as e:
             logger.error(f"批量删除会话规则失败: {e!s}")
             return Response().error(f"批量删除会话规则失败: {e!s}").to_json()
@@ -373,7 +370,7 @@ class SessionManagementRoute(Route):
                 result = await session.execute(
                     select(ConversationV2.user_id)
                     .distinct()
-                    .order_by(ConversationV2.user_id)
+                    .order_by(ConversationV2.user_id),
                 )
                 umos = [row[0] for row in result.fetchall()]
             return Response().ok({"umos": umos}).to_json()
@@ -397,18 +394,16 @@ class SessionManagementRoute(Route):
             search = request.args.get("search", "", type=str).strip()
             message_type = request.args.get("message_type", "all", type=str)
             platform = request.args.get("platform", "", type=str)
-            if page < 1:
-                page = 1
+            page = max(page, 1)
             if page_size < 1:
                 page_size = 20
-            if page_size > 100:
-                page_size = 100
+            page_size = min(page_size, 100)
             async with self.db_helper.get_db() as session:
                 session: AsyncSession
                 result = await session.execute(
                     select(ConversationV2.user_id)
                     .distinct()
-                    .order_by(ConversationV2.user_id)
+                    .order_by(ConversationV2.user_id),
                 )
                 all_umos = [row[0] for row in result.fetchall()]
             umo_rules, _ = await self._get_umo_rules(page=1, page_size=99999, search="")
@@ -470,7 +465,7 @@ class SessionManagementRoute(Route):
                         "chat_provider": rules.get(chat_provider_key),
                         "tts_provider": rules.get(tts_provider_key),
                         "stt_provider": rules.get(stt_provider_key),
-                    }
+                    },
                 )
             total = len(umos_with_status)
             start_idx = (page - 1) * page_size
@@ -506,7 +501,7 @@ class SessionManagementRoute(Route):
                         "available_chat_providers": available_chat_providers,
                         "available_tts_providers": available_tts_providers,
                         "available_stt_providers": available_stt_providers,
-                    }
+                    },
                 )
                 .to_json()
             )
@@ -553,7 +548,7 @@ class SessionManagementRoute(Route):
                     async with self.db_helper.get_db() as session:
                         session: AsyncSession
                         result = await session.execute(
-                            select(ConversationV2.user_id).distinct()
+                            select(ConversationV2.user_id).distinct(),
                         )
                         all_umos = [row[0] for row in result.fetchall()]
                     if scope == "group":
@@ -611,7 +606,7 @@ class SessionManagementRoute(Route):
                         "success_count": success_count,
                         "failed_count": len(failed_umos),
                         "failed_umos": failed_umos,
-                    }
+                    },
                 )
                 .to_json()
             )
@@ -667,7 +662,7 @@ class SessionManagementRoute(Route):
                     async with self.db_helper.get_db() as session:
                         session: AsyncSession
                         result = await session.execute(
-                            select(ConversationV2.user_id).distinct()
+                            select(ConversationV2.user_id).distinct(),
                         )
                         all_umos = [row[0] for row in result.fetchall()]
                     if scope == "group":
@@ -710,7 +705,7 @@ class SessionManagementRoute(Route):
                         "success_count": success_count,
                         "failed_count": len(failed_umos),
                         "failed_umos": failed_umos,
-                    }
+                    },
                 )
                 .to_json()
             )
@@ -738,7 +733,7 @@ class SessionManagementRoute(Route):
                         "name": group_data.get("name", ""),
                         "umos": group_data.get("umos", []),
                         "umo_count": len(group_data.get("umos", [])),
-                    }
+                    },
                 )
             return Response().ok({"groups": groups_list}).to_json()
         except Exception as e:
@@ -770,7 +765,7 @@ class SessionManagementRoute(Route):
                             "umos": umos,
                             "umo_count": len(umos),
                         },
-                    }
+                    },
                 )
                 .to_json()
             )
@@ -816,7 +811,7 @@ class SessionManagementRoute(Route):
                             "umos": group["umos"],
                             "umo_count": len(group["umos"]),
                         },
-                    }
+                    },
                 )
                 .to_json()
             )

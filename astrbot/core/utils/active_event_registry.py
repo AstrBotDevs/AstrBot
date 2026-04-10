@@ -38,6 +38,7 @@ class ActiveEventRegistry:
 
         Returns:
             被终止的事件数量｡
+
         """
         count = 0
         for event in list(self._events.get(umo, [])):

@@ -1,5 +1,4 @@
-"""
-AstrBot Gateway - HTTP/WebSocket API server.
+"""AstrBot Gateway - HTTP/WebSocket API server.
 
 Built on FastAPI, provides:
 - HTTP REST API (stats, inspector, config)
@@ -14,8 +13,7 @@ from abc import ABC, abstractmethod
 
 
 class BaseAstrbotGateway(ABC):
-    """
-    Gateway: HTTP/WebSocket server built on FastAPI.
+    """Gateway: HTTP/WebSocket server built on FastAPI.
 
     ┌─────────────────────────────────────────────────────────┐
     │                      FastAPI App                        │
@@ -56,8 +54,7 @@ class BaseAstrbotGateway(ABC):
 
     @abstractmethod
     async def serve(self) -> None:
-        """
-        Start gateway server - blocks until shutdown.
+        """Start gateway server - blocks until shutdown.
 
         Should:
         1. Create FastAPI app with routes
@@ -69,5 +66,6 @@ class BaseAstrbotGateway(ABC):
 
         Raises:
             OSError: address already in use
+
         """
         ...

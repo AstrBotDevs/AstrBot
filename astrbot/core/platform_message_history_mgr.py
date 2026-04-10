@@ -41,7 +41,7 @@ class PlatformMessageHistoryManager:
         return history
 
     async def delete(
-        self, platform_id: str, user_id: str, offset_sec: int = 86400
+        self, platform_id: str, user_id: str, offset_sec: int = 86400,
     ) -> None:
         """Delete platform message history records older than the specified offset."""
         await self.db.delete_platform_message_offset(

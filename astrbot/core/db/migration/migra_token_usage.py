@@ -19,7 +19,7 @@ async def migrate_token_usage(db_helper: BaseDatabase) -> None:
     """
     # 检查是否已经完成迁移
     migration_done = await db_helper.get_preference(
-        "global", "global", "migration_done_token_usage_1"
+        "global", "global", "migration_done_token_usage_1",
     )
     if migration_done:
         return
@@ -38,15 +38,15 @@ async def migrate_token_usage(db_helper: BaseDatabase) -> None:
             if "token_usage" in column_names:
                 logger.info("token_usage 列已存在,跳过迁移")
                 await sp.put_async(
-                    "global", "global", "migration_done_token_usage_1", True
+                    "global", "global", "migration_done_token_usage_1", True,
                 )
                 return
 
             # 添加 token_usage 列
             await session.execute(
                 text(
-                    "ALTER TABLE conversations ADD COLUMN token_usage INTEGER NOT NULL DEFAULT 0"
-                )
+                    "ALTER TABLE conversations ADD COLUMN token_usage INTEGER NOT NULL DEFAULT 0",
+                ),
             )
             await session.commit()
 

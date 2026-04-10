@@ -53,7 +53,7 @@ class TUIMessageEvent(AstrMessageEvent):
                     "message_id": message_id,
                 },
             )
-            return
+            return None
 
         data = ""
         for comp in message.chain:

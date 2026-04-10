@@ -110,7 +110,7 @@ class ConversationManager:
         return conv.conversation_id
 
     async def switch_conversation(
-        self, unified_msg_origin: str, conversation_id: str
+        self, unified_msg_origin: str, conversation_id: str,
     ) -> None:
         """切换会话的对话
 
@@ -337,7 +337,6 @@ class ConversationManager:
         conversation_id: str | None = None,
     ) -> None:
         """Clear the conversation-specific persona override and fall back to default."""
-
         await self.update_conversation(
             unified_msg_origin=unified_msg_origin,
             conversation_id=conversation_id,
@@ -359,6 +358,7 @@ class ConversationManager:
 
         Raises:
             Exception: If the conversation with the given ID is not found
+
         """
         conv = await self.db.get_conversation_by_id(cid=cid)
         if not conv:

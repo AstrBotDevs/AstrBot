@@ -102,7 +102,7 @@ def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
             "--bind",
             config.workspace_dir,
             config.workspace_dir,
-        ]
+        ],
     )
 
     cmd.extend(["--"])
@@ -147,7 +147,7 @@ class BwrapShellComponent(ShellComponent):
 
             result = subprocess.run(
                 bwrap_cmd,
-                cwd=working_dir,
+                check=False, cwd=working_dir,
                 env=run_env,
                 timeout=timeout,
                 capture_output=True,
@@ -174,12 +174,12 @@ class BwrapPythonComponent(PythonComponent):
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             bwrap_cmd = build_bwrap_cmd(
-                self.config, [os.environ.get("PYTHON", "python3"), "-c", code]
+                self.config, [os.environ.get("PYTHON", "python3"), "-c", code],
             )
             try:
                 result = subprocess.run(
                     bwrap_cmd,
-                    timeout=timeout,
+                    check=False, timeout=timeout,
                     capture_output=True,
                     text=True,
                 )
@@ -221,7 +221,7 @@ class HostBackedFileSystemComponent(FileSystemComponent):
         return path
 
     async def create_file(
-        self, path: str, content: str = "", mode: int = 0o644
+        self, path: str, content: str = "", mode: int = 0o644,
     ) -> dict[str, Any]:
         p = self._safe_path(path)
         await asyncio.to_thread(os.makedirs, os.path.dirname(p), exist_ok=True)
@@ -238,7 +238,7 @@ class HostBackedFileSystemComponent(FileSystemComponent):
             return {"success": False, "error": str(e)}
 
     async def write_file(
-        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
+        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8",
     ) -> dict[str, Any]:
         p = self._safe_path(path)
         await asyncio.to_thread(os.makedirs, os.path.dirname(p), exist_ok=True)
@@ -260,7 +260,7 @@ class HostBackedFileSystemComponent(FileSystemComponent):
             return {"success": False, "error": str(e)}
 
     async def list_dir(
-        self, path: str = ".", show_hidden: bool = False
+        self, path: str = ".", show_hidden: bool = False,
     ) -> dict[str, Any]:
         p = self._safe_path(path)
         try:
@@ -274,7 +274,7 @@ class HostBackedFileSystemComponent(FileSystemComponent):
 
 class BwrapBooter(ComputerBooter):
     def __init__(
-        self, rw_binds: list[str] | None = None, ro_binds: list[str] | None = None
+        self, rw_binds: list[str] | None = None, ro_binds: list[str] | None = None,
     ):
         self._rw_binds = rw_binds or []
         self._ro_binds = ro_binds or []
@@ -307,7 +307,7 @@ class BwrapBooter(ComputerBooter):
 
     async def boot(self, session_id: str) -> None:
         workspace_dir = os.path.join(
-            get_astrbot_temp_path(), f"sandbox_workspace_{session_id}"
+            get_astrbot_temp_path(), f"sandbox_workspace_{session_id}",
         )
         await asyncio.to_thread(os.makedirs, workspace_dir, exist_ok=True)
 
@@ -321,19 +321,19 @@ class BwrapBooter(ComputerBooter):
         self._shell = BwrapShellComponent(self.config)
         if not await self.available():
             raise RuntimeError(
-                "BubbleWrap sandbox unavailable on current machine for no bwrap executable."
+                "BubbleWrap sandbox unavailable on current machine for no bwrap executable.",
             )
         test_shl = await self._shell.exec(command="ls > /dev/null")
         if test_shl["exit_code"] != 0:
             raise RuntimeError(
                 """BubbleWrap sandbox fails to exec test shell command "ls > /dev/null" with stderr:
-{}""".format(test_shl["stderr"])
+{}""".format(test_shl["stderr"]),
             )
         test_py = await self._python.exec(code="print('Yes')")
         if test_py["exit_code"] != 0:
             raise RuntimeError(
                 """BubbleWrap sandbox fails to exec test python code "print('Yes')" with stderr:
-{}""".format(test_py["stderr"])
+{}""".format(test_py["stderr"]),
             )
 
     async def shutdown(self) -> None:
@@ -342,7 +342,7 @@ class BwrapBooter(ComputerBooter):
             return
         if await asyncio.to_thread(os.path.exists, config.workspace_dir):
             await asyncio.to_thread(
-                shutil.rmtree, config.workspace_dir, ignore_errors=True
+                shutil.rmtree, config.workspace_dir, ignore_errors=True,
             )
 
     async def upload_file(self, path: str, file_name: str) -> dict:

@@ -133,7 +133,7 @@ class LocalShellComponent(ShellComponent):
             # Safety relies on `_is_safe_command()` and the allowed-root checks.
             result = subprocess.run(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 command,
-                shell=shell,
+                check=False, shell=shell,
                 cwd=working_dir,
                 env=run_env,
                 timeout=timeout,
@@ -161,7 +161,7 @@ class LocalPythonComponent(PythonComponent):
             try:
                 result = subprocess.run(
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
-                    timeout=timeout,
+                    check=False, timeout=timeout,
                     capture_output=True,
                     text=True,
                 )
@@ -171,14 +171,14 @@ class LocalPythonComponent(PythonComponent):
                     "data": {
                         "output": {"text": stdout, "images": []},
                         "error": stderr,
-                    }
+                    },
                 }
             except subprocess.TimeoutExpired:
                 return {
                     "data": {
                         "output": {"text": "", "images": []},
                         "error": "Execution timed out.",
-                    }
+                    },
                 }
 
         return await asyncio.to_thread(_run)
@@ -187,7 +187,7 @@ class LocalPythonComponent(PythonComponent):
 @dataclass
 class LocalFileSystemComponent(FileSystemComponent):
     async def create_file(
-        self, path: str, content: str = "", mode: int = 0o644
+        self, path: str, content: str = "", mode: int = 0o644,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = _ensure_safe_path(path)
@@ -213,7 +213,7 @@ class LocalFileSystemComponent(FileSystemComponent):
         return await asyncio.to_thread(_run)
 
     async def write_file(
-        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
+        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8",
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = _ensure_safe_path(path)
@@ -236,7 +236,7 @@ class LocalFileSystemComponent(FileSystemComponent):
         return await asyncio.to_thread(_run)
 
     async def list_dir(
-        self, path: str = ".", show_hidden: bool = False
+        self, path: str = ".", show_hidden: bool = False,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = _ensure_safe_path(path)
@@ -274,12 +274,12 @@ class LocalBooter(ComputerBooter):
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         raise NotImplementedError(
-            "LocalBooter does not support upload_file operation. Use shell instead."
+            "LocalBooter does not support upload_file operation. Use shell instead.",
         )
 
     async def download_file(self, remote_path: str, local_path: str) -> None:
         raise NotImplementedError(
-            "LocalBooter does not support download_file operation. Use shell instead."
+            "LocalBooter does not support download_file operation. Use shell instead.",
         )
 
     async def available(self) -> bool:

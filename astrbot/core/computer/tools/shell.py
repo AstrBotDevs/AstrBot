@@ -35,7 +35,7 @@ class ExecuteShellTool(FunctionTool):
                 },
             },
             "required": ["command"],
-        }
+        },
     )
 
     is_local: bool = False
@@ -61,4 +61,4 @@ class ExecuteShellTool(FunctionTool):
             result = await sb.shell.exec(command, background=background, env=env)
             return json.dumps(result)
         except Exception as e:
-            return f"Error executing command: {str(e)}"
+            return f"Error executing command: {e!s}"

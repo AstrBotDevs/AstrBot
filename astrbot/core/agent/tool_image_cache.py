@@ -90,6 +90,7 @@ class ToolImageCache:
 
         Returns:
             CachedImage object with file path.
+
         """
         ext = self._get_file_extension(mime_type)
         file_name = f"{tool_call_id}_{index}{ext}"
@@ -113,7 +114,7 @@ class ToolImageCache:
         )
 
     def get_image_base64_by_path(
-        self, file_path: str, mime_type: str = "image/png"
+        self, file_path: str, mime_type: str = "image/png",
     ) -> tuple[str, str] | None:
         """Read an image file and return its base64 encoded data.
 
@@ -123,6 +124,7 @@ class ToolImageCache:
 
         Returns:
             Tuple of (base64_data, mime_type) if found, None otherwise.
+
         """
         if not os.path.exists(file_path):
             return None
@@ -141,6 +143,7 @@ class ToolImageCache:
 
         Returns:
             Number of images cleaned up.
+
         """
         now = time.time()
         cleaned = 0

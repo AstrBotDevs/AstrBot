@@ -74,7 +74,8 @@ class ComputerBooter(abc.ABC):
 
     def get_tools(self) -> list[ToolSchema]:
         """Capability-filtered tool list (post-boot).
-        Defaults to get_default_tools()."""
+        Defaults to get_default_tools().
+        """
         return self.__class__.get_default_tools()
 
     @classmethod

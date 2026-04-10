@@ -167,7 +167,7 @@ class Record(BaseMessageComponent):
             bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
             file_path = os.path.join(
-                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.jpg"
+                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.jpg",
             )
             async with await anyio.open_file(file_path, "wb") as f:
                 await f.write(image_bytes)
@@ -256,7 +256,7 @@ class Video(BaseMessageComponent):
             return url[8:]
         if url and url.startswith("http"):
             video_file_path = os.path.join(
-                get_astrbot_temp_path(), f"videoseg_{uuid.uuid4().hex}"
+                get_astrbot_temp_path(), f"videoseg_{uuid.uuid4().hex}",
             )
             await download_file(url, video_file_path)
             if await anyio.Path(video_file_path).exists():
@@ -452,7 +452,7 @@ class Image(BaseMessageComponent):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
             image_file_path = os.path.join(
-                get_astrbot_temp_path(), f"imgseg_{uuid.uuid4()}.jpg"
+                get_astrbot_temp_path(), f"imgseg_{uuid.uuid4()}.jpg",
             )
             async with await anyio.open_file(image_file_path, "wb") as f:
                 await f.write(image_bytes)

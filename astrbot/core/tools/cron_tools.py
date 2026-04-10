@@ -50,11 +50,11 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["note"],
-        }
+        },
     )
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self, context: ContextWrapper[AstrAgentContext], **kwargs,
     ) -> ToolExecResult:
         cron_mgr = context.context.context.cron_manager
         if cron_mgr is None:
@@ -116,14 +116,14 @@ class DeleteCronJobTool(FunctionTool[AstrAgentContext]):
                 "job_id": {
                     "type": "string",
                     "description": "The job_id returned when the job was created.",
-                }
+                },
             },
             "required": ["job_id"],
-        }
+        },
     )
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self, context: ContextWrapper[AstrAgentContext], **kwargs,
     ) -> ToolExecResult:
         cron_mgr = context.context.context.cron_manager
         if cron_mgr is None:
@@ -152,13 +152,13 @@ class ListCronJobsTool(FunctionTool[AstrAgentContext]):
                 "job_type": {
                     "type": "string",
                     "description": "Optional filter: basic or active_agent.",
-                }
+                },
             },
-        }
+        },
     )
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self, context: ContextWrapper[AstrAgentContext], **kwargs,
     ) -> ToolExecResult:
         cron_mgr = context.context.context.cron_manager
         if cron_mgr is None:
@@ -175,7 +175,7 @@ class ListCronJobsTool(FunctionTool[AstrAgentContext]):
         lines = []
         for j in jobs:
             lines.append(
-                f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={j.next_run_time}"
+                f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={j.next_run_time}",
             )
         return "\n".join(lines)
 

@@ -1,5 +1,4 @@
-"""
-MCP (Model Context Protocol) client.
+"""MCP (Model Context Protocol) client.
 
 Transport: stdio | SSE | streamable_http
 Messages:  JSON-RPC 2.0
@@ -8,10 +7,7 @@ Messages:  JSON-RPC 2.0
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Literal, TypedDict
-
-if TYPE_CHECKING:
-    pass
+from typing import Any, Literal, TypedDict
 
 
 class McpServerConfig(TypedDict, total=False):
@@ -38,8 +34,7 @@ class McpToolInfo(TypedDict):
 
 
 class BaseAstrbotMcpClient(ABC):
-    """
-    MCP client: connects to MCP servers for external tools.
+    """MCP client: connects to MCP servers for external tools.
 
     Subclass must implement:
     - connect() -> None
@@ -66,8 +61,7 @@ class BaseAstrbotMcpClient(ABC):
         config: McpServerConfig,
         name: str,
     ) -> None:
-        """
-        Connect to MCP server.
+        """Connect to MCP server.
 
         Stdio: {"command": "python", "args": ["server.py"], "env": {...}}
         HTTP:  {"url": "https://...", "transport": "sse"}

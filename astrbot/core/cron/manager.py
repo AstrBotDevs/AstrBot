@@ -77,7 +77,7 @@ class CronJobManager:
     ) -> CronJob:
         if (cron_expression is None) == (interval_seconds is None):
             raise ValueError(
-                "cron_expression and interval_seconds must have exactly one value"
+                "cron_expression and interval_seconds must have exactly one value",
             )
         payload_data = dict(payload or {})
         if interval_seconds is not None:
@@ -184,7 +184,7 @@ class CronJobManager:
                     trigger = IntervalTrigger(seconds=interval_seconds, timezone=tzinfo)
                 else:
                     trigger = CronTrigger.from_crontab(
-                        job.cron_expression, timezone=tzinfo
+                        job.cron_expression, timezone=tzinfo,
                     )
             self.scheduler.add_job(
                 self._run_job,
@@ -196,8 +196,8 @@ class CronJobManager:
             )
             asyncio.create_task(
                 self.db.update_cron_job(
-                    job.job_id, next_run_time=self._get_next_run_time(job.job_id)
-                )
+                    job.job_id, next_run_time=self._get_next_run_time(job.job_id),
+                ),
             )
         except Exception as e:
             logger.error(f"Failed to schedule cron job {job.job_id}: {e!s}")
@@ -212,7 +212,7 @@ class CronJobManager:
             return
         start_time = datetime.now(timezone.utc)
         await self.db.update_cron_job(
-            job_id, status="running", last_run_at=start_time, last_error=None
+            job_id, status="running", last_run_at=start_time, last_error=None,
         )
         status = "completed"
         last_error = None
@@ -270,11 +270,11 @@ class CronJobManager:
             "cron_payload": payload,
         }
         await self._woke_main_agent(
-            message=note, session_str=session_str, extras=extras
+            message=note, session_str=session_str, extras=extras,
         )
 
     async def _woke_main_agent(
-        self, *, message: str, session_str: str, extras: dict
+        self, *, message: str, session_str: str, extras: dict,
     ) -> None:
         """Woke the main agent to handle the cron job message."""
         from astrbot.core.astr_main_agent import (
@@ -317,7 +317,7 @@ class CronJobManager:
         from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
 
         tool_call_timeout = cfg.get("provider_settings", {}).get(
-            "tool_call_timeout", 120
+            "tool_call_timeout", 120,
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
@@ -338,14 +338,14 @@ class CronJobManager:
             )
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
+            cron_job=cron_job_str,
         )
         req.prompt = CRON_TASK_WOKE_USER_PROMPT
         if not req.func_tool:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
         result = await build_main_agent(
-            event=cron_event, plugin_context=self.ctx, config=config, req=req
+            event=cron_event, plugin_context=self.ctx, config=config, req=req,
         )
         if not result:
             logger.error("Failed to build main agent for cron job.")

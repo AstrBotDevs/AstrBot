@@ -59,7 +59,7 @@ class AuthRoute(Route):
                     "challenge_id": challenge_id,
                     "nonce": nonce,
                     **challenge,
-                }
+                },
             )
             .__dict__
         )
@@ -87,7 +87,7 @@ class AuthRoute(Route):
         login_verified = False
         if isinstance(req_password, str):
             login_verified = req_username == username and verify_dashboard_password(
-                password, req_password
+                password, req_password,
             )
         elif isinstance(req_challenge_id, str) and isinstance(req_password_proof, str):
             challenge_nonce = self._consume_login_challenge(req_challenge_id)
@@ -95,7 +95,7 @@ class AuthRoute(Route):
                 req_username == username
                 and isinstance(challenge_nonce, str)
                 and verify_dashboard_login_proof(
-                    password, challenge_nonce, req_password_proof
+                    password, challenge_nonce, req_password_proof,
                 )
             )
         else:
@@ -111,7 +111,7 @@ class AuthRoute(Route):
             ):
                 change_pwd_hint = True
                 logger.warning(
-                    "The dashboard is using the default password, please change it immediately to ensure security."
+                    "The dashboard is using the default password, please change it immediately to ensure security.",
                 )
                 legacy_pwd_hint = True
 

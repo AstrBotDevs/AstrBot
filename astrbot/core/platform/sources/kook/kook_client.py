@@ -37,7 +37,7 @@ class KookClient:
         self._http_client = aiohttp.ClientSession(
             headers={
                 "Authorization": f"Bot {self.config.token}",
-            }
+            },
         )
         self.event_callback = event_callback  # 回调函数,用于处理接收到的事件
         self.ws = None
@@ -71,21 +71,21 @@ class KookClient:
             async with self._http_client.get(url) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"[KOOK] 获取机器人账号信息失败,状态码: {resp.status} , {await resp.text()}"
+                        f"[KOOK] 获取机器人账号信息失败,状态码: {resp.status} , {await resp.text()}",
                     )
                     return
                 try:
                     resp_content = KookUserMeResponse.from_dict(await resp.json())
                 except pydantic.ValidationError as e:
                     logger.error(
-                        f"[KOOK] 获取机器人账号信息失败, 响应数据格式错误: \n{e}"
+                        f"[KOOK] 获取机器人账号信息失败, 响应数据格式错误: \n{e}",
                     )
                     logger.error(f"[KOOK] 响应内容: {await resp.text()}")
                     return
 
                 if not resp_content.success():
                     logger.error(
-                        f"[KOOK] 获取机器人账号信息失败: {resp_content.model_dump_json()}"
+                        f"[KOOK] 获取机器人账号信息失败: {resp_content.model_dump_json()}",
                     )
                     return
 
@@ -147,7 +147,7 @@ class KookClient:
         try:
             # 获取gateway地址
             gateway_url = await self.get_gateway_url(
-                resume=resume, sn=self.last_sn, session_id=self.session_id
+                resume=resume, sn=self.last_sn, session_id=self.session_id,
             )
             await self.get_bot_info()
 
@@ -249,7 +249,7 @@ class KookClient:
 
             case _:
                 logger.debug(
-                    f"[KOOK] 未处理的信令类型: {event.signal.name}({event.signal.value})"
+                    f"[KOOK] 未处理的信令类型: {event.signal.name}({event.signal.value})",
                 )
 
     async def _handle_hello(self, data: KookHelloEventData):
@@ -289,7 +289,7 @@ class KookClient:
             try:
                 # 随机化心跳间隔 (±5秒)
                 interval = max(
-                    1, self.config.heartbeat_interval + random.randint(-5, 5)
+                    1, self.config.heartbeat_interval + random.randint(-5, 5),
                 )
                 await asyncio.sleep(interval)
 
@@ -309,7 +309,7 @@ class KookClient:
                 ):
                     self.heartbeat_failed_count += 1
                     logger.warning(
-                        f"[KOOK] 心跳超时,失败次数: {self.heartbeat_failed_count}"
+                        f"[KOOK] 心跳超时,失败次数: {self.heartbeat_failed_count}",
                     )
 
                     if (
@@ -372,19 +372,19 @@ class KookClient:
                     result = await resp.json()
                     if result.get("code") != 0:
                         raise RuntimeError(
-                            f'发送kook消息类型 "{kook_message_type.name}" 失败: {result}'
+                            f'发送kook消息类型 "{kook_message_type.name}" 失败: {result}',
                         )
                     # else:
                     #     logger.info("[KOOK] 发送消息成功")
                 else:
                     raise RuntimeError(
-                        f'发送kook消息类型 "{kook_message_type.name}" HTTP错误: {resp.status} , 响应内容 : {await resp.text()}'
+                        f'发送kook消息类型 "{kook_message_type.name}" HTTP错误: {resp.status} , 响应内容 : {await resp.text()}',
                     )
         except RuntimeError:
             raise
         except Exception as e:
             logger.error(
-                f'[KOOK] 发送kook消息类型 "{kook_message_type.name}" 异常: {e}'
+                f'[KOOK] 发送kook消息类型 "{kook_message_type.name}" 异常: {e}',
             )
 
     async def upload_asset(self, file_url: str | None) -> str:
@@ -414,7 +414,7 @@ class KookClient:
             except Exception as exp:
                 logger.error(f'[KOOK] 获取文件 "{file_url}" 绝对路径失败: "{exp}"')
                 raise FileNotFoundError(
-                    f'获取文件 "{file_url}" 绝对路径失败: "{exp}"'
+                    f'获取文件 "{file_url}" 绝对路径失败: "{exp}"',
                 ) from exp
 
             if not await target_path.is_file():
@@ -441,12 +441,10 @@ class KookClient:
                         remote_url = result["data"]["url"]
                         logger.debug(f"[KOOK] 文件远端URL: {remote_url}")
                         return remote_url
-                    else:
-                        raise RuntimeError(f"上传文件到kook服务器失败: {result}")
-                else:
-                    raise RuntimeError(
-                        f"上传文件到kook服务器 HTTP错误: {resp.status} , {await resp.text()}"
-                    )
+                    raise RuntimeError(f"上传文件到kook服务器失败: {result}")
+                raise RuntimeError(
+                    f"上传文件到kook服务器 HTTP错误: {resp.status} , {await resp.text()}",
+                )
         except RuntimeError:
             raise
         except Exception as e:

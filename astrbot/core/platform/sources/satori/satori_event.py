@@ -53,13 +53,13 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
     @classmethod
     async def send_with_adapter(
-        cls, adapter: "SatoriPlatformAdapter", message: MessageChain, session_id: str
+        cls, adapter: "SatoriPlatformAdapter", message: MessageChain, session_id: str,
     ):
         try:
             content_parts = []
             for component in message.chain:
                 component_content = await cls._convert_component_to_satori_static(
-                    component
+                    component,
                 )
                 if component_content:
                     content_parts.append(component_content)
@@ -82,7 +82,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 user = current_login.get("user", {})
                 user_id = user.get("id", "") if user else ""
             result = await adapter.send_http_request(
-                "POST", "/message.create", data, platform, user_id
+                "POST", "/message.create", data, platform, user_id,
             )
             if result:
                 return result
@@ -118,7 +118,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             channel_id = self.session_id
             data = {"channel_id": channel_id, "content": content}
             result = await self.adapter.send_http_request(
-                "POST", "/message.create", data, platform, user_id
+                "POST", "/message.create", data, platform, user_id,
             )
             if not result:
                 logger.error("Satori 消息发送失败")
@@ -153,9 +153,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
                                     img_chain = MessageChain(
                                         [
                                             Plain(
-                                                text=f'<img src="data:image/jpeg;base64,{image_base64}"/>'
-                                            )
-                                        ]
+                                                text=f'<img src="data:image/jpeg;base64,{image_base64}"/>',
+                                            ),
+                                        ],
                                     )
                                     await self.send(img_chain)
                             except Exception as e:
@@ -224,7 +224,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             if node.content:
                 for content_component in node.content:
                     component_content = await self._convert_component_to_satori(
-                        content_component
+                        content_component,
                     )
                     if component_content:
                         content_parts.append(component_content)
@@ -298,7 +298,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             if node.content:
                 for content_component in node.content:
                     component_content = await cls._convert_component_to_satori_static(
-                        content_component
+                        content_component,
                     )
                     if component_content:
                         content_parts.append(component_content)

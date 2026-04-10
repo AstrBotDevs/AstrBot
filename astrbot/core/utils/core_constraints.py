@@ -101,7 +101,8 @@ class CoreConstraintsProvider:
     @contextlib.contextmanager
     def constraints_file(self) -> Iterator[str | None]:
         """Synchronous context manager kept for backward compatibility with tests and
-        synchronous callers. Creates a temporary constraints file and yields its path."""
+        synchronous callers. Creates a temporary constraints file and yields its path.
+        """
         constraints = _get_core_constraints(self._core_dist_name)
         if not constraints:
             yield None
@@ -112,7 +113,7 @@ class CoreConstraintsProvider:
             import tempfile
 
             with tempfile.NamedTemporaryFile(
-                mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8"
+                mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8",
             ) as f:
                 f.write("\n".join(constraints))
                 path = f.name
@@ -148,7 +149,7 @@ class CoreConstraintsProvider:
 
             def _make_tmp() -> str:
                 with tempfile.NamedTemporaryFile(
-                    mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8"
+                    mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8",
                 ) as f:
                     f.write("\n".join(constraints))
                     return f.name

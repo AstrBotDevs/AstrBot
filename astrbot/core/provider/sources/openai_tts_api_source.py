@@ -53,10 +53,9 @@ class ProviderOpenAITTSAPI(TTSProvider):
             voice=self.voice,
             response_format="wav",
             input=text,
-        ) as response:
-            async with aiofiles.open(path, "wb") as f:
-                async for chunk in response.iter_bytes(chunk_size=1024):
-                    await f.write(chunk)
+        ) as response, aiofiles.open(path, "wb") as f:
+            async for chunk in response.iter_bytes(chunk_size=1024):
+                await f.write(chunk)
         return path
 
     async def terminate(self):

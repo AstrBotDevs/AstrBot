@@ -38,7 +38,7 @@ class ContentPart(BaseModel):
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: object, handler: GetCoreSchemaHandler
+        cls, source_type: object, handler: GetCoreSchemaHandler,
     ) -> core_schema.CoreSchema:
         # If we're dealing with the base ContentPart class, use custom validation
         if cls.__name__ == "ContentPart":
@@ -65,8 +65,7 @@ class ContentPart(BaseModel):
 
 
 class TextPart(ContentPart):
-    """
-    >>> TextPart(text="Hello, world!").model_dump()
+    """>>> TextPart(text="Hello, world!").model_dump()
     {'type': 'text', 'text': 'Hello, world!'}
     """
 
@@ -75,8 +74,7 @@ class TextPart(ContentPart):
 
 
 class ThinkPart(ContentPart):
-    """
-    >>> ThinkPart(think="I think I need to think about this.").model_dump()
+    """>>> ThinkPart(think="I think I need to think about this.").model_dump()
     {'type': 'think', 'think': 'I think I need to think about this.', 'encrypted': None}
     """
 
@@ -97,8 +95,7 @@ class ThinkPart(ContentPart):
 
 
 class ImageURLPart(ContentPart):
-    """
-    >>> ImageURLPart(image_url="http://example.com/image.jpg").model_dump()
+    """>>> ImageURLPart(image_url="http://example.com/image.jpg").model_dump()
     {'type': 'image_url', 'image_url': 'http://example.com/image.jpg'}
     """
 
@@ -113,8 +110,7 @@ class ImageURLPart(ContentPart):
 
 
 class AudioURLPart(ContentPart):
-    """
-    >>> AudioURLPart(audio_url=AudioURLPart.AudioURL(url="https://example.com/audio.mp3")).model_dump()
+    """>>> AudioURLPart(audio_url=AudioURLPart.AudioURL(url="https://example.com/audio.mp3")).model_dump()
     {'type': 'audio_url', 'audio_url': {'url': 'https://example.com/audio.mp3', 'id': None}}
     """
 
@@ -129,8 +125,7 @@ class AudioURLPart(ContentPart):
 
 
 class ToolCall(BaseModel):
-    """
-    A tool call requested by the assistant.
+    """A tool call requested by the assistant.
 
     >>> ToolCall(
     ...     id="123",
@@ -200,7 +195,7 @@ class Message(BaseModel):
         # other all cases: content is required
         if self.content is None:
             raise ValueError(
-                "content is required unless role='assistant' and tool_calls is not None"
+                "content is required unless role='assistant' and tool_calls is not None",
             )
         return self
 

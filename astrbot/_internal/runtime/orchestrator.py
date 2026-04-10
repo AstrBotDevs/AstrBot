@@ -1,5 +1,4 @@
-"""
-AstrBot Orchestrator - core runtime that coordinates all protocol clients.
+"""AstrBot Orchestrator - core runtime that coordinates all protocol clients.
 
 The orchestrator manages the lifecycle of LSP, MCP, ACP, and ABP clients,
 and runs the main event loop that dispatches messages between components.
@@ -23,8 +22,7 @@ log = logger
 
 
 class AstrbotOrchestrator(BaseAstrbotOrchestrator):
-    """
-    Core runtime orchestrator for AstrBot.
+    """Core runtime orchestrator for AstrBot.
 
     Manages:
     - LSP client: Language Server Protocol for editor integrations
@@ -54,8 +52,7 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
         log.debug("AstrbotOrchestrator initialized.")
 
     async def start(self) -> None:
-        """
-        Initialize all protocol clients.
+        """Initialize all protocol clients.
 
         Calls connect() on all protocol clients to prepare them for use.
         """
@@ -70,8 +67,7 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
         log.info("AstrbotOrchestrator started.")
 
     async def run_loop(self) -> None:
-        """
-        Main orchestrator event loop.
+        """Main orchestrator event loop.
 
         This loop runs continuously, handling:
         - Periodic health checks of protocol clients
@@ -109,23 +105,23 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
             log.info("AstrbotOrchestrator run loop stopped.")
 
     async def register_star(self, name: str, star_instance: Any) -> None:
-        """
-        Register a star (plugin) with the orchestrator.
+        """Register a star (plugin) with the orchestrator.
 
         Args:
             name: Unique name for the star
             star_instance: Star plugin instance
+
         """
         self._stars[name] = star_instance
         self.abp.register_star(name, star_instance)
         log.info(f"Star '{name}' registered.")
 
     async def unregister_star(self, name: str) -> None:
-        """
-        Unregister a star (plugin) from the orchestrator.
+        """Unregister a star (plugin) from the orchestrator.
 
         Args:
             name: Name of the star to unregister
+
         """
         self._stars.pop(name, None)
         self.abp.unregister_star(name)
@@ -147,8 +143,7 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
         self._last_activity_timestamp = time.time()
 
     async def shutdown(self) -> None:
-        """
-        Shutdown the orchestrator and all protocol clients.
+        """Shutdown the orchestrator and all protocol clients.
         """
         log.info("Shutting down AstrbotOrchestrator...")
         self._running = False

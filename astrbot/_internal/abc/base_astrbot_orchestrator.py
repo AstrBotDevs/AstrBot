@@ -1,5 +1,4 @@
-"""
-AstrBot Orchestrator - core runtime lifecycle manager.
+"""AstrBot Orchestrator - core runtime lifecycle manager.
 
 Architecture
 ============
@@ -165,8 +164,7 @@ DEFAULT_SLEEP_INTERVAL: float = 5.0
 
 
 class BaseAstrbotOrchestrator(ABC):
-    """
-    Core runtime: owns lifecycle of all protocol clients and stars.
+    """Core runtime: owns lifecycle of all protocol clients and stars.
 
     ┌────────────────────────────────────────────────────────────┐
     │  Protocol Clients (always present, never None after init) │
@@ -217,8 +215,7 @@ class BaseAstrbotOrchestrator(ABC):
     abp: AstrbotAbpClient
 
     def __init__(self) -> None:
-        """
-        Initialize orchestrator and all protocol clients.
+        """Initialize orchestrator and all protocol clients.
 
         After __init__, all clients exist but are not connected.
         Call start() or run_loop() to begin operation.
@@ -232,6 +229,7 @@ class BaseAstrbotOrchestrator(ABC):
                     self.abp = AstrbotAbpClient()
                     self._stars: dict[str, Any] = {}
                     self._running = False
+
         """
         self._stars: dict[str, Any] = {}
         self._running: bool = False
@@ -243,8 +241,7 @@ class BaseAstrbotOrchestrator(ABC):
 
     @abstractmethod
     async def start(self) -> None:
-        """
-        Initialize all protocol clients.
+        """Initialize all protocol clients.
 
         Called once before run_loop(). Should:
         1. Call lsp.connect()
@@ -255,13 +252,13 @@ class BaseAstrbotOrchestrator(ABC):
 
         Raises:
             Exception: if any client fails to initialize
+
         """
         ...
 
     @abstractmethod
     async def run_loop(self) -> None:
-        """
-        Main event loop - blocks until shutdown.
+        """Main event loop - blocks until shutdown.
 
         Execution:
             self._running = True
@@ -286,13 +283,13 @@ class BaseAstrbotOrchestrator(ABC):
         Note:
             Subclass defines _heartbeat() for periodic tasks.
             This method only handles the loop control.
+
         """
         ...
 
     @abstractmethod
     async def register_star(self, name: str, star_instance: Any) -> None:
-        """
-        Register a star (plugin) with the orchestrator.
+        """Register a star (plugin) with the orchestrator.
 
         Args:
             name: Unique identifier for the star
@@ -304,13 +301,13 @@ class BaseAstrbotOrchestrator(ABC):
 
         Raises:
             ValueError: if name already registered
+
         """
         ...
 
     @abstractmethod
     async def unregister_star(self, name: str) -> None:
-        """
-        Unregister a star (plugin) from the orchestrator.
+        """Unregister a star (plugin) from the orchestrator.
 
         Args:
             name: Identifier of star to remove
@@ -321,6 +318,7 @@ class BaseAstrbotOrchestrator(ABC):
 
         Note:
             Idempotent - does nothing if name not found.
+
         """
         ...
 
@@ -336,8 +334,7 @@ class BaseAstrbotOrchestrator(ABC):
 
     @abstractmethod
     async def shutdown(self) -> None:
-        """
-        Graceful shutdown of orchestrator and all clients.
+        """Graceful shutdown of orchestrator and all clients.
 
         Execution order:
             1. self._running = False  (stop run_loop)

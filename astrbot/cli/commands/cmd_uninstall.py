@@ -10,11 +10,10 @@ from astrbot.core.utils.astrbot_path import astrbot_paths
 @click.command()
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompts")
 @click.option(
-    "--keep-data", is_flag=True, help="Keep data directory (config, plugins, etc.)"
+    "--keep-data", is_flag=True, help="Keep data directory (config, plugins, etc.)",
 )
 def uninstall(yes: bool, keep_data: bool) -> None:
     """Remove AstrBot files from the current root directory."""
-
     if os.environ.get("ASTRBOT_SYSTEMD") == "1":
         yes = True
 

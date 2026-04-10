@@ -38,7 +38,7 @@ def _extract_conversation_id(session_id: str) -> str:
 
 class QueueListener:
     def __init__(
-        self, tui_queue_mgr: TUIQueueMgr, callback: Callable, stop_event: asyncio.Event
+        self, tui_queue_mgr: TUIQueueMgr, callback: Callable, stop_event: asyncio.Event,
     ) -> None:
         self.tui_queue_mgr = tui_queue_mgr
         self.callback = callback
@@ -56,7 +56,7 @@ class QueueListener:
 @register_platform_adapter("tui", "tui")
 class TUIAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
@@ -65,13 +65,13 @@ class TUIAdapter(Platform):
         os.makedirs(self.imgs_dir, exist_ok=True)
         os.makedirs(self.attachments_dir, exist_ok=True)
         self.metadata = PlatformMetadata(
-            name="tui", description="tui", id="tui", support_proactive_message=True
+            name="tui", description="tui", id="tui", support_proactive_message=True,
         )
         self._shutdown_event = asyncio.Event()
         self._tui_queue_mgr = tui_queue_mgr
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSesion, message_chain: MessageChain,
     ) -> None:
         conversation_id = _extract_conversation_id(session.session_id)
         active_request_ids = self._tui_queue_mgr.list_back_request_ids(conversation_id)
@@ -84,7 +84,7 @@ class TUIAdapter(Platform):
                 await self._save_proactive_message(conversation_id, message_chain)
             except Exception as e:
                 logger.error(
-                    f"[TUIAdapter] Failed to save proactive message: {e}", exc_info=True
+                    f"[TUIAdapter] Failed to save proactive message: {e}", exc_info=True,
                 )
             await super().send_by_session(session, message_chain)
             return
@@ -101,12 +101,12 @@ class TUIAdapter(Platform):
                 await self._save_proactive_message(conversation_id, message_chain)
             except Exception as e:
                 logger.error(
-                    f"[TUIAdapter] Failed to save proactive message: {e}", exc_info=True
+                    f"[TUIAdapter] Failed to save proactive message: {e}", exc_info=True,
                 )
         await super().send_by_session(session, message_chain)
 
     async def _save_proactive_message(
-        self, conversation_id: str, message_chain: MessageChain
+        self, conversation_id: str, message_chain: MessageChain,
     ) -> None:
         message_parts = await message_chain_to_storage_message_parts(
             message_chain,
@@ -124,12 +124,12 @@ class TUIAdapter(Platform):
         )
 
     async def _get_message_history(
-        self, message_id: int
+        self, message_id: int,
     ) -> PlatformMessageHistory | None:
         return await db_helper.get_platform_message_history_by_id(message_id)
 
     async def _parse_message_parts(
-        self, message_parts: list, depth: int = 0, max_depth: int = 1
+        self, message_parts: list, depth: int = 0, max_depth: int = 1,
     ) -> tuple[list, list[str]]:
         """Parse message parts list, return message components and plain text lists."""
 
@@ -194,7 +194,7 @@ class TUIAdapter(Platform):
         message_event.set_extra("selected_provider", payload.get("selected_provider"))
         message_event.set_extra("selected_model", payload.get("selected_model"))
         message_event.set_extra(
-            "enable_streaming", payload.get("enable_streaming", True)
+            "enable_streaming", payload.get("enable_streaming", True),
         )
         message_event.set_extra("action_type", payload.get("action_type"))
         self.commit_event(message_event)

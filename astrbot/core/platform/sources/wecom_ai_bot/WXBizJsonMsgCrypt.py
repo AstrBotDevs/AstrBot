@@ -210,7 +210,7 @@ class Prpcrypt:
         @return: 16位字符串
         """
         return str(
-            secrets.randbelow(self.RANDOM_RANGE) + self.MIN_RANDOM_VALUE
+            secrets.randbelow(self.RANDOM_RANGE) + self.MIN_RANDOM_VALUE,
         ).encode()
 
 

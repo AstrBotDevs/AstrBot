@@ -44,11 +44,11 @@ DEFAULT_UPLOAD_CONCURRENCY = 3
 
 
 @register_platform_adapter(
-    "misskey", "Misskey 平台适配器", support_streaming_message=False
+    "misskey", "Misskey 平台适配器", support_streaming_message=False,
 )
 class MisskeyPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config or {}, event_queue)
         self.settings = platform_settings or {}
@@ -56,14 +56,14 @@ class MisskeyPlatformAdapter(Platform):
         self.access_token = self.config.get("misskey_token", "")
         self.max_message_length = self.config.get("max_message_length", 3000)
         self.default_visibility = self.config.get(
-            "misskey_default_visibility", "public"
+            "misskey_default_visibility", "public",
         )
         self.local_only = self.config.get("misskey_local_only", False)
         self.enable_chat = self.config.get("misskey_enable_chat", True)
         self.enable_file_upload = self.config.get("misskey_enable_file_upload", True)
         self.upload_folder = self.config.get("misskey_upload_folder")
         self.allow_insecure_downloads = bool(
-            self.config.get("misskey_allow_insecure_downloads", False)
+            self.config.get("misskey_allow_insecure_downloads", False),
         )
         _dt = self.config.get("misskey_download_timeout")
         try:
@@ -141,12 +141,12 @@ class MisskeyPlatformAdapter(Platform):
         if self.enable_chat:
             streaming.add_message_handler("newChatMessage", self._handle_chat_message)
             streaming.add_message_handler(
-                "messaging:newChatMessage", self._handle_chat_message
+                "messaging:newChatMessage", self._handle_chat_message,
             )
             streaming.add_message_handler("_debug", self._debug_handler)
 
     async def _send_text_only_message(
-        self, session_id: str, text: str, session, message_chain
+        self, session_id: str, text: str, session, message_chain,
     ):
         """发送纯文本消息(无文件上传)"""
         if not self.api:
@@ -166,7 +166,7 @@ class MisskeyPlatformAdapter(Platform):
         return await super().send_by_session(session, message_chain)
 
     def _process_poll_data(
-        self, message: AstrBotMessage, poll: dict[str, Any], message_parts: list[str]
+        self, message: AstrBotMessage, poll: dict[str, Any], message_parts: list[str],
     ) -> None:
         """处理投票数据,将其添加到消息中"""
         try:
@@ -190,7 +190,7 @@ class MisskeyPlatformAdapter(Platform):
                 fields["cw"] = comp.cw
                 break
         if hasattr(session, "extra_data") and isinstance(
-            getattr(session, "extra_data", None), dict
+            getattr(session, "extra_data", None), dict,
         ):
             extra_data = session.extra_data
             fields.update(
@@ -198,7 +198,7 @@ class MisskeyPlatformAdapter(Platform):
                     "poll": extra_data.get("poll"),
                     "renote_id": extra_data.get("renote_id"),
                     "channel_id": extra_data.get("channel_id"),
-                }
+                },
             )
         return fields
 
@@ -217,7 +217,7 @@ class MisskeyPlatformAdapter(Platform):
                 self._register_event_handlers(streaming)
                 if await streaming.connect():
                     logger.info(
-                        f"[Misskey] WebSocket 已连接 (尝试 #{connection_attempts})"
+                        f"[Misskey] WebSocket 已连接 (尝试 #{connection_attempts})",
                     )
                     connection_attempts = 0
                     await streaming.subscribe_channel("main")
@@ -229,17 +229,17 @@ class MisskeyPlatformAdapter(Platform):
                     await streaming.listen()
                 else:
                     logger.error(
-                        f"[Misskey] WebSocket 连接失败 (尝试 #{connection_attempts})"
+                        f"[Misskey] WebSocket 连接失败 (尝试 #{connection_attempts})",
                     )
             except Exception as e:
                 logger.error(
-                    f"[Misskey] WebSocket 异常 (尝试 #{connection_attempts}): {e}"
+                    f"[Misskey] WebSocket 异常 (尝试 #{connection_attempts}): {e}",
                 )
             if self._running:
                 jitter = random.uniform(0, 1.0)
                 sleep_time = backoff_delay + jitter
                 logger.info(
-                    f"[Misskey] {sleep_time:.1f}秒后重连 (下次尝试 #{connection_attempts + 1})"
+                    f"[Misskey] {sleep_time:.1f}秒后重连 (下次尝试 #{connection_attempts + 1})",
                 )
                 await asyncio.sleep(sleep_time)
                 backoff_delay = min(backoff_delay * backoff_multiplier, max_backoff)
@@ -248,13 +248,13 @@ class MisskeyPlatformAdapter(Platform):
         try:
             notification_type = data.get("type")
             logger.debug(
-                f"[Misskey] 收到通知事件: type={notification_type}, user_id={data.get('userId', 'unknown')}"
+                f"[Misskey] 收到通知事件: type={notification_type}, user_id={data.get('userId', 'unknown')}",
             )
             if notification_type in ["mention", "reply", "quote"]:
                 note = data.get("note")
                 if note and self._is_bot_mentioned(note):
                     logger.info(
-                        f"[Misskey] 处理贴文提及: {note.get('text', '')[:50]}..."
+                        f"[Misskey] 处理贴文提及: {note.get('text', '')[:50]}...",
                     )
                     message = await self.convert_message(note)
                     event = MisskeyPlatformEvent(
@@ -271,7 +271,7 @@ class MisskeyPlatformAdapter(Platform):
     async def _handle_chat_message(self, data: dict[str, Any]) -> None:
         try:
             sender_id = str(
-                data.get("fromUserId", "") or data.get("fromUser", {}).get("id", "")
+                data.get("fromUserId", "") or data.get("fromUser", {}).get("id", ""),
             )
             room_id = data.get("toRoomId")
             logger.debug(
@@ -282,7 +282,7 @@ class MisskeyPlatformAdapter(Platform):
             if room_id:
                 raw_text = data.get("text", "")
                 logger.debug(
-                    f"[Misskey] 检查群聊消息: '{raw_text}', 机器人用户名: '{self._bot_username}'"
+                    f"[Misskey] 检查群聊消息: '{raw_text}', 机器人用户名: '{self._bot_username}'",
                 )
                 message = await self.convert_room_message(data)
                 logger.info(f"[Misskey] 处理群聊消息: {message.message_str[:50]}...")
@@ -303,7 +303,7 @@ class MisskeyPlatformAdapter(Platform):
     async def _debug_handler(self, data: dict[str, Any]) -> None:
         event_type = data.get("type", "unknown")
         logger.debug(
-            f"[Misskey] 收到未处理事件: type={event_type}, channel={data.get('channel', 'unknown')}"
+            f"[Misskey] 收到未处理事件: type={event_type}, channel={data.get('channel', 'unknown')}",
         )
 
     def _is_bot_mentioned(self, note: dict[str, Any]) -> bool:
@@ -323,7 +323,7 @@ class MisskeyPlatformAdapter(Platform):
         return False
 
     async def send_by_session(
-        self, session: MessageSession, message_chain: MessageChain
+        self, session: MessageSession, message_chain: MessageChain,
     ) -> None:
         if not self.api:
             logger.error("[Misskey] API 客户端未初始化")
@@ -362,13 +362,13 @@ class MisskeyPlatformAdapter(Platform):
             fallback_urls: list[str] = []
             if not self.enable_file_upload:
                 return await self._send_text_only_message(
-                    session_id, text, session, message_chain
+                    session_id, text, session, message_chain,
                 )
             MAX_UPLOAD_CONCURRENCY = 10
             upload_concurrency = int(
                 self.config.get(
-                    "misskey_upload_concurrency", DEFAULT_UPLOAD_CONCURRENCY
-                )
+                    "misskey_upload_concurrency", DEFAULT_UPLOAD_CONCURRENCY,
+                ),
             )
             upload_concurrency = min(upload_concurrency, MAX_UPLOAD_CONCURRENCY)
             sem = asyncio.Semaphore(upload_concurrency)
@@ -386,12 +386,12 @@ class MisskeyPlatformAdapter(Platform):
                         if not self.api:
                             return None
                         url_candidate, local_path = await resolve_component_url_or_path(
-                            comp
+                            comp,
                         )
                         if not url_candidate and (not local_path):
                             return None
                         preferred_name = getattr(comp, "name", None) or getattr(
-                            comp, "file", None
+                            comp, "file", None,
                         )
                         if url_candidate:
                             result = await self.api.upload_and_find_file(
@@ -449,7 +449,7 @@ class MisskeyPlatformAdapter(Platform):
                     continue
             if len(file_components) > MAX_FILE_UPLOAD_COUNT:
                 logger.warning(
-                    f"[Misskey] 文件数量超过限制 ({len(file_components)} > {MAX_FILE_UPLOAD_COUNT}),只上传前{MAX_FILE_UPLOAD_COUNT}个文件"
+                    f"[Misskey] 文件数量超过限制 ({len(file_components)} > {MAX_FILE_UPLOAD_COUNT}),只上传前{MAX_FILE_UPLOAD_COUNT}个文件",
                 )
                 file_components = file_components[:MAX_FILE_UPLOAD_COUNT]
             upload_tasks = [_upload_comp(comp) for comp in file_components]
@@ -499,7 +499,7 @@ class MisskeyPlatformAdapter(Platform):
                         payload["fileId"] = file_ids[0]
                         if len(file_ids) > 1:
                             logger.warning(
-                                f"[Misskey] 聊天消息只支持单个文件,忽略其余 {len(file_ids) - 1} 个文件"
+                                f"[Misskey] 聊天消息只支持单个文件,忽略其余 {len(file_ids) - 1} 个文件",
                             )
                     await self.api.send_message(payload)
                 else:
@@ -514,7 +514,7 @@ class MisskeyPlatformAdapter(Platform):
                         default_visibility=self.default_visibility,
                     )
                     logger.debug(
-                        f"[Misskey] 解析可见性: visibility={visibility}, visible_user_ids={visible_user_ids}, session_id={session_id}, user_id_for_cache={user_id_for_cache}"
+                        f"[Misskey] 解析可见性: visibility={visibility}, visible_user_ids={visible_user_ids}, session_id={session_id}, user_id_for_cache={user_id_for_cache}",
                     )
                     fields = self._extract_additional_fields(session, message_chain)
                     if fallback_urls:

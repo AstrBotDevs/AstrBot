@@ -24,7 +24,7 @@ class SlackMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _from_segment_to_slack_block(
-        segment: BaseMessageComponent, web_client: AsyncWebClient
+        segment: BaseMessageComponent, web_client: AsyncWebClient,
     ) -> dict | None:
         """将消息段转换为 Slack 块格式"""
         if isinstance(segment, Plain):
@@ -51,7 +51,7 @@ class SlackMessageEvent(AstrMessageEvent):
         if isinstance(segment, File):
             url = segment.url or segment.file
             response = await web_client.files_upload_v2(
-                file=url, filename=segment.name or "file"
+                file=url, filename=segment.name or "file",
             )
             if not response["ok"]:
                 logger.error(f"Slack file upload failed: {response['error']}")
@@ -71,7 +71,7 @@ class SlackMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _parse_slack_blocks(
-        message_chain: MessageChain, web_client: AsyncWebClient
+        message_chain: MessageChain, web_client: AsyncWebClient,
     ):
         """解析成 Slack 块格式"""
         blocks = []
@@ -85,32 +85,32 @@ class SlackMessageEvent(AstrMessageEvent):
                         {
                             "type": "section",
                             "text": {"type": "mrkdwn", "text": text_content},
-                        }
+                        },
                     )
                     text_content = ""
                 block = await SlackMessageEvent._from_segment_to_slack_block(
-                    segment, web_client
+                    segment, web_client,
                 )
                 if block:
                     blocks.append(block)
         if text_content.strip():
             blocks.append(
-                {"type": "section", "text": {"type": "mrkdwn", "text": text_content}}
+                {"type": "section", "text": {"type": "mrkdwn", "text": text_content}},
             )
         return (blocks, "" if blocks else text_content)
 
     async def send(self, message: MessageChain) -> None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
-            message, self.web_client
+            message, self.web_client,
         )
         try:
             if self.get_group_id():
                 await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(), text=text, blocks=blocks or None
+                    channel=self.get_group_id(), text=text, blocks=blocks or None,
                 )
             else:
                 await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(), text=text, blocks=blocks or None
+                    channel=self.get_sender_id(), text=text, blocks=blocks or None,
                 )
         except Exception:
             parts = []
@@ -124,16 +124,16 @@ class SlackMessageEvent(AstrMessageEvent):
             fallback_text = "".join(parts)
             if self.get_group_id():
                 await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(), text=fallback_text
+                    channel=self.get_group_id(), text=fallback_text,
                 )
             else:
                 await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(), text=fallback_text
+                    channel=self.get_sender_id(), text=fallback_text,
                 )
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator, use_fallback: bool = False
+        self, generator: AsyncGenerator, use_fallback: bool = False,
     ):
         if not use_fallback:
             buffer = None
@@ -173,7 +173,7 @@ class SlackMessageEvent(AstrMessageEvent):
         try:
             channel_info = await self.web_client.conversations_info(channel=channel_id)
             members_response = await self.web_client.conversations_members(
-                channel=channel_id
+                channel=channel_id,
             )
             members = []
             for member_id in members_response["members"]:
@@ -185,7 +185,7 @@ class SlackMessageEvent(AstrMessageEvent):
                             user_id=member_id,
                             nickname=user_data.get("real_name")
                             or user_data.get("name", member_id),
-                        )
+                        ),
                     )
                 except Exception:
                     members.append(MessageMember(user_id=member_id, nickname=member_id))

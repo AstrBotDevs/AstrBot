@@ -6,7 +6,7 @@ import random
 import uuid
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 from urllib.parse import urlparse
 
 import aiofiles
@@ -39,7 +39,7 @@ logging.getLogger("google_genai.types").addFilter(SuppressNonTextPartsWarning())
 
 
 @register_provider_adapter(
-    "googlegenai_chat_completion", "Google Gemini Chat Completion 提供商适配器"
+    "googlegenai_chat_completion", "Google Gemini Chat Completion 提供商适配器",
 )
 class ProviderGoogleGenAI(Provider):
     CATEGORY_MAPPING: ClassVar[dict[str, types.HarmCategory]] = {
@@ -71,13 +71,13 @@ class ProviderGoogleGenAI(Provider):
         """初始化Gemini客户端"""
         proxy = self.provider_config.get("proxy", "")
         http_options = types.HttpOptions(
-            base_url=self.api_base, timeout=self.timeout * 1000
+            base_url=self.api_base, timeout=self.timeout * 1000,
         )
         if proxy:
             http_options.async_client_args = {"proxy": proxy}
             logger.info(f"[Gemini] 使用代理: {proxy}")
         self.client = genai.Client(
-            api_key=self.chosen_api_key, http_options=http_options
+            api_key=self.chosen_api_key, http_options=http_options,
         ).aio
 
     def _init_safety_settings(self) -> None:
@@ -85,7 +85,7 @@ class ProviderGoogleGenAI(Provider):
         user_safety_config = self.provider_config.get("gm_safety_settings", {})
         self.safety_settings = [
             types.SafetySetting(
-                category=harm_category, threshold=self.THRESHOLD_MAPPING[threshold_str]
+                category=harm_category, threshold=self.THRESHOLD_MAPPING[threshold_str],
             )
             for config_key, harm_category in self.CATEGORY_MAPPING.items()
             if (threshold_str := user_safety_config.get(config_key))
@@ -101,7 +101,7 @@ class ProviderGoogleGenAI(Provider):
             if len(keys) > 0:
                 self.set_key(random.choice(keys))
                 logger.info(
-                    f"检测到 Key 异常({e.message}),正在尝试更换 API Key 重试..."
+                    f"检测到 Key 异常({e.message}),正在尝试更换 API Key 重试...",
                 )
                 await asyncio.sleep(1)
                 return True
@@ -141,7 +141,7 @@ class ProviderGoogleGenAI(Provider):
                     logger.warning("代码执行工具与搜索工具互斥,已忽略搜索工具")
                 if url_context:
                     logger.warning(
-                        "代码执行工具与URL上下文工具互斥,已忽略URL上下文工具"
+                        "代码执行工具与URL上下文工具互斥,已忽略URL上下文工具",
                     )
             else:
                 if native_search:
@@ -151,12 +151,12 @@ class ProviderGoogleGenAI(Provider):
                         tool_list.append(types.Tool(url_context=types.UrlContext()))
                     else:
                         logger.warning(
-                            "当前 SDK 版本不支持 URL 上下文工具,已忽略该设置,请升级 google-genai 包"
+                            "当前 SDK 版本不支持 URL 上下文工具,已忽略该设置,请升级 google-genai 包",
                         )
         elif "gemini-2.0-lite" in model_name:
             if native_coderunner or native_search or url_context:
                 logger.warning(
-                    "gemini-2.0-lite 不支持代码执行､搜索工具和URL上下文,将忽略这些设置"
+                    "gemini-2.0-lite 不支持代码执行､搜索工具和URL上下文,将忽略这些设置",
                 )
         else:
             if native_coderunner:
@@ -170,13 +170,13 @@ class ProviderGoogleGenAI(Provider):
                     tool_list.append(types.Tool(url_context=types.UrlContext()))
                 else:
                     logger.warning(
-                        "当前 SDK 版本不支持 URL 上下文工具,已忽略该设置,请升级 google-genai 包"
+                        "当前 SDK 版本不支持 URL 上下文工具,已忽略该设置,请升级 google-genai 包",
                     )
         if tools and tool_list:
             logger.warning("已启用原生工具,函数工具将被忽略")
         elif tools and (func_desc := tools.get_func_desc_google_genai_style()):
             tool_list = [
-                types.Tool(function_declarations=func_desc["function_declarations"])
+                types.Tool(function_declarations=func_desc["function_declarations"]),
             ]
         tool_config = None
         if tools and tool_list:
@@ -184,8 +184,8 @@ class ProviderGoogleGenAI(Provider):
                 function_calling_config=types.FunctionCallingConfig(
                     mode=types.FunctionCallingConfigMode.ANY
                     if tool_choice == "required"
-                    else types.FunctionCallingConfigMode.AUTO
-                )
+                    else types.FunctionCallingConfigMode.AUTO,
+                ),
             )
         thinking_config = None
         if model_name in [
@@ -199,7 +199,7 @@ class ProviderGoogleGenAI(Provider):
             "gemini-live-2.5-flash-preview-native-audio-09-2025",
         ]:
             thinking_budget = self.provider_config.get("gm_thinking_config", {}).get(
-                "budget", 0
+                "budget", 0,
             )
             if thinking_budget is not None:
                 thinking_config = types.ThinkingConfig(
@@ -211,13 +211,13 @@ class ProviderGoogleGenAI(Provider):
             # covered without needing to keep an exhaustive list up to date.
             # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
             thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
-                "level", "HIGH"
+                "level", "HIGH",
             )
             if thinking_level and isinstance(thinking_level, str):
                 thinking_level = thinking_level.upper()
                 if thinking_level not in ["MINIMAL", "LOW", "MEDIUM", "HIGH"]:
                     logger.warning(
-                        f"Invalid thinking level: {thinking_level}, using HIGH"
+                        f"Invalid thinking level: {thinking_level}, using HIGH",
                     )
                     thinking_level = "HIGH"
                 level = types.ThinkingLevel(thinking_level)
@@ -248,7 +248,7 @@ class ProviderGoogleGenAI(Provider):
             safety_settings=self.safety_settings if self.safety_settings else None,
             thinking_config=thinking_config,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                disable=True
+                disable=True,
             ),
         )
 
@@ -289,7 +289,7 @@ class ProviderGoogleGenAI(Provider):
             [
                 self.provider_config.get("gm_native_coderunner", False),
                 self.provider_config.get("gm_native_search", False),
-            ]
+            ],
         )
         for message in payloads["messages"]:
             role, content = (message["role"], message.get("content"))
@@ -333,7 +333,7 @@ class ProviderGoogleGenAI(Provider):
                             )
                             thinking_signature = None
                     parts.append(
-                        types.Part(text=text, thought_signature=thinking_signature)
+                        types.Part(text=text, thought_signature=thinking_signature),
                     )
                     append_or_extend(gemini_contents, parts, types.ModelContent)
                 elif not native_tool_enabled and "tool_calls" in message:
@@ -357,7 +357,7 @@ class ProviderGoogleGenAI(Provider):
                     logger.warning("assistant 角色的消息内容为空,已添加空格占位")
                     if native_tool_enabled and "tool_calls" in message:
                         logger.warning(
-                            "检测到启用Gemini原生工具,且上下文中存在函数调用,建议使用 /reset 重置上下文"
+                            "检测到启用Gemini原生工具,且上下文中存在函数调用,建议使用 /reset 重置上下文",
                         )
                     parts = [types.Part.from_text(text=" ")]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
@@ -385,7 +385,7 @@ class ProviderGoogleGenAI(Provider):
         return "".join(thought_buf).strip()
 
     def _extract_usage(
-        self, usage_metadata: types.GenerateContentResponseUsageMetadata
+        self, usage_metadata: types.GenerateContentResponseUsageMetadata,
     ) -> TokenUsage:
         """Extract usage from candidate"""
         return TokenUsage(
@@ -407,7 +407,7 @@ class ProviderGoogleGenAI(Provider):
         if has_text_output or has_reasoning_output or has_tool_output:
             return
         raise EmptyModelOutputError(
-            f"Gemini completion has no usable output. response_id={response_id}, finish_reason={finish_reason}"
+            f"Gemini completion has no usable output. response_id={response_id}, finish_reason={finish_reason}",
         )
 
     def _process_content_parts(
@@ -423,7 +423,7 @@ class ProviderGoogleGenAI(Provider):
             if validate_output:
                 raise EmptyModelOutputError(
                     "Gemini candidate content is empty. "
-                    f"finish_reason={candidate.finish_reason}"
+                    f"finish_reason={candidate.finish_reason}",
                 )
             llm_response.result_chain = MessageChain(chain=[])
             return llm_response.result_chain
@@ -446,7 +446,7 @@ class ProviderGoogleGenAI(Provider):
             if validate_output:
                 raise EmptyModelOutputError(
                     "Gemini candidate content parts are empty. "
-                    f"finish_reason={candidate.finish_reason}"
+                    f"finish_reason={candidate.finish_reason}",
                 )
             llm_response.result_chain = MessageChain(chain=[])
             return llm_response.result_chain
@@ -484,7 +484,7 @@ class ProviderGoogleGenAI(Provider):
                 if part.thought_signature:
                     ts_bs64 = base64.b64encode(part.thought_signature).decode("utf-8")
                     llm_response.tools_call_extra_content[tool_call_id] = {
-                        "google": {"thought_signature": ts_bs64}
+                        "google": {"thought_signature": ts_bs64},
                     }
             if (
                 part.inline_data
@@ -530,7 +530,7 @@ class ProviderGoogleGenAI(Provider):
                     streaming=False,
                 )
                 result = await self.client.models.generate_content(
-                    model=model, contents=conversation, config=config
+                    model=model, contents=conversation, config=config,
                 )
                 logger.debug(f"genai result: {result}")
                 if not result.candidates:
@@ -541,7 +541,7 @@ class ProviderGoogleGenAI(Provider):
                         raise Exception("温度参数已超过最大值2,仍然发生recitation")
                     temperature += 0.2
                     logger.warning(
-                        f"发生了recitation,正在提高温度至{temperature:.1f}重试..."
+                        f"发生了recitation,正在提高温度至{temperature:.1f}重试...",
                     )
                     continue
                 break
@@ -550,7 +550,7 @@ class ProviderGoogleGenAI(Provider):
                     e.message = ""
                 if "Developer instruction is not enabled" in e.message:
                     logger.warning(
-                        f"{model} 不支持 system prompt,已自动去除(影响人格设置)"
+                        f"{model} 不支持 system prompt,已自动去除(影响人格设置)",
                     )
                     system_instruction = None
                 elif "Function calling is not enabled" in e.message:
@@ -570,7 +570,7 @@ class ProviderGoogleGenAI(Provider):
         llm_response = LLMResponse("assistant")
         llm_response.raw_completion = result
         llm_response.result_chain = self._process_content_parts(
-            result.candidates[0], llm_response
+            result.candidates[0], llm_response,
         )
         llm_response.id = result.response_id
         if result.usage_metadata:
@@ -578,7 +578,7 @@ class ProviderGoogleGenAI(Provider):
         return llm_response
 
     async def _query_stream(
-        self, payloads: dict, tools: ToolSet | None
+        self, payloads: dict, tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         system_instruction = next(
@@ -598,7 +598,7 @@ class ProviderGoogleGenAI(Provider):
                     streaming=True,
                 )
                 result = await self.client.models.generate_content_stream(
-                    model=model, contents=conversation, config=config
+                    model=model, contents=conversation, config=config,
                 )
                 break
             except APIError as e:
@@ -606,7 +606,7 @@ class ProviderGoogleGenAI(Provider):
                     e.message = ""
                 if "Developer instruction is not enabled" in e.message:
                     logger.warning(
-                        f"{model} 不支持 system prompt,已自动去除(影响人格设置)"
+                        f"{model} 不支持 system prompt,已自动去除(影响人格设置)",
                     )
                     system_instruction = None
                 elif "Function calling is not enabled" in e.message:
@@ -672,7 +672,7 @@ class ProviderGoogleGenAI(Provider):
             final_response.reasoning_content = accumulated_reasoning
         if accumulated_text:
             final_response.result_chain = MessageChain(
-                chain=[Comp.Plain(accumulated_text)]
+                chain=[Comp.Plain(accumulated_text)],
             )
         self._ensure_usable_response(
             final_response,
@@ -844,7 +844,7 @@ class ProviderGoogleGenAI(Provider):
                 temp_dir = Path(get_astrbot_temp_path())
                 temp_dir.mkdir(parents=True, exist_ok=True)
                 resolved_path = str(
-                    temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
+                    temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}",
                 )
                 await download_file(audio_path, resolved_path)
             elif audio_path.startswith("file:///"):
@@ -861,7 +861,7 @@ class ProviderGoogleGenAI(Provider):
                 audio_bytes = Path(resolved_path).read_bytes()
             except OSError as exc:
                 logger.warning(
-                    f"Failed to read audio file {resolved_path}, skipping. Error: {exc}"
+                    f"Failed to read audio file {resolved_path}, skipping. Error: {exc}",
                 )
                 return None
 

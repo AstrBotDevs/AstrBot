@@ -58,7 +58,7 @@ def build_user_content(prompt: str, image_urls: list[str]) -> Any:
         if not is_likely_base64_image(url):
             skipped_invalid_images += 1
             logger.debug(
-                "Skipped DeerFlow image input because it is neither URL/data URI nor valid base64."
+                "Skipped DeerFlow image input because it is neither URL/data URI nor valid base64.",
             )
             continue
         compact_base64 = url.replace("\n", "").replace("\r", "")
@@ -164,14 +164,14 @@ def append_components_from_content(
 
     if "content" in content:
         append_components_from_content(
-            content.get("content"), components, image_resolver
+            content.get("content"), components, image_resolver,
         )
         return
 
     kwargs = content.get("kwargs")
     if isinstance(kwargs, dict) and "content" in kwargs:
         append_components_from_content(
-            kwargs.get("content"), components, image_resolver
+            kwargs.get("content"), components, image_resolver,
         )
 
 

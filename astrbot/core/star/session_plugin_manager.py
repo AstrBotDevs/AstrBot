@@ -55,7 +55,7 @@ class SessionPluginManager:
                 scope_id=session_id,
                 key="session_plugin_config",
                 default={},
-            )
+            ),
         )
         session_config = session_plugin_config.get(session_id, {})
         enabled_plugins = session_config.get("enabled_plugins", [])
@@ -68,7 +68,7 @@ class SessionPluginManager:
 
     @staticmethod
     async def filter_handlers_by_session(
-        event: AstrMessageEvent, handlers: list
+        event: AstrMessageEvent, handlers: list,
     ) -> list:
         """根据会话配置过滤处理器列表
 
@@ -90,7 +90,7 @@ class SessionPluginManager:
                 scope_id=session_id,
                 key="session_plugin_config",
                 default={},
-            )
+            ),
         )
         session_config = session_plugin_config.get(session_id, {})
         disabled_plugins = session_config.get("disabled_plugins", [])
@@ -106,7 +106,7 @@ class SessionPluginManager:
                 continue
             if plugin.name in disabled_plugins:
                 logger.debug(
-                    f"插件 {plugin.name} 在会话 {session_id} 中被禁用,跳过处理器 {handler.handler_name}"
+                    f"插件 {plugin.name} 在会话 {session_id} 中被禁用,跳过处理器 {handler.handler_name}",
                 )
             else:
                 filtered_handlers.append(handler)

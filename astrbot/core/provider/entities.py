@@ -484,7 +484,7 @@ class LLMResponse:
                     ),
                     # the extra_content will not serialize if it's None when calling ToolCall.model_dump()
                     extra_content=self.tools_call_extra_content.get(
-                        self.tools_call_ids[idx]
+                        self.tools_call_ids[idx],
                     ),
                 ),
             )

@@ -38,10 +38,10 @@ class KnowledgeBaseRoute(Route):
         self.session_config_db = None  # 会话配置数据库
         self.retrieval_manager = None
         self.upload_progress: dict[
-            str, Any
+            str, Any,
         ] = {}  # 存储上传进度 {task_id: {status, file_index, file_total, stage, current, total}}
         self.upload_tasks: dict[
-            str, Any
+            str, Any,
         ] = {}  # 存储后台上传任务 {task_id: {"status", "result", "error"}}
 
         # 注册路由
@@ -83,7 +83,7 @@ class KnowledgeBaseRoute(Route):
         }
 
     def _set_task_result(
-        self, task_id: str, status: str, result: Any = None, error: str | None = None
+        self, task_id: str, status: str, result: Any = None, error: str | None = None,
     ) -> None:
         self.upload_tasks[task_id] = {
             "status": status,
@@ -176,7 +176,7 @@ class KnowledgeBaseRoute(Route):
 
                     # 创建进度回调函数
                     progress_callback = self._make_progress_callback(
-                        task_id, file_idx, file_info["file_name"]
+                        task_id, file_idx, file_info["file_name"],
                     )
 
                     doc = await kb_helper.upload_document(
@@ -258,7 +258,7 @@ class KnowledgeBaseRoute(Route):
 
                     # 创建进度回调函数
                     progress_callback = self._make_progress_callback(
-                        task_id, file_idx, file_name
+                        task_id, file_idx, file_name,
                     )
 
                     # 调用 upload_document,传入 pre_chunked_text
@@ -395,7 +395,7 @@ class KnowledgeBaseRoute(Route):
                     rerank_provider_id,
                 )
                 if rerank_prv is not None and not isinstance(
-                    rerank_prv, RerankProvider
+                    rerank_prv, RerankProvider,
                 ):
                     return Response().error("重排序模型类型错误").to_json()
                 if not rerank_prv:

@@ -60,12 +60,12 @@ class PersonaManager:
         )
 
     async def get_default_persona_v3(
-        self, umo: str | MessageSession | None = None
+        self, umo: str | MessageSession | None = None,
     ) -> Personality:
         """获取默认 persona"""
         cfg = self.acm.get_conf(umo)
         default_persona_id = cfg.get("provider_settings", {}).get(
-            "default_personality", "default"
+            "default_personality", "default",
         )
         return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
 
@@ -85,10 +85,11 @@ class PersonaManager:
                 - selected persona object
                 - force applied persona_id from session rule
                 - whether use webchat special default persona
+
         """
         session_service_config = (
             await sp.get_async(
-                scope="umo", scope_id=str(umo), key="session_service_config", default={}
+                scope="umo", scope_id=str(umo), key="session_service_config", default={},
             )
             or {}
         )
@@ -101,7 +102,7 @@ class PersonaManager:
             elif persona_id is None:
                 persona_id = (provider_settings or {}).get("default_personality")
         persona = next(
-            (item for item in self.personas_v3 if item["name"] == persona_id), None
+            (item for item in self.personas_v3 if item["name"] == persona_id), None,
         )
         use_webchat_special_default = False
         if not persona and platform_name == "webchat" and (persona_id != "[%None]"):
@@ -143,7 +144,7 @@ class PersonaManager:
         if custom_error_message is not NOT_GIVEN:
             update_kwargs["custom_error_message"] = custom_error_message
         persona = await self.db.update_persona(
-            persona_id, system_prompt, begin_dialogs, **update_kwargs
+            persona_id, system_prompt, begin_dialogs, **update_kwargs,
         )
         if persona:
             for i, p in enumerate(self.personas):
@@ -158,23 +159,25 @@ class PersonaManager:
         return await self.db.get_personas()
 
     async def get_personas_by_folder(
-        self, folder_id: str | None = None
+        self, folder_id: str | None = None,
     ) -> list[Persona]:
         """获取指定文件夹中的 personas
 
         Args:
             folder_id: 文件夹 ID,None 表示根目录
+
         """
         return await self.db.get_personas_by_folder(folder_id)
 
     async def move_persona_to_folder(
-        self, persona_id: str, folder_id: str | None
+        self, persona_id: str, folder_id: str | None,
     ) -> Persona | None:
         """移动 persona 到指定文件夹
 
         Args:
             persona_id: Persona ID
             folder_id: 目标文件夹 ID,None 表示移动到根目录
+
         """
         persona = await self.db.move_persona_to_folder(persona_id, folder_id)
         if persona:
@@ -208,6 +211,7 @@ class PersonaManager:
 
         Args:
             parent_id: 父文件夹 ID,None 表示获取根目录下的文件夹
+
         """
         return await self.db.get_persona_folders(parent_id)
 
@@ -247,6 +251,7 @@ class PersonaManager:
                 - id: persona_id 或 folder_id
                 - type: "persona" 或 "folder"
                 - sort_order: 新的排序顺序值
+
         """
         await self.db.batch_update_sort_order(items)
         self.personas = await self.get_all_personas()
@@ -257,6 +262,7 @@ class PersonaManager:
 
         Returns:
             树形结构的文件夹列表,每个文件夹包含 children 子列表
+
         """
         all_folders = await self.get_all_folders()
         folder_map: dict[str, dict] = {}
@@ -307,6 +313,7 @@ class PersonaManager:
             skills: Skills 列表,None 表示使用所有 Skills,空列表表示不使用任何 Skills
             folder_id: 所属文件夹 ID,None 表示根目录
             sort_order: 排序顺序
+
         """
         if await self.db.get_persona_by_id(persona_id):
             raise ValueError(f"Persona with ID {persona_id} already exists.")
@@ -325,7 +332,7 @@ class PersonaManager:
         return new_persona
 
     async def clone_persona(
-        self, source_persona_id: str, new_persona_id: str
+        self, source_persona_id: str, new_persona_id: str,
     ) -> Persona:
         """Clone an existing persona with a new ID.
 
@@ -335,6 +342,7 @@ class PersonaManager:
 
         Returns:
             The newly created persona clone
+
         """
         source_persona = await self.db.get_persona_by_id(source_persona_id)
         if not source_persona:
@@ -384,7 +392,7 @@ class PersonaManager:
             if begin_dialogs:
                 if len(begin_dialogs) % 2 != 0:
                     logger.error(
-                        f"{persona_cfg['name']} 人格情景预设对话格式不对,条数应该为偶数｡"
+                        f"{persona_cfg['name']} 人格情景预设对话格式不对,条数应该为偶数｡",
                     )
                     begin_dialogs = []
                 user_turn = True
@@ -394,7 +402,7 @@ class PersonaManager:
                             "role": "user" if user_turn else "assistant",
                             "content": dialog,
                             "_no_save": True,
-                        }
+                        },
                     )
                     user_turn = not user_turn
             try:

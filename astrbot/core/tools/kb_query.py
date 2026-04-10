@@ -38,11 +38,11 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self, context: ContextWrapper[AstrAgentContext], **kwargs,
     ) -> ToolExecResult:
         query = kwargs.get("query", "")
         if not query:
@@ -68,6 +68,7 @@ async def retrieve_knowledge_base(
         query: The search query string
         umo: Unique message object (session ID)
         context: Star context
+
     """
     kb_mgr = context.kb_manager
     config = context.get_config(umo=umo)

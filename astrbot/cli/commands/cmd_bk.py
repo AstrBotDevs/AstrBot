@@ -47,13 +47,12 @@ async def _get_kb_manager():
 @click.group(name="bk")
 def bk():
     """Backup management (Export/Import)"""
-    pass
 
 
 @bk.command(name="export")
 @click.option("--output", "-o", help="Output directory", default=None)
 @click.option(
-    "--gpg-sign", "-S", is_flag=True, help="Sign backup with GPG default private key"
+    "--gpg-sign", "-S", is_flag=True, help="Sign backup with GPG default private key",
 )
 @click.option(
     "--gpg-encrypt",
@@ -62,7 +61,7 @@ def bk():
     metavar="RECIPIENT",
 )
 @click.option(
-    "--gpg-symmetric", "-C", is_flag=True, help="Encrypt with symmetric cipher (GPG)"
+    "--gpg-symmetric", "-C", is_flag=True, help="Encrypt with symmetric cipher (GPG)",
 )
 @click.option(
     "--digest",
@@ -83,7 +82,6 @@ def export_data(
     and saved with a .gpg extension.
 
     Examples:
-
     \b
     1. Standard Export:
        astrbot bk export
@@ -113,8 +111,8 @@ def export_data(
     5. Signed and Encrypted with Digest:
        astrbot bk export -S -E "bob@example.com" -d sha256
        -> Signs, encrypts for Bob, and generates a SHA256 checksum file.
-    """
 
+    """
     # Handle case where -E consumes the next flag (e.g. -E -S)
     if gpg_encrypt and gpg_encrypt.startswith("-"):
         consumed_flag = gpg_encrypt
@@ -122,7 +120,7 @@ def export_data(
             click.style(
                 f"Warning: Flag '{consumed_flag}' was interpreted as the recipient for -E.",
                 fg="yellow",
-            )
+            ),
         )
 
         # Recover flags
@@ -140,7 +138,7 @@ def export_data(
         if gpg_sign or gpg_encrypt or gpg_symmetric:
             if not shutil.which("gpg"):
                 raise click.ClickException(
-                    "GPG tool not found. Please install GnuPG to use encryption/signing features."
+                    "GPG tool not found. Please install GnuPG to use encryption/signing features.",
                 )
 
         exporter = AstrBotExporter(db_helper)
@@ -152,7 +150,7 @@ def export_data(
             path_str = await exporter.export_all(output, progress_callback=on_progress)
             final_path = Path(path_str)
             click.echo(
-                click.style(f"\nRaw backup exported to: {final_path}", fg="green")
+                click.style(f"\nRaw backup exported to: {final_path}", fg="green"),
             )
 
             # GPG Operations
@@ -168,7 +166,7 @@ def export_data(
                             click.style(
                                 "Warning: Symmetric encryption selected, ignoring asymmetric recipient.",
                                 fg="yellow",
-                            )
+                            ),
                         )
                     cmd.append("--symmetric")
                     # No --batch to allow interactive passphrase entry on TTY
@@ -196,7 +194,7 @@ def export_data(
                 await anyio.Path(final_path).unlink()
                 final_path = gpg_output
                 click.echo(
-                    click.style(f"Processed backup created: {final_path}", fg="green")
+                    click.style(f"Processed backup created: {final_path}", fg="green"),
                 )
 
             # Digest Generation
@@ -211,7 +209,7 @@ def export_data(
                 digest_val = hash_func.hexdigest()
                 digest_file = final_path.with_name(final_path.name + f".{digest}")
                 await anyio.Path(digest_file).write_text(
-                    f"{digest_val} *{final_path.name}\n", encoding="utf-8"
+                    f"{digest_val} *{final_path.name}\n", encoding="utf-8",
                 )
                 click.echo(click.style(f"Digest generated: {digest_file}", fg="green"))
 
@@ -266,13 +264,13 @@ def import_data_command(backup_file: str, yes: bool):
 
                     if calculated_digest == expected_digest:
                         click.echo(
-                            click.style("Digest verification PASSED.", fg="green")
+                            click.style("Digest verification PASSED.", fg="green"),
                         )
                     else:
                         click.echo(
                             click.style(
-                                "Digest verification FAILED!", fg="red", bold=True
-                            )
+                                "Digest verification FAILED!", fg="red", bold=True,
+                            ),
                         )
                         click.echo(f"  Expected: {expected_digest}")
                         click.echo(f"  Actual:   {calculated_digest}")
@@ -286,7 +284,7 @@ def import_data_command(backup_file: str, yes: bool):
     if not _verify_digest(backup_path):
         if not yes:
             if not click.confirm(
-                "Digest verification failed. Abort import?", default=True, abort=True
+                "Digest verification failed. Abort import?", default=True, abort=True,
             ):
                 pass
         else:
@@ -294,7 +292,7 @@ def import_data_command(backup_file: str, yes: bool):
                 click.style(
                     "Warning: Digest verification failed. Continuing due to --yes.",
                     fg="yellow",
-                )
+                ),
             )
 
     if not yes:
@@ -312,7 +310,7 @@ def import_data_command(backup_file: str, yes: bool):
         if backup_path.suffix == ".gpg":
             if not shutil.which("gpg"):
                 raise click.ClickException(
-                    "GPG tool not found. Cannot decrypt .gpg file."
+                    "GPG tool not found. Cannot decrypt .gpg file.",
                 )
 
             # Remove .gpg extension for output
@@ -356,12 +354,12 @@ def import_data_command(backup_file: str, yes: bool):
 
         try:
             result = await importer.import_all(
-                str(zip_path), progress_callback=on_progress
+                str(zip_path), progress_callback=on_progress,
             )
 
             if result.errors:
                 click.echo(
-                    click.style("\nImport failed with errors:", fg="red"), err=True
+                    click.style("\nImport failed with errors:", fg="red"), err=True,
                 )
                 for err in result.errors:
                     click.echo(f"  - {err}", err=True)

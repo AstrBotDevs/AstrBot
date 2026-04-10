@@ -109,12 +109,12 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
                 if file_format == "silk":
                     logger.info(
-                        "Converting silk file to wav using tencent_silk_to_wav..."
+                        "Converting silk file to wav using tencent_silk_to_wav...",
                     )
                     await tencent_silk_to_wav(audio_url, output_path)
                 elif file_format == "amr":
                     logger.info(
-                        "Converting amr file to wav using convert_to_pcm_wav..."
+                        "Converting amr file to wav using convert_to_pcm_wav...",
                     )
                     await convert_to_pcm_wav(audio_url, output_path)
 

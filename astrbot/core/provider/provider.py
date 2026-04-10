@@ -19,7 +19,7 @@ from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
 Providers: TypeAlias = Union[
-    "Provider", "STTProvider", "TTSProvider", "EmbeddingProvider", "RerankProvider"
+    "Provider", "STTProvider", "TTSProvider", "EmbeddingProvider", "RerankProvider",
 ]
 
 
@@ -54,12 +54,12 @@ class AbstractProvider(abc.ABC):
         return meta
 
     async def test(self) -> None:
-        """test the provider is a
+        """Test the provider is a
 
-        raises:
+        Raises:
             Exception: if the provider is not available
+
         """
-        ...
 
 
 class Provider(AbstractProvider):
@@ -162,7 +162,7 @@ class Provider(AbstractProvider):
         """
         if False:
             yield None
-        raise NotImplementedError()
+        raise NotImplementedError
 
     async def pop_record(self, context: list) -> None:
         """弹出 context 第一条非系统提示词对话记录"""
@@ -179,7 +179,7 @@ class Provider(AbstractProvider):
             context.pop(idx)
 
     def _ensure_message_to_dicts(
-        self, messages: list[dict] | list[Message] | None
+        self, messages: list[dict] | list[Message] | None,
     ) -> list[dict]:
         """Convert a list of Message objects to a list of dictionaries."""
         if not messages:
@@ -210,7 +210,7 @@ class STTProvider(AbstractProvider):
 
     async def test(self) -> None:
         sample_audio_path = os.path.join(
-            get_astrbot_path(), "samples", "stt_health_check.wav"
+            get_astrbot_path(), "samples", "stt_health_check.wav",
         )
         await self.get_text(sample_audio_path)
 
@@ -229,6 +229,7 @@ class TTSProvider(AbstractProvider):
 
         Notes:
             子类可以重写此方法返回 True 来启用流式 TTS 支持
+
         """
         return False
 
@@ -255,6 +256,7 @@ class TTSProvider(AbstractProvider):
             - 默认实现会将文本累积后一次性调用 get_audio 生成完整音频
             - 子类可以重写此方法实现真正的流式 TTS
             - 音频数据应该是 WAV 格式的 bytes
+
         """
         accumulated_text = ""
         while True:
@@ -280,7 +282,7 @@ class TTSProvider(AbstractProvider):
         file_size = (await audio_path_obj.stat()).st_size
         if file_size == 0:
             raise Exception(
-                "TTS test failed: generated audio file is empty (0 bytes). Please check your TTS provider configuration, especially required parameters like group_id for MiniMax."
+                "TTS test failed: generated audio file is empty (0 bytes). Please check your TTS provider configuration, especially required parameters like group_id for MiniMax.",
             )
         try:
             os.remove(audio_path)
@@ -354,7 +356,7 @@ class EmbeddingProvider(AbstractProvider):
                         if attempt == max_retries - 1:
                             failed_batches.append((batch_idx, batch_texts))
                             raise Exception(
-                                f"批次 {batch_idx} 处理失败,已重试 {max_retries} 次: {e!s}"
+                                f"批次 {batch_idx} 处理失败,已重试 {max_retries} 次: {e!s}",
                             )
                         await asyncio.sleep(2**attempt)
 
@@ -381,7 +383,7 @@ class RerankProvider(AbstractProvider):
 
     @abc.abstractmethod
     async def rerank(
-        self, query: str, documents: list[str], top_n: int | None = None
+        self, query: str, documents: list[str], top_n: int | None = None,
     ) -> list[RerankResult]:
         """获取查询和文档的重排序分数"""
         ...

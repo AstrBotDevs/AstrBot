@@ -1,5 +1,4 @@
-"""
-AstrBot Gateway - FastAPI server for the dashboard backend.
+"""AstrBot Gateway - FastAPI server for the dashboard backend.
 
 Provides REST API endpoints and WebSocket connections for the frontend dashboard.
 The gateway acts as the communication bridge between the dashboard and the orchestrator.
@@ -32,8 +31,7 @@ log = logger
 
 
 class AstrbotGateway(BaseAstrbotGateway):
-    """
-    FastAPI-based gateway server for AstrBot.
+    """FastAPI-based gateway server for AstrBot.
 
     Handles:
     - REST API endpoints for configuration and stats
@@ -49,8 +47,7 @@ class AstrbotGateway(BaseAstrbotGateway):
         self._port = 8765
 
     async def serve(self) -> None:
-        """
-        Start the gateway server.
+        """Start the gateway server.
 
         Creates and runs a FastAPI application with WebSocket support.
         """
@@ -82,7 +79,7 @@ class AstrbotGateway(BaseAstrbotGateway):
         import uvicorn
 
         config = uvicorn.Config(
-            self._app, host=self._host, port=self._port, log_level="info"
+            self._app, host=self._host, port=self._port, log_level="info",
         )
         server = uvicorn.Server(config)
         await server.serve()
@@ -140,16 +137,16 @@ class AstrbotGateway(BaseAstrbotGateway):
         self._app.include_router(memory_router)
 
     async def _handle_ws_message(
-        self, message: dict[str, Any]
+        self, message: dict[str, Any],
     ) -> dict[str, Any] | None:
-        """
-        Handle an incoming WebSocket message.
+        """Handle an incoming WebSocket message.
 
         Args:
             message: Parsed JSON message from the client
 
         Returns:
             Response message to send back, or None for no response
+
         """
         msg_type = message.get("type")
         data = message.get("data", {})
@@ -176,7 +173,7 @@ class AstrbotGateway(BaseAstrbotGateway):
             }
         try:
             result = await self.orchestrator.abp.call_star_tool(
-                star_name, tool_name, arguments
+                star_name, tool_name, arguments,
             )
             return {"type": "tool_result", "data": {"result": result}}
         except Exception as e:

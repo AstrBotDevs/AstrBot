@@ -34,7 +34,7 @@ from .slack_event import SlackMessageEvent
 )
 class SlackAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
@@ -46,7 +46,7 @@ class SlackAdapter(Platform):
         self.webhook_host = platform_config.get("slack_webhook_host", "0.0.0.0")
         self.webhook_port = platform_config.get("slack_webhook_port", 3000)
         self.webhook_path = platform_config.get(
-            "slack_webhook_path", "/astrbot-slack-webhook/callback"
+            "slack_webhook_path", "/astrbot-slack-webhook/callback",
         )
         if not self.bot_token:
             raise ValueError("Slack bot_token 是必需的")
@@ -66,10 +66,10 @@ class SlackAdapter(Platform):
         self.bot_self_id = None
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSesion, message_chain: MessageChain,
     ) -> None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
-            message_chain=message_chain, web_client=self.web_client
+            message_chain=message_chain, web_client=self.web_client,
         )
         try:
             if session.message_type == MessageType.GROUP_MESSAGE:
@@ -79,7 +79,7 @@ class SlackAdapter(Platform):
                     else session.session_id
                 )
                 await self.web_client.chat_postMessage(
-                    channel=channel_id, text=text, blocks=blocks if blocks else None
+                    channel=channel_id, text=text, blocks=blocks if blocks else None,
                 )
             else:
                 await self.web_client.chat_postMessage(
@@ -138,7 +138,7 @@ class SlackAdapter(Platform):
                         mentioned_user = await self.web_client.users_info(user=mention)
                         user_data = mentioned_user["user"]
                         user_name = user_data.get("real_name") or user_data.get(
-                            "name", mention
+                            "name", mention,
                         )
                         abm.message.append(At(qq=mention, name=user_name))
                     except Exception:
@@ -156,7 +156,7 @@ class SlackAdapter(Platform):
                     abm.message.append(Image.fromBase64(base64=file_url))
                 else:
                     abm.message.append(
-                        File(name=file_name, file=file_url, url=file_url)
+                        File(name=file_name, file=file_url, url=file_url),
                     )
         abm.raw_message = event
         return abm
@@ -182,7 +182,7 @@ class SlackAdapter(Platform):
                                     text_content = "".join(text_parts)
                                     if text_content.strip():
                                         message_components.append(
-                                            Plain(text=text_content)
+                                            Plain(text=text_content),
                                         )
                                     text_parts = []
                                     message_components.append(At(qq=user_id, name=""))
@@ -251,7 +251,7 @@ class SlackAdapter(Platform):
                     base64_content = base64.b64encode(content).decode("utf-8")
                     return base64_content
                 logger.error(
-                    f"Failed to download slack file: {resp.status} {await resp.text()}"
+                    f"Failed to download slack file: {resp.status} {await resp.text()}",
                 )
                 raise Exception(f"下载文件失败: {resp.status}")
 
@@ -262,7 +262,7 @@ class SlackAdapter(Platform):
             if not self.app_token:
                 raise ValueError("Socket Mode 需要 app_token")
             self.socket_client = SlackSocketClient(
-                self.web_client, self.app_token, self._handle_socket_event
+                self.web_client, self.app_token, self._handle_socket_event,
             )
             logger.info("Slack 适配器 (Socket Mode) 启动中...")
             await self.socket_client.start()
@@ -283,12 +283,12 @@ class SlackAdapter(Platform):
                 await self.webhook_client.shutdown_event.wait()
             else:
                 logger.info(
-                    f"Slack 适配器 (Webhook Mode) 启动中,监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}..."
+                    f"Slack 适配器 (Webhook Mode) 启动中,监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}...",
                 )
                 await self.webhook_client.start()
         else:
             raise ValueError(
-                f"不支持的连接模式: {self.connection_mode},请使用 'socket' 或 'webhook'"
+                f"不支持的连接模式: {self.connection_mode},请使用 'socket' 或 'webhook'",
             )
 
     async def _handle_webhook_event(self, event_data: dict) -> None:
@@ -340,5 +340,5 @@ class SlackAdapter(Platform):
         return bool(
             self.config.get("unified_webhook_mode", False)
             and self.config.get("slack_connection_mode", "") == "webhook"
-            and self.config.get("webhook_uuid")
+            and self.config.get("webhook_uuid"),
         )

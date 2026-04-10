@@ -42,7 +42,7 @@ async def initialize_astrbot(
     for name, path in paths.items():
         path.mkdir(parents=True, exist_ok=True)
         click.echo(
-            f"{('Created' if not path.exists() else f'{name} Directory exists')}: {path}"
+            f"{('Created' if not path.exists() else f'{name} Directory exists')}: {path}",
         )
     config_path = astrbot_root / "data" / "cmd_config.json"
     if not config_path.exists():
@@ -87,7 +87,7 @@ async def initialize_astrbot(
             click.echo("No config.template found; skipping .env generation")
     if admin_password is not None:
         raise click.ClickException(
-            "--admin-password is no longer supported during init. Run 'astrbot conf admin' after initialization."
+            "--admin-password is no longer supported during init. Run 'astrbot conf admin' after initialization.",
         )
     effective_admin_username = (
         admin_username.strip()
@@ -97,19 +97,19 @@ async def initialize_astrbot(
     if admin_username:
         config = ensure_config_file()
         set_dashboard_credentials(
-            config, username=effective_admin_username, password_hash=None
+            config, username=effective_admin_username, password_hash=None,
         )
         config_path.write_text(
-            json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8-sig"
+            json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8-sig",
         )
     click.echo(f"Configured dashboard admin username: {effective_admin_username}")
     click.echo(
-        "Dashboard password is not initialized for interactive use. Run 'astrbot conf admin' before the first login."
+        "Dashboard password is not initialized for interactive use. Run 'astrbot conf admin' before the first login.",
     )
     if not backend_only and (
         yes
         or click.confirm(
-            "是否需要集成式 WebUI?(个人电脑推荐,服务器不推荐)", default=True
+            "是否需要集成式 WebUI?(个人电脑推荐,服务器不推荐)", default=True,
         )
     ):
         await DashboardManager().ensure_installed(astrbot_root)
@@ -164,19 +164,19 @@ def init(
                     backend_only=backend_only,
                     admin_username=admin_username,
                     admin_password=admin_password,
-                )
+                ),
             )
             if backup:
                 from .cmd_bk import import_data_command
 
                 click.echo(f"Restoring from backup: {backup}")
                 click.get_current_context().invoke(
-                    import_data_command, backup_file=backup, yes=True
+                    import_data_command, backup_file=backup, yes=True,
                 )
             click.echo("Done! You can now run 'astrbot run' to start AstrBot")
     except Timeout:
         raise click.ClickException(
-            "Cannot acquire lock file. Please check if another instance is running"
+            "Cannot acquire lock file. Please check if another instance is running",
         )
     except Exception as e:
         raise click.ClickException(f"Initialization failed: {e!s}")

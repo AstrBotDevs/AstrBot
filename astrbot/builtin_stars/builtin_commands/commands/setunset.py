@@ -20,7 +20,7 @@ class SetUnsetCommands:
         """设置会话变量"""
         uid = event.unified_msg_origin
         session_var = _normalize_session_variables(
-            await sp.session_get(uid, "session_variables", {})
+            await sp.session_get(uid, "session_variables", {}),
         )
         session_var[key] = value
         await sp.session_put(uid, "session_variables", session_var)
@@ -35,7 +35,7 @@ class SetUnsetCommands:
         """移除会话变量"""
         uid = event.unified_msg_origin
         session_var = _normalize_session_variables(
-            await sp.session_get(uid, "session_variables", {})
+            await sp.session_get(uid, "session_variables", {}),
         )
 
         if key not in session_var:

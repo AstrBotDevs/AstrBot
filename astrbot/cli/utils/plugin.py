@@ -226,7 +226,7 @@ def manage_plugin(
     # Check if plugin exists
     if is_update and not target_path.exists():
         raise click.ClickException(
-            f"Plugin {plugin_name} is not installed and cannot be updated"
+            f"Plugin {plugin_name} is not installed and cannot be updated",
         )
 
     # Backup existing plugin
@@ -245,7 +245,7 @@ def manage_plugin(
         if is_update and backup_path is not None and backup_path.exists():
             shutil.rmtree(backup_path)
         click.echo(
-            f"Plugin {plugin_name} {'updated' if is_update else 'installed'} successfully"
+            f"Plugin {plugin_name} {'updated' if is_update else 'installed'} successfully",
         )
     except Exception as e:
         if target_path.exists():

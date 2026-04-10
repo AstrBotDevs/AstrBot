@@ -137,7 +137,7 @@ class _LoguruInterceptHandler(logging.Handler):
             ),
             "astrbot_version_tag": getattr(record, "astrbot_version_tag", ""),
             "source_file": getattr(
-                record, "source_file", _build_source_file(record.pathname)
+                record, "source_file", _build_source_file(record.pathname),
             ),
             "source_line": getattr(record, "source_line", record.lineno),
             "is_trace": getattr(record, "is_trace", record.name == "astrbot.trace"),
@@ -415,7 +415,7 @@ class LogManager:
 
         enable = bool(
             config.get("trace_log_enable")
-            or (config.get("log_file", {}) or {}).get("trace_enable", False)
+            or (config.get("log_file", {}) or {}).get("trace_enable", False),
         )
         path = config.get("trace_log_path")
         max_mb = config.get("trace_log_max_mb")

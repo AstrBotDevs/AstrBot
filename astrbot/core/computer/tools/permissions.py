@@ -3,10 +3,10 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 
 
 def check_admin_permission(
-    context: ContextWrapper[AstrAgentContext], operation_name: str
+    context: ContextWrapper[AstrAgentContext], operation_name: str,
 ) -> str | None:
     cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
+        umo=context.context.event.unified_msg_origin,
     )
     provider_settings = cfg.get("provider_settings", {})
     require_admin = provider_settings.get("computer_use_require_admin", True)

@@ -50,7 +50,7 @@ def validate_dashboard_password(raw_password: str) -> None:
         raise ValueError("Password cannot be empty")
     if len(raw_password) < _DASHBOARD_PASSWORD_MIN_LENGTH:
         raise ValueError(
-            f"Password must be at least {_DASHBOARD_PASSWORD_MIN_LENGTH} characters long"
+            f"Password must be at least {_DASHBOARD_PASSWORD_MIN_LENGTH} characters long",
         )
 
     if not re.search(r"[A-Z]", raw_password):
@@ -107,7 +107,7 @@ def get_dashboard_login_challenge(stored_hash: str) -> dict[str, Any]:
 
 
 def verify_dashboard_login_proof(
-    stored_hash: str, challenge_nonce: str, proof: str
+    stored_hash: str, challenge_nonce: str, proof: str,
 ) -> bool:
     """Verify an HMAC-SHA256 login proof generated from the stored password secret."""
     if (
@@ -160,7 +160,7 @@ def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool
         # new clients send plain password, old clients may send md5 of it.
         candidate_md5 = hashlib.md5(candidate_password.encode("utf-8")).hexdigest()
         return hmac.compare_digest(
-            stored_hash.lower(), candidate_md5.lower()
+            stored_hash.lower(), candidate_md5.lower(),
         ) or hmac.compare_digest(
             stored_hash.lower(),
             candidate_password.lower(),
@@ -190,10 +190,10 @@ def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool
         c in "0123456789abcdefABCDEF" for c in stored_hash
     ):
         candidate_sha256 = hashlib.sha256(
-            candidate_password.encode("utf-8")
+            candidate_password.encode("utf-8"),
         ).hexdigest()
         return hmac.compare_digest(
-            stored_hash.lower(), candidate_sha256.lower()
+            stored_hash.lower(), candidate_sha256.lower(),
         ) or hmac.compare_digest(stored_hash.lower(), candidate_password.lower())
 
     return False

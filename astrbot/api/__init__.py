@@ -1,5 +1,4 @@
-"""
-AstrBot Public API.
+"""AstrBot Public API.
 
 This package exposes the public interface for extending and integrating with
 AstrBot. All exports from this module are guaranteed to be stable across

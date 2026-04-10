@@ -1,5 +1,4 @@
-"""
-Configuration CLI for AstrBot.
+"""Configuration CLI for AstrBot.
 
 This module provides:
 - secure hashing utilities for the dashboard password (argon2)
@@ -32,8 +31,7 @@ from astrbot.core.utils.auth_password import (
 
 
 def is_dashboard_password_hash(value: str) -> bool:
-    """
-    Heuristic: return True if `value` looks like a supported dashboard password hash.
+    """Heuristic: return True if `value` looks like a supported dashboard password hash.
     """
     if not isinstance(value, str) or not value:
         return False
@@ -106,14 +104,13 @@ CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
 
 
 def _load_config() -> dict[str, Any]:
-    """
-    Load or initialize the CLI config file (data/cmd_config.json).
+    """Load or initialize the CLI config file (data/cmd_config.json).
     Ensures the astrbot root is valid before proceeding.
     """
     root = astrbot_paths.root
     if not astrbot_paths.is_root:
         raise click.ClickException(
-            f"{root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize"
+            f"{root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
         )
 
     config_path = astrbot_paths.data / "cmd_config.json"
@@ -133,7 +130,7 @@ def _load_config() -> dict[str, Any]:
 def _save_config(config: dict[str, Any]) -> None:
     config_path = astrbot_paths.data / "cmd_config.json"
     config_path.write_text(
-        json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8-sig"
+        json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8-sig",
     )
 
 
@@ -149,7 +146,7 @@ def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
             cur[part] = {}
         elif not isinstance(cur[part], dict):
             raise click.ClickException(
-                f"Config path conflict: {'.'.join(parts[: parts.index(part) + 1])} is not a dict"
+                f"Config path conflict: {'.'.join(parts[: parts.index(part) + 1])} is not a dict",
             )
         cur = cur[part]
     cur[parts[-1]] = value
@@ -179,7 +176,7 @@ def set_dashboard_credentials(
 ) -> None:
     if username is not None:
         _set_nested_item(
-            config, "dashboard.username", _validate_dashboard_username(username)
+            config, "dashboard.username", _validate_dashboard_username(username),
         )
     if password_hash is not None:
         if isinstance(password_hash, str) and is_dashboard_password_hash(password_hash):
@@ -189,7 +186,7 @@ def set_dashboard_credentials(
                 raise click.ClickException(
                     "Storing legacy dashboard password hashes is no longer supported. "
                     "Please provide the plaintext password (it will be hashed securely), "
-                    "or provide an Argon2-encoded hash string."
+                    "or provide an Argon2-encoded hash string.",
                 )
             _set_nested_item(
                 config,
@@ -200,8 +197,7 @@ def set_dashboard_credentials(
 
 @click.group(name="conf")
 def conf() -> None:
-    """
-    Configuration management commands.
+    """Configuration management commands.
 
     Supported config keys:
     - timezone
@@ -211,7 +207,6 @@ def conf() -> None:
     - dashboard.password
     - callback_api_base
     """
-    pass
 
 
 @conf.command(name="set")
@@ -286,7 +281,7 @@ def _check_astrbot_not_running() -> None:
     except Timeout:
         raise click.ClickException(
             "AstrBot is currently running. "
-            "Please stop it first before changing the password via CLI."
+            "Please stop it first before changing the password via CLI.",
         ) from None
     else:
         lock.release()
@@ -301,8 +296,7 @@ def _check_astrbot_not_running() -> None:
     help="Set admain password directly without interactive prompt",
 )
 def set_dashboard_password(username: str | None, password: str | None) -> None:
-    """
-    Interactively set dashboard password (with confirmation) or set directly with -p.
+    """Interactively set dashboard password (with confirmation) or set directly with -p.
 
     Acceptable inputs:
     - Plaintext password (recommended): it will be hashed securely before storage.
@@ -319,7 +313,7 @@ def set_dashboard_password(username: str | None, password: str | None) -> None:
                 raise click.ClickException(
                     "Providing legacy dashboard password hashes is no longer supported. "
                     "Please supply the plaintext password (it will be hashed securely), "
-                    "or provide an Argon2-encoded hash string."
+                    "or provide an Argon2-encoded hash string.",
                 )
             password_hash = _validate_dashboard_password(password)
     else:

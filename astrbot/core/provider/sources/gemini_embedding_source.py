@@ -31,7 +31,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             logger.info(f"[Gemini Embedding] 使用代理: {proxy}")
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
         self.model = provider_config.get(
-            "embedding_model", "gemini-embedding-exp-03-07"
+            "embedding_model", "gemini-embedding-exp-03-07",
         )
 
     async def get_embedding(self, text: str) -> list[float]:

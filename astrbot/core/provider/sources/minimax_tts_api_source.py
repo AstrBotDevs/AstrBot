@@ -121,7 +121,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                                     if "extra_info" in data:
                                         continue
                                     audio: str | None = data.get("data", {}).get(
-                                        "audio"
+                                        "audio",
                                     )
                                     if audio is not None:
                                         yield audio
@@ -159,7 +159,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                 raise Exception(
                     "MiniMax TTS API returned empty audio data. "
                     "Please verify your configuration, especially the 'group_id' parameter. "
-                    "You can find your group_id in Account Management -> Basic Information on the MiniMax platform."
+                    "You can find your group_id in Account Management -> Basic Information on the MiniMax platform.",
                 )
 
             # 结果保存至文件

@@ -49,7 +49,7 @@ class SessionServiceManager:
                 scope_id=session_id,
                 key="session_service_config",
                 default={},
-            )
+            ),
         )
         llm_enabled = session_services.get("llm_enabled")
         if llm_enabled is not None:
@@ -71,7 +71,7 @@ class SessionServiceManager:
                 scope_id=session_id,
                 key="session_service_config",
                 default={},
-            )
+            ),
         )
         session_config["llm_enabled"] = enabled
         await sp.put_async(
@@ -112,7 +112,7 @@ class SessionServiceManager:
                 scope_id=session_id,
                 key="session_service_config",
                 default={},
-            )
+            ),
         )
         tts_enabled = session_services.get("tts_enabled")
         if tts_enabled is not None:
@@ -134,7 +134,7 @@ class SessionServiceManager:
                 scope_id=session_id,
                 key="session_service_config",
                 default={},
-            )
+            ),
         )
         session_config["tts_enabled"] = enabled
         await sp.put_async(
@@ -144,7 +144,7 @@ class SessionServiceManager:
             value=session_config,
         )
         logger.info(
-            f"会话 {session_id} 的TTS状态已更新为: {('启用' if enabled else '禁用')}"
+            f"会话 {session_id} 的TTS状态已更新为: {('启用' if enabled else '禁用')}",
         )
 
     @staticmethod
@@ -178,7 +178,7 @@ class SessionServiceManager:
                 scope_id=session_id,
                 key="session_service_config",
                 default={},
-            )
+            ),
         )
         session_enabled = session_services.get("session_enabled")
         if session_enabled is not None:

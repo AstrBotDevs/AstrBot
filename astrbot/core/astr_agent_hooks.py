@@ -34,7 +34,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         if llm_response and llm_response.reasoning_content:
             # we will use this in result_decorate stage to inject reasoning content to chain
             run_context.context.event.set_extra(
-                "_llm_reasoning_content", llm_response.reasoning_content
+                "_llm_reasoning_content", llm_response.reasoning_content,
             )
 
         await call_event_hook(
@@ -43,7 +43,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             llm_response,
         )
         sdk_plugin_bridge = getattr(
-            run_context.context.context, "sdk_plugin_bridge", None
+            run_context.context.context, "sdk_plugin_bridge", None,
         )
         if sdk_plugin_bridge is not None:
             try:
@@ -80,7 +80,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             tool_args,
         )
         sdk_plugin_bridge = getattr(
-            run_context.context.context, "sdk_plugin_bridge", None
+            run_context.context.context, "sdk_plugin_bridge", None,
         )
         if sdk_plugin_bridge is not None:
             try:
@@ -113,7 +113,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             tool_result,
         )
         sdk_plugin_bridge = getattr(
-            run_context.context.context, "sdk_plugin_bridge", None
+            run_context.context.context, "sdk_plugin_bridge", None,
         )
         if sdk_plugin_bridge is not None:
             try:

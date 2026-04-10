@@ -1,5 +1,4 @@
-"""
-MCP (Model Context Protocol) Public API for AstrBot.
+"""MCP (Model Context Protocol) Public API for AstrBot.
 
 This module provides a simple, stable interface for MCP server management,
 delegating to the _internal package.
@@ -23,6 +22,7 @@ Example:
         url="http://localhost:8080/sse",
         transport="sse",
     )
+
 """
 
 from __future__ import annotations
@@ -71,6 +71,7 @@ async def register_mcp_server(
     Example - Stdio:
         await register_mcp_server(name="weather", command="uv",
                                   args=["tool", "run", "weather-mcp"])
+
     """
     from astrbot.core.provider.register import llm_tools as func_tool_manager
 

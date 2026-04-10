@@ -40,13 +40,13 @@ class OTTSProvider:
     def client(self) -> AsyncClient:
         if self._client is None:
             raise RuntimeError(
-                "Client not initialized. Please use 'async with' context."
+                "Client not initialized. Please use 'async with' context.",
             )
         return self._client
 
     async def __aenter__(self):
         self._client = AsyncClient(
-            timeout=self.timeout, proxy=self.proxy if self.proxy else None
+            timeout=self.timeout, proxy=self.proxy if self.proxy else None,
         )
         return self
 
@@ -140,7 +140,7 @@ class AzureNativeProvider(TTSProvider):
     def client(self) -> AsyncClient:
         if self._client is None:
             raise RuntimeError(
-                "Client not initialized. Please use 'async with' context."
+                "Client not initialized. Please use 'async with' context.",
             )
         return self._client
 
@@ -212,7 +212,7 @@ class AzureTTSProvider(TTSProvider):
         self.provider = self._parse_provider(key_value, provider_config)
 
     def _parse_provider(
-        self, key_value: str, config: dict
+        self, key_value: str, config: dict,
     ) -> OTTSProvider | AzureNativeProvider:
         if key_value.lower().startswith("other["):
             json_str = ""

@@ -69,34 +69,34 @@ class InternalAgentSubStage(Stage):
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
         self.show_reasoning = settings.get("display_reasoning_text", False)
         self.sanitize_context_by_modalities: bool = settings.get(
-            "sanitize_context_by_modalities", False
+            "sanitize_context_by_modalities", False,
         )
         self.kb_agentic_mode: bool = conf.get("kb_agentic_mode", False)
         file_extract_conf: dict = settings.get("file_extract", {})
         self.file_extract_enabled: bool = file_extract_conf.get("enable", False)
         self.file_extract_prov: str = file_extract_conf.get("provider", "moonshotai")
         self.file_extract_msh_api_key: str = file_extract_conf.get(
-            "moonshotai_api_key", ""
+            "moonshotai_api_key", "",
         )
         self.context_limit_reached_strategy: str = settings.get(
-            "context_limit_reached_strategy", "truncate_by_turns"
+            "context_limit_reached_strategy", "truncate_by_turns",
         )
         self.llm_compress_instruction: str = settings.get(
-            "llm_compress_instruction", ""
+            "llm_compress_instruction", "",
         )
         self.llm_compress_keep_recent: int = settings.get("llm_compress_keep_recent", 4)
         self.llm_compress_provider_id: str = settings.get(
-            "llm_compress_provider_id", ""
+            "llm_compress_provider_id", "",
         )
         self.max_context_length = settings["max_context_length"]
         self.dequeue_context_length: int = min(
-            max(1, settings["dequeue_context_length"]), self.max_context_length - 1
+            max(1, settings["dequeue_context_length"]), self.max_context_length - 1,
         )
         if self.dequeue_context_length <= 0:
             self.dequeue_context_length = 1
         self.llm_safety_mode = settings.get("llm_safety_mode", True)
         self.safety_mode_strategy = settings.get(
-            "safety_mode_strategy", "system_prompt"
+            "safety_mode_strategy", "system_prompt",
         )
         self.computer_use_runtime = settings.get("computer_use_runtime")
         self.sandbox_cfg = settings.get("sandbox", {})
@@ -178,12 +178,12 @@ class InternalAgentSubStage(Stage):
                 logger.warning("send_typing failed", exc_info=True)
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
             sdk_plugin_bridge = getattr(
-                self.ctx.plugin_manager.context, "sdk_plugin_bridge", None
+                self.ctx.plugin_manager.context, "sdk_plugin_bridge", None,
             )
             if sdk_plugin_bridge is not None:
                 try:
                     await sdk_plugin_bridge.dispatch_message_event(
-                        "waiting_llm_request", event
+                        "waiting_llm_request", event,
                     )
                 except Exception as exc:
                     logger.warning("SDK waiting_llm_request dispatch failed: %s", exc)
@@ -258,12 +258,12 @@ class InternalAgentSubStage(Stage):
                         logger.info("[Internal Agent] 检测到 Live Mode,启用 TTS 处理")
                         tts_provider = (
                             self.ctx.plugin_manager.context.get_using_tts_provider(
-                                event.unified_msg_origin
+                                event.unified_msg_origin,
                             )
                         )
                         if not tts_provider:
                             logger.warning(
-                                "[Live Mode] TTS Provider 未配置,将使用普通流式模式"
+                                "[Live Mode] TTS Provider 未配置,将使用普通流式模式",
                             )
                         event.set_result(
                             MessageEventResult()
@@ -276,8 +276,8 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
-                                )
-                            )
+                                ),
+                            ),
                         )
                         yield None
                         if agent_runner.done() and (
@@ -302,8 +302,8 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
-                                )
-                            )
+                                ),
+                            ),
                         )
                         yield None
                         if agent_runner.done():
@@ -322,7 +322,7 @@ class InternalAgentSubStage(Stage):
                                     MessageEventResult(
                                         chain=chain,
                                         result_content_type=ResultContentType.STREAMING_FINISH,
-                                    )
+                                    ),
                                 )
                     else:
                         async for _ in run_agent(
@@ -342,8 +342,8 @@ class InternalAgentSubStage(Stage):
                     )
                     asyncio.create_task(
                         _record_internal_agent_stats(
-                            event, req, agent_runner, final_resp
-                        )
+                            event, req, agent_runner, final_resp,
+                        ),
                     )
                     if not event.is_stopped() or agent_runner.was_aborted():
                         await self._save_to_history(
@@ -359,7 +359,7 @@ class InternalAgentSubStage(Stage):
                             llm_tick=1,
                             model_name=agent_runner.provider.get_model(),
                             provider_type=agent_runner.provider.meta().type,
-                        )
+                        ),
                     )
                 finally:
                     if runner_registered and agent_runner is not None:
@@ -371,7 +371,7 @@ class InternalAgentSubStage(Stage):
                 get_astrbot_skills_path(),
             )
             custom_error_message = extract_persona_custom_error_message_from_event(
-                event
+                event,
             )
             error_text = (
                 custom_error_message
@@ -408,7 +408,7 @@ class InternalAgentSubStage(Stage):
             if not user_aborted:
                 return
             llm_response = LLMResponse(
-                role="assistant", completion_text=llm_response.completion_text or ""
+                role="assistant", completion_text=llm_response.completion_text or "",
             )
         elif llm_response is None:
             llm_response = LLMResponse(role="assistant", completion_text="")

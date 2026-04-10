@@ -58,7 +58,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 "data": "",
                 "streaming": False,
                 "session_id": stream_id,
-            }
+            },
         )
 
     @staticmethod
@@ -83,7 +83,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         "data": data,
                         "streaming": streaming,
                         "session_id": stream_id,
-                    }
+                    },
                 )
             elif isinstance(comp, Plain):
                 data = comp.text
@@ -93,7 +93,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         "data": data,
                         "streaming": streaming,
                         "session_id": stream_id,
-                    }
+                    },
                 )
             elif isinstance(comp, Image):
                 try:
@@ -105,7 +105,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                                 "image_data": image_base64,
                                 "streaming": streaming,
                                 "session_id": stream_id,
-                            }
+                            },
                         )
                     else:
                         logger.warning("图片数据为空,跳过")
@@ -139,7 +139,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         stream_id = raw.get("stream_id", self.session_id)
         pending_response = self.queue_mgr.get_pending_response(stream_id) or {}
         connection_mode = pending_response.get("callback_params", {}).get(
-            "connection_mode"
+            "connection_mode",
         )
         req_id = pending_response.get("callback_params", {}).get("req_id")
         if (
@@ -154,7 +154,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 return
             if self.webhook_client and message:
                 await self.webhook_client.send_message_chain(
-                    message, unsupported_only=True
+                    message, unsupported_only=True,
                 )
             content = self._extract_plain_text_from_chain(message)
             await self.long_connection_sender(
@@ -192,7 +192,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         stream_id = raw.get("stream_id", self.session_id)
         pending_response = self.queue_mgr.get_pending_response(stream_id) or {}
         connection_mode = pending_response.get("callback_params", {}).get(
-            "connection_mode"
+            "connection_mode",
         )
         req_id = pending_response.get("callback_params", {}).get("req_id")
         back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
@@ -222,7 +222,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             async for chain in generator:
                 if self.webhook_client:
                     await self.webhook_client.send_message_chain(
-                        chain, unsupported_only=True
+                        chain, unsupported_only=True,
                     )
                 chain.squash_plain()
                 chunk_text = self._extract_plain_text_from_chain(chain)
@@ -276,13 +276,13 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     "data": text,
                     "streaming": True,
                     "session_id": stream_id,
-                }
+                },
             )
 
         async for chain in generator:
             if self.webhook_client:
                 await self.webhook_client.send_message_chain(
-                    chain, unsupported_only=True
+                    chain, unsupported_only=True,
                 )
             if chain.type == "break" and final_data:
                 if increment_plain:
@@ -293,7 +293,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         "data": final_data,
                         "streaming": True,
                         "session_id": stream_id,
-                    }
+                    },
                 )
                 final_data = ""
                 increment_plain = ""
@@ -323,6 +323,6 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 "data": final_data,
                 "streaming": True,
                 "session_id": stream_id,
-            }
+            },
         )
         await super().send_streaming(generator, use_fallback)

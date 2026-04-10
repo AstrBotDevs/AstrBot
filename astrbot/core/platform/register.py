@@ -73,6 +73,7 @@ def unregister_platform_adapters_by_module(module_path_prefix: str) -> list[str]
 
     Returns:
         被注销的平台适配器名称列表
+
     """
     unregistered = []
     to_remove = []

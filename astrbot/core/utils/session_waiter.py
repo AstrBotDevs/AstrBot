@@ -71,7 +71,7 @@ class SessionController:
         self.timeout = timeout
 
         _holding_task = asyncio.create_task(
-            self._holding(new_event, timeout)
+            self._holding(new_event, timeout),
         )  # 开始新的 keep
         self.tasks.add(_holding_task)
         _holding_task.add_done_callback(self.tasks.discard)

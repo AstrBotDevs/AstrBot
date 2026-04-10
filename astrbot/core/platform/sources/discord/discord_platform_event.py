@@ -86,7 +86,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False,
     ):
         buffer = None
         async for chain in generator:
@@ -107,14 +107,14 @@ class DiscordPlatformEvent(AstrMessageEvent):
         try:
             channel_id = int(self.session_id)
             return self.client.get_channel(
-                channel_id
+                channel_id,
             ) or await self.client.fetch_channel(channel_id)
         except (ValueError, discord.errors.NotFound, discord.errors.Forbidden):
             logger.error(f"[Discord] 无法获取频道 {self.session_id}")
             return None
 
     async def _parse_to_discord(
-        self, message: MessageChain
+        self, message: MessageChain,
     ) -> tuple[
         str,
         list[discord.File],
@@ -155,7 +155,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         if await asyncio.to_thread(path.exists):
                             file_bytes = await asyncio.to_thread(path.read_bytes)
                             discord_file = discord.File(
-                                BytesIO(file_bytes), filename=filename or path.name
+                                BytesIO(file_bytes), filename=filename or path.name,
                             )
                         else:
                             logger.warning(f"[Discord] 图片文件不存在: {path}")
@@ -167,7 +167,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                             b64_data += "=" * (4 - missing_padding)
                         img_bytes = base64.b64decode(b64_data)
                         discord_file = discord.File(
-                            BytesIO(img_bytes), filename=filename or "image.png"
+                            BytesIO(img_bytes), filename=filename or "image.png",
                         )
                     else:
                         try:
@@ -178,17 +178,17 @@ class DiscordPlatformEvent(AstrMessageEvent):
                                 b64_data += "=" * (4 - missing_padding)
                             img_bytes = base64.b64decode(b64_data)
                             discord_file = discord.File(
-                                BytesIO(img_bytes), filename=filename or "image.png"
+                                BytesIO(img_bytes), filename=filename or "image.png",
                             )
                         except (ValueError, TypeError, binascii.Error):
                             logger.debug(
-                                f"[Discord] 裸 Base64 解码失败,作为本地路径处理: {file_content}"
+                                f"[Discord] 裸 Base64 解码失败,作为本地路径处理: {file_content}",
                             )
                             path = Path(file_content)
                             if await asyncio.to_thread(path.exists):
                                 file_bytes = await asyncio.to_thread(path.read_bytes)
                                 discord_file = discord.File(
-                                    BytesIO(file_bytes), filename=filename or path.name
+                                    BytesIO(file_bytes), filename=filename or path.name,
                                 )
                             else:
                                 logger.warning(f"[Discord] 图片文件不存在: {path}")
@@ -208,11 +208,11 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         if await asyncio.to_thread(path.exists):
                             file_bytes = await asyncio.to_thread(path.read_bytes)
                             files.append(
-                                discord.File(BytesIO(file_bytes), filename=i.name)
+                                discord.File(BytesIO(file_bytes), filename=i.name),
                             )
                         else:
                             logger.warning(
-                                f"[Discord] 获取文件失败,路径不存在: {file_path_str}"
+                                f"[Discord] 获取文件失败,路径不存在: {file_path_str}",
                             )
                     else:
                         logger.warning(f"[Discord] 获取文件失败: {i.name}")
@@ -237,7 +237,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         """对原消息添加反应"""
         try:
             if hasattr(self.message_obj, "raw_message") and hasattr(
-                self.message_obj.raw_message, "add_reaction"
+                self.message_obj.raw_message, "add_reaction",
             ):
                 await self.message_obj.raw_message.add_reaction(emoji)
         except Exception as e:
@@ -274,7 +274,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
     def is_mentioned(self) -> bool:
         """判断机器人是否被@"""
         if hasattr(self.message_obj, "raw_message") and hasattr(
-            self.message_obj.raw_message, "mentions"
+            self.message_obj.raw_message, "mentions",
         ):
             return any(
                 mention.id == int(self.message_obj.self_id)
@@ -285,7 +285,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
     def get_mention_clean_content(self) -> str:
         """获取去除@后的清洁内容"""
         if hasattr(self.message_obj, "raw_message") and hasattr(
-            self.message_obj.raw_message, "clean_content"
+            self.message_obj.raw_message, "clean_content",
         ):
             return self.message_obj.raw_message.clean_content
         return self.message_str

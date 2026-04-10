@@ -34,7 +34,7 @@ def cli() -> None:
 @click.command()
 @click.argument("command_name", required=False, type=str)
 @click.option(
-    "--all", "-a", is_flag=True, help="Show help for all commands recursively."
+    "--all", "-a", is_flag=True, help="Show help for all commands recursively.",
 )
 def help(command_name: str | None, all: bool) -> None:
     """Display help information for commands
@@ -111,7 +111,7 @@ def completion(shell: str | None) -> None:
         click.echo(f"No completion support for shell: {shell}", err=True)
         sys.exit(1)
     comp = comp_cls(
-        cli, ctx_args={}, prog_name="astrbot", complete_var="_ASTRBOT_COMPLETE"
+        cli, ctx_args={}, prog_name="astrbot", complete_var="_ASTRBOT_COMPLETE",
     )
     click.echo(comp.source())
 

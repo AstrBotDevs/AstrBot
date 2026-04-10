@@ -58,6 +58,7 @@ class LarkWebhookServer:
         Args:
             config: 飞书配置
             event_queue: 事件队列
+
         """
         self.app_id = config["app_id"]
         self.app_secret = config["app_secret"]
@@ -91,6 +92,7 @@ class LarkWebhookServer:
 
         Returns:
             签名是否有效
+
         """
         # 拼接字符串: timestamp + nonce + encrypt_key + body
         bytes_b1 = (timestamp + nonce + encrypt_key).encode("utf-8")
@@ -107,6 +109,7 @@ class LarkWebhookServer:
 
         Returns:
             解密后的事件字典
+
         """
         if not self.cipher:
             raise ValueError("未配置 encrypt_key,无法解密事件")
@@ -122,6 +125,7 @@ class LarkWebhookServer:
 
         Returns:
             包含 challenge 的响应
+
         """
         challenge = event_data.get("challenge", "")
         logger.info(f"[Lark Webhook] 收到 challenge 验证请求: {challenge}")
@@ -136,6 +140,7 @@ class LarkWebhookServer:
 
         Returns:
             响应数据
+
         """
         # 获取原始请求体
         body = await request.get_data()
@@ -158,7 +163,7 @@ class LarkWebhookServer:
 
             if timestamp and nonce and signature:
                 if not self.verify_signature(
-                    timestamp, nonce, self.encrypt_key, body, signature
+                    timestamp, nonce, self.encrypt_key, body, signature,
                 ):
                     logger.error("[Lark Webhook] 签名验证失败")
                     return {"error": "Invalid signature"}, 401
@@ -202,5 +207,6 @@ class LarkWebhookServer:
 
         Args:
             callback: 处理事件的异步函数
+
         """
         self.callback = callback

@@ -66,7 +66,7 @@ _PARAM_EXPAND_RE = re.compile(r"\$\{([^}:]+?)(:-([^}]*))?\}")
 
 
 def _expand_parameter(
-    match: re.Match, env: dict[str, str], local: dict[str, str]
+    match: re.Match, env: dict[str, str], local: dict[str, str],
 ) -> str:
     """Helper to expand a single ${VAR:-default} or ${VAR} occurrence.
 
@@ -302,7 +302,7 @@ def run(
                     click.echo(f"  {click.style(key, fg='cyan')}: {val}")
             if svc_path:
                 click.echo(
-                    f"  {click.style('SERVICE_CONFIG', fg='cyan')}: {svc_path!s}"
+                    f"  {click.style('SERVICE_CONFIG', fg='cyan')}: {svc_path!s}",
                 )
             click.echo("")
 
@@ -338,7 +338,7 @@ def run(
                     while True:
                         try:
                             log_entry = await asyncio.wait_for(
-                                log_queue.get(), timeout=0.5
+                                log_queue.get(), timeout=0.5,
                             )
                             # Format: [LEVEL] message
                             level = log_entry.get("level_name", "INFO")
@@ -385,10 +385,10 @@ def run(
         click.echo("AstrBot has been shut down.")
     except Timeout:
         raise click.ClickException(
-            "Cannot acquire lock file. Please check if another instance is running"
+            "Cannot acquire lock file. Please check if another instance is running",
         ) from None
     except Exception as e:
         # Keep original traceback visible for diagnostics
         raise click.ClickException(
-            f"Runtime error: {e}\n{traceback.format_exc()}"
+            f"Runtime error: {e}\n{traceback.format_exc()}",
         ) from e

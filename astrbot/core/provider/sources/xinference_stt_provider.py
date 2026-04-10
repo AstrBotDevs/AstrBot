@@ -129,16 +129,16 @@ class ProviderXinferenceSTT(STTProvider):
             # 3. Perform conversion if needed
             if conversion_type:
                 logger.info(
-                    f"Audio requires conversion ({conversion_type}), using temporary files..."
+                    f"Audio requires conversion ({conversion_type}), using temporary files...",
                 )
                 temp_dir = anyio.Path(get_astrbot_temp_path())
                 await temp_dir.mkdir(parents=True, exist_ok=True)
 
                 input_path = str(
-                    temp_dir / f"xinference_stt_{uuid.uuid4().hex[:8]}.input"
+                    temp_dir / f"xinference_stt_{uuid.uuid4().hex[:8]}.input",
                 )
                 output_path = str(
-                    temp_dir / f"xinference_stt_{uuid.uuid4().hex[:8]}.wav"
+                    temp_dir / f"xinference_stt_{uuid.uuid4().hex[:8]}.wav",
                 )
                 temp_files.extend([input_path, output_path])
 

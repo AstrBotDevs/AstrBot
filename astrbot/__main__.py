@@ -99,7 +99,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
         await download_dashboard(version=f"v{VERSION}", latest=False)
     except Exception as e:
         logger.warning(
-            f"下载指定版本(v{VERSION})的管理面板文件失败: {e},尝试下载最新版本｡"
+            f"下载指定版本(v{VERSION})的管理面板文件失败: {e},尝试下载最新版本｡",
         )
         try:
             await download_dashboard(latest=True)
@@ -118,7 +118,7 @@ async def main_async(webui_dir_arg: str | None, log_broker: LogBroker) -> None:
     if webui_dir is None:
         logger.warning(
             "管理面板文件检查失败,WebUI 功能将不可用｡"
-            "请检查网络连接或手动指定 --webui-dir 参数｡"
+            "请检查网络连接或手动指定 --webui-dir 参数｡",
         )
 
     db = db_helper

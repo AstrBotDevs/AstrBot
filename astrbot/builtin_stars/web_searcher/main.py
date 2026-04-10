@@ -379,7 +379,7 @@ class Main(star.Star):
                     "snippet": f"{result.snippet}",
                     # TODO: do not need ref for non-webchat platform adapter
                     "index": index,
-                }
+                },
             )
             if result.favicon:
                 sp.temporary_cache["_ws_favicon"][result.url] = result.favicon
@@ -481,8 +481,7 @@ class Main(star.Star):
         exclude: str = "",
         count: int = 10,
     ) -> str:
-        """
-        A web search tool based on Bocha Search API, used to retrieve web pages
+        """A web search tool based on Bocha Search API, used to retrieve web pages
         related to the user's query.
 
         Args:
@@ -511,14 +510,16 @@ class Main(star.Star):
             include (string): Optional. Specifies the domains to include in
                 the search. Multiple domains can be separated by "|" or ",".
                 A maximum of 100 domains is allowed.
-                Examples:
+
+        Examples:
                 - "qq.com"
                 - "qq.com|m.163.com"
 
             exclude (string): Optional. Specifies the domains to exclude from
                 the search. Multiple domains can be separated by "|" or ",".
                 A maximum of 100 domains is allowed.
-                Examples:
+
+        Examples:
                 - "qq.com"
                 - "qq.com|m.163.com"
 
@@ -527,6 +528,7 @@ class Main(star.Star):
                 - Default: 10
                 The actual number of returned results may be less than the
                 specified count.
+
         """
         logger.info(f"web_searcher - search_from_bocha: {query}")
         cfg = self.context.get_config(umo=event.unified_msg_origin)
@@ -569,7 +571,7 @@ class Main(star.Star):
                     "url": f"{result.url}",
                     "snippet": f"{result.snippet}",
                     "index": index,
-                }
+                },
             )
             if result.favicon:
                 sp.temporary_cache["_ws_favicon"][result.url] = result.favicon
@@ -592,7 +594,7 @@ class Main(star.Star):
             DEFAULT_WEB_SEARCH_PROVIDER,
         )
         branch_provider, is_known_provider = normalize_websearch_provider_for_tools(
-            raw_provider
+            raw_provider,
         )
 
         tool_set = req.func_tool

@@ -40,7 +40,7 @@ class ProviderMiMoTTSAPI(TTSProvider):
         self.style_prompt = provider_config.get("mimo-tts-style-prompt", "")
         self.dialect = provider_config.get("mimo-tts-dialect", "")
         self.seed_text = provider_config.get(
-            "mimo-tts-seed-text", DEFAULT_MIMO_TTS_SEED_TEXT
+            "mimo-tts-seed-text", DEFAULT_MIMO_TTS_SEED_TEXT,
         )
         self.set_model(provider_config.get("model", DEFAULT_MIMO_TTS_MODEL))
         self.client = create_http_client(self.timeout, self.proxy)
@@ -79,14 +79,14 @@ class ProviderMiMoTTSAPI(TTSProvider):
                 {
                     "role": "user",
                     "content": user_prompt,
-                }
+                },
             )
 
         messages.append(
             {
                 "role": "assistant",
                 "content": self._build_assistant_content(text),
-            }
+            },
         )
 
         return {
@@ -110,7 +110,7 @@ class ProviderMiMoTTSAPI(TTSProvider):
         except Exception as exc:
             error_text = response.text[:1024]
             raise MiMoAPIError(
-                f"MiMo TTS API request failed: HTTP {response.status_code}, response: {error_text}"
+                f"MiMo TTS API request failed: HTTP {response.status_code}, response: {error_text}",
             ) from exc
 
         data = response.json()

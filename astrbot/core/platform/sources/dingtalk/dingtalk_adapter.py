@@ -41,11 +41,11 @@ class MyEventHandler(dingtalk_stream.EventHandler):
 
 
 @register_platform_adapter(
-    "dingtalk", "钉钉机器人官方 API 适配器", support_streaming_message=True
+    "dingtalk", "钉钉机器人官方 API 适配器", support_streaming_message=True,
 )
 class DingtalkPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.client_id = platform_config["client_id"]
@@ -65,7 +65,7 @@ class DingtalkPlatformAdapter(Platform):
         client = dingtalk_stream.DingTalkStreamClient(credential, logger=logger)
         client.register_all_event_handler(MyEventHandler())
         client.register_callback_handler(
-            dingtalk_stream.ChatbotMessage.TOPIC, self.client
+            dingtalk_stream.ChatbotMessage.TOPIC, self.client,
         )
         self.client_ = client
         self._shutdown_event: threading.Event | None = None
@@ -79,7 +79,7 @@ class DingtalkPlatformAdapter(Platform):
         return dingtalk_id or "unknown"
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSesion, message_chain: MessageChain,
     ) -> None:
         robot_code = self.client_id
         if session.message_type == MessageType.GROUP_MESSAGE:
@@ -93,21 +93,21 @@ class DingtalkPlatformAdapter(Platform):
             staff_id = await self._get_sender_staff_id(session)
             if not staff_id:
                 logger.warning(
-                    "钉钉私聊会话缺少 staff_id 映射,回退使用 session_id 作为 userId 发送"
+                    "钉钉私聊会话缺少 staff_id 映射,回退使用 session_id 作为 userId 发送",
                 )
                 staff_id = session.session_id
             await self.send_message_chain_to_user(
-                staff_id=staff_id, robot_code=robot_code, message_chain=message_chain
+                staff_id=staff_id, robot_code=robot_code, message_chain=message_chain,
             )
         await super().send_by_session(session, message_chain)
 
     async def send_with_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSesion, message_chain: MessageChain,
     ) -> None:
         await self.send_by_session(session, message_chain)
 
     async def send_with_sesison(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSesion, message_chain: MessageChain,
     ) -> None:
         await self.send_by_session(session, message_chain)
 
@@ -121,7 +121,7 @@ class DingtalkPlatformAdapter(Platform):
         )
 
     async def convert_msg(
-        self, message: dingtalk_stream.ChatbotMessage
+        self, message: dingtalk_stream.ChatbotMessage,
     ) -> AstrBotMessage:
         abm = AstrBotMessage()
         abm.message = []
@@ -133,7 +133,7 @@ class DingtalkPlatformAdapter(Platform):
             else MessageType.FRIEND_MESSAGE
         )
         abm.sender = MessageMember(
-            user_id=self._id_to_sid(message.sender_id), nickname=message.sender_nick
+            user_id=self._id_to_sid(message.sender_id), nickname=message.sender_nick,
         )
         abm.self_id = self._id_to_sid(message.chatbot_user_id)
         abm.message_id = message.message_id
@@ -169,7 +169,7 @@ class DingtalkPlatformAdapter(Platform):
                     logger.warning("钉钉图片消息缺少 downloadCode,已跳过")
                 else:
                     f_path = await self.download_ding_file(
-                        download_code, robot_code, "jpg"
+                        download_code, robot_code, "jpg",
                     )
                     if f_path:
                         abm.message.append(Image.fromFileSystem(f_path))
@@ -192,11 +192,11 @@ class DingtalkPlatformAdapter(Platform):
                             continue
                         if not robot_code:
                             logger.error(
-                                "钉钉富文本图片消息解析失败: 回调中缺少 robotCode"
+                                "钉钉富文本图片消息解析失败: 回调中缺少 robotCode",
                             )
                             continue
                         f_path = await self.download_ding_file(
-                            download_code, robot_code, "jpg"
+                            download_code, robot_code, "jpg",
                         )
                         if f_path:
                             abm.message.append(Image.fromFileSystem(f_path))
@@ -213,7 +213,7 @@ class DingtalkPlatformAdapter(Platform):
                         voice_ext = "amr"
                     voice_ext = voice_ext.lstrip(".")
                     f_path = await self.download_ding_file(
-                        download_code, robot_code, voice_ext
+                        download_code, robot_code, voice_ext,
                     )
                     if f_path:
                         abm.message.append(Record.fromFileSystem(f_path))
@@ -231,7 +231,7 @@ class DingtalkPlatformAdapter(Platform):
                     if not file_ext:
                         file_ext = "file"
                     f_path = await self.download_ding_file(
-                        download_code, robot_code, file_ext
+                        download_code, robot_code, file_ext,
                     )
                     if f_path:
                         if not file_name:
@@ -241,7 +241,7 @@ class DingtalkPlatformAdapter(Platform):
         return abm
 
     async def _remember_sender_binding(
-        self, message: dingtalk_stream.ChatbotMessage, abm: AstrBotMessage
+        self, message: dingtalk_stream.ChatbotMessage, abm: AstrBotMessage,
     ) -> None:
         try:
             if abm.type == MessageType.FRIEND_MESSAGE:
@@ -253,16 +253,16 @@ class DingtalkPlatformAdapter(Platform):
                             platform_name=self.meta().id,
                             message_type=abm.type,
                             session_id=sender_id,
-                        )
+                        ),
                     )
                     await sp.put_async(
-                        "global", umo, "dingtalk_staffid", sender_staff_id
+                        "global", umo, "dingtalk_staffid", sender_staff_id,
                     )
         except Exception as e:
             logger.warning(f"保存钉钉会话映射失败: {e}")
 
     async def download_ding_file(
-        self, download_code: str, robot_code: str, ext: str
+        self, download_code: str, robot_code: str, ext: str,
     ) -> str:
         """下载钉钉文件
 
@@ -304,7 +304,7 @@ class DingtalkPlatformAdapter(Platform):
     async def get_access_token(self) -> str:
         try:
             access_token = await asyncio.get_running_loop().run_in_executor(
-                None, self.client_.get_access_token
+                None, self.client_.get_access_token,
             )
             if access_token:
                 return access_token
@@ -313,11 +313,11 @@ class DingtalkPlatformAdapter(Platform):
         payload = {"appKey": self.client_id, "appSecret": self.client_secret}
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                "https://api.dingtalk.com/v1.0/oauth2/accessToken", json=payload
+                "https://api.dingtalk.com/v1.0/oauth2/accessToken", json=payload,
             ) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"获取钉钉机器人 access_token 失败: {resp.status}, {await resp.text()}"
+                        f"获取钉钉机器人 access_token 失败: {resp.status}, {await resp.text()}",
                     )
                     return ""
                 data = await resp.json()
@@ -326,7 +326,7 @@ class DingtalkPlatformAdapter(Platform):
     async def _get_sender_staff_id(self, session: MessageSesion) -> str:
         try:
             staff_id = await sp.get_async(
-                "global", str(session), "dingtalk_staffid", ""
+                "global", str(session), "dingtalk_staffid", "",
             )
             return staff_id or ""
         except Exception as e:
@@ -334,7 +334,7 @@ class DingtalkPlatformAdapter(Platform):
             return ""
 
     async def _send_group_message(
-        self, open_conversation_id: str, robot_code: str, msg_key: str, msg_param: dict
+        self, open_conversation_id: str, robot_code: str, msg_key: str, msg_param: dict,
     ) -> None:
         access_token = await self.get_access_token()
         if not access_token:
@@ -350,19 +350,18 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://api.dingtalk.com/v1.0/robot/groupMessages/send",
-                headers=headers,
-                json=payload,
-            ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"钉钉群消息发送失败: {resp.status}, {await resp.text()}"
-                    )
+        async with aiohttp.ClientSession() as session, session.post(
+            "https://api.dingtalk.com/v1.0/robot/groupMessages/send",
+            headers=headers,
+            json=payload,
+        ) as resp:
+            if resp.status != 200:
+                logger.error(
+                    f"钉钉群消息发送失败: {resp.status}, {await resp.text()}",
+                )
 
     async def _send_private_message(
-        self, staff_id: str, robot_code: str, msg_key: str, msg_param: dict
+        self, staff_id: str, robot_code: str, msg_key: str, msg_param: dict,
     ) -> None:
         access_token = await self.get_access_token()
         if not access_token:
@@ -378,16 +377,15 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend",
-                headers=headers,
-                json=payload,
-            ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"钉钉私聊消息发送失败: {resp.status}, {await resp.text()}"
-                    )
+        async with aiohttp.ClientSession() as session, session.post(
+            "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend",
+            headers=headers,
+            json=payload,
+        ) as resp:
+            if resp.status != 200:
+                logger.error(
+                    f"钉钉私聊消息发送失败: {resp.status}, {await resp.text()}",
+                )
 
     def _safe_remove_file(self, file_path: str | None) -> None:
         if not file_path:
@@ -432,7 +430,7 @@ class DingtalkPlatformAdapter(Platform):
             ) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"钉钉媒体上传失败: {resp.status}, {await resp.text()}"
+                        f"钉钉媒体上传失败: {resp.status}, {await resp.text()}",
                     )
                     return ""
                 data = await resp.json()
@@ -487,7 +485,7 @@ class DingtalkPlatformAdapter(Platform):
                 if not photo_url:
                     continue
                 await send_message(
-                    msg_key="sampleImageMsg", msg_param={"photoURL": photo_url}
+                    msg_key="sampleImageMsg", msg_param={"photoURL": photo_url},
                 )
             elif isinstance(segment, Record):
                 converted_audio = None
@@ -625,7 +623,7 @@ class DingtalkPlatformAdapter(Platform):
                 logger.error("钉钉私聊回复失败: 缺少 sender_staff_id")
                 return
             await self.send_message_chain_to_user(
-                staff_id=staff_id, robot_code=robot_code, message_chain=message_chain
+                staff_id=staff_id, robot_code=robot_code, message_chain=message_chain,
             )
 
     async def handle_msg(self, abm: AstrBotMessage) -> None:

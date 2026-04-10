@@ -4,7 +4,7 @@ from .openai_source import ProviderOpenAIOfficial
 
 
 @register_provider_adapter(
-    "xai_chat_completion", "xAI Chat Completion Provider Adapter"
+    "xai_chat_completion", "xAI Chat Completion Provider Adapter",
 )
 class ProviderXAI(ProviderOpenAIOfficial):
     def __init__(

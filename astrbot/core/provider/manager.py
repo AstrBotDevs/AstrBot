@@ -223,7 +223,7 @@ class ProviderManager:
         return self.inst_map.get(provider_id)
 
     def get_using_provider(
-        self, provider_type: ProviderType, umo=None
+        self, provider_type: ProviderType, umo=None,
     ) -> Providers | None:
         """获取正在使用的提供商实例｡
 
@@ -281,7 +281,7 @@ class ProviderManager:
 
         if not provider and provider_id:
             logger.warning(
-                f"没有找到 ID 为 {provider_id} 的提供商,这可能是由于您修改了提供商(模型)ID 导致的｡"
+                f"没有找到 ID 为 {provider_id} 的提供商,这可能是由于您修改了提供商(模型)ID 导致的｡",
             )
 
         return provider
@@ -367,6 +367,7 @@ class ProviderManager:
 
         Raises:
             ImportError: 如果提供商类型未知或无法导入对应模块,则抛出异常｡
+
         """
         match type:
             case "openai_chat_completion":
@@ -499,6 +500,7 @@ class ProviderManager:
 
         Returns:
             dict: 合并后的 provider 配置,key 为 provider id,value 为合并后的配置字典
+
         """
         pc = copy.deepcopy(provider_config)
         provider_source_id = pc.get("provider_source_id", "")
@@ -599,7 +601,7 @@ class ProviderManager:
                     # STT 任务
                     if not issubclass(cls_type, STTProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of STTProvider"
+                            f"Provider class {cls_type} is not a subclass of STTProvider",
                         )
                     inst = cls_type(provider_config, self.provider_settings)
 
@@ -622,7 +624,7 @@ class ProviderManager:
                     # TTS 任务
                     if not issubclass(cls_type, TTSProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of TTSProvider"
+                            f"Provider class {cls_type} is not a subclass of TTSProvider",
                         )
                     inst = cls_type(provider_config, self.provider_settings)
 
@@ -645,7 +647,7 @@ class ProviderManager:
                     # 文本生成任务
                     if not issubclass(cls_type, Provider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of Provider"
+                            f"Provider class {cls_type} is not a subclass of Provider",
                         )
                     inst = cls_type(
                         provider_config,
@@ -670,7 +672,7 @@ class ProviderManager:
                 case ProviderType.EMBEDDING:
                     if not issubclass(cls_type, EmbeddingProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of EmbeddingProvider"
+                            f"Provider class {cls_type} is not a subclass of EmbeddingProvider",
                         )
                     inst = cls_type(provider_config, self.provider_settings)
                     if isinstance(inst, HasInitialize):
@@ -679,7 +681,7 @@ class ProviderManager:
                 case ProviderType.RERANK:
                     if not issubclass(cls_type, RerankProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of RerankProvider"
+                            f"Provider class {cls_type} is not a subclass of RerankProvider",
                         )
                     inst = cls_type(provider_config, self.provider_settings)
                     if isinstance(inst, HasInitialize):
@@ -689,7 +691,7 @@ class ProviderManager:
                     # 未知供应商抛出异常,确保inst初始化
                     # Should be unreachable
                     raise Exception(
-                        f"未知的提供商类型:{provider_metadata.provider_type}"
+                        f"未知的提供商类型:{provider_metadata.provider_type}",
                     )
 
             self.inst_map[provider_config["id"]] = inst
@@ -784,7 +786,7 @@ class ProviderManager:
             del self.inst_map[provider_id]
 
     async def delete_provider(
-        self, provider_id: str | None = None, provider_source_id: str | None = None
+        self, provider_id: str | None = None, provider_source_id: str | None = None,
     ) -> None:
         """Delete provider and/or provider source from config and terminate the instances. Config will be saved after deletion."""
         async with self.resource_lock:
@@ -808,7 +810,7 @@ class ProviderManager:
     async def update_provider(self, origin_provider_id: str, new_config: dict) -> None:
         """Update provider config and reload the instance. Config will be saved after update."""
         async with self.resource_lock:
-            npid = new_config.get("id", None)
+            npid = new_config.get("id")
             if not npid:
                 raise ValueError("New provider config must have an 'id' field")
             config = self.acm.default_conf
@@ -832,7 +834,7 @@ class ProviderManager:
     async def create_provider(self, new_config: dict) -> None:
         """Add new provider config and load the instance. Config will be saved after addition."""
         async with self.resource_lock:
-            npid = new_config.get("id", None)
+            npid = new_config.get("id")
             if not npid:
                 raise ValueError("New provider config must have an 'id' field")
             config = self.acm.default_conf

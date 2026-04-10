@@ -1,5 +1,4 @@
-"""
-LSP (Language Server Protocol) client implementation.
+"""LSP (Language Server Protocol) client implementation.
 
 The orchestrator acts as an LSP client, connecting to LSP servers
 that provide language intelligence features (completions, diagnostics, etc.).
@@ -20,8 +19,7 @@ log = logger
 
 
 class AstrbotLspClient(BaseAstrbotLspClient):
-    """
-    LSP client for communicating with LSP servers.
+    """LSP client for communicating with LSP servers.
 
     Implements the Microsoft Language Server Protocol for connecting to
     external language intelligence services.
@@ -44,8 +42,7 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         return self._connected
 
     async def connect(self) -> None:
-        """
-        Connect to configured LSP servers.
+        """Connect to configured LSP servers.
 
         LSP servers are typically stdio-based subprocesses. This method
         establishes the communication channel.
@@ -57,12 +54,12 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         log.info("LSP client initialized.")
 
     async def connect_to_server(self, command: list[str], workspace_uri: str) -> None:
-        """
-        Connect to an LSP server subprocess.
+        """Connect to an LSP server subprocess.
 
         Args:
             command: Command line to start the LSP server (e.g., ["python", "lsp_server.py"])
             workspace_uri: Root URI of the workspace to serve
+
         """
         log.debug(f"Starting LSP server: {' '.join(command)}")
 
@@ -99,7 +96,7 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         log.info(f"LSP client connected to server: {command[0]}")
 
     async def send_request(
-        self, method: str, params: dict[str, Any] | None = None
+        self, method: str, params: dict[str, Any] | None = None,
     ) -> Any:
         """Send an LSP request and wait for response."""
         if not self._writer:
@@ -138,7 +135,7 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         raise TimeoutError(f"LSP request {method} timed out")
 
     async def send_notification(
-        self, method: str, params: dict[str, Any] | None = None
+        self, method: str, params: dict[str, Any] | None = None,
     ) -> None:
         """Send an LSP notification (no response expected)."""
         if not self._writer:

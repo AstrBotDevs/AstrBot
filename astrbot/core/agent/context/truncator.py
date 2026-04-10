@@ -20,6 +20,7 @@ class ContextTruncator:
 
         Returns:
             tuple: (system_messages, non_system_messages)
+
         """
         first_non_system = 0
         for i, msg in enumerate(messages):
@@ -51,7 +52,7 @@ class ContextTruncator:
 
         # If a user message exists inside the truncated list, promote it to the front.
         index_in_truncated = next(
-            (i for i, m in enumerate(truncated) if m.role == "user"), None
+            (i for i, m in enumerate(truncated) if m.role == "user"), None,
         )
         if index_in_truncated is not None:
             # Build a new truncated list that places the found user message first,
@@ -127,8 +128,7 @@ class ContextTruncator:
         keep_most_recent_turns: int,
         drop_turns: int = 1,
     ) -> list[Message]:
-        """
-        Turn-based truncation strategy, which drops the oldest turns while keeping the most recent N turns.
+        """Turn-based truncation strategy, which drops the oldest turns while keeping the most recent N turns.
         A turn consists of a user message and an assistant message.
         This method ensures that the truncated context list conforms to OpenAI's context format.
 
@@ -139,6 +139,7 @@ class ContextTruncator:
 
         Returns:
             The truncated list of messages.
+
         """
         if keep_most_recent_turns == -1:
             return messages
@@ -163,7 +164,7 @@ class ContextTruncator:
             truncated_contexts = truncated_contexts[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_contexts, messages
+            system_messages, truncated_contexts, messages,
         )
         return self.fix_messages(result)
 
@@ -192,7 +193,7 @@ class ContextTruncator:
             truncated_non_system = truncated_non_system[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_non_system, messages
+            system_messages, truncated_non_system, messages,
         )
         return self.fix_messages(result)
 
@@ -221,6 +222,6 @@ class ContextTruncator:
             truncated_non_system = truncated_non_system[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_non_system, messages
+            system_messages, truncated_non_system, messages,
         )
         return self.fix_messages(result)

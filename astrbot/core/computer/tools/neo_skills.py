@@ -39,7 +39,7 @@ async def _get_neo_context(
     if client is None or sandbox is None:
         raise RuntimeError(
             "Current sandbox booter does not support Neo skill lifecycle APIs. "
-            "Please switch to shipyard_neo."
+            "Please switch to shipyard_neo.",
         )
     return client, sandbox
 
@@ -81,7 +81,7 @@ class GetExecutionHistoryTool(NeoSkillToolBase):
                 "has_description": {"type": "boolean", "default": False},
             },
             "required": [],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -124,7 +124,7 @@ class AnnotateExecutionTool(NeoSkillToolBase):
                 "notes": {"type": "string"},
             },
             "required": ["execution_id"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -175,7 +175,7 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
                 },
             },
             "required": ["payload"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -205,7 +205,7 @@ class GetSkillPayloadTool(NeoSkillToolBase):
                 "payload_ref": {"type": "string"},
             },
             "required": ["payload_ref"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -250,7 +250,7 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
                 },
             },
             "required": ["skill_key", "source_execution_ids"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -287,7 +287,7 @@ class ListSkillCandidatesTool(NeoSkillToolBase):
                 "offset": {"type": "integer", "default": 0},
             },
             "required": [],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -325,7 +325,7 @@ class EvaluateSkillCandidateTool(NeoSkillToolBase):
                 "report": {"type": "string"},
             },
             "required": ["candidate_id", "passed"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -377,7 +377,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
                 },
             },
             "required": ["candidate_id"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -414,7 +414,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
                     "release": result.get("release"),
                     "sync": result.get("sync"),
                     "rollback": result.get("rollback"),
-                }
+                },
             )
         except Exception as e:
             return f"Error promoting skill candidate: {e!s}"
@@ -435,7 +435,7 @@ class ListSkillReleasesTool(NeoSkillToolBase):
                 "offset": {"type": "integer", "default": 0},
             },
             "required": [],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -471,7 +471,7 @@ class RollbackSkillReleaseTool(NeoSkillToolBase):
                 "release_id": {"type": "string"},
             },
             "required": ["release_id"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -501,7 +501,7 @@ class SyncSkillReleaseTool(NeoSkillToolBase):
                 "require_stable": {"type": "boolean", "default": True},
             },
             "required": [],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]

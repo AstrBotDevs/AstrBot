@@ -44,7 +44,7 @@ class EventBus:
             scheduler = self.pipeline_scheduler_mapping.get(conf_id)
             if not scheduler:
                 logger.error(
-                    f"PipelineScheduler not found for id: {conf_id}, event ignored."
+                    f"PipelineScheduler not found for id: {conf_id}, event ignored.",
                 )
                 continue
             asyncio.create_task(scheduler.execute(event))  # noqa: RUF006

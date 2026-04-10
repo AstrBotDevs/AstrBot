@@ -30,13 +30,13 @@ try:
     from mcp.client.sse import sse_client
 except (ModuleNotFoundError, ImportError):
     logger.warning(
-        "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
+        "Warning: Missing 'mcp' dependency, MCP services will be unavailable.",
     )
 try:
     from mcp.client.streamable_http import streamablehttp_client
 except (ModuleNotFoundError, ImportError):
     logger.warning(
-        "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable."
+        "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
     )
 
 
@@ -166,7 +166,7 @@ class McpClient(BaseAstrbotMcpClient):
         return tools
 
     async def call_tool(
-        self, name: str, arguments: dict[str, Any], read_timeout_seconds: int = 60
+        self, name: str, arguments: dict[str, Any], read_timeout_seconds: int = 60,
     ) -> Any:
         """Call a tool on the MCP server with reconnection support."""
         return await self.call_tool_with_reconnect(
@@ -236,7 +236,7 @@ class McpClient(BaseAstrbotMcpClient):
                     sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
                 )
                 streams = await self.exit_stack.enter_async_context(
-                    self._streams_context
+                    self._streams_context,
                 )
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
                 self.session = await self.exit_stack.enter_async_context(
@@ -244,12 +244,12 @@ class McpClient(BaseAstrbotMcpClient):
                         *streams,
                         read_timeout_seconds=read_timeout,
                         logging_callback=logging_callback,
-                    )
+                    ),
                 )
             else:
                 timeout = timedelta(seconds=cfg.get("timeout", 30))
                 sse_read_timeout = timedelta(
-                    seconds=cfg.get("sse_read_timeout", 60 * 5)
+                    seconds=cfg.get("sse_read_timeout", 60 * 5),
                 )
                 self._streams_context = streamablehttp_client(
                     url=cfg["url"],
@@ -259,7 +259,7 @@ class McpClient(BaseAstrbotMcpClient):
                     terminate_on_close=cfg.get("terminate_on_close", True),
                 )
                 read_s, write_s, _ = await self.exit_stack.enter_async_context(
-                    self._streams_context
+                    self._streams_context,
                 )
                 read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
                 self.session = await self.exit_stack.enter_async_context(
@@ -268,7 +268,7 @@ class McpClient(BaseAstrbotMcpClient):
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
                         logging_callback=logging_callback,
-                    )
+                    ),
                 )
         else:
             cfg = _prepare_stdio_env(cfg)
@@ -295,11 +295,11 @@ class McpClient(BaseAstrbotMcpClient):
                         identifier=f"MCPServer-{name}",
                         callback=callback,
                     ),
-                )
+                ),
             )
             self.process_pid = self._extract_stdio_process_pid(stdio_transport)
             self.session = await self.exit_stack.enter_async_context(
-                mcp.ClientSession(*stdio_transport)
+                mcp.ClientSession(*stdio_transport),
             )
         await self.session.initialize()
 
@@ -318,11 +318,12 @@ class McpClient(BaseAstrbotMcpClient):
 
         Raises:
             Exception: raised when reconnection fails
+
         """
         async with self._reconnect_lock:
             if self._reconnecting:
                 logger.debug(
-                    f"MCP Client {self._server_name} is already reconnecting, skipping"
+                    f"MCP Client {self._server_name} is already reconnecting, skipping",
                 )
                 return
             if not self._mcp_server_config or not self._server_name:
@@ -330,7 +331,7 @@ class McpClient(BaseAstrbotMcpClient):
             self._reconnecting = True
             try:
                 logger.info(
-                    f"Attempting to reconnect to MCP server {self._server_name}..."
+                    f"Attempting to reconnect to MCP server {self._server_name}...",
                 )
                 if self.exit_stack:
                     self._old_exit_stacks.append(self.exit_stack)
@@ -339,18 +340,18 @@ class McpClient(BaseAstrbotMcpClient):
                 await self.connect_to_server(self._mcp_server_config, self._server_name)
                 await self.list_tools_and_save()
                 logger.info(
-                    f"Successfully reconnected to MCP server {self._server_name}"
+                    f"Successfully reconnected to MCP server {self._server_name}",
                 )
             except Exception as e:
                 logger.error(
-                    f"Failed to reconnect to MCP server {self._server_name}: {e}"
+                    f"Failed to reconnect to MCP server {self._server_name}: {e}",
                 )
                 raise
             finally:
                 self._reconnecting = False
 
     async def call_tool_with_reconnect(
-        self, tool_name: str, arguments: dict, read_timeout_seconds: timedelta
+        self, tool_name: str, arguments: dict, read_timeout_seconds: timedelta,
     ) -> mcp.types.CallToolResult:
         """Call MCP tool with automatic reconnection on failure, max 2 retries.
 
@@ -365,6 +366,7 @@ class McpClient(BaseAstrbotMcpClient):
         Raises:
             ValueError: MCP session is not available
             anyio.ClosedResourceError: raised after reconnection failure
+
         """
 
         @retry(
@@ -385,7 +387,7 @@ class McpClient(BaseAstrbotMcpClient):
                 )
             except anyio.ClosedResourceError:
                 logger.warning(
-                    f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect..."
+                    f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect...",
                 )
                 await self._reconnect()
                 raise
