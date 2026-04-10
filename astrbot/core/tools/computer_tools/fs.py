@@ -50,11 +50,11 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 from ..registry import builtin_tool
+from . import util as computer_util
 from .util import (
     check_admin_permission,
     is_local_runtime,
     normalize_umo_for_workspace,
-    workspace_root,
 )
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
@@ -75,11 +75,22 @@ def _restricted_env_path_labels(umo: str) -> list[str]:
     ]
 
 
+def get_astrbot_workspaces_path() -> str:
+    """Compatibility wrapper for tests and older module-level monkeypatches."""
+    return computer_util.get_astrbot_workspaces_path()
+
+
+def _workspace_root(umo: str) -> Path:
+    """Workspace root that follows both util-level and fs-level getter monkeypatches."""
+    normalized_umo = normalize_umo_for_workspace(umo)
+    return (Path(get_astrbot_workspaces_path()) / normalized_umo).resolve(strict=False)
+
+
 def _read_allowed_roots(umo: str) -> tuple[Path, ...]:
     """Non-admin users can only read files within these directories (and their subdirectories)"""
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
-        workspace_root(umo),
+        _workspace_root(umo),
         Path("/tmp/.astrbot").resolve(strict=False),
     )
 
@@ -103,7 +114,7 @@ def _resolve_tool_path(path: str, *, local_env: bool, umo: str) -> str:
     if candidate.is_absolute():
         return str(candidate.resolve(strict=False))
     if local_env:
-        return str((workspace_root(umo) / candidate).resolve(strict=False))
+        return str((_workspace_root(umo) / candidate).resolve(strict=False))
     return normalized_path
 
 
@@ -112,7 +123,7 @@ def _resolve_user_path(path: str, *, local_env: bool, umo: str) -> Path:
     if candidate.is_absolute():
         return candidate.resolve(strict=False)
     if local_env:
-        return (workspace_root(umo) / candidate).resolve(strict=False)
+        return (_workspace_root(umo) / candidate).resolve(strict=False)
     return (Path.cwd() / candidate).resolve(strict=False)
 
 
@@ -225,6 +236,11 @@ class FileReadTool(FunctionTool):
                 path=normalized_path,
                 offset=offset,
                 limit=limit,
+                workspace_dir=(
+                    str(_workspace_root(context.context.event.unified_msg_origin))
+                    if local_env
+                    else None
+                ),
             )
         except PermissionError as exc:
             return f"Error: {exc}"
@@ -505,7 +521,7 @@ class GrepTool(FunctionTool):
             if restricted:
                 return [str(root) for root in _read_allowed_roots(umo)]
             if local_env:
-                return [str(workspace_root(umo))]
+                return [str(_workspace_root(umo))]
             return ["."]
 
         if restricted:

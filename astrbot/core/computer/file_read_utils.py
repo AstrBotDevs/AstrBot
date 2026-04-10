@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import io
 import json
+import zipfile
 from asyncio import to_thread
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,11 +48,13 @@ _UTF_BOMS = (
     b"\xff\xfe\x00\x00",
     b"\x00\x00\xfe\xff",
 )
-_BINARY_MAGIC_PREFIXES = (
-    b"%PDF-",
+_ZIP_MAGIC_PREFIXES = (
     b"PK\x03\x04",
     b"PK\x05\x06",
     b"PK\x07\x08",
+)
+_BINARY_MAGIC_PREFIXES = (
+    b"%PDF-",
     b"\x1f\x8b",
     b"7z\xbc\xaf\x27\x1c",
     b"Rar!\x1a\x07",
@@ -64,6 +69,13 @@ class FileProbe:
     encoding: str | None
     mime_type: str | None
     size_bytes: int
+
+
+@dataclass(frozen=True)
+class ParsedDocument:
+    kind: Literal["docx", "pdf"]
+    file_bytes: bytes
+    text: str
 
 
 def _build_probe_script(path: str) -> str:
@@ -269,6 +281,10 @@ async def _read_local_image_base64(path: str) -> dict[str, str | int]:
     return await to_thread(_run)
 
 
+async def _read_local_file_bytes(path: str) -> bytes:
+    return await to_thread(Path(path).read_bytes)
+
+
 async def _compress_image_bytes_to_base64(data: bytes) -> dict[str, str | int]:
     def _run() -> dict[str, str | int]:
         temp_dir = Path(get_astrbot_temp_path())
@@ -318,6 +334,63 @@ def _detect_image_mime(sample: bytes) -> str | None:
 
 def _looks_like_known_binary(sample: bytes) -> bool:
     return any(sample.startswith(prefix) for prefix in _BINARY_MAGIC_PREFIXES)
+
+
+def _looks_like_pdf(path: str, sample: bytes) -> bool:
+    return Path(path).suffix.lower() == ".pdf" or sample.startswith(b"%PDF-")
+
+
+def _looks_like_zip_container(sample: bytes) -> bool:
+    return any(sample.startswith(prefix) for prefix in _ZIP_MAGIC_PREFIXES)
+
+
+def _is_docx_bytes(file_bytes: bytes) -> bool:
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as archive:
+            names = set(archive.namelist())
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+    if "[Content_Types].xml" not in names:
+        return False
+
+    return any(name.startswith("word/") for name in names)
+
+
+async def _parse_local_docx_text(file_bytes: bytes, file_name: str) -> str:
+    from astrbot.core.knowledge_base.parsers.markitdown_parser import (
+        MarkitdownParser,
+    )
+
+    result = await MarkitdownParser().parse(file_bytes, file_name)
+    return result.text
+
+
+async def _parse_local_pdf_text(file_bytes: bytes, file_name: str) -> str:
+    from astrbot.core.knowledge_base.parsers.pdf_parser import PDFParser
+
+    result = await PDFParser().parse(file_bytes, file_name)
+    return result.text
+
+
+async def _parse_local_supported_document(
+    path: str,
+    sample: bytes,
+) -> ParsedDocument | None:
+    file_name = Path(path).name
+    if _looks_like_pdf(path, sample):
+        file_bytes = await _read_local_file_bytes(path)
+        text = await _parse_local_pdf_text(file_bytes, file_name)
+        return ParsedDocument(kind="pdf", file_bytes=file_bytes, text=text)
+
+    if Path(path).suffix.lower() == ".docx" or _looks_like_zip_container(sample):
+        file_bytes = await _read_local_file_bytes(path)
+        if not _is_docx_bytes(file_bytes):
+            return None
+        text = await _parse_local_docx_text(file_bytes, file_name)
+        return ParsedDocument(kind="docx", file_bytes=file_bytes, text=text)
+
+    return None
 
 
 def _probe_file(sample: bytes, *, size_bytes: int) -> FileProbe:
@@ -375,6 +448,10 @@ def _validate_text_output(content: str) -> str | None:
     return None
 
 
+def _text_exceeds_read_thresholds(content: str) -> bool:
+    return _validate_text_output(content) is not None
+
+
 def _validate_full_text_read_request(probe: FileProbe) -> str | None:
     if probe.size_bytes > _MAX_TEXT_FILE_FULL_READ_BYTES:
         return (
@@ -385,6 +462,135 @@ def _validate_full_text_read_request(probe: FileProbe) -> str | None:
     return None
 
 
+def _slice_text_by_lines(
+    content: str,
+    *,
+    offset: int | None,
+    limit: int | None,
+) -> str:
+    if offset is None and limit is None:
+        return content
+
+    lines = content.splitlines(keepends=True)
+    start = 0 if offset is None else offset
+    end = None if limit is None else start + limit
+    return "".join(lines[start:end])
+
+
+async def _store_converted_text_for_workspace(
+    *,
+    workspace_dir: str,
+    original_path: str,
+    original_bytes: bytes,
+    content: str,
+) -> str:
+    def _run() -> str:
+        original_name = Path(original_path).name
+        digest_suffix = hashlib.md5(original_bytes).hexdigest()[-6:]
+        target_dir = (
+            Path(workspace_dir) / "converted_files" / f"{original_name}_{digest_suffix}"
+        )
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / "text.txt"
+        target_path.write_text(content, encoding="utf-8")
+        return str(target_path)
+
+    return await to_thread(_run)
+
+
+def _build_converted_text_notice(
+    converted_text_path: str,
+    *,
+    selection_returned: bool,
+    selection_too_large: bool = False,
+) -> str:
+    if selection_too_large:
+        return (
+            "Converted text was saved to "
+            f"`{converted_text_path}`. The requested output is still too large to "
+            "return directly. Read that text file with a narrower `offset`/`limit` window."
+        )
+
+    if selection_returned:
+        return (
+            "Full converted text is also available at "
+            f"`{converted_text_path}`. Use that file with a narrow `offset`/`limit` "
+            "window for additional reads."
+        )
+
+    return (
+        "Converted text was saved to "
+        f"`{converted_text_path}` because the parsed document is too large to "
+        "return directly. Read that text file with a narrow `offset`/`limit` window."
+    )
+
+
+async def _read_local_supported_document_result(
+    *,
+    path: str,
+    parsed_document: ParsedDocument,
+    workspace_dir: str | None,
+    offset: int | None,
+    limit: int | None,
+) -> ToolExecResult:
+    content = parsed_document.text
+    if not content:
+        return "No content found at the requested line offset."
+
+    if not _text_exceeds_read_thresholds(content):
+        selected_content = _slice_text_by_lines(content, offset=offset, limit=limit)
+        if not selected_content:
+            return "No content found at the requested line offset."
+        if validation_error := _validate_text_output(selected_content):
+            return validation_error
+        return selected_content
+
+    if not workspace_dir:
+        return (
+            "Error reading file: parsed document exceeds the read output limit and "
+            "no workspace is available for storing converted text."
+        )
+
+    converted_text_path = await _store_converted_text_for_workspace(
+        workspace_dir=workspace_dir,
+        original_path=path,
+        original_bytes=parsed_document.file_bytes,
+        content=content,
+    )
+
+    if offset is None and limit is None:
+        return _build_converted_text_notice(
+            converted_text_path,
+            selection_returned=False,
+        )
+
+    selected_content = _slice_text_by_lines(content, offset=offset, limit=limit)
+    if not selected_content:
+        return (
+            "No content found at the requested line offset. "
+            + _build_converted_text_notice(
+                converted_text_path,
+                selection_returned=False,
+            )
+        )
+
+    notice = _build_converted_text_notice(
+        converted_text_path,
+        selection_returned=True,
+    )
+    combined_output = f"{selected_content}\n\n[{notice}]"
+    if _validate_text_output(combined_output):
+        if _validate_text_output(selected_content):
+            return _build_converted_text_notice(
+                converted_text_path,
+                selection_returned=False,
+                selection_too_large=True,
+            )
+        return selected_content
+
+    return combined_output
+
+
 async def read_file_tool_result(
     booter: ComputerBooter,
     *,
@@ -392,6 +598,7 @@ async def read_file_tool_result(
     path: str,
     offset: int | None,
     limit: int | None,
+    workspace_dir: str | None = None,
 ) -> ToolExecResult:
     if local_mode:
         probe_payload = await _probe_local_file(path)
@@ -405,6 +612,21 @@ async def read_file_tool_result(
     sample = base64.b64decode(sample_b64) if sample_b64 else b""
     size_bytes = int(probe_payload.get("size_bytes", 0) or 0)
     probe = _probe_file(sample, size_bytes=size_bytes)
+
+    if local_mode:
+        try:
+            parsed_document = await _parse_local_supported_document(path, sample)
+        except Exception as exc:
+            return f"Error reading file: failed to parse document: {exc}"
+
+        if parsed_document is not None:
+            return await _read_local_supported_document_result(
+                path=path,
+                parsed_document=parsed_document,
+                workspace_dir=workspace_dir,
+                offset=offset,
+                limit=limit,
+            )
 
     if probe.kind == "binary":
         return "Error reading file: binary files are not supported by this tool."

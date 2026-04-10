@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import io
+import zipfile
 from types import SimpleNamespace
 from typing import Any
 
@@ -12,6 +14,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.computer import file_read_utils
 from astrbot.core.computer.booters.local import LocalBooter
 from astrbot.core.tools.computer_tools import fs as fs_tools
+from astrbot.core.tools.computer_tools import util as computer_util
 
 
 def _make_context(
@@ -52,7 +55,7 @@ def _setup_local_fs_tools(
     temp_root.mkdir()
 
     monkeypatch.setattr(
-        fs_tools,
+        computer_util,
         "get_astrbot_workspaces_path",
         lambda: str(workspaces_root),
     )
@@ -79,7 +82,7 @@ def _setup_local_fs_tools(
 
     monkeypatch.setattr(fs_tools, "get_booter", _fake_get_booter)
 
-    normalized_umo = fs_tools._normalize_umo_for_workspace(umo)
+    normalized_umo = computer_util.normalize_umo_for_workspace(umo)
     workspace = workspaces_root / normalized_umo
     workspace.mkdir(parents=True, exist_ok=True)
     return workspace
@@ -174,7 +177,7 @@ async def test_file_read_tool_treats_svg_as_text(
 
 
 @pytest.mark.asyncio
-async def test_file_read_tool_rejects_pdf_as_binary(
+async def test_file_read_tool_reads_pdf_via_parser(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ):
@@ -182,12 +185,71 @@ async def test_file_read_tool_rejects_pdf_as_binary(
     pdf_path = workspace / "doc.pdf"
     pdf_path.write_bytes(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\n")
 
+    async def _fake_parse_pdf(_file_bytes: bytes, _file_name: str) -> str:
+        return "page-1\npage-2\n"
+
+    monkeypatch.setattr(file_read_utils, "_parse_local_pdf_text", _fake_parse_pdf)
+
     result = await fs_tools.FileReadTool().call(
         _make_context(),
         path="doc.pdf",
     )
 
-    assert result == "Error reading file: binary files are not supported by this tool."
+    assert result == "page-1\npage-2\n"
+
+
+@pytest.mark.asyncio
+async def test_file_read_tool_reads_docx_via_parser_and_magic(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    docx_path = workspace / "report.bin"
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, mode="w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("word/document.xml", "<w:document/>")
+    docx_path.write_bytes(buffer.getvalue())
+
+    async def _fake_parse_docx(_file_bytes: bytes, _file_name: str) -> str:
+        return "doc-line-1\ndoc-line-2\n"
+
+    monkeypatch.setattr(file_read_utils, "_parse_local_docx_text", _fake_parse_docx)
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(),
+        path="report.bin",
+    )
+
+    assert result == "doc-line-1\ndoc-line-2\n"
+
+
+@pytest.mark.asyncio
+async def test_file_read_tool_stores_long_converted_document_in_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    pdf_path = workspace / "manual.pdf"
+    pdf_path.write_bytes(b"%PDF-1.7\nfake\n")
+    long_text = _make_large_text()
+
+    async def _fake_parse_pdf(_file_bytes: bytes, _file_name: str) -> str:
+        return long_text
+
+    monkeypatch.setattr(file_read_utils, "_parse_local_pdf_text", _fake_parse_pdf)
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(),
+        path="manual.pdf",
+    )
+
+    converted_root = workspace / "converted_files"
+    converted_files = list(converted_root.glob("manual.pdf_*/text.txt"))
+    assert len(converted_files) == 1
+    assert converted_files[0].read_text(encoding="utf-8") == long_text
+    assert str(converted_files[0]) in result
+    assert "narrow `offset`/`limit` window" in result
 
 
 @pytest.mark.asyncio
