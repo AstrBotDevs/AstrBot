@@ -11,6 +11,8 @@ import os
 import sys
 import tempfile
 import traceback
+from dataclasses import dataclass
+from enum import Enum, auto
 from types import ModuleType
 
 import yaml
@@ -37,6 +39,7 @@ from astrbot.core.utils.astrbot_path import (
 from astrbot.core.utils.io import remove_dir
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.requirements_utils import (
+    MissingRequirementsPlan,
     plan_missing_requirements_install,
 )
 
@@ -75,6 +78,19 @@ class PluginDependencyInstallError(Exception):
         self.plugin_label = plugin_label
         self.requirements_path = requirements_path
         self.error = error
+
+
+class ImportDependencyRecoveryMode(Enum):
+    DISABLED = auto()
+    PRELOAD_AND_RECOVER = auto()
+    RECOVER_ON_FAILURE = auto()
+    REINSTALL_ON_FAILURE = auto()
+
+
+@dataclass(frozen=True)
+class ImportDependencyRecoveryState:
+    mode: ImportDependencyRecoveryMode
+    install_plan: MissingRequirementsPlan | None = None
 
 
 @contextlib.contextmanager
@@ -338,6 +354,55 @@ class PluginManager:
             logger.exception(str(dependency_error))
             raise dependency_error from e
 
+    @staticmethod
+    def _resolve_import_dependency_recovery_state(
+        requirements_path: str,
+        *,
+        reserved: bool,
+    ) -> ImportDependencyRecoveryState:
+        if reserved or not os.path.exists(requirements_path):
+            return ImportDependencyRecoveryState(ImportDependencyRecoveryMode.DISABLED)
+
+        install_plan = plan_missing_requirements_install(requirements_path)
+        if install_plan is None:
+            return ImportDependencyRecoveryState(
+                ImportDependencyRecoveryMode.RECOVER_ON_FAILURE
+            )
+        if install_plan.version_mismatch_names:
+            return ImportDependencyRecoveryState(
+                ImportDependencyRecoveryMode.REINSTALL_ON_FAILURE,
+                install_plan=install_plan,
+            )
+
+        return ImportDependencyRecoveryState(
+            ImportDependencyRecoveryMode.PRELOAD_AND_RECOVER,
+            install_plan=install_plan,
+        )
+
+    @staticmethod
+    def _try_import_from_installed_dependencies(
+        path: str,
+        module_str: str,
+        root_dir_name: str,
+        requirements_path: str,
+        import_exc: Exception,
+    ) -> ModuleType | None:
+        try:
+            logger.info(
+                f"插件 {root_dir_name} 导入失败，尝试从已安装依赖恢复: {import_exc!s}"
+            )
+            pip_installer.prefer_installed_dependencies(
+                requirements_path=requirements_path
+            )
+            module = __import__(path, fromlist=[module_str])
+            logger.info(f"插件 {root_dir_name} 已从 site-packages 恢复依赖，跳过重新安装。")
+            return module
+        except Exception as recover_exc:
+            logger.info(
+                f"插件 {root_dir_name} 已安装依赖恢复失败，将重新安装依赖: {recover_exc!s}"
+            )
+            return None
+
     async def _import_plugin_with_dependency_recovery(
         self,
         path: str,
@@ -347,17 +412,12 @@ class PluginManager:
         *,
         reserved: bool = False,
     ) -> ModuleType:
-        can_attempt_installed_dependency_recovery = False
-        can_preload_installed_dependencies = False
-        install_plan = None
-        if os.path.exists(requirements_path) and not reserved:
-            can_attempt_installed_dependency_recovery = True
-            install_plan = plan_missing_requirements_install(requirements_path)
-            can_preload_installed_dependencies = (
-                install_plan is not None and not install_plan.version_mismatch_names
-            )
+        recovery_state = self._resolve_import_dependency_recovery_state(
+            requirements_path,
+            reserved=reserved,
+        )
 
-        if can_preload_installed_dependencies:
+        if recovery_state.mode is ImportDependencyRecoveryMode.PRELOAD_AND_RECOVER:
             try:
                 pip_installer.prefer_installed_dependencies(
                     requirements_path=requirements_path
@@ -370,30 +430,25 @@ class PluginManager:
         try:
             return __import__(path, fromlist=[module_str])
         except (ModuleNotFoundError, ImportError) as import_exc:
-            if can_attempt_installed_dependency_recovery and (
-                install_plan is None or not install_plan.version_mismatch_names
-            ):
-                try:
-                    logger.info(
-                        f"插件 {root_dir_name} 导入失败，尝试从已安装依赖恢复: {import_exc!s}"
-                    )
-                    pip_installer.prefer_installed_dependencies(
-                        requirements_path=requirements_path
-                    )
-                    module = __import__(path, fromlist=[module_str])
-                    logger.info(
-                        f"插件 {root_dir_name} 已从 site-packages 恢复依赖，跳过重新安装。"
-                    )
-                    return module
-                except Exception as recover_exc:
-                    logger.info(
-                        f"插件 {root_dir_name} 已安装依赖恢复失败，将重新安装依赖: {recover_exc!s}"
-                    )
-            elif install_plan is not None and install_plan.version_mismatch_names:
+            if recovery_state.mode in {
+                ImportDependencyRecoveryMode.PRELOAD_AND_RECOVER,
+                ImportDependencyRecoveryMode.RECOVER_ON_FAILURE,
+            }:
+                recovered_module = self._try_import_from_installed_dependencies(
+                    path,
+                    module_str,
+                    root_dir_name,
+                    requirements_path,
+                    import_exc,
+                )
+                if recovered_module is not None:
+                    return recovered_module
+            elif recovery_state.mode is ImportDependencyRecoveryMode.REINSTALL_ON_FAILURE:
+                assert recovery_state.install_plan is not None
                 logger.info(
                     "插件 %s 预检查检测到版本不匹配，跳过已安装依赖恢复: %s",
                     root_dir_name,
-                    sorted(install_plan.version_mismatch_names),
+                    sorted(recovery_state.install_plan.version_mismatch_names),
                 )
 
             await self._check_plugin_dept_update(target_plugin=root_dir_name)
