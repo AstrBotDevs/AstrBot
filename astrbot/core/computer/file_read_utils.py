@@ -508,20 +508,20 @@ def _build_converted_text_notice(
         return (
             "Converted text was saved to "
             f"`{converted_text_path}`. The requested output is still too large to "
-            "return directly. Read that text file with a narrower `offset`/`limit` window."
+            "return directly. Read or grep that file with a narrower window."
         )
 
     if selection_returned:
         return (
             "Full converted text is also available at "
-            f"`{converted_text_path}`. Use that file with a narrow `offset`/`limit` "
+            f"`{converted_text_path}`. Read or grep that file with a narrow "
             "window for additional reads."
         )
 
     return (
         "Converted text was saved to "
         f"`{converted_text_path}` because the parsed document is too large to "
-        "return directly. Read that text file with a narrow `offset`/`limit` window."
+        "return directly. Read or grep that file with a narrow window."
     )
 
 
