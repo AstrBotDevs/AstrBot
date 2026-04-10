@@ -182,8 +182,22 @@ def detect_text_encoding(sample: bytes) -> str | None:
     for encoding in _TEXT_ENCODINGS:
         try:
             decoded = sample.decode(encoding)
-        except UnicodeDecodeError:
-            continue
+        except UnicodeDecodeError as exc:
+            # Probe samples can end in the middle of a multibyte sequence.
+            # When the decode failure only happens at the sample tail, trim a few
+            # bytes and retry so UTF-8 text is not misclassified as binary.
+            if exc.start >= len(sample) - 4:
+                decoded = ""
+                for trim_bytes in range(1, min(4, len(sample)) + 1):
+                    try:
+                        decoded = sample[:-trim_bytes].decode(encoding)
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                if not decoded:
+                    continue
+            else:
+                continue
         if _looks_like_text(decoded):
             return encoding
 

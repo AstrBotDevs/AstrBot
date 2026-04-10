@@ -81,7 +81,10 @@ from astrbot.core.tools.web_search_tools import (
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
 )
-from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_system_tmp_path,
+    get_astrbot_workspaces_path,
+)
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.media_utils import (
@@ -1470,6 +1473,14 @@ async def build_main_agent(
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=_get_fallback_chat_providers(
             provider, plugin_context, config.provider_settings
+        ),
+        tool_result_overflow_dir=(
+            get_astrbot_system_tmp_path()
+            if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")
+            else None
+        ),
+        read_tool=(
+            req.func_tool.get_tool("astrbot_file_read_tool") if req.func_tool else None
         ),
     )
 

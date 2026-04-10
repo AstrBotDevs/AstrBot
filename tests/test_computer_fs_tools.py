@@ -92,6 +92,12 @@ def _make_large_text() -> str:
     return "".join(f"line-{index:05d}-{'x' * 48}\n" for index in range(6000))
 
 
+def test_detect_text_encoding_allows_utf8_probe_cut_mid_character():
+    sample = '{"results": ["中文内容"]}'.encode()[:-1]
+
+    assert file_read_utils.detect_text_encoding(sample) in {"utf-8", "utf-8-sig"}
+
+
 @pytest.mark.asyncio
 async def test_file_read_tool_rejects_large_full_text_read_before_local_stream_read(
     monkeypatch: pytest.MonkeyPatch,
@@ -249,7 +255,7 @@ async def test_file_read_tool_stores_long_converted_document_in_workspace(
     assert len(converted_files) == 1
     assert converted_files[0].read_text(encoding="utf-8") == long_text
     assert str(converted_files[0]) in result
-    assert "narrow `offset`/`limit` window" in result
+    assert "Read or grep that file with a narrow window." in result
 
 
 @pytest.mark.asyncio

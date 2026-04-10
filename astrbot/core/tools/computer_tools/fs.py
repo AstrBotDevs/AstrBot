@@ -46,6 +46,7 @@ from astrbot.core.computer.file_read_utils import read_file_tool_result
 from astrbot.core.message.components import File
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_skills_path,
+    get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
 )
 
@@ -71,7 +72,7 @@ def _restricted_env_path_labels(umo: str) -> list[str]:
     return [
         "data/skills",
         f"data/workspaces/{normalized_umo}",
-        "/tmp/.astrbot",
+        get_astrbot_system_tmp_path(),
     ]
 
 
@@ -91,7 +92,7 @@ def _read_allowed_roots(umo: str) -> tuple[Path, ...]:
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
         _workspace_root(umo),
-        Path("/tmp/.astrbot").resolve(strict=False),
+        Path(get_astrbot_system_tmp_path()).resolve(strict=False),
     )
 
 
