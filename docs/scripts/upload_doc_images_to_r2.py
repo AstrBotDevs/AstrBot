@@ -27,7 +27,8 @@ IMAGE_EXTS = {
 
 MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 HTML_IMG_RE = re.compile(
-    r"<img\b[^>]*\bsrc\s*=\s*([\"'])([^\"']+)\1[^>]*>", re.IGNORECASE
+    r"<img\b[^>]*\bsrc\s*=\s*([\"'])([^\"']+)\1[^>]*>",
+    re.IGNORECASE,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Upload all locally referenced images from Markdown docs to Cloudflare R2 using rclone."
+        description="Upload all locally referenced images from Markdown docs to Cloudflare R2 using rclone.",
     )
     parser.add_argument("--remote", required=True, help="rclone remote name, e.g. r2")
     parser.add_argument("--bucket", default="", help="bucket name in remote path")
@@ -50,10 +51,14 @@ def parse_args() -> argparse.Namespace:
         help="docs root to scan for .md files (default: current directory)",
     )
     parser.add_argument(
-        "--dry-run", action="store_true", help="preview uploads without sending files"
+        "--dry-run",
+        action="store_true",
+        help="preview uploads without sending files",
     )
     parser.add_argument(
-        "--list-only", action="store_true", help="only print matched image files"
+        "--list-only",
+        action="store_true",
+        help="only print matched image files",
     )
     parser.add_argument(
         "--rewrite-markdown",
@@ -137,7 +142,8 @@ def find_markdown_files(root: Path) -> list[Path]:
 
 
 def collect_images(
-    root: Path, md_files: Sequence[Path]
+    root: Path,
+    md_files: Sequence[Path],
 ) -> tuple[set[Path], list[tuple[Path, str]]]:
     images: set[Path] = set()
     missing: list[tuple[Path, str]] = []
@@ -193,7 +199,10 @@ def build_public_url(base: str, object_path: str) -> str:
 
 
 def run_rclone_upload(
-    root: Path, target: str, rel_files: Iterable[str], dry_run: bool
+    root: Path,
+    target: str,
+    rel_files: Iterable[str],
+    dry_run: bool,
 ) -> None:
     if shutil.which("rclone") is None:
         raise RuntimeError("rclone not found in PATH")
@@ -263,7 +272,9 @@ def rewrite_markdown_files(
             if not url:
                 return match.group(0)
             return match.group(0).replace(
-                f"src={quote_ch}{raw}{quote_ch}", f"src={quote_ch}{url}{quote_ch}", 1
+                f"src={quote_ch}{raw}{quote_ch}",
+                f"src={quote_ch}{url}{quote_ch}",
+                1,
             )
 
         updated = MD_IMAGE_RE.sub(md_repl, text)
