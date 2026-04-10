@@ -368,6 +368,52 @@ class TestApplyKb:
         assert req.func_tool is not None
 
 
+class TestBuiltinToolInjection:
+    """Tests for builtin tool injection paths."""
+
+    @pytest.mark.asyncio
+    async def test_apply_web_search_tools_uses_builtin_tool_manager(
+        self, mock_event, mock_context
+    ):
+        """Test web search tool injection through the builtin tool manager."""
+        module = ama
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {
+                "web_search": True,
+                "websearch_provider": "baidu_ai_search",
+            }
+        }
+        builtin_tool = MagicMock(spec=FunctionTool)
+        builtin_tool.name = "web_search_baidu"
+        tool_mgr = MagicMock()
+        tool_mgr.get_builtin_tool.return_value = builtin_tool
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        await module._apply_web_search_tools(mock_event, req, mock_context)
+
+        tool_mgr.get_builtin_tool.assert_called_once_with(module.BaiduWebSearchTool)
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("web_search_baidu") is builtin_tool
+
+    def test_proactive_cron_job_tools_uses_builtin_tool_manager(self, mock_context):
+        """Test cron tool injection through the builtin tool manager."""
+        module = ama
+        req = ProviderRequest()
+        tool_mgr = MagicMock()
+
+        future_task_tool = MagicMock(spec=FunctionTool)
+        future_task_tool.name = "future_task"
+        tool_mgr.get_builtin_tool.return_value = future_task_tool
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        module._proactive_cron_job_tools(req, mock_context)
+
+        tool_mgr.get_builtin_tool.assert_called_once_with(module.FutureTaskTool)
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("future_task") is future_task_tool
+
+
 class TestApplyFileExtract:
     """Tests for _apply_file_extract function."""
 
@@ -565,9 +611,10 @@ class TestEnsurePersonaAndSkills:
         tmgr = mock_context.get_llm_tool_manager.return_value
         tmgr.func_list = [tool_a, tool_b]
         tmgr.get_full_tool_set.return_value = ToolSet([tool_a, tool_b])
-        tmgr.get_func.side_effect = lambda name: {"tool_a": tool_a, "tool_b": tool_b}.get(
-            name
-        )
+        tmgr.get_func.side_effect = lambda name: {
+            "tool_a": tool_a,
+            "tool_b": tool_b,
+        }.get(name)
 
         handoff = MagicMock()
         handoff.name = "transfer_to_planner"
@@ -675,7 +722,7 @@ class TestModalitiesFix:
 
         module._modalities_fix(mock_provider, req)
 
-        assert "[图片]" in req.prompt
+        assert "[Image]" in req.prompt
         assert req.image_urls == []
 
     def test_modalities_fix_tool_not_supported(self, mock_provider):

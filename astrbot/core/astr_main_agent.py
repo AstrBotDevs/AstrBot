@@ -32,7 +32,6 @@ from astrbot.core.astr_main_agent_resources import (
     FILE_UPLOAD_TOOL,
     GET_EXECUTION_HISTORY_TOOL,
     GET_SKILL_PAYLOAD_TOOL,
-    KNOWLEDGE_BASE_QUERY_TOOL,
     LIST_SKILL_CANDIDATES_TOOL,
     LIST_SKILL_RELEASES_TOOL,
     LIVE_MODE_SYSTEM_PROMPT,
@@ -44,14 +43,12 @@ from astrbot.core.astr_main_agent_resources import (
     ROLLBACK_SKILL_RELEASE_TOOL,
     RUN_BROWSER_SKILL_TOOL,
     SANDBOX_MODE_PROMPT,
-    SEND_MESSAGE_TO_USER_TOOL,
     SYNC_SKILL_RELEASE_TOOL,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
-    retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.message.components import File, Image, Reply
+from astrbot.core.message.components import File, Image, Record, Reply
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
     set_persona_custom_error_message_on_event,
@@ -62,10 +59,19 @@ from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
-from astrbot.core.tools.cron_tools import (
-    CREATE_CRON_JOB_TOOL,
-    DELETE_CRON_JOB_TOOL,
-    LIST_CRON_JOBS_TOOL,
+from astrbot.core.tools.cron_tools import FutureTaskTool
+from astrbot.core.tools.knowledge_base_tools import (
+    KnowledgeBaseQueryTool,
+    retrieve_knowledge_base,
+)
+from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.web_search_tools import (
+    BaiduWebSearchTool,
+    BochaWebSearchTool,
+    BraveWebSearchTool,
+    TavilyExtractWebPageTool,
+    TavilyWebSearchTool,
+    normalize_legacy_web_search_config,
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
@@ -218,7 +224,11 @@ async def _apply_kb(
     else:
         if req.func_tool is None:
             req.func_tool = ToolSet()
-        req.func_tool.add_tool(KNOWLEDGE_BASE_QUERY_TOOL)
+        req.func_tool.add_tool(
+            plugin_context.get_llm_tool_manager().get_builtin_tool(
+                KnowledgeBaseQueryTool
+            )
+        )
 
 
 async def _apply_file_extract(
@@ -515,6 +525,18 @@ def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> No
     )
 
 
+def _append_audio_attachment(req: ProviderRequest, audio_path: str) -> None:
+    req.extra_user_content_parts.append(
+        TextPart(text=f"[Audio Attachment: path {audio_path}]")
+    )
+
+
+def _append_quoted_audio_attachment(req: ProviderRequest, audio_path: str) -> None:
+    req.extra_user_content_parts.append(
+        TextPart(text=f"[Audio Attachment in quoted message: path {audio_path}]")
+    )
+
+
 def _get_quoted_message_parser_settings(
     provider_settings: dict[str, object] | None,
 ) -> QuotedMessageParserSettings:
@@ -753,12 +775,25 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
                 "Provider %s does not support image, using placeholder.", provider
             )
             image_count = len(req.image_urls)
-            placeholder = " ".join(["[图片]"] * image_count)
+            placeholder = " ".join(["[Image]"] * image_count)
             if req.prompt:
                 req.prompt = f"{placeholder} {req.prompt}"
             else:
                 req.prompt = placeholder
             req.image_urls = []
+    if req.audio_urls:
+        provider_cfg = provider.provider_config.get("modalities", ["audio"])
+        if "audio" not in provider_cfg:
+            logger.debug(
+                "Provider %s does not support audio, using placeholder.", provider
+            )
+            audio_count = len(req.audio_urls)
+            placeholder = " ".join(["[Audio]"] * audio_count)
+            if req.prompt:
+                req.prompt = f"{placeholder} {req.prompt}"
+            else:
+                req.prompt = placeholder
+            req.audio_urls = []
     if req.func_tool:
         provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
         if "tool_use" not in provider_cfg:
@@ -781,12 +816,14 @@ def _sanitize_context_by_modalities(
     if not modalities or not isinstance(modalities, list):
         return
     supports_image = bool("image" in modalities)
+    supports_audio = bool("audio" in modalities)
     supports_tool_use = bool("tool_use" in modalities)
-    if supports_image and supports_tool_use:
+    if supports_image and supports_audio and supports_tool_use:
         return
 
     sanitized_contexts: list[dict] = []
     removed_image_blocks = 0
+    removed_audio_blocks = 0
     removed_tool_messages = 0
     removed_tool_calls = 0
 
@@ -808,20 +845,27 @@ def _sanitize_context_by_modalities(
                 new_msg.pop("tool_calls", None)
                 new_msg.pop("tool_call_id", None)
 
-        if not supports_image:
+        if not supports_image or not supports_audio:
             content = new_msg.get("content")
             if isinstance(content, list):
                 filtered_parts: list = []
-                removed_any_image = False
+                removed_any_multimodal = False
                 for part in content:
                     if isinstance(part, dict):
                         part_type = str(part.get("type", "")).lower()
-                        if part_type in {"image_url", "image"}:
-                            removed_any_image = True
+                        if not supports_image and part_type in {"image_url", "image"}:
+                            removed_any_multimodal = True
                             removed_image_blocks += 1
                             continue
+                        if not supports_audio and part_type in {
+                            "audio_url",
+                            "input_audio",
+                        }:
+                            removed_any_multimodal = True
+                            removed_audio_blocks += 1
+                            continue
                     filtered_parts.append(part)
-                if removed_any_image:
+                if removed_any_multimodal:
                     new_msg["content"] = filtered_parts
 
         if role == "assistant":
@@ -835,11 +879,18 @@ def _sanitize_context_by_modalities(
 
         sanitized_contexts.append(new_msg)
 
-    if removed_image_blocks or removed_tool_messages or removed_tool_calls:
+    if (
+        removed_image_blocks
+        or removed_audio_blocks
+        or removed_tool_messages
+        or removed_tool_calls
+    ):
         logger.debug(
             "sanitize_context_by_modalities applied: "
-            "removed_image_blocks=%s, removed_tool_messages=%s, removed_tool_calls=%s",
+            "removed_image_blocks=%s, removed_audio_blocks=%s, "
+            "removed_tool_messages=%s, removed_tool_calls=%s",
             removed_image_blocks,
+            removed_audio_blocks,
             removed_tool_messages,
             removed_tool_calls,
         )
@@ -1005,12 +1056,39 @@ def _apply_sandbox_tools(
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 
-def _proactive_cron_job_tools(req: ProviderRequest) -> None:
+def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
-    req.func_tool.add_tool(CREATE_CRON_JOB_TOOL)
-    req.func_tool.add_tool(DELETE_CRON_JOB_TOOL)
-    req.func_tool.add_tool(LIST_CRON_JOBS_TOOL)
+    tool_mgr = plugin_context.get_llm_tool_manager()
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FutureTaskTool))
+
+
+async def _apply_web_search_tools(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    plugin_context: Context,
+) -> None:
+    cfg = plugin_context.get_config(umo=event.unified_msg_origin)
+    normalize_legacy_web_search_config(cfg)
+    prov_settings = cfg.get("provider_settings", {})
+
+    if not prov_settings.get("web_search", False):
+        return
+
+    if req.func_tool is None:
+        req.func_tool = ToolSet()
+
+    tool_mgr = plugin_context.get_llm_tool_manager()
+    provider = prov_settings.get("websearch_provider", "tavily")
+    if provider == "tavily":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(TavilyWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(TavilyExtractWebPageTool))
+    elif provider == "bocha":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BochaWebSearchTool))
+    elif provider == "brave":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BraveWebSearchTool))
+    elif provider == "baidu_ai_search":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
 
 
 def _get_compress_provider(
@@ -1101,6 +1179,7 @@ async def build_main_agent(
             req = ProviderRequest()
             req.prompt = ""
             req.image_urls = []
+            req.audio_urls = []
             if sel_model := event.get_extra("selected_model"):
                 req.model = sel_model
             if config.provider_wake_prefix and not event.message_str.startswith(
@@ -1124,6 +1203,10 @@ async def build_main_agent(
                     req.extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
                     )
+                elif isinstance(comp, Record):
+                    audio_path = await comp.convert_to_file_path()
+                    req.audio_urls.append(audio_path)
+                    _append_audio_attachment(req, audio_path)
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
                     file_name = comp.name or os.path.basename(file_path)
@@ -1155,6 +1238,10 @@ async def build_main_agent(
                                 event.track_temporary_local_file(image_path)
                             req.image_urls.append(image_path)
                             _append_quoted_image_attachment(req, image_path)
+                        elif isinstance(reply_comp, Record):
+                            audio_path = await reply_comp.convert_to_file_path()
+                            req.audio_urls.append(audio_path)
+                            _append_quoted_audio_attachment(req, audio_path)
                         elif isinstance(reply_comp, File):
                             file_path = await reply_comp.get_file()
                             file_name = reply_comp.name or os.path.basename(file_path)
@@ -1222,6 +1309,7 @@ async def build_main_agent(
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
+    req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
 
     if config.file_extract_enabled:
         try:
@@ -1229,7 +1317,7 @@ async def build_main_agent(
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while applying file extract: %s", exc)
 
-    if not req.prompt and not req.image_urls:
+    if not req.prompt and not req.image_urls and not req.audio_urls:
         if not event.get_group_id() and req.extra_user_content_parts:
             req.prompt = "<attachment>"
         else:
@@ -1244,6 +1332,7 @@ async def build_main_agent(
 
     _modalities_fix(provider, req)
     _plugin_tool_fix(event, req)
+    await _apply_web_search_tools(event, req, plugin_context)
     _sanitize_context_by_modalities(config, provider, req)
 
     if config.llm_safety_mode:
@@ -1261,12 +1350,16 @@ async def build_main_agent(
     )
 
     if config.add_cron_tools:
-        _proactive_cron_job_tools(req)
+        _proactive_cron_job_tools(req, plugin_context)
 
     if event.platform_meta.support_proactive_message:
         if req.func_tool is None:
             req.func_tool = ToolSet()
-        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+        req.func_tool.add_tool(
+            plugin_context.get_llm_tool_manager().get_builtin_tool(
+                SendMessageToUserTool
+            )
+        )
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()

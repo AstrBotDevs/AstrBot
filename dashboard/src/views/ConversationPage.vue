@@ -71,30 +71,74 @@
                         class="elevation-0" :items-per-page="pagination.page_size"
                         :items-per-page-options="pageSizeOptions" show-select return-object
                         :disabled="loading" @update:options="handleTableOptions">
-                        <template v-slot:item.title="{ item }">
-                            <div class="d-flex align-center">
-                                <span>{{ item.title || tm('status.noTitle') }}</span>
+                        <template v-slot:header.umo_source>
+                            <div class="umo-header-cell">
+                                <span>{{ tm('table.headers.umo') }}</span>
+                                <v-btn-toggle
+                                    v-model="umoDisplayMode"
+                                    mandatory
+                                    density="compact"
+                                    divided
+                                    variant="outlined"
+                                    class="umo-header-toggle"
+                                >
+                                    <v-btn value="parsed" size="x-small">
+                                        {{ tm('table.umoDisplay.parsed') }}
+                                    </v-btn>
+                                    <v-btn value="raw" size="x-small">
+                                        {{ tm('table.umoDisplay.raw') }}
+                                    </v-btn>
+                                </v-btn-toggle>
                             </div>
                         </template>
 
-                        <template v-slot:item.platform="{ item }">
-                            <v-chip size="small" label>
-                                {{ item.sessionInfo.platform || tm('status.unknown') }}
-                            </v-chip>
+                        <template v-slot:item.title="{ item }">
+                            <div class="conversation-title-cell">
+                                <div class="conversation-title-row">
+                                    <span class="conversation-title-text">{{ item.title || tm('status.noTitle') }}</span>
+                                    <v-btn
+                                        icon
+                                        variant="plain"
+                                        size="x-small"
+                                        density="compact"
+                                        :ripple="false"
+                                        class="conversation-inline-edit"
+                                        @click.stop="editConversation(item)"
+                                        :disabled="loading"
+                                    >
+                                        <v-icon size="14">mdi-pencil</v-icon>
+                                    </v-btn>
+                                </div>
+                                <span class="conversation-title-meta">{{ item.cid || tm('status.unknown') }}</span>
+                            </div>
                         </template>
 
-                        <template v-slot:item.messageType="{ item }">
-                            <v-chip size="small" label>
-                                {{ getMessageTypeDisplay(item.sessionInfo.messageType) }}
-                            </v-chip>
-                        </template>
-
-                        <template v-slot:item.cid="{ item }">
-                            <span class="text-truncate">{{ item.cid || tm('status.unknown') }}</span>
-                        </template>
-
-                        <template v-slot:item.sessionId="{ item }">
-                            <span>{{ item.sessionInfo.sessionId || tm('status.unknown') }}</span>
+                        <template v-slot:item.umo_source="{ item }">
+                            <div class="umo-source-cell">
+                                <div class="umo-source-content">
+                                    <template v-if="umoDisplayMode === 'parsed'">
+                                        <v-chip size="x-small" label>
+                                            {{ item.sessionInfo.platform || tm('status.unknown') }}
+                                        </v-chip>
+                                        <span class="umo-separator">:</span>
+                                        <v-chip size="x-small" label>
+                                            {{ getMessageTypeDisplay(item.sessionInfo.messageType) }}
+                                        </v-chip>
+                                        <span class="umo-separator">:</span>
+                                        <span class="umo-session-id">{{ item.sessionInfo.sessionId || tm('status.unknown') }}</span>
+                                    </template>
+                                    <span v-else class="umo-raw-text">{{ item.user_id || tm('status.unknown') }}</span>
+                                </div>
+                                <v-btn
+                                    icon
+                                    variant="plain"
+                                    size="x-small"
+                                    class="umo-copy-button"
+                                    @click.stop="copyUmoSource(item)"
+                                >
+                                    <v-icon size="16">mdi-content-copy</v-icon>
+                                </v-btn>
+                            </div>
                         </template>
 
                         <template v-slot:item.created_at="{ item }">
@@ -110,10 +154,6 @@
                                 <v-btn icon variant="plain" size="x-small" class="action-button"
                                     @click="viewConversation(item)" :disabled="loading">
                                     <v-icon>mdi-eye</v-icon>
-                                </v-btn>
-                                <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="editConversation(item)" :disabled="loading">
-                                    <v-icon>mdi-pencil</v-icon>
                                 </v-btn>
                                 <v-btn icon color="error" variant="plain" size="x-small" class="action-button"
                                     @click="confirmDeleteConversation(item)" :disabled="loading">
@@ -415,6 +455,7 @@ export default {
             editedHistory: '',
             savingHistory: false,
             monacoEditor: null,
+            umoDisplayMode: 'parsed',
 
             commonStore: useCommonStore()
         }
@@ -445,17 +486,8 @@ export default {
         // 动态表头
         tableHeaders() {
             return [
-                { title: this.tm('table.headers.title'), key: 'title', sortable: true },
-                { title: this.tm('table.headers.cid'), key: 'cid', sortable: true, width: '100px' },
-                {
-                    title: this.tm('table.headers.umo'),
-                    align: 'center',
-                    children: [
-                        { title: this.tm('table.headers.platform'), key: 'platform', sortable: true, width: '120px' },
-                        { title: this.tm('table.headers.type'), key: 'messageType', sortable: true, width: '100px' },
-                        { title: this.tm('table.headers.sessionId'), key: 'sessionId', sortable: true, width: '100px' },
-                    ],
-                },
+                { title: this.tm('table.headers.title'), key: 'title', sortable: true, minWidth: '80px', width: '200px' },
+                { title: this.tm('table.headers.umo'), key: 'umo_source', sortable: false, minWidth: '280px', width: '360px' },
                 { title: this.tm('table.headers.createdAt'), key: 'created_at', sortable: true, width: '180px' },
                 { title: this.tm('table.headers.updatedAt'), key: 'updated_at', sortable: true, width: '180px' },
                 { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, align: 'center' }
@@ -588,6 +620,30 @@ export default {
             };
 
             return typeMap[messageType] || typeMap.default;
+        },
+
+        formatUmoSource(item) {
+            if (!item?.sessionInfo) {
+                return item?.user_id || this.tm('status.unknown');
+            }
+
+            if (this.umoDisplayMode === 'raw') {
+                return item.user_id || this.tm('status.unknown');
+            }
+
+            const platform = item.sessionInfo.platform || this.tm('status.unknown');
+            const messageType = this.getMessageTypeDisplay(item.sessionInfo.messageType);
+            const sessionId = item.sessionInfo.sessionId || this.tm('status.unknown');
+            return `${platform}:${messageType}:${sessionId}`;
+        },
+
+        async copyUmoSource(item) {
+            try {
+                await navigator.clipboard.writeText(this.formatUmoSource(item));
+                this.showSuccessMessage(this.tm('messages.copySuccess'));
+            } catch (error) {
+                this.showErrorMessage(this.tm('messages.copyError'));
+            }
         },
 
         // 获取对话列表
@@ -1134,6 +1190,87 @@ export default {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.conversation-title-cell {
+    padding: 6px 0px;
+    min-width: 100px;
+    max-width: 145px;
+}
+
+.conversation-title-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
+.conversation-title-text {
+    display: inline-block;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.conversation-inline-edit {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    flex-shrink: 0;
+}
+
+.conversation-title-meta {
+    display: block;
+    color: rgba(var(--v-theme-on-surface), 0.58);
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.umo-header-cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.umo-header-toggle {
+    flex-shrink: 0;
+}
+
+.umo-source-cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.umo-source-content {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.umo-separator {
+    color: rgba(var(--v-theme-on-surface), 0.5);
+    flex-shrink: 0;
+}
+
+.umo-session-id,
+.umo-raw-text {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.umo-copy-button {
+    flex-shrink: 0;
 }
 
 /* 动画 */
