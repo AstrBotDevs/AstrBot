@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import io
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -817,23 +818,37 @@ class WeixinOCAdapter(Platform):
         if not qrcode or not qrcode_url:
             raise RuntimeError("qrcode response missing qrcode or qrcode_img_content")
         qr_console_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={quote(qrcode_url)}"
-        logger.info(
-            "weixin_oc(%s): QR session started, qr_link=%s 请使用手机微信扫码登录,二维码有效期 5 分钟,过期后会自动刷新｡",
-            self.meta().id,
-            qr_console_url,
-        )
-        try:
-            qr = qrcode_lib.QRCode(border=1)
-            qr.add_data(qrcode_url)
-            qr.make(fit=True)
-            qr_buffer = io.StringIO()
-            qr.print_ascii(out=qr_buffer, tty=False)
+        # Only show QR code login info in interactive terminal
+        if sys.stdout.isatty():
             logger.info(
-                "weixin_oc(%s): terminal QR code:\n%s",
+                "weixin_oc(%s): QR session started, qr_link=%s 请使用手机微信扫码登录,二维码有效期 5 分钟,过期后会自动刷新｡",
                 self.meta().id,
-                qr_buffer.getvalue(),
+                qr_console_url,
             )
-        except Exception as e:
+            try:
+                qr = qrcode_lib.QRCode(border=1)
+                qr.add_data(qrcode_url)
+                qr.make(fit=True)
+                qr_buffer = io.StringIO()
+                qr.print_ascii(out=qr_buffer, tty=False)
+                logger.info(
+                    "weixin_oc(%s): terminal QR code:\n%s",
+                    self.meta().id,
+                    qr_buffer.getvalue(),
+                )
+            except Exception as e:
+                logger.warning(
+                    "weixin_oc(%s): failed to render terminal QR code: %s",
+                    self.meta().id,
+                    e,
+                )
+        else:
+            # Non-interactive mode: just show the QR code link
+            logger.info(
+                "weixin_oc(%s): QR login link: %s",
+                self.meta().id,
+                qr_console_url,
+            )
             logger.warning(
                 "weixin_oc(%s): failed to render terminal QR code: %s",
                 self.meta().id,

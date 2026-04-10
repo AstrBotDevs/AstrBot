@@ -23,9 +23,12 @@ async def initialize_astrbot(
     admin_password: str | None,
 ) -> None:
     """Execute AstrBot initialization logic"""
+    from astrbot.cli.banner import print_logo
+
     click.echo("=" * 60)
     click.echo("AstrBot 初始化向导")
     click.echo("=" * 60)
+    print_logo()
     click.echo()
 
     dot_astrbot = astrbot_root / ".astrbot"

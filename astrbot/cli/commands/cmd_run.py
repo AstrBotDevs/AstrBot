@@ -382,6 +382,10 @@ def run(
             click.echo("=" * 60)
             click.echo("AstrBot 启动中...")
             click.echo("=" * 60)
+
+            from astrbot.cli.banner import print_logo
+
+            print_logo()
             click.echo()
 
             if backend_only:

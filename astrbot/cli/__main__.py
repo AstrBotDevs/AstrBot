@@ -12,14 +12,7 @@ from . import __version__
 from .commands import bk, conf, init, plug, run, uninstall
 from .i18n import t
 
-logo_tmpl = r"""
-     ___           _______.___________..______      .______     ______   .___________.
-    /   \         /       |           ||   _  \     |   _  \   /  __  \  |           |
-   /  ^  \       |   (----`---|  |----`|  |_)  |    |  |_)  | |  |  |  | `---|  |----`
-  /  /_\  \       \   \       |  |     |      /     |   _  <  |  |  |  |     |  |
- /  _____  \  .----)   |      |  |     |  |\  \----.|  |_)  | |  `--'  |     |  |
-/__/     \__\ |_______/       |__|     | _| `._____||______/   \______/      |__|
-"""
+from .banner import logo_tmpl
 
 
 def print_version_detail() -> None:
