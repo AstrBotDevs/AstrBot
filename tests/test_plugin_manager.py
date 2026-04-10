@@ -803,6 +803,57 @@ async def test_import_plugin_does_not_recover_from_plain_import_error(
 
 
 @pytest.mark.asyncio
+async def test_import_plugin_surfaces_unexpected_recovery_errors(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("networkx\n", encoding="utf-8")
+    events = []
+
+    def raising_prefer_installed_dependencies(*, requirements_path):
+        events.append(("prefer", requirements_path))
+        raise RuntimeError("unexpected recovery failure")
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
+        raising_prefer_installed_dependencies,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: None,
+    )
+
+    async def unexpected_check_plugin_dept_update(*args, **kwargs):
+        raise AssertionError("dependency install fallback should not run")
+
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_check_plugin_dept_update",
+        unexpected_check_plugin_dept_update,
+    )
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        del globals, locals, level
+        events.append(("import", name, tuple(fromlist)))
+        raise ModuleNotFoundError("networkx")
+
+    monkeypatch.setattr(star_manager_module, "__import__", fake_import, raising=False)
+
+    with pytest.raises(RuntimeError, match="unexpected recovery failure"):
+        await plugin_manager_pm._import_plugin_with_dependency_recovery(
+            path="data.plugins.helloworld.main",
+            module_str="main",
+            root_dir_name=TEST_PLUGIN_DIR,
+            requirements_path=str(requirements_path),
+        )
+
+    assert events == [
+        ("import", "data.plugins.helloworld.main", ("main",)),
+        ("prefer", str(requirements_path)),
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("dependency_install_fails", [False, True])
 async def test_update_plugin_dependency_install_flow(
     plugin_manager_pm: PluginManager,

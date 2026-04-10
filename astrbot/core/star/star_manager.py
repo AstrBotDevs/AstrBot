@@ -399,7 +399,7 @@ class PluginManager:
                 f"插件 {root_dir_name} 已从 site-packages 恢复依赖，跳过重新安装。"
             )
             return module
-        except Exception as recover_exc:
+        except (ImportError, ModuleNotFoundError) as recover_exc:
             logger.info(
                 f"插件 {root_dir_name} 已安装依赖恢复失败，将重新安装依赖: {recover_exc!s}"
             )
