@@ -41,7 +41,10 @@ class ConfigMetadataI18n:
         result = {}
 
         def convert_items(
-            group: str, section: str, items: dict[str, Any], prefix: str = "",
+            group: str,
+            section: str,
+            items: dict[str, Any],
+            prefix: str = "",
         ) -> dict[str, Any]:
             items_result: dict[str, Any] = {}
 
@@ -72,11 +75,15 @@ class ConfigMetadataI18n:
 
                 if "items" in field_data and isinstance(field_data["items"], dict):
                     field_result["items"] = convert_items(
-                        group, section, field_data["items"], field_path,
+                        group,
+                        section,
+                        field_data["items"],
+                        field_path,
                     )
 
                 if "template_schema" in field_data and isinstance(
-                    field_data["template_schema"], dict,
+                    field_data["template_schema"],
+                    dict,
                 ):
                     field_result["template_schema"] = convert_items(
                         group,
@@ -108,7 +115,9 @@ class ConfigMetadataI18n:
 
                 if "items" in section_data and isinstance(section_data["items"], dict):
                     section_result["items"] = convert_items(
-                        group_key, section_key, section_data["items"],
+                        group_key,
+                        section_key,
+                        section_data["items"],
                     )
 
                 group_result["metadata"][section_key] = section_result

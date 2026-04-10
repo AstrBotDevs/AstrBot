@@ -64,8 +64,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step(self):
-        """执行 Dify Agent 的一个步骤
-        """
+        """执行 Dify Agent 的一个步骤"""
         if not self.req:
             raise ValueError("Request is not set. Please call reset() first.")
 
@@ -86,7 +85,8 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             logger.error(f"Dify 请求失败：{e!s}")
             self._transition_state(AgentState.ERROR)
             self.final_llm_resp = LLMResponse(
-                role="err", completion_text=f"Dify 请求失败：{e!s}",
+                role="err",
+                completion_text=f"Dify 请求失败：{e!s}",
             )
             yield AgentResponse(
                 type="err",
@@ -99,7 +99,8 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step_until_done(
-        self, max_step: int = 30,
+        self,
+        max_step: int = 30,
     ) -> T.AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():

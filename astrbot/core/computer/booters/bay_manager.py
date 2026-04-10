@@ -110,7 +110,8 @@ class BayContainerManager:
             },
         }
         self._container = await self._docker.containers.create_or_replace(
-            BAY_CONTAINER_NAME, config,
+            BAY_CONTAINER_NAME,
+            config,
         )
         await self._container.start()
         logger.info("[BayManager] Bay container started: %s", BAY_CONTAINER_NAME)
@@ -128,7 +129,8 @@ class BayContainerManager:
             while loop.time() < deadline:
                 try:
                     async with session.get(
-                        url, timeout=aiohttp.ClientTimeout(total=3),
+                        url,
+                        timeout=aiohttp.ClientTimeout(total=3),
                     ) as resp:
                         if resp.status == 200:
                             logger.info("[BayManager] Bay is healthy")
@@ -201,7 +203,8 @@ class BayContainerManager:
                         return api_key
         except Exception as exc:
             logger.debug(
-                "[BayManager] Failed to read credentials from container: %s", exc,
+                "[BayManager] Failed to read credentials from container: %s",
+                exc,
             )
 
         return ""

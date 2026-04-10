@@ -8,21 +8,26 @@ from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "nvidia_rerank", "NVIDIA Rerank 适配器", provider_type=ProviderType.RERANK,
+    "nvidia_rerank",
+    "NVIDIA Rerank 适配器",
+    provider_type=ProviderType.RERANK,
 )
 class NvidiaRerankProvider(RerankProvider):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
         self.api_key = provider_config.get("nvidia_rerank_api_key", "")
         self.base_url = provider_config.get(
-            "nvidia_rerank_api_base", "https://ai.api.nvidia.com/v1/retrieval",
+            "nvidia_rerank_api_base",
+            "https://ai.api.nvidia.com/v1/retrieval",
         ).rstrip("/")
         self.timeout = provider_config.get("timeout", 20)
         self.model = provider_config.get(
-            "nvidia_rerank_model", "nv-rerank-qa-mistral-4b:1",
+            "nvidia_rerank_model",
+            "nv-rerank-qa-mistral-4b:1",
         )
         self.model_endpoint = provider_config.get(
-            "nvidia_rerank_model_endpoint", "/reranking",
+            "nvidia_rerank_model_endpoint",
+            "/reranking",
         )
         self.truncate = provider_config.get("nvidia_rerank_truncate", "")
 
@@ -37,7 +42,8 @@ class NvidiaRerankProvider(RerankProvider):
                 "Accept": "application/json",
             }
             self.client = aiohttp.ClientSession(
-                headers=headers, timeout=aiohttp.ClientTimeout(total=self.timeout),
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=self.timeout),
             )
         return self.client
 
@@ -74,7 +80,9 @@ class NvidiaRerankProvider(RerankProvider):
         return payload
 
     def _parse_results(
-        self, response_data: dict, top_n: int | None,
+        self,
+        response_data: dict,
+        top_n: int | None,
     ) -> list[RerankResult]:
         """解析响应数据"""
         results = response_data.get("rankings", [])
@@ -133,7 +141,8 @@ class NvidiaRerankProvider(RerankProvider):
                     try:
                         response_data = await response.json()
                         error_detail = response_data.get(
-                            "detail", response_data.get("message", "Unknown Error"),
+                            "detail",
+                            response_data.get("message", "Unknown Error"),
                         )
 
                     except Exception:

@@ -145,7 +145,8 @@ class AiocqhttpAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
-            user_id=str(event.user_id), nickname=str(event.user_id),
+            user_id=str(event.user_id),
+            nickname=str(event.user_id),
         )
         abm.type = MessageType.OTHER_MESSAGE
         if event.get("group_id"):
@@ -170,7 +171,8 @@ class AiocqhttpAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
-            user_id=str(event.user_id), nickname=str(event.user_id),
+            user_id=str(event.user_id),
+            nickname=str(event.user_id),
         )
         abm.type = MessageType.OTHER_MESSAGE
         if event.get("group_id"):

@@ -29,7 +29,8 @@ class botClient(Client):
 
     # 收到群消息
     async def on_group_at_message_create(
-        self, message: botpy.message.GroupMessage,
+        self,
+        message: botpy.message.GroupMessage,
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
@@ -53,7 +54,8 @@ class botClient(Client):
 
     # 收到私聊消息
     async def on_direct_message_create(
-        self, message: botpy.message.DirectMessage,
+        self,
+        message: botpy.message.DirectMessage,
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,

@@ -83,8 +83,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step(self):
-        """执行 Dashscope Agent 的一个步骤
-        """
+        """执行 Dashscope Agent 的一个步骤"""
         if not self.req:
             raise ValueError("Request is not set. Please call reset() first.")
 
@@ -105,7 +104,8 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             logger.error(f"阿里云百炼请求失败：{e!s}")
             self._transition_state(AgentState.ERROR)
             self.final_llm_resp = LLMResponse(
-                role="err", completion_text=f"阿里云百炼请求失败：{e!s}",
+                role="err",
+                completion_text=f"阿里云百炼请求失败：{e!s}",
             )
             yield AgentResponse(
                 type="err",
@@ -116,14 +116,17 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step_until_done(
-        self, max_step: int = 30,
+        self,
+        max_step: int = 30,
     ) -> T.AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():
                 yield resp
 
     def _consume_sync_generator(
-        self, response: T.Any, response_queue: queue.Queue,
+        self,
+        response: T.Any,
+        response_queue: queue.Queue,
     ) -> None:
         """在线程中消费同步generator,将结果放入队列
 
@@ -144,7 +147,9 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             response_queue.put(("done", None))
 
     async def _process_stream_chunk(
-        self, chunk: ApplicationResponse, output_text: str,
+        self,
+        chunk: ApplicationResponse,
+        output_text: str,
     ) -> tuple[str, list | None, AgentResponse | None]:
         """处理流式响应的单个chunk
 
@@ -216,7 +221,11 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         return f"\n\n回答来源:\n{ref_str}"
 
     async def _build_request_payload(
-        self, prompt: str, session_id: str, contexts: list, system_prompt: str,
+        self,
+        prompt: str,
+        session_id: str,
+        contexts: list,
+        system_prompt: str,
     ) -> dict:
         """构建请求payload
 
@@ -276,7 +285,9 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         return payload
 
     async def _handle_streaming_response(
-        self, response: T.Any, session_id: str,
+        self,
+        response: T.Any,
+        session_id: str,
     ) -> T.AsyncGenerator[AgentResponse, None]:
         """处理流式响应
 
@@ -301,7 +312,10 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         while True:
             try:
                 item_type, item_data = await asyncio.get_running_loop().run_in_executor(
-                    None, response_queue.get, True, 1,
+                    None,
+                    response_queue.get,
+                    True,
+                    1,
                 )
             except queue.Empty:
                 continue
@@ -378,7 +392,10 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
         # 构建请求payload
         payload = await self._build_request_payload(
-            prompt, session_id, contexts, system_prompt,
+            prompt,
+            session_id,
+            contexts,
+            system_prompt,
         )
 
         if not self.streaming:

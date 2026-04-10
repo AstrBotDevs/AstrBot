@@ -498,7 +498,8 @@ class WeixinOCAdapter(Platform):
         astrbot_config.save_config()
 
     def _is_login_session_valid(
-        self, login_session: OpenClawLoginSession | None,
+        self,
+        login_session: OpenClawLoginSession | None,
     ) -> bool:
         if not login_session:
             return False
@@ -742,7 +743,8 @@ class WeixinOCAdapter(Platform):
         return None
 
     async def _resolve_media_file_path(
-        self, segment: Image | Video | File,
+        self,
+        segment: Image | Video | File,
     ) -> Path | None:
         try:
             if isinstance(segment, File):
@@ -814,7 +816,8 @@ class WeixinOCAdapter(Platform):
     ) -> bool:
         if not self.token:
             logger.warning(
-                "weixin_oc(%s): missing token, skip media send", self.meta().id,
+                "weixin_oc(%s): missing token, skip media send",
+                self.meta().id,
             )
             return False
         media_path = await self._resolve_media_file_path(segment)
@@ -958,7 +961,8 @@ class WeixinOCAdapter(Platform):
             await self._save_account_state()
 
     def _message_text_from_item_list(
-        self, item_list: list[dict[str, Any]] | None,
+        self,
+        item_list: list[dict[str, Any]] | None,
     ) -> str:
         if not item_list:
             return ""
@@ -992,7 +996,8 @@ class WeixinOCAdapter(Platform):
         return "\n".join(text_parts).strip()
 
     async def _item_list_to_components(
-        self, item_list: list[dict[str, Any]] | None,
+        self,
+        item_list: list[dict[str, Any]] | None,
     ) -> list[Any]:
         if not item_list:
             return []
@@ -1113,7 +1118,10 @@ class WeixinOCAdapter(Platform):
         return text.strip()
 
     async def _send_to_session(
-        self, user_id: str, text: str, _components: list[Any] | None = None,
+        self,
+        user_id: str,
+        text: str,
+        _components: list[Any] | None = None,
     ) -> bool:
         if not text:
             text = self._message_chain_to_text(MessageChain(_components or []))

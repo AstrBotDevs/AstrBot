@@ -185,11 +185,12 @@ class WeixinOfficialAccountServer:
                         self.user_buffer.pop(from_user, None)
                         return _reply_text(cached_xml)
                     return _reply_text(
-                        cached_xml
-                        + "\n【后续消息还在缓冲中，回复任意文字继续获取】",
+                        cached_xml + "\n【后续消息还在缓冲中，回复任意文字继续获取】",
                     )
 
-                task: asyncio.Task | None = cast("asyncio.Task | None", state.get("task"))
+                task: asyncio.Task | None = cast(
+                    "asyncio.Task | None", state.get("task")
+                )
                 placeholder = (
                     f"【正在思考'{state.get('preview', '...')}'中，已思考"
                     f"{int(time.monotonic() - state.get('started_at', time.monotonic()))}s，回复任意文字尝试获取回复】"
@@ -230,7 +231,8 @@ class WeixinOfficialAccountServer:
                             return _reply_text(placeholder)
                         except Exception:
                             logger.critical(
-                                "wx task failed in passive window", exc_info=True,
+                                "wx task failed in passive window",
+                                exc_info=True,
                             )
                             self.user_buffer.pop(from_user, None)
                             return _reply_text("处理消息失败，请稍后再试。")
@@ -311,7 +313,9 @@ class WeixinOfficialAccountServer:
 
 
 @register_platform_adapter(
-    "weixin_official_account", "微信公众平台 适配器", support_streaming_message=False,
+    "weixin_official_account",
+    "微信公众平台 适配器",
+    support_streaming_message=False,
 )
 class WeixinOfficialAccountPlatformAdapter(Platform):
     def __init__(
@@ -341,7 +345,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
 
         self.user_buffer: dict[str, dict[str, Any]] = {}  # from_user -> state
         self.server = WeixinOfficialAccountServer(
-            self._event_queue, self.config, self.user_buffer,
+            self._event_queue,
+            self.config,
+            self.user_buffer,
         )
 
         self.client = WeChatClient(
@@ -445,7 +451,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             assert isinstance(msg, ImageMessage)
             abm.message_str = "[图片]"
             abm.self_id = str(msg.target)
-            abm.message = [Image(file=cast("str", msg.image), url=cast("str", msg.image))]
+            abm.message = [
+                Image(file=cast("str", msg.image), url=cast("str", msg.image))
+            ]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
                 cast("str", msg.source),

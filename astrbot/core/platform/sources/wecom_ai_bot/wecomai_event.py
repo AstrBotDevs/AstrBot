@@ -314,7 +314,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         async for chain in generator:
             if self.webhook_client:
                 await self.webhook_client.send_message_chain(
-                    chain, unsupported_only=True,
+                    chain,
+                    unsupported_only=True,
                 )
 
             if chain.type == "break" and final_data:

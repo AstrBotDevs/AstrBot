@@ -72,7 +72,8 @@ class _HandleFunctionToolsResult:
 
     @classmethod
     def from_tool_call_result_blocks(
-        cls, blocks: list[ToolCallMessageSegment],
+        cls,
+        blocks: list[ToolCallMessageSegment],
     ) -> "_HandleFunctionToolsResult":
         return cls(kind="tool_call_result_blocks", tool_call_result_blocks=blocks)
 
@@ -299,7 +300,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats.start_time = time.time()
 
     async def _iter_llm_responses(
-        self, *, include_model: bool = True,
+        self,
+        *,
+        include_model: bool = True,
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
         payload = {
@@ -522,7 +525,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]")
         self.run_context.messages = await self.context_manager.process(
-            self.run_context.messages, trusted_token_usage=token_usage,
+            self.run_context.messages,
+            trusted_token_usage=token_usage,
         )
         self._simple_print_message_role("[AftCompact]")
 
@@ -705,7 +709,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     image_parts = []
                     for cached_img in cached_images:
                         img_data = tool_image_cache.get_image_base64_by_path(
-                            cached_img.file_path, cached_img.mime_type,
+                            cached_img.file_path,
+                            cached_img.mime_type,
                         )
                         if img_data:
                             base64_data, mime_type = img_data
@@ -733,7 +738,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.req.append_tool_calls_result(tool_calls_result)
 
     async def step_until_done(
-        self, max_step: int,
+        self,
+        max_step: int,
     ) -> T.AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
         step_count = 0
@@ -937,7 +943,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 func_tool_id,
                                 "\n\n".join(result_parts)
                                 + self._build_repeated_tool_call_guidance(
-                                    func_tool_name, tool_call_streak,
+                                    func_tool_name,
+                                    tool_call_streak,
                                 ),
                             )
 
@@ -954,7 +961,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             func_tool_id,
                             "The tool has no return value, or has sent the result directly to the user."
                             + self._build_repeated_tool_call_guidance(
-                                func_tool_name, tool_call_streak,
+                                func_tool_name,
+                                tool_call_streak,
                             ),
                         )
                     else:
@@ -966,7 +974,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             func_tool_id,
                             "*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*"
                             + self._build_repeated_tool_call_guidance(
-                                func_tool_name, tool_call_streak,
+                                func_tool_name,
+                                tool_call_streak,
                             ),
                         )
 
@@ -987,7 +996,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     func_tool_id,
                     f"error: {e!s}"
                     + self._build_repeated_tool_call_guidance(
-                        func_tool_name, tool_call_streak,
+                        func_tool_name,
+                        tool_call_streak,
                     ),
                 )
 
@@ -1072,7 +1082,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         if isinstance(self._tool_schema_param_set, ToolSet):
             param_subset = self._build_tool_subset(
-                self._tool_schema_param_set, tool_names,
+                self._tool_schema_param_set,
+                tool_names,
             )
             if param_subset.tools and tool_names:
                 contexts = self._build_tool_requery_context(tool_names)

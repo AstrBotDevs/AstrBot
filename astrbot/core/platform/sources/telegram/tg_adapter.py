@@ -118,10 +118,12 @@ class TelegramPlatformAdapter(Platform):
         # Cache structure: {media_group_id: {"created_at": datetime, "items": [(update, context), ...]}}
         self.media_group_cache: dict[str, dict] = {}
         self.media_group_timeout = self.config.get(
-            "telegram_media_group_timeout", 2.5,
+            "telegram_media_group_timeout",
+            2.5,
         )  # seconds - debounce delay between messages
         self.media_group_max_wait = self.config.get(
-            "telegram_media_group_max_wait", 10.0,
+            "telegram_media_group_max_wait",
+            10.0,
         )  # max seconds - hard cap to prevent indefinite delay
 
     @override
@@ -307,7 +309,9 @@ class TelegramPlatformAdapter(Platform):
         )
 
     async def message_handler(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE,
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
         logger.debug(f"Telegram message: {update.message}")
 
@@ -510,7 +514,9 @@ class TelegramPlatformAdapter(Platform):
         return message
 
     async def handle_media_group_message(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE,
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
     ):
         """Handle messages that are part of a media group (album).
 

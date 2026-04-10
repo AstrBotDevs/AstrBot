@@ -53,7 +53,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return [image_urls_raw]
 
         if isinstance(image_urls_raw, (Sequence, AbstractSet)) and not isinstance(
-            image_urls_raw, (str, bytes, bytearray),
+            image_urls_raw,
+            (str, bytes, bytearray),
         ):
             return [item for item in image_urls_raw if isinstance(item, str)]
 
@@ -65,7 +66,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
     @classmethod
     async def _collect_image_urls_from_message(
-        cls, run_context: ContextWrapper[AstrAgentContext],
+        cls,
+        run_context: ContextWrapper[AstrAgentContext],
     ) -> list[str]:
         urls: list[str] = []
         event = getattr(run_context.context, "event", None)
@@ -133,7 +135,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             is_bg = tool_args.pop("background_task", False)
             if is_bg:
                 async for r in cls._execute_handoff_background(
-                    tool, run_context, **tool_args,
+                    tool,
+                    run_context,
+                    **tool_args,
                 ):
                     yield r
                 return
@@ -273,7 +277,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # Use per-subagent provider override if configured; otherwise fall back
         # to the current/default provider resolution.
         prov_id = getattr(
-            tool, "provider_id", None,
+            tool,
+            "provider_id",
+            None,
         ) or await ctx.get_current_chat_provider_id(umo)
 
         # prepare begin dialogs
@@ -412,7 +418,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         result_text = ""
         try:
             async for r in cls._execute_local(
-                tool, run_context, tool_call_timeout=3600, **tool_args,
+                tool,
+                run_context,
+                tool_call_timeout=3600,
+                **tool_args,
             ):
                 # collect results, currently we just collect the text results
                 if isinstance(r, mcp.types.CallToolResult):
@@ -520,7 +529,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
 
         result = await build_main_agent(
-            event=cron_event, plugin_context=ctx, config=config, req=req,
+            event=cron_event,
+            plugin_context=ctx,
+            config=config,
+            req=req,
         )
         if not result:
             logger.error(f"Failed to build main agent for background task {tool_name}.")

@@ -81,7 +81,9 @@ class TempDirCleaner:
         if not self._temp_dir.exists():
             return
         for path in sorted(
-            self._temp_dir.rglob("*"), key=lambda p: len(p.parts), reverse=True,
+            self._temp_dir.rglob("*"),
+            key=lambda p: len(p.parts),
+            reverse=True,
         ):
             if not path.is_dir():
                 continue

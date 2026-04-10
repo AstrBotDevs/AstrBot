@@ -260,7 +260,8 @@ class KBSQLiteDatabase:
             }
 
     async def get_documents_with_metadata_batch(
-        self, doc_ids: set[str],
+        self,
+        doc_ids: set[str],
     ) -> dict[str, dict]:
         """批量获取文档及其所属知识库元数据
 

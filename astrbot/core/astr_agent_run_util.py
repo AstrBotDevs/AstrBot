@@ -47,7 +47,8 @@ def _extract_chain_json_data(msg_chain: MessageChain) -> dict | None:
 
 
 def _record_tool_call_name(
-    tool_info: dict | None, tool_name_by_call_id: dict[str, str],
+    tool_info: dict | None,
+    tool_name_by_call_id: dict[str, str],
 ) -> None:
     if not isinstance(tool_info, dict):
         return
@@ -65,7 +66,8 @@ def _build_tool_call_status_message(tool_info: dict | None) -> str:
 
 
 def _build_tool_result_status_message(
-    msg_chain: MessageChain, tool_name_by_call_id: dict[str, str],
+    msg_chain: MessageChain,
+    tool_name_by_call_id: dict[str, str],
 ) -> str:
     tool_name = "unknown"
     tool_result = ""
@@ -157,7 +159,8 @@ async def run_agent(
                         await astr_event.send(msg_chain)
                     elif show_tool_use and show_tool_call_result:
                         status_msg = _build_tool_result_status_message(
-                            msg_chain, tool_name_by_call_id,
+                            msg_chain,
+                            tool_name_by_call_id,
                         )
                         await astr_event.send(
                             MessageChain(type="tool_call").message(status_msg),
@@ -261,7 +264,8 @@ async def run_agent(
             )
             try:
                 await agent_runner.agent_hooks.on_agent_done(
-                    agent_runner.run_context, error_llm_response,
+                    agent_runner.run_context,
+                    error_llm_response,
                 )
             except Exception:
                 logger.exception("Error in on_agent_done hook")

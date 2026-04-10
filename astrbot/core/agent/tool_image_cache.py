@@ -110,7 +110,9 @@ class ToolImageCache:
         )
 
     def get_image_base64_by_path(
-        self, file_path: str, mime_type: str = "image/png",
+        self,
+        file_path: str,
+        mime_type: str = "image/png",
     ) -> tuple[str, str] | None:
         """Read an image file and return its base64 encoded data.
 

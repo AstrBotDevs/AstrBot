@@ -106,7 +106,9 @@ class AstrBotCoreLifecycle:
         logger.info("AstrBot v" + VERSION)
         if os.environ.get("TESTING", ""):
             LogManager.configure_logger(
-                logger, self.astrbot_config, override_level="DEBUG",
+                logger,
+                self.astrbot_config,
+                override_level="DEBUG",
             )
             LogManager.configure_trace_logger(self.astrbot_config)
         else:

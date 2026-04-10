@@ -283,10 +283,13 @@ async def _validate_neo_connectivity(
 
     health_url = f"{endpoint}/health"
     try:
-        async with aiohttp.ClientSession() as session, session.get(
-            health_url,
-            timeout=aiohttp.ClientTimeout(total=5),
-        ) as resp:
+        async with (
+            aiohttp.ClientSession() as session,
+            session.get(
+                health_url,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp,
+        ):
             if resp.status != 200:
                 return (
                     f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
@@ -299,7 +302,9 @@ async def _validate_neo_connectivity(
 
 
 def save_config(
-    post_config: dict, config: AstrBotConfig, is_core: bool = False,
+    post_config: dict,
+    config: AstrBotConfig,
+    is_core: bool = False,
 ) -> None:
     """验证并保存配置"""
     errors = None
@@ -318,7 +323,9 @@ def save_config(
             )
         else:
             errors, post_config = validate_config(
-                post_config, getattr(config, "schema", {}), is_core,
+                post_config,
+                getattr(config, "schema", {}),
+                is_core,
             )
     except BaseException as e:
         logger.error(traceback.format_exc())
@@ -1297,7 +1304,8 @@ class ConfigRoute(Route):
 
         try:
             await self.core_lifecycle.provider_manager.update_provider(
-                origin_provider_id, new_config,
+                origin_provider_id,
+                new_config,
             )
         except Exception as e:
             return Response().error(str(e)).__dict__
@@ -1351,7 +1359,8 @@ class ConfigRoute(Route):
                 cached_token = self._logo_token_cache[cache_key]
                 # 确保platform_default_tmpl[platform.name]存在且为字典
                 if platform.name not in platform_default_tmpl or not isinstance(
-                    platform_default_tmpl[platform.name], dict,
+                    platform_default_tmpl[platform.name],
+                    dict,
                 ):
                     platform_default_tmpl[platform.name] = {}
                 platform_default_tmpl[platform.name]["logo_token"] = cached_token
@@ -1380,7 +1389,8 @@ class ConfigRoute(Route):
 
                 # 确保platform_default_tmpl[platform.name]存在且为字典
                 if platform.name not in platform_default_tmpl or not isinstance(
-                    platform_default_tmpl[platform.name], dict,
+                    platform_default_tmpl[platform.name],
+                    dict,
                 ):
                     platform_default_tmpl[platform.name] = {}
 
@@ -1407,7 +1417,10 @@ class ConfigRoute(Route):
             )
 
     def _inject_platform_metadata_with_i18n(
-        self, platform, metadata, platform_i18n_translations: dict,
+        self,
+        platform,
+        metadata,
+        platform_i18n_translations: dict,
     ):
         """将配置元数据注入到 metadata 中并处理国际化键转换。"""
         metadata["platform_group"]["metadata"]["platform"].setdefault("items", {})
@@ -1418,7 +1431,8 @@ class ConfigRoute(Route):
 
             for lang, lang_data in platform.i18n_resources.items():
                 platform_i18n_translations.setdefault(lang, {}).setdefault(
-                    "platform_group", {},
+                    "platform_group",
+                    {},
                 ).setdefault("platform", {})[platform.name] = lang_data
 
             for field_key, field_value in platform_items_to_inject.items():
@@ -1465,7 +1479,9 @@ class ConfigRoute(Route):
                 # 注入配置元数据（在 convert_to_i18n_keys 之后，使用国际化键）
                 if platform.config_metadata:
                     self._inject_platform_metadata_with_i18n(
-                        platform, metadata, platform_i18n_translations,
+                        platform,
+                        metadata,
+                        platform_i18n_translations,
                     )
 
                 # 收集logo注册任务
@@ -1514,7 +1530,9 @@ class ConfigRoute(Route):
         return ret
 
     async def _save_astrbot_configs(
-        self, post_configs: dict, conf_id: str | None = None,
+        self,
+        post_configs: dict,
+        conf_id: str | None = None,
     ) -> None:
         try:
             if conf_id not in self.acm.confs:
@@ -1545,7 +1563,9 @@ class ConfigRoute(Route):
 
         try:
             errors, post_configs = validate_config(
-                post_configs, getattr(md.config, "schema", {}), is_core=False,
+                post_configs,
+                getattr(md.config, "schema", {}),
+                is_core=False,
             )
             if errors:
                 raise ValueError(f"格式校验未通过: {errors}")

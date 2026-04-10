@@ -139,7 +139,9 @@ class MattermostClient:
     async def ws_connect(self) -> aiohttp.ClientWebSocketResponse:
         session = await self.ensure_session()
         ws_url = self.base_url.replace("https://", "wss://", 1).replace(
-            "http://", "ws://", 1,
+            "http://",
+            "ws://",
+            1,
         )
         ws_url = f"{ws_url}/api/v4/websocket"
         return await session.ws_connect(ws_url, heartbeat=30.0)
@@ -218,7 +220,9 @@ class MattermostClient:
                 file_bytes = await self.download_file(file_id)
             except Exception as exc:
                 logger.warning(
-                    "Mattermost fetch attachment failed %s: %s", file_id, exc,
+                    "Mattermost fetch attachment failed %s: %s",
+                    file_id,
+                    exc,
                 )
                 continue
 

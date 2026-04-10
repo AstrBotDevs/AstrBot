@@ -83,7 +83,8 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
     async def send(self, message: MessageChain) -> None:
         message_obj = self.message_obj
         active_send_mode = cast("dict", message_obj.raw_message).get(
-            "active_send_mode", False,
+            "active_send_mode",
+            False,
         )
         for comp in message.chain:
             if isinstance(comp, Plain):
@@ -120,7 +121,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     else:
                         reply = ImageReply(
                             media_id=response["media_id"],
-                            message=cast("dict", self.message_obj.raw_message)["message"],
+                            message=cast("dict", self.message_obj.raw_message)[
+                                "message"
+                            ],
                         )
                         xml = reply.render()
                         future = cast("dict", self.message_obj.raw_message)["future"]
@@ -158,7 +161,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                                 ],
                             )
                             xml = reply.render()
-                            future = cast("dict", self.message_obj.raw_message)["future"]
+                            future = cast("dict", self.message_obj.raw_message)[
+                                "future"
+                            ]
                             assert isinstance(future, asyncio.Future)
                             future.set_result(xml)
                 finally:

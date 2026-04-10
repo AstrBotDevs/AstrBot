@@ -163,7 +163,11 @@ class LarkWebhookServer:
 
             if timestamp and nonce and signature:
                 if not self.verify_signature(
-                    timestamp, nonce, self.encrypt_key, body, signature,
+                    timestamp,
+                    nonce,
+                    self.encrypt_key,
+                    body,
+                    signature,
                 ):
                     logger.error("[Lark Webhook] 签名验证失败")
                     return {"error": "Invalid signature"}, 401

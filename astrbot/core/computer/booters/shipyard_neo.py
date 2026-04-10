@@ -428,7 +428,8 @@ class ShipyardNeoBooter(ComputerBooter):
         if self._client is not None:
             sandbox_id = getattr(self._sandbox, "id", "unknown")
             logger.info(
-                "[Computer] Shutting down Shipyard Neo sandbox: id=%s", sandbox_id,
+                "[Computer] Shutting down Shipyard Neo sandbox: id=%s",
+                sandbox_id,
             )
             await self._client.__aexit__(None, None, None)
             self._client = None

@@ -415,7 +415,8 @@ class FunctionToolManager:
             logger.debug(f"  主机: {scheme}://{host}{port}")
 
     async def init_mcp_clients(
-        self, raise_on_all_failed: bool = False,
+        self,
+        raise_on_all_failed: bool = False,
     ) -> MCPInitSummary:
         """从项目根目录读取 mcp_server.json 文件，初始化 MCP 服务列表。文件格式如下：
         ```
@@ -506,7 +507,9 @@ class FunctionToolManager:
             )
 
         summary = MCPInitSummary(
-            total=len(active_configs), success=success_count, failed=failed_services,
+            total=len(active_configs),
+            success=success_count,
+            failed=failed_services,
         )
         logger.info(
             f"MCP services initialization completed: {summary.success}/{summary.total} successful, {len(summary.failed)} failed.",
@@ -635,7 +638,9 @@ class FunctionToolManager:
         return []
 
     async def _cleanup_mcp_client_safely(
-        self, mcp_client: MCPClient, name: str,
+        self,
+        mcp_client: MCPClient,
+        name: str,
     ) -> None:
         """安全清理单个 MCP 客户端，避免清理异常中断主流程。"""
         try:

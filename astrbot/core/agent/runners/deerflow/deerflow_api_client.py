@@ -168,7 +168,8 @@ class DeerFlowAPIClient:
         input_payload = payload.get("input")
         message_count = 0
         if isinstance(input_payload, dict) and isinstance(
-            input_payload.get("messages"), list,
+            input_payload.get("messages"),
+            list,
         ):
             message_count = len(input_payload["messages"])
         # Log only a minimal summary to avoid exposing sensitive user content.

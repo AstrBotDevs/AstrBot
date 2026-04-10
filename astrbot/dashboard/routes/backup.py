@@ -186,7 +186,10 @@ class BackupRoute(Route):
         """创建进度回调函数"""
 
         async def _callback(
-            stage: str, current: int, total: int, message: str = "",
+            stage: str,
+            current: int,
+            total: int,
+            message: str = "",
         ) -> None:
             self._update_progress(
                 task_id,
@@ -312,7 +315,8 @@ class BackupRoute(Route):
                         "size": stat.st_size,
                         "created_at": stat.st_mtime,
                         "type": manifest.get(
-                            "origin", "exported",
+                            "origin",
+                            "exported",
                         ),  # 老版本没有 origin 默认为 exported
                         "astrbot_version": manifest.get("astrbot_version", "未知"),
                         "exported_at": manifest.get("exported_at"),

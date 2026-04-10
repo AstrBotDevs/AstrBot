@@ -35,7 +35,9 @@ else:
 
 # 注册平台适配器
 @register_platform_adapter(
-    "discord", "Discord 适配器 (基于 Pycord)", support_streaming_message=False,
+    "discord",
+    "Discord 适配器 (基于 Pycord)",
+    support_streaming_message=False,
 )
 class DiscordPlatformAdapter(Platform):
     def __init__(
@@ -156,7 +158,8 @@ class DiscordPlatformAdapter(Platform):
                     )
             except Exception as e:
                 logger.error(
-                    f"[Discord] on_ready_once_callback err: {e}", exc_info=True,
+                    f"[Discord] on_ready_once_callback err: {e}",
+                    exc_info=True,
                 )
 
         self.client.on_ready_once_callback = callback
@@ -189,7 +192,8 @@ class DiscordPlatformAdapter(Platform):
         return MessageType.GROUP_MESSAGE
 
     def _get_channel_id(
-        self, channel: Messageable | GuildChannel | PrivateChannel,
+        self,
+        channel: Messageable | GuildChannel | PrivateChannel,
     ) -> str:
         """根据 channel 对象获取ID"""
         return str(getattr(channel, "id", None))
@@ -433,7 +437,8 @@ class DiscordPlatformAdapter(Platform):
         """为每个指令动态创建一个异步回调函数"""
 
         async def dynamic_callback(
-            ctx: discord.ApplicationContext, params: str | None = None,
+            ctx: discord.ApplicationContext,
+            params: str | None = None,
         ) -> None:
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] Callback triggered: {cmd_name}")

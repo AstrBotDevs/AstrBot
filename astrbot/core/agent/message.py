@@ -33,7 +33,9 @@ class ContentPart(BaseModel):
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: Any, handler: GetCoreSchemaHandler,
+        cls,
+        source_type: Any,
+        handler: GetCoreSchemaHandler,
     ) -> core_schema.CoreSchema:
         # If we're dealing with the base ContentPart class, use custom validation
         if cls.__name__ == "ContentPart":

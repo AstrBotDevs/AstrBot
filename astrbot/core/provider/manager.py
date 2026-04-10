@@ -211,7 +211,9 @@ class ProviderManager:
         return self.inst_map.get(provider_id)
 
     def get_using_provider(
-        self, provider_type: ProviderType, umo=None,
+        self,
+        provider_type: ProviderType,
+        umo=None,
     ) -> Providers | None:
         """获取正在使用的提供商实例。
 
@@ -772,7 +774,9 @@ class ProviderManager:
             del self.inst_map[provider_id]
 
     async def delete_provider(
-        self, provider_id: str | None = None, provider_source_id: str | None = None,
+        self,
+        provider_id: str | None = None,
+        provider_source_id: str | None = None,
     ) -> None:
         """Delete provider and/or provider source from config and terminate the instances. Config will be saved after deletion."""
         async with self.resource_lock:

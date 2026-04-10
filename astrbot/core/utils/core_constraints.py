@@ -103,7 +103,10 @@ class CoreConstraintsProvider:
             import tempfile
 
             with tempfile.NamedTemporaryFile(
-                mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8",
+                mode="w",
+                suffix="_constraints.txt",
+                delete=False,
+                encoding="utf-8",
             ) as f:
                 f.write("\n".join(constraints))
                 path = f.name

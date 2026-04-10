@@ -98,12 +98,18 @@ class SkillsRoute(Route):
         return endpoint, access_token
 
     async def _delete_neo_release(
-        self, client: Any, release_id: str, reason: str | None,
+        self,
+        client: Any,
+        release_id: str,
+        reason: str | None,
     ):
         return await client.skills.delete_release(release_id, reason=reason)
 
     async def _delete_neo_candidate(
-        self, client: Any, candidate_id: str, reason: str | None,
+        self,
+        client: Any,
+        candidate_id: str,
+        reason: str | None,
     ):
         return await client.skills.delete_candidate(candidate_id, reason=reason)
 
@@ -132,12 +138,15 @@ class SkillsRoute(Route):
     async def get_skills(self):
         try:
             provider_settings = self.core_lifecycle.astrbot_config.get(
-                "provider_settings", {},
+                "provider_settings",
+                {},
             )
             runtime = provider_settings.get("computer_use_runtime", "local")
             skill_mgr = SkillManager()
             skills = skill_mgr.list_skills(
-                active_only=False, runtime=runtime, show_sandbox_path=False,
+                active_only=False,
+                runtime=runtime,
+                show_sandbox_path=False,
             )
             return (
                 Response()
@@ -181,12 +190,15 @@ class SkillsRoute(Route):
             try:
                 try:
                     skill_name = skill_mgr.install_skill_from_zip(
-                        temp_path, overwrite=False, skill_name_hint=Path(filename).stem,
+                        temp_path,
+                        overwrite=False,
+                        skill_name_hint=Path(filename).stem,
                     )
                 except TypeError:
                     # Backward compatibility for callers that do not accept skill_name_hint
                     skill_name = skill_mgr.install_skill_from_zip(
-                        temp_path, overwrite=False,
+                        temp_path,
+                        overwrite=False,
                     )
             except Exception:
                 # Keep behavior consistent with previous implementation
@@ -263,7 +275,8 @@ class SkillsRoute(Route):
                         # Backward compatibility for monkeypatched implementations in tests
                         try:
                             skill_name = skill_mgr.install_skill_from_zip(
-                                temp_path, overwrite=False,
+                                temp_path,
+                                overwrite=False,
                             )
                         except FileExistsError:
                             skipped.append(

@@ -105,7 +105,9 @@ class WecomPlatformEvent(AstrMessageEvent):
                                     f"kf API error 40096 for user {user_id}, falling back to regular message API",
                                 )
                                 self.client.message.send_text(
-                                    self.get_self_id(), user_id, chunk,
+                                    self.get_self_id(),
+                                    user_id,
+                                    chunk,
                                 )
                             else:
                                 raise

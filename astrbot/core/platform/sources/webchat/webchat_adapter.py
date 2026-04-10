@@ -154,7 +154,8 @@ class WebChatAdapter(Platform):
         )
 
     async def _get_message_history(
-        self, message_id: int,
+        self,
+        message_id: int,
     ) -> PlatformMessageHistory | None:
         return await db_helper.get_platform_message_history_by_id(message_id)
 
@@ -248,7 +249,8 @@ class WebChatAdapter(Platform):
         message_event.set_extra("selected_provider", payload.get("selected_provider"))
         message_event.set_extra("selected_model", payload.get("selected_model"))
         message_event.set_extra(
-            "enable_streaming", payload.get("enable_streaming", True),
+            "enable_streaming",
+            payload.get("enable_streaming", True),
         )
         message_event.set_extra("action_type", payload.get("action_type"))
 

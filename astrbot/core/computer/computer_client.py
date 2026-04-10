@@ -462,7 +462,10 @@ async def get_booter(
             max_sessions = sandbox_cfg.get("shipyard_max_sessions", 10)
 
             client = ShipyardBooter(
-                endpoint_url=ep, access_token=token, ttl=ttl, session_num=max_sessions,
+                endpoint_url=ep,
+                access_token=token,
+                ttl=ttl,
+                session_num=max_sessions,
             )
         elif booter_type == "shipyard_neo":
             from .booters.shipyard_neo import ShipyardNeoBooter
@@ -509,7 +512,8 @@ async def get_booter(
 async def sync_skills_to_active_sandboxes() -> None:
     """Best-effort skills synchronization for all active sandbox sessions."""
     logger.info(
-        "[Computer] Syncing skills to %d active sandbox(es)", len(session_booter),
+        "[Computer] Syncing skills to %d active sandbox(es)",
+        len(session_booter),
     )
     for session_id, booter in list(session_booter.items()):
         try:

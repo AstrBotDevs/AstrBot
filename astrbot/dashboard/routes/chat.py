@@ -107,7 +107,8 @@ class ChatRoute(Route):
             if not os.path.exists(real_file_path):
                 # try legacy
                 file_path = os.path.join(
-                    self.legacy_img_dir, os.path.basename(filename),
+                    self.legacy_img_dir,
+                    os.path.basename(filename),
                 )
                 if os.path.exists(file_path):
                     real_file_path = os.path.realpath(file_path)
@@ -201,7 +202,9 @@ class ChatRoute(Route):
         )
 
     async def _create_attachment_from_file(
-        self, filename: str, attach_type: str,
+        self,
+        filename: str,
+        attach_type: str,
     ) -> dict | None:
         """从本地文件创建 attachment 并返回消息部分。"""
         return await create_attachment_part_from_existing_file(
@@ -213,7 +216,9 @@ class ChatRoute(Route):
         )
 
     def _extract_web_search_refs(
-        self, accumulated_text: str, accumulated_parts: list,
+        self,
+        accumulated_text: str,
+        accumulated_parts: list,
     ) -> dict:
         """从消息中提取 web_search_tavily 的引用
 
@@ -370,7 +375,8 @@ class ChatRoute(Route):
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
                         result, should_break = await _poll_webchat_stream_result(
-                            back_queue, username,
+                            back_queue,
+                            username,
                         )
                         if should_break:
                             client_disconnected = True
@@ -456,14 +462,16 @@ class ChatRoute(Route):
                         elif msg_type == "image":
                             filename = result_text.replace("[IMAGE]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "image",
+                                filename,
+                                "image",
                             )
                             if part:
                                 accumulated_parts.append(part)
                         elif msg_type == "record":
                             filename = result_text.replace("[RECORD]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "record",
+                                filename,
+                                "record",
                             )
                             if part:
                                 accumulated_parts.append(part)
@@ -471,7 +479,8 @@ class ChatRoute(Route):
                             # 格式: [FILE]filename
                             filename = result_text.replace("[FILE]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "file",
+                                filename,
+                                "file",
                             )
                             if part:
                                 accumulated_parts.append(part)
@@ -821,7 +830,8 @@ class ChatRoute(Route):
         # 获取项目信息（如果会话属于某个项目）
         username = g.get("username", "guest")
         project_info = await self.db.get_project_by_session(
-            session_id=session_id, creator=username,
+            session_id=session_id,
+            creator=username,
         )
 
         # Get platform message history using session_id

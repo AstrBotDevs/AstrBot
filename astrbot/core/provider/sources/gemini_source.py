@@ -241,7 +241,8 @@ class ProviderGoogleGenAI(Provider):
         ]:
             # The thinkingBudget parameter, introduced with the Gemini 2.5 series
             thinking_budget = self.provider_config.get("gm_thinking_config", {}).get(
-                "budget", 0,
+                "budget",
+                0,
             )
             if thinking_budget is not None:
                 thinking_config = types.ThinkingConfig(
@@ -253,7 +254,8 @@ class ProviderGoogleGenAI(Provider):
             # covered without needing to keep an exhaustive list up to date.
             # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
             thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
-                "level", "HIGH",
+                "level",
+                "HIGH",
             )
             if thinking_level and isinstance(thinking_level, str):
                 thinking_level = thinking_level.upper()
@@ -445,7 +447,8 @@ class ProviderGoogleGenAI(Provider):
         return "".join(thought_buf).strip()
 
     def _extract_usage(
-        self, usage_metadata: types.GenerateContentResponseUsageMetadata,
+        self,
+        usage_metadata: types.GenerateContentResponseUsageMetadata,
     ) -> TokenUsage:
         """Extract usage from candidate"""
         return TokenUsage(

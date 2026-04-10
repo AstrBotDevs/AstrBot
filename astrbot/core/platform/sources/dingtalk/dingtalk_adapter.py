@@ -47,7 +47,9 @@ class MyEventHandler(dingtalk_stream.EventHandler):
 
 
 @register_platform_adapter(
-    "dingtalk", "钉钉机器人官方 API 适配器", support_streaming_message=True,
+    "dingtalk",
+    "钉钉机器人官方 API 适配器",
+    support_streaming_message=True,
 )
 class DingtalkPlatformAdapter(Platform):
     def __init__(
@@ -196,7 +198,8 @@ class DingtalkPlatformAdapter(Platform):
                     message.image_content,
                 )
                 download_code = cast(
-                    "str", (image_content.download_code if image_content else "") or "",
+                    "str",
+                    (image_content.download_code if image_content else "") or "",
                 )
                 if not download_code:
                     logger.warning("钉钉图片消息缺少 downloadCode，已跳过")
@@ -212,7 +215,8 @@ class DingtalkPlatformAdapter(Platform):
                         logger.warning("钉钉图片消息下载失败，无法解析为图片")
             case "richText":
                 rtc: dingtalk_stream.RichTextContent = cast(
-                    "dingtalk_stream.RichTextContent", message.rich_text_content,
+                    "dingtalk_stream.RichTextContent",
+                    message.rich_text_content,
                 )
                 contents: list[dict] = cast("list[dict]", rtc.rich_text_list)
                 plain_parts: list[str] = []
@@ -425,11 +429,14 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
-        async with aiohttp.ClientSession() as session, session.post(
-            "https://api.dingtalk.com/v1.0/robot/groupMessages/send",
-            headers=headers,
-            json=payload,
-        ) as resp:
+        async with (
+            aiohttp.ClientSession() as session,
+            session.post(
+                "https://api.dingtalk.com/v1.0/robot/groupMessages/send",
+                headers=headers,
+                json=payload,
+            ) as resp,
+        ):
             if resp.status != 200:
                 logger.error(
                     f"钉钉群消息发送失败: {resp.status}, {await resp.text()}",
@@ -457,11 +464,14 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
-        async with aiohttp.ClientSession() as session, session.post(
-            "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend",
-            headers=headers,
-            json=payload,
-        ) as resp:
+        async with (
+            aiohttp.ClientSession() as session,
+            session.post(
+                "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend",
+                headers=headers,
+                json=payload,
+            ) as resp,
+        ):
             if resp.status != 200:
                 logger.error(
                     f"钉钉私聊消息发送失败: {resp.status}, {await resp.text()}",

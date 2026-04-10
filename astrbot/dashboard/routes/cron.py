@@ -11,7 +11,9 @@ from .route import Response, Route, RouteContext
 
 class CronRoute(Route):
     def __init__(
-        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle,
+        self,
+        context: RouteContext,
+        core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
@@ -249,7 +251,9 @@ class CronRoute(Route):
                     cron_expression = str(payload.get("cron_expression") or "").strip()
                     if not cron_expression:
                         return jsonify(
-                            Response().error("cron_expression cannot be empty").__dict__,
+                            Response()
+                            .error("cron_expression cannot be empty")
+                            .__dict__,
                         )
                     updates["cron_expression"] = cron_expression
 

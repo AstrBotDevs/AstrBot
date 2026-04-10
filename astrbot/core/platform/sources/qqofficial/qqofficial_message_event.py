@@ -145,7 +145,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             # 如需兜底，应该只发送未发送 delta（后续可继续优化）
             self.send_buffer = None
 
-
     @staticmethod
     def _extract_response_message_id(ret) -> str | None:
         """兼容 qq-botpy 返回 Message 对象或 dict 两种形态。"""

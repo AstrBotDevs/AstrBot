@@ -143,7 +143,9 @@ class SlackSocketClient:
         self.socket_client = None
 
     async def _handle_events(
-        self, _: AsyncBaseSocketModeClient, req: SocketModeRequest,
+        self,
+        _: AsyncBaseSocketModeClient,
+        req: SocketModeRequest,
     ) -> None:
         """处理 Socket Mode 事件"""
         try:

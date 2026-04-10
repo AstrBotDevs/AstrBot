@@ -32,7 +32,8 @@ class ToolSchema:
     @model_validator(mode="after")
     def validate_parameters(self) -> "ToolSchema":
         jsonschema.validate(
-            self.parameters, jsonschema.Draft202012Validator.META_SCHEMA,
+            self.parameters,
+            jsonschema.Draft202012Validator.META_SCHEMA,
         )
         return self
 

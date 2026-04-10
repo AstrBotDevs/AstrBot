@@ -407,7 +407,9 @@ def register_on_waiting_llm_request(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(
-            awaitable, EventType.OnWaitingLLMRequestEvent, **kwargs,
+            awaitable,
+            EventType.OnWaitingLLMRequestEvent,
+            **kwargs,
         )
         return awaitable
 

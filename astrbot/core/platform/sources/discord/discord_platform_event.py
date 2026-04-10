@@ -98,7 +98,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False,
+        self,
+        generator: AsyncGenerator[MessageChain, None],
+        use_fallback: bool = False,
     ):
         buffer = None
         async for chain in generator:
@@ -274,7 +276,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 self.message_obj.raw_message,
                 "add_reaction",
             ):
-                await cast("discord.Message", self.message_obj.raw_message).add_reaction(
+                await cast(
+                    "discord.Message", self.message_obj.raw_message
+                ).add_reaction(
                     emoji,
                 )
         except Exception as e:
@@ -319,7 +323,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
             return any(
                 mention.id == int(self.message_obj.self_id)
                 for mention in cast(
-                    "discord.Message", self.message_obj.raw_message,
+                    "discord.Message",
+                    self.message_obj.raw_message,
                 ).mentions
             )
         return False

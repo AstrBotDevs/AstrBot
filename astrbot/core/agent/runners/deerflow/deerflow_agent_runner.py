@@ -130,7 +130,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 
     async def _finish_with_result(
-        self, chain: MessageChain, role: str,
+        self,
+        chain: MessageChain,
+        role: str,
     ) -> AgentResponse:
         self.final_llm_resp = LLMResponse(
             role=role,
@@ -304,7 +306,8 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step_until_done(
-        self, max_step: int = 30,
+        self,
+        max_step: int = 30,
     ) -> T.AsyncGenerator[AgentResponse, None]:
         if max_step <= 0:
             raise ValueError("max_step must be greater than 0")

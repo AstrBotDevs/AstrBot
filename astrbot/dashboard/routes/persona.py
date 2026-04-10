@@ -209,7 +209,8 @@ class PersonaRoute(Route):
 
             if has_custom_error_message:
                 if custom_error_message is not None and not isinstance(
-                    custom_error_message, str,
+                    custom_error_message,
+                    str,
                 ):
                     return Response().error("自定义报错回复信息必须是字符串").__dict__
                 if isinstance(custom_error_message, str):

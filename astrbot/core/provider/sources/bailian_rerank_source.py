@@ -13,19 +13,18 @@ class BailianRerankError(Exception):
     """百炼重排序服务异常基类"""
 
 
-
 class BailianAPIError(BailianRerankError):
     """百炼API返回错误"""
-
 
 
 class BailianNetworkError(BailianRerankError):
     """百炼网络请求错误"""
 
 
-
 @register_provider_adapter(
-    "bailian_rerank", "阿里云百炼文本排序适配器", provider_type=ProviderType.RERANK,
+    "bailian_rerank",
+    "阿里云百炼文本排序适配器",
+    provider_type=ProviderType.RERANK,
 )
 class BailianRerankProvider(RerankProvider):
     """阿里云百炼文本重排序适配器."""
@@ -39,7 +38,8 @@ class BailianRerankProvider(RerankProvider):
 
         # API配置
         self.api_key = provider_config.get("rerank_api_key") or os.getenv(
-            "DASHSCOPE_API_KEY", "",
+            "DASHSCOPE_API_KEY",
+            "",
         )
         if not self.api_key:
             raise ValueError("阿里云百炼 API Key 不能为空。")
@@ -61,7 +61,8 @@ class BailianRerankProvider(RerankProvider):
         }
 
         self.client = aiohttp.ClientSession(
-            headers=headers, timeout=aiohttp.ClientTimeout(total=self.timeout),
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=self.timeout),
         )
 
         # 设置模型名称
@@ -70,7 +71,10 @@ class BailianRerankProvider(RerankProvider):
         logger.info(f"AstrBot 百炼 Rerank 初始化完成。模型: {self.model}")
 
     def _build_payload(
-        self, query: str, documents: list[str], top_n: int | None,
+        self,
+        query: str,
+        documents: list[str],
+        top_n: int | None,
     ) -> dict:
         """构建请求载荷
 
@@ -159,7 +163,8 @@ class BailianRerankProvider(RerankProvider):
                     relevance_score = 0.0
 
                 rerank_result = RerankResult(
-                    index=index, relevance_score=relevance_score,
+                    index=index,
+                    relevance_score=relevance_score,
                 )
                 rerank_results.append(rerank_result)
             except Exception as e:

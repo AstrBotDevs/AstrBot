@@ -189,7 +189,9 @@ class PluginManager:
         self.plugin_config_path = get_astrbot_config_path()
         """存储插件配置的路径。data/config"""
         self.reserved_plugin_path = os.path.join(
-            get_astrbot_path(), "astrbot", "builtin_stars",
+            get_astrbot_path(),
+            "astrbot",
+            "builtin_stars",
         )
         """保留插件的路径。在 astrbot/builtin_stars 目录下"""
         self.conf_schema_fname = "_conf_schema.json"
@@ -307,7 +309,8 @@ class PluginManager:
         return plugins
 
     async def _check_plugin_dept_update(
-        self, target_plugin: str | None = None,
+        self,
+        target_plugin: str | None = None,
     ) -> bool | None:
         """检查插件的依赖
         如果 target_plugin 为 None，则检查所有插件的依赖
@@ -1303,7 +1306,10 @@ class PluginManager:
         self._rebuild_failed_plugin_info()
 
     async def install_plugin(
-        self, repo_url: str, proxy: str = "", ignore_version_check: bool = False,
+        self,
+        repo_url: str,
+        proxy: str = "",
+        ignore_version_check: bool = False,
     ):
         """从仓库 URL 安装插件
 
@@ -1722,11 +1728,14 @@ class PluginManager:
         await self.reload(plugin_name)
 
     async def install_plugin_from_file(
-        self, zip_file_path: str, ignore_version_check: bool = False,
+        self,
+        zip_file_path: str,
+        ignore_version_check: bool = False,
     ):
         dir_name = os.path.splitext(os.path.basename(zip_file_path))[0]
         desti_dir = tempfile.mkdtemp(
-            dir=self.plugin_store_path, prefix="plugin_upload_",
+            dir=self.plugin_store_path,
+            prefix="plugin_upload_",
         )
         temp_desti_dir = desti_dir
 

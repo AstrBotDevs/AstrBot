@@ -25,7 +25,9 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
     """
     # 检查是否已经完成迁移
     migration_done = await db_helper.get_preference(
-        "global", "global", "migration_done_webchat_session_1",
+        "global",
+        "global",
+        "migration_done_webchat_session_1",
     )
     if migration_done:
         return
@@ -53,7 +55,10 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
             if not webchat_users:
                 logger.info("没有找到需要迁移的 WebChat 数据")
                 await sp.put_async(
-                    "global", "global", "migration_done_webchat_session_1", True,
+                    "global",
+                    "global",
+                    "migration_done_webchat_session_1",
+                    True,
                 )
                 return
 
@@ -71,7 +76,8 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
                 for user_id, _, _, _ in webchat_users
             ]
             conv_query = select(
-                col(ConversationV2.user_id), col(ConversationV2.title),
+                col(ConversationV2.user_id),
+                col(ConversationV2.title),
             ).where(col(ConversationV2.user_id).in_(user_ids_to_query))
             conv_result = await session.execute(conv_query)
             # 创建 user_id -> title 的映射字典

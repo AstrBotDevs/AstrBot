@@ -186,7 +186,8 @@ class ThirdPartyAgentSubStage(Stage):
         )
 
     async def _resolve_persona_custom_error_message(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> str | None:
         try:
             conversation_persona_id = await resolve_event_conversation_persona_id(
@@ -286,7 +287,9 @@ class ThirdPartyAgentSubStage(Stage):
         yield
 
     async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str,
+        self,
+        event: AstrMessageEvent,
+        provider_wake_prefix: str,
     ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 

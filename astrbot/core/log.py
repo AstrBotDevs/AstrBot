@@ -111,7 +111,9 @@ class _LoguruInterceptHandler(logging.Handler):
             ),
             "astrbot_version_tag": getattr(record, "astrbot_version_tag", ""),
             "source_file": getattr(
-                record, "source_file", _build_source_file(record.pathname),
+                record,
+                "source_file",
+                _build_source_file(record.pathname),
             ),
             "source_line": getattr(record, "source_line", record.lineno),
             "is_trace": getattr(record, "is_trace", record.name == "astrbot.trace"),

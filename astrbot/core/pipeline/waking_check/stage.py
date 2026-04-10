@@ -69,7 +69,8 @@ class WakingCheckStage(Stage):
             False,
         )
         self.disable_builtin_commands = self.ctx.astrbot_config.get(
-            "disable_builtin_commands", False,
+            "disable_builtin_commands",
+            False,
         )
         platform_settings = self.ctx.astrbot_config.get("platform_settings", {})
         self.unique_session = platform_settings.get("unique_session", False)

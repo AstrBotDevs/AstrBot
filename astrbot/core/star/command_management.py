@@ -285,18 +285,23 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
 
     if isinstance(filter_ref, CommandFilter):
         raw_fragment = getattr(
-            filter_ref, "_original_command_name", filter_ref.command_name,
+            filter_ref,
+            "_original_command_name",
+            filter_ref.command_name,
         )
         current_fragment = filter_ref.command_name
         parent_signature = (filter_ref.parent_command_names or [""])[0].strip()
         # 如果是子指令，尝试找到父指令组的 handler_full_name
         if is_sub_command and parent_signature:
             parent_group_handler = _find_parent_group_handler(
-                handler.handler_module_path, parent_signature,
+                handler.handler_module_path,
+                parent_signature,
             )
     else:
         raw_fragment = getattr(
-            filter_ref, "_original_group_name", filter_ref.group_name,
+            filter_ref,
+            "_original_group_name",
+            filter_ref.group_name,
         )
         current_fragment = filter_ref.group_name
         parent_signature = _resolve_group_parent_signature(filter_ref)

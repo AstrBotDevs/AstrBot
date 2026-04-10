@@ -173,7 +173,8 @@ class OpenApiRoute(Route):
                     await self.core_lifecycle.umop_config_router.delete_route(umo)
                 else:
                     await self.core_lifecycle.umop_config_router.update_route(
-                        umo, config_id,
+                        umo,
+                        config_id,
                     )
             except Exception as e:
                 logger.error(
@@ -260,7 +261,8 @@ class OpenApiRoute(Route):
                 await self.core_lifecycle.umop_config_router.delete_route(umo)
             else:
                 await self.core_lifecycle.umop_config_router.update_route(
-                    umo, config_id,
+                    umo,
+                    config_id,
                 )
         except Exception as e:
             logger.error(
@@ -279,7 +281,8 @@ class OpenApiRoute(Route):
         )
         if username_err or not effective_username:
             await self._send_chat_ws_error(
-                username_err or "Invalid username", "BAD_USER",
+                username_err or "Invalid username",
+                "BAD_USER",
             )
             return
 
@@ -417,7 +420,10 @@ class OpenApiRoute(Route):
                             tool_calls[tc_id]["result"] = tcr.get("result")
                             tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
                             accumulated_parts.append(
-                                {"type": "tool_call", "tool_calls": [tool_calls[tc_id]]},
+                                {
+                                    "type": "tool_call",
+                                    "tool_calls": [tool_calls[tc_id]],
+                                },
                             )
                             tool_calls.pop(tc_id, None)
                     elif chain_type == "reasoning":
@@ -429,28 +435,32 @@ class OpenApiRoute(Route):
                 elif msg_type == "image":
                     filename = str(result_text).replace("[IMAGE]", "")
                     part = await self.chat_route._create_attachment_from_file(
-                        filename, "image",
+                        filename,
+                        "image",
                     )
                     if part:
                         accumulated_parts.append(part)
                 elif msg_type == "record":
                     filename = str(result_text).replace("[RECORD]", "")
                     part = await self.chat_route._create_attachment_from_file(
-                        filename, "record",
+                        filename,
+                        "record",
                     )
                     if part:
                         accumulated_parts.append(part)
                 elif msg_type == "file":
                     filename = str(result_text).replace("[FILE]", "")
                     part = await self.chat_route._create_attachment_from_file(
-                        filename, "file",
+                        filename,
+                        "file",
                     )
                     if part:
                         accumulated_parts.append(part)
                 elif msg_type == "video":
                     filename = str(result_text).replace("[VIDEO]", "")
                     part = await self.chat_route._create_attachment_from_file(
-                        filename, "video",
+                        filename,
+                        "video",
                     )
                     if part:
                         accumulated_parts.append(part)
@@ -500,7 +510,8 @@ class OpenApiRoute(Route):
         except Exception as e:
             logger.exception(f"Open API WS chat failed: {e}", exc_info=True)
             await self._send_chat_ws_error(
-                f"Failed to process message: {e}", "PROCESSING_ERROR",
+                f"Failed to process message: {e}",
+                "PROCESSING_ERROR",
             )
         finally:
             webchat_queue_mgr.remove_back_queue(message_id)

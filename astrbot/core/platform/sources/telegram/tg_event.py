@@ -167,17 +167,24 @@ class TelegramPlatformEvent(AstrMessageEvent):
     ) -> None:
         """发送媒体时显示 upload action，发送完成后恢复 typing"""
         effective_thread_id = message_thread_id or cast(
-            "str | None", payload.get("message_thread_id"),
+            "str | None",
+            payload.get("message_thread_id"),
         )
         await cls._send_chat_action(
-            client, user_name, upload_action, effective_thread_id,
+            client,
+            user_name,
+            upload_action,
+            effective_thread_id,
         )
         send_payload = dict(payload)
         if effective_thread_id and "message_thread_id" not in send_payload:
             send_payload["message_thread_id"] = effective_thread_id
         await send_coro(**send_payload)
         await cls._send_chat_action(
-            client, user_name, ChatAction.TYPING, effective_thread_id,
+            client,
+            user_name,
+            ChatAction.TYPING,
+            effective_thread_id,
         )
 
     @classmethod
@@ -250,7 +257,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
     ) -> None:
         """确保显示 typing 状态"""
         await self._send_chat_action(
-            self.client, user_name, ChatAction.TYPING, message_thread_id,
+            self.client,
+            user_name,
+            ChatAction.TYPING,
+            message_thread_id,
         )
 
     async def send_typing(self) -> None:
@@ -321,7 +331,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
                 await client.send_document(
-                    document=path, filename=name, **cast("Any", payload),
+                    document=path,
+                    filename=name,
+                    **cast("Any", payload),
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
@@ -514,12 +526,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
         if is_private:
             logger.info("[Telegram] 流式输出: 使用 sendMessageDraft (私聊)")
             await self._send_streaming_draft(
-                user_name, message_thread_id, payload, generator,
+                user_name,
+                message_thread_id,
+                payload,
+                generator,
             )
         else:
             logger.info("[Telegram] 流式输出: 使用 edit_message_text fallback (群聊)")
             await self._send_streaming_edit(
-                user_name, message_thread_id, payload, generator,
+                user_name,
+                message_thread_id,
+                payload,
+                generator,
             )
 
         # 内联父类 send_streaming 的副作用（避免传入已消费的 generator）
@@ -614,7 +632,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     continue
 
                 await self._process_chain_items(
-                    chain, payload, user_name, message_thread_id, _append_text,
+                    chain,
+                    payload,
+                    user_name,
+                    message_thread_id,
+                    _append_text,
                 )
         finally:
             done = True
@@ -675,7 +697,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 continue
 
             await self._process_chain_items(
-                chain, payload, user_name, message_thread_id, _append_text,
+                chain,
+                payload,
+                user_name,
+                message_thread_id,
+                _append_text,
             )
 
             # 编辑或发送消息
@@ -705,7 +731,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     last_chat_action_time = current_time
                 try:
                     msg = await self.client.send_message(
-                        text=delta, **cast("Any", payload),
+                        text=delta,
+                        **cast("Any", payload),
                     )
                     current_content = delta
                 except Exception as e:

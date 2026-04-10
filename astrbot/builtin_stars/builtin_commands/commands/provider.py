@@ -48,7 +48,11 @@ class _ModelCache:
         return models
 
     def set(
-        self, provider_id: str, umo: str | None, models: list[str], ttl: float,
+        self,
+        provider_id: str,
+        umo: str | None,
+        models: list[str],
+        ttl: float,
     ) -> None:
         if ttl <= 0:
             return
@@ -67,7 +71,10 @@ class _ModelCache:
             self._store.pop(key, None)
 
     def invalidate(
-        self, provider_id: str | None = None, *, umo: str | None = None,
+        self,
+        provider_id: str | None = None,
+        *,
+        umo: str | None = None,
     ) -> None:
         if provider_id is None:
             self._store.clear()
@@ -106,7 +113,10 @@ class ProviderCommands:
             register_change_hook(self._on_provider_manager_changed)
 
     def invalidate_provider_models_cache(
-        self, provider_id: str | None = None, *, umo: str | None = None,
+        self,
+        provider_id: str | None = None,
+        *,
+        umo: str | None = None,
     ) -> None:
         """Public hook for cache invalidation on external provider config changes."""
         self._model_cache.invalidate(provider_id, umo=umo)
@@ -205,7 +215,11 @@ class ProviderCommands:
         return None
 
     def _apply_model(
-        self, prov: Provider, model_name: str, *, umo: str | None = None,
+        self,
+        prov: Provider,
+        model_name: str,
+        *,
+        umo: str | None = None,
     ) -> str:
         prov.set_model(model_name)
         self.invalidate_provider_models_cache(prov.meta().id, umo=umo)
@@ -287,7 +301,10 @@ class ProviderCommands:
             err_code = "TEST_FAILED"
             err_reason = safe_error("", e)
             self._log_reachability_failure(
-                provider, provider_capability_type, err_code, err_reason,
+                provider,
+                provider_capability_type,
+                err_code,
+                err_reason,
             )
             return False, err_code, err_reason
 
@@ -558,7 +575,10 @@ class ProviderCommands:
             event.set_result(MessageEventResult().message("无效的参数。"))
 
     async def _switch_model_by_name(
-        self, message: AstrMessageEvent, model_name: str, prov: Provider,
+        self,
+        message: AstrMessageEvent,
+        model_name: str,
+        prov: Provider,
     ) -> None:
         model_name = model_name.strip()
         if not model_name:

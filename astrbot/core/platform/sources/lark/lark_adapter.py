@@ -34,7 +34,9 @@ from .server import LarkWebhookServer
 
 
 @register_platform_adapter(
-    "lark", "飞书机器人官方 API 适配器", support_streaming_message=True,
+    "lark",
+    "飞书机器人官方 API 适配器",
+    support_streaming_message=True,
 )
 class LarkPlatformAdapter(Platform):
     def __init__(

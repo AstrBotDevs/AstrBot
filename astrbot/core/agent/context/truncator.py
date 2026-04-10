@@ -140,7 +140,9 @@ class ContextTruncator:
             truncated_contexts = truncated_contexts[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_contexts, messages,
+            system_messages,
+            truncated_contexts,
+            messages,
         )
         return self.fix_messages(result)
 
@@ -169,7 +171,9 @@ class ContextTruncator:
             truncated_non_system = truncated_non_system[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_non_system, messages,
+            system_messages,
+            truncated_non_system,
+            messages,
         )
         return self.fix_messages(result)
 
@@ -198,6 +202,8 @@ class ContextTruncator:
             truncated_non_system = truncated_non_system[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_non_system, messages,
+            system_messages,
+            truncated_non_system,
+            messages,
         )
         return self.fix_messages(result)

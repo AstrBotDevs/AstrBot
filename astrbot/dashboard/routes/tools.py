@@ -16,7 +16,6 @@ class EmptyMcpServersError(ValueError):
     """Raised when mcpServers is empty."""
 
 
-
 def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
     """Extract server configuration from user-submitted mcpServers field.
 

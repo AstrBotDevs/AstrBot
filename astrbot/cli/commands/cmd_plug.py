@@ -180,7 +180,9 @@ def remove(name: str) -> None:
     plugin_path = plugin["local_path"]
 
     click.confirm(
-        f"Are you sure you want to uninstall plugin {name}?", default=False, abort=True,
+        f"Are you sure you want to uninstall plugin {name}?",
+        default=False,
+        abort=True,
     )
 
     try:

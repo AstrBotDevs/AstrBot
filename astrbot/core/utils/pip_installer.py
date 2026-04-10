@@ -54,7 +54,11 @@ class DependencyConflictError(Exception):
     """Raised when pip encounters a dependency conflict."""
 
     def __init__(
-        self, message: str, errors: list[str], *, is_core_conflict: bool,
+        self,
+        message: str,
+        errors: list[str],
+        *,
+        is_core_conflict: bool,
     ) -> None:
         super().__init__(message)
         self.errors = errors
@@ -559,7 +563,8 @@ def _ensure_preferred_modules(
     site_packages_path: str,
 ) -> None:
     unresolved_prefer_reasons = _prefer_modules_from_site_packages(
-        module_names, site_packages_path,
+        module_names,
+        site_packages_path,
     )
 
     unresolved_modules: list[str] = []
@@ -619,7 +624,8 @@ def _is_module_loaded_from_site_packages(
 
 
 def _prefer_module_from_site_packages(
-    module_name: str, site_packages_path: str,
+    module_name: str,
+    site_packages_path: str,
 ) -> bool:
     with _SITE_PACKAGES_IMPORT_LOCK:
         base_path = os.path.join(site_packages_path, *module_name.split("."))
@@ -914,7 +920,9 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
             package_name,
         ):
             finder_registry = getattr(
-                distlib_resources, "_finder_registry", finder_registry,
+                distlib_resources,
+                "_finder_registry",
+                finder_registry,
             )
 
 
@@ -985,7 +993,9 @@ class PipInstaller:
         allow_target_upgrade: bool = True,
     ) -> None:
         args, requested_requirements = self._build_pip_args(
-            package_name, requirements_path, mirror,
+            package_name,
+            requirements_path,
+            mirror,
         )
         if not args:
             logger.info("Pip 包管理器跳过安装：未提供有效的包名或 requirements 文件。")

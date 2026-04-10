@@ -161,7 +161,8 @@ class MainAgentBuildResult:
 
 
 def _select_provider(
-    event: AstrMessageEvent, plugin_context: Context,
+    event: AstrMessageEvent,
+    plugin_context: Context,
 ) -> Provider | None:
     """Select chat provider for the event."""
     sel_provider = event.get_extra("selected_provider")
@@ -171,7 +172,8 @@ def _select_provider(
             logger.error("未找到指定的提供商: %s。", sel_provider)
         if not isinstance(provider, Provider):
             logger.error(
-                "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider),
+                "选择的提供商类型无效(%s)，跳过 LLM 请求处理。",
+                type(provider),
             )
             return None
         return provider
@@ -183,7 +185,8 @@ def _select_provider(
 
 
 async def _get_session_conv(
-    event: AstrMessageEvent, plugin_context: Context,
+    event: AstrMessageEvent,
+    plugin_context: Context,
 ) -> Conversation:
     conv_mgr = plugin_context.conversation_manager
     umo = event.unified_msg_origin
@@ -337,7 +340,8 @@ async def _ensure_persona_and_skills(
     )
 
     set_persona_custom_error_message_on_event(
-        event, extract_persona_custom_error_message_from_persona(persona),
+        event,
+        extract_persona_custom_error_message_from_persona(persona),
     )
 
     if persona:
@@ -773,7 +777,8 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
         provider_cfg = provider.provider_config.get("modalities", ["image"])
         if "image" not in provider_cfg:
             logger.debug(
-                "Provider %s does not support image, using placeholder.", provider,
+                "Provider %s does not support image, using placeholder.",
+                provider,
             )
             image_count = len(req.image_urls)
             placeholder = " ".join(["[Image]"] * image_count)
@@ -786,7 +791,8 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
         provider_cfg = provider.provider_config.get("modalities", ["audio"])
         if "audio" not in provider_cfg:
             logger.debug(
-                "Provider %s does not support audio, using placeholder.", provider,
+                "Provider %s does not support audio, using placeholder.",
+                provider,
             )
             audio_count = len(req.audio_urls)
             placeholder = " ".join(["[Audio]"] * audio_count)
@@ -799,7 +805,8 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
         provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
         if "tool_use" not in provider_cfg:
             logger.debug(
-                "Provider %s does not support tool_use, clearing tools.", provider,
+                "Provider %s does not support tool_use, clearing tools.",
+                provider,
             )
             req.func_tool = None
 
@@ -928,7 +935,9 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
 
 
 async def _handle_webchat(
-    event: AstrMessageEvent, req: ProviderRequest, prov: Provider,
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    prov: Provider,
 ) -> None:
     from astrbot.core import db_helper
 
@@ -963,7 +972,9 @@ async def _handle_webchat(
         if not title or "<None>" in title:
             return
         logger.info(
-            "Generated chatui title for session %s: %s", chatui_session_id, title,
+            "Generated chatui title for session %s: %s",
+            chatui_session_id,
+            title,
         )
         await db_helper.update_platform_session(
             session_id=chatui_session_id,
@@ -982,7 +993,9 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
 
 
 def _apply_sandbox_tools(
-    config: MainAgentBuildConfig, req: ProviderRequest, session_id: str,
+    config: MainAgentBuildConfig,
+    req: ProviderRequest,
+    session_id: str,
 ) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
@@ -1093,7 +1106,8 @@ async def _apply_web_search_tools(
 
 
 def _get_compress_provider(
-    config: MainAgentBuildConfig, plugin_context: Context,
+    config: MainAgentBuildConfig,
+    plugin_context: Context,
 ) -> Provider | None:
     if not config.llm_compress_provider_id:
         return None
@@ -1116,7 +1130,9 @@ def _get_compress_provider(
 
 
 def _get_fallback_chat_providers(
-    provider: Provider, plugin_context: Context, provider_settings: dict,
+    provider: Provider,
+    plugin_context: Context,
+    provider_settings: dict,
 ) -> list[Provider]:
     fallback_ids = provider_settings.get("fallback_chat_models", [])
     if not isinstance(fallback_ids, list):
@@ -1401,7 +1417,9 @@ async def build_main_agent(
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=_get_fallback_chat_providers(
-            provider, plugin_context, config.provider_settings,
+            provider,
+            plugin_context,
+            config.provider_settings,
         ),
     )
 

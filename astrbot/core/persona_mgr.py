@@ -175,7 +175,8 @@ class PersonaManager:
         return await self.db.get_personas()
 
     async def get_personas_by_folder(
-        self, folder_id: str | None = None,
+        self,
+        folder_id: str | None = None,
     ) -> list[Persona]:
         """获取指定文件夹中的 personas
 
@@ -186,7 +187,9 @@ class PersonaManager:
         return await self.db.get_personas_by_folder(folder_id)
 
     async def move_persona_to_folder(
-        self, persona_id: str, folder_id: str | None,
+        self,
+        persona_id: str,
+        folder_id: str | None,
     ) -> Persona | None:
         """移动 persona 到指定文件夹
 

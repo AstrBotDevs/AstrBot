@@ -157,7 +157,8 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
         ) as response:
             if response.status_code == 200 and response.headers.get(
-                "content-type", "",
+                "content-type",
+                "",
             ).startswith("audio/"):
                 with open(path, "wb") as f:
                     async for chunk in response.aiter_bytes():

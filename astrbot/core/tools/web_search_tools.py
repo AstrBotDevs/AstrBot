@@ -124,11 +124,14 @@ async def _tavily_search(
         "Authorization": f"Bearer {tavily_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session, session.post(
-        "https://api.tavily.com/search",
-        json=payload,
-        headers=header,
-    ) as response:
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
+            "https://api.tavily.com/search",
+            json=payload,
+            headers=header,
+        ) as response,
+    ):
         if response.status != 200:
             reason = await response.text()
             raise Exception(
@@ -152,11 +155,14 @@ async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
         "Authorization": f"Bearer {tavily_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session, session.post(
-        "https://api.tavily.com/extract",
-        json=payload,
-        headers=header,
-    ) as response:
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
+            "https://api.tavily.com/extract",
+            json=payload,
+            headers=header,
+        ) as response,
+    ):
         if response.status != 200:
             reason = await response.text()
             raise Exception(
@@ -180,11 +186,14 @@ async def _bocha_search(
         "Authorization": f"Bearer {bocha_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session, session.post(
-        "https://api.bochaai.com/v1/web-search",
-        json=payload,
-        headers=header,
-    ) as response:
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
+            "https://api.bochaai.com/v1/web-search",
+            json=payload,
+            headers=header,
+        ) as response,
+    ):
         if response.status != 200:
             reason = await response.text()
             raise Exception(
@@ -212,11 +221,14 @@ async def _brave_search(
         "Accept": "application/json",
         "X-Subscription-Token": brave_key,
     }
-    async with aiohttp.ClientSession(trust_env=True) as session, session.get(
-        "https://api.search.brave.com/res/v1/web/search",
-        params=payload,
-        headers=header,
-    ) as response:
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            params=payload,
+            headers=header,
+        ) as response,
+    ):
         if response.status != 200:
             reason = await response.text()
             raise Exception(
@@ -247,11 +259,14 @@ async def _baidu_search(
         "X-Appbuilder-Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session, session.post(
-        "https://qianfan.baidubce.com/v2/ai_search/web_search",
-        json=payload,
-        headers=headers,
-    ) as response:
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
+            "https://qianfan.baidubce.com/v2/ai_search/web_search",
+            json=payload,
+            headers=headers,
+        ) as response,
+    ):
         if response.status != 200:
             reason = await response.text()
             raise Exception(

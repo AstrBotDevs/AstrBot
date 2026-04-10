@@ -178,7 +178,8 @@ class CronJobManager:
             )
             asyncio.create_task(
                 self.db.update_cron_job(
-                    job.job_id, next_run_time=self._get_next_run_time(job.job_id),
+                    job.job_id,
+                    next_run_time=self._get_next_run_time(job.job_id),
                 ),
             )
         except Exception as e:
@@ -194,7 +195,10 @@ class CronJobManager:
             return
         start_time = datetime.now(timezone.utc)
         await self.db.update_cron_job(
-            job_id, status="running", last_run_at=start_time, last_error=None,
+            job_id,
+            status="running",
+            last_run_at=start_time,
+            last_error=None,
         )
         status = "completed"
         last_error = None
@@ -308,7 +312,8 @@ class CronJobManager:
             cron_event.role = "admin"
 
         tool_call_timeout = cfg.get("provider_settings", {}).get(
-            "tool_call_timeout", 120,
+            "tool_call_timeout",
+            120,
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
@@ -347,7 +352,10 @@ class CronJobManager:
         )
 
         result = await build_main_agent(
-            event=cron_event, plugin_context=self.ctx, config=config, req=req,
+            event=cron_event,
+            plugin_context=self.ctx,
+            config=config,
+            req=req,
         )
         if not result:
             logger.error("Failed to build main agent for cron job.")

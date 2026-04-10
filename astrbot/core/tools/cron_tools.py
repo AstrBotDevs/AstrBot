@@ -74,7 +74,9 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
     )
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
     ) -> ToolExecResult:
         cron_mgr = context.context.context.cron_manager
         if cron_mgr is None:

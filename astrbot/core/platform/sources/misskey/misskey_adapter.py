@@ -45,7 +45,9 @@ DEFAULT_UPLOAD_CONCURRENCY = 3
 
 
 @register_platform_adapter(
-    "misskey", "Misskey 平台适配器", support_streaming_message=False,
+    "misskey",
+    "Misskey 平台适配器",
+    support_streaming_message=False,
 )
 class MisskeyPlatformAdapter(Platform):
     def __init__(

@@ -340,7 +340,12 @@ class SQLiteDatabase(BaseDatabase):
                 return new_conversation
 
     async def update_conversation(
-        self, cid, title=None, persona_id=None, content=None, token_usage=None,
+        self,
+        cid,
+        title=None,
+        persona_id=None,
+        content=None,
+        token_usage=None,
     ):
         async with self.get_db() as session:
             session: AsyncSession
@@ -557,7 +562,8 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalars().all()
 
     async def get_platform_message_history_by_id(
-        self, message_id: int,
+        self,
+        message_id: int,
     ) -> PlatformMessageHistory | None:
         """Get a platform message history record by its ID."""
         async with self.get_db() as session:
@@ -846,7 +852,8 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalar_one_or_none()
 
     async def get_persona_folders(
-        self, parent_id: str | None = None,
+        self,
+        parent_id: str | None = None,
     ) -> list[PersonaFolder]:
         """Get all persona folders, optionally filtered by parent_id.
 
@@ -878,7 +885,8 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             query = select(PersonaFolder).order_by(
-                col(PersonaFolder.sort_order), col(PersonaFolder.name),
+                col(PersonaFolder.sort_order),
+                col(PersonaFolder.name),
             )
             result = await session.execute(query)
             return list(result.scalars().all())
@@ -936,7 +944,9 @@ class SQLiteDatabase(BaseDatabase):
                 )
 
     async def move_persona_to_folder(
-        self, persona_id: str, folder_id: str | None,
+        self,
+        persona_id: str,
+        folder_id: str | None,
     ) -> Persona | None:
         """Move a persona to a folder (or root if folder_id is None)."""
         async with self.get_db() as session:
@@ -950,7 +960,8 @@ class SQLiteDatabase(BaseDatabase):
         return await self.get_persona_by_id(persona_id)
 
     async def get_personas_by_folder(
-        self, folder_id: str | None = None,
+        self,
+        folder_id: str | None = None,
     ) -> list[Persona]:
         """Get all personas in a specific folder.
 
@@ -1455,7 +1466,8 @@ class SQLiteDatabase(BaseDatabase):
                 return new_session
 
     async def get_platform_session_by_id(
-        self, session_id: str,
+        self,
+        session_id: str,
     ) -> PlatformSession | None:
         """Get a Platform session by its ID."""
         async with self.get_db() as session:
@@ -1467,7 +1479,8 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalar_one_or_none()
 
     async def get_platform_sessions_by_ids(
-        self, session_ids: list[str],
+        self,
+        session_ids: list[str],
     ) -> list[PlatformSession]:
         """Get platform sessions by IDs."""
         if not session_ids:
@@ -1779,7 +1792,9 @@ class SQLiteDatabase(BaseDatabase):
             return list(result.scalars().all())
 
     async def get_project_by_session(
-        self, session_id: str, creator: str,
+        self,
+        session_id: str,
+        creator: str,
     ) -> ChatUIProject | None:
         """Get the project that a session belongs to."""
         async with self.get_db() as session:
