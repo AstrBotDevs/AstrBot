@@ -24,9 +24,6 @@ from astrbot.core.utils.io import (
     download_dashboard,
     get_dashboard_version,
 )
-from astrbot.runtime_bootstrap import initialize_runtime_bootstrap
-
-initialize_runtime_bootstrap()
 
 
 # 将父目录添加到 sys.path
