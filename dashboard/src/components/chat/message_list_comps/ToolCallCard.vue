@@ -97,21 +97,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import type { ToolCall } from "@/composables/useMessages";
 
-const props = defineProps({
-  toolCall: {
-    type: Object,
-    required: true,
-  },
-  isDark: {
-    type: Boolean,
-    default: false,
-  },
-  initialExpanded: {
-    type: Boolean,
-    default: false,
-  },
-});
+const props = defineProps<{
+  toolCall: ToolCall;
+  isDark?: boolean;
+  initialExpanded?: boolean;
+}>();
 
 const isExpanded = ref(props.initialExpanded);
 const currentTime = ref(Date.now() / 1000);
@@ -124,13 +116,19 @@ const elapsedTime = computed(() => {
 });
 
 const formattedResult = computed(() => {
-  if (!props.toolCall.result) return "";
-  try {
-    const parsed = JSON.parse(props.toolCall.result);
-    return JSON.stringify(parsed, null, 2);
-  } catch {
-    return props.toolCall.result;
+  const result = props.toolCall.result;
+  if (!result) return "";
+  
+  if (typeof result === "string") {
+    try {
+      const parsed = JSON.parse(result);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return result;
+    }
   }
+  
+  return JSON.stringify(result, null, 2);
 });
 
 const formatDuration = (seconds) => {

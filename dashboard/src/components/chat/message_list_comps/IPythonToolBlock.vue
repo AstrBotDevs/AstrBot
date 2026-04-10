@@ -28,29 +28,15 @@
 import { ref, computed, onMounted } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { createHighlighter } from "shiki";
+import type { ToolCall } from "@/composables/useMessages";
 
-const props = defineProps({
-  toolCall: {
-    type: Object,
-    required: true,
-  },
-  isDark: {
-    type: Boolean,
-    default: false,
-  },
-  initialExpanded: {
-    type: Boolean,
-    default: false,
-  },
-  showHeader: {
-    type: Boolean,
-    default: true,
-  },
-  forceExpanded: {
-    type: Boolean,
-    default: null,
-  },
-});
+const props = defineProps<{
+  toolCall: ToolCall;
+  isDark?: boolean;
+  initialExpanded?: boolean;
+  showHeader?: boolean;
+  forceExpanded?: boolean | null;
+}>();
 
 const { tm } = useModuleI18n("features/chat");
 const isExpanded = ref(props.initialExpanded);
@@ -59,8 +45,12 @@ const shikiReady = ref(false);
 
 const code = computed(() => {
   try {
-    if (props.toolCall.args && props.toolCall.args.code) {
-      return props.toolCall.args.code;
+    const args = props.toolCall.args;
+    if (args && typeof args === "object" && args !== null && "code" in args) {
+      const codeValue = (args as Record<string, unknown>).code;
+      if (typeof codeValue === "string") {
+        return codeValue;
+      }
     }
   } catch (err) {
     console.error("Failed to get iPython code:", err);
@@ -71,13 +61,19 @@ const code = computed(() => {
 const result = computed(() => props.toolCall.result);
 
 const formattedResult = computed(() => {
-  if (!result.value) return "";
-  try {
-    const parsed = JSON.parse(result.value);
-    return JSON.stringify(parsed, null, 2);
-  } catch {
-    return result.value;
+  const resultValue = result.value;
+  if (!resultValue) return "";
+  
+  if (typeof resultValue === "string") {
+    try {
+      const parsed = JSON.parse(resultValue);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return resultValue;
+    }
   }
+  
+  return JSON.stringify(resultValue, null, 2);
 });
 
 const highlightedCode = computed(() => {

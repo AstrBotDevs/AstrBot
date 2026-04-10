@@ -269,7 +269,7 @@ const getElapsedTime = (startTs: number) => {
   return formatDuration(elapsed);
 };
 
-const formatToolResult = (result: string) => {
+const formatToolResult = (result: unknown) => {
   if (!result) return "";
   if (typeof result === "string") {
     try {
@@ -282,7 +282,7 @@ const formatToolResult = (result: string) => {
   return JSON.stringify(result, null, 2);
 };
 
-const formatToolArgs = (args: string) => {
+const formatToolArgs = (args: unknown) => {
   if (!args) return "";
   if (typeof args === "string") {
     try {

@@ -19,6 +19,7 @@
       @mouseup="handleTextSelection"
     >
       <v-virtual-scroll
+        ref="virtualScroll"
         :items="messages"
         :height="containerHeight"
         :item-height="estimatedItemHeight"
@@ -515,7 +516,6 @@ export default {
   async mounted() {
     this.initCodeCopyButtons();
     this.initImageClickEvents();
-    this.addScrollListener();
     this.scrollToBottom();
     this.startElapsedTimeTimer();
     this.extractWebSearchResults();
@@ -545,13 +545,13 @@ export default {
       }
     },
 
-    onScroll() {
+    onScroll(event: Event) {
       // 更新用户是否在底部附近的状态
-      const container = this.$refs.messageContainer as HTMLElement;
-      if (container) {
-        const scrollTop = container.scrollTop;
-        const scrollHeight = container.scrollHeight;
-        const clientHeight = container.clientHeight;
+      const target = event.target as HTMLElement;
+      if (target) {
+        const scrollTop = target.scrollTop;
+        const scrollHeight = target.scrollHeight;
+        const clientHeight = target.clientHeight;
 
         this.isUserNearBottom =
           scrollHeight - scrollTop - clientHeight <= this.scrollThreshold;
@@ -646,14 +646,23 @@ export default {
       }
 
       // 获取message-item在messages数组中的索引
-      const messageContainer = this.$refs.messageContainer as HTMLElement;
-      const messageItems = messageContainer?.querySelectorAll(".message-item");
+      // 使用 data-message-index 属性而不是 DOM 索引
+      const messageIndexAttr = messageItem.getAttribute("data-message-index");
       let messageIndex = -1;
-      if (messageItems) {
-        for (let i = 0; i < messageItems.length; i++) {
-          if (messageItems[i] === messageItem) {
-            messageIndex = i;
-            break;
+      
+      if (messageIndexAttr !== null) {
+        // 如果元素有 data-message-index 属性，直接使用它
+        messageIndex = parseInt(messageIndexAttr, 10);
+      } else {
+        // 备选方案：如果没有 data-message-index 属性，回退到 DOM 索引
+        const messageContainer = this.$refs.messageContainer as HTMLElement;
+        const messageItems = messageContainer?.querySelectorAll(".message-item");
+        if (messageItems) {
+          for (let i = 0; i < messageItems.length; i++) {
+            if (messageItems[i] === messageItem) {
+              messageIndex = i;
+              break;
+            }
           }
         }
       }
@@ -731,18 +740,47 @@ export default {
       const msgIndex = this.messages.findIndex((m) => m.id === messageId);
       if (msgIndex === -1) return;
 
+      // 使用 data-message-index 属性查找渲染的消息项
       const container = this.$refs.messageContainer as HTMLElement | undefined;
-      const messageItems = container?.querySelectorAll(".message-item");
-      if (messageItems && messageItems[msgIndex]) {
-        messageItems[msgIndex].scrollIntoView({
+      if (!container) return;
+      
+      // 查找具有对应 data-message-index 属性的消息项
+      const messageItem = container.querySelector(`.message-item[data-message-index="${msgIndex}"]`);
+      if (messageItem) {
+        // 如果消息在 DOM 中，直接滚动到它
+        messageItem.scrollIntoView({
           behavior: "smooth",
           block: "center",
         });
         // 高亮一下
-        messageItems[msgIndex].classList.add("highlight-message");
+        messageItem.classList.add("highlight-message");
         setTimeout(() => {
-          messageItems[msgIndex].classList.remove("highlight-message");
+          messageItem.classList.remove("highlight-message");
         }, 2000);
+      } else {
+        // 如果消息不在 DOM 中（虚拟滚动未渲染），尝试使用虚拟滚动 API
+        // 首先尝试获取虚拟滚动组件的引用
+        const virtualScroll = this.$refs.virtualScroll as any;
+        if (virtualScroll && typeof virtualScroll.scrollToIndex === "function") {
+          // 使用虚拟滚动组件的 scrollToIndex 方法
+          virtualScroll.scrollToIndex(msgIndex, { behavior: "smooth", block: "center" });
+        } else {
+          // 备选方案：计算估计的滚动位置
+          this.$nextTick(() => {
+            // 等待下一帧，然后尝试再次查找元素
+            const retryItem = container.querySelector(`.message-item[data-message-index="${msgIndex}"]`);
+            if (retryItem) {
+              retryItem.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+              });
+              retryItem.classList.add("highlight-message");
+              setTimeout(() => {
+                retryItem.classList.remove("highlight-message");
+              }, 2000);
+            }
+          });
+        }
       }
     },
 
@@ -1030,9 +1068,9 @@ export default {
     scrollToBottom() {
       this.$nextTick(() => {
         if (this.isUnmounted) return;
-        const container = this.$refs.messageContainer as HTMLElement | undefined;
-        if (container) {
-          container.scrollTop = container.scrollHeight;
+        const virtualScroll = this.$refs.virtualScroll as any;
+        if (virtualScroll && virtualScroll.scrollToOffset) {
+          virtualScroll.scrollToOffset({ offset: virtualScroll.scrollHeight });
           this.isUserNearBottom = true; // 程序滚动到底部后标记用户在底部
         }
       });
@@ -1040,10 +1078,7 @@ export default {
 
     // 添加滚动事件监听器
     addScrollListener() {
-      const container = this.$refs.messageContainer as HTMLElement | undefined;
-      if (container) {
-        container.addEventListener("scroll", this.throttledHandleScroll);
-      }
+      // 不再需要手动添加滚动监听器，因为 v-virtual-scroll 已经通过 @scroll 事件处理
     },
 
     // 节流处理滚动事件
@@ -1058,23 +1093,12 @@ export default {
 
     // 处理滚动事件
     handleScroll() {
-      const container = this.$refs.messageContainer as HTMLElement | undefined;
-      if (container) {
-        const { scrollTop, scrollHeight, clientHeight } = container;
-        const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
-
-        // 判断用户是否在底部附近
-        this.isUserNearBottom = distanceFromBottom <= this.scrollThreshold;
-      }
+      // 这个方法不再使用，因为滚动事件现在通过 onScroll 方法处理
     },
 
     // 组件销毁时移除监听器
     beforeUnmount() {
       this.isUnmounted = true;
-      const container = this.$refs.messageContainer as HTMLElement | undefined;
-      if (container) {
-        container.removeEventListener("scroll", this.throttledHandleScroll);
-      }
       // 清理定时器
       if (this.scrollTimer) {
         clearTimeout(this.scrollTimer);
@@ -1640,6 +1664,7 @@ export default {
   border-radius: 1.5rem;
   word-break: break-word;
   overflow-wrap: break-word;
+  white-space: pre-wrap;
   box-sizing: border-box;
   margin-right: 16px;
 }

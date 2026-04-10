@@ -7,9 +7,9 @@ import { useToast } from "@/utils/toast";
 export interface ToolCall {
   id: string;
   name: string;
-  args: Record<string, any>;
+  args: unknown;
   ts: number; // 开始时间戳
-  result?: string; // 工具调用结果
+  result?: unknown; // 工具调用结果
   finished_ts?: number; // 完成时间戳
 }
 
