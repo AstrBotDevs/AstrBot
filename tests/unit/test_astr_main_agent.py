@@ -1,7 +1,7 @@
 """Tests for astr_main_agent module."""
 
 import os
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -404,26 +404,16 @@ class TestBuiltinToolInjection:
         req = ProviderRequest()
         tool_mgr = MagicMock()
 
-        create_tool = MagicMock(spec=FunctionTool)
-        create_tool.name = "create_future_task"
-        delete_tool = MagicMock(spec=FunctionTool)
-        delete_tool.name = "delete_future_task"
-        list_tool = MagicMock(spec=FunctionTool)
-        list_tool.name = "list_future_tasks"
-        tool_mgr.get_builtin_tool.side_effect = [create_tool, delete_tool, list_tool]
+        future_task_tool = MagicMock(spec=FunctionTool)
+        future_task_tool.name = "future_task"
+        tool_mgr.get_builtin_tool.return_value = future_task_tool
         mock_context.get_llm_tool_manager.return_value = tool_mgr
 
         module._proactive_cron_job_tools(req, mock_context)
 
-        assert tool_mgr.get_builtin_tool.call_args_list == [
-            call(module.CreateActiveCronTool),
-            call(module.DeleteCronJobTool),
-            call(module.ListCronJobsTool),
-        ]
+        tool_mgr.get_builtin_tool.assert_called_once_with(module.FutureTaskTool)
         assert req.func_tool is not None
-        assert req.func_tool.get_tool("create_future_task") is create_tool
-        assert req.func_tool.get_tool("delete_future_task") is delete_tool
-        assert req.func_tool.get_tool("list_future_tasks") is list_tool
+        assert req.func_tool.get_tool("future_task") is future_task_tool
 
 
 class TestApplyFileExtract:

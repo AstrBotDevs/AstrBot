@@ -67,11 +67,7 @@ from astrbot.core.tools.computer_tools import (
     SyncSkillReleaseTool,
     normalize_umo_for_workspace,
 )
-from astrbot.core.tools.cron_tools import (
-    CreateActiveCronTool,
-    DeleteCronJobTool,
-    ListCronJobsTool,
-)
+from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
@@ -1124,9 +1120,7 @@ def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> 
     if req.func_tool is None:
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateActiveCronTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeleteCronJobTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListCronJobsTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FutureTaskTool))
 
 
 async def _apply_web_search_tools(
