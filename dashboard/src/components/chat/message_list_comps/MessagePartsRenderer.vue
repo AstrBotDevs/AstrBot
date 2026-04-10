@@ -226,7 +226,7 @@ const emit = defineEmits(["open-image-preview", "download-file"]);
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 
-const emitOpenImage = (url: any) => {
+const emitOpenImage = (url: string | undefined) => {
   emit("open-image-preview", url);
 };
 

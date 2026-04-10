@@ -420,16 +420,18 @@ interface WebSearchResult {
   snippet: string;
 }
 
-// 类型谓词：检查是否为纯文本类型的MessagePart
-function isPlainPart(part: unknown): part is MessagePart & { type: "plain"; text: string } {
-  return (
-    !!part &&
-    typeof part === "object" &&
-    (part as any).type === "plain" &&
-    "text" in part &&
-    typeof (part as any).text === "string" &&
-    !!(part as any).text
-  );
+interface WebSearchResultItem {
+  index?: string;
+  url?: string;
+  title?: string;
+  snippet?: string;
+}
+
+// 虚拟滚动组件引用类型
+interface VirtualScrollRef {
+  scrollHeight: number;
+  scrollToOffset: (options: { offset: number }) => void;
+  scrollToIndex: (index: number, options?: { behavior?: string; block?: string }) => void;
 }
 
 enableKatex();
@@ -568,11 +570,11 @@ export default {
         }
 
         msg.content.message.forEach((part: MessagePart) => {
-          if (part.type !== "tool_call" || !("tool_calls" in part) || !Array.isArray(part.tool_calls)) {
+          if (!this.isToolCallPart(part)) {
             return;
           }
 
-          part.tool_calls.forEach((toolCall) => {
+          part.tool_calls?.forEach((toolCall) => {
             // 检查是否是 web_search_tavily 工具调用
             if (toolCall.name !== "web_search_tavily" || !toolCall.result) {
               return;
@@ -586,12 +588,12 @@ export default {
                   : toolCall.result;
 
               if (resultData.results && Array.isArray(resultData.results)) {
-                resultData.results.forEach((item: any) => {
+                resultData.results.forEach((item: WebSearchResultItem) => {
                   if (item.index) {
                     results[item.index] = {
-                      url: item.url,
-                      title: item.title,
-                      snippet: item.snippet,
+                      url: item.url || "",
+                      title: item.title || "",
+                      snippet: item.snippet || "",
                     };
                   }
                 });
@@ -724,8 +726,8 @@ export default {
       let content = "";
       if (Array.isArray(replyMsg.content.message)) {
         const textParts = replyMsg.content.message
-          .filter(isPlainPart)
-          .map((part) => part.text);
+          .filter(this.isPlainPart)
+          .map((part: MessagePart & { type: "plain"; text: string }) => part.text);
         content = textParts.join("");
       }
       // 截断过长内容
@@ -760,7 +762,7 @@ export default {
       } else {
         // 如果消息不在 DOM 中（虚拟滚动未渲染），尝试使用虚拟滚动 API
         // 首先尝试获取虚拟滚动组件的引用
-        const virtualScroll = this.$refs.virtualScroll as any;
+        const virtualScroll = this.$refs.virtualScroll as VirtualScrollRef;
         if (virtualScroll && typeof virtualScroll.scrollToIndex === "function") {
           // 使用虚拟滚动组件的 scrollToIndex 方法
           virtualScroll.scrollToIndex(msgIndex, { behavior: "smooth", block: "center" });
@@ -900,7 +902,7 @@ export default {
       }
 
       const textContents = messageParts
-        .filter(isPlainPart)
+        .filter(this.isPlainPart)
         .map((part) => part.text);
 
       let textToCopy = textContents.join("\n");
@@ -1068,7 +1070,7 @@ export default {
     scrollToBottom() {
       this.$nextTick(() => {
         if (this.isUnmounted) return;
-        const virtualScroll = this.$refs.virtualScroll as any;
+        const virtualScroll = this.$refs.virtualScroll as VirtualScrollRef;
         if (virtualScroll && virtualScroll.scrollToOffset) {
           virtualScroll.scrollToOffset({ offset: virtualScroll.scrollHeight });
           this.isUserNearBottom = true; // 程序滚动到底部后标记用户在底部
@@ -1203,6 +1205,20 @@ export default {
     
     isToolCallPart(part: MessagePart): part is { type: 'tool_call'; tool_calls?: ToolCall[] } {
       return part?.type === 'tool_call' && Array.isArray(part.tool_calls);
+    },
+
+    // 类型谓词：检查是否为纯文本类型的MessagePart
+    isPlainPart(part: unknown): part is MessagePart & { type: "plain"; text: string } {
+      return (
+        !!part &&
+        typeof part === "object" &&
+        part !== null &&
+        "type" in part &&
+        (part as { type?: unknown }).type === "plain" &&
+        "text" in part &&
+        typeof (part as { text?: unknown }).text === "string" &&
+        !!(part as { text?: unknown }).text
+      );
     },
 
     // Get elapsed time string for a tool call
