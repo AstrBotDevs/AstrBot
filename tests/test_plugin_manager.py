@@ -480,10 +480,7 @@ async def test_ensure_plugin_requirements_sets_target_upgrade_based_on_version_m
     )
 
     assert len(observed_calls) == 1
-    assert (
-        observed_calls[0]["allow_target_upgrade"]
-        is expected_allow_target_upgrade
-    )
+    assert observed_calls[0]["allow_target_upgrade"] is expected_allow_target_upgrade
 
 
 @pytest.mark.asyncio
@@ -751,6 +748,57 @@ async def test_import_plugin_attempts_dependency_recovery_when_precheck_is_unava
         ("import", "data.plugins.helloworld.main", ("main",), 1),
         ("prefer", str(requirements_path)),
         ("import", "data.plugins.helloworld.main", ("main",), 2),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_import_plugin_does_not_recover_from_plain_import_error(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("networkx\n", encoding="utf-8")
+    events = []
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
+        lambda *, requirements_path: events.append(("prefer", requirements_path)),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: MissingRequirementsPlan(
+            missing_names=frozenset(),
+            install_lines=(),
+            version_mismatch_names=frozenset(),
+        ),
+    )
+
+    async def unexpected_check_plugin_dept_update(*args, **kwargs):
+        raise AssertionError("dependency install fallback should not run")
+
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_check_plugin_dept_update",
+        unexpected_check_plugin_dept_update,
+    )
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        del globals, locals, level
+        events.append(("import", name, tuple(fromlist)))
+        raise ImportError("plugin import error")
+
+    monkeypatch.setattr(star_manager_module, "__import__", fake_import, raising=False)
+
+    with pytest.raises(ImportError, match="plugin import error"):
+        await plugin_manager_pm._import_plugin_with_dependency_recovery(
+            path="data.plugins.helloworld.main",
+            module_str="main",
+            root_dir_name=TEST_PLUGIN_DIR,
+            requirements_path=str(requirements_path),
+        )
+
+    assert events == [
+        ("prefer", str(requirements_path)),
+        ("import", "data.plugins.helloworld.main", ("main",)),
     ]
 
 

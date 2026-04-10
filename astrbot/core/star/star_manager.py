@@ -431,7 +431,7 @@ class PluginManager:
 
         try:
             return __import__(path, fromlist=[module_str])
-        except (ModuleNotFoundError, ImportError) as import_exc:
+        except ModuleNotFoundError as import_exc:
             if recovery_state.mode in {
                 ImportDependencyRecoveryMode.PRELOAD_AND_RECOVER,
                 ImportDependencyRecoveryMode.RECOVER_ON_FAILURE,
