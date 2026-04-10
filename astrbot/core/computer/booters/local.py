@@ -6,8 +6,9 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from astrbot.api import logger
 from astrbot.core.utils.astrbot_path import (
@@ -53,7 +54,9 @@ def _ensure_safe_path(path: str) -> str:
     return abs_path
 
 
-def _resolve_working_dir(configured_path: str | None, fallback_func: Callable[[], str]) -> tuple[str, bool]:
+def _resolve_working_dir(
+    configured_path: str | None, fallback_func: Callable[[], str]
+) -> tuple[str, bool]:
     """Resolve working directory with fallback to default.
 
     Args:

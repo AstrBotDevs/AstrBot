@@ -8,7 +8,10 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
 from astrbot.core.computer.computer_client import get_booter, get_local_booter
-from astrbot.core.computer.tools.permissions import check_admin_permission, get_configured_cwd
+from astrbot.core.computer.tools.permissions import (
+    check_admin_permission,
+    get_configured_cwd,
+)
 from astrbot.core.message.message_event_result import MessageChain
 
 _OS_NAME = platform.system()
