@@ -15,9 +15,12 @@ else:
 class DiscordBotClient(discord.Bot):
     """Discord客户端封装"""
 
-    def __init__(self, token: str, proxy: str | None = None) -> None:
+    def __init__(
+        self, token: str, proxy: str | None = None, allow_bot_messages: bool = False
+    ) -> None:
         self.token = token
         self.proxy = proxy
+        self.allow_bot_messages = allow_bot_messages
 
         # 设置Intent权限，遵循权限最小化原则
         intents = discord.Intents.default()
@@ -95,7 +98,7 @@ class DiscordBotClient(discord.Bot):
 
     async def on_message(self, message: discord.Message) -> None:
         """当接收到消息时触发"""
-        if message.author.bot:
+        if message.author.bot and not self.allow_bot_messages:
             return
 
         logger.debug(

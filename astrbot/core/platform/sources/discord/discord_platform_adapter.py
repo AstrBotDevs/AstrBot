@@ -142,7 +142,8 @@ class DiscordPlatformAdapter(Platform):
             return
 
         proxy = self.config.get("discord_proxy") or None
-        self.client = DiscordBotClient(token, proxy)
+        allow_bot_messages = bool(self.config.get("discord_allow_bot_messages"))
+        self.client = DiscordBotClient(token, proxy, allow_bot_messages)
         self.client.on_message_received = on_received
 
         async def callback() -> None:
