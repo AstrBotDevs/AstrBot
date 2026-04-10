@@ -46,11 +46,9 @@ const shikiReady = ref(false);
 const code = computed(() => {
   try {
     const args = props.toolCall.args;
-    if (args && typeof args === "object" && args !== null && "code" in args) {
+    if (args && typeof args === "object" && args !== null && "code" in args && typeof (args as Record<string, unknown>).code === "string") {
       const codeValue = (args as Record<string, unknown>).code;
-      if (typeof codeValue === "string") {
-        return codeValue;
-      }
+      return codeValue as string;
     }
   } catch (err) {
     console.error("Failed to get iPython code:", err);
