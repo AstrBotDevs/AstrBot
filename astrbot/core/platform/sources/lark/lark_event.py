@@ -211,7 +211,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     file_path = comp.file.replace("file:///", "")
                 elif comp.file and comp.file.startswith("http"):
                     image_file_path = await download_image_by_url(comp.file)
-                    file_path = image_file_path if image_file_path else ""
+                    file_path = image_file_path or ""
                 elif comp.file and comp.file.startswith("base64://"):
                     base64_str = comp.file.removeprefix("base64://")
                     image_data = base64.b64decode(base64_str)
@@ -228,7 +228,7 @@ class LarkMessageEvent(AstrMessageEvent):
 
                     await asyncio.to_thread(_write_image)
                 else:
-                    file_path = comp.file if comp.file else ""
+                    file_path = comp.file or ""
 
                 if image_file is None:
                     if not file_path:
@@ -567,17 +567,29 @@ class LarkMessageEvent(AstrMessageEvent):
         # 发送附件
         for file_comp in file_components:
             await LarkMessageEvent._send_file_message(
-                file_comp, lark_client, reply_message_id, receive_id, receive_id_type,
+                file_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
             )
 
         for audio_comp in audio_components:
             await LarkMessageEvent._send_audio_message(
-                audio_comp, lark_client, reply_message_id, receive_id, receive_id_type,
+                audio_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
             )
 
         for media_comp in media_components:
             await LarkMessageEvent._send_media_message(
-                media_comp, lark_client, reply_message_id, receive_id, receive_id_type,
+                media_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
             )
 
     async def send(self, message: MessageChain) -> None:
@@ -609,7 +621,9 @@ class LarkMessageEvent(AstrMessageEvent):
         """
         file_path = file_comp.file or ""
         file_key = await LarkMessageEvent._upload_lark_file(
-            lark_client, path=file_path, file_type="stream",
+            lark_client,
+            path=file_path,
+            file_type="stream",
         )
         if not file_key:
             return
@@ -650,7 +664,8 @@ class LarkMessageEvent(AstrMessageEvent):
             return
 
         if not original_audio_path or not await asyncio.to_thread(
-            os.path.exists, original_audio_path,
+            os.path.exists,
+            original_audio_path,
         ):
             logger.error(f"[Lark] 音频文件不存在: {original_audio_path}")
             return
@@ -682,7 +697,8 @@ class LarkMessageEvent(AstrMessageEvent):
 
         # 清理转换后的临时音频文件
         if converted_audio_path and await asyncio.to_thread(
-            os.path.exists, converted_audio_path,
+            os.path.exists,
+            converted_audio_path,
         ):
             try:
                 await asyncio.to_thread(os.remove, converted_audio_path)
@@ -728,7 +744,8 @@ class LarkMessageEvent(AstrMessageEvent):
             return
 
         if not original_video_path or not await asyncio.to_thread(
-            os.path.exists, original_video_path,
+            os.path.exists,
+            original_video_path,
         ):
             logger.error(f"[Lark] 视频文件不存在: {original_video_path}")
             return
@@ -760,7 +777,8 @@ class LarkMessageEvent(AstrMessageEvent):
 
         # 清理转换后的临时视频文件
         if converted_video_path and await asyncio.to_thread(
-            os.path.exists, converted_video_path,
+            os.path.exists,
+            converted_video_path,
         ):
             try:
                 await asyncio.to_thread(os.remove, converted_video_path)
@@ -1100,7 +1118,8 @@ class LarkMessageEvent(AstrMessageEvent):
         if card_id is None:
             if not fallback_used:
                 await Metric.upload(
-                    msg_event_tick=1, adapter_name=self.platform_meta.name,
+                    msg_event_tick=1,
+                    adapter_name=self.platform_meta.name,
                 )
                 self._has_send_oper = True
             return

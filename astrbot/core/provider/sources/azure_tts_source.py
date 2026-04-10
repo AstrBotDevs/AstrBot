@@ -46,7 +46,8 @@ class OTTSProvider:
 
     async def __aenter__(self):
         self._client = AsyncClient(
-            timeout=self.timeout, proxy=self.proxy if self.proxy else None,
+            timeout=self.timeout,
+            proxy=self.proxy or None,
         )
         return self
 
@@ -151,7 +152,7 @@ class AzureNativeProvider(TTSProvider):
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm",
             },
-            proxy=self.proxy if self.proxy else None,
+            proxy=self.proxy or None,
         )
         return self
 
@@ -212,7 +213,9 @@ class AzureTTSProvider(TTSProvider):
         self.provider = self._parse_provider(key_value, provider_config)
 
     def _parse_provider(
-        self, key_value: str, config: dict,
+        self,
+        key_value: str,
+        config: dict,
     ) -> OTTSProvider | AzureNativeProvider:
         if key_value.lower().startswith("other["):
             json_str = ""

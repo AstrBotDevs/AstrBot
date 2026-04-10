@@ -109,7 +109,8 @@ class ChatRoute(Route):
             resolved_base_dir = _resolve_path(self.attachments_dir)
             if not await anyio.Path(resolved_file_path).exists():
                 file_path = os.path.join(
-                    self.legacy_img_dir, os.path.basename(filename),
+                    self.legacy_img_dir,
+                    os.path.basename(filename),
                 )
                 if await anyio.Path(file_path).exists():
                     resolved_file_path = _resolve_path(file_path)
@@ -139,7 +140,8 @@ class ChatRoute(Route):
             file_path = attachment.path
             resolved_file_path = _resolve_path(file_path)
             return await send_file(
-                str(resolved_file_path), mimetype=attachment.mime_type,
+                str(resolved_file_path),
+                mimetype=attachment.mime_type,
             )
         except (FileNotFoundError, OSError):
             return Response().error("File access error").to_json()
@@ -163,7 +165,9 @@ class ChatRoute(Route):
         path = os.path.join(self.attachments_dir, filename)
         await file.save(path)
         attachment = await self.db.insert_attachment(
-            path=path, type=attach_type, mime_type=content_type,
+            path=path,
+            type=attach_type,
+            mime_type=content_type,
         )
         if not attachment:
             return Response().error("Failed to create attachment").to_json()
@@ -183,11 +187,15 @@ class ChatRoute(Route):
     async def _build_user_message_parts(self, message: str | list) -> list[dict]:
         """构建用户消息的部分列表｡"""
         return await build_webchat_message_parts(
-            message, get_attachment_by_id=self.db.get_attachment_by_id, strict=False,
+            message,
+            get_attachment_by_id=self.db.get_attachment_by_id,
+            strict=False,
         )
 
     async def _create_attachment_from_file(
-        self, filename: str, attach_type: str,
+        self,
+        filename: str,
+        attach_type: str,
     ) -> dict | None:
         """从本地文件创建 attachment 并返回消息部分｡"""
         return await create_attachment_part_from_existing_file(
@@ -199,7 +207,9 @@ class ChatRoute(Route):
         )
 
     def _extract_web_search_refs(
-        self, accumulated_text: str, accumulated_parts: list,
+        self,
+        accumulated_text: str,
+        accumulated_parts: list,
     ) -> dict:
         """从消息中提取 web_search_tavily 的引用
 
@@ -309,7 +319,8 @@ class ChatRoute(Route):
             )
         message_id = str(uuid.uuid4())
         back_queue = webchat_queue_mgr.get_or_create_back_queue(
-            message_id, webchat_conv_id,
+            message_id,
+            webchat_conv_id,
         )
 
         async def stream():
@@ -330,7 +341,8 @@ class ChatRoute(Route):
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
                         result, should_break = await _poll_webchat_stream_result(
-                            back_queue, username,
+                            back_queue,
+                            username,
                         )
                         if should_break:
                             client_disconnected = True
@@ -404,21 +416,24 @@ class ChatRoute(Route):
                         elif msg_type == "image":
                             filename = result_text.replace("[IMAGE]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "image",
+                                filename,
+                                "image",
                             )
                             if part:
                                 accumulated_parts.append(part)
                         elif msg_type == "record":
                             filename = result_text.replace("[RECORD]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "record",
+                                filename,
+                                "record",
                             )
                             if part:
                                 accumulated_parts.append(part)
                         elif msg_type == "file":
                             filename = result_text.replace("[FILE]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "file",
+                                filename,
+                                "file",
                             )
                             if part:
                                 accumulated_parts.append(part)
@@ -432,7 +447,8 @@ class ChatRoute(Route):
                                 continue
                             try:
                                 refs = self._extract_web_search_refs(
-                                    accumulated_text, accumulated_parts,
+                                    accumulated_text,
+                                    accumulated_parts,
                                 )
                             except Exception as e:
                                 logger.exception(
@@ -548,7 +564,9 @@ class ChatRoute(Route):
         if attachment_ids:
             await self._delete_attachments(attachment_ids)
         await mgr.delete(
-            platform_id=session.platform_id, user_id=session_id, offset_sec=99999999,
+            platform_id=session.platform_id,
+            user_id=session_id,
+            offset_sec=99999999,
         )
         try:
             router = self.umop_config_router
@@ -658,7 +676,9 @@ class ChatRoute(Route):
         username = g.get("username", "guest")
         platform_id = request.args.get("platform_id", "webchat")
         session = await self.db.create_platform_session(
-            creator=username, platform_id=platform_id, is_group=0,
+            creator=username,
+            platform_id=platform_id,
+            is_group=0,
         )
         return (
             Response()
@@ -707,12 +727,16 @@ class ChatRoute(Route):
         platform_id = session.platform_id if session else "webchat"
         username = g.get("username", "guest")
         project_info = await self.db.get_project_by_session(
-            session_id=session_id, creator=username,
+            session_id=session_id,
+            creator=username,
         )
         mgr = self.platform_history_mgr
         assert mgr is not None
         history_ls = await mgr.get(
-            platform_id=platform_id, user_id=session_id, page=1, page_size=1000,
+            platform_id=platform_id,
+            user_id=session_id,
+            page=1,
+            page_size=1000,
         )
         history_res = [history.model_dump() for history in history_ls]
         response_data: dict[str, Any] = {
@@ -743,6 +767,7 @@ class ChatRoute(Route):
         if session.creator != username:
             return Response().error("Permission denied").to_json()
         await self.db.update_platform_session(
-            session_id=session_id, display_name=display_name,
+            session_id=session_id,
+            display_name=display_name,
         )
         return Response().ok().to_json()

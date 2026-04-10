@@ -52,7 +52,8 @@ class ContextTruncator:
 
         # If a user message exists inside the truncated list, promote it to the front.
         index_in_truncated = next(
-            (i for i, m in enumerate(truncated) if m.role == "user"), None,
+            (i for i, m in enumerate(truncated) if m.role == "user"),
+            None,
         )
         if index_in_truncated is not None:
             # Build a new truncated list that places the found user message first,
@@ -164,7 +165,9 @@ class ContextTruncator:
             truncated_contexts = truncated_contexts[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_contexts, messages,
+            system_messages,
+            truncated_contexts,
+            messages,
         )
         return self.fix_messages(result)
 
@@ -193,7 +196,9 @@ class ContextTruncator:
             truncated_non_system = truncated_non_system[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_non_system, messages,
+            system_messages,
+            truncated_non_system,
+            messages,
         )
         return self.fix_messages(result)
 
@@ -222,6 +227,8 @@ class ContextTruncator:
             truncated_non_system = truncated_non_system[index:]
 
         result = self._ensure_user_message(
-            system_messages, truncated_non_system, messages,
+            system_messages,
+            truncated_non_system,
+            messages,
         )
         return self.fix_messages(result)

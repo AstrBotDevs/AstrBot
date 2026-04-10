@@ -1,5 +1,4 @@
-"""ABP (AstrBot Protocol) client - in-process star communication.
-"""
+"""ABP (AstrBot Protocol) client - in-process star communication."""
 
 from __future__ import annotations
 

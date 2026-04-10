@@ -53,7 +53,10 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
     @classmethod
     async def send_with_adapter(
-        cls, adapter: "SatoriPlatformAdapter", message: MessageChain, session_id: str,
+        cls,
+        adapter: "SatoriPlatformAdapter",
+        message: MessageChain,
+        session_id: str,
     ):
         try:
             content_parts = []
@@ -82,7 +85,11 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 user = current_login.get("user", {})
                 user_id = user.get("id", "") if user else ""
             result = await adapter.send_http_request(
-                "POST", "/message.create", data, platform, user_id,
+                "POST",
+                "/message.create",
+                data,
+                platform,
+                user_id,
             )
             if result:
                 return result
@@ -118,7 +125,11 @@ class SatoriPlatformEvent(AstrMessageEvent):
             channel_id = self.session_id
             data = {"channel_id": channel_id, "content": content}
             result = await self.adapter.send_http_request(
-                "POST", "/message.create", data, platform, user_id,
+                "POST",
+                "/message.create",
+                data,
+                platform,
+                user_id,
             )
             if not result:
                 logger.error("Satori 消息发送失败")

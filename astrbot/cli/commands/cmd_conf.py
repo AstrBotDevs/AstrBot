@@ -31,8 +31,7 @@ from astrbot.core.utils.auth_password import (
 
 
 def is_dashboard_password_hash(value: str) -> bool:
-    """Heuristic: return True if `value` looks like a supported dashboard password hash.
-    """
+    """Heuristic: return True if `value` looks like a supported dashboard password hash."""
     if not isinstance(value, str) or not value:
         return False
     return _is_argon2_hash(value) or _is_pbkdf2_hash(value)
@@ -130,7 +129,8 @@ def _load_config() -> dict[str, Any]:
 def _save_config(config: dict[str, Any]) -> None:
     config_path = astrbot_paths.data / "cmd_config.json"
     config_path.write_text(
-        json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8-sig",
+        json.dumps(config, ensure_ascii=False, indent=2),
+        encoding="utf-8-sig",
     )
 
 
@@ -176,7 +176,9 @@ def set_dashboard_credentials(
 ) -> None:
     if username is not None:
         _set_nested_item(
-            config, "dashboard.username", _validate_dashboard_username(username),
+            config,
+            "dashboard.username",
+            _validate_dashboard_username(username),
         )
     if password_hash is not None:
         if isinstance(password_hash, str) and is_dashboard_password_hash(password_hash):

@@ -130,7 +130,8 @@ class MainAgentBuildResult:
 
 
 def _select_provider(
-    event: AstrMessageEvent, plugin_context: Context,
+    event: AstrMessageEvent,
+    plugin_context: Context,
 ) -> Provider | None:
     """Select chat provider for the event."""
     sel_provider = event.get_extra("selected_provider")
@@ -150,7 +151,8 @@ def _select_provider(
 
 
 async def _get_session_conv(
-    event: AstrMessageEvent, plugin_context: Context,
+    event: AstrMessageEvent,
+    plugin_context: Context,
 ) -> Conversation:
     conv_mgr = plugin_context.conversation_manager
     umo = event.unified_msg_origin
@@ -177,7 +179,9 @@ async def _apply_kb(
             return
         try:
             kb_result = await retrieve_knowledge_base(
-                query=req.prompt, umo=event.unified_msg_origin, context=plugin_context,
+                query=req.prompt,
+                umo=event.unified_msg_origin,
+                context=plugin_context,
             )
             if not kb_result:
                 return
@@ -194,7 +198,9 @@ async def _apply_kb(
 
 
 async def _apply_file_extract(
-    event: AstrMessageEvent, req: ProviderRequest, config: MainAgentBuildConfig,
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    config: MainAgentBuildConfig,
 ) -> None:
     file_paths = []
     file_names = []
@@ -229,7 +235,8 @@ async def _apply_file_extract(
             {
                 "role": "system",
                 "content": FILE_EXTRACT_CONTEXT_TEMPLATE.format(
-                    file_content=file_content, file_name=file_name or "Unknown",
+                    file_content=file_content,
+                    file_name=file_name or "Unknown",
                 ),
             },
         )
@@ -246,7 +253,10 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
 
 
 async def _ensure_persona_and_skills(
-    req: ProviderRequest, cfg: dict, plugin_context: Context, event: AstrMessageEvent,
+    req: ProviderRequest,
+    cfg: dict,
+    plugin_context: Context,
+    event: AstrMessageEvent,
 ) -> None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
     if not req.conversation:
@@ -263,7 +273,8 @@ async def _ensure_persona_and_skills(
         provider_settings=cfg,
     )
     set_persona_custom_error_message_on_event(
-        event, extract_persona_custom_error_message_from_persona(persona),
+        event,
+        extract_persona_custom_error_message_from_persona(persona),
     )
     if persona:
         if prompt := persona["prompt"]:
@@ -368,7 +379,10 @@ async def _ensure_persona_and_skills(
 
 
 async def _request_img_caption(
-    provider_id: str, cfg: dict, image_urls: list[str], plugin_context: Context,
+    provider_id: str,
+    cfg: dict,
+    image_urls: list[str],
+    plugin_context: Context,
 ) -> str:
     prov = plugin_context.get_provider_by_id(provider_id)
     if prov is None:
@@ -400,7 +414,10 @@ async def _ensure_img_caption(
             if _is_generated_compressed_image_path(url, compressed_url):
                 event.track_temporary_local_file(compressed_url)
         caption = await _request_img_caption(
-            image_caption_provider, cfg, compressed_urls, plugin_context,
+            image_caption_provider,
+            cfg,
+            compressed_urls,
+            plugin_context,
         )
         if caption:
             req.extra_user_content_parts.append(
@@ -468,7 +485,8 @@ def _get_image_compress_args(
 
 
 async def _compress_image_for_provider(
-    url_or_path: str, provider_settings: dict[str, object] | None,
+    url_or_path: str,
+    provider_settings: dict[str, object] | None,
 ) -> str:
     try:
         enabled, max_size, quality = _get_image_compress_args(provider_settings)
@@ -505,7 +523,8 @@ def _get_image_compress_args(
 
 
 async def _compress_image_for_provider(
-    url_or_path: str, provider_settings: dict[str, object] | None,
+    url_or_path: str,
+    provider_settings: dict[str, object] | None,
 ) -> str:
     try:
         enabled, max_size, quality = _get_image_compress_args(provider_settings)
@@ -518,7 +537,8 @@ async def _compress_image_for_provider(
 
 
 def _is_generated_compressed_image_path(
-    original_path: str, compressed_path: str | None,
+    original_path: str,
+    compressed_path: str | None,
 ) -> bool:
     if not compressed_path or compressed_path == original_path:
         return False
@@ -552,7 +572,8 @@ def _get_image_compress_args(
 
 
 async def _compress_image_for_provider(
-    url_or_path: str, provider_settings: dict[str, object] | None,
+    url_or_path: str,
+    provider_settings: dict[str, object] | None,
 ) -> str:
     try:
         enabled, max_size, quality = _get_image_compress_args(provider_settings)
@@ -565,7 +586,8 @@ async def _compress_image_for_provider(
 
 
 def _is_generated_compressed_image_path(
-    original_path: str, compressed_path: str | None,
+    original_path: str,
+    compressed_path: str | None,
 ) -> bool:
     if not compressed_path or compressed_path == original_path:
         return False
@@ -593,7 +615,9 @@ async def _process_quote_message(
     sender_info = f"({quote.sender_nickname}): " if quote.sender_nickname else ""
     message_str = (
         await extract_quoted_message_text(
-            event, quote, settings=quoted_message_settings,
+            event,
+            quote,
+            settings=quoted_message_settings,
         )
         or quote.message_str
         or "[Empty Text]"
@@ -617,7 +641,8 @@ async def _process_quote_message(
             if prov and isinstance(prov, Provider):
                 path = await image_seg.convert_to_file_path()
                 compress_path = await _compress_image_for_provider(
-                    path, config.provider_settings if config else None,
+                    path,
+                    config.provider_settings if config else None,
                 )
                 if path and _is_generated_compressed_image_path(path, compress_path):
                     event.track_temporary_local_file(compress_path)
@@ -646,7 +671,10 @@ async def _process_quote_message(
 
 
 def _append_system_reminders(
-    event: AstrMessageEvent, req: ProviderRequest, cfg: dict, timezone: str | None,
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    cfg: dict,
+    timezone: str | None,
 ) -> None:
     system_parts: list[str] = []
     if cfg.get("identifier"):
@@ -701,7 +729,12 @@ async def _decorate_llm_request(
     img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
     quoted_message_settings = _get_quoted_message_parser_settings(cfg)
     await _process_quote_message(
-        event, req, img_cap_prov_id, plugin_context, quoted_message_settings, config,
+        event,
+        req,
+        img_cap_prov_id,
+        plugin_context,
+        quoted_message_settings,
+        config,
     )
     tz = config.timezone
     if tz is None:
@@ -714,7 +747,8 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
         provider_cfg = provider.provider_config.get("modalities", ["image"])
         if "image" not in provider_cfg:
             logger.debug(
-                "Provider %s does not support image, using placeholder.", provider,
+                "Provider %s does not support image, using placeholder.",
+                provider,
             )
             image_count = len(req.image_urls)
             placeholder = " ".join(["[Image]"] * image_count)
@@ -727,7 +761,8 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
         provider_cfg = provider.provider_config.get("modalities", ["audio"])
         if "audio" not in provider_cfg:
             logger.debug(
-                "Provider %s does not support audio, using placeholder.", provider,
+                "Provider %s does not support audio, using placeholder.",
+                provider,
             )
             audio_count = len(req.audio_urls)
             placeholder = " ".join(["[Audio]"] * audio_count)
@@ -740,13 +775,16 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
         provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
         if "tool_use" not in provider_cfg:
             logger.debug(
-                "Provider %s does not support tool_use, clearing tools.", provider,
+                "Provider %s does not support tool_use, clearing tools.",
+                provider,
             )
             req.func_tool = None
 
 
 def _sanitize_context_by_modalities(
-    config: MainAgentBuildConfig, provider: Provider, req: ProviderRequest,
+    config: MainAgentBuildConfig,
+    provider: Provider,
+    req: ProviderRequest,
 ) -> None:
     if not config.sanitize_context_by_modalities:
         return
@@ -844,14 +882,17 @@ def _model_outputs_image(provider: Provider, req: ProviderRequest) -> bool:
 
 
 def _should_disable_streaming_for_webchat_output(
-    event: AstrMessageEvent, provider: Provider, req: ProviderRequest,
+    event: AstrMessageEvent,
+    provider: Provider,
+    req: ProviderRequest,
 ) -> bool:
     if event.get_platform_name() != "webchat":
         return False
     provider_cfg = provider.provider_config
     provider_type = provider_cfg.get("type", "")
     if provider_type == "googlegenai_chat_completion" and provider_cfg.get(
-        "gm_resp_image_modal", False,
+        "gm_resp_image_modal",
+        False,
     ):
         return True
     if _model_outputs_image(provider, req):
@@ -885,7 +926,9 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
 
 
 async def _handle_webchat(
-    event: AstrMessageEvent, req: ProviderRequest, prov: Provider,
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    prov: Provider,
 ) -> None:
     from astrbot.core import db_helper
 
@@ -906,7 +949,9 @@ async def _handle_webchat(
         )
     except Exception as e:
         logger.exception(
-            "Failed to generate webchat title for session %s: %s", chatui_session_id, e,
+            "Failed to generate webchat title for session %s: %s",
+            chatui_session_id,
+            e,
         )
         return
     if llm_resp and llm_resp.completion_text:
@@ -914,10 +959,13 @@ async def _handle_webchat(
         if not title or "<None>" in title:
             return
         logger.info(
-            "Generated chatui title for session %s: %s", chatui_session_id, title,
+            "Generated chatui title for session %s: %s",
+            chatui_session_id,
+            title,
         )
         await db_helper.update_platform_session(
-            session_id=chatui_session_id, display_name=title,
+            session_id=chatui_session_id,
+            display_name=title,
         )
 
 
@@ -926,12 +974,14 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
         req.system_prompt = f"{LLM_SAFETY_MODE_SYSTEM_PROMPT}\n\n{req.system_prompt}"
     else:
         logger.warning(
-            "Unsupported llm_safety_mode strategy: %s.", config.safety_mode_strategy,
+            "Unsupported llm_safety_mode strategy: %s.",
+            config.safety_mode_strategy,
         )
 
 
 def _get_compress_provider(
-    config: MainAgentBuildConfig, plugin_context: Context,
+    config: MainAgentBuildConfig,
+    plugin_context: Context,
 ) -> Provider | None:
     if not config.llm_compress_provider_id:
         return None
@@ -940,7 +990,8 @@ def _get_compress_provider(
     provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
     if provider is None:
         logger.warning(
-            "未找到指定的上下文压缩模型 %s,将跳过压缩｡", config.llm_compress_provider_id,
+            "未找到指定的上下文压缩模型 %s,将跳过压缩｡",
+            config.llm_compress_provider_id,
         )
         return None
     if not isinstance(provider, Provider):
@@ -953,7 +1004,9 @@ def _get_compress_provider(
 
 
 def _get_fallback_chat_providers(
-    provider: Provider, plugin_context: Context, provider_settings: dict,
+    provider: Provider,
+    plugin_context: Context,
+    provider_settings: dict,
 ) -> list[Provider]:
     fallback_ids = provider_settings.get("fallback_chat_models", [])
     if not isinstance(fallback_ids, list):
@@ -1026,7 +1079,8 @@ async def build_main_agent(
                 if isinstance(comp, Image):
                     path = await comp.convert_to_file_path()
                     image_path = await _compress_image_for_provider(
-                        path, config.provider_settings,
+                        path,
+                        config.provider_settings,
                     )
                     if _is_generated_compressed_image_path(path, image_path):
                         event.track_temporary_local_file(image_path)
@@ -1061,7 +1115,8 @@ async def build_main_agent(
                             has_embedded_image = True
                             path = await reply_comp.convert_to_file_path()
                             image_path = await _compress_image_for_provider(
-                                path, config.provider_settings,
+                                path,
+                                config.provider_settings,
                             )
                             if _is_generated_compressed_image_path(path, image_path):
                                 event.track_temporary_local_file(image_path)
@@ -1083,7 +1138,9 @@ async def build_main_agent(
                     try:
                         fallback_images = normalize_and_dedupe_strings(
                             await extract_quoted_message_images(
-                                event, comp, settings=quoted_message_settings,
+                                event,
+                                comp,
+                                settings=quoted_message_settings,
                             ),
                         )
                         remaining_limit = max(
@@ -1198,7 +1255,9 @@ async def build_main_agent(
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
     streaming_response = config.streaming_response
     if streaming_response and _should_disable_streaming_for_webchat_output(
-        event, provider, req,
+        event,
+        provider,
+        req,
     ):
         logger.info(
             "Disable streaming for webchat direct media output. provider=%s model=%s",
@@ -1224,7 +1283,9 @@ async def build_main_agent(
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=_get_fallback_chat_providers(
-            provider, plugin_context, config.provider_settings,
+            provider,
+            plugin_context,
+            config.provider_settings,
         ),
     )
     if apply_reset:

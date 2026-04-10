@@ -66,7 +66,9 @@ _PARAM_EXPAND_RE = re.compile(r"\$\{([^}:]+?)(:-([^}]*))?\}")
 
 
 def _expand_parameter(
-    match: re.Match, env: dict[str, str], local: dict[str, str],
+    match: re.Match,
+    env: dict[str, str],
+    local: dict[str, str],
 ) -> str:
     """Helper to expand a single ${VAR:-default} or ${VAR} occurrence.
 
@@ -338,7 +340,8 @@ def run(
                     while True:
                         try:
                             log_entry = await asyncio.wait_for(
-                                log_queue.get(), timeout=0.5,
+                                log_queue.get(),
+                                timeout=0.5,
                             )
                             # Format: [LEVEL] message
                             level = log_entry.get("level_name", "INFO")

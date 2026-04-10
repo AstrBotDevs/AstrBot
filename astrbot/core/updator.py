@@ -145,7 +145,11 @@ class AstrBotUpdator(RepoZipUpdator):
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
     async def update(  # type: ignore[override]
-        self, reboot=False, latest=True, version=None, proxy="",
+        self,
+        reboot=False,
+        latest=True,
+        version=None,
+        proxy="",
     ) -> None:
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None

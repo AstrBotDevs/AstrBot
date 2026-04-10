@@ -319,7 +319,9 @@ class AstrBotDashboard:
         self.subagent_route = SubAgentRoute(self.context, self.core_lifecycle)
         self.skills_route = SkillsRoute(self.context, self.core_lifecycle)
         self.conversation_route = ConversationRoute(
-            self.context, db, self.core_lifecycle,
+            self.context,
+            db,
+            self.core_lifecycle,
         )
         self.file_route = FileRoute(self.context)
         self.session_management_route = SessionManagementRoute(
@@ -368,7 +370,10 @@ class AstrBotDashboard:
         self._jwt_secret = dashboard_cfg["jwt_secret"]
 
     async def guarded_srv_plug_route(
-        self, subpath: str, *args, **kwargs,
+        self,
+        subpath: str,
+        *args,
+        **kwargs,
     ) -> ResponseReturnValue:
         guard_resp = self._maybe_runtime_guard(request.path)
         if guard_resp is not None:

@@ -34,10 +34,14 @@ class LogRoute(Route):
         self.log_broker = log_broker
         self.app.add_url_rule("/api/live-log", view_func=self.log, methods=["GET"])
         self.app.add_url_rule(
-            "/api/log-history", view_func=self.log_history, methods=["GET"],
+            "/api/log-history",
+            view_func=self.log_history,
+            methods=["GET"],
         )
         self.app.add_url_rule(
-            "/api/trace/settings", view_func=self.get_trace_settings, methods=["GET"],
+            "/api/trace/settings",
+            view_func=self.get_trace_settings,
+            methods=["GET"],
         )
         self.app.add_url_rule(
             "/api/trace/settings",
@@ -46,7 +50,8 @@ class LogRoute(Route):
         )
 
     async def _replay_cached_logs(
-        self, last_event_id: str,
+        self,
+        last_event_id: str,
     ) -> AsyncGenerator[str, None]:
         """辅助生成器：重放缓存的日志"""
         try:

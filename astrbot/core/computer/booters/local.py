@@ -133,7 +133,8 @@ class LocalShellComponent(ShellComponent):
             # Safety relies on `_is_safe_command()` and the allowed-root checks.
             result = subprocess.run(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 command,
-                check=False, shell=shell,
+                check=False,
+                shell=shell,
                 cwd=working_dir,
                 env=run_env,
                 timeout=timeout,
@@ -161,7 +162,8 @@ class LocalPythonComponent(PythonComponent):
             try:
                 result = subprocess.run(
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
-                    check=False, timeout=timeout,
+                    check=False,
+                    timeout=timeout,
                     capture_output=True,
                     text=True,
                 )
@@ -187,7 +189,10 @@ class LocalPythonComponent(PythonComponent):
 @dataclass
 class LocalFileSystemComponent(FileSystemComponent):
     async def create_file(
-        self, path: str, content: str = "", mode: int = 0o644,
+        self,
+        path: str,
+        content: str = "",
+        mode: int = 0o644,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = _ensure_safe_path(path)
@@ -213,7 +218,11 @@ class LocalFileSystemComponent(FileSystemComponent):
         return await asyncio.to_thread(_run)
 
     async def write_file(
-        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8",
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = _ensure_safe_path(path)
@@ -236,7 +245,9 @@ class LocalFileSystemComponent(FileSystemComponent):
         return await asyncio.to_thread(_run)
 
     async def list_dir(
-        self, path: str = ".", show_hidden: bool = False,
+        self,
+        path: str = ".",
+        show_hidden: bool = False,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = _ensure_safe_path(path)

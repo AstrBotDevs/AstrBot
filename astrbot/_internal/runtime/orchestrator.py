@@ -143,8 +143,7 @@ class AstrbotOrchestrator(BaseAstrbotOrchestrator):
         self._last_activity_timestamp = time.time()
 
     async def shutdown(self) -> None:
-        """Shutdown the orchestrator and all protocol clients.
-        """
+        """Shutdown the orchestrator and all protocol clients."""
         log.info("Shutting down AstrbotOrchestrator...")
         self._running = False
 

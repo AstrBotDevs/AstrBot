@@ -19,7 +19,11 @@ from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
 Providers: TypeAlias = Union[
-    "Provider", "STTProvider", "TTSProvider", "EmbeddingProvider", "RerankProvider",
+    "Provider",
+    "STTProvider",
+    "TTSProvider",
+    "EmbeddingProvider",
+    "RerankProvider",
 ]
 
 
@@ -179,7 +183,8 @@ class Provider(AbstractProvider):
             context.pop(idx)
 
     def _ensure_message_to_dicts(
-        self, messages: list[dict] | list[Message] | None,
+        self,
+        messages: list[dict] | list[Message] | None,
     ) -> list[dict]:
         """Convert a list of Message objects to a list of dictionaries."""
         if not messages:
@@ -210,7 +215,9 @@ class STTProvider(AbstractProvider):
 
     async def test(self) -> None:
         sample_audio_path = os.path.join(
-            get_astrbot_path(), "samples", "stt_health_check.wav",
+            get_astrbot_path(),
+            "samples",
+            "stt_health_check.wav",
         )
         await self.get_text(sample_audio_path)
 
@@ -383,7 +390,10 @@ class RerankProvider(AbstractProvider):
 
     @abc.abstractmethod
     async def rerank(
-        self, query: str, documents: list[str], top_n: int | None = None,
+        self,
+        query: str,
+        documents: list[str],
+        top_n: int | None = None,
     ) -> list[RerankResult]:
         """获取查询和文档的重排序分数"""
         ...

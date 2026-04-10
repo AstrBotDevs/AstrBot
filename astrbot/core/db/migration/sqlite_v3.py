@@ -227,7 +227,9 @@ class SQLiteDatabase:
         return Stats(platform)
 
     def get_conversation_by_user_id(
-        self, user_id: str, cid: str,
+        self,
+        user_id: str,
+        cid: str,
     ) -> Conversation | None:
         try:
             c = self.conn.cursor()
@@ -306,7 +308,10 @@ class SQLiteDatabase:
         )
 
     def update_conversation_persona_id(
-        self, user_id: str, cid: str, persona_id: str,
+        self,
+        user_id: str,
+        cid: str,
+        persona_id: str,
     ) -> None:
         self._exec_sql(
             """

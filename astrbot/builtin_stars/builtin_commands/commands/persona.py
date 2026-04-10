@@ -100,7 +100,7 @@ class PersonaCommands:
             if force_applied_persona_id:
                 curr_persona_name = f"{curr_persona_name} (自定义规则)"
 
-            curr_cid_title = conv.title if conv.title else "新对话"
+            curr_cid_title = conv.title or "新对话"
             curr_cid_title += f"({cid[:4]})"
 
         if len(parts) == 1:

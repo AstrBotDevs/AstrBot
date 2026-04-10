@@ -147,7 +147,9 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 
 
 async def convert_video_format(
-    video_path: str, output_format: str = "mp4", output_path: str | None = None,
+    video_path: str,
+    output_format: str = "mp4",
+    output_path: str | None = None,
 ) -> str:
     """使用ffmpeg转换视频格式
 

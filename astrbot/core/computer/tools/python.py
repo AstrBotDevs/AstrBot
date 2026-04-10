@@ -46,7 +46,9 @@ async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult
         for img in images:
             resp.content.append(
                 mcp.types.ImageContent(
-                    type="image", data=img["image/png"], mimeType="image/png",
+                    type="image",
+                    data=img["image/png"],
+                    mimeType="image/png",
                 ),
             )
 
@@ -68,7 +70,10 @@ class PythonTool(FunctionTool):
     parameters: dict = field(default_factory=lambda: param_schema)
 
     async def call(  # type: ignore[override]
-        self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        code: str,
+        silent: bool = False,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
@@ -94,7 +99,10 @@ class LocalPythonTool(FunctionTool):
     parameters: dict = field(default_factory=lambda: param_schema)
 
     async def call(  # type: ignore[override]
-        self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        code: str,
+        silent: bool = False,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error

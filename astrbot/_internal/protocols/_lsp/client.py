@@ -96,7 +96,9 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         log.info(f"LSP client connected to server: {command[0]}")
 
     async def send_request(
-        self, method: str, params: dict[str, Any] | None = None,
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
     ) -> Any:
         """Send an LSP request and wait for response."""
         if not self._writer:
@@ -135,7 +137,9 @@ class AstrbotLspClient(BaseAstrbotLspClient):
         raise TimeoutError(f"LSP request {method} timed out")
 
     async def send_notification(
-        self, method: str, params: dict[str, Any] | None = None,
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
     ) -> None:
         """Send an LSP notification (no response expected)."""
         if not self._writer:

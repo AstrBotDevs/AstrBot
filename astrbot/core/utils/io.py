@@ -146,7 +146,8 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
             connector=connector,
         ) as session:
             async with session.get(
-                url, timeout=aiohttp.ClientTimeout(total=1800),
+                url,
+                timeout=aiohttp.ClientTimeout(total=1800),
             ) as resp:
                 if resp.status != 200:
                     raise Exception(f"下载文件失败: {resp.status}")

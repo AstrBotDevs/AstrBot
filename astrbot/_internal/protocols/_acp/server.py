@@ -44,7 +44,9 @@ class AstrbotAcpServer(BaseAstrbotAcpServer):
         log.debug(f"ACP server registered tool: {name}")
 
     def register_notification_handler(
-        self, name: str, handler: Callable[..., Any],
+        self,
+        name: str,
+        handler: Callable[..., Any],
     ) -> None:
         """Register a notification handler.
 
@@ -75,7 +77,9 @@ class AstrbotAcpServer(BaseAstrbotAcpServer):
         log.info(f"ACP server listening on {host}:{port}")
 
     async def _handle_client(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
     ) -> None:
         """Handle an incoming ACP client connection."""
         addr = writer.get_extra_info("peername")

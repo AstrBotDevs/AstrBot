@@ -552,7 +552,7 @@ class MisskeyAPI:
         form.add_field("i", self.access_token)
 
         try:
-            filename = name or file_path.split("/")[-1]
+            filename = name or file_path.rsplit("/", maxsplit=1)[-1]
             if folder_id:
                 form.add_field("folderId", str(folder_id))
 

@@ -21,7 +21,6 @@ class RequirementsPrecheckFailed(Exception):
     """Raised when the pre-check of requirements fails."""
 
 
-
 @dataclass(frozen=True)
 class ParsedPackageInput:
     specs: tuple[str, ...]
@@ -252,7 +251,8 @@ def _iter_requirement_lines(
     resolved_path = os.path.realpath(requirements_path)
     if resolved_path in visited:
         logger.warning(
-            "检测到循环依赖的 requirements 包含: %s,将跳过该文件", resolved_path,
+            "检测到循环依赖的 requirements 包含: %s,将跳过该文件",
+            resolved_path,
         )
         return
     visited.add(resolved_path)

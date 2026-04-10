@@ -88,7 +88,8 @@ def tool(
     description: str,
     parameters: dict[str, Any] | None = None,
 ) -> Callable[
-    [Callable[..., Awaitable[str | None]]], Callable[..., Awaitable[str | None]],
+    [Callable[..., Awaitable[str | None]]],
+    Callable[..., Awaitable[str | None]],
 ]:
     """Decorator to register an async function as a tool.
 

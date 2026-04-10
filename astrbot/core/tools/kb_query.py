@@ -42,7 +42,9 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
     )
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
     ) -> ToolExecResult:
         query = kwargs.get("query", "")
         if not query:

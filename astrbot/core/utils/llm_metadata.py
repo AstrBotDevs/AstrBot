@@ -33,9 +33,13 @@ LLM_METADATAS: dict[str, LLMMetadata] = {}
 async def update_llm_metadata() -> None:
     url = "https://models.dev/api.json"
     try:
-        async with aiohttp.ClientSession(
-            trust_env=True, connector=build_tls_connector(),
-        ) as session, session.get(url) as response:
+        async with (
+            aiohttp.ClientSession(
+                trust_env=True,
+                connector=build_tls_connector(),
+            ) as session,
+            session.get(url) as response,
+        ):
             data = await response.json()
             global LLM_METADATAS
             models = {}
@@ -51,7 +55,8 @@ async def update_llm_metadata() -> None:
                         knowledge=model.get("knowledge", "none"),
                         release_date=model.get("release_date", ""),
                         modalities=model.get(
-                            "modalities", {"input": [], "output": []},
+                            "modalities",
+                            {"input": [], "output": []},
                         ),
                         open_weights=model.get("open_weights", False),
                         limit=model.get("limit", {"context": 0, "output": 0}),

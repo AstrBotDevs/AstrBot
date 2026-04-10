@@ -29,7 +29,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
     @staticmethod
     async def send_with_client(
-        client: WeChatClient, message: MessageChain, user_name: str,
+        client: WeChatClient,
+        message: MessageChain,
+        user_name: str,
     ) -> None:
         pass
 
@@ -100,7 +102,8 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     logger.debug(f"微信公众平台上传图片返回: {response}")
                     if active_send_mode:
                         self.client.message.send_image(
-                            message_obj.sender.user_id, response["media_id"],
+                            message_obj.sender.user_id,
+                            response["media_id"],
                         )
                     else:
                         reply = ImageReply(
@@ -121,13 +124,16 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         except Exception as e:
                             logger.error(f"微信公众平台上传语音失败: {e}")
                             await self.send(
-                                MessageChain().message(f"微信公众平台上传语音失败: {e}"),
+                                MessageChain().message(
+                                    f"微信公众平台上传语音失败: {e}"
+                                ),
                             )
                             return
                         logger.info(f"微信公众平台上传语音返回: {response}")
                         if active_send_mode:
                             self.client.message.send_voice(
-                                message_obj.sender.user_id, response["media_id"],
+                                message_obj.sender.user_id,
+                                response["media_id"],
                             )
                         else:
                             reply = VoiceReply(

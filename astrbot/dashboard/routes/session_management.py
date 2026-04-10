@@ -50,7 +50,10 @@ class SessionManagementRoute(Route):
         self.register_routes()
 
     async def _get_umo_rules(
-        self, page: int = 1, page_size: int = 10, search: str = "",
+        self,
+        page: int = 1,
+        page_size: int = 10,
+        search: str = "",
     ) -> tuple[dict, int]:
         """获取所有带有自定义规则的 umo 及其规则内容（支持分页和搜索）。
 
@@ -126,7 +129,9 @@ class SessionManagementRoute(Route):
                 page_size = 10
             page_size = min(page_size, 100)
             umo_rules, total = await self._get_umo_rules(
-                page=page, page_size=page_size, search=search,
+                page=page,
+                page_size=page_size,
+                search=search,
             )
             rules_list = []
             for umo, rules in umo_rules.items():
@@ -264,9 +269,7 @@ class SessionManagementRoute(Route):
                     .to_json()
                 )
             await sp.clear_async("umo", umo)
-            return (
-                Response().ok({"message": "所有规则已删除", "umo": umo}).to_json()
-            )
+            return Response().ok({"message": "所有规则已删除", "umo": umo}).to_json()
         except Exception as e:
             logger.error(f"删除会话规则失败: {e!s}")
             return Response().error(f"删除会话规则失败: {e!s}").to_json()

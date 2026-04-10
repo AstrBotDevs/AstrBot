@@ -127,7 +127,9 @@ class SlackSocketClient:
         self.socket_client = None
 
     async def _handle_events(
-        self, _: AsyncBaseSocketModeClient, req: SocketModeRequest,
+        self,
+        _: AsyncBaseSocketModeClient,
+        req: SocketModeRequest,
     ) -> None:
         """处理 Socket Mode 事件"""
         try:
@@ -143,7 +145,9 @@ class SlackSocketClient:
     async def start(self) -> None:
         """启动 Socket Mode 连接"""
         self.socket_client = SocketModeClient(
-            app_token=self.app_token, logger=logger, web_client=self.web_client,
+            app_token=self.app_token,
+            logger=logger,
+            web_client=self.web_client,
         )
         self.socket_client.socket_mode_request_listeners.append(self._handle_events)
         logger.info("Slack Socket Mode 客户端启动中...")

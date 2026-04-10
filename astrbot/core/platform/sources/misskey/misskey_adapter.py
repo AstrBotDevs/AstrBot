@@ -44,11 +44,16 @@ DEFAULT_UPLOAD_CONCURRENCY = 3
 
 
 @register_platform_adapter(
-    "misskey", "Misskey 平台适配器", support_streaming_message=False,
+    "misskey",
+    "Misskey 平台适配器",
+    support_streaming_message=False,
 )
 class MisskeyPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config or {}, event_queue)
         self.settings = platform_settings or {}
@@ -56,7 +61,8 @@ class MisskeyPlatformAdapter(Platform):
         self.access_token = self.config.get("misskey_token", "")
         self.max_message_length = self.config.get("max_message_length", 3000)
         self.default_visibility = self.config.get(
-            "misskey_default_visibility", "public",
+            "misskey_default_visibility",
+            "public",
         )
         self.local_only = self.config.get("misskey_local_only", False)
         self.enable_chat = self.config.get("misskey_enable_chat", True)
@@ -141,12 +147,17 @@ class MisskeyPlatformAdapter(Platform):
         if self.enable_chat:
             streaming.add_message_handler("newChatMessage", self._handle_chat_message)
             streaming.add_message_handler(
-                "messaging:newChatMessage", self._handle_chat_message,
+                "messaging:newChatMessage",
+                self._handle_chat_message,
             )
             streaming.add_message_handler("_debug", self._debug_handler)
 
     async def _send_text_only_message(
-        self, session_id: str, text: str, session, message_chain,
+        self,
+        session_id: str,
+        text: str,
+        session,
+        message_chain,
     ):
         """发送纯文本消息(无文件上传)"""
         if not self.api:
@@ -166,7 +177,10 @@ class MisskeyPlatformAdapter(Platform):
         return await super().send_by_session(session, message_chain)
 
     def _process_poll_data(
-        self, message: AstrBotMessage, poll: dict[str, Any], message_parts: list[str],
+        self,
+        message: AstrBotMessage,
+        poll: dict[str, Any],
+        message_parts: list[str],
     ) -> None:
         """处理投票数据,将其添加到消息中"""
         try:
@@ -190,7 +204,8 @@ class MisskeyPlatformAdapter(Platform):
                 fields["cw"] = comp.cw
                 break
         if hasattr(session, "extra_data") and isinstance(
-            getattr(session, "extra_data", None), dict,
+            getattr(session, "extra_data", None),
+            dict,
         ):
             extra_data = session.extra_data
             fields.update(
@@ -323,7 +338,9 @@ class MisskeyPlatformAdapter(Platform):
         return False
 
     async def send_by_session(
-        self, session: MessageSession, message_chain: MessageChain,
+        self,
+        session: MessageSession,
+        message_chain: MessageChain,
     ) -> None:
         if not self.api:
             logger.error("[Misskey] API 客户端未初始化")
@@ -362,12 +379,16 @@ class MisskeyPlatformAdapter(Platform):
             fallback_urls: list[str] = []
             if not self.enable_file_upload:
                 return await self._send_text_only_message(
-                    session_id, text, session, message_chain,
+                    session_id,
+                    text,
+                    session,
+                    message_chain,
                 )
             MAX_UPLOAD_CONCURRENCY = 10
             upload_concurrency = int(
                 self.config.get(
-                    "misskey_upload_concurrency", DEFAULT_UPLOAD_CONCURRENCY,
+                    "misskey_upload_concurrency",
+                    DEFAULT_UPLOAD_CONCURRENCY,
                 ),
             )
             upload_concurrency = min(upload_concurrency, MAX_UPLOAD_CONCURRENCY)
@@ -391,7 +412,9 @@ class MisskeyPlatformAdapter(Platform):
                         if not url_candidate and (not local_path):
                             return None
                         preferred_name = getattr(comp, "name", None) or getattr(
-                            comp, "file", None,
+                            comp,
+                            "file",
+                            None,
                         )
                         if url_candidate:
                             result = await self.api.upload_and_find_file(
@@ -601,7 +624,7 @@ class MisskeyPlatformAdapter(Platform):
             message.message.append(Comp.Plain(raw_text))
         files = raw_data.get("files", [])
         process_files(message, files, include_text_parts=False)
-        message.message_str = raw_text if raw_text else ""
+        message.message_str = raw_text or ""
         return message
 
     async def convert_room_message(self, raw_data: dict[str, Any]) -> AstrBotMessage:

@@ -12,8 +12,7 @@ from astrbot.core.db.migration.migra_webchat_session import migrate_webchat_sess
 
 
 def _migra_agent_runner_configs(conf: AstrBotConfig, ids_map: dict) -> None:
-    """Migra agent runner configs from provider configs.
-    """
+    """Migra agent runner configs from provider configs."""
     try:
         default_prov_id = conf["provider_settings"]["default_provider_id"]
         if default_prov_id in ids_map:
@@ -127,7 +126,10 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
 
 
 async def migra(
-    db, astrbot_config_mgr, umop_config_router, acm: AstrBotConfigManager,
+    db,
+    astrbot_config_mgr,
+    umop_config_router,
+    acm: AstrBotConfigManager,
 ) -> None:
     """Stores the migration logic here.
     btw, i really don't like migration :(

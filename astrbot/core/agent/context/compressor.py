@@ -25,7 +25,10 @@ class ContextCompressor(Protocol):
     """
 
     def should_compress(
-        self, messages: list[Message], current_tokens: int, max_tokens: int,
+        self,
+        messages: list[Message],
+        current_tokens: int,
+        max_tokens: int,
     ) -> bool:
         """Check if compression is needed.
 
@@ -59,7 +62,9 @@ class TruncateByTurnsCompressor:
     """
 
     def __init__(
-        self, truncate_turns: int = 1, compression_threshold: float = 0.82,
+        self,
+        truncate_turns: int = 1,
+        compression_threshold: float = 0.82,
     ) -> None:
         """Initialize the truncate by turns compressor.
 
@@ -72,7 +77,10 @@ class TruncateByTurnsCompressor:
         self.compression_threshold = compression_threshold
 
     def should_compress(
-        self, messages: list[Message], current_tokens: int, max_tokens: int,
+        self,
+        messages: list[Message],
+        current_tokens: int,
+        max_tokens: int,
     ) -> bool:
         """Check if compression is needed.
 
@@ -100,7 +108,8 @@ class TruncateByTurnsCompressor:
 
 
 def split_history(
-    messages: list[Message], keep_recent: int,
+    messages: list[Message],
+    keep_recent: int,
 ) -> tuple[list[Message], list[Message], list[Message]]:
     """Split the message list into system messages, messages to summarize, and recent messages.
 
@@ -180,7 +189,10 @@ class LLMSummaryCompressor:
         )
 
     def should_compress(
-        self, messages: list[Message], current_tokens: int, max_tokens: int,
+        self,
+        messages: list[Message],
+        current_tokens: int,
+        max_tokens: int,
     ) -> bool:
         """Check if compression is needed.
 
@@ -210,7 +222,8 @@ class LLMSummaryCompressor:
             return messages
 
         system_messages, messages_to_summarize, recent_messages = split_history(
-            messages, self.keep_recent,
+            messages,
+            self.keep_recent,
         )
 
         if not messages_to_summarize:

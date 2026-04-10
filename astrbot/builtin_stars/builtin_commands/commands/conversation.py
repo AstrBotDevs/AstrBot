@@ -64,7 +64,8 @@ class ConversationCommands:
         if not curr:
             return None
         conv = await self.context.conversation_manager.get_conversation(
-            session_id, curr,
+            session_id,
+            curr,
         )
         if not conv:
             return None
@@ -83,7 +84,8 @@ class ConversationCommands:
         plugin_config = alter_cmd_cfg.get("astrbot", {})
         reset_cfg = plugin_config.get("reset", {})
         required_perm = reset_cfg.get(
-            scene.key, "admin" if is_group and (not is_unique_session) else "member",
+            scene.key,
+            "admin" if is_group and (not is_unique_session) else "member",
         )
         if required_perm == "admin" and message.role != "admin":
             message.set_result(
@@ -130,7 +132,8 @@ class ConversationCommands:
             stopped_count = active_event_registry.stop_all(umo, exclude=message)
         else:
             stopped_count = active_event_registry.request_agent_stop_all(
-                umo, exclude=message,
+                umo,
+                exclude=message,
             )
         if stopped_count > 0:
             message.set_result(
@@ -154,10 +157,14 @@ class ConversationCommands:
         session_curr_cid = await conv_mgr.get_curr_conversation_id(umo)
         if not session_curr_cid:
             session_curr_cid = await conv_mgr.new_conversation(
-                umo, message.get_platform_id(),
+                umo,
+                message.get_platform_id(),
             )
         contexts, total_pages = await conv_mgr.get_human_readable_context(
-            umo, session_curr_cid, page, size_per_page,
+            umo,
+            session_curr_cid,
+            page,
+            size_per_page,
         )
         parts = []
         for context in contexts:
@@ -198,7 +205,7 @@ class ConversationCommands:
         "生成所有对话的标题字典"
         _titles = {}
         for conv in conversations_all:
-            title = conv.title if conv.title else "新对话"
+            title = conv.title or "新对话"
             _titles[conv.cid] = title
         "遍历分页后的对话生成列表显示"
         provider_settings = cfg.get("provider_settings", {})
@@ -266,7 +273,9 @@ class ConversationCommands:
         active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
         cpersona = await self._get_current_persona_id(message.unified_msg_origin)
         cid = await self.context.conversation_manager.new_conversation(
-            message.unified_msg_origin, message.get_platform_id(), persona_id=cpersona,
+            message.unified_msg_origin,
+            message.get_platform_id(),
+            persona_id=cpersona,
         )
         message.set_extra("_clean_ltm_session", True)
         message.set_result(
@@ -285,7 +294,9 @@ class ConversationCommands:
             )
             cpersona = await self._get_current_persona_id(session)
             cid = await self.context.conversation_manager.new_conversation(
-                session, message.get_platform_id(), persona_id=cpersona,
+                session,
+                message.get_platform_id(),
+                persona_id=cpersona,
             )
             message.set_result(
                 MessageEventResult().message(
@@ -298,7 +309,9 @@ class ConversationCommands:
             )
 
     async def switch_conv(
-        self, message: AstrMessageEvent, index: int | None = None,
+        self,
+        message: AstrMessageEvent,
+        index: int | None = None,
     ) -> None:
         """通过 /ls 前面的序号切换对话"""
         if not isinstance(index, int):
@@ -322,9 +335,10 @@ class ConversationCommands:
             )
         else:
             conversation = conversations[index - 1]
-            title = conversation.title if conversation.title else "新对话"
+            title = conversation.title or "新对话"
             await self.context.conversation_manager.switch_conversation(
-                message.unified_msg_origin, conversation.cid,
+                message.unified_msg_origin,
+                conversation.cid,
             )
             message.set_result(
                 MessageEventResult().message(
@@ -338,7 +352,8 @@ class ConversationCommands:
             message.set_result(MessageEventResult().message("请输入新的对话名称｡"))
             return
         await self.context.conversation_manager.update_conversation_title(
-            message.unified_msg_origin, new_name,
+            message.unified_msg_origin,
+            new_name,
         )
         message.set_result(MessageEventResult().message("重命名对话成功｡"))
 
@@ -380,7 +395,8 @@ class ConversationCommands:
             return
         active_event_registry.stop_all(umo, exclude=message)
         await self.context.conversation_manager.delete_conversation(
-            umo, session_curr_cid,
+            umo,
+            session_curr_cid,
         )
         ret = "删除当前对话成功｡不再处于对话状态,使用 /switch 序号 切换到其他对话或 /new 创建｡"
         message.set_extra("_clean_ltm_session", True)

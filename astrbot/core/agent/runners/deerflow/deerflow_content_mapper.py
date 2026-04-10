@@ -164,14 +164,18 @@ def append_components_from_content(
 
     if "content" in content:
         append_components_from_content(
-            content.get("content"), components, image_resolver,
+            content.get("content"),
+            components,
+            image_resolver,
         )
         return
 
     kwargs = content.get("kwargs")
     if isinstance(kwargs, dict) and "content" in kwargs:
         append_components_from_content(
-            kwargs.get("content"), components, image_resolver,
+            kwargs.get("content"),
+            components,
+            image_resolver,
         )
 
 

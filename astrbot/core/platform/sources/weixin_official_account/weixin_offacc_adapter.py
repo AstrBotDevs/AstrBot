@@ -46,10 +46,14 @@ class WeixinOfficialAccountServer:
         self.encoding_aes_key = config.get("encoding_aes_key")
         self.appid = config.get("appid")
         self.server.add_url_rule(
-            "/callback/command", view_func=self.verify, methods=["GET"],
+            "/callback/command",
+            view_func=self.verify,
+            methods=["GET"],
         )
         self.server.add_url_rule(
-            "/callback/command", view_func=self.callback_command, methods=["POST"],
+            "/callback/command",
+            view_func=self.callback_command,
+            methods=["POST"],
         )
         self.crypto = WeChatCrypto(self.token, self.encoding_aes_key, self.appid)
         self.event_queue = event_queue
@@ -202,7 +206,8 @@ class WeixinOfficialAccountServer:
                             return _reply_text(placeholder)
                         except Exception:
                             logger.critical(
-                                "wx task failed in passive window", exc_info=True,
+                                "wx task failed in passive window",
+                                exc_info=True,
                             )
                             self.user_buffer.pop(from_user, None)
                             return _reply_text("处理消息失败,请稍后再试｡")
@@ -272,16 +277,22 @@ class WeixinOfficialAccountServer:
 
 
 @register_platform_adapter(
-    "weixin_official_account", "微信公众平台 适配器", support_streaming_message=False,
+    "weixin_official_account",
+    "微信公众平台 适配器",
+    support_streaming_message=False,
 )
 class WeixinOfficialAccountPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settingss = platform_settings
         self.api_base_url = platform_config.get(
-            "api_base_url", "https://api.weixin.qq.com/cgi-bin/",
+            "api_base_url",
+            "https://api.weixin.qq.com/cgi-bin/",
         )
         self.active_send_mode = self.config.get("active_send_mode", False)
         self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
@@ -294,10 +305,13 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             self.api_base_url += "/"
         self.user_buffer: dict[str, dict[str, Any]] = {}
         self.server = WeixinOfficialAccountServer(
-            self._event_queue, self.config, self.user_buffer,
+            self._event_queue,
+            self.config,
+            self.user_buffer,
         )
         self.client = WeChatClient(
-            self.config["appid"].strip(), self.config["secret"].strip(),
+            self.config["appid"].strip(),
+            self.config["secret"].strip(),
         )
         self.client.__setattr__("API_BASE_URL", self.api_base_url)
         self.wexin_event_workers: dict[str, asyncio.Future] = {}
@@ -331,7 +345,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
 
     @override
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ) -> None:
         await super().send_by_session(session, message_chain)
 
@@ -361,7 +377,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         return await self.server.handle_callback(request)
 
     async def convert_message(
-        self, msg, future: asyncio.Future | None = None,
+        self,
+        msg,
+        future: asyncio.Future | None = None,
     ) -> AstrBotMessage | None:
         abm = AstrBotMessage()
         if isinstance(msg, TextMessage):
@@ -386,7 +404,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         elif msg.type == "voice":
             assert isinstance(msg, VoiceMessage)
             resp: Response = await asyncio.get_running_loop().run_in_executor(
-                None, self.client.media.download, msg.media_id,
+                None,
+                self.client.media.download,
+                msg.media_id,
             )
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixin_offacc_{msg.media_id}.amr")

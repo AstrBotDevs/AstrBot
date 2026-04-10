@@ -34,7 +34,10 @@ from .slack_event import SlackMessageEvent
 )
 class SlackAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
@@ -46,7 +49,8 @@ class SlackAdapter(Platform):
         self.webhook_host = platform_config.get("slack_webhook_host", "0.0.0.0")
         self.webhook_port = platform_config.get("slack_webhook_port", 3000)
         self.webhook_path = platform_config.get(
-            "slack_webhook_path", "/astrbot-slack-webhook/callback",
+            "slack_webhook_path",
+            "/astrbot-slack-webhook/callback",
         )
         if not self.bot_token:
             raise ValueError("Slack bot_token 是必需的")
@@ -66,10 +70,13 @@ class SlackAdapter(Platform):
         self.bot_self_id = None
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ) -> None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
-            message_chain=message_chain, web_client=self.web_client,
+            message_chain=message_chain,
+            web_client=self.web_client,
         )
         try:
             if session.message_type == MessageType.GROUP_MESSAGE:
@@ -79,13 +86,15 @@ class SlackAdapter(Platform):
                     else session.session_id
                 )
                 await self.web_client.chat_postMessage(
-                    channel=channel_id, text=text, blocks=blocks if blocks else None,
+                    channel=channel_id,
+                    text=text,
+                    blocks=blocks or None,
                 )
             else:
                 await self.web_client.chat_postMessage(
                     channel=session.session_id,
                     text=text,
-                    blocks=blocks if blocks else None,
+                    blocks=blocks or None,
                 )
         except Exception as e:
             logger.error(f"Slack 发送消息失败: {e}")
@@ -138,7 +147,8 @@ class SlackAdapter(Platform):
                         mentioned_user = await self.web_client.users_info(user=mention)
                         user_data = mentioned_user["user"]
                         user_name = user_data.get("real_name") or user_data.get(
-                            "name", mention,
+                            "name",
+                            mention,
                         )
                         abm.message.append(At(qq=mention, name=user_name))
                     except Exception:
@@ -262,7 +272,9 @@ class SlackAdapter(Platform):
             if not self.app_token:
                 raise ValueError("Socket Mode 需要 app_token")
             self.socket_client = SlackSocketClient(
-                self.web_client, self.app_token, self._handle_socket_event,
+                self.web_client,
+                self.app_token,
+                self._handle_socket_event,
             )
             logger.info("Slack 适配器 (Socket Mode) 启动中...")
             await self.socket_client.start()

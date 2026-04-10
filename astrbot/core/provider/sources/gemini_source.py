@@ -39,7 +39,8 @@ logging.getLogger("google_genai.types").addFilter(SuppressNonTextPartsWarning())
 
 
 @register_provider_adapter(
-    "googlegenai_chat_completion", "Google Gemini Chat Completion 提供商适配器",
+    "googlegenai_chat_completion",
+    "Google Gemini Chat Completion 提供商适配器",
 )
 class ProviderGoogleGenAI(Provider):
     CATEGORY_MAPPING: ClassVar[dict[str, types.HarmCategory]] = {
@@ -71,13 +72,15 @@ class ProviderGoogleGenAI(Provider):
         """初始化Gemini客户端"""
         proxy = self.provider_config.get("proxy", "")
         http_options = types.HttpOptions(
-            base_url=self.api_base, timeout=self.timeout * 1000,
+            base_url=self.api_base,
+            timeout=self.timeout * 1000,
         )
         if proxy:
             http_options.async_client_args = {"proxy": proxy}
             logger.info(f"[Gemini] 使用代理: {proxy}")
         self.client = genai.Client(
-            api_key=self.chosen_api_key, http_options=http_options,
+            api_key=self.chosen_api_key,
+            http_options=http_options,
         ).aio
 
     def _init_safety_settings(self) -> None:
@@ -85,7 +88,8 @@ class ProviderGoogleGenAI(Provider):
         user_safety_config = self.provider_config.get("gm_safety_settings", {})
         self.safety_settings = [
             types.SafetySetting(
-                category=harm_category, threshold=self.THRESHOLD_MAPPING[threshold_str],
+                category=harm_category,
+                threshold=self.THRESHOLD_MAPPING[threshold_str],
             )
             for config_key, harm_category in self.CATEGORY_MAPPING.items()
             if (threshold_str := user_safety_config.get(config_key))
@@ -199,7 +203,8 @@ class ProviderGoogleGenAI(Provider):
             "gemini-live-2.5-flash-preview-native-audio-09-2025",
         ]:
             thinking_budget = self.provider_config.get("gm_thinking_config", {}).get(
-                "budget", 0,
+                "budget",
+                0,
             )
             if thinking_budget is not None:
                 thinking_config = types.ThinkingConfig(
@@ -211,7 +216,8 @@ class ProviderGoogleGenAI(Provider):
             # covered without needing to keep an exhaustive list up to date.
             # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
             thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
-                "level", "HIGH",
+                "level",
+                "HIGH",
             )
             if thinking_level and isinstance(thinking_level, str):
                 thinking_level = thinking_level.upper()
@@ -245,7 +251,7 @@ class ProviderGoogleGenAI(Provider):
             response_modalities=modalities,
             tools=tool_list,
             tool_config=tool_config,
-            safety_settings=self.safety_settings if self.safety_settings else None,
+            safety_settings=self.safety_settings or None,
             thinking_config=thinking_config,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 disable=True,
@@ -256,7 +262,7 @@ class ProviderGoogleGenAI(Provider):
         """准备 Gemini SDK 的 Content 列表"""
 
         def create_text_part(text: str) -> types.Part:
-            content_a = text if text else " "
+            content_a = text or " "
             if not text:
                 logger.warning("文本内容为空,已添加空格占位")
             return types.Part.from_text(text=content_a)
@@ -385,7 +391,8 @@ class ProviderGoogleGenAI(Provider):
         return "".join(thought_buf).strip()
 
     def _extract_usage(
-        self, usage_metadata: types.GenerateContentResponseUsageMetadata,
+        self,
+        usage_metadata: types.GenerateContentResponseUsageMetadata,
     ) -> TokenUsage:
         """Extract usage from candidate"""
         return TokenUsage(
@@ -530,7 +537,9 @@ class ProviderGoogleGenAI(Provider):
                     streaming=False,
                 )
                 result = await self.client.models.generate_content(
-                    model=model, contents=conversation, config=config,
+                    model=model,
+                    contents=conversation,
+                    config=config,
                 )
                 logger.debug(f"genai result: {result}")
                 if not result.candidates:
@@ -570,7 +579,8 @@ class ProviderGoogleGenAI(Provider):
         llm_response = LLMResponse("assistant")
         llm_response.raw_completion = result
         llm_response.result_chain = self._process_content_parts(
-            result.candidates[0], llm_response,
+            result.candidates[0],
+            llm_response,
         )
         llm_response.id = result.response_id
         if result.usage_metadata:
@@ -578,7 +588,9 @@ class ProviderGoogleGenAI(Provider):
         return llm_response
 
     async def _query_stream(
-        self, payloads: dict, tools: ToolSet | None,
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         system_instruction = next(
@@ -598,7 +610,9 @@ class ProviderGoogleGenAI(Provider):
                     streaming=True,
                 )
                 result = await self.client.models.generate_content_stream(
-                    model=model, contents=conversation, config=config,
+                    model=model,
+                    contents=conversation,
+                    config=config,
                 )
                 break
             except APIError as e:

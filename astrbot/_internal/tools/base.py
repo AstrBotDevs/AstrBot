@@ -36,7 +36,8 @@ class ToolSchema:
         import jsonschema
 
         jsonschema.validate(
-            self.parameters, jsonschema.Draft202012Validator.META_SCHEMA,
+            self.parameters,
+            jsonschema.Draft202012Validator.META_SCHEMA,
         )
         return self
 
@@ -196,7 +197,8 @@ class ToolSet:
         return list(self._tools.values())
 
     def openai_schema(
-        self, omit_empty_parameter_field: bool = False,
+        self,
+        omit_empty_parameter_field: bool = False,
     ) -> list[dict[str, Any]]:
         """Convert tools to OpenAI API function calling schema format."""
         result: list[dict[str, Any]] = []
@@ -265,7 +267,8 @@ class ToolSet:
             if target_type in supported_types:
                 result["type"] = target_type
                 if "format" in schema and schema["format"] in supported_formats.get(
-                    result["type"], set(),
+                    result["type"],
+                    set(),
                 ):
                     result["format"] = schema["format"]
             else:

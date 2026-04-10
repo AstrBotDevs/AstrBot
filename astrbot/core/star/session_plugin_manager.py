@@ -68,7 +68,8 @@ class SessionPluginManager:
 
     @staticmethod
     async def filter_handlers_by_session(
-        event: AstrMessageEvent, handlers: list,
+        event: AstrMessageEvent,
+        handlers: list,
     ) -> list:
         """根据会话配置过滤处理器列表
 

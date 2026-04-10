@@ -30,7 +30,9 @@ from astrbot.core.platform.astr_message_event import MessageSession
 
 
 @register_platform_adapter(
-    "satori", "Satori 协议适配器", support_streaming_message=False,
+    "satori",
+    "Satori 协议适配器",
+    support_streaming_message=False,
 )
 class SatoriPlatformAdapter(Platform):
     def __init__(

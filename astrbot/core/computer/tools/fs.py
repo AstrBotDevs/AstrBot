@@ -186,7 +186,8 @@ class FileDownloadTool(FunctionTool):
             name = os.path.basename(remote_path)
 
             local_path = os.path.join(
-                get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
+                get_astrbot_temp_path(),
+                f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
             )
 
             # Download file from sandbox

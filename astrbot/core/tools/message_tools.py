@@ -75,7 +75,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     )
 
     async def _resolve_path_from_sandbox(
-        self, context: ContextWrapper[AstrAgentContext], path: str,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        path: str,
     ) -> tuple[str, bool]:
         if os.path.exists(path):
             return path, False
@@ -90,7 +92,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if "_&exists_" in json.dumps(result):
                 name = os.path.basename(path)
                 local_path = os.path.join(
-                    get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
+                    get_astrbot_temp_path(),
+                    f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
                 )
                 await sb.download_file(path, local_path)
                 logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
@@ -101,7 +104,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return path, False
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
     ) -> ToolExecResult:
         session = kwargs.get("session") or context.context.event.unified_msg_origin
         messages = kwargs.get("messages")
@@ -128,7 +133,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     url = msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path,
+                            context,
+                            path,
                         )
                         components.append(Comp.Image.fromFileSystem(path=local_path))
                     elif url:
@@ -140,7 +146,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     url = msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path,
+                            context,
+                            path,
                         )
                         components.append(Comp.Record.fromFileSystem(path=local_path))
                     elif url:
@@ -152,7 +159,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     url = msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path,
+                            context,
+                            path,
                         )
                         components.append(Comp.Video.fromFileSystem(path=local_path))
                     elif url:
@@ -170,7 +178,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     )
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path,
+                            context,
+                            path,
                         )
                         components.append(Comp.File(name=name, file=local_path))
                     elif url:

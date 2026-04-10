@@ -97,10 +97,13 @@ async def initialize_astrbot(
     if admin_username:
         config = ensure_config_file()
         set_dashboard_credentials(
-            config, username=effective_admin_username, password_hash=None,
+            config,
+            username=effective_admin_username,
+            password_hash=None,
         )
         config_path.write_text(
-            json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8-sig",
+            json.dumps(config, ensure_ascii=False, indent=2),
+            encoding="utf-8-sig",
         )
     click.echo(f"Configured dashboard admin username: {effective_admin_username}")
     click.echo(
@@ -109,7 +112,8 @@ async def initialize_astrbot(
     if not backend_only and (
         yes
         or click.confirm(
-            "是否需要集成式 WebUI?(个人电脑推荐,服务器不推荐)", default=True,
+            "是否需要集成式 WebUI?(个人电脑推荐,服务器不推荐)",
+            default=True,
         )
     ):
         await DashboardManager().ensure_installed(astrbot_root)
@@ -171,7 +175,9 @@ def init(
 
                 click.echo(f"Restoring from backup: {backup}")
                 click.get_current_context().invoke(
-                    import_data_command, backup_file=backup, yes=True,
+                    import_data_command,
+                    backup_file=backup,
+                    yes=True,
                 )
             click.echo("Done! You can now run 'astrbot run' to start AstrBot")
     except Timeout:

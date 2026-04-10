@@ -88,7 +88,8 @@ class ResultDecorateStage(Stage):
             escaped_words_list.sort(key=len, reverse=True)
             escaped_words = escaped_words_list
             self.split_words_pattern = re.compile(
-                f"(.*?({'|'.join(escaped_words)})|.+$)", re.DOTALL,
+                f"(.*?({'|'.join(escaped_words)})|.+$)",
+                re.DOTALL,
             )
         else:
             self.split_words_pattern = None
@@ -127,7 +128,7 @@ class ResultDecorateStage(Stage):
                     break
             if content.strip():
                 result.append(content)
-        return result if result else [text]
+        return result or [text]
 
     async def process(
         self,

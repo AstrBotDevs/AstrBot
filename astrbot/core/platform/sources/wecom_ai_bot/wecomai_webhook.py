@@ -102,7 +102,9 @@ class WecomAIBotWebhookClient:
         )
 
     async def upload_media(
-        self, file_path: Path, media_type: Literal["file", "voice"],
+        self,
+        file_path: Path,
+        media_type: Literal["file", "voice"],
     ) -> str:
         file_path_anyio = anyio.Path(file_path)
         if not await file_path_anyio.exists() or not await file_path_anyio.is_file():
@@ -216,7 +218,9 @@ class WecomAIBotWebhookClient:
                             target_voice_path.unlink()
                         except Exception as e:
                             logger.warning(
-                                "清理临时语音文件失败 %s: %s", target_voice_path, e,
+                                "清理临时语音文件失败 %s: %s",
+                                target_voice_path,
+                                e,
                             )
             else:
                 logger.warning(

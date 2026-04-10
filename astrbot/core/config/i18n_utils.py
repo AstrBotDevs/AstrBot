@@ -50,7 +50,10 @@ class ConfigMetadataI18n:
         result: dict[str, I18nGroup] = {}
 
         def convert_items(
-            group: str, section: str, items: dict[str, object], prefix: str = "",
+            group: str,
+            section: str,
+            items: dict[str, object],
+            prefix: str = "",
         ) -> dict[str, object]:
             items_result: dict[str, object] = {}
 
@@ -82,7 +85,10 @@ class ConfigMetadataI18n:
                 field_items = field_data.get("items")
                 if _is_str_keyed_dict(field_items):
                     field_result["items"] = convert_items(
-                        group, section, field_items, field_path,
+                        group,
+                        section,
+                        field_items,
+                        field_path,
                     )
 
                 template_schema = field_data.get("template_schema")
@@ -130,7 +136,9 @@ class ConfigMetadataI18n:
                 section_items = section_data.get("items")
                 if _is_str_keyed_dict(section_items):
                     section_result["items"] = convert_items(
-                        group_key, section_key, section_items,
+                        group_key,
+                        section_key,
+                        section_items,
                     )
 
                 group_metadata[section_key] = section_result

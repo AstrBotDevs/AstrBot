@@ -137,7 +137,10 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
         log.debug(f"ACP notification: {method}")
 
     async def call_tool(
-        self, server_name: str, tool_name: str, arguments: dict[str, Any],
+        self,
+        server_name: str,
+        tool_name: str,
+        arguments: dict[str, Any],
     ) -> Any:
         """Call a tool on an ACP server.
 
@@ -181,7 +184,9 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
         await self._writer.drain()
 
     async def send_notification(
-        self, method: str, params: dict[str, Any] | None = None,
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
     ) -> None:
         """Send a one-way notification to the server."""
         message = {

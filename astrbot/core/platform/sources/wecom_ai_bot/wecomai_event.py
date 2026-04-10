@@ -154,7 +154,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 return
             if self.webhook_client and message:
                 await self.webhook_client.send_message_chain(
-                    message, unsupported_only=True,
+                    message,
+                    unsupported_only=True,
                 )
             content = self._extract_plain_text_from_chain(message)
             await self.long_connection_sender(
@@ -222,7 +223,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             async for chain in generator:
                 if self.webhook_client:
                     await self.webhook_client.send_message_chain(
-                        chain, unsupported_only=True,
+                        chain,
+                        unsupported_only=True,
                     )
                 chain.squash_plain()
                 chunk_text = self._extract_plain_text_from_chain(chain)
@@ -282,7 +284,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         async for chain in generator:
             if self.webhook_client:
                 await self.webhook_client.send_message_chain(
-                    chain, unsupported_only=True,
+                    chain,
+                    unsupported_only=True,
                 )
             if chain.type == "break" and final_data:
                 if increment_plain:

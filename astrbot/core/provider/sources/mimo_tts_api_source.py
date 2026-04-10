@@ -40,7 +40,8 @@ class ProviderMiMoTTSAPI(TTSProvider):
         self.style_prompt = provider_config.get("mimo-tts-style-prompt", "")
         self.dialect = provider_config.get("mimo-tts-dialect", "")
         self.seed_text = provider_config.get(
-            "mimo-tts-seed-text", DEFAULT_MIMO_TTS_SEED_TEXT,
+            "mimo-tts-seed-text",
+            DEFAULT_MIMO_TTS_SEED_TEXT,
         )
         self.set_model(provider_config.get("model", DEFAULT_MIMO_TTS_MODEL))
         self.client = create_http_client(self.timeout, self.proxy)

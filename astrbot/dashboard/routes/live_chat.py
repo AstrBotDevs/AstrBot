@@ -254,7 +254,9 @@ class LiveChatRoute(Route):
             logger.info(f"[Live Chat] WebSocket 连接关闭: {username}")
 
     async def _create_attachment_from_file(
-        self, filename: str, attach_type: str,
+        self,
+        filename: str,
+        attach_type: str,
     ) -> dict | None:
         """从本地文件创建 attachment 并返回消息部分｡"""
         return await create_attachment_part_from_existing_file(
@@ -266,7 +268,9 @@ class LiveChatRoute(Route):
         )
 
     def _extract_web_search_refs(
-        self, accumulated_text: str, accumulated_parts: list,
+        self,
+        accumulated_text: str,
+        accumulated_parts: list,
     ) -> dict:
         """从消息中提取 web_search 引用｡"""
         supported = ["web_search_tavily", "web_search_bocha"]
@@ -357,7 +361,8 @@ class LiveChatRoute(Route):
         request_id: str,
     ) -> None:
         back_queue = webchat_queue_mgr.get_or_create_back_queue(
-            request_id, chat_session_id,
+            request_id,
+            chat_session_id,
         )
         try:
             while True:
@@ -414,7 +419,9 @@ class LiveChatRoute(Route):
         session.chat_subscription_tasks.clear()
 
     async def _handle_chat_message(
-        self, session: LiveChatSession, message: dict,
+        self,
+        session: LiveChatSession,
+        message: dict,
     ) -> None:
         """处理 Chat Mode 消息(ct=chat)"""
         msg_type = message.get("t")
@@ -791,7 +798,10 @@ class LiveChatRoute(Route):
             logger.info(f"[Live Chat] 用户打断: {session.username}")
 
     async def _process_audio(
-        self, session: LiveChatSession, audio_path: str, assemble_duration: float,
+        self,
+        session: LiveChatSession,
+        audio_path: str,
+        assemble_duration: float,
     ) -> None:
         """处理音频:STT -> LLM -> 流式 TTS"""
         try:
@@ -869,7 +879,9 @@ class LiveChatRoute(Route):
                         await websocket.send_json({"t": "stop_play"})
                         # 保存消息并标记为被打断
                         await self._save_interrupted_message(
-                            session, user_text, bot_text,
+                            session,
+                            user_text,
+                            bot_text,
                         )
                         # 清空队列中未处理的消息
                         while not back_queue.empty():
@@ -1012,7 +1024,10 @@ class LiveChatRoute(Route):
             session.should_interrupt = False
 
     async def _save_interrupted_message(
-        self, session: LiveChatSession, user_text: str, bot_text: str,
+        self,
+        session: LiveChatSession,
+        user_text: str,
+        bot_text: str,
     ) -> None:
         """保存被打断的消息"""
         interrupted_text = bot_text + " [用户打断]"

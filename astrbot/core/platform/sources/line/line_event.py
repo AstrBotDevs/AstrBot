@@ -232,7 +232,9 @@ class LineMessageEvent(AstrMessageEvent):
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator, use_fallback: bool = False,
+        self,
+        generator: AsyncGenerator,
+        use_fallback: bool = False,
     ):
         if not use_fallback:
             buffer = None

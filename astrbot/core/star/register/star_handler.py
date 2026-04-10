@@ -415,7 +415,9 @@ def register_on_waiting_llm_request(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(
-            awaitable, EventType.OnWaitingLLMRequestEvent, **kwargs,
+            awaitable,
+            EventType.OnWaitingLLMRequestEvent,
+            **kwargs,
         )
         return awaitable
 
@@ -562,7 +564,7 @@ def register_llm_tool(name: str | None = None, **kwargs):
             | Awaitable[MessageEventResult | str | None],
         ],
     ):
-        llm_tool_name = name_ if name_ else getattr(awaitable, "__name__", "")
+        llm_tool_name = name_ or getattr(awaitable, "__name__", "")
         func_doc = awaitable.__doc__ or ""
         docstring = docstring_parser.parse(func_doc)
         args = []

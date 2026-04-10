@@ -40,7 +40,10 @@ class AstrbotAbpClient(BaseAstrbotAbpClient):
         log.info("ABP client connected to internal stars registry.")
 
     async def call_star_tool(
-        self, star_name: str, tool_name: str, arguments: dict[str, Any],
+        self,
+        star_name: str,
+        tool_name: str,
+        arguments: dict[str, Any],
     ) -> Any:
         """Call a tool on a registered star.
 

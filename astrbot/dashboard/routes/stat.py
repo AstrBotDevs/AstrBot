@@ -218,10 +218,15 @@ class StatRoute(Route):
             local_tz = datetime.now().astimezone().tzinfo or timezone.utc
             now_local = datetime.now(local_tz)
             range_start_local = (now_local - timedelta(days=days)).replace(
-                minute=0, second=0, microsecond=0,
+                minute=0,
+                second=0,
+                microsecond=0,
             )
             today_start_local = now_local.replace(
-                hour=0, minute=0, second=0, microsecond=0,
+                hour=0,
+                minute=0,
+                second=0,
+                microsecond=0,
             )
             query_start_local = min(range_start_local, today_start_local)
             query_start_utc = query_start_local.astimezone(timezone.utc)
@@ -274,7 +279,9 @@ class StatRoute(Route):
 
                 if created_at_local >= range_start_local:
                     bucket_local = created_at_local.replace(
-                        minute=0, second=0, microsecond=0,
+                        minute=0,
+                        second=0,
+                        microsecond=0,
                     )
                     bucket_ts = int(bucket_local.timestamp() * 1000)
                     trend_by_provider[provider_id][bucket_ts] += token_total

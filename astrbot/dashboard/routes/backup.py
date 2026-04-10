@@ -187,7 +187,10 @@ class BackupRoute(Route):
         """创建进度回调函数"""
 
         async def _callback(
-            stage: str, current: int, total: int, message: str = "",
+            stage: str,
+            current: int,
+            total: int,
+            message: str = "",
         ) -> None:
             self._update_progress(
                 task_id,
@@ -313,7 +316,8 @@ class BackupRoute(Route):
                         "size": stat.st_size,
                         "created_at": stat.st_mtime,
                         "type": manifest.get(
-                            "origin", "exported",
+                            "origin",
+                            "exported",
                         ),  # 老版本没有 origin 默认为 exported
                         "astrbot_version": manifest.get("astrbot_version", "未知"),
                         "exported_at": manifest.get("exported_at"),
@@ -700,7 +704,8 @@ class BackupRoute(Route):
                     for i in range(total):
                         chunk_path = os.path.join(chunk_dir, f"{i}.part")
                         async with await anyio.open_file(
-                            chunk_path, "rb",
+                            chunk_path,
+                            "rb",
                         ) as chunk_file:
                             # 分块读取,避免内存溢出
                             while True:

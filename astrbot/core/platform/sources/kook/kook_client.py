@@ -123,7 +123,9 @@ class KookClient:
                     return None
 
                 gateway_url: str = resp_content.data.url
-                logger.info(f"[KOOK] 获取gateway成功: {gateway_url.split('?')[0]}")
+                logger.info(
+                    f"[KOOK] 获取gateway成功: {gateway_url.split('?', maxsplit=1)[0]}"
+                )
                 return gateway_url
 
         except pydantic.ValidationError as e:
@@ -147,7 +149,9 @@ class KookClient:
         try:
             # 获取gateway地址
             gateway_url = await self.get_gateway_url(
-                resume=resume, sn=self.last_sn, session_id=self.session_id,
+                resume=resume,
+                sn=self.last_sn,
+                session_id=self.session_id,
             )
             await self.get_bot_info()
 
@@ -289,7 +293,8 @@ class KookClient:
             try:
                 # 随机化心跳间隔 (±5秒)
                 interval = max(
-                    1, self.config.heartbeat_interval + random.randint(-5, 5),
+                    1,
+                    self.config.heartbeat_interval + random.randint(-5, 5),
                 )
                 await asyncio.sleep(interval)
 

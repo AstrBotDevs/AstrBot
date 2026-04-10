@@ -13,7 +13,8 @@ class FileTokenService:
     def __init__(self, default_timeout: float = 300) -> None:
         self.lock = asyncio.Lock()
         self.staged_files: dict[
-            str, tuple[str, float],
+            str,
+            tuple[str, float],
         ] = {}  # token: (file_path, expire_time)
         self.default_timeout = default_timeout
 
@@ -32,7 +33,9 @@ class FileTokenService:
             return file_token not in self.staged_files
 
     async def register_file(
-        self, file_path: str, expire_seconds: float | None = None,
+        self,
+        file_path: str,
+        expire_seconds: float | None = None,
     ) -> str:
         """向令牌服务注册一个文件｡
 

@@ -318,7 +318,8 @@ class Context:
         return self.provider_manager.llm_tools.deactivate_llm_tool(name)
 
     def get_provider_by_id(
-        self, provider_id: str,
+        self,
+        provider_id: str,
     ) -> (
         Provider | TTSProvider | STTProvider | EmbeddingProvider | RerankProvider | None
     ):
@@ -372,7 +373,8 @@ class Context:
 
         """
         prov = self.provider_manager.get_using_provider(
-            provider_type=ProviderType.CHAT_COMPLETION, umo=umo,
+            provider_type=ProviderType.CHAT_COMPLETION,
+            umo=umo,
         )
         if prov is None:
             return None
@@ -394,7 +396,8 @@ class Context:
 
         """
         prov = self.provider_manager.get_using_provider(
-            provider_type=ProviderType.TEXT_TO_SPEECH, umo=umo,
+            provider_type=ProviderType.TEXT_TO_SPEECH,
+            umo=umo,
         )
         if prov and (not isinstance(prov, TTSProvider)):
             raise ValueError("返回的 Provider 不是 TTSProvider 类型")
@@ -414,7 +417,8 @@ class Context:
 
         """
         prov = self.provider_manager.get_using_provider(
-            provider_type=ProviderType.SPEECH_TO_TEXT, umo=umo,
+            provider_type=ProviderType.SPEECH_TO_TEXT,
+            umo=umo,
         )
         if prov and (not isinstance(prov, STTProvider)):
             raise ValueError("返回的 Provider 不是 STTProvider 类型")
@@ -438,7 +442,9 @@ class Context:
         return self.astrbot_config_mgr.get_conf(umo)
 
     async def send_message(
-        self, session: str | MessageSesion, message_chain: MessageChain,
+        self,
+        session: str | MessageSesion,
+        message_chain: MessageChain,
     ) -> bool:
         """根据 session(unified_msg_origin) 主动发送消息｡
 
@@ -507,7 +513,11 @@ class Context:
             self.provider_manager.llm_tools.func_list.append(tool)
 
     def register_web_api(
-        self, route: str, view_handler: Awaitable, methods: list, desc: str,
+        self,
+        route: str,
+        view_handler: Awaitable,
+        methods: list,
+        desc: str,
     ) -> None:
         """注册 Web API｡
 

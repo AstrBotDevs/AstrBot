@@ -242,7 +242,8 @@ class NeoSkillSyncManager:
             release = await self._find_release(client, release_id=release_id)
         elif skill_key:
             release = await self._find_active_stable_release(
-                client, skill_key=skill_key,
+                client,
+                skill_key=skill_key,
             )
         else:
             raise ValueError("release_id or skill_key is required for sync.")

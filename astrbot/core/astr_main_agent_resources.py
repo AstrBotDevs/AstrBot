@@ -65,7 +65,9 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
     )
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
     ) -> ToolExecResult:
         query = kwargs.get("query", "")
         if not query:
@@ -134,7 +136,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     )
 
     async def _resolve_path_from_sandbox(
-        self, context: ContextWrapper[AstrAgentContext], path: str,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        path: str,
     ) -> tuple[str, bool]:
         """If the path exists locally, return it directly.
         Otherwise, check if it exists in the sandbox and download it.
@@ -156,7 +160,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 # Download the file from sandbox
                 name = os.path.basename(path)
                 local_path = os.path.join(
-                    get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
+                    get_astrbot_temp_path(),
+                    f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
                 )
                 await sb.download_file(path, local_path)
                 logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
@@ -168,7 +173,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return path, False
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs: Any,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs: Any,
     ) -> ToolExecResult:
         session = kwargs.get("session") or context.context.event.unified_msg_origin
         messages_raw: list[dict[str, Any]] | None = kwargs.get("messages")

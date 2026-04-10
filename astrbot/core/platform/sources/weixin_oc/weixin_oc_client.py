@@ -188,7 +188,8 @@ class WeixinOCClient:
         assert self._http_session is not None
         timeout = aiohttp.ClientTimeout(total=self.api_timeout_ms / 1000)
         async with self._http_session.get(
-            self._build_cdn_download_url(encrypted_query_param), timeout=timeout,
+            self._build_cdn_download_url(encrypted_query_param),
+            timeout=timeout,
         ) as resp:
             if resp.status >= 400:
                 detail = await resp.text()
@@ -198,7 +199,9 @@ class WeixinOCClient:
             return await resp.read()
 
     async def download_and_decrypt_media(
-        self, encrypted_query_param: str, aes_key_value: str,
+        self,
+        encrypted_query_param: str,
+        aes_key_value: str,
     ) -> bytes:
         encrypted = await self.download_cdn_bytes(encrypted_query_param)
         key = self.parse_media_aes_key(aes_key_value)
@@ -238,7 +241,9 @@ class WeixinOCClient:
             return json.loads(text)
 
     async def get_typing_config(
-        self, user_id: str, context_token: str,
+        self,
+        user_id: str,
+        context_token: str,
     ) -> dict[str, Any]:
         return await self.request_json(
             "POST",
@@ -253,7 +258,11 @@ class WeixinOCClient:
         )
 
     async def send_typing_state(
-        self, user_id: str, typing_ticket: str, *, cancel: bool,
+        self,
+        user_id: str,
+        typing_ticket: str,
+        *,
+        cancel: bool,
     ) -> dict[str, Any]:
         return await self.request_json(
             "POST",

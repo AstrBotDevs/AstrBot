@@ -65,7 +65,7 @@ class MockShipyardSandboxClient:
             data.add_field(
                 "file",
                 file_content,
-                filename=remote_path.split("/")[-1],
+                filename=remote_path.rsplit("/", maxsplit=1)[-1],
                 content_type="application/octet-stream",
             )
             data.add_field("file_path", remote_path)

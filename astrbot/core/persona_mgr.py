@@ -60,12 +60,14 @@ class PersonaManager:
         )
 
     async def get_default_persona_v3(
-        self, umo: str | MessageSession | None = None,
+        self,
+        umo: str | MessageSession | None = None,
     ) -> Personality:
         """获取默认 persona"""
         cfg = self.acm.get_conf(umo)
         default_persona_id = cfg.get("provider_settings", {}).get(
-            "default_personality", "default",
+            "default_personality",
+            "default",
         )
         return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
 
@@ -89,7 +91,10 @@ class PersonaManager:
         """
         session_service_config = (
             await sp.get_async(
-                scope="umo", scope_id=str(umo), key="session_service_config", default={},
+                scope="umo",
+                scope_id=str(umo),
+                key="session_service_config",
+                default={},
             )
             or {}
         )
@@ -102,7 +107,8 @@ class PersonaManager:
             elif persona_id is None:
                 persona_id = (provider_settings or {}).get("default_personality")
         persona = next(
-            (item for item in self.personas_v3 if item["name"] == persona_id), None,
+            (item for item in self.personas_v3 if item["name"] == persona_id),
+            None,
         )
         use_webchat_special_default = False
         if not persona and platform_name == "webchat" and (persona_id != "[%None]"):
@@ -144,7 +150,10 @@ class PersonaManager:
         if custom_error_message is not NOT_GIVEN:
             update_kwargs["custom_error_message"] = custom_error_message
         persona = await self.db.update_persona(
-            persona_id, system_prompt, begin_dialogs, **update_kwargs,
+            persona_id,
+            system_prompt,
+            begin_dialogs,
+            **update_kwargs,
         )
         if persona:
             for i, p in enumerate(self.personas):
@@ -159,7 +168,8 @@ class PersonaManager:
         return await self.db.get_personas()
 
     async def get_personas_by_folder(
-        self, folder_id: str | None = None,
+        self,
+        folder_id: str | None = None,
     ) -> list[Persona]:
         """获取指定文件夹中的 personas
 
@@ -170,7 +180,9 @@ class PersonaManager:
         return await self.db.get_personas_by_folder(folder_id)
 
     async def move_persona_to_folder(
-        self, persona_id: str, folder_id: str | None,
+        self,
+        persona_id: str,
+        folder_id: str | None,
     ) -> Persona | None:
         """移动 persona 到指定文件夹
 
@@ -332,7 +344,9 @@ class PersonaManager:
         return new_persona
 
     async def clone_persona(
-        self, source_persona_id: str, new_persona_id: str,
+        self,
+        source_persona_id: str,
+        new_persona_id: str,
     ) -> Persona:
         """Clone an existing persona with a new ID.
 

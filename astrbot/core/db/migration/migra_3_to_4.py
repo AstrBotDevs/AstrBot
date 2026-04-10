@@ -17,7 +17,8 @@ from .sqlite_v3 import SQLiteDatabase as SQLiteV3DatabaseV3
 
 
 def get_platform_id(
-    platform_id_map: dict[str, dict[str, str]], old_platform_name: str,
+    platform_id_map: dict[str, dict[str, str]],
+    old_platform_name: str,
 ) -> str:
     return platform_id_map.get(
         old_platform_name,
@@ -26,7 +27,8 @@ def get_platform_id(
 
 
 def get_platform_type(
-    platform_id_map: dict[str, dict[str, str]], old_platform_name: str,
+    platform_id_map: dict[str, dict[str, str]],
+    old_platform_name: str,
 ) -> str:
     return platform_id_map.get(
         old_platform_name,
@@ -35,13 +37,15 @@ def get_platform_type(
 
 
 async def migration_conversation_table(
-    db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]],
+    db_helper: BaseDatabase,
+    platform_id_map: dict[str, dict[str, str]],
 ) -> None:
     db_helper_v3 = SQLiteV3DatabaseV3(
         db_path=DB_PATH.replace("data_v4.db", "data_v3.db"),
     )
     conversations, total_cnt = db_helper_v3.get_all_conversations(
-        page=1, page_size=10000000,
+        page=1,
+        page_size=10000000,
     )
     logger.info(f"迁移 {total_cnt} 条旧的会话数据到新的表中...")
     async with db_helper.get_db() as dbsession, dbsession.begin():
@@ -64,7 +68,8 @@ async def migration_conversation_table(
                     continue
                 session = MessageSesion.from_str(session_str=conv.user_id)
                 platform_id = get_platform_id(
-                    platform_id_map, session.platform_name,
+                    platform_id_map,
+                    session.platform_name,
                 )
                 session.platform_id = platform_id
                 conv_v2 = ConversationV2(
@@ -87,7 +92,8 @@ async def migration_conversation_table(
 
 
 async def migration_platform_table(
-    db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]],
+    db_helper: BaseDatabase,
+    platform_id_map: dict[str, dict[str, str]],
 ) -> None:
     db_helper_v3 = SQLiteV3DatabaseV3(
         db_path=DB_PATH.replace("data_v4.db", "data_v3.db"),
@@ -126,10 +132,12 @@ async def migration_platform_table(
                 if cnt == 0:
                     continue
                 platform_id = get_platform_id(
-                    platform_id_map, platform_stats_v3[idx].name,
+                    platform_id_map,
+                    platform_stats_v3[idx].name,
                 )
                 platform_type = get_platform_type(
-                    platform_id_map, platform_stats_v3[idx].name,
+                    platform_id_map,
+                    platform_stats_v3[idx].name,
                 )
                 try:
                     await dbsession.execute(
@@ -138,7 +146,8 @@ async def migration_platform_table(
                         ),
                         {
                             "timestamp": datetime.datetime.fromtimestamp(
-                                bucket_end, tz=datetime.timezone.utc,
+                                bucket_end,
+                                tz=datetime.timezone.utc,
                             ),
                             "platform_id": platform_id,
                             "platform_type": platform_type,
@@ -154,14 +163,16 @@ async def migration_platform_table(
 
 
 async def migration_webchat_data(
-    db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]],
+    db_helper: BaseDatabase,
+    platform_id_map: dict[str, dict[str, str]],
 ) -> None:
     """迁移 WebChat 的历史记录到新的 PlatformMessageHistory 表中"""
     db_helper_v3 = SQLiteV3DatabaseV3(
         db_path=DB_PATH.replace("data_v4.db", "data_v3.db"),
     )
     conversations, total_cnt = db_helper_v3.get_all_conversations(
-        page=1, page_size=10000000,
+        page=1,
+        page_size=10000000,
     )
     logger.info(f"迁移 {total_cnt} 条旧的 WebChat 会话数据到新的表中...")
     async with db_helper.get_db() as dbsession, dbsession.begin():
@@ -203,7 +214,8 @@ async def migration_webchat_data(
 
 
 async def migration_persona_data(
-    db_helper: BaseDatabase, astrbot_config: AstrBotConfig,
+    db_helper: BaseDatabase,
+    astrbot_config: AstrBotConfig,
 ) -> None:
     """迁移 Persona 数据到新的表中｡
     旧的 Persona 数据存储在 preference 中,新的 Persona 数据存储在 persona 表中｡
@@ -244,7 +256,8 @@ async def migration_persona_data(
 
 
 async def migration_preferences(
-    db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]],
+    db_helper: BaseDatabase,
+    platform_id_map: dict[str, dict[str, str]],
 ) -> None:
     keys = [
         "inactivated_llm_tools",
@@ -305,7 +318,10 @@ async def migration_preferences(
             perf_dict = perf
             for provider_type, provider_id in perf_dict.items():
                 await sp.put_async(
-                    "umo", str(session), f"provider_perf_{provider_type}", provider_id,
+                    "umo",
+                    str(session),
+                    f"provider_perf_{provider_type}",
+                    provider_id,
                 )
             logger.info(f"迁移会话 {umo} 的提供商偏好到新表成功,平台 ID: {platform_id}")
         except Exception as e:

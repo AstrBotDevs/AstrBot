@@ -469,7 +469,8 @@ class AstrBotImporter:
                     await progress_callback("attachments", 0, 100, "正在导入附件...")
 
                 attachment_count = await self._import_attachments(
-                    zf, main_data.get("attachments", []),
+                    zf,
+                    main_data.get("attachments", []),
                 )
                 result.imported_files["attachments"] = attachment_count
 
@@ -479,7 +480,10 @@ class AstrBotImporter:
                 # 6. 导入插件和其他目录
                 if progress_callback:
                     await progress_callback(
-                        "directories", 0, 100, "正在导入插件和数据目录...",
+                        "directories",
+                        0,
+                        100,
+                        "正在导入插件和数据目录...",
                     )
 
                 dir_stats = await self._import_directories(zf, manifest, result)
@@ -557,7 +561,8 @@ class AstrBotImporter:
         self.kb_manager.kb_insts.clear()
 
     async def _import_main_database(
-        self, data: dict[str, list[dict]],
+        self,
+        data: dict[str, list[dict]],
     ) -> dict[str, int]:
         """导入主数据库数据"""
         imported: dict[str, int] = {}
@@ -587,7 +592,9 @@ class AstrBotImporter:
         return imported
 
     def _preprocess_main_table_rows(
-        self, table_name: str, rows: list[dict[str, Any]],
+        self,
+        table_name: str,
+        rows: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         if table_name == "platform_stats":
             normalized_rows = self._merge_platform_stats_rows(rows)
@@ -602,7 +609,8 @@ class AstrBotImporter:
         return rows
 
     def _merge_platform_stats_rows(
-        self, rows: list[dict[str, Any]],
+        self,
+        rows: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """Merge duplicate platform_stats rows by normalized timestamp/platform key.
 
@@ -770,7 +778,8 @@ class AstrBotImporter:
                         rel_path = name[len(media_prefix) :]
                         target_path = kb_dir / rel_path
                         await anyio.Path(target_path.parent).mkdir(
-                            parents=True, exist_ok=True,
+                            parents=True,
+                            exist_ok=True,
                         )
                         with zf.open(name) as src:
                             content = src.read()
@@ -836,7 +845,8 @@ class AstrBotImporter:
                         target_path = attachments_dir / os.path.basename(name)
 
                     await anyio.Path(target_path.parent).mkdir(
-                        parents=True, exist_ok=True,
+                        parents=True,
+                        exist_ok=True,
                     )
                     with zf.open(name) as src:
                         content = src.read()
@@ -918,7 +928,8 @@ class AstrBotImporter:
 
                         target_path = target_dir / rel_path
                         await anyio.Path(target_path.parent).mkdir(
-                            parents=True, exist_ok=True,
+                            parents=True,
+                            exist_ok=True,
                         )
 
                         with zf.open(name) as src:

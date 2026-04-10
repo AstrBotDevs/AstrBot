@@ -117,7 +117,8 @@ class RuntimeStatusStar:
             last_ts = getattr(self._orchestrator, "_last_activity_timestamp", None)
             if last_ts is not None:
                 result["last_activity"] = datetime.fromtimestamp(
-                    last_ts, tz=timezone.utc,
+                    last_ts,
+                    tz=timezone.utc,
                 ).isoformat()
             else:
                 result["last_activity"] = None

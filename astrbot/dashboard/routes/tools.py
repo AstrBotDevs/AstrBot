@@ -17,7 +17,6 @@ class EmptyMcpServersError(ValueError):
     """Raised when mcpServers is empty."""
 
 
-
 def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
     """Extract server configuration from user-submitted mcpServers field.
 
@@ -39,7 +38,9 @@ def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
 
 class ToolsRoute(Route):
     def __init__(
-        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle,
+        self,
+        context: RouteContext,
+        core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
@@ -145,7 +146,9 @@ class ToolsRoute(Route):
             if self.tool_mgr.save_mcp_config(config):
                 try:
                     await self.tool_mgr.enable_mcp_server(
-                        name, server_config, init_timeout=30,
+                        name,
+                        server_config,
+                        init_timeout=30,
                     )
                 except TimeoutError:
                     rollback_ok = self._rollback_mcp_server(name)
@@ -221,7 +224,8 @@ class ToolsRoute(Route):
                     ):
                         try:
                             await self.tool_mgr.disable_mcp_server(
-                                old_name, shutdown_timeout=10,
+                                old_name,
+                                shutdown_timeout=10,
                             )
                         except TimeoutError as e:
                             return (
@@ -242,7 +246,9 @@ class ToolsRoute(Route):
                             )
                     try:
                         await self.tool_mgr.enable_mcp_server(
-                            name, config["mcpServers"][name], init_timeout=30,
+                            name,
+                            config["mcpServers"][name],
+                            init_timeout=30,
                         )
                     except TimeoutError:
                         return (

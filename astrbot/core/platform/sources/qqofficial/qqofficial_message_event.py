@@ -239,7 +239,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload["content"] = plain_text or None
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
-                        group_openid=source.group_openid or "", **retry_payload,
+                        group_openid=source.group_openid or "",
+                        **retry_payload,
                     ),
                     payload=payload,
                     plain_text=plain_text,
@@ -304,7 +305,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 else:
                     ret = await self._send_with_markdown_fallback(
                         send_func=lambda retry_payload: self.post_c2c_message(
-                            openid=source.author.user_openid, **retry_payload,
+                            openid=source.author.user_openid,
+                            **retry_payload,
                         ),
                         payload=payload,
                         plain_text=plain_text,
@@ -317,7 +319,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 payload.pop("msg_type", None)
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_message(
-                        channel_id=source.channel_id, **retry_payload,
+                        channel_id=source.channel_id,
+                        **retry_payload,
                     ),
                     payload=payload,
                     plain_text=plain_text,
@@ -329,7 +332,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 payload.pop("msg_type", None)
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_dms(
-                        guild_id=source.guild_id, **retry_payload,
+                        guild_id=source.guild_id,
+                        **retry_payload,
                     ),
                     payload=payload,
                     plain_text=plain_text,
@@ -342,7 +346,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return ret
 
     async def _send_with_markdown_fallback(
-        self, send_func, payload: dict, plain_text: str, stream: dict | None = None,
+        self,
+        send_func,
+        payload: dict,
+        plain_text: str,
+        stream: dict | None = None,
     ):
         try:
             return await send_func(payload)
@@ -380,7 +388,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             return await send_func(fallback_payload)
 
     async def upload_group_and_c2c_image(
-        self, image_base64: str, file_type: int, **kwargs,
+        self,
+        image_base64: str,
+        file_type: int,
+        **kwargs,
     ) -> botpy.types.message.Media:
         payload = {
             "file_data": image_base64,
@@ -522,11 +533,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     record_wav_path = await i.convert_to_file_path()
                     temp_dir = get_astrbot_temp_path()
                     record_tecent_silk_path = os.path.join(
-                        temp_dir, f"qqofficial_{uuid.uuid4()}.silk",
+                        temp_dir,
+                        f"qqofficial_{uuid.uuid4()}.silk",
                     )
                     try:
                         duration = await wav_to_tencent_silk(
-                            record_wav_path, record_tecent_silk_path,
+                            record_wav_path,
+                            record_tecent_silk_path,
                         )
                         if duration > 0:
                             record_file_path = record_tecent_silk_path

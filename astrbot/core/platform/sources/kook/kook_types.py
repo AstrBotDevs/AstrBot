@@ -57,7 +57,14 @@ class KookModuleType(str, Enum):
 
 
 ThemeType = Literal[
-    "primary", "success", "danger", "warning", "info", "secondary", "none", "invisible",
+    "primary",
+    "success",
+    "danger",
+    "warning",
+    "info",
+    "secondary",
+    "none",
+    "invisible",
 ]
 """主题,可选的值为:primary, success, danger, warning, info, secondary, none.默认为 primary,为 none 时不显示侧边框｡"""
 SizeType = Literal["xs", "sm", "md", "lg"]
@@ -276,7 +283,9 @@ class KookCardMessageContainer(list[KookCardMessage]):
 
     def to_json(self, indent: int | None = None, ensure_ascii: bool = True) -> str:
         return json.dumps(
-            [i.to_dict() for i in self], indent=indent, ensure_ascii=ensure_ascii,
+            [i.to_dict() for i in self],
+            indent=indent,
+            ensure_ascii=ensure_ascii,
         )
 
     @classmethod
@@ -351,7 +360,8 @@ class KookExtra(KookBaseDataClass):
 
 class KookMessageEventData(KookBaseDataClass):
     signal: Literal[KookMessageSignal.MESSAGE] = Field(
-        KookMessageSignal.MESSAGE, exclude=True,
+        KookMessageSignal.MESSAGE,
+        exclude=True,
     )
     """only for type hint"""
 
@@ -369,7 +379,8 @@ class KookMessageEventData(KookBaseDataClass):
 
 class KookHelloEventData(KookBaseDataClass):
     signal: Literal[KookMessageSignal.HELLO] = Field(
-        KookMessageSignal.HELLO, exclude=True,
+        KookMessageSignal.HELLO,
+        exclude=True,
     )
     """only for type hint"""
 
@@ -379,28 +390,32 @@ class KookHelloEventData(KookBaseDataClass):
 
 class KookPingEventData(KookBaseDataClass):
     signal: Literal[KookMessageSignal.PING] = Field(
-        KookMessageSignal.PING, exclude=True,
+        KookMessageSignal.PING,
+        exclude=True,
     )
     """only for type hint"""
 
 
 class KookPongEventData(KookBaseDataClass):
     signal: Literal[KookMessageSignal.PONG] = Field(
-        KookMessageSignal.PONG, exclude=True,
+        KookMessageSignal.PONG,
+        exclude=True,
     )
     """only for type hint"""
 
 
 class KookResumeEventData(KookBaseDataClass):
     signal: Literal[KookMessageSignal.RESUME] = Field(
-        KookMessageSignal.RESUME, exclude=True,
+        KookMessageSignal.RESUME,
+        exclude=True,
     )
     """only for type hint"""
 
 
 class KookReconnectEventData(KookBaseDataClass):
     signal: Literal[KookMessageSignal.RECONNECT] = Field(
-        KookMessageSignal.RECONNECT, exclude=True,
+        KookMessageSignal.RECONNECT,
+        exclude=True,
     )
     """only for type hint"""
 
@@ -410,7 +425,8 @@ class KookReconnectEventData(KookBaseDataClass):
 
 class KookResumeAckEventData(KookBaseDataClass):
     signal: Literal[KookMessageSignal.RESUME_ACK] = Field(
-        KookMessageSignal.RESUME_ACK, exclude=True,
+        KookMessageSignal.RESUME_ACK,
+        exclude=True,
     )
     """only for type hint"""
 
@@ -421,7 +437,9 @@ class KookWebsocketEvent(KookBaseDataClass):
     """KOOK WebSocket 原始推送结构"""
 
     signal: KookMessageSignal = Field(
-        ..., validation_alias="s", serialization_alias="s",
+        ...,
+        validation_alias="s",
+        serialization_alias="s",
     )
     """信令类型"""
     data: Annotated[

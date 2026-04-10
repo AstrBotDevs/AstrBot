@@ -166,7 +166,10 @@ class McpClient(BaseAstrbotMcpClient):
         return tools
 
     async def call_tool(
-        self, name: str, arguments: dict[str, Any], read_timeout_seconds: int = 60,
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        read_timeout_seconds: int = 60,
     ) -> Any:
         """Call a tool on the MCP server with reconnection support."""
         return await self.call_tool_with_reconnect(
@@ -351,7 +354,10 @@ class McpClient(BaseAstrbotMcpClient):
                 self._reconnecting = False
 
     async def call_tool_with_reconnect(
-        self, tool_name: str, arguments: dict, read_timeout_seconds: timedelta,
+        self,
+        tool_name: str,
+        arguments: dict,
+        read_timeout_seconds: timedelta,
     ) -> mcp.types.CallToolResult:
         """Call MCP tool with automatic reconnection on failure, max 2 retries.
 

@@ -57,7 +57,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     )
 
     async def _resolve_path_from_sandbox(
-        self, context: ContextWrapper[AstrAgentContext], path: str,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        path: str,
     ) -> tuple[str, bool]:
         """If the path exists locally, return it directly.
         Otherwise, check if it exists in the sandbox and download it.
@@ -68,7 +70,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             return (path, False)
         try:
             sb = await get_booter(
-                context.context.context, context.context.event.unified_msg_origin,
+                context.context.context,
+                context.context.event.unified_msg_origin,
             )
             import shlex
 
@@ -78,7 +81,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if "_&exists_" in json.dumps(result):
                 name = anyio.Path(path).name
                 local_path = os.path.join(
-                    get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
+                    get_astrbot_temp_path(),
+                    f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
                 )
                 await sb.download_file(path, local_path)
                 logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
@@ -88,7 +92,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return (path, False)
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs: Any,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs: Any,
     ) -> ToolExecResult:
         session: str | MessageSession = (
             kwargs.get("session") or context.context.event.unified_msg_origin
@@ -189,7 +195,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         except Exception as e:
             return f"error: invalid session: {e}"
         await context.context.context.send_message(
-            target_session, MessageChain(chain=components),
+            target_session,
+            MessageChain(chain=components),
         )
         return f"Message sent to session {target_session}"
 

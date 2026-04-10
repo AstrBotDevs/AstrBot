@@ -159,7 +159,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             }
             resp = await bot.call_action("upload_file_stream", **params)
             if not cls._is_upload_success_response(
-                resp, expected_statuses=("chunk_received", "file_complete"),
+                resp,
+                expected_statuses=("chunk_received", "file_complete"),
             ):
                 raise OSError(f"上传分片 {i} 失败: {resp}")
 
@@ -167,7 +168,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         complete_params = {"stream_id": stream_id, "is_complete": True}
         resp = await bot.call_action("upload_file_stream", **complete_params)
         if not cls._is_upload_success_response(
-            resp, expected_statuses=("file_complete",),
+            resp,
+            expected_statuses=("file_complete",),
         ):
             raise OSError(f"文件合并失败: {resp}")
 
@@ -313,7 +315,11 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 # 其他异常:尝试流式重试
                 try:
                     success = await cls._send_with_stream_retry(
-                        bot, message_chain, event, is_group, session_id,
+                        bot,
+                        message_chain,
+                        event,
+                        is_group,
+                        session_id,
                     )
                     if success:
                         return
@@ -357,11 +363,15 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
                 if is_group:
                     await bot.send_group_file(
-                        group_id=session_id_int, file=file_path, name=file_name,
+                        group_id=session_id_int,
+                        file=file_path,
+                        name=file_name,
                     )
                 else:
                     await bot.send_private_file(
-                        user_id=session_id_int, file=file_path, name=file_name,
+                        user_id=session_id_int,
+                        file=file_path,
+                        name=file_name,
                     )
             else:
                 messages = await cls._parse_onebot_json(MessageChain([seg]))

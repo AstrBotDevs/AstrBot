@@ -110,7 +110,9 @@ class ConversationManager:
         return conv.conversation_id
 
     async def switch_conversation(
-        self, unified_msg_origin: str, conversation_id: str,
+        self,
+        unified_msg_origin: str,
+        conversation_id: str,
     ) -> None:
         """切换会话的对话
 

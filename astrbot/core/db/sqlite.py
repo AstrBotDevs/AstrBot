@@ -97,14 +97,20 @@ class SQLiteDatabase(BaseDatabase):
             )
 
     async def insert_platform_stats(
-        self, platform_id, platform_type, count=1, timestamp=None,
+        self,
+        platform_id,
+        platform_type,
+        count=1,
+        timestamp=None,
     ) -> None:
         """Insert a new platform statistic record."""
         async with self.get_db() as session:
             async with session.begin():
                 if timestamp is None:
                     timestamp = datetime.now().replace(
-                        minute=0, second=0, microsecond=0,
+                        minute=0,
+                        second=0,
+                        microsecond=0,
                     )
                 current_hour = timestamp
                 await session.execute(
@@ -212,7 +218,12 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalars().all()
 
     async def get_filtered_conversations(
-        self, page=1, page_size=20, platform_ids=None, search_query="", **kwargs,
+        self,
+        page=1,
+        page_size=20,
+        platform_ids=None,
+        search_query="",
+        **kwargs,
     ):
         async with self.get_db() as session:
             base_query = select(ConversationV2)
@@ -327,7 +338,11 @@ class SQLiteDatabase(BaseDatabase):
             )
 
     async def get_session_conversations(
-        self, page=1, page_size=20, search_query=None, platform=None,
+        self,
+        page=1,
+        page_size=20,
+        search_query=None,
+        platform=None,
     ) -> tuple[list[dict], int]:
         """Get paginated session conversations with joined conversation and persona details."""
         async with self.get_db() as session:
@@ -349,7 +364,8 @@ class SQLiteDatabase(BaseDatabase):
                     == ConversationV2.conversation_id,
                 )
                 .outerjoin(
-                    Persona, col(ConversationV2.persona_id) == Persona.persona_id,
+                    Persona,
+                    col(ConversationV2.persona_id) == Persona.persona_id,
                 )
                 .where(Preference.scope == "umo", Preference.key == "sel_conv_id")
             )
@@ -380,7 +396,8 @@ class SQLiteDatabase(BaseDatabase):
                     == ConversationV2.conversation_id,
                 )
                 .outerjoin(
-                    Persona, col(ConversationV2.persona_id) == Persona.persona_id,
+                    Persona,
+                    col(ConversationV2.persona_id) == Persona.persona_id,
                 )
                 .where(Preference.scope == "umo", Preference.key == "sel_conv_id")
             )
@@ -413,7 +430,12 @@ class SQLiteDatabase(BaseDatabase):
             return (sessions_data, total)
 
     async def insert_platform_message_history(
-        self, platform_id, user_id, content, sender_id=None, sender_name=None,
+        self,
+        platform_id,
+        user_id,
+        content,
+        sender_id=None,
+        sender_name=None,
     ):
         """Insert a new platform message history record."""
         async with self.get_db() as session, session.begin():
@@ -428,7 +450,10 @@ class SQLiteDatabase(BaseDatabase):
             return new_history
 
     async def delete_platform_message_offset(
-        self, platform_id, user_id, offset_sec=86400,
+        self,
+        platform_id,
+        user_id,
+        offset_sec=86400,
     ) -> None:
         """Delete platform message history records newer than the specified offset."""
         async with self.get_db() as session, session.begin():
@@ -443,7 +468,11 @@ class SQLiteDatabase(BaseDatabase):
             )
 
     async def get_platform_message_history(
-        self, platform_id, user_id, page=1, page_size=20,
+        self,
+        platform_id,
+        user_id,
+        page=1,
+        page_size=20,
     ):
         """Get platform message history records."""
         async with self.get_db() as session:
@@ -460,7 +489,12 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalars().all()
 
     async def list_sdk_platform_message_history(
-        self, platform_id, user_id, cursor_id=None, limit=50, include_total=False,
+        self,
+        platform_id,
+        user_id,
+        cursor_id=None,
+        limit=50,
+        include_total=False,
     ):
         """List SDK message history records ordered by descending id."""
         async with self.get_db() as session:
@@ -525,7 +559,10 @@ class SQLiteDatabase(BaseDatabase):
             return int(getattr(result, "rowcount", 0) or 0)
 
     async def find_platform_message_history_by_idempotency_key(
-        self, platform_id, user_id, idempotency_key,
+        self,
+        platform_id,
+        user_id,
+        idempotency_key,
     ) -> PlatformMessageHistory | None:
         """Find a SDK message history record by its idempotency key."""
         async with self.get_db() as session:
@@ -535,7 +572,8 @@ class SQLiteDatabase(BaseDatabase):
                     PlatformMessageHistory.platform_id == platform_id,
                     PlatformMessageHistory.user_id == user_id,
                     func.json_extract(
-                        PlatformMessageHistory.content, "$.idempotency_key",
+                        PlatformMessageHistory.content,
+                        "$.idempotency_key",
                     )
                     == str(idempotency_key),
                 )
@@ -545,7 +583,8 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalar_one_or_none()
 
     async def get_platform_message_history_by_id(
-        self, message_id: int,
+        self,
+        message_id: int,
     ) -> PlatformMessageHistory | None:
         """Get a platform message history record by its ID."""
         async with self.get_db() as session:
@@ -792,7 +831,8 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalar_one_or_none()
 
     async def get_persona_folders(
-        self, parent_id: str | None = None,
+        self,
+        parent_id: str | None = None,
     ) -> list[PersonaFolder]:
         """Get all persona folders, optionally filtered by parent_id.
 
@@ -821,7 +861,8 @@ class SQLiteDatabase(BaseDatabase):
         """Get all persona folders."""
         async with self.get_db() as session:
             query = select(PersonaFolder).order_by(
-                col(PersonaFolder.sort_order), col(PersonaFolder.name),
+                col(PersonaFolder.sort_order),
+                col(PersonaFolder.name),
             )
             result = await session.execute(query)
             return list(result.scalars().all())
@@ -873,7 +914,9 @@ class SQLiteDatabase(BaseDatabase):
             )
 
     async def move_persona_to_folder(
-        self, persona_id: str, folder_id: str | None,
+        self,
+        persona_id: str,
+        folder_id: str | None,
     ) -> Persona | None:
         """Move a persona to a folder (or root if folder_id is None)."""
         async with self.get_db() as session, session.begin():
@@ -885,7 +928,8 @@ class SQLiteDatabase(BaseDatabase):
         return await self.get_persona_by_id(persona_id)
 
     async def get_personas_by_folder(
-        self, folder_id: str | None = None,
+        self,
+        folder_id: str | None = None,
     ) -> list[Persona]:
         """Get all personas in a specific folder.
 
@@ -955,7 +999,10 @@ class SQLiteDatabase(BaseDatabase):
                 existing_preference.value = value
             else:
                 new_preference = Preference(
-                    scope=scope, scope_id=scope_id, key=key, value=value,
+                    scope=scope,
+                    scope_id=scope_id,
+                    key=key,
+                    value=value,
                 )
                 session.add(new_preference)
             return existing_preference or new_preference
@@ -1008,7 +1055,8 @@ class SQLiteDatabase(BaseDatabase):
             await session.commit()
 
     async def _run_in_tx(
-        self, fn: Callable[[AsyncSession], Awaitable[TxResult]],
+        self,
+        fn: Callable[[AsyncSession], Awaitable[TxResult]],
     ) -> TxResult:
         async with self.get_db() as session, session.begin():
             return await fn(session)
@@ -1158,7 +1206,8 @@ class SQLiteDatabase(BaseDatabase):
         await self._run_in_tx(_op)
 
     async def list_command_conflicts(
-        self, status: str | None = None,
+        self,
+        status: str | None = None,
     ) -> list[CommandConflict]:
         async with self.get_db() as session:
             query = select(CommandConflict)
@@ -1343,7 +1392,8 @@ class SQLiteDatabase(BaseDatabase):
             return new_session
 
     async def get_platform_session_by_id(
-        self, session_id: str,
+        self,
+        session_id: str,
     ) -> PlatformSession | None:
         """Get a Platform session by its ID."""
         async with self.get_db() as session:
@@ -1354,7 +1404,8 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalar_one_or_none()
 
     async def get_platform_sessions_by_ids(
-        self, session_ids: list[str],
+        self,
+        session_ids: list[str],
     ) -> list[PlatformSession]:
         """Get platform sessions by IDs."""
         if not session_ids:
@@ -1466,7 +1517,9 @@ class SQLiteDatabase(BaseDatabase):
             return (sessions_with_projects, total)
 
     async def update_platform_session(
-        self, session_id: str, display_name: str | None = None,
+        self,
+        session_id: str,
+        display_name: str | None = None,
     ) -> None:
         """Update a Platform session's updated_at timestamp and optionally display_name."""
         async with self.get_db() as session, session.begin():
@@ -1498,7 +1551,10 @@ class SQLiteDatabase(BaseDatabase):
         """Create a new ChatUI project."""
         async with self.get_db() as session, session.begin():
             project = ChatUIProject(
-                creator=creator, title=title, emoji=emoji, description=description,
+                creator=creator,
+                title=title,
+                emoji=emoji,
+                description=description,
             )
             session.add(project)
             await session.flush()
@@ -1509,12 +1565,17 @@ class SQLiteDatabase(BaseDatabase):
         """Get a ChatUI project by its ID."""
         async with self.get_db() as session:
             result = await session.execute(
-                select(ChatUIProject).where(col(ChatUIProject.project_id) == project_id),
+                select(ChatUIProject).where(
+                    col(ChatUIProject.project_id) == project_id
+                ),
             )
             return result.scalar_one_or_none()
 
     async def get_chatui_projects_by_creator(
-        self, creator: str, page: int = 1, page_size: int = 100,
+        self,
+        creator: str,
+        page: int = 1,
+        page_size: int = 100,
     ) -> list[ChatUIProject]:
         """Get all ChatUI projects for a specific creator."""
         async with self.get_db() as session:
@@ -1565,7 +1626,9 @@ class SQLiteDatabase(BaseDatabase):
             )
 
     async def add_session_to_project(
-        self, session_id: str, project_id: str,
+        self,
+        session_id: str,
+        project_id: str,
     ) -> SessionProjectRelation:
         """Add a session to a project."""
         async with self.get_db() as session, session.begin():
@@ -1575,7 +1638,8 @@ class SQLiteDatabase(BaseDatabase):
                 ),
             )
             relation = SessionProjectRelation(
-                session_id=session_id, project_id=project_id,
+                session_id=session_id,
+                project_id=project_id,
             )
             session.add(relation)
             await session.flush()
@@ -1592,7 +1656,10 @@ class SQLiteDatabase(BaseDatabase):
             )
 
     async def get_project_sessions(
-        self, project_id: str, page: int = 1, page_size: int = 100,
+        self,
+        project_id: str,
+        page: int = 1,
+        page_size: int = 100,
     ) -> list[PlatformSession]:
         """Get all sessions in a project."""
         async with self.get_db() as session:
@@ -1612,7 +1679,9 @@ class SQLiteDatabase(BaseDatabase):
             return list(result.scalars().all())
 
     async def get_project_by_session(
-        self, session_id: str, creator: str,
+        self,
+        session_id: str,
+        creator: str,
     ) -> ChatUIProject | None:
         """Get the project that a session belongs to."""
         async with self.get_db() as session:

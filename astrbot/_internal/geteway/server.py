@@ -79,7 +79,10 @@ class AstrbotGateway(BaseAstrbotGateway):
         import uvicorn
 
         config = uvicorn.Config(
-            self._app, host=self._host, port=self._port, log_level="info",
+            self._app,
+            host=self._host,
+            port=self._port,
+            log_level="info",
         )
         server = uvicorn.Server(config)
         await server.serve()
@@ -137,7 +140,8 @@ class AstrbotGateway(BaseAstrbotGateway):
         self._app.include_router(memory_router)
 
     async def _handle_ws_message(
-        self, message: dict[str, Any],
+        self,
+        message: dict[str, Any],
     ) -> dict[str, Any] | None:
         """Handle an incoming WebSocket message.
 
@@ -173,7 +177,9 @@ class AstrbotGateway(BaseAstrbotGateway):
             }
         try:
             result = await self.orchestrator.abp.call_star_tool(
-                star_name, tool_name, arguments,
+                star_name,
+                tool_name,
+                arguments,
             )
             return {"type": "tool_result", "data": {"result": result}}
         except Exception as e:

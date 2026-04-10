@@ -1,5 +1,4 @@
-"""WebSocket connection manager for the AstrBot gateway.
-"""
+"""WebSocket connection manager for the AstrBot gateway."""
 
 from __future__ import annotations
 
@@ -75,7 +74,9 @@ class WebSocketManager:
                     self._connections.discard(conn)
 
     async def send_to(
-        self, websocket: WebSocket, message: str | dict[str, Any],
+        self,
+        websocket: WebSocket,
+        message: str | dict[str, Any],
     ) -> None:
         """Send a message to a specific WebSocket.
 

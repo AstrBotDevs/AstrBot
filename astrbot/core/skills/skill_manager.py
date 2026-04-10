@@ -339,7 +339,8 @@ class SkillManager:
                 continue
             description = str(item.get("description", "") or "")
             path = _normalize_cached_sandbox_skill_path(
-                name, str(item.get("path", "") or ""),
+                name,
+                str(item.get("path", "") or ""),
             )
             deduped[name] = {
                 "name": name,
@@ -389,7 +390,8 @@ class SkillManager:
                 continue
             name = str(item.get("name", "") or "").strip()
             path = _normalize_cached_sandbox_skill_path(
-                name, str(item.get("path", "") or ""),
+                name,
+                str(item.get("path", "") or ""),
             )
             if not name or not _SKILL_NAME_RE.match(name):
                 continue

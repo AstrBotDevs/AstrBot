@@ -24,7 +24,8 @@ class SlackMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _from_segment_to_slack_block(
-        segment: BaseMessageComponent, web_client: AsyncWebClient,
+        segment: BaseMessageComponent,
+        web_client: AsyncWebClient,
     ) -> dict | None:
         """将消息段转换为 Slack 块格式"""
         if isinstance(segment, Plain):
@@ -51,7 +52,8 @@ class SlackMessageEvent(AstrMessageEvent):
         if isinstance(segment, File):
             url = segment.url or segment.file
             response = await web_client.files_upload_v2(
-                file=url, filename=segment.name or "file",
+                file=url,
+                filename=segment.name or "file",
             )
             if not response["ok"]:
                 logger.error(f"Slack file upload failed: {response['error']}")
@@ -71,7 +73,8 @@ class SlackMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _parse_slack_blocks(
-        message_chain: MessageChain, web_client: AsyncWebClient,
+        message_chain: MessageChain,
+        web_client: AsyncWebClient,
     ):
         """解析成 Slack 块格式"""
         blocks = []
@@ -89,7 +92,8 @@ class SlackMessageEvent(AstrMessageEvent):
                     )
                     text_content = ""
                 block = await SlackMessageEvent._from_segment_to_slack_block(
-                    segment, web_client,
+                    segment,
+                    web_client,
                 )
                 if block:
                     blocks.append(block)
@@ -101,16 +105,21 @@ class SlackMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain) -> None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
-            message, self.web_client,
+            message,
+            self.web_client,
         )
         try:
             if self.get_group_id():
                 await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(), text=text, blocks=blocks or None,
+                    channel=self.get_group_id(),
+                    text=text,
+                    blocks=blocks or None,
                 )
             else:
                 await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(), text=text, blocks=blocks or None,
+                    channel=self.get_sender_id(),
+                    text=text,
+                    blocks=blocks or None,
                 )
         except Exception:
             parts = []
@@ -124,16 +133,20 @@ class SlackMessageEvent(AstrMessageEvent):
             fallback_text = "".join(parts)
             if self.get_group_id():
                 await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(), text=fallback_text,
+                    channel=self.get_group_id(),
+                    text=fallback_text,
                 )
             else:
                 await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(), text=fallback_text,
+                    channel=self.get_sender_id(),
+                    text=fallback_text,
                 )
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator, use_fallback: bool = False,
+        self,
+        generator: AsyncGenerator,
+        use_fallback: bool = False,
     ):
         if not use_fallback:
             buffer = None

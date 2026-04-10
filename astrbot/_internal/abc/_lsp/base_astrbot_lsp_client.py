@@ -97,8 +97,7 @@ class BaseAstrbotLspClient(ABC):
         method: str,
         params: dict[str, Any] | None = None,
     ) -> None:
-        """Send JSON-RPC notification (no response expected).
-        """
+        """Send JSON-RPC notification (no response expected)."""
         ...
 
     @abstractmethod

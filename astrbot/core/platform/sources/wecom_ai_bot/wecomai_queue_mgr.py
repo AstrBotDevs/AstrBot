@@ -125,7 +125,9 @@ class WecomAIQueueMgr:
         return session_id in self.back_queues
 
     def set_pending_response(
-        self, session_id: str, callback_params: dict[str, str],
+        self,
+        session_id: str,
+        callback_params: dict[str, str],
     ) -> None:
         """设置待处理的响应参数
 

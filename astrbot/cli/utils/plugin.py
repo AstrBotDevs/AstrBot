@@ -33,7 +33,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
         release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
         try:
             with httpx.Client(
-                proxy=proxy if proxy else None,
+                proxy=proxy or None,
                 follow_redirects=True,
             ) as client:
                 resp = client.get(release_url)
@@ -57,7 +57,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
 
         # Download and extract
         with httpx.Client(
-            proxy=proxy if proxy else None,
+            proxy=proxy or None,
             follow_redirects=True,
         ) as client:
             resp = client.get(download_url)

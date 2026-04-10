@@ -48,10 +48,14 @@ class KookEvent(AstrMessageEvent):
         self._file_message_counter = 0
 
     def _wrap_message(
-        self, index: int, message_component: BaseMessageComponent,
+        self,
+        index: int,
+        message_component: BaseMessageComponent,
     ) -> Coroutine[Any, Any, OrderMessage]:
         async def wrap_upload(
-            index: int, message_type: KookMessageType, upload_coro,
+            index: int,
+            message_type: KookMessageType,
+            upload_coro,
         ) -> OrderMessage:
             url = await upload_coro
             return OrderMessage(index=index, text=url, type=message_type)
@@ -93,7 +97,9 @@ class KookEvent(AstrMessageEvent):
                     f_data = await f_item.get_file()
                     url = await self.client.upload_asset(f_data)
                     return OrderMessage(
-                        index=index, text=url, type=KookMessageType.FILE,
+                        index=index,
+                        text=url,
+                        type=KookMessageType.FILE,
                     )
 
                 self._file_message_counter += 1

@@ -358,7 +358,8 @@ async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
     if not _shell_exec_succeeded(apply_result):
         detail = _format_exec_error_detail(apply_result)
         logger.error(
-            "[Computer] sandbox_sync phase=apply status=failed detail=%s", detail,
+            "[Computer] sandbox_sync phase=apply status=failed detail=%s",
+            detail,
         )
         raise RuntimeError(f"Failed to apply sandbox skill sync strategy: {detail}")
     logger.info("[Computer] sandbox_sync phase=apply status=done")
@@ -371,7 +372,8 @@ async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
     if not _shell_exec_succeeded(scan_result):
         detail = _format_exec_error_detail(scan_result)
         logger.error(
-            "[Computer] sandbox_sync phase=scan status=failed detail=%s", detail,
+            "[Computer] sandbox_sync phase=scan status=failed detail=%s",
+            detail,
         )
         raise RuntimeError(f"Failed to scan sandbox skills after sync: {detail}")
 
@@ -477,7 +479,10 @@ async def get_booter(
             max_sessions = sandbox_cfg.get("shipyard_max_sessions", 10)
 
             client = ShipyardBooter(
-                endpoint_url=ep, access_token=token, ttl=ttl, session_num=max_sessions,
+                endpoint_url=ep,
+                access_token=token,
+                ttl=ttl,
+                session_num=max_sessions,
             )
         elif booter_type == "shipyard_neo":
             from .booters.shipyard_neo import ShipyardNeoBooter

@@ -42,10 +42,12 @@ class botClient(Client):
         self.platform = platform
 
     async def on_group_at_message_create(
-        self, message: botpy.message.GroupMessage,
+        self,
+        message: botpy.message.GroupMessage,
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.GROUP_MESSAGE,
+            message,
+            MessageType.GROUP_MESSAGE,
         )
         abm.group_id = message.group_openid
         abm.session_id = abm.group_id
@@ -54,7 +56,8 @@ class botClient(Client):
 
     async def on_at_message_create(self, message: botpy.message.Message) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.GROUP_MESSAGE,
+            message,
+            MessageType.GROUP_MESSAGE,
         )
         abm.group_id = message.channel_id
         abm.session_id = abm.group_id
@@ -62,10 +65,12 @@ class botClient(Client):
         self._commit(abm)
 
     async def on_direct_message_create(
-        self, message: botpy.message.DirectMessage,
+        self,
+        message: botpy.message.DirectMessage,
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.FRIEND_MESSAGE,
+            message,
+            MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
         self.platform.remember_session_scene(abm.session_id, "friend")
@@ -73,7 +78,8 @@ class botClient(Client):
 
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.FRIEND_MESSAGE,
+            message,
+            MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
         self.platform.remember_session_scene(abm.session_id, "friend")
@@ -95,7 +101,10 @@ class botClient(Client):
 @register_platform_adapter("qq_official", "QQ 机器人官方 API 适配器")
 class QQOfficialPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.appid = platform_config["appid"]
@@ -110,7 +119,8 @@ class QQOfficialPlatformAdapter(Platform):
             )
         else:
             self.intents = botpy.Intents(
-                public_guild_messages=True, direct_message=guild_dm,
+                public_guild_messages=True,
+                direct_message=guild_dm,
             )
         self.client = botClient(intents=self.intents, bot_log=False, timeout=20)
         self.client.set_platform(self)
@@ -119,12 +129,16 @@ class QQOfficialPlatformAdapter(Platform):
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ) -> None:
         await self._send_by_session_common(session, message_chain)
 
     async def _send_by_session_common(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ) -> None:
         (
             plain_text,
@@ -201,13 +215,15 @@ class QQOfficialPlatformAdapter(Platform):
                         payload["msg_type"] = 7
                         payload.pop("msg_id", None)
                 ret = await self.client.api.post_group_message(
-                    group_openid=session.session_id, **payload,
+                    group_openid=session.session_id,
+                    **payload,
                 )
             else:
                 if image_path:
                     payload["file_image"] = image_path
                 ret = await self.client.api.post_message(
-                    channel_id=session.session_id, **payload,
+                    channel_id=session.session_id,
+                    **payload,
                 )
         elif session.message_type == MessageType.FRIEND_MESSAGE:
             payload.pop("msg_id", None)
@@ -253,7 +269,9 @@ class QQOfficialPlatformAdapter(Platform):
                     payload["media"] = media
                     payload["msg_type"] = 7
             ret = await QQOfficialMessageEvent.post_c2c_message(
-                send_helper, openid=session.session_id, **payload,
+                send_helper,
+                openid=session.session_id,
+                **payload,
             )
         else:
             logger.warning(
@@ -313,7 +331,8 @@ class QQOfficialPlatformAdapter(Platform):
 
     @staticmethod
     async def _append_attachments(
-        msg: list[BaseMessageComponent], attachments: list | None,
+        msg: list[BaseMessageComponent],
+        attachments: list | None,
     ) -> None:
         if not attachments:
             return
@@ -340,7 +359,8 @@ class QQOfficialPlatformAdapter(Platform):
                     try:
                         msg.append(
                             await QQOfficialPlatformAdapter._prepare_audio_attachment(
-                                url, filename,
+                                url,
+                                filename,
                             ),
                         )
                     except Exception as e:
@@ -410,7 +430,8 @@ class QQOfficialPlatformAdapter(Platform):
         abm.message_id = message.id
         msg: list[BaseMessageComponent] = []
         if isinstance(message, botpy.message.GroupMessage) or isinstance(
-            message, botpy.message.C2CMessage,
+            message,
+            botpy.message.C2CMessage,
         ):
             if isinstance(message, botpy.message.GroupMessage):
                 abm.sender = MessageMember(message.author.member_openid, "")
@@ -424,11 +445,13 @@ class QQOfficialPlatformAdapter(Platform):
             msg.append(At(qq="qq_official"))
             msg.append(Plain(abm.message_str))
             await QQOfficialPlatformAdapter._append_attachments(
-                msg, message.attachments,
+                msg,
+                message.attachments,
             )
             abm.message = msg
         elif isinstance(message, botpy.message.Message) or isinstance(
-            message, botpy.message.DirectMessage,
+            message,
+            botpy.message.DirectMessage,
         ):
             if isinstance(message, botpy.message.Message):
                 abm.self_id = str(message.mentions[0].id)
@@ -438,12 +461,14 @@ class QQOfficialPlatformAdapter(Platform):
                 message.content.replace("<@!" + str(abm.self_id) + ">", "").strip(),
             )
             await QQOfficialPlatformAdapter._append_attachments(
-                msg, message.attachments,
+                msg,
+                message.attachments,
             )
             abm.message = msg
             abm.message_str = plain_content
             abm.sender = MessageMember(
-                str(message.author.id), str(message.author.username),
+                str(message.author.id),
+                str(message.author.username),
             )
             msg.append(At(qq="qq_official"))
             msg.append(Plain(plain_content))

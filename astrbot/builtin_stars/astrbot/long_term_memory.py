@@ -126,7 +126,7 @@ class LongTermMemory:
                 elif isinstance(comp, Image):
                     if cfg["image_caption"]:
                         try:
-                            url = comp.url if comp.url else comp.file
+                            url = comp.url or comp.file
                             if not url:
                                 raise Exception("图片 URL 为空")
                             caption = await self.get_image_caption(
@@ -172,7 +172,9 @@ class LongTermMemory:
             req.system_prompt += chats_str
 
     async def after_req_llm(
-        self, event: AstrMessageEvent, llm_resp: LLMResponse,
+        self,
+        event: AstrMessageEvent,
+        llm_resp: LLMResponse,
     ) -> None:
         if event.unified_msg_origin not in self.session_chats:
             return

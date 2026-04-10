@@ -181,7 +181,8 @@ class ThirdPartyAgentSubStage(Stage):
         )
 
     async def _resolve_persona_custom_error_message(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> str | None:
         try:
             conversation_persona_id = await resolve_event_conversation_persona_id(
@@ -326,7 +327,9 @@ class ThirdPartyAgentSubStage(Stage):
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
             return
         sdk_plugin_bridge = getattr(
-            self.ctx.plugin_manager.context, "sdk_plugin_bridge", None,
+            self.ctx.plugin_manager.context,
+            "sdk_plugin_bridge",
+            None,
         )
         if sdk_plugin_bridge is not None:
             try:

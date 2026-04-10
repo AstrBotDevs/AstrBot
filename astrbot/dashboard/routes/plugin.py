@@ -336,7 +336,10 @@ class PluginRoute(Route):
         return None
 
     async def _save_plugin_cache(
-        self, cache_file: str, data, md5: str | None = None,
+        self,
+        cache_file: str,
+        data,
+        md5: str | None = None,
     ) -> None:
         """保存插件市场数据到本地缓存"""
         try:
@@ -363,7 +366,8 @@ class PluginRoute(Route):
                 if not await file_token_service.check_token_expired(token):
                     return self._logo_cache[logo_path]
             token = await file_token_service.register_file(
-                logo_path, expire_seconds=300,
+                logo_path,
+                expire_seconds=300,
             )
             self._logo_cache[logo_path] = token
             return token
@@ -858,7 +862,8 @@ class PluginRoute(Route):
             if await anyio.Path(changelog_path).is_file():
                 try:
                     async with await anyio.open_file(
-                        changelog_path, encoding="utf-8",
+                        changelog_path,
+                        encoding="utf-8",
                     ) as f:
                         changelog_content = await f.read()
                     return (

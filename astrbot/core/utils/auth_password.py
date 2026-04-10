@@ -107,7 +107,9 @@ def get_dashboard_login_challenge(stored_hash: str) -> dict[str, Any]:
 
 
 def verify_dashboard_login_proof(
-    stored_hash: str, challenge_nonce: str, proof: str,
+    stored_hash: str,
+    challenge_nonce: str,
+    proof: str,
 ) -> bool:
     """Verify an HMAC-SHA256 login proof generated from the stored password secret."""
     if (
@@ -160,7 +162,8 @@ def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool
         # new clients send plain password, old clients may send md5 of it.
         candidate_md5 = hashlib.md5(candidate_password.encode("utf-8")).hexdigest()
         return hmac.compare_digest(
-            stored_hash.lower(), candidate_md5.lower(),
+            stored_hash.lower(),
+            candidate_md5.lower(),
         ) or hmac.compare_digest(
             stored_hash.lower(),
             candidate_password.lower(),
@@ -193,7 +196,8 @@ def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool
             candidate_password.encode("utf-8"),
         ).hexdigest()
         return hmac.compare_digest(
-            stored_hash.lower(), candidate_sha256.lower(),
+            stored_hash.lower(),
+            candidate_sha256.lower(),
         ) or hmac.compare_digest(stored_hash.lower(), candidate_password.lower())
 
     return False

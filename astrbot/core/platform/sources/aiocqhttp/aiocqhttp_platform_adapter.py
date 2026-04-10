@@ -34,7 +34,10 @@ from .aiocqhttp_message_event import AiocqhttpMessageEvent
 )
 class AiocqhttpAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
@@ -99,7 +102,9 @@ class AiocqhttpAdapter(Platform):
             logger.info("aiocqhttp(OneBot v11) 适配器已连接｡")
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ) -> None:
         is_group = session.message_type == MessageType.GROUP_MESSAGE
         if is_group:
@@ -132,7 +137,8 @@ class AiocqhttpAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
-            user_id=str(event.user_id), nickname=str(event.user_id),
+            user_id=str(event.user_id),
+            nickname=str(event.user_id),
         )
         abm.type = MessageType.OTHER_MESSAGE
         if event.get("group_id"):
@@ -157,7 +163,8 @@ class AiocqhttpAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
-            user_id=str(event.user_id), nickname=str(event.user_id),
+            user_id=str(event.user_id),
+            nickname=str(event.user_id),
         )
         abm.type = MessageType.OTHER_MESSAGE
         if event.get("group_id"):
@@ -181,7 +188,9 @@ class AiocqhttpAdapter(Platform):
         return abm
 
     async def _convert_handle_message_event(
-        self, event: Event, get_reply=True,
+        self,
+        event: Event,
+        get_reply=True,
     ) -> AstrBotMessage:
         """OneBot V11 消息类事件
 
@@ -276,7 +285,8 @@ class AiocqhttpAdapter(Platform):
                     else:
                         try:
                             reply_event_data = await self.bot.call_action(
-                                action="get_msg", message_id=int(m["data"]["id"]),
+                                action="get_msg",
+                                message_id=int(m["data"]["id"]),
                             )
                             reply_event_data["post_type"] = "message"
                             new_event = Event.from_payload(reply_event_data)
@@ -286,7 +296,8 @@ class AiocqhttpAdapter(Platform):
                                 )
                                 continue
                             abm_reply = await self._convert_handle_message_event(
-                                new_event, get_reply=False,
+                                new_event,
+                                get_reply=False,
                             )
                             reply_seg = Reply(
                                 id=abm_reply.message_id,
@@ -326,7 +337,8 @@ class AiocqhttpAdapter(Platform):
                                     no_cache=False,
                                 )
                                 nickname = at_info.get("nick", "") or at_info.get(
-                                    "nickname", "",
+                                    "nickname",
+                                    "",
                                 )
                             is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
                             abm.message.append(At(qq=m["data"]["qq"], name=nickname))

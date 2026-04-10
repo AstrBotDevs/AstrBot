@@ -113,7 +113,7 @@ class AstrBotConfigManager:
             scope="global",
             scope_id="global",
         )
-        abconf_data: dict[str, dict[str, str]] = raw_abconf if raw_abconf else {}
+        abconf_data: dict[str, dict[str, str]] = raw_abconf or {}
         random_word = abconf_name or uuid.uuid4().hex[:8]
         abconf_data[abconf_id] = {
             "path": abconf_path,

@@ -89,8 +89,7 @@ class KBSQLiteDatabase:
             # 创建知识库表索引
             await session.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS idx_kb_kb_id "
-                    "ON knowledge_bases(kb_id)",
+                    "CREATE INDEX IF NOT EXISTS idx_kb_kb_id ON knowledge_bases(kb_id)",
                 ),
             )
             await session.execute(
@@ -109,20 +108,17 @@ class KBSQLiteDatabase:
             # 创建文档表索引
             await session.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS idx_doc_doc_id "
-                    "ON kb_documents(doc_id)",
+                    "CREATE INDEX IF NOT EXISTS idx_doc_doc_id ON kb_documents(doc_id)",
                 ),
             )
             await session.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS idx_doc_kb_id "
-                    "ON kb_documents(kb_id)",
+                    "CREATE INDEX IF NOT EXISTS idx_doc_kb_id ON kb_documents(kb_id)",
                 ),
             )
             await session.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS idx_doc_name "
-                    "ON kb_documents(doc_name)",
+                    "CREATE INDEX IF NOT EXISTS idx_doc_name ON kb_documents(doc_name)",
                 ),
             )
             await session.execute(
@@ -147,8 +143,7 @@ class KBSQLiteDatabase:
             )
             await session.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS idx_media_doc_id "
-                    "ON kb_media(doc_id)",
+                    "CREATE INDEX IF NOT EXISTS idx_media_doc_id ON kb_media(doc_id)",
                 ),
             )
             await session.execute(
@@ -158,8 +153,7 @@ class KBSQLiteDatabase:
             )
             await session.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS idx_media_type "
-                    "ON kb_media(media_type)",
+                    "CREATE INDEX IF NOT EXISTS idx_media_type ON kb_media(media_type)",
                 ),
             )
 
@@ -258,7 +252,8 @@ class KBSQLiteDatabase:
             }
 
     async def get_documents_with_metadata_batch(
-        self, doc_ids: set[str],
+        self,
+        doc_ids: set[str],
     ) -> dict[str, dict]:
         """批量获取文档及其所属知识库元数据
 

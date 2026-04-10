@@ -134,7 +134,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 
     async def _finish_with_result(
-        self, chain: MessageChain, role: str,
+        self,
+        chain: MessageChain,
+        role: str,
     ) -> AgentResponse:
         self.final_llm_resp = LLMResponse(
             role=role,

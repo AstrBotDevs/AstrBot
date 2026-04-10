@@ -121,12 +121,18 @@ class FunctionToolManager:
 
     # MCP-related stub methods for base class compatibility
     async def enable_mcp_server(
-        self, name: str, config: dict[str, Any], init_timeout: int = 30,
+        self,
+        name: str,
+        config: dict[str, Any],
+        init_timeout: int = 30,
     ) -> None:
         """Enable an MCP server (stub)."""
 
     async def disable_mcp_server(
-        self, name: str = "", timeout: int = 10, shutdown_timeout: int = 10,
+        self,
+        name: str = "",
+        timeout: int = 10,
+        shutdown_timeout: int = 10,
     ) -> None:
         """Disable an MCP server (stub)."""
 
@@ -134,7 +140,8 @@ class FunctionToolManager:
         """Initialize MCP clients (stub)."""
 
     async def test_mcp_server_connection(
-        self, config: dict[str, Any],
+        self,
+        config: dict[str, Any],
     ) -> tuple[bool, str]:
         """Test MCP server connection (stub)."""
         return False, "Not implemented"
@@ -266,19 +273,26 @@ class FuncCall(FunctionToolManager):
         self.remove(name)
 
     def get_func_desc_openai_style(
-        self, omit_empty_parameter_field: bool = False,
+        self,
+        omit_empty_parameter_field: bool = False,
     ) -> list[dict[str, Any]]:
         """Get tools in OpenAI style (deprecated, use get_full_tool_set().openai_schema())."""
         tool_set = self.get_full_tool_set()
         return tool_set.openai_schema(omit_empty_parameter_field)
 
     async def enable_mcp_server(
-        self, name: str, config: dict[str, Any], init_timeout: int = 30,
+        self,
+        name: str,
+        config: dict[str, Any],
+        init_timeout: int = 30,
     ) -> None:
         """Enable an MCP server (stub implementation)."""
 
     async def disable_mcp_server(
-        self, name: str = "", timeout: int = 10, shutdown_timeout: int = 10,
+        self,
+        name: str = "",
+        timeout: int = 10,
+        shutdown_timeout: int = 10,
     ) -> None:
         """Disable an MCP server (stub implementation)."""
 
@@ -291,7 +305,8 @@ class FuncCall(FunctionToolManager):
         return True
 
     async def test_mcp_server_connection(
-        self, config: dict[str, Any],
+        self,
+        config: dict[str, Any],
     ) -> tuple[bool, str]:
         """Test MCP server connection (stub implementation)."""
         # Import the actual test function if available

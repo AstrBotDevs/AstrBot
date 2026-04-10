@@ -372,7 +372,8 @@ class ProviderOpenAIOfficial(Provider):
 
             try:
                 resolved_part = await self._resolve_image_part(
-                    url, image_detail=image_detail,
+                    url,
+                    image_detail=image_detail,
                 )
             except Exception as exc:
                 logger.warning(
@@ -402,7 +403,8 @@ class ProviderOpenAIOfficial(Provider):
         return {**message, "content": new_content}
 
     async def _materialize_context_image_parts(
-        self, context_query: list[dict],
+        self,
+        context_query: list[dict],
     ) -> list[dict]:
         return [
             await self._materialize_message_image_parts(message)
@@ -494,7 +496,8 @@ class ProviderOpenAIOfficial(Provider):
         return bool(value)
 
     def _apply_provider_specific_extra_body_overrides(
-        self, extra_body: dict[str, Any],
+        self,
+        extra_body: dict[str, Any],
     ) -> None:
         if self.provider_config.get("provider") != "ollama":
             return
@@ -805,7 +808,9 @@ class ProviderOpenAIOfficial(Provider):
         return str(raw_content) if raw_content is not None else ""
 
     async def _parse_openai_completion(
-        self, completion: ChatCompletion, tools: ToolSet | None,
+        self,
+        completion: ChatCompletion,
+        tools: ToolSet | None,
     ) -> LLMResponse:
         """Parse OpenAI ChatCompletion into LLMResponse"""
         llm_response = LLMResponse("assistant")
@@ -967,7 +972,8 @@ class ProviderOpenAIOfficial(Provider):
 
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
-                message.get("content"), list,
+                message.get("content"),
+                list,
             ):
                 reasoning_content = ""
                 new_content = []  # not including think part
@@ -991,7 +997,8 @@ class ProviderOpenAIOfficial(Provider):
                         json.loads(content)
                     except (json.JSONDecodeError, ValueError):
                         message["content"] = json.dumps(
-                            {"result": content}, ensure_ascii=False,
+                            {"result": content},
+                            ensure_ascii=False,
                         )
 
     async def _handle_api_error(
