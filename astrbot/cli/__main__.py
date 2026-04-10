@@ -1,7 +1,9 @@
 """AstrBot CLI entry point"""
 
 import os
+import platform
 import sys
+from pathlib import Path
 
 import click
 from click.shell_completion import get_completion_class
@@ -20,8 +22,57 @@ logo_tmpl = r"""
 """
 
 
+def print_version_detail() -> None:
+    """Print detailed version info (same for --version and version command)"""
+    from astrbot.core.utils.astrbot_path import astrbot_paths
+
+    click.echo(f"AstrBot:         {__version__}")
+    click.echo(f"Python:          {sys.version.split()[0]}")
+    click.echo(f"System:          {platform.system()} {platform.release()}")
+    click.echo(f"Machine:         {platform.machine()}")
+
+    git_root = Path(astrbot_paths.root) / ".git"
+    if git_root.exists():
+        import subprocess
+
+        try:
+            git_hash = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=str(astrbot_paths.root),
+                text=True,
+            ).strip()
+            git_branch = subprocess.check_output(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=str(astrbot_paths.root),
+                text=True,
+            ).strip()
+            click.echo(f"Git Branch:      {git_branch}")
+            click.echo(f"Git Commit:      {git_hash}")
+        except Exception:
+            pass
+
+    click.echo(f"AstrBot Root:    {astrbot_paths.root}")
+    click.echo(f"Platform:        {platform.platform()}")
+
+
+def version_callback(ctx: click.Context, param: click.Parameter, value: bool) -> bool:
+    """Callback for --version to show detailed version and exit."""
+    if not value:
+        return value
+    print_version_detail()
+    ctx.exit()
+    return value
+
+
 @click.group()
-@click.version_option(__version__, prog_name="AstrBot")
+@click.option(
+    "--version",
+    "-v",
+    is_flag=True,
+    is_eager=True,
+    expose_value=False,
+    callback=lambda ctx, param, value: value and (print_version_detail(), ctx.exit()),
+)
 def cli() -> None:
     """Astrbot
     Agentic IM Chatbot infrastructure that integrates lots of IM platforms, LLMs, plugins and AI feature, and can be your openclaw alternative. ✨
@@ -123,6 +174,16 @@ def completion(shell: str | None) -> None:
 
 
 cli.add_command(completion)
+
+
+@click.command(name="version")
+def version_cmd() -> None:
+    """Display detailed version information"""
+    print_version_detail()
+
+
+cli.add_command(version_cmd)
+
 
 if __name__ == "__main__":
     cli()
