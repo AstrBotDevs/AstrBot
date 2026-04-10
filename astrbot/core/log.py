@@ -99,6 +99,11 @@ class _SSLDebugFilter(logging.Filter):
     _SSL_IGNORE_PATTERNS = (
         "APPLICATION_DATA_AFTER_CLOSE_NOTIFY",
         "SSL: APPLICATION_DATA_AFTER_CLOSE_NOTIFY",
+        "SSL: UNEXPECTED_RECORD",
+        "SSLWantRead",
+        "SSLWantWrite",
+        "SSL_ERROR_CODE",
+        "sslPP: error",
     )
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -108,6 +113,14 @@ class _SSLDebugFilter(logging.Filter):
                 record.levelno = logging.DEBUG
                 record.levelname = "DEBUG"
                 return True
+        # Also check exc_info for the error message
+        if record.exc_info and record.exc_info[1]:
+            exc_msg = str(record.exc_info[1])
+            for pattern in self._SSL_IGNORE_PATTERNS:
+                if pattern in exc_msg:
+                    record.levelno = logging.DEBUG
+                    record.levelname = "DEBUG"
+                    return True
         return True
 
 
@@ -209,6 +222,8 @@ class LogManager:
         "apscheduler": logging.WARNING,
         "quart": logging.WARNING,
         "hypercorn": logging.WARNING,
+        "httpcore": logging.WARNING,
+        "httpx": logging.WARNING,
     }
 
     @classmethod
@@ -303,6 +318,7 @@ class LogManager:
         handler = LogQueueHandler(log_broker)
         handler.setLevel(logging.DEBUG)
         handler.addFilter(_QueueAnsiColorFilter())
+        handler.addFilter(_SSLDebugFilter())
         handler.setFormatter(
             logging.Formatter(
                 "%(ansi_prefix)s[%(asctime)s.%(msecs)03d] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s "
