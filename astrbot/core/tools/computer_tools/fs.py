@@ -32,7 +32,6 @@ Local path resolution rule:
 """
 
 import os
-import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,11 +47,15 @@ from astrbot.core.message.components import File
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_skills_path,
     get_astrbot_temp_path,
-    get_astrbot_workspaces_path,
 )
 
 from ..registry import builtin_tool
-from .permissions import check_admin_permission
+from .util import (
+    check_admin_permission,
+    is_local_runtime,
+    normalize_umo_for_workspace,
+    workspace_root,
+)
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
@@ -62,14 +65,9 @@ _SANDBOX_RUNTIME_TOOL_CONFIG = {
 }
 
 
-def _normalize_umo_for_workspace(umo: str) -> str:
-    normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", umo.strip())
-    return normalized or "unknown"
-
-
 def _restricted_env_path_labels(umo: str) -> list[str]:
     """Labels for the allowed directories in a local(not sandbox) and restricted(not admin) environment"""
-    normalized_umo = _normalize_umo_for_workspace(umo)
+    normalized_umo = normalize_umo_for_workspace(umo)
     return [
         "data/skills",
         f"data/workspaces/{normalized_umo}",
@@ -77,32 +75,17 @@ def _restricted_env_path_labels(umo: str) -> list[str]:
     ]
 
 
-def _workspace_root(umo: str) -> Path:
-    """Root directory for relative paths in local runtime"""
-    normalized_umo = _normalize_umo_for_workspace(umo)
-    return (Path(get_astrbot_workspaces_path()) / normalized_umo).resolve(strict=False)
-
-
 def _read_allowed_roots(umo: str) -> tuple[Path, ...]:
     """Non-admin users can only read files within these directories (and their subdirectories)"""
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
-        _workspace_root(umo),
+        workspace_root(umo),
         Path("/tmp/.astrbot").resolve(strict=False),
     )
 
 
-def _is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
-    cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
-    )
-    provider_settings = cfg.get("provider_settings", {})
-    runtime = str(provider_settings.get("computer_use_runtime", "local"))
-    return runtime == "local"
-
-
 def _is_restricted_env(context: ContextWrapper[AstrAgentContext]) -> bool:
-    if not _is_local_runtime(context):
+    if not is_local_runtime(context):
         return False
     cfg = context.context.context.get_config(
         umo=context.context.event.unified_msg_origin
@@ -120,7 +103,7 @@ def _resolve_tool_path(path: str, *, local_env: bool, umo: str) -> str:
     if candidate.is_absolute():
         return str(candidate.resolve(strict=False))
     if local_env:
-        return str((_workspace_root(umo) / candidate).resolve(strict=False))
+        return str((workspace_root(umo) / candidate).resolve(strict=False))
     return normalized_path
 
 
@@ -129,7 +112,7 @@ def _resolve_user_path(path: str, *, local_env: bool, umo: str) -> Path:
     if candidate.is_absolute():
         return candidate.resolve(strict=False)
     if local_env:
-        return (_workspace_root(umo) / candidate).resolve(strict=False)
+        return (workspace_root(umo) / candidate).resolve(strict=False)
     return (Path.cwd() / candidate).resolve(strict=False)
 
 
@@ -216,7 +199,7 @@ class FileReadTool(FunctionTool):
         offset: int | None = None,
         limit: int | None = None,
     ) -> ToolExecResult:
-        local_env = _is_local_runtime(context)
+        local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         try:
             normalized_path = (
@@ -278,7 +261,7 @@ class FileWriteTool(FunctionTool):
         path: str,
         content: str,
     ) -> ToolExecResult:
-        local_env = _is_local_runtime(context)
+        local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         try:
             normalized_path = (
@@ -356,7 +339,7 @@ class FileEditTool(FunctionTool):
         replace_all: bool = False,
     ) -> ToolExecResult:
         umo = str(context.context.event.unified_msg_origin)
-        local_env = _is_local_runtime(context)
+        local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         try:
             normalized_path = (
@@ -522,7 +505,7 @@ class GrepTool(FunctionTool):
             if restricted:
                 return [str(root) for root in _read_allowed_roots(umo)]
             if local_env:
-                return [str(_workspace_root(umo))]
+                return [str(workspace_root(umo))]
             return ["."]
 
         if restricted:
@@ -554,7 +537,7 @@ class GrepTool(FunctionTool):
         if not normalized_pattern:
             return "Error: `pattern` must be a non-empty string."
 
-        local_env = _is_local_runtime(context)
+        local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         try:
             search_paths = (

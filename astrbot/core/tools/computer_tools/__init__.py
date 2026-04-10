@@ -5,9 +5,7 @@ from .fs import (
     FileUploadTool,
     FileWriteTool,
     GrepTool,
-    _normalize_umo_for_workspace,
 )
-from .permissions import check_admin_permission
 from .python import LocalPythonTool, PythonTool
 from .shell import ExecuteShellTool
 from .shipyard_neo import (
@@ -26,6 +24,7 @@ from .shipyard_neo import (
     RunBrowserSkillTool,
     SyncSkillReleaseTool,
 )
+from .util import check_admin_permission, normalize_umo_for_workspace
 
 __all__ = [
     "AnnotateExecutionTool",
@@ -51,6 +50,6 @@ __all__ = [
     "RollbackSkillReleaseTool",
     "RunBrowserSkillTool",
     "SyncSkillReleaseTool",
-    "_normalize_umo_for_workspace",
+    "normalize_umo_for_workspace",
     "check_admin_permission",
 ]

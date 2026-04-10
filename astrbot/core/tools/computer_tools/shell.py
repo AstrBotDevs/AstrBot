@@ -8,7 +8,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 
 from ..registry import builtin_tool
-from .permissions import check_admin_permission
+from .util import check_admin_permission, is_local_runtime, workspace_root
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
@@ -59,7 +59,20 @@ class ExecuteShellTool(FunctionTool):
             context.context.event.unified_msg_origin,
         )
         try:
-            result = await sb.shell.exec(command, background=background, env=env)
+            cwd: str | None = None
+            if is_local_runtime(context):
+                current_workspace_root = workspace_root(
+                    context.context.event.unified_msg_origin
+                )
+                current_workspace_root.mkdir(parents=True, exist_ok=True)
+                cwd = str(current_workspace_root)
+
+            result = await sb.shell.exec(
+                command,
+                cwd=cwd,
+                background=background,
+                env=env,
+            )
             return json.dumps(result)
         except Exception as e:
             return f"Error executing command: {str(e)}"

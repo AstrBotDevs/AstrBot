@@ -9,7 +9,7 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
-from astrbot.core.tools.computer_tools.permissions import check_admin_permission
+from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
 
 _SHIPYARD_NEO_TOOL_CONFIG = {

@@ -11,7 +11,7 @@ from astrbot.core.computer.computer_client import get_booter, get_local_booter
 from astrbot.core.message.message_event_result import MessageChain
 
 from ..registry import builtin_tool
-from .permissions import check_admin_permission
+from .util import check_admin_permission
 
 _OS_NAME = platform.system()
 _SANDBOX_PYTHON_TOOL_CONFIG = {

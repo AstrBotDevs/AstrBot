@@ -65,7 +65,7 @@ from astrbot.core.tools.computer_tools import (
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
     SyncSkillReleaseTool,
-    _normalize_umo_for_workspace,
+    normalize_umo_for_workspace,
 )
 from astrbot.core.tools.cron_tools import (
     CreateActiveCronTool,
@@ -304,7 +304,7 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
 
 
 def _get_workspace_path_for_umo(umo: str) -> Path:
-    normalized_umo = _normalize_umo_for_workspace(umo)
+    normalized_umo = normalize_umo_for_workspace(umo)
     return Path(get_astrbot_workspaces_path()) / normalized_umo
 
 
