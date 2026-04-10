@@ -129,6 +129,58 @@ async def test_install_targets_site_packages_for_desktop_client(monkeypatch, tmp
 
 
 @pytest.mark.asyncio
+async def test_install_keeps_target_upgrade_enabled_by_default_for_desktop_client(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    site_packages_path = tmp_path / "site-packages"
+    run_pip = _make_run_pip_mock()
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
+        lambda: str(site_packages_path),
+    )
+
+    installer = PipInstaller("")
+    await installer.install(package_name="demo-package")
+
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert "--target" in recorded_args
+    assert "--upgrade" in recorded_args
+    assert "--upgrade-strategy" in recorded_args
+
+
+@pytest.mark.asyncio
+async def test_install_skips_target_upgrade_when_disabled_for_desktop_client(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    site_packages_path = tmp_path / "site-packages"
+    run_pip = _make_run_pip_mock()
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
+        lambda: str(site_packages_path),
+    )
+
+    installer = PipInstaller("")
+    await installer.install(package_name="demo-package", allow_target_upgrade=False)
+
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert "--target" in recorded_args
+    assert "--upgrade" not in recorded_args
+    assert "--upgrade-strategy" not in recorded_args
+
+
+@pytest.mark.asyncio
 async def test_run_pip_in_process_streams_output_lines(monkeypatch):
     logged_lines = []
     first_line_seen = asyncio.Event()

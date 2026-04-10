@@ -1,12 +1,12 @@
 import asyncio
 import os
 from pathlib import Path
-
 from typing import Any, cast
 
 import pytest
 import yaml
 
+from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
@@ -114,12 +114,14 @@ def _mock_missing_requirements_plan(
     missing_names,
     install_lines,
     *,
+    version_mismatch_names=(),
     fallback_reason: str | None = None,
 ):
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.plan_missing_requirements_install",
         lambda requirements_path: MissingRequirementsPlan(
             missing_names=frozenset(missing_names),
+            version_mismatch_names=frozenset(version_mismatch_names),
             install_lines=tuple(install_lines),
             fallback_reason=fallback_reason,
         ),
@@ -441,6 +443,417 @@ async def test_ensure_plugin_requirements_logs_requirements_file_install_for_mis
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("version_mismatch_names", "expected_allow_target_upgrade"),
+    [
+        (set(), False),
+        ({"networkx"}, True),
+    ],
+)
+async def test_ensure_plugin_requirements_sets_target_upgrade_based_on_version_mismatch(
+    plugin_manager_pm: PluginManager,
+    local_updator: Path,
+    monkeypatch,
+    version_mismatch_names,
+    expected_allow_target_upgrade: bool,
+):
+    _write_requirements(local_updator)
+    _mock_missing_requirements_plan(
+        monkeypatch,
+        {"networkx"},
+        ["networkx"],
+        version_mismatch_names=version_mismatch_names,
+    )
+    observed_calls = []
+
+    async def mock_install_requirements(*args, **kwargs):
+        observed_calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        mock_install_requirements,
+    )
+
+    await plugin_manager_pm._ensure_plugin_requirements(
+        str(local_updator),
+        TEST_PLUGIN_DIR,
+    )
+
+    assert len(observed_calls) == 1
+    assert observed_calls[0]["allow_target_upgrade"] is expected_allow_target_upgrade
+
+
+@pytest.mark.asyncio
+async def test_import_plugin_prefers_installed_dependencies_before_first_import(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("networkx\n", encoding="utf-8")
+    events = []
+    sentinel_module = object()
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
+        lambda *, requirements_path: events.append(("prefer", requirements_path)),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: MissingRequirementsPlan(
+            missing_names=frozenset(),
+            install_lines=(),
+            version_mismatch_names=frozenset(),
+        ),
+    )
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        del globals, locals, level
+        events.append(("import", name, tuple(fromlist)))
+        return sentinel_module
+
+    monkeypatch.setattr(star_manager_module, "__import__", fake_import, raising=False)
+
+    imported_module = await plugin_manager_pm._import_plugin_with_dependency_recovery(
+        path="data.plugins.helloworld.main",
+        module_str="main",
+        root_dir_name=TEST_PLUGIN_DIR,
+        requirements_path=str(requirements_path),
+    )
+
+    assert imported_module is sentinel_module
+    assert events == [
+        ("prefer", str(requirements_path)),
+        ("import", "data.plugins.helloworld.main", ("main",)),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_import_reserved_plugin_skips_preloading_user_site_dependencies(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("networkx\n", encoding="utf-8")
+    events = []
+    sentinel_module = object()
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
+        lambda *, requirements_path: events.append(("prefer", requirements_path)),
+    )
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        del globals, locals, level
+        events.append(("import", name, tuple(fromlist)))
+        return sentinel_module
+
+    monkeypatch.setattr(star_manager_module, "__import__", fake_import, raising=False)
+
+    imported_module = await plugin_manager_pm._import_plugin_with_dependency_recovery(
+        path="astrbot.builtin_stars.web_searcher.main",
+        module_str="main",
+        root_dir_name="web_searcher",
+        requirements_path=str(requirements_path),
+        reserved=True,
+    )
+
+    assert imported_module is sentinel_module
+    assert events == [
+        ("import", "astrbot.builtin_stars.web_searcher.main", ("main",)),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_import_plugin_skips_preloading_when_requirements_version_mismatch_detected(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("networkx>=3\n", encoding="utf-8")
+    events = []
+    sentinel_module = object()
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
+        lambda *, requirements_path: events.append(("prefer", requirements_path)),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: MissingRequirementsPlan(
+            missing_names=frozenset({"networkx"}),
+            install_lines=("networkx>=3",),
+            version_mismatch_names=frozenset({"networkx"}),
+        ),
+    )
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        del globals, locals, level
+        events.append(("import", name, tuple(fromlist)))
+        return sentinel_module
+
+    monkeypatch.setattr(star_manager_module, "__import__", fake_import, raising=False)
+
+    imported_module = await plugin_manager_pm._import_plugin_with_dependency_recovery(
+        path="data.plugins.helloworld.main",
+        module_str="main",
+        root_dir_name=TEST_PLUGIN_DIR,
+        requirements_path=str(requirements_path),
+    )
+
+    assert imported_module is sentinel_module
+    assert events == [
+        ("import", "data.plugins.helloworld.main", ("main",)),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_import_plugin_reinstalls_when_version_mismatch_import_fails(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("networkx>=3\n", encoding="utf-8")
+    events = []
+    sentinel_module = object()
+    import_attempts = {"count": 0}
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
+        lambda *, requirements_path: events.append(("prefer", requirements_path)),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: MissingRequirementsPlan(
+            missing_names=frozenset({"networkx"}),
+            install_lines=("networkx>=3",),
+            version_mismatch_names=frozenset({"networkx"}),
+        ),
+    )
+
+    async def mock_check_plugin_dept_update(*, target_plugin=None):
+        events.append(("reinstall", target_plugin))
+
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_check_plugin_dept_update",
+        mock_check_plugin_dept_update,
+    )
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        del globals, locals, level
+        import_attempts["count"] += 1
+        events.append(("import", name, tuple(fromlist), import_attempts["count"]))
+        if import_attempts["count"] == 1:
+            raise ModuleNotFoundError("networkx")
+        return sentinel_module
+
+    monkeypatch.setattr(star_manager_module, "__import__", fake_import, raising=False)
+
+    imported_module = await plugin_manager_pm._import_plugin_with_dependency_recovery(
+        path="data.plugins.helloworld.main",
+        module_str="main",
+        root_dir_name=TEST_PLUGIN_DIR,
+        requirements_path=str(requirements_path),
+    )
+
+    assert imported_module is sentinel_module
+    assert events == [
+        ("import", "data.plugins.helloworld.main", ("main",), 1),
+        ("reinstall", TEST_PLUGIN_DIR),
+        ("import", "data.plugins.helloworld.main", ("main",), 2),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_import_plugin_skips_preloading_when_requirement_precheck_is_unavailable(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("networkx\n", encoding="utf-8")
+    events = []
+    sentinel_module = object()
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
+        lambda *, requirements_path: events.append(("prefer", requirements_path)),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: None,
+    )
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        del globals, locals, level
+        events.append(("import", name, tuple(fromlist)))
+        return sentinel_module
+
+    monkeypatch.setattr(star_manager_module, "__import__", fake_import, raising=False)
+
+    imported_module = await plugin_manager_pm._import_plugin_with_dependency_recovery(
+        path="data.plugins.helloworld.main",
+        module_str="main",
+        root_dir_name=TEST_PLUGIN_DIR,
+        requirements_path=str(requirements_path),
+    )
+
+    assert imported_module is sentinel_module
+    assert events == [
+        ("import", "data.plugins.helloworld.main", ("main",)),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_import_plugin_attempts_dependency_recovery_when_precheck_is_unavailable(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("networkx\n", encoding="utf-8")
+    events = []
+    sentinel_module = object()
+    import_attempts = {"count": 0}
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
+        lambda *, requirements_path: events.append(("prefer", requirements_path)),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: None,
+    )
+
+    async def unexpected_check_plugin_dept_update(*args, **kwargs):
+        raise AssertionError("dependency install fallback should not run")
+
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_check_plugin_dept_update",
+        unexpected_check_plugin_dept_update,
+    )
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        del globals, locals, level
+        import_attempts["count"] += 1
+        events.append(("import", name, tuple(fromlist), import_attempts["count"]))
+        if import_attempts["count"] == 1:
+            raise ModuleNotFoundError("networkx")
+        return sentinel_module
+
+    monkeypatch.setattr(star_manager_module, "__import__", fake_import, raising=False)
+
+    imported_module = await plugin_manager_pm._import_plugin_with_dependency_recovery(
+        path="data.plugins.helloworld.main",
+        module_str="main",
+        root_dir_name=TEST_PLUGIN_DIR,
+        requirements_path=str(requirements_path),
+    )
+
+    assert imported_module is sentinel_module
+    assert events == [
+        ("import", "data.plugins.helloworld.main", ("main",), 1),
+        ("prefer", str(requirements_path)),
+        ("import", "data.plugins.helloworld.main", ("main",), 2),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_import_plugin_does_not_recover_from_plain_import_error(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("networkx\n", encoding="utf-8")
+    events = []
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
+        lambda *, requirements_path: events.append(("prefer", requirements_path)),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: MissingRequirementsPlan(
+            missing_names=frozenset(),
+            install_lines=(),
+            version_mismatch_names=frozenset(),
+        ),
+    )
+
+    async def unexpected_check_plugin_dept_update(*args, **kwargs):
+        raise AssertionError("dependency install fallback should not run")
+
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_check_plugin_dept_update",
+        unexpected_check_plugin_dept_update,
+    )
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        del globals, locals, level
+        events.append(("import", name, tuple(fromlist)))
+        raise ImportError("plugin import error")
+
+    monkeypatch.setattr(star_manager_module, "__import__", fake_import, raising=False)
+
+    with pytest.raises(ImportError, match="plugin import error"):
+        await plugin_manager_pm._import_plugin_with_dependency_recovery(
+            path="data.plugins.helloworld.main",
+            module_str="main",
+            root_dir_name=TEST_PLUGIN_DIR,
+            requirements_path=str(requirements_path),
+        )
+
+    assert events == [
+        ("prefer", str(requirements_path)),
+        ("import", "data.plugins.helloworld.main", ("main",)),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_import_plugin_surfaces_unexpected_recovery_errors(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("networkx\n", encoding="utf-8")
+    events = []
+
+    def raising_prefer_installed_dependencies(*, requirements_path):
+        events.append(("prefer", requirements_path))
+        raise RuntimeError("unexpected recovery failure")
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
+        raising_prefer_installed_dependencies,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: None,
+    )
+
+    async def unexpected_check_plugin_dept_update(*args, **kwargs):
+        raise AssertionError("dependency install fallback should not run")
+
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_check_plugin_dept_update",
+        unexpected_check_plugin_dept_update,
+    )
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        del globals, locals, level
+        events.append(("import", name, tuple(fromlist)))
+        raise ModuleNotFoundError("networkx")
+
+    monkeypatch.setattr(star_manager_module, "__import__", fake_import, raising=False)
+
+    with pytest.raises(RuntimeError, match="unexpected recovery failure"):
+        await plugin_manager_pm._import_plugin_with_dependency_recovery(
+            path="data.plugins.helloworld.main",
+            module_str="main",
+            root_dir_name=TEST_PLUGIN_DIR,
+            requirements_path=str(requirements_path),
+        )
+
+    assert events == [
+        ("import", "data.plugins.helloworld.main", ("main",)),
+        ("prefer", str(requirements_path)),
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("dependency_install_fails", [False, True])
 async def test_update_plugin_dependency_install_flow(
     plugin_manager_pm: PluginManager,
@@ -639,6 +1052,42 @@ async def test_ensure_plugin_requirements_falls_back_when_missing_names_have_no_
     )
 
     assert events == [("deps", str(requirements_path))]
+
+
+@pytest.mark.asyncio
+async def test_ensure_plugin_requirements_fallback_full_install_keeps_upgrade_for_version_mismatch(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("boto3>=2\n", encoding="utf-8")
+    observed_calls = []
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda path: MissingRequirementsPlan(
+            missing_names=frozenset({"boto3"}),
+            install_lines=(),
+            version_mismatch_names=frozenset({"boto3"}),
+            fallback_reason="unmapped missing requirement names",
+        ),
+    )
+
+    async def mock_install_requirements(*args, **kwargs):
+        observed_calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        mock_install_requirements,
+    )
+
+    await plugin_manager_pm._ensure_plugin_requirements(
+        str(local_updator),
+        TEST_PLUGIN_DIR,
+    )
+
+    assert len(observed_calls) == 1
+    assert observed_calls[0]["requirements_path"] == str(requirements_path)
+    assert observed_calls[0]["allow_target_upgrade"] is True
 
 
 @pytest.mark.asyncio

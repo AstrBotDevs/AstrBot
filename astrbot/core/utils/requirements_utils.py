@@ -30,9 +30,16 @@ class ParsedPackageInput:
 
 
 @dataclass(frozen=True)
+class MissingRequirementsAnalysis:
+    missing_names: frozenset[str]
+    version_mismatch_names: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
 class MissingRequirementsPlan:
     missing_names: frozenset[str]
     install_lines: tuple[str, ...]
+    version_mismatch_names: frozenset[str] = frozenset()
     fallback_reason: str | None = None
 
 
@@ -394,15 +401,26 @@ def find_missing_requirements(requirements_path: str) -> set[str] | None:
 def find_missing_requirements_from_lines(
     requirement_lines: Sequence[str],
 ) -> set[str] | None:
+    analysis = classify_missing_requirements_from_lines(requirement_lines)
+    if analysis is None:
+        return None
+
+    return set(analysis.missing_names)
+
+
+def classify_missing_requirements_from_lines(
+    requirement_lines: Sequence[str],
+) -> MissingRequirementsAnalysis | None:
     required = list(iter_requirements(lines=requirement_lines))
     if not required:
-        return set()
+        return MissingRequirementsAnalysis(missing_names=frozenset())
 
     installed = collect_installed_distribution_versions(get_requirement_check_paths())
     if installed is None:
         return None
 
     missing: set[str] = set()
+    version_mismatch_names: set[str] = set()
     for name, specifier in required:
         installed_version = installed.get(name)
         if not installed_version:
@@ -410,8 +428,12 @@ def find_missing_requirements_from_lines(
             continue
         if specifier and not _specifier_contains_version(specifier, installed_version):
             missing.add(name)
+            version_mismatch_names.add(name)
 
-    return missing
+    return MissingRequirementsAnalysis(
+        missing_names=frozenset(missing),
+        version_mismatch_names=frozenset(version_mismatch_names),
+    )
 
 
 def build_missing_requirements_install_lines(
@@ -449,9 +471,11 @@ def plan_missing_requirements_install(
     if not can_precheck or requirement_lines is None:
         return None
 
-    missing = find_missing_requirements_from_lines(requirement_lines)
-    if missing is None:
+    analysis = classify_missing_requirements_from_lines(requirement_lines)
+    if analysis is None:
         return None
+    missing = analysis.missing_names
+    version_mismatch_names = analysis.version_mismatch_names
 
     install_lines = build_missing_requirements_install_lines(
         requirements_path,
@@ -468,12 +492,14 @@ def plan_missing_requirements_install(
         )
         return MissingRequirementsPlan(
             missing_names=frozenset(missing),
+            version_mismatch_names=frozenset(version_mismatch_names),
             install_lines=(),
             fallback_reason="unmapped missing requirement names",
         )
 
     return MissingRequirementsPlan(
         missing_names=frozenset(missing),
+        version_mismatch_names=frozenset(version_mismatch_names),
         install_lines=install_lines,
     )
 

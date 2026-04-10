@@ -60,6 +60,48 @@ def test_check_env(monkeypatch):
         check_env()
 
 
+def test_check_env_appends_user_site_packages_after_runtime_paths(monkeypatch):
+    astrbot_root = "/tmp/astrbot-root"
+    site_packages_path = "/tmp/astrbot-site-packages"
+    original_sys_path = list(sys.path)
+
+    monkeypatch.setattr(sys, "version_info", _version_info(3, 12))
+    monkeypatch.setattr("main.get_astrbot_root", lambda: astrbot_root)
+    monkeypatch.setattr("main.get_astrbot_site_packages_path", lambda: site_packages_path)
+    monkeypatch.setattr("main.get_astrbot_config_path", lambda: "/tmp/config")
+    monkeypatch.setattr("main.get_astrbot_plugin_path", lambda: "/tmp/plugins")
+    monkeypatch.setattr("main.get_astrbot_temp_path", lambda: "/tmp/temp")
+    monkeypatch.setattr("main.get_astrbot_knowledge_base_path", lambda: "/tmp/kb")
+    monkeypatch.setattr(sys, "path", ["/runtime/lib", *original_sys_path])
+
+    with mock.patch("os.makedirs"):
+        check_env()
+
+    assert sys.path[0] == astrbot_root
+    assert sys.path[-1] == site_packages_path
+    assert sys.path.index(site_packages_path) > sys.path.index("/runtime/lib")
+
+
+def test_check_env_does_not_append_duplicate_user_site_packages(monkeypatch):
+    astrbot_root = "/tmp/astrbot-root"
+    site_packages_path = "/tmp/astrbot-site-packages"
+    original_sys_path = list(sys.path)
+
+    monkeypatch.setattr(sys, "version_info", _version_info(3, 12))
+    monkeypatch.setattr("main.get_astrbot_root", lambda: astrbot_root)
+    monkeypatch.setattr("main.get_astrbot_site_packages_path", lambda: site_packages_path)
+    monkeypatch.setattr("main.get_astrbot_config_path", lambda: "/tmp/config")
+    monkeypatch.setattr("main.get_astrbot_plugin_path", lambda: "/tmp/plugins")
+    monkeypatch.setattr("main.get_astrbot_temp_path", lambda: "/tmp/temp")
+    monkeypatch.setattr("main.get_astrbot_knowledge_base_path", lambda: "/tmp/kb")
+    monkeypatch.setattr(sys, "path", [astrbot_root, *original_sys_path, site_packages_path])
+
+    with mock.patch("os.makedirs"):
+        check_env()
+
+    assert sys.path.count(site_packages_path) == 1
+
+
 def test_version_info_comparisons():
     """Test _version_info comparison operators with tuples and other instances."""
     v3_10 = _version_info(3, 10)
