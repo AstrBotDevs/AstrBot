@@ -25,7 +25,8 @@ To keep large file handling consistent, store large files under `data/plugin_dat
 You can fetch the plugin data directory with:
 
 ```py
+from pathlib import Path
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-plugin_data_path = get_astrbot_data_path() / "plugin_data" / self.name  # self.name is the plugin name; available in v4.9.2 and above. For lower versions, specify the plugin name yourself.
+plugin_data_path = Path(get_astrbot_data_path()) / "plugin_data" / self.name  # self.name is the plugin name; available in v4.9.2 and above. For lower versions, specify the plugin name yourself.
 ```
