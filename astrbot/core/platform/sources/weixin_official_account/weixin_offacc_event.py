@@ -82,8 +82,8 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain) -> None:
         message_obj = self.message_obj
-        active_send_mode = cast(dict, message_obj.raw_message).get(
-            "active_send_mode", False
+        active_send_mode = cast("dict", message_obj.raw_message).get(
+            "active_send_mode", False,
         )
         for comp in message.chain:
             if isinstance(comp, Plain):
@@ -95,7 +95,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                 else:
                     # disable passive sending, just store the chunks in
                     logger.debug(
-                        f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent."
+                        f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent.",
                     )
                     self.message_out["cached_xml"] = plain_chunks
             elif isinstance(comp, Image):
@@ -120,10 +120,10 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     else:
                         reply = ImageReply(
                             media_id=response["media_id"],
-                            message=cast(dict, self.message_obj.raw_message)["message"],
+                            message=cast("dict", self.message_obj.raw_message)["message"],
                         )
                         xml = reply.render()
-                        future = cast(dict, self.message_obj.raw_message)["future"]
+                        future = cast("dict", self.message_obj.raw_message)["future"]
                         assert isinstance(future, asyncio.Future)
                         future.set_result(xml)
 
@@ -139,7 +139,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                             logger.error(f"微信公众平台上传语音失败: {e}")
                             await self.send(
                                 MessageChain().message(
-                                    f"微信公众平台上传语音失败: {e}"
+                                    f"微信公众平台上传语音失败: {e}",
                                 ),
                             )
                             return
@@ -153,17 +153,17 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         else:
                             reply = VoiceReply(
                                 media_id=response["media_id"],
-                                message=cast(dict, self.message_obj.raw_message)[
+                                message=cast("dict", self.message_obj.raw_message)[
                                     "message"
                                 ],
                             )
                             xml = reply.render()
-                            future = cast(dict, self.message_obj.raw_message)["future"]
+                            future = cast("dict", self.message_obj.raw_message)["future"]
                             assert isinstance(future, asyncio.Future)
                             future.set_result(xml)
                 finally:
                     if record_path_amr != record_path and os.path.exists(
-                        record_path_amr
+                        record_path_amr,
                     ):
                         try:
                             os.remove(record_path_amr)

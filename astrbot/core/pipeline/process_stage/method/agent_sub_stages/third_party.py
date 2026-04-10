@@ -64,8 +64,7 @@ async def run_third_party_agent(
     stream_to_general: bool = False,
     custom_error_message: str | None = None,
 ) -> AsyncGenerator[tuple[MessageChain, bool], None]:
-    """
-    运行第三方 agent runner 并转换响应格式
+    """运行第三方 agent runner 并转换响应格式
     类似于 run_agent 函数，但专门处理第三方 agent runner
     """
     try:
@@ -86,7 +85,7 @@ async def run_third_party_agent(
             err_msg = (
                 f"Error occurred during AI execution.\n"
                 f"Error Type: {type(e).__name__} (3rd party)\n"
-                f"Error Message: {str(e)}"
+                f"Error Message: {e!s}"
             )
         yield MessageChain().message(err_msg), True
 
@@ -187,7 +186,7 @@ class ThirdPartyAgentSubStage(Stage):
         )
 
     async def _resolve_persona_custom_error_message(
-        self, event: AstrMessageEvent
+        self, event: AstrMessageEvent,
     ) -> str | None:
         try:
             conversation_persona_id = await resolve_event_conversation_persona_id(
@@ -241,7 +240,7 @@ class ThirdPartyAgentSubStage(Stage):
 
         if runner.done():
             final_chain, is_runner_error = aggregator.finalize(
-                runner.get_final_llm_resp()
+                runner.get_final_llm_resp(),
             )
             event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)
             event.set_result(
@@ -287,12 +286,12 @@ class ThirdPartyAgentSubStage(Stage):
         yield
 
     async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
+        self, event: AstrMessageEvent, provider_wake_prefix: str,
     ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
         if provider_wake_prefix and not event.message_str.startswith(
-            provider_wake_prefix
+            provider_wake_prefix,
         ):
             return
 
@@ -305,7 +304,7 @@ class ThirdPartyAgentSubStage(Stage):
             return
         if not self.prov_cfg:
             logger.error(
-                f"Agent Runner 提供商 {self.prov_id} 配置不存在，请前往配置页面修改配置。"
+                f"Agent Runner 提供商 {self.prov_id} 配置不存在，请前往配置页面修改配置。",
             )
             return
 

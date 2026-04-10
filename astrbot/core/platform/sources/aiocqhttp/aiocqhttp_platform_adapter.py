@@ -48,7 +48,7 @@ class AiocqhttpAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="aiocqhttp",
             description="适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。",
-            id=cast(str, self.config.get("id")),
+            id=cast("str", self.config.get("id")),
             support_streaming_message=False,
         )
 
@@ -145,7 +145,7 @@ class AiocqhttpAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
-            user_id=str(event.user_id), nickname=str(event.user_id)
+            user_id=str(event.user_id), nickname=str(event.user_id),
         )
         abm.type = MessageType.OTHER_MESSAGE
         if event.get("group_id"):
@@ -170,7 +170,7 @@ class AiocqhttpAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
-            user_id=str(event.user_id), nickname=str(event.user_id)
+            user_id=str(event.user_id), nickname=str(event.user_id),
         )
         abm.type = MessageType.OTHER_MESSAGE
         if event.get("group_id"):
@@ -399,14 +399,14 @@ class AiocqhttpAdapter(Platform):
                     try:
                         if t not in ComponentTypes:
                             logger.warning(
-                                f"不支持的消息段类型，已忽略: {t}, data={m['data']}"
+                                f"不支持的消息段类型，已忽略: {t}, data={m['data']}",
                             )
                             continue
                         a = ComponentTypes[t](**m["data"])
                         abm.message.append(a)
                     except Exception as e:
                         logger.exception(
-                            f"消息段解析失败: type={t}, data={m['data']}. {e}"
+                            f"消息段解析失败: type={t}, data={m['data']}. {e}",
                         )
                         continue
 

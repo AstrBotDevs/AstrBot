@@ -78,6 +78,7 @@ class AstrBotExporter:
 
         Returns:
             str: 生成的 ZIP 文件路径
+
         """
         if output_dir is None:
             output_dir = get_astrbot_backups_path()
@@ -98,7 +99,7 @@ class AstrBotExporter:
                     await progress_callback("main_db", 0, 100, "正在导出主数据库...")
                 main_data = await self._export_main_database()
                 main_db_json = json.dumps(
-                    main_data, ensure_ascii=False, indent=2, default=str
+                    main_data, ensure_ascii=False, indent=2, default=str,
                 )
                 zf.writestr("databases/main_db.json", main_db_json)
                 self._add_checksum("databases/main_db.json", main_db_json)
@@ -114,17 +115,17 @@ class AstrBotExporter:
                 if self.kb_manager:
                     if progress_callback:
                         await progress_callback(
-                            "kb_metadata", 0, 100, "正在导出知识库元数据..."
+                            "kb_metadata", 0, 100, "正在导出知识库元数据...",
                         )
                     kb_meta_data = await self._export_kb_metadata()
                     kb_meta_json = json.dumps(
-                        kb_meta_data, ensure_ascii=False, indent=2, default=str
+                        kb_meta_data, ensure_ascii=False, indent=2, default=str,
                     )
                     zf.writestr("databases/kb_metadata.json", kb_meta_json)
                     self._add_checksum("databases/kb_metadata.json", kb_meta_json)
                     if progress_callback:
                         await progress_callback(
-                            "kb_metadata", 100, 100, "知识库元数据导出完成"
+                            "kb_metadata", 100, 100, "知识库元数据导出完成",
                         )
 
                     # 导出每个知识库的文档数据
@@ -140,7 +141,7 @@ class AstrBotExporter:
                             )
                         doc_data = await self._export_kb_documents(kb_helper)
                         doc_json = json.dumps(
-                            doc_data, ensure_ascii=False, indent=2, default=str
+                            doc_data, ensure_ascii=False, indent=2, default=str,
                         )
                         doc_path = f"databases/kb_{kb_id}/documents.json"
                         zf.writestr(doc_path, doc_json)
@@ -154,7 +155,7 @@ class AstrBotExporter:
 
                     if progress_callback:
                         await progress_callback(
-                            "kb_documents", total_kbs, total_kbs, "知识库文档导出完成"
+                            "kb_documents", total_kbs, total_kbs, "知识库文档导出完成",
                         )
 
                 # 3. 导出配置文件
@@ -178,7 +179,7 @@ class AstrBotExporter:
                 # 5. 导出插件和其他目录
                 if progress_callback:
                     await progress_callback(
-                        "directories", 0, 100, "正在导出插件和数据目录..."
+                        "directories", 0, 100, "正在导出插件和数据目录...",
                     )
                 dir_stats = await self._export_directories(zf)
                 if progress_callback:
@@ -216,7 +217,7 @@ class AstrBotExporter:
                         self._model_to_dict(record) for record in records
                     ]
                     logger.debug(
-                        f"导出表 {table_name}: {len(export_data[table_name])} 条记录"
+                        f"导出表 {table_name}: {len(export_data[table_name])} 条记录",
                     )
                 except Exception as e:
                     logger.warning(f"导出表 {table_name} 失败: {e}")
@@ -240,7 +241,7 @@ class AstrBotExporter:
                         self._model_to_dict(record) for record in records
                     ]
                     logger.debug(
-                        f"导出知识库表 {table_name}: {len(export_data[table_name])} 条记录"
+                        f"导出知识库表 {table_name}: {len(export_data[table_name])} 条记录",
                     )
                 except Exception as e:
                     logger.warning(f"导出知识库表 {table_name} 失败: {e}")
@@ -286,7 +287,7 @@ class AstrBotExporter:
             logger.warning(f"导出 FAISS 索引失败: {e}")
 
     async def _export_kb_media_files(
-        self, zf: zipfile.ZipFile, kb_helper: Any, kb_id: str
+        self, zf: zipfile.ZipFile, kb_helper: Any, kb_id: str,
     ) -> None:
         """导出知识库的多媒体文件"""
         try:
@@ -305,12 +306,13 @@ class AstrBotExporter:
             logger.warning(f"导出知识库媒体文件失败: {e}")
 
     async def _export_directories(
-        self, zf: zipfile.ZipFile
+        self, zf: zipfile.ZipFile,
     ) -> dict[str, dict[str, int]]:
         """导出插件和其他数据目录
 
         Returns:
             dict: 每个目录的统计信息 {dir_name: {"files": count, "size": bytes}}
+
         """
         stats: dict[str, dict[str, int]] = {}
         backup_directories = get_backup_directories()
@@ -347,7 +349,7 @@ class AstrBotExporter:
 
                 stats[dir_name] = {"files": file_count, "size": total_size}
                 logger.debug(
-                    f"导出目录 {dir_name}: {file_count} 个文件, {total_size} 字节"
+                    f"导出目录 {dir_name}: {file_count} 个文件, {total_size} 字节",
                 )
             except Exception as e:
                 logger.warning(f"导出目录 {dir_path} 失败: {e}")
@@ -356,7 +358,7 @@ class AstrBotExporter:
         return stats
 
     async def _export_attachments(
-        self, zf: zipfile.ZipFile, attachments: list[dict]
+        self, zf: zipfile.ZipFile, attachments: list[dict],
     ) -> None:
         """导出附件文件"""
         for attachment in attachments:

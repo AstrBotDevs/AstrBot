@@ -60,7 +60,7 @@ class AstrMessageEvent(abc.ABC):
             except (ValueError, TypeError, AttributeError):
                 logger.warning(
                     f"Failed to convert message type {message_obj.type!r} to MessageType. "
-                    f"Falling back to FRIEND_MESSAGE."
+                    f"Falling back to FRIEND_MESSAGE.",
                 )
                 message_type = MessageType.FRIEND_MESSAGE
         self.session = MessageSession(

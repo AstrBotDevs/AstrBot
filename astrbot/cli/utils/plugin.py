@@ -32,7 +32,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
         release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
         try:
             with httpx.Client(
-                proxy=proxy if proxy else None,
+                proxy=proxy or None,
                 follow_redirects=True,
             ) as client:
                 resp = client.get(release_url)
@@ -56,7 +56,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
 
         # Download and extract
         with httpx.Client(
-            proxy=proxy if proxy else None,
+            proxy=proxy or None,
             follow_redirects=True,
         ) as client:
             resp = client.get(download_url)
@@ -219,7 +219,7 @@ def manage_plugin(
     # Check if plugin exists
     if is_update and not target_path.exists():
         raise click.ClickException(
-            f"Plugin {plugin_name} is not installed and cannot be updated"
+            f"Plugin {plugin_name} is not installed and cannot be updated",
         )
 
     # Backup existing plugin
@@ -238,7 +238,7 @@ def manage_plugin(
         if is_update and backup_path is not None and backup_path.exists():
             shutil.rmtree(backup_path)
         click.echo(
-            f"Plugin {plugin_name} {'updated' if is_update else 'installed'} successfully"
+            f"Plugin {plugin_name} {'updated' if is_update else 'installed'} successfully",
         )
     except Exception as e:
         if target_path.exists():

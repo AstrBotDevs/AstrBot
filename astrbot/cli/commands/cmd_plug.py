@@ -33,7 +33,7 @@ def display_plugins(plugins, title=None, color=None) -> None:
         click.echo(click.style(title, fg=color, bold=True))
 
     click.echo(
-        f"{'Name':<20} {'Version':<10} {'Status':<10} {'Author':<15} {'Description':<30}"
+        f"{'Name':<20} {'Version':<10} {'Status':<10} {'Author':<15} {'Description':<30}",
     )
     click.echo("-" * 85)
 
@@ -84,7 +84,7 @@ def new(name: str) -> None:
     # Rewrite README.md
     with open(plug_path / "README.md", "w", encoding="utf-8") as f:
         f.write(
-            f"# {name}\n\n{desc}\n\n# Support\n\n[Documentation](https://astrbot.app)\n"
+            f"# {name}\n\n{desc}\n\n# Support\n\n[Documentation](https://astrbot.app)\n",
         )
 
     # Rewrite main.py
@@ -180,7 +180,7 @@ def remove(name: str) -> None:
     plugin_path = plugin["local_path"]
 
     click.confirm(
-        f"Are you sure you want to uninstall plugin {name}?", default=False, abort=True
+        f"Are you sure you want to uninstall plugin {name}?", default=False, abort=True,
     )
 
     try:
@@ -211,7 +211,7 @@ def update(name: str, proxy: str | None) -> None:
 
         if not plugin:
             raise click.ClickException(
-                f"Plugin {name} does not need updating or cannot be updated"
+                f"Plugin {name} does not need updating or cannot be updated",
             )
 
         manage_plugin(plugin, plug_path, is_update=True, proxy=proxy)

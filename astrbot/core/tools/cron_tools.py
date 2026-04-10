@@ -70,11 +70,11 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["action"],
-        }
+        },
     )
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self, context: ContextWrapper[AstrAgentContext], **kwargs,
     ) -> ToolExecResult:
         cron_mgr = context.context.context.cron_manager
         if cron_mgr is None:
@@ -219,7 +219,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             lines = []
             for j in jobs:
                 lines.append(
-                    f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={j.next_run_time}"
+                    f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={j.next_run_time}",
                 )
             return "\n".join(lines)
 

@@ -16,7 +16,7 @@ for handler in logging.root.handlers[:]:
 
 class QQOfficialWebhook:
     def __init__(
-        self, config: dict, event_queue: asyncio.Queue, botpy_client: Client
+        self, config: dict, event_queue: asyncio.Queue, botpy_client: Client,
     ) -> None:
         self.appid = config["appid"]
         self.secret = config["secret"]
@@ -96,6 +96,7 @@ class QQOfficialWebhook:
 
         Returns:
             响应数据
+
         """
         msg: dict = await request.json
         logger.debug(f"收到 qq_official_webhook 回调: {msg}")
@@ -106,7 +107,7 @@ class QQOfficialWebhook:
 
         if opcode == 13:
             # validation
-            signed = await self.webhook_validation(cast(dict, data))
+            signed = await self.webhook_validation(cast("dict", data))
             print(signed)
             return signed
 

@@ -20,7 +20,7 @@ class SubAgentOrchestrator:
     """
 
     def __init__(
-        self, tool_mgr: FunctionToolManager, persona_mgr: PersonaManager
+        self, tool_mgr: FunctionToolManager, persona_mgr: PersonaManager,
     ) -> None:
         self._tool_mgr = tool_mgr
         self._persona_mgr = persona_mgr
@@ -68,7 +68,7 @@ class SubAgentOrchestrator:
                 if prompt:
                     instructions = prompt
                 begin_dialogs = copy.deepcopy(
-                    persona_data.get("_begin_dialogs_processed")
+                    persona_data.get("_begin_dialogs_processed"),
                 )
                 tools = persona_data.get("tools")
                 if public_description == "" and prompt:

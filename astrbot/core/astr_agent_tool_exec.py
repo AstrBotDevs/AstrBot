@@ -53,7 +53,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return [image_urls_raw]
 
         if isinstance(image_urls_raw, (Sequence, AbstractSet)) and not isinstance(
-            image_urls_raw, (str, bytes, bytearray)
+            image_urls_raw, (str, bytes, bytearray),
         ):
             return [item for item in image_urls_raw if isinstance(item, str)]
 
@@ -65,7 +65,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
     @classmethod
     async def _collect_image_urls_from_message(
-        cls, run_context: ContextWrapper[AstrAgentContext]
+        cls, run_context: ContextWrapper[AstrAgentContext],
     ) -> list[str]:
         urls: list[str] = []
         event = getattr(run_context.context, "event", None)
@@ -133,7 +133,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             is_bg = tool_args.pop("background_task", False)
             if is_bg:
                 async for r in cls._execute_handoff_background(
-                    tool, run_context, **tool_args
+                    tool, run_context, **tool_args,
                 ):
                     yield r
                 return
@@ -273,7 +273,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # Use per-subagent provider override if configured; otherwise fall back
         # to the current/default provider resolution.
         prov_id = getattr(
-            tool, "provider_id", None
+            tool, "provider_id", None,
         ) or await ctx.get_current_chat_provider_id(umo)
 
         # prepare begin dialogs
@@ -286,7 +286,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     contexts.append(
                         dialog
                         if isinstance(dialog, Message)
-                        else Message.model_validate(dialog)
+                        else Message.model_validate(dialog),
                     )
                 except Exception:
                     continue
@@ -307,7 +307,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             stream=stream,
         )
         yield mcp.types.CallToolResult(
-            content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
+            content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)],
         )
 
     @classmethod
@@ -412,7 +412,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         result_text = ""
         try:
             async for r in cls._execute_local(
-                tool, run_context, tool_call_timeout=3600, **tool_args
+                tool, run_context, tool_call_timeout=3600, **tool_args,
             ):
                 # collect results, currently we just collect the text results
                 if isinstance(r, mcp.types.CallToolResult):
@@ -503,7 +503,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
         req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
-            background_task_result=bg
+            background_task_result=bg,
         )
         req.prompt = (
             "Proceed according to your system instructions. "
@@ -516,11 +516,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if not req.func_tool:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(
-            ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
+            ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool),
         )
 
         result = await build_main_agent(
-            event=cron_event, plugin_context=ctx, config=config, req=req
+            event=cron_event, plugin_context=ctx, config=config, req=req,
         )
         if not result:
             logger.error(f"Failed to build main agent for background task {tool_name}.")
@@ -583,7 +583,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             awaitable = tool.call
             method_name = "call"
         elif hasattr(tool, "run"):
-            awaitable = getattr(tool, "run")
+            awaitable = tool.run
             method_name = "run"
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
@@ -620,7 +620,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                                     MessageChain(
                                         chain=res.chain,
                                         type="tool_direct_result",
-                                    )
+                                    ),
                                 )
                             except Exception as e:
                                 logger.error(
@@ -705,7 +705,7 @@ async def call_local_llm_tool(
             handler_param_str = "(unable to inspect signature)"
 
         raise Exception(
-            f"Tool handler parameter mismatch, please check the handler definition. Handler parameters: {handler_param_str}"
+            f"Tool handler parameter mismatch, please check the handler definition. Handler parameters: {handler_param_str}",
         ) from e
     except Exception as e:
         trace_ = traceback.format_exc()

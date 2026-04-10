@@ -29,13 +29,13 @@ class botClient(Client):
 
     # 收到群消息
     async def on_group_at_message_create(
-        self, message: botpy.message.GroupMessage
+        self, message: botpy.message.GroupMessage,
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
         )
-        abm.group_id = cast(str, message.group_openid)
+        abm.group_id = cast("str", message.group_openid)
         abm.session_id = abm.group_id
         self.platform.remember_session_scene(abm.session_id, "group")
         self._commit(abm)
@@ -53,7 +53,7 @@ class botClient(Client):
 
     # 收到私聊消息
     async def on_direct_message_create(
-        self, message: botpy.message.DirectMessage
+        self, message: botpy.message.DirectMessage,
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
@@ -121,7 +121,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         message_chain: MessageChain,
     ) -> None:
         await QQOfficialPlatformAdapter._send_by_session_common(
-            cast(Any, self),
+            cast("Any", self),
             session,
             message_chain,
         )
@@ -149,7 +149,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         return PlatformMetadata(
             name="qq_official_webhook",
             description="QQ 机器人官方 API 适配器",
-            id=cast(str, self.config.get("id")),
+            id=cast("str", self.config.get("id")),
             support_proactive_message=True,
         )
 

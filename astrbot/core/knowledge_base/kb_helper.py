@@ -61,8 +61,7 @@ async def _repair_and_translate_chunk_with_retry(
     rate_limiter: RateLimiter,
     max_retries: int = 2,
 ) -> list[str]:
-    """
-    Repairs, translates, and optionally re-chunks a single text chunk using the small LLM, with rate limiting.
+    """Repairs, translates, and optionally re-chunks a single text chunk using the small LLM, with rate limiting.
     """
     # 为了防止 LLM 上下文污染，在 user_prompt 中也加入明确的指令
     user_prompt = f"""IGNORE ALL PREVIOUS INSTRUCTIONS. Your ONLY task is to process the following text chunk according to the system prompt provided.
@@ -76,7 +75,7 @@ Text chunk to process:
         try:
             async with rate_limiter:
                 response = await repair_llm_service.text_chat(
-                    prompt=user_prompt, system_prompt=TEXT_REPAIR_SYSTEM_PROMPT
+                    prompt=user_prompt, system_prompt=TEXT_REPAIR_SYSTEM_PROMPT,
                 )
 
             llm_output = response.completion_text
@@ -94,16 +93,15 @@ Text chunk to process:
             if matches:
                 # Further cleaning to ensure no empty strings are returned
                 return [m.strip() for m in matches if m.strip()]
-            else:
-                # If no valid tags and not explicitly discarded, discard it to be safe.
-                return []
+            # If no valid tags and not explicitly discarded, discard it to be safe.
+            return []
         except Exception as e:
             logger.warning(
-                f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {str(e)}"
+                f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {e!s}",
             )
 
     logger.error(
-        f"  - Failed to process chunk after {max_retries + 1} attempts. Using original text."
+        f"  - Failed to process chunk after {max_retries + 1} attempts. Using original text.",
     )
     return [chunk]
 
@@ -255,7 +253,7 @@ class KBHelper:
                 # 否则，执行标准的文件解析和分块流程
                 if file_content is None:
                     raise ValueError(
-                        "当未提供 pre_chunked_text 时，file_content 不能为空。"
+                        "当未提供 pre_chunked_text 时，file_content 不能为空。",
                     )
 
                 file_size = len(file_content)
@@ -516,11 +514,11 @@ class KBHelper:
         # 获取 Tavily API 密钥
         config = self.prov_mgr.acm.default_conf
         tavily_keys = config.get("provider_settings", {}).get(
-            "websearch_tavily_key", []
+            "websearch_tavily_key", [],
         )
         if not tavily_keys:
             raise ValueError(
-                "Error: Tavily API key is not configured in provider_settings."
+                "Error: Tavily API key is not configured in provider_settings.",
             )
 
         # 阶段1: 从 URL 提取内容
@@ -552,11 +550,11 @@ class KBHelper:
 
         if enable_cleaning and not final_chunks:
             raise ValueError(
-                "内容清洗后未提取到有效文本。请尝试关闭内容清洗功能，或更换更高性能的LLM模型后重试。"
+                "内容清洗后未提取到有效文本。请尝试关闭内容清洗功能，或更换更高性能的LLM模型后重试。",
             )
 
         # 创建一个虚拟文件名
-        file_name = url.split("/")[-1] or f"document_from_{url}"
+        file_name = url.rsplit("/", maxsplit=1)[-1] or f"document_from_{url}"
         if not Path(file_name).suffix:
             file_name += ".url"
 
@@ -585,21 +583,20 @@ class KBHelper:
         chunk_size: int = 512,
         chunk_overlap: int = 50,
     ) -> list[str]:
-        """
-        对从 URL 获取的内容进行清洗、修复、翻译和重新分块。
+        """对从 URL 获取的内容进行清洗、修复、翻译和重新分块。
         """
         if not enable_cleaning:
             # 如果不启用清洗，则使用从前端传递的参数进行分块
             logger.info(
-                f"内容清洗未启用，使用指定参数进行分块: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
+                f"内容清洗未启用，使用指定参数进行分块: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}",
             )
             return await self.chunker.chunk(
-                content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+                content, chunk_size=chunk_size, chunk_overlap=chunk_overlap,
             )
 
         if not cleaning_provider_id:
             logger.warning(
-                "启用了内容清洗，但未提供 cleaning_provider_id，跳过清洗并使用默认分块。"
+                "启用了内容清洗，但未提供 cleaning_provider_id，跳过清洗并使用默认分块。",
             )
             return await self.chunker.chunk(content)
 
@@ -611,7 +608,7 @@ class KBHelper:
             llm_provider = await self.prov_mgr.get_provider_by_id(cleaning_provider_id)
             if not llm_provider or not isinstance(llm_provider, LLMProvider):
                 raise ValueError(
-                    f"无法找到 ID 为 {cleaning_provider_id} 的 LLM Provider 或类型不正确"
+                    f"无法找到 ID 为 {cleaning_provider_id} 的 LLM Provider 或类型不正确",
                 )
 
             # 初步分块
@@ -628,7 +625,7 @@ class KBHelper:
             rate_limiter = RateLimiter(repair_max_rpm)
             tasks = [
                 _repair_and_translate_chunk_with_retry(
-                    chunk, llm_provider, rate_limiter
+                    chunk, llm_provider, rate_limiter,
                 )
                 for chunk in initial_chunks
             ]
@@ -638,13 +635,13 @@ class KBHelper:
             final_chunks = []
             for i, result in enumerate(repaired_results):
                 if isinstance(result, Exception):
-                    logger.warning(f"块 {i} 处理异常: {str(result)}. 回退到原始块。")
+                    logger.warning(f"块 {i} 处理异常: {result!s}. 回退到原始块。")
                     final_chunks.append(initial_chunks[i])
                 elif isinstance(result, list):
                     final_chunks.extend(result)
 
             logger.info(
-                f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。"
+                f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。",
             )
 
             if progress_callback:

@@ -107,7 +107,7 @@ class ChatRoute(Route):
             if not os.path.exists(real_file_path):
                 # try legacy
                 file_path = os.path.join(
-                    self.legacy_img_dir, os.path.basename(filename)
+                    self.legacy_img_dir, os.path.basename(filename),
                 )
                 if os.path.exists(file_path):
                     real_file_path = os.path.realpath(file_path)
@@ -187,7 +187,7 @@ class ChatRoute(Route):
                     "attachment_id": attachment.attachment_id,
                     "filename": filename,
                     "type": attach_type,
-                }
+                },
             )
             .__dict__
         )
@@ -201,7 +201,7 @@ class ChatRoute(Route):
         )
 
     async def _create_attachment_from_file(
-        self, filename: str, attach_type: str
+        self, filename: str, attach_type: str,
     ) -> dict | None:
         """从本地文件创建 attachment 并返回消息部分。"""
         return await create_attachment_part_from_existing_file(
@@ -213,7 +213,7 @@ class ChatRoute(Route):
         )
 
     def _extract_web_search_refs(
-        self, accumulated_text: str, accumulated_parts: list
+        self, accumulated_text: str, accumulated_parts: list,
     ) -> dict:
         """从消息中提取 web_search_tavily 的引用
 
@@ -223,6 +223,7 @@ class ChatRoute(Route):
 
         Returns:
             包含 used 列表的字典，记录被引用的搜索结果
+
         """
         supported = [
             "web_search_baidu",
@@ -241,7 +242,7 @@ class ChatRoute(Route):
         for part in tool_call_parts:
             for tool_call in part["tool_calls"]:
                 if tool_call.get("name") not in supported or not tool_call.get(
-                    "result"
+                    "result",
                 ):
                     continue
                 try:
@@ -369,7 +370,7 @@ class ChatRoute(Route):
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
                         result, should_break = await _poll_webchat_stream_result(
-                            back_queue, username
+                            back_queue, username,
                         )
                         if should_break:
                             client_disconnected = True
@@ -410,7 +411,7 @@ class ChatRoute(Route):
                         except Exception as e:
                             if not client_disconnected:
                                 logger.debug(
-                                    f"[WebChat] 用户 {username} 断开聊天长连接。 {e}"
+                                    f"[WebChat] 用户 {username} 断开聊天长连接。 {e}",
                                 )
                             client_disconnected = True
 
@@ -430,7 +431,7 @@ class ChatRoute(Route):
                                 if accumulated_text:
                                     # 如果累积了文本，则先保存文本
                                     accumulated_parts.append(
-                                        {"type": "plain", "text": accumulated_text}
+                                        {"type": "plain", "text": accumulated_text},
                                     )
                                     accumulated_text = ""
                             elif chain_type == "tool_call_result":
@@ -443,7 +444,7 @@ class ChatRoute(Route):
                                         {
                                             "type": "tool_call",
                                             "tool_calls": [tool_calls[tc_id]],
-                                        }
+                                        },
                                     )
                                     tool_calls.pop(tc_id, None)
                             elif chain_type == "reasoning":
@@ -455,14 +456,14 @@ class ChatRoute(Route):
                         elif msg_type == "image":
                             filename = result_text.replace("[IMAGE]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "image"
+                                filename, "image",
                             )
                             if part:
                                 accumulated_parts.append(part)
                         elif msg_type == "record":
                             filename = result_text.replace("[RECORD]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "record"
+                                filename, "record",
                             )
                             if part:
                                 accumulated_parts.append(part)
@@ -470,7 +471,7 @@ class ChatRoute(Route):
                             # 格式: [FILE]filename
                             filename = result_text.replace("[FILE]", "")
                             part = await self._create_attachment_from_file(
-                                filename, "file"
+                                filename, "file",
                             )
                             if part:
                                 accumulated_parts.append(part)
@@ -515,7 +516,7 @@ class ChatRoute(Route):
                                     "data": {
                                         "id": saved_record.id,
                                         "created_at": to_utc_isoformat(
-                                            saved_record.created_at
+                                            saved_record.created_at,
                                         ),
                                     },
                                 }
@@ -561,7 +562,7 @@ class ChatRoute(Route):
         )
 
         response = cast(
-            QuartResponse,
+            "QuartResponse",
             await make_response(
                 stream(),
                 {
@@ -708,7 +709,7 @@ class ChatRoute(Route):
                     "deleted_count": deleted_count,
                     "failed_count": len(failed_items),
                     "failed_items": failed_items,
-                }
+                },
             )
             .__dict__
         )
@@ -737,7 +738,7 @@ class ChatRoute(Route):
                     os.remove(attachment.path)
                 except OSError as e:
                     logger.warning(
-                        f"Failed to delete attachment file {attachment.path}: {e}"
+                        f"Failed to delete attachment file {attachment.path}: {e}",
                     )
         except Exception as e:
             logger.warning(f"Failed to get attachments: {e}")
@@ -768,7 +769,7 @@ class ChatRoute(Route):
                 data={
                     "session_id": session.session_id,
                     "platform_id": session.platform_id,
-                }
+                },
             )
             .__dict__
         )
@@ -802,7 +803,7 @@ class ChatRoute(Route):
                     "is_group": session.is_group,
                     "created_at": to_utc_isoformat(session.created_at),
                     "updated_at": to_utc_isoformat(session.updated_at),
-                }
+                },
             )
 
         return Response().ok(data=sessions_data).__dict__
@@ -820,7 +821,7 @@ class ChatRoute(Route):
         # 获取项目信息（如果会话属于某个项目）
         username = g.get("username", "guest")
         project_info = await self.db.get_project_by_session(
-            session_id=session_id, creator=username
+            session_id=session_id, creator=username,
         )
 
         # Get platform message history using session_id

@@ -71,13 +71,13 @@ class botClient(Client):
 
     # 收到群消息
     async def on_group_at_message_create(
-        self, message: botpy.message.GroupMessage
+        self, message: botpy.message.GroupMessage,
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
         )
-        abm.group_id = cast(str, message.group_openid)
+        abm.group_id = cast("str", message.group_openid)
         abm.session_id = abm.group_id
         self.platform.remember_session_scene(abm.session_id, "group")
         self._commit(abm)
@@ -95,7 +95,7 @@ class botClient(Client):
 
     # 收到私聊消息
     async def on_direct_message_create(
-        self, message: botpy.message.DirectMessage
+        self, message: botpy.message.DirectMessage,
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
@@ -378,7 +378,7 @@ class QQOfficialPlatformAdapter(Platform):
         return PlatformMetadata(
             name="qq_official",
             description="QQ 机器人官方 API 适配器",
-            id=cast(str, self.config.get("id")),
+            id=cast("str", self.config.get("id")),
             support_proactive_message=True,
         )
 
@@ -415,11 +415,11 @@ class QQOfficialPlatformAdapter(Platform):
 
         for attachment in attachments:
             content_type = cast(
-                str,
+                "str",
                 getattr(attachment, "content_type", "") or "",
             ).lower()
             url = QQOfficialPlatformAdapter._normalize_attachment_url(
-                cast(str | None, getattr(attachment, "url", None))
+                cast("str | None", getattr(attachment, "url", None)),
             )
             if not url:
                 continue
@@ -428,7 +428,7 @@ class QQOfficialPlatformAdapter(Platform):
                 msg.append(Image.fromURL(url))
             else:
                 filename = cast(
-                    str,
+                    "str",
                     getattr(attachment, "filename", None)
                     or getattr(attachment, "name", None)
                     or "attachment",
@@ -457,7 +457,7 @@ class QQOfficialPlatformAdapter(Platform):
                             await QQOfficialPlatformAdapter._prepare_audio_attachment(
                                 url,
                                 filename,
-                            )
+                            ),
                         )
                     except Exception as e:
                         logger.warning(
@@ -488,6 +488,7 @@ class QQOfficialPlatformAdapter(Platform):
 
         Returns:
             Content with face tags replaced by readable emoji descriptions.
+
         """
         import base64
         import json
@@ -541,13 +542,13 @@ class QQOfficialPlatformAdapter(Platform):
                 abm.sender = MessageMember(message.author.user_openid, "")
             # Parse face messages to readable text
             abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
-                message.content.strip()
+                message.content.strip(),
             )
             abm.self_id = "unknown_selfid"
             msg.append(At(qq="qq_official"))
             msg.append(Plain(abm.message_str))
             await QQOfficialPlatformAdapter._append_attachments(
-                msg, message.attachments
+                msg, message.attachments,
             )
             abm.message = msg
 
@@ -564,11 +565,11 @@ class QQOfficialPlatformAdapter(Platform):
                 message.content.replace(
                     "<@!" + str(abm.self_id) + ">",
                     "",
-                ).strip()
+                ).strip(),
             )
 
             await QQOfficialPlatformAdapter._append_attachments(
-                msg, message.attachments
+                msg, message.attachments,
             )
             abm.message = msg
             abm.message_str = plain_content

@@ -1,5 +1,4 @@
-"""
-Custom Hatchling build hook.
+"""Custom Hatchling build hook.
 
 Only runs when the environment variable ASTRBOT_BUILD_DASHBOARD=1 is set,
 so that `uv sync` / editable installs are never affected.

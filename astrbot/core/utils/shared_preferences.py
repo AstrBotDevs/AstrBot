@@ -32,7 +32,7 @@ class SharedPreferences:
 
         self._scheduler = BackgroundScheduler()
         self._scheduler.add_job(
-            self._clear_temporary_cache, "interval", hours=24, id="clear_sp_temp_cache"
+            self._clear_temporary_cache, "interval", hours=24, id="clear_sp_temp_cache",
         )
         self._scheduler.start()
 
@@ -203,7 +203,7 @@ class SharedPreferences:
         return result
 
     def put(
-        self, key, value, scope: str | None = None, scope_id: str | None = None
+        self, key, value, scope: str | None = None, scope_id: str | None = None,
     ) -> None:
         """设置偏好设置（已弃用）"""
         asyncio.run_coroutine_threadsafe(
@@ -212,7 +212,7 @@ class SharedPreferences:
         ).result()
 
     def remove(
-        self, key, scope: str | None = None, scope_id: str | None = None
+        self, key, scope: str | None = None, scope_id: str | None = None,
     ) -> None:
         """删除偏好设置（已弃用）"""
         asyncio.run_coroutine_threadsafe(

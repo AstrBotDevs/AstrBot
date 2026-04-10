@@ -66,7 +66,7 @@ class SlackAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="slack",
             description="适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
-            id=cast(str, self.config.get("id")),
+            id=cast("str", self.config.get("id")),
             support_streaming_message=False,
         )
 
@@ -98,14 +98,14 @@ class SlackAdapter(Platform):
                 await self.web_client.chat_postMessage(
                     channel=channel_id,
                     text=text,
-                    blocks=blocks if blocks else None,
+                    blocks=blocks or None,
                 )
             else:
                 # 发送私信
                 await self.web_client.chat_postMessage(
                     channel=session.session_id,
                     text=text,
-                    blocks=blocks if blocks else None,
+                    blocks=blocks or None,
                 )
         except Exception as e:
             logger.error(f"Slack 发送消息失败: {e}")
@@ -116,13 +116,13 @@ class SlackAdapter(Platform):
         logger.debug(f"[slack] RawMessage {event}")
 
         abm = AstrBotMessage()
-        abm.self_id = cast(str, self.bot_self_id)
+        abm.self_id = cast("str", self.bot_self_id)
 
         # 获取用户信息
         user_id = event.get("user", "")
         try:
             user_info = await self.web_client.users_info(user=user_id)
-            user_data = cast(dict, user_info["user"])
+            user_data = cast("dict", user_info["user"])
             user_name = user_data.get("real_name") or user_data.get("name", user_id)
         except Exception:
             user_name = user_id
@@ -133,7 +133,7 @@ class SlackAdapter(Platform):
         channel_id = event.get("channel", "")
         try:
             channel_info = await self.web_client.conversations_info(channel=channel_id)
-            is_im = cast(dict, channel_info["channel"])["is_im"]
+            is_im = cast("dict", channel_info["channel"])["is_im"]
 
             if is_im:
                 abm.type = MessageType.FRIEND_MESSAGE
@@ -174,7 +174,7 @@ class SlackAdapter(Platform):
                 for mention in mentions:
                     try:
                         mentioned_user = await self.web_client.users_info(user=mention)
-                        user_data = cast(dict, mentioned_user["user"])
+                        user_data = cast("dict", mentioned_user["user"])
                         user_name = user_data.get("real_name") or user_data.get(
                             "name",
                             mention,
@@ -429,5 +429,5 @@ class SlackAdapter(Platform):
         return bool(
             self.config.get("unified_webhook_mode", False)
             and self.config.get("slack_connection_mode", "") == "webhook"
-            and self.config.get("webhook_uuid")
+            and self.config.get("webhook_uuid"),
         )

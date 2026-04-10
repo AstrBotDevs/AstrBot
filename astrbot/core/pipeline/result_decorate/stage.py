@@ -76,10 +76,10 @@ class ResultDecorateStage(Stage):
         ].get("split_words", ["。", "？", "！", "~", "…"])
         if self.split_words:
             escaped_words = sorted(
-                [re.escape(word) for word in self.split_words], key=len, reverse=True
+                [re.escape(word) for word in self.split_words], key=len, reverse=True,
             )
             self.split_words_pattern = re.compile(
-                f"(.*?({'|'.join(escaped_words)})|.+$)", re.DOTALL
+                f"(.*?({'|'.join(escaped_words)})|.+$)", re.DOTALL,
             )
         else:
             self.split_words_pattern = None
@@ -121,7 +121,7 @@ class ResultDecorateStage(Stage):
                     result.append(content)
             elif seg and seg.strip():
                 result.append(seg)
-        return result if result else [text]
+        return result or [text]
 
     async def process(
         self,

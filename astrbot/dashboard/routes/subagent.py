@@ -109,7 +109,7 @@ class SubAgentRoute(Route):
                         "parameters": tool.parameters,
                         "active": tool.active,
                         "handler_module_path": tool.handler_module_path,
-                    }
+                    },
                 )
             return jsonify(Response().ok(data=tools_dict).__dict__)
         except Exception as e:

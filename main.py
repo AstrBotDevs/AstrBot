@@ -108,7 +108,7 @@ async def main_async(webui_dir_arg: str | None) -> None:
     if webui_dir is None:
         logger.warning(
             "管理面板文件检查失败，WebUI 功能将不可用。"
-            "请检查网络连接或手动指定 --webui-dir 参数。"
+            "请检查网络连接或手动指定 --webui-dir 参数。",
         )
 
     db = db_helper

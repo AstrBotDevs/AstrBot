@@ -20,7 +20,6 @@ logger = logging.getLogger("astrbot")
 class RequirementsPrecheckFailed(Exception):
     """Raised when the pre-check of requirements fails."""
 
-    pass
 
 
 @dataclass(frozen=True)
@@ -66,7 +65,7 @@ def _looks_like_local_path_reference(token: str) -> bool:
     if not candidate:
         return False
     return candidate in {".", ".."} or candidate.startswith(
-        ("./", "../", "/", "~/", ".\\", "..\\", "\\")
+        ("./", "../", "/", "~/", ".\\", "..\\", "\\"),
     )
 
 
@@ -196,7 +195,7 @@ def _extract_requirement_names_from_package_tokens(tokens: list[str]) -> frozens
                 "--trusted-host=",
                 "--requirement=",
                 "--constraint=",
-            )
+            ),
         ):
             continue
 
@@ -237,7 +236,7 @@ def parse_package_install_input(raw_input: str) -> ParsedPackageInput:
                 continue
             specs.extend(tokens)
             requirement_names.update(
-                _extract_requirement_names_from_package_tokens(tokens)
+                _extract_requirement_names_from_package_tokens(tokens),
             )
             continue
 
@@ -260,7 +259,7 @@ def _iter_requirement_lines(
     resolved_path = os.path.realpath(requirements_path)
     if resolved_path in visited:
         logger.warning(
-            "检测到循环依赖的 requirements 包含: %s，将跳过该文件", resolved_path
+            "检测到循环依赖的 requirements 包含: %s，将跳过该文件", resolved_path,
         )
         return
     visited.add(resolved_path)
@@ -390,7 +389,7 @@ def _load_requirement_lines_for_precheck(
 
 def find_missing_requirements(requirements_path: str) -> set[str] | None:
     can_precheck, requirement_lines = _load_requirement_lines_for_precheck(
-        requirements_path
+        requirements_path,
     )
     if not can_precheck or requirement_lines is None:
         return None
@@ -466,7 +465,7 @@ def plan_missing_requirements_install(
     requirements_path: str,
 ) -> MissingRequirementsPlan | None:
     can_precheck, requirement_lines = _load_requirement_lines_for_precheck(
-        requirements_path
+        requirements_path,
     )
     if not can_precheck or requirement_lines is None:
         return None

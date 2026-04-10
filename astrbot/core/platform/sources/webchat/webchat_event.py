@@ -51,7 +51,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "message_id": message_id,
                 },  # end means this request is finished
             )
-            return
+            return None
 
         data = ""
         for comp in message.chain:
@@ -78,7 +78,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(comp, Image):
                 # save image to local
-                filename = f"{str(uuid.uuid4())}.jpg"
+                filename = f"{uuid.uuid4()!s}.jpg"
                 path = os.path.join(attachments_dir, filename)
                 image_base64 = await comp.convert_to_base64()
                 with open(path, "wb") as f:
@@ -94,7 +94,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(comp, Record):
                 # save record to local
-                filename = f"{str(uuid.uuid4())}.wav"
+                filename = f"{uuid.uuid4()!s}.wav"
                 path = os.path.join(attachments_dir, filename)
                 record_base64 = await comp.convert_to_base64()
                 with open(path, "wb") as f:

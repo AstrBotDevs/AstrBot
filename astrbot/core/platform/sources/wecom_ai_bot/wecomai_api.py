@@ -142,7 +142,7 @@ class WecomAIBotAPIClient:
                 return "verify fail"
 
             logger.info("URL 验证成功")
-            return echo_result if echo_result else "verify fail"
+            return echo_result or "verify fail"
 
         except Exception as e:
             logger.error(f"URL 验证发生异常: {e}")

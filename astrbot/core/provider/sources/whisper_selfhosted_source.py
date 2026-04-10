@@ -103,4 +103,4 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
             raise RuntimeError("Whisper 模型未初始化")
 
         result = await loop.run_in_executor(None, self.model.transcribe, audio_url)
-        return cast(str, result["text"])
+        return cast("str", result["text"])

@@ -99,7 +99,7 @@ class ApiKeyRoute(Route):
                     Response().error("expires_in_days must be greater than 0").__dict__
                 )
             expires_at = datetime.now(timezone.utc) + timedelta(
-                days=expires_in_days_int
+                days=expires_in_days_int,
             )
 
         raw_key = f"abk_{secrets.token_urlsafe(32)}"

@@ -34,7 +34,7 @@ from .server import LarkWebhookServer
 
 
 @register_platform_adapter(
-    "lark", "飞书机器人官方 API 适配器", support_streaming_message=True
+    "lark", "飞书机器人官方 API 适配器", support_streaming_message=True,
 )
 class LarkPlatformAdapter(Platform):
     def __init__(
@@ -455,6 +455,7 @@ class LarkPlatformAdapter(Platform):
 
         Returns:
             True 表示重复事件，False 表示新事件
+
         """
         self._clean_expired_events()
         if event_id in self.event_id_timestamps:
@@ -490,7 +491,7 @@ class LarkPlatformAdapter(Platform):
         return PlatformMetadata(
             name="lark",
             description="飞书机器人官方 API 适配器",
-            id=cast(str, self.config.get("id")),
+            id=cast("str", self.config.get("id")),
             support_streaming_message=True,
         )
 
@@ -531,7 +532,7 @@ class LarkPlatformAdapter(Platform):
                 if m.id is None:
                     continue
                 # 飞书 open_id 可能是 None，这里做个防护
-                open_id = m.id.open_id if m.id.open_id else ""
+                open_id = m.id.open_id or ""
                 at_list[m.key] = Comp.At(qq=open_id, name=m.name)
 
                 if m.name == self.bot_name:
@@ -603,6 +604,7 @@ class LarkPlatformAdapter(Platform):
 
         Args:
             event_data: Webhook 事件数据
+
         """
         try:
             header = event_data.get("header", {})
@@ -654,5 +656,5 @@ class LarkPlatformAdapter(Platform):
     def unified_webhook(self) -> bool:
         return bool(
             self.config.get("lark_connection_mode", "") == "webhook"
-            and self.config.get("webhook_uuid")
+            and self.config.get("webhook_uuid"),
         )

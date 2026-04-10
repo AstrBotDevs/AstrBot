@@ -63,7 +63,7 @@ def _expect_type(value, expected_type, path_key, errors, expected_name=None) -> 
     if not isinstance(value, expected_type):
         errors.append(
             f"错误的类型 {path_key}: 期望是 {expected_name or expected_type.__name__}, "
-            f"得到了 {type(value).__name__}"
+            f"得到了 {type(value).__name__}",
         )
         return False
     return True
@@ -283,16 +283,15 @@ async def _validate_neo_connectivity(
 
     health_url = f"{endpoint}/health"
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                health_url,
-                timeout=aiohttp.ClientTimeout(total=5),
-            ) as resp:
-                if resp.status != 200:
-                    return (
-                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
-                        f"请确认 Bay 正在运行: {endpoint}"
-                    )
+        async with aiohttp.ClientSession() as session, session.get(
+            health_url,
+            timeout=aiohttp.ClientTimeout(total=5),
+        ) as resp:
+            if resp.status != 200:
+                return (
+                    f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
+                    f"请确认 Bay 正在运行: {endpoint}"
+                )
     except Exception:
         return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
 
@@ -300,7 +299,7 @@ async def _validate_neo_connectivity(
 
 
 def save_config(
-    post_config: dict, config: AstrBotConfig, is_core: bool = False
+    post_config: dict, config: AstrBotConfig, is_core: bool = False,
 ) -> None:
     """验证并保存配置"""
     errors = None
@@ -319,7 +318,7 @@ def save_config(
             )
         else:
             errors, post_config = validate_config(
-                post_config, getattr(config, "schema", {}), is_core
+                post_config, getattr(config, "schema", {}), is_core,
             )
     except BaseException as e:
         logger.error(traceback.format_exc())
@@ -418,7 +417,7 @@ class ConfigRoute(Route):
 
         # 删除引用了该 provider_source 的 providers
         await self.core_lifecycle.provider_manager.delete_provider(
-            provider_source_id=provider_source_id
+            provider_source_id=provider_source_id,
         )
 
         try:
@@ -514,13 +513,13 @@ class ConfigRoute(Route):
                     "metadata": {
                         "provider": CONFIG_METADATA_2["provider_group"]["metadata"][
                             "provider"
-                        ]
-                    }
-                }
-            }
+                        ],
+                    },
+                },
+            },
         )
         config_schema = {
-            "provider": provider_metadata["provider_group"]["metadata"]["provider"]
+            "provider": provider_metadata["provider_group"]["metadata"]["provider"],
         }
         data = {
             "config_schema": config_schema,
@@ -626,7 +625,7 @@ class ConfigRoute(Route):
             if system_config:
                 abconf = self.acm.confs["default"]
                 metadata = ConfigMetadataI18n.convert_to_i18n_keys(
-                    CONFIG_METADATA_3_SYSTEM
+                    CONFIG_METADATA_3_SYSTEM,
                 )
                 return Response().ok({"config": abconf, "metadata": metadata}).__dict__
             if abconf_id is None:
@@ -792,7 +791,7 @@ class ConfigRoute(Route):
             ):
                 # chat
                 prov = self.core_lifecycle.provider_manager.get_merged_provider_config(
-                    provider
+                    provider,
                 )
                 provider_list.append(prov)
             elif not ps_id and provider.get("provider_type", "") in provider_type_ls:
@@ -865,7 +864,7 @@ class ConfigRoute(Route):
                     return (
                         Response()
                         .error(
-                            "提供商适配器加载失败，请检查提供商类型配置或查看服务端日志"
+                            "提供商适配器加载失败，请检查提供商类型配置或查看服务端日志",
                         )
                         .__dict__
                     )
@@ -942,7 +941,7 @@ class ConfigRoute(Route):
 
             try:
                 self.core_lifecycle.provider_manager.dynamic_import_provider(
-                    provider_type
+                    provider_type,
                 )
             except ImportError as e:
                 logger.error(traceback.format_exc())
@@ -1066,7 +1065,6 @@ class ConfigRoute(Route):
         当前支持的 scope：
         - scope=plugin：name=<plugin_name>，key=<config_key_path>
         """
-
         scope = request.args.get("scope") or "plugin"
         name = request.args.get("name")
         key_path = request.args.get("key")
@@ -1084,7 +1082,6 @@ class ConfigRoute(Route):
 
     async def upload_config_file(self):
         """上传文件到插件数据目录（用于某个 file 类型配置项）。"""
-
         try:
             scope, name, key_path, md, config = self._resolve_config_file_scope()
         except ValueError as e:
@@ -1163,7 +1160,6 @@ class ConfigRoute(Route):
 
     async def delete_config_file(self):
         """删除插件数据目录中的文件。"""
-
         scope = request.args.get("scope") or "plugin"
         name = request.args.get("name")
         if not name:
@@ -1199,7 +1195,6 @@ class ConfigRoute(Route):
 
     async def get_config_file_list(self):
         """获取配置项对应目录下的文件列表。"""
-
         try:
             _, name, key_path, _, config = self._resolve_config_file_scope()
         except ValueError as e:
@@ -1260,7 +1255,7 @@ class ConfigRoute(Route):
 
         try:
             await self.core_lifecycle.provider_manager.create_provider(
-                new_provider_config
+                new_provider_config,
             )
         except Exception as e:
             return Response().error(str(e)).__dict__
@@ -1302,7 +1297,7 @@ class ConfigRoute(Route):
 
         try:
             await self.core_lifecycle.provider_manager.update_provider(
-                origin_provider_id, new_config
+                origin_provider_id, new_config,
             )
         except Exception as e:
             return Response().error(str(e)).__dict__
@@ -1332,7 +1327,7 @@ class ConfigRoute(Route):
 
         try:
             await self.core_lifecycle.provider_manager.delete_provider(
-                provider_id=provider_id
+                provider_id=provider_id,
             )
         except Exception as e:
             return Response().error(str(e)).__dict__
@@ -1356,7 +1351,7 @@ class ConfigRoute(Route):
                 cached_token = self._logo_token_cache[cache_key]
                 # 确保platform_default_tmpl[platform.name]存在且为字典
                 if platform.name not in platform_default_tmpl or not isinstance(
-                    platform_default_tmpl[platform.name], dict
+                    platform_default_tmpl[platform.name], dict,
                 ):
                     platform_default_tmpl[platform.name] = {}
                 platform_default_tmpl[platform.name]["logo_token"] = cached_token
@@ -1385,7 +1380,7 @@ class ConfigRoute(Route):
 
                 # 确保platform_default_tmpl[platform.name]存在且为字典
                 if platform.name not in platform_default_tmpl or not isinstance(
-                    platform_default_tmpl[platform.name], dict
+                    platform_default_tmpl[platform.name], dict,
                 ):
                     platform_default_tmpl[platform.name] = {}
 
@@ -1412,7 +1407,7 @@ class ConfigRoute(Route):
             )
 
     def _inject_platform_metadata_with_i18n(
-        self, platform, metadata, platform_i18n_translations: dict
+        self, platform, metadata, platform_i18n_translations: dict,
     ):
         """将配置元数据注入到 metadata 中并处理国际化键转换。"""
         metadata["platform_group"]["metadata"]["platform"].setdefault("items", {})
@@ -1423,7 +1418,7 @@ class ConfigRoute(Route):
 
             for lang, lang_data in platform.i18n_resources.items():
                 platform_i18n_translations.setdefault(lang, {}).setdefault(
-                    "platform_group", {}
+                    "platform_group", {},
                 ).setdefault("platform", {})[platform.name] = lang_data
 
             for field_key, field_value in platform_items_to_inject.items():
@@ -1432,7 +1427,7 @@ class ConfigRoute(Route):
                         field_value[key] = f"{i18n_prefix}.{field_key}.{key}"
 
         metadata["platform_group"]["metadata"]["platform"]["items"].update(
-            platform_items_to_inject
+            platform_items_to_inject,
         )
 
     async def _get_astrbot_config(self):
@@ -1442,10 +1437,10 @@ class ConfigRoute(Route):
             {
                 "platform_group": {
                     "metadata": {
-                        "platform": metadata["platform_group"]["metadata"]["platform"]
-                    }
-                }
-            }
+                        "platform": metadata["platform_group"]["metadata"]["platform"],
+                    },
+                },
+            },
         )
         metadata["platform_group"]["metadata"]["platform"] = platform_i18n[
             "platform_group"
@@ -1464,13 +1459,13 @@ class ConfigRoute(Route):
         for platform in platform_registry:
             if platform.default_config_tmpl:
                 platform_default_tmpl[platform.name] = copy.deepcopy(
-                    platform.default_config_tmpl
+                    platform.default_config_tmpl,
                 )
 
                 # 注入配置元数据（在 convert_to_i18n_keys 之后，使用国际化键）
                 if platform.config_metadata:
                     self._inject_platform_metadata_with_i18n(
-                        platform, metadata, platform_i18n_translations
+                        platform, metadata, platform_i18n_translations,
                     )
 
                 # 收集logo注册任务
@@ -1519,7 +1514,7 @@ class ConfigRoute(Route):
         return ret
 
     async def _save_astrbot_configs(
-        self, post_configs: dict, conf_id: str | None = None
+        self, post_configs: dict, conf_id: str | None = None,
     ) -> None:
         try:
             if conf_id not in self.acm.confs:
@@ -1550,7 +1545,7 @@ class ConfigRoute(Route):
 
         try:
             errors, post_configs = validate_config(
-                post_configs, getattr(md.config, "schema", {}), is_core=False
+                post_configs, getattr(md.config, "schema", {}), is_core=False,
             )
             if errors:
                 raise ValueError(f"格式校验未通过: {errors}")

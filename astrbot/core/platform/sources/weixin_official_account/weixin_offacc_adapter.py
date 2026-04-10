@@ -45,7 +45,7 @@ class WeixinOfficialAccountServer:
         user_buffer: dict[Any, dict[str, Any]],
     ) -> None:
         self.server = quart.Quart(__name__)
-        self.port = int(cast(int | str, config.get("port")))
+        self.port = int(cast("int | str", config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.token = config.get("token")
         self.encoding_aes_key = config.get("encoding_aes_key")
@@ -85,6 +85,7 @@ class WeixinOfficialAccountServer:
 
         Returns:
             验证响应
+
         """
         logger.info(f"验证请求有效性: {request.args}")
 
@@ -117,7 +118,7 @@ class WeixinOfficialAccountServer:
     def _preview(self, msg: BaseMessage, limit: int = 24) -> str:
         """生成消息预览文本，供占位符使用"""
         if isinstance(msg, TextMessage):
-            t = cast(str, msg.content).strip()
+            t = cast("str", msg.content).strip()
             return (t[:limit] + "...") if len(t) > limit else (t or "空消息")
         if isinstance(msg, ImageMessage):
             return "图片"
@@ -133,6 +134,7 @@ class WeixinOfficialAccountServer:
 
         Returns:
             响应内容
+
         """
         data = await request.get_data()
         msg_signature = request.args.get("msg_signature")
@@ -163,7 +165,7 @@ class WeixinOfficialAccountServer:
 
             # passive reply
             from_user = str(getattr(msg, "source", ""))
-            msg_id = str(cast(str | int, getattr(msg, "id", "")))
+            msg_id = str(cast("str | int", getattr(msg, "id", "")))
             state = self.user_buffer.get(from_user)
 
             def _reply_text(text: str) -> str:
@@ -182,13 +184,12 @@ class WeixinOfficialAccountServer:
                     if len(cached) == 0:
                         self.user_buffer.pop(from_user, None)
                         return _reply_text(cached_xml)
-                    else:
-                        return _reply_text(
-                            cached_xml
-                            + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
-                        )
+                    return _reply_text(
+                        cached_xml
+                        + "\n【后续消息还在缓冲中，回复任意文字继续获取】",
+                    )
 
-                task: asyncio.Task | None = cast(asyncio.Task | None, state.get("task"))
+                task: asyncio.Task | None = cast("asyncio.Task | None", state.get("task"))
                 placeholder = (
                     f"【正在思考'{state.get('preview', '...')}'中，已思考"
                     f"{int(time.monotonic() - state.get('started_at', time.monotonic()))}s，回复任意文字尝试获取回复】"
@@ -207,36 +208,35 @@ class WeixinOfficialAccountServer:
                             # send one cached each time, if cached is empty after pop, remove the buffer
                             if cached and len(cached) > 0:
                                 logger.info(
-                                    f"wx buffer hit on retry window: user={from_user}"
+                                    f"wx buffer hit on retry window: user={from_user}",
                                 )
                                 cached_xml = cached.pop(0)
                                 if len(cached) == 0:
                                     self.user_buffer.pop(from_user, None)
                                     logger.debug(
-                                        f"wx finished message sending in passive window: user={from_user} msg_id={msg_id} "
+                                        f"wx finished message sending in passive window: user={from_user} msg_id={msg_id} ",
                                     )
                                     return _reply_text(cached_xml)
-                                else:
-                                    logger.debug(
-                                        f"wx finished message sending in passive window but not final: user={from_user} msg_id={msg_id} "
-                                    )
-                                    return _reply_text(
-                                        cached_xml
-                                        + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
-                                    )
+                                logger.debug(
+                                    f"wx finished message sending in passive window but not final: user={from_user} msg_id={msg_id} ",
+                                )
+                                return _reply_text(
+                                    cached_xml
+                                    + "\n【后续消息还在缓冲中，回复任意文字继续获取】",
+                                )
                             logger.info(
-                                f"wx finished in window but not final; return placeholder: user={from_user} msg_id={msg_id} "
+                                f"wx finished in window but not final; return placeholder: user={from_user} msg_id={msg_id} ",
                             )
                             return _reply_text(placeholder)
                         except Exception:
                             logger.critical(
-                                "wx task failed in passive window", exc_info=True
+                                "wx task failed in passive window", exc_info=True,
                             )
                             self.user_buffer.pop(from_user, None)
                             return _reply_text("处理消息失败，请稍后再试。")
 
                     logger.info(
-                        f"wx passive window timeout: user={from_user} msg_id={msg_id}"
+                        f"wx passive window timeout: user={from_user} msg_id={msg_id}",
                     )
                     return _reply_text(placeholder)
 
@@ -250,7 +250,7 @@ class WeixinOfficialAccountServer:
                 f"【正在思考'{preview}'中，已思考0s，回复任意文字尝试获取回复】"
             )
             logger.info(
-                f"wx start task: user={from_user} msg_id={msg_id} preview={preview}"
+                f"wx start task: user={from_user} msg_id={msg_id} preview={preview}",
             )
 
             self.user_buffer[from_user] = state = {
@@ -261,7 +261,7 @@ class WeixinOfficialAccountServer:
                 "started_at": time.monotonic(),
             }
             self.user_buffer[from_user]["task"] = task = asyncio.create_task(
-                self.callback(msg)
+                self.callback(msg),
             )
 
             # immediate return if done
@@ -272,7 +272,7 @@ class WeixinOfficialAccountServer:
             )
             if done:
                 try:
-                    cached = state.get("cached_xml", None)
+                    cached = state.get("cached_xml")
                     # send one cached each time, if cached is empty after pop, remove the buffer
                     if cached and len(cached) > 0:
                         logger.info(f"wx buffer hit immediately: user={from_user}")
@@ -280,13 +280,12 @@ class WeixinOfficialAccountServer:
                         if len(cached) == 0:
                             self.user_buffer.pop(from_user, None)
                             return _reply_text(cached_xml)
-                        else:
-                            return _reply_text(
-                                cached_xml
-                                + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
-                            )
+                        return _reply_text(
+                            cached_xml
+                            + "\n【后续消息还在缓冲中，回复任意文字继续获取】",
+                        )
                     logger.info(
-                        f"wx not finished in first window; return placeholder: user={from_user} msg_id={msg_id} "
+                        f"wx not finished in first window; return placeholder: user={from_user} msg_id={msg_id} ",
                     )
                     return _reply_text(placeholder)
                 except Exception:
@@ -312,7 +311,7 @@ class WeixinOfficialAccountServer:
 
 
 @register_platform_adapter(
-    "weixin_official_account", "微信公众平台 适配器", support_streaming_message=False
+    "weixin_official_account", "微信公众平台 适配器", support_streaming_message=False,
 )
 class WeixinOfficialAccountPlatformAdapter(Platform):
     def __init__(
@@ -342,7 +341,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
 
         self.user_buffer: dict[str, dict[str, Any]] = {}  # from_user -> state
         self.server = WeixinOfficialAccountServer(
-            self._event_queue, self.config, self.user_buffer
+            self._event_queue, self.config, self.user_buffer,
         )
 
         self.client = WeChatClient(
@@ -362,7 +361,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                     await self.convert_message(msg, None)
                     return None
 
-                msg_id = str(cast(str | int, msg.id))
+                msg_id = str(cast("str | int", msg.id))
                 future = self.wexin_event_workers.get(msg_id)
                 if future:
                     logger.debug(f"duplicate message id checked: {msg.id}")
@@ -383,7 +382,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             except Exception as e:
                 logger.error(f"转换消息时出现异常: {e}")
             finally:
-                self.wexin_event_workers.pop(str(cast(str | int, msg.id)), None)
+                self.wexin_event_workers.pop(str(cast("str | int", msg.id)), None)
 
         self.server.callback = callback
         self.server.active_send_mode = self.active_send_mode
@@ -422,8 +421,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         # 根据请求方法分发到不同的处理函数
         if request.method == "GET":
             return await self.server.handle_verify(request)
-        else:
-            return await self.server.handle_callback(request)
+        return await self.server.handle_callback(request)
 
     async def convert_message(
         self,
@@ -432,29 +430,29 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
     ) -> AstrBotMessage | None:
         abm = AstrBotMessage()
         if isinstance(msg, TextMessage):
-            abm.message_str = cast(str, msg.content)
+            abm.message_str = cast("str", msg.content)
             abm.self_id = str(msg.target)
-            abm.message = [Plain(cast(str, msg.content))]
+            abm.message = [Plain(cast("str", msg.content))]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                cast("str", msg.source),
+                cast("str", msg.source),
             )
-            abm.message_id = str(cast(str | int, msg.id))
-            abm.timestamp = cast(int, msg.time)
+            abm.message_id = str(cast("str | int", msg.id))
+            abm.timestamp = cast("int", msg.time)
             abm.session_id = abm.sender.user_id
         elif msg.type == "image":
             assert isinstance(msg, ImageMessage)
             abm.message_str = "[图片]"
             abm.self_id = str(msg.target)
-            abm.message = [Image(file=cast(str, msg.image), url=cast(str, msg.image))]
+            abm.message = [Image(file=cast("str", msg.image), url=cast("str", msg.image))]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                cast("str", msg.source),
+                cast("str", msg.source),
             )
-            abm.message_id = str(cast(str | int, msg.id))
-            abm.timestamp = cast(int, msg.time)
+            abm.message_id = str(cast("str | int", msg.id))
+            abm.timestamp = cast("int", msg.time)
             abm.session_id = abm.sender.user_id
         elif msg.type == "voice":
             assert isinstance(msg, VoiceMessage)
@@ -487,11 +485,11 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             abm.message = [Record(file=path_wav, url=path_wav)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                cast("str", msg.source),
+                cast("str", msg.source),
             )
-            abm.message_id = str(cast(str | int, msg.id))
-            abm.timestamp = cast(int, msg.time)
+            abm.message_id = str(cast("str | int", msg.id))
+            abm.timestamp = cast("int", msg.time)
             abm.session_id = abm.sender.user_id
         else:
             logger.warning(f"暂未实现的事件: {msg.type}")
@@ -511,7 +509,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         buffer = self.user_buffer.get(message.sender.user_id, None)
         if buffer is None:
             logger.critical(
-                f"用户消息未找到缓冲状态，无法处理消息: user={message.sender.user_id} message_id={message.message_id}"
+                f"用户消息未找到缓冲状态，无法处理消息: user={message.sender.user_id} message_id={message.message_id}",
             )
             return
         message_event = WeixinOfficialAccountPlatformEvent(

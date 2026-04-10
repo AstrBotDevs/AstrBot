@@ -32,12 +32,11 @@ def _patch_qq_botpy_formdata() -> None:
     aiohttp.FormData to have a private flag named _is_processed, which is no
     longer present in newer aiohttp versions.
     """
-
     try:
         from botpy.http import _FormData  # type: ignore
 
         if not hasattr(_FormData, "_is_processed"):
-            setattr(_FormData, "_is_processed", False)
+            _FormData._is_processed = False
     except Exception:
         logger.debug("[QQOfficial] Skip botpy FormData patch.")
 
@@ -123,7 +122,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 current_time = asyncio.get_running_loop().time()
                 if current_time - last_edit_time >= throttle_interval:
                     ret = cast(
-                        message.Message,
+                        "message.Message",
                         await self._post_send(stream=stream_payload),
                     )
                     stream_payload["index"] += 1
@@ -146,7 +145,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             # 如需兜底，应该只发送未发送 delta（后续可继续优化）
             self.send_buffer = None
 
-        return None
 
     @staticmethod
     def _extract_response_message_id(ret) -> str | None:
@@ -407,16 +405,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
                 markdown_payload = retry_payload.get("markdown")
                 if isinstance(markdown_payload, dict):
-                    md_content = cast(str, markdown_payload.get("content", "") or "")
+                    md_content = cast("str", markdown_payload.get("content", "") or "")
                     if md_content and not md_content.endswith("\n"):
                         retry_payload["markdown"] = {"content": md_content + "\n"}
 
-                content = cast(str | None, retry_payload.get("content"))
+                content = cast("str | None", retry_payload.get("content"))
                 if content and not content.endswith("\n"):
                     retry_payload["content"] = content + "\n"
 
                 logger.warning(
-                    "[QQOfficial] 流式 markdown 分片换行校验失败，已修正后重试一次。"
+                    "[QQOfficial] 流式 markdown 分片换行校验失败，已修正后重试一次。",
                 )
                 return await send_func(retry_payload)
 
@@ -428,7 +426,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 raise
 
             logger.warning(
-                "[QQOfficial] markdown 发送被拒绝，回退到 content 模式重试。"
+                "[QQOfficial] markdown 发送被拒绝，回退到 content 模式重试。",
             )
             fallback_payload = payload.copy()
             fallback_payload.pop("markdown", None)
@@ -436,7 +434,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             if fallback_payload.get("msg_type") == 2:
                 fallback_payload["msg_type"] = 0
             if stream:
-                fallback_content = cast(str, fallback_payload.get("content") or "")
+                fallback_content = cast("str", fallback_payload.get("content") or "")
                 if fallback_content and not fallback_content.endswith("\n"):
                     fallback_payload["content"] = fallback_content + "\n"
             return await send_func(fallback_payload)
@@ -471,7 +469,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         if not isinstance(result, dict):
             raise RuntimeError(
-                f"Failed to upload image, response is not dict: {result}"
+                f"Failed to upload image, response is not dict: {result}",
             )
 
         return Media(

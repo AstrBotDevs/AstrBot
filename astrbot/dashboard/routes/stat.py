@@ -211,10 +211,10 @@ class StatRoute(Route):
             local_tz = datetime.now().astimezone().tzinfo or timezone.utc
             now_local = datetime.now(local_tz)
             range_start_local = (now_local - timedelta(days=days)).replace(
-                minute=0, second=0, microsecond=0
+                minute=0, second=0, microsecond=0,
             )
             today_start_local = now_local.replace(
-                hour=0, minute=0, second=0, microsecond=0
+                hour=0, minute=0, second=0, microsecond=0,
             )
             query_start_local = min(range_start_local, today_start_local)
             query_start_utc = query_start_local.astimezone(timezone.utc)
@@ -226,7 +226,7 @@ class StatRoute(Route):
                         ProviderStat.agent_type == "internal",
                         ProviderStat.created_at >= query_start_utc,
                     )
-                    .order_by(ProviderStat.created_at.asc())
+                    .order_by(ProviderStat.created_at.asc()),
                 )
                 records = result.scalars().all()
 
@@ -237,7 +237,7 @@ class StatRoute(Route):
                 bucket_cursor += timedelta(hours=1)
 
             trend_by_provider: dict[str, dict[int, int]] = defaultdict(
-                lambda: defaultdict(int)
+                lambda: defaultdict(int),
             )
             total_by_provider: dict[str, int] = defaultdict(int)
             total_by_umo: dict[str, int] = defaultdict(int)
@@ -267,7 +267,7 @@ class StatRoute(Route):
 
                 if created_at_local >= range_start_local:
                     bucket_local = created_at_local.replace(
-                        minute=0, second=0, microsecond=0
+                        minute=0, second=0, microsecond=0,
                     )
                     bucket_ts = int(bucket_local.timestamp() * 1000)
                     trend_by_provider[provider_id][bucket_ts] += token_total
@@ -386,7 +386,7 @@ class StatRoute(Route):
                         "today_total_calls": today_total_calls,
                         "today_by_model": today_by_model_data,
                         "today_by_provider": today_by_provider_data,
-                    }
+                    },
                 )
                 .__dict__
             )

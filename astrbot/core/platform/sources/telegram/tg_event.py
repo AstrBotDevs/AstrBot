@@ -121,13 +121,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await client.send_message(
                     text=markdown_text,
                     parse_mode="MarkdownV2",
-                    **cast(Any, payload),
+                    **cast("Any", payload),
                 )
             except (ValueError, BadRequest) as e:
                 logger.warning(
-                    f"Failed to convert message to Markdown，using normal text: {e!s}"
+                    f"Failed to convert message to Markdown，using normal text: {e!s}",
                 )
-                await client.send_message(text=chunk, **cast(Any, payload))
+                await client.send_message(text=chunk, **cast("Any", payload))
 
     @classmethod
     async def _send_chat_action(
@@ -167,17 +167,17 @@ class TelegramPlatformEvent(AstrMessageEvent):
     ) -> None:
         """发送媒体时显示 upload action，发送完成后恢复 typing"""
         effective_thread_id = message_thread_id or cast(
-            str | None, payload.get("message_thread_id")
+            "str | None", payload.get("message_thread_id"),
         )
         await cls._send_chat_action(
-            client, user_name, upload_action, effective_thread_id
+            client, user_name, upload_action, effective_thread_id,
         )
         send_payload = dict(payload)
         if effective_thread_id and "message_thread_id" not in send_payload:
             send_payload["message_thread_id"] = effective_thread_id
         await send_coro(**send_payload)
         await cls._send_chat_action(
-            client, user_name, ChatAction.TYPING, effective_thread_id
+            client, user_name, ChatAction.TYPING, effective_thread_id,
         )
 
     @classmethod
@@ -210,10 +210,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     client.send_voice,
                     user_name=user_name,
                     voice=path,
-                    **cast(Any, media_payload),
+                    **cast("Any", media_payload),
                 )
             else:
-                await client.send_voice(voice=path, **cast(Any, payload))
+                await client.send_voice(voice=path, **cast("Any", payload))
         except BadRequest as e:
             # python-telegram-bot raises BadRequest for Voice_messages_forbidden;
             # distinguish the voice-privacy case via the API error message.
@@ -221,7 +221,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 raise
             logger.warning(
                 "User privacy settings prevent receiving voice messages, falling back to sending an audio file. "
-                "To enable voice messages, go to Telegram Settings → Privacy and Security → Voice Messages → set to 'Everyone'."
+                "To enable voice messages, go to Telegram Settings → Privacy and Security → Voice Messages → set to 'Everyone'.",
             )
             if use_media_action:
                 media_payload = dict(payload)
@@ -234,13 +234,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     user_name=user_name,
                     document=path,
                     caption=caption,
-                    **cast(Any, media_payload),
+                    **cast("Any", media_payload),
                 )
             else:
                 await client.send_document(
                     document=path,
                     caption=caption,
-                    **cast(Any, payload),
+                    **cast("Any", payload),
                 )
 
     async def _ensure_typing(
@@ -250,7 +250,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     ) -> None:
         """确保显示 typing 状态"""
         await self._send_chat_action(
-            self.client, user_name, ChatAction.TYPING, message_thread_id
+            self.client, user_name, ChatAction.TYPING, message_thread_id,
         )
 
     async def send_typing(self) -> None:
@@ -316,12 +316,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 else:
                     send_coro = client.send_photo
                     media_kwarg = {"photo": image_path}
-                await send_coro(**media_kwarg, **cast(Any, payload))
+                await send_coro(**media_kwarg, **cast("Any", payload))
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
                 await client.send_document(
-                    document=path, filename=name, **cast(Any, payload)
+                    document=path, filename=name, **cast("Any", payload),
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
@@ -337,7 +337,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await client.send_video(
                     video=path,
                     caption=getattr(i, "text", None) or None,
-                    **cast(Any, payload),
+                    **cast("Any", payload),
                 )
 
     async def send(self, message: MessageChain) -> None:
@@ -397,6 +397,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             text: 消息文本，1-4096 字符
             message_thread_id: 可选，目标消息线程 ID
             parse_mode: 可选，消息文本的解析模式
+
         """
         if not text or not text.strip():
             return
@@ -409,7 +410,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
         try:
             logger.debug(
-                f"[Telegram] sendMessageDraft: chat_id={chat_id}, draft_id={draft_id}, text_len={len(text)}"
+                f"[Telegram] sendMessageDraft: chat_id={chat_id}, draft_id={draft_id}, text_len={len(text)}",
             )
             await self.client.send_message_draft(
                 chat_id=int(chat_id),
@@ -448,7 +449,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     send_coro,
                     user_name=user_name,
                     **media_kwarg,
-                    **cast(Any, payload),
+                    **cast("Any", payload),
                 )
             elif isinstance(i, File):
                 path = await i.get_file()
@@ -460,7 +461,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     user_name=user_name,
                     document=path,
                     filename=name,
-                    **cast(Any, payload),
+                    **cast("Any", payload),
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
@@ -481,7 +482,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     self.client.send_video,
                     user_name=user_name,
                     video=path,
-                    **cast(Any, payload),
+                    **cast("Any", payload),
                 )
             else:
                 logger.warning(f"不支持的消息类型: {type(i)}")
@@ -513,12 +514,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
         if is_private:
             logger.info("[Telegram] 流式输出: 使用 sendMessageDraft (私聊)")
             await self._send_streaming_draft(
-                user_name, message_thread_id, payload, generator
+                user_name, message_thread_id, payload, generator,
             )
         else:
             logger.info("[Telegram] 流式输出: 使用 edit_message_text fallback (群聊)")
             await self._send_streaming_edit(
-                user_name, message_thread_id, payload, generator
+                user_name, message_thread_id, payload, generator,
             )
 
         # 内联父类 send_streaming 的副作用（避免传入已消费的 generator）
@@ -581,7 +582,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                                 last_sent_text = draft_text
                             except Exception as e2:
                                 logger.debug(
-                                    f"[Telegram] sendMessageDraft failed (ignored): {e2!s}"
+                                    f"[Telegram] sendMessageDraft failed (ignored): {e2!s}",
                                 )
 
         sender_task = asyncio.create_task(_draft_sender_loop())
@@ -613,7 +614,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     continue
 
                 await self._process_chain_items(
-                    chain, payload, user_name, message_thread_id, _append_text
+                    chain, payload, user_name, message_thread_id, _append_text,
                 )
         finally:
             done = True
@@ -674,7 +675,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 continue
 
             await self._process_chain_items(
-                chain, payload, user_name, message_thread_id, _append_text
+                chain, payload, user_name, message_thread_id, _append_text,
             )
 
             # 编辑或发送消息
@@ -704,7 +705,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     last_chat_action_time = current_time
                 try:
                     msg = await self.client.send_message(
-                        text=delta, **cast(Any, payload)
+                        text=delta, **cast("Any", payload),
                     )
                     current_content = delta
                 except Exception as e:

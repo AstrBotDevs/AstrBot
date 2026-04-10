@@ -273,7 +273,7 @@ class AstrBotDashboard:
         """获取占用端口的进程详细信息"""
         try:
             for conn in psutil.net_connections(kind="inet"):
-                if cast(_AddrWithPort, conn.laddr).port == port:
+                if cast("_AddrWithPort", conn.laddr).port == port:
                     try:
                         process = psutil.Process(conn.pid)
                         # 获取详细信息

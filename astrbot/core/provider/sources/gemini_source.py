@@ -155,7 +155,7 @@ class ProviderGoogleGenAI(Provider):
             modalities = ["TEXT"]
 
         tool_list: list[types.Tool] | None = []
-        model_name = cast(str, payloads.get("model", self.get_model()))
+        model_name = cast("str", payloads.get("model", self.get_model()))
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
         url_context = self.provider_config.get("gm_url_context", False)
@@ -223,8 +223,8 @@ class ProviderGoogleGenAI(Provider):
                         types.FunctionCallingConfigMode.ANY
                         if tool_choice == "required"
                         else types.FunctionCallingConfigMode.AUTO
-                    )
-                )
+                    ),
+                ),
             )
 
         # oper thinking config
@@ -241,7 +241,7 @@ class ProviderGoogleGenAI(Provider):
         ]:
             # The thinkingBudget parameter, introduced with the Gemini 2.5 series
             thinking_budget = self.provider_config.get("gm_thinking_config", {}).get(
-                "budget", 0
+                "budget", 0,
             )
             if thinking_budget is not None:
                 thinking_config = types.ThinkingConfig(
@@ -253,19 +253,19 @@ class ProviderGoogleGenAI(Provider):
             # covered without needing to keep an exhaustive list up to date.
             # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
             thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
-                "level", "HIGH"
+                "level", "HIGH",
             )
             if thinking_level and isinstance(thinking_level, str):
                 thinking_level = thinking_level.upper()
                 if thinking_level not in ["MINIMAL", "LOW", "MEDIUM", "HIGH"]:
                     logger.warning(
-                        f"Invalid thinking level: {thinking_level}, using HIGH"
+                        f"Invalid thinking level: {thinking_level}, using HIGH",
                     )
                     thinking_level = "HIGH"
                 level = types.ThinkingLevel(thinking_level)
                 thinking_config = types.ThinkingConfig()
                 if not hasattr(types.ThinkingConfig, "thinking_level"):
-                    setattr(types.ThinkingConfig, "thinking_level", level)
+                    types.ThinkingConfig.thinking_level = level
                 else:
                     thinking_config.thinking_level = level
 
@@ -286,9 +286,9 @@ class ProviderGoogleGenAI(Provider):
             logprobs=payloads.get("logprobs"),
             seed=payloads.get("seed"),
             response_modalities=modalities,
-            tools=cast(types.ToolListUnion | None, tool_list),
+            tools=cast("types.ToolListUnion | None", tool_list),
             tool_config=tool_config,
-            safety_settings=self.safety_settings if self.safety_settings else None,
+            safety_settings=self.safety_settings or None,
             thinking_config=thinking_config,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 disable=True,
@@ -299,7 +299,7 @@ class ProviderGoogleGenAI(Provider):
         """准备 Gemini SDK 的 Content 列表"""
 
         def create_text_part(text: str) -> types.Part:
-            content_a = text if text else " "
+            content_a = text or " "
             if not text:
                 logger.warning("文本内容为空，已添加空格占位")
             return types.Part.from_text(text=content_a)
@@ -383,7 +383,7 @@ class ProviderGoogleGenAI(Provider):
                         types.Part(
                             text=text,
                             thought_signature=thinking_signature,
-                        )
+                        ),
                     )
                     append_or_extend(gemini_contents, parts, types.ModelContent)
 
@@ -397,7 +397,7 @@ class ProviderGoogleGenAI(Provider):
                         # we should set thought_signature back to part if exists
                         # for more info about thought_signature, see:
                         # https://ai.google.dev/gemini-api/docs/thought-signatures
-                        if "extra_content" in tool and tool["extra_content"]:
+                        if tool.get("extra_content"):
                             ts_bs64 = (
                                 tool["extra_content"]
                                 .get("google", {})
@@ -445,7 +445,7 @@ class ProviderGoogleGenAI(Provider):
         return "".join(thought_buf).strip()
 
     def _extract_usage(
-        self, usage_metadata: types.GenerateContentResponseUsageMetadata
+        self, usage_metadata: types.GenerateContentResponseUsageMetadata,
     ) -> TokenUsage:
         """Extract usage from candidate"""
         return TokenUsage(
@@ -468,7 +468,7 @@ class ProviderGoogleGenAI(Provider):
             return
         raise EmptyModelOutputError(
             "Gemini completion has no usable output. "
-            f"response_id={response_id}, finish_reason={finish_reason}"
+            f"response_id={response_id}, finish_reason={finish_reason}",
         )
 
     def _process_content_parts(
@@ -484,7 +484,7 @@ class ProviderGoogleGenAI(Provider):
             if validate_output:
                 raise EmptyModelOutputError(
                     "Gemini candidate content is empty. "
-                    f"finish_reason={candidate.finish_reason}"
+                    f"finish_reason={candidate.finish_reason}",
                 )
             llm_response.result_chain = MessageChain(chain=[])
             return llm_response.result_chain
@@ -512,7 +512,7 @@ class ProviderGoogleGenAI(Provider):
             if validate_output:
                 raise EmptyModelOutputError(
                     "Gemini candidate content parts are empty. "
-                    f"finish_reason={candidate.finish_reason}"
+                    f"finish_reason={candidate.finish_reason}",
                 )
             llm_response.result_chain = MessageChain(chain=[])
             return llm_response.result_chain
@@ -556,7 +556,7 @@ class ProviderGoogleGenAI(Provider):
                 if part.thought_signature:
                     ts_bs64 = base64.b64encode(part.thought_signature).decode("utf-8")
                     llm_response.tools_call_extra_content[tool_call_id] = {
-                        "google": {"thought_signature": ts_bs64}
+                        "google": {"thought_signature": ts_bs64},
                     }
 
             if (
@@ -609,7 +609,7 @@ class ProviderGoogleGenAI(Provider):
                 )
                 result = await self.client.models.generate_content(
                     model=model,
-                    contents=cast(types.ContentListUnion, conversation),
+                    contents=cast("types.ContentListUnion", conversation),
                     config=config,
                 )
                 logger.debug(f"genai result: {result}")
@@ -689,7 +689,7 @@ class ProviderGoogleGenAI(Provider):
                 )
                 result = await self.client.models.generate_content_stream(
                     model=model,
-                    contents=cast(types.ContentListUnion, conversation),
+                    contents=cast("types.ContentListUnion", conversation),
                     config=config,
                 )
                 break
@@ -970,7 +970,7 @@ class ProviderGoogleGenAI(Provider):
                 temp_dir = Path(get_astrbot_temp_path())
                 temp_dir.mkdir(parents=True, exist_ok=True)
                 resolved_path = str(
-                    temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
+                    temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}",
                 )
                 await download_file(audio_path, resolved_path)
             elif audio_path.startswith("file:///"):
@@ -987,7 +987,7 @@ class ProviderGoogleGenAI(Provider):
                 audio_bytes = Path(resolved_path).read_bytes()
             except OSError as exc:
                 logger.warning(
-                    f"Failed to read audio file {resolved_path}, skipping. Error: {exc}"
+                    f"Failed to read audio file {resolved_path}, skipping. Error: {exc}",
                 )
                 return None
 

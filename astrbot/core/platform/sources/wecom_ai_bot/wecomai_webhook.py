@@ -69,12 +69,12 @@ class WecomAIBotWebhookClient:
                 text = await response.text()
                 if response.status != 200:
                     raise WecomAIBotWebhookError(
-                        f"Webhook 请求失败: HTTP {response.status}, {text}"
+                        f"Webhook 请求失败: HTTP {response.status}, {text}",
                     )
                 result = await response.json(content_type=None)
                 if result.get("errcode") != 0:
                     raise WecomAIBotWebhookError(
-                        f"Webhook 返回错误: {result.get('errcode')} {result.get('errmsg')}"
+                        f"Webhook 返回错误: {result.get('errcode')} {result.get('errmsg')}",
                     )
         logger.debug("企业微信消息推送成功: %s", payload.get("msgtype", "unknown"))
 
@@ -84,7 +84,7 @@ class WecomAIBotWebhookClient:
                 {
                     "msgtype": "markdown_v2",
                     "markdown_v2": {"content": chunk},
-                }
+                },
             )
 
     async def send_image_base64(self, image_base64: str) -> None:
@@ -97,11 +97,11 @@ class WecomAIBotWebhookClient:
                     "base64": image_base64,
                     "md5": md5,
                 },
-            }
+            },
         )
 
     async def upload_media(
-        self, file_path: Path, media_type: Literal["file", "voice"]
+        self, file_path: Path, media_type: Literal["file", "voice"],
     ) -> str:
         if not file_path.exists() or not file_path.is_file():
             raise WecomAIBotWebhookError(f"文件不存在: {file_path}")
@@ -126,12 +126,12 @@ class WecomAIBotWebhookClient:
                 text = await response.text()
                 if response.status != 200:
                     raise WecomAIBotWebhookError(
-                        f"上传媒体失败: HTTP {response.status}, {text}"
+                        f"上传媒体失败: HTTP {response.status}, {text}",
                     )
                 result = await response.json(content_type=None)
                 if result.get("errcode") != 0:
                     raise WecomAIBotWebhookError(
-                        f"上传媒体失败: {result.get('errcode')} {result.get('errmsg')}"
+                        f"上传媒体失败: {result.get('errcode')} {result.get('errmsg')}",
                     )
                 media_id = result.get("media_id", "")
                 if not media_id:
@@ -144,7 +144,7 @@ class WecomAIBotWebhookClient:
             {
                 "msgtype": "file",
                 "file": {"media_id": media_id},
-            }
+            },
         )
 
     async def send_voice(self, file_path: Path) -> None:
@@ -153,7 +153,7 @@ class WecomAIBotWebhookClient:
             {
                 "msgtype": "voice",
                 "voice": {"media_id": media_id},
-            }
+            },
         )
 
     @staticmethod
@@ -214,7 +214,7 @@ class WecomAIBotWebhookClient:
                             target_voice_path.unlink()
                         except Exception as e:
                             logger.warning(
-                                "清理临时语音文件失败 %s: %s", target_voice_path, e
+                                "清理临时语音文件失败 %s: %s", target_voice_path, e,
                             )
             else:
                 logger.warning(

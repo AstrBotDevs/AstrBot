@@ -27,7 +27,7 @@ try:
     from mcp.client.sse import sse_client
 except (ModuleNotFoundError, ImportError):
     logger.warning(
-        "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
+        "Warning: Missing 'mcp' dependency, MCP services will be unavailable.",
     )
 
 try:
@@ -179,7 +179,7 @@ class MCPClient:
             # Handle MCP service error logs
             if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
                 if msg.level in ("warning", "error", "critical", "alert", "emergency"):
-                    log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                    log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                     self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
@@ -258,7 +258,7 @@ class MCPClient:
                         "alert",
                         "emergency",
                     ):
-                        log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                        log_msg = f"[{msg.level.upper()}] {msg.data!s}"
                         self.server_errlogs.append(log_msg)
 
             stdio_transport = await self.exit_stack.enter_async_context(
@@ -294,12 +294,13 @@ class MCPClient:
 
         Raises:
             Exception: raised when reconnection fails
+
         """
         async with self._reconnect_lock:
             # Check if already reconnecting (useful for logging)
             if self._reconnecting:
                 logger.debug(
-                    f"MCP Client {self._server_name} is already reconnecting, skipping"
+                    f"MCP Client {self._server_name} is already reconnecting, skipping",
                 )
                 return
 
@@ -309,7 +310,7 @@ class MCPClient:
             self._reconnecting = True
             try:
                 logger.info(
-                    f"Attempting to reconnect to MCP server {self._server_name}..."
+                    f"Attempting to reconnect to MCP server {self._server_name}...",
                 )
 
                 # Save old exit_stack for later cleanup (don't close it now to avoid cancel scope issues)
@@ -327,11 +328,11 @@ class MCPClient:
                 await self.list_tools_and_save()
 
                 logger.info(
-                    f"Successfully reconnected to MCP server {self._server_name}"
+                    f"Successfully reconnected to MCP server {self._server_name}",
                 )
             except Exception as e:
                 logger.error(
-                    f"Failed to reconnect to MCP server {self._server_name}: {e}"
+                    f"Failed to reconnect to MCP server {self._server_name}: {e}",
                 )
                 raise
             finally:
@@ -356,6 +357,7 @@ class MCPClient:
         Raises:
             ValueError: MCP session is not available
             anyio.ClosedResourceError: raised after reconnection failure
+
         """
 
         @retry(
@@ -377,7 +379,7 @@ class MCPClient:
                 )
             except anyio.ClosedResourceError:
                 logger.warning(
-                    f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect..."
+                    f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect...",
                 )
                 # Attempt to reconnect
                 await self._reconnect()
@@ -407,7 +409,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
     """A function tool that calls an MCP service."""
 
     def __init__(
-        self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
+        self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs,
     ) -> None:
         super().__init__(
             name=mcp_tool.name,
@@ -419,7 +421,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self.mcp_server_name = mcp_server_name
 
     async def call(
-        self, context: ContextWrapper[TContext], **kwargs
+        self, context: ContextWrapper[TContext], **kwargs,
     ) -> mcp.types.CallToolResult:
         return await self.mcp_client.call_tool_with_reconnect(
             tool_name=self.mcp_tool.name,

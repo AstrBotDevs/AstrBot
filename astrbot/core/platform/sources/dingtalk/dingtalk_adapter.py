@@ -47,7 +47,7 @@ class MyEventHandler(dingtalk_stream.EventHandler):
 
 
 @register_platform_adapter(
-    "dingtalk", "钉钉机器人官方 API 适配器", support_streaming_message=True
+    "dingtalk", "钉钉机器人官方 API 适配器", support_streaming_message=True,
 )
 class DingtalkPlatformAdapter(Platform):
     def __init__(
@@ -140,7 +140,7 @@ class DingtalkPlatformAdapter(Platform):
         return PlatformMetadata(
             name="dingtalk",
             description="钉钉机器人官方 API 适配器",
-            id=cast(str, self.config.get("id")),
+            id=cast("str", self.config.get("id")),
             support_streaming_message=True,
             support_proactive_message=True,
         )
@@ -152,7 +152,7 @@ class DingtalkPlatformAdapter(Platform):
         abm = AstrBotMessage()
         abm.message = []
         abm.message_str = ""
-        abm.timestamp = int(cast(int, message.create_at) / 1000)
+        abm.timestamp = int(cast("int", message.create_at) / 1000)
         abm.type = (
             MessageType.GROUP_MESSAGE
             if message.conversation_type == "2"
@@ -163,7 +163,7 @@ class DingtalkPlatformAdapter(Platform):
             nickname=message.sender_nick,
         )
         abm.self_id = self._id_to_sid(message.chatbot_user_id)
-        abm.message_id = cast(str, message.message_id)
+        abm.message_id = cast("str", message.message_id)
         abm.raw_message = message
 
         if abm.type == MessageType.GROUP_MESSAGE:
@@ -177,9 +177,9 @@ class DingtalkPlatformAdapter(Platform):
         else:
             abm.session_id = abm.sender.user_id
 
-        message_type: str = cast(str, message.message_type)
-        robot_code = cast(str, message.robot_code or "")
-        raw_content = cast(dict, message.extensions.get("content") or {})
+        message_type: str = cast("str", message.message_type)
+        robot_code = cast("str", message.robot_code or "")
+        raw_content = cast("dict", message.extensions.get("content") or {})
         if not isinstance(raw_content, dict):
             raw_content = {}
         match message_type:
@@ -192,11 +192,11 @@ class DingtalkPlatformAdapter(Platform):
                     await self._remember_sender_binding(message, abm)
                     return abm
                 image_content = cast(
-                    dingtalk_stream.ImageContent | None,
+                    "dingtalk_stream.ImageContent | None",
                     message.image_content,
                 )
                 download_code = cast(
-                    str, (image_content.download_code if image_content else "") or ""
+                    "str", (image_content.download_code if image_content else "") or "",
                 )
                 if not download_code:
                     logger.warning("钉钉图片消息缺少 downloadCode，已跳过")
@@ -212,26 +212,26 @@ class DingtalkPlatformAdapter(Platform):
                         logger.warning("钉钉图片消息下载失败，无法解析为图片")
             case "richText":
                 rtc: dingtalk_stream.RichTextContent = cast(
-                    dingtalk_stream.RichTextContent, message.rich_text_content
+                    "dingtalk_stream.RichTextContent", message.rich_text_content,
                 )
-                contents: list[dict] = cast(list[dict], rtc.rich_text_list)
+                contents: list[dict] = cast("list[dict]", rtc.rich_text_list)
                 plain_parts: list[str] = []
                 for content in contents:
                     if "text" in content:
-                        plain_text = cast(str, content.get("text") or "")
+                        plain_text = cast("str", content.get("text") or "")
                         if plain_text:
                             plain_parts.append(plain_text)
                             abm.message.append(Plain(plain_text))
                     elif "type" in content and content["type"] == "picture":
-                        download_code = cast(str, content.get("downloadCode") or "")
+                        download_code = cast("str", content.get("downloadCode") or "")
                         if not download_code:
                             logger.warning(
-                                "钉钉富文本图片消息缺少 downloadCode，已跳过"
+                                "钉钉富文本图片消息缺少 downloadCode，已跳过",
                             )
                             continue
                         if not robot_code:
                             logger.error(
-                                "钉钉富文本图片消息解析失败: 回调中缺少 robotCode"
+                                "钉钉富文本图片消息解析失败: 回调中缺少 robotCode",
                             )
                             continue
                         f_path = await self.download_ding_file(
@@ -243,13 +243,13 @@ class DingtalkPlatformAdapter(Platform):
                             abm.message.append(Image.fromFileSystem(f_path))
                 abm.message_str = "".join(plain_parts).strip()
             case "audio" | "voice":
-                download_code = cast(str, raw_content.get("downloadCode") or "")
+                download_code = cast("str", raw_content.get("downloadCode") or "")
                 if not download_code:
                     logger.warning("钉钉语音消息缺少 downloadCode，已跳过")
                 elif not robot_code:
                     logger.error("钉钉语音消息解析失败: 回调中缺少 robotCode")
                 else:
-                    voice_ext = cast(str, raw_content.get("fileExtension") or "")
+                    voice_ext = cast("str", raw_content.get("fileExtension") or "")
                     if not voice_ext:
                         voice_ext = "amr"
                     voice_ext = voice_ext.lstrip(".")
@@ -261,16 +261,16 @@ class DingtalkPlatformAdapter(Platform):
                     if f_path:
                         abm.message.append(Record.fromFileSystem(f_path))
             case "file":
-                download_code = cast(str, raw_content.get("downloadCode") or "")
+                download_code = cast("str", raw_content.get("downloadCode") or "")
                 if not download_code:
                     logger.warning("钉钉文件消息缺少 downloadCode，已跳过")
                 elif not robot_code:
                     logger.error("钉钉文件消息解析失败: 回调中缺少 robotCode")
                 else:
-                    file_name = cast(str, raw_content.get("fileName") or "")
+                    file_name = cast("str", raw_content.get("fileName") or "")
                     file_ext = Path(file_name).suffix.lstrip(".") if file_name else ""
                     if not file_ext:
-                        file_ext = cast(str, raw_content.get("fileExtension") or "")
+                        file_ext = cast("str", raw_content.get("fileExtension") or "")
                     if not file_ext:
                         file_ext = "file"
                     f_path = await self.download_ding_file(
@@ -294,14 +294,14 @@ class DingtalkPlatformAdapter(Platform):
         try:
             if abm.type == MessageType.FRIEND_MESSAGE:
                 sender_id = abm.sender.user_id
-                sender_staff_id = cast(str, message.sender_staff_id or "")
+                sender_staff_id = cast("str", message.sender_staff_id or "")
                 if sender_staff_id:
                     umo = str(
                         MessageSesion(
                             platform_name=self.meta().id,
                             message_type=abm.type,
                             session_id=sender_id,
-                        )
+                        ),
                     )
                     await sp.put_async(
                         "global",
@@ -352,7 +352,7 @@ class DingtalkPlatformAdapter(Platform):
                 return ""
             resp_data = await resp.json()
             download_url = cast(
-                str,
+                "str",
                 (
                     resp_data.get("downloadUrl")
                     or resp_data.get("data", {}).get("downloadUrl")
@@ -388,7 +388,7 @@ class DingtalkPlatformAdapter(Platform):
                     )
                     return ""
                 data = await resp.json()
-                return cast(str, data.get("data", {}).get("accessToken", ""))
+                return cast("str", data.get("data", {}).get("accessToken", ""))
 
     async def _get_sender_staff_id(self, session: MessageSesion) -> str:
         try:
@@ -398,7 +398,7 @@ class DingtalkPlatformAdapter(Platform):
                 "dingtalk_staffid",
                 "",
             )
-            return cast(str, staff_id or "")
+            return cast("str", staff_id or "")
         except Exception as e:
             logger.warning(f"读取钉钉 staff_id 映射失败: {e}")
             return ""
@@ -425,16 +425,15 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://api.dingtalk.com/v1.0/robot/groupMessages/send",
-                headers=headers,
-                json=payload,
-            ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"钉钉群消息发送失败: {resp.status}, {await resp.text()}",
-                    )
+        async with aiohttp.ClientSession() as session, session.post(
+            "https://api.dingtalk.com/v1.0/robot/groupMessages/send",
+            headers=headers,
+            json=payload,
+        ) as resp:
+            if resp.status != 200:
+                logger.error(
+                    f"钉钉群消息发送失败: {resp.status}, {await resp.text()}",
+                )
 
     async def _send_private_message(
         self,
@@ -458,16 +457,15 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend",
-                headers=headers,
-                json=payload,
-            ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"钉钉私聊消息发送失败: {resp.status}, {await resp.text()}",
-                    )
+        async with aiohttp.ClientSession() as session, session.post(
+            "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend",
+            headers=headers,
+            json=payload,
+        ) as resp:
+            if resp.status != 200:
+                logger.error(
+                    f"钉钉私聊消息发送失败: {resp.status}, {await resp.text()}",
+                )
 
     def _safe_remove_file(self, file_path: str | None) -> None:
         if not file_path:
@@ -514,14 +512,14 @@ class DingtalkPlatformAdapter(Platform):
             ) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"钉钉媒体上传失败: {resp.status}, {await resp.text()}"
+                        f"钉钉媒体上传失败: {resp.status}, {await resp.text()}",
                     )
                     return ""
                 data = await resp.json()
                 if data.get("errcode") != 0:
                     logger.error(f"钉钉媒体上传失败: {data}")
                     return ""
-                return cast(str, data.get("media_id", ""))
+                return cast("str", data.get("media_id", ""))
 
     async def upload_image(self, image: Image) -> str:
         image_file_path = await image.convert_to_file_path()
@@ -693,8 +691,8 @@ class DingtalkPlatformAdapter(Platform):
         robot_code = self.client_id
 
         # at_list: list[str] = []
-        sender_id = cast(str, incoming_message.sender_id or "")
-        sender_staff_id = cast(str, incoming_message.sender_staff_id or "")
+        sender_id = cast("str", incoming_message.sender_id or "")
+        sender_staff_id = cast("str", incoming_message.sender_staff_id or "")
         normalized_sender_id = self._id_to_sid(sender_id)
         # 现在用的发消息接口不支持 at
         # for segment in message_chain.chain:
@@ -710,7 +708,7 @@ class DingtalkPlatformAdapter(Platform):
 
         if incoming_message.conversation_type == "2":
             await self.send_message_chain_to_group(
-                open_conversation_id=cast(str, incoming_message.conversation_id),
+                open_conversation_id=cast("str", incoming_message.conversation_id),
                 robot_code=robot_code,
                 message_chain=message_chain,
                 # at_str=at_str,

@@ -40,10 +40,10 @@ __all__ = [
     "PlatformRoute",
     "PluginRoute",
     "SessionManagementRoute",
+    "SkillsRoute",
     "StatRoute",
     "StaticFileRoute",
     "SubAgentRoute",
     "ToolsRoute",
-    "SkillsRoute",
     "UpdateRoute",
 ]

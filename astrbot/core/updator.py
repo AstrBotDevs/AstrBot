@@ -150,7 +150,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
         if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
             raise Exception(
-                "Error: You are running AstrBot via CLI, please use `pip` or `uv tool upgrade` to update AstrBot."
+                "Error: You are running AstrBot via CLI, please use `pip` or `uv tool upgrade` to update AstrBot.",
             )  # 避免版本管理混乱
 
         if latest:

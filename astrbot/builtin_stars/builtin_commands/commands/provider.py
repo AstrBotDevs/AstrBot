@@ -48,7 +48,7 @@ class _ModelCache:
         return models
 
     def set(
-        self, provider_id: str, umo: str | None, models: list[str], ttl: float
+        self, provider_id: str, umo: str | None, models: list[str], ttl: float,
     ) -> None:
         if ttl <= 0:
             return
@@ -67,7 +67,7 @@ class _ModelCache:
             self._store.pop(key, None)
 
     def invalidate(
-        self, provider_id: str | None = None, *, umo: str | None = None
+        self, provider_id: str | None = None, *, umo: str | None = None,
     ) -> None:
         if provider_id is None:
             self._store.clear()
@@ -106,7 +106,7 @@ class ProviderCommands:
             register_change_hook(self._on_provider_manager_changed)
 
     def invalidate_provider_models_cache(
-        self, provider_id: str | None = None, *, umo: str | None = None
+        self, provider_id: str | None = None, *, umo: str | None = None,
     ) -> None:
         """Public hook for cache invalidation on external provider config changes."""
         self._model_cache.invalidate(provider_id, umo=umo)
@@ -198,14 +198,14 @@ class ProviderCommands:
         for candidate in models:
             cand_norm = candidate.casefold()
             if cand_norm.endswith(f"/{requested_norm}") or cand_norm.endswith(
-                f":{requested_norm}"
+                f":{requested_norm}",
             ):
                 return candidate
 
         return None
 
     def _apply_model(
-        self, prov: Provider, model_name: str, *, umo: str | None = None
+        self, prov: Provider, model_name: str, *, umo: str | None = None,
     ) -> str:
         prov.set_model(model_name)
         self.invalidate_provider_models_cache(prov.meta().id, umo=umo)
@@ -287,7 +287,7 @@ class ProviderCommands:
             err_code = "TEST_FAILED"
             err_reason = safe_error("", e)
             self._log_reachability_failure(
-                provider, provider_capability_type, err_code, err_reason
+                provider, provider_capability_type, err_code, err_reason,
             )
             return False, err_code, err_reason
 
@@ -339,7 +339,7 @@ class ProviderCommands:
                     return provider, None, err
 
         results = await asyncio.gather(
-            *(fetch_models(provider) for provider in all_providers)
+            *(fetch_models(provider) for provider in all_providers),
         )
         failed_provider_errors: list[tuple[str, str]] = []
         for provider, models, err in results:
@@ -405,8 +405,8 @@ class ProviderCommands:
                 if all_providers:
                     await event.send(
                         MessageEventResult().message(
-                            "正在进行提供商可达性测试，请稍候..."
-                        )
+                            "正在进行提供商可达性测试，请稍候...",
+                        ),
                     )
                 check_results = await asyncio.gather(
                     *[self._test_provider_capability(p) for p, _ in all_providers],
@@ -463,7 +463,7 @@ class ProviderCommands:
                         "info": info,
                         "mark": mark,
                         "provider": p,
-                    }
+                    },
                 )
 
             # 分组输出
@@ -558,7 +558,7 @@ class ProviderCommands:
             event.set_result(MessageEventResult().message("无效的参数。"))
 
     async def _switch_model_by_name(
-        self, message: AstrMessageEvent, model_name: str, prov: Provider
+        self, message: AstrMessageEvent, model_name: str, prov: Provider,
     ) -> None:
         model_name = model_name.strip()
         if not model_name:
@@ -583,7 +583,7 @@ class ProviderCommands:
         if matched_model_name is not None:
             message.set_result(
                 MessageEventResult().message(
-                    self._apply_model(prov, matched_model_name, umo=umo)
+                    self._apply_model(prov, matched_model_name, umo=umo),
                 ),
             )
             return
@@ -620,7 +620,7 @@ class ProviderCommands:
         except Exception as e:
             message.set_result(
                 MessageEventResult().message(
-                    safe_error("跨提供商切换并设置模型失败: ", e)
+                    safe_error("跨提供商切换并设置模型失败: ", e),
                 ),
             )
 
@@ -655,7 +655,7 @@ class ProviderCommands:
             curr_model = prov.get_model() or "无"
             parts.append(f"\n当前模型: [{curr_model}]")
             parts.append(
-                "\nTips: 使用 /model <模型名/编号> 切换模型。输入模型名时可自动跨提供商查找并切换；跨提供商也可使用 /provider 切换。"
+                "\nTips: 使用 /model <模型名/编号> 切换模型。输入模型名时可自动跨提供商查找并切换；跨提供商也可使用 /provider 切换。",
             )
 
             ret = "".join(parts)
@@ -680,13 +680,13 @@ class ProviderCommands:
                                 prov,
                                 new_model,
                                 umo=message.unified_msg_origin,
-                            )
+                            ),
                         ),
                     )
                 except Exception as e:
                     message.set_result(
                         MessageEventResult().message(
-                            safe_error("切换模型未知错误: ", e)
+                            safe_error("切换模型未知错误: ", e),
                         ),
                     )
                     return
@@ -730,7 +730,7 @@ class ProviderCommands:
                 except Exception as e:
                     message.set_result(
                         MessageEventResult().message(
-                            safe_error("切换 Key 未知错误: ", e)
+                            safe_error("切换 Key 未知错误: ", e),
                         ),
                     )
                     return

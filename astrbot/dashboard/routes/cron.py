@@ -11,7 +11,7 @@ from .route import Response, Route, RouteContext
 
 class CronRoute(Route):
     def __init__(
-        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle
+        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
@@ -42,7 +42,7 @@ class CronRoute(Route):
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").__dict__
+                    Response().error("Cron manager not initialized").__dict__,
                 )
             job_type = request.args.get("type")
             jobs = await cron_mgr.list_jobs(job_type)
@@ -57,7 +57,7 @@ class CronRoute(Route):
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").__dict__
+                    Response().error("Cron manager not initialized").__dict__,
                 )
 
             payload = await request.json
@@ -79,13 +79,13 @@ class CronRoute(Route):
                 return jsonify(Response().error("session is required").__dict__)
             if run_once and not run_at:
                 return jsonify(
-                    Response().error("run_at is required when run_once=true").__dict__
+                    Response().error("run_at is required when run_once=true").__dict__,
                 )
             if (not run_once) and not cron_expression:
                 return jsonify(
                     Response()
                     .error("cron_expression is required when run_once=false")
-                    .__dict__
+                    .__dict__,
                 )
             if run_once and cron_expression:
                 cron_expression = None  # ignore cron when run_once specified
@@ -95,7 +95,7 @@ class CronRoute(Route):
                     run_at_dt = datetime.fromisoformat(str(run_at))
                 except Exception:
                     return jsonify(
-                        Response().error("run_at must be ISO datetime").__dict__
+                        Response().error("run_at must be ISO datetime").__dict__,
                     )
 
             job_payload = {
@@ -128,7 +128,7 @@ class CronRoute(Route):
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").__dict__
+                    Response().error("Cron manager not initialized").__dict__,
                 )
 
             payload = await request.json
@@ -170,7 +170,7 @@ class CronRoute(Route):
                     session = str(payload.get("session") or "").strip()
                     if not session:
                         return jsonify(
-                            Response().error("session cannot be empty").__dict__
+                            Response().error("session cannot be empty").__dict__,
                         )
                     merged_payload["session"] = session
 
@@ -179,7 +179,7 @@ class CronRoute(Route):
                     note = str(payload.get("note") or "").strip()
                     if not note:
                         return jsonify(
-                            Response().error("note cannot be empty").__dict__
+                            Response().error("note cannot be empty").__dict__,
                         )
                     merged_payload["note"] = note
                     updates["description"] = note
@@ -188,7 +188,7 @@ class CronRoute(Route):
                     description = str(payload.get("description") or "").strip()
                     if not description:
                         return jsonify(
-                            Response().error("description cannot be empty").__dict__
+                            Response().error("description cannot be empty").__dict__,
                         )
                     updates["description"] = description
                     merged_payload["note"] = description
@@ -196,7 +196,7 @@ class CronRoute(Route):
 
                 if not note_updated and updates.get("description") is None:
                     existing_note = str(
-                        merged_payload.get("note") or job.description or ""
+                        merged_payload.get("note") or job.description or "",
                     ).strip()
                     if existing_note:
                         merged_payload["note"] = existing_note
@@ -220,7 +220,7 @@ class CronRoute(Route):
                         run_at_iso = datetime.fromisoformat(str(run_at_raw)).isoformat()
                     except Exception:
                         return jsonify(
-                            Response().error("run_at must be ISO datetime").__dict__
+                            Response().error("run_at must be ISO datetime").__dict__,
                         )
 
                 if next_run_once:
@@ -228,7 +228,7 @@ class CronRoute(Route):
                         return jsonify(
                             Response()
                             .error("run_at is required when run_once=true")
-                            .__dict__
+                            .__dict__,
                         )
                     next_cron_expression = None
                     merged_payload["run_at"] = run_at_iso
@@ -237,7 +237,7 @@ class CronRoute(Route):
                         return jsonify(
                             Response()
                             .error("cron_expression is required when run_once=false")
-                            .__dict__
+                            .__dict__,
                         )
                     merged_payload.pop("run_at", None)
 
@@ -249,7 +249,7 @@ class CronRoute(Route):
                     cron_expression = str(payload.get("cron_expression") or "").strip()
                     if not cron_expression:
                         return jsonify(
-                            Response().error("cron_expression cannot be empty").__dict__
+                            Response().error("cron_expression cannot be empty").__dict__,
                         )
                     updates["cron_expression"] = cron_expression
 
@@ -270,7 +270,7 @@ class CronRoute(Route):
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").__dict__
+                    Response().error("Cron manager not initialized").__dict__,
                 )
             await cron_mgr.delete_job(job_id)
             return jsonify(Response().ok(message="deleted").__dict__)

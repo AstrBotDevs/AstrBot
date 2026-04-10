@@ -108,7 +108,7 @@ class LinePlatformAdapter(Platform):
         return PlatformMetadata(
             name="line",
             description="LINE Messaging API 适配器",
-            id=cast(str, self.config.get("id", "line")),
+            id=cast("str", self.config.get("id", "line")),
             support_streaming_message=False,
         )
 
@@ -193,7 +193,7 @@ class LinePlatformAdapter(Platform):
             message.get("id")
             or event.get("webhookEventId")
             or event.get("deliveryContext", {}).get("deliveryId", "")
-            or uuid.uuid4().hex
+            or uuid.uuid4().hex,
         )
 
         event_timestamp = event.get("timestamp")

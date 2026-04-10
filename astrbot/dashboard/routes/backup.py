@@ -40,6 +40,7 @@ def secure_filename(filename: str) -> str:
 
     Returns:
         安全的文件名
+
     """
     # 跨平台处理：先将反斜杠替换为正斜杠，再取文件名
     filename = filename.replace("\\", "/")
@@ -70,6 +71,7 @@ def generate_unique_filename(original_filename: str) -> str:
 
     Returns:
         添加了时间戳后缀的唯一文件名，格式为 {原文件名}_{YYYYMMDD_HHMMSS}.{扩展名}
+
     """
     name, ext = os.path.splitext(original_filename)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -184,7 +186,7 @@ class BackupRoute(Route):
         """创建进度回调函数"""
 
         async def _callback(
-            stage: str, current: int, total: int, message: str = ""
+            stage: str, current: int, total: int, message: str = "",
         ) -> None:
             self._update_progress(
                 task_id,
@@ -202,7 +204,7 @@ class BackupRoute(Route):
         if self._cleanup_task is None or self._cleanup_task.done():
             try:
                 self._cleanup_task = asyncio.create_task(
-                    self._cleanup_expired_uploads()
+                    self._cleanup_expired_uploads(),
                 )
             except RuntimeError:
                 # 如果没有运行中的事件循环，跳过（等待下次异步调用时启动）
@@ -255,15 +257,15 @@ class BackupRoute(Route):
 
         Returns:
             dict | None: manifest 内容，如果不是有效备份则返回 None
+
         """
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 if "manifest.json" in zf.namelist():
                     manifest_data = zf.read("manifest.json")
                     return json.loads(manifest_data.decode("utf-8"))
-                else:
-                    # 没有 manifest.json，不是有效的 AstrBot 备份
-                    return None
+                # 没有 manifest.json，不是有效的 AstrBot 备份
+                return None
         except Exception as e:
             logger.debug(f"读取备份 manifest 失败: {e}")
         return None  # 无法读取，不是有效备份
@@ -310,11 +312,11 @@ class BackupRoute(Route):
                         "size": stat.st_size,
                         "created_at": stat.st_mtime,
                         "type": manifest.get(
-                            "origin", "exported"
+                            "origin", "exported",
                         ),  # 老版本没有 origin 默认为 exported
                         "astrbot_version": manifest.get("astrbot_version", "未知"),
                         "exported_at": manifest.get("exported_at"),
-                    }
+                    },
                 )
 
             # 按创建时间倒序排序
@@ -333,7 +335,7 @@ class BackupRoute(Route):
                         "total": len(backup_files),
                         "page": page,
                         "page_size": page_size,
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -364,7 +366,7 @@ class BackupRoute(Route):
                     {
                         "task_id": task_id,
                         "message": "export task created, processing in background",
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -442,7 +444,7 @@ class BackupRoute(Route):
             await file.save(zip_path)
 
             logger.info(
-                f"上传的备份文件已保存: {unique_filename} (原始名称: {file.filename})"
+                f"上传的备份文件已保存: {unique_filename} (原始名称: {file.filename})",
             )
 
             return (
@@ -452,7 +454,7 @@ class BackupRoute(Route):
                         "filename": unique_filename,
                         "original_filename": file.filename,
                         "size": os.path.getsize(zip_path),
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -520,7 +522,7 @@ class BackupRoute(Route):
 
             logger.info(
                 f"初始化分片上传: upload_id={upload_id}, "
-                f"filename={unique_filename}, total_chunks={total_chunks}"
+                f"filename={unique_filename}, total_chunks={total_chunks}",
             )
 
             return (
@@ -531,7 +533,7 @@ class BackupRoute(Route):
                         "chunk_size": CHUNK_SIZE,
                         "total_chunks": total_chunks,
                         "filename": unique_filename,
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -596,7 +598,7 @@ class BackupRoute(Route):
 
             logger.debug(
                 f"接收分片: upload_id={upload_id}, "
-                f"chunk={chunk_index + 1}/{total_chunks}"
+                f"chunk={chunk_index + 1}/{total_chunks}",
             )
 
             return (
@@ -606,7 +608,7 @@ class BackupRoute(Route):
                         "received": received_count,
                         "total": total_chunks,
                         "chunk_index": chunk_index,
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -623,6 +625,7 @@ class BackupRoute(Route):
 
         Args:
             zip_path: ZIP 文件路径
+
         """
         try:
             # 读取原有 manifest
@@ -706,7 +709,7 @@ class BackupRoute(Route):
                 self._mark_backup_as_uploaded(output_path)
 
                 logger.info(
-                    f"分片上传完成: {filename}, size={file_size}, chunks={total}"
+                    f"分片上传完成: {filename}, size={file_size}, chunks={total}",
                 )
 
                 # 清理分片目录
@@ -719,7 +722,7 @@ class BackupRoute(Route):
                             "filename": filename,
                             "original_filename": session["original_filename"],
                             "size": file_size,
-                        }
+                        },
                     )
                     .__dict__
                 )
@@ -859,7 +862,7 @@ class BackupRoute(Route):
                     {
                         "task_id": task_id,
                         "message": "import task created, processing in background",
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -1065,8 +1068,7 @@ class BackupRoute(Route):
             new_name = secure_filename(new_name)
 
             # 移除新文件名中的扩展名（如果有的话）
-            if new_name.endswith(".zip"):
-                new_name = new_name[:-4]
+            new_name = new_name.removesuffix(".zip")
 
             # 验证新文件名不为空
             if not new_name or new_name.replace("_", "") == "":
@@ -1096,7 +1098,7 @@ class BackupRoute(Route):
                     {
                         "old_filename": filename,
                         "new_filename": new_filename,
-                    }
+                    },
                 )
                 .__dict__
             )

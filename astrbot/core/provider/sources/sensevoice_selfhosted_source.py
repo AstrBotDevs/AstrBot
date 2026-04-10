@@ -91,8 +91,8 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
             loop = asyncio.get_running_loop()
             res = await loop.run_in_executor(
                 None,  # 使用默认的线程池
-                lambda: cast(SenseVoiceSmall, self.model)(
-                    audio_url, language="auto", use_itn=True
+                lambda: cast("SenseVoiceSmall", self.model)(
+                    audio_url, language="auto", use_itn=True,
                 ),
             )
 

@@ -45,7 +45,7 @@ DEFAULT_UPLOAD_CONCURRENCY = 3
 
 
 @register_platform_adapter(
-    "misskey", "Misskey 平台适配器", support_streaming_message=False
+    "misskey", "Misskey 平台适配器", support_streaming_message=False,
 )
 class MisskeyPlatformAdapter(Platform):
     def __init__(
@@ -703,7 +703,7 @@ class MisskeyPlatformAdapter(Platform):
         files = raw_data.get("files", [])
         process_files(message, files, include_text_parts=False)
 
-        message.message_str = raw_text if raw_text else ""
+        message.message_str = raw_text or ""
         return message
 
     async def convert_room_message(self, raw_data: dict[str, Any]) -> AstrBotMessage:

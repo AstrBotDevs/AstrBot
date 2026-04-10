@@ -328,12 +328,12 @@ class ShipyardNeoBooter(ComputerBooter):
             if self._bay_manager is not None:
                 raise ValueError(
                     "Bay container started but credentials could not be read. "
-                    "Ensure Bay generated credentials.json, or set access_token manually."
+                    "Ensure Bay generated credentials.json, or set access_token manually.",
                 )
             raise ValueError(
                 "Shipyard Neo sandbox configuration is incomplete. "
                 "Set endpoint (default http://127.0.0.1:8114) and access token, "
-                "or ensure Bay's credentials.json is accessible for auto-discovery."
+                "or ensure Bay's credentials.json is accessible for auto-discovery.",
             )
 
         from shipyard_neo import BayClient
@@ -428,7 +428,7 @@ class ShipyardNeoBooter(ComputerBooter):
         if self._client is not None:
             sandbox_id = getattr(self._sandbox, "id", "unknown")
             logger.info(
-                "[Computer] Shutting down Shipyard Neo sandbox: id=%s", sandbox_id
+                "[Computer] Shutting down Shipyard Neo sandbox: id=%s", sandbox_id,
             )
             await self._client.__aexit__(None, None, None)
             self._client = None
@@ -487,7 +487,7 @@ class ShipyardNeoBooter(ComputerBooter):
         if local_dir:
             os.makedirs(local_dir, exist_ok=True)
         with open(local_path, "wb") as f:
-            f.write(cast(bytes, content))
+            f.write(cast("bytes", content))
         logger.info(
             "[Computer] File downloaded from Neo sandbox: %s -> %s",
             remote_path,

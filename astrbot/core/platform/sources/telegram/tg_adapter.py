@@ -118,10 +118,10 @@ class TelegramPlatformAdapter(Platform):
         # Cache structure: {media_group_id: {"created_at": datetime, "items": [(update, context), ...]}}
         self.media_group_cache: dict[str, dict] = {}
         self.media_group_timeout = self.config.get(
-            "telegram_media_group_timeout", 2.5
+            "telegram_media_group_timeout", 2.5,
         )  # seconds - debounce delay between messages
         self.media_group_max_wait = self.config.get(
-            "telegram_media_group_max_wait", 10.0
+            "telegram_media_group_max_wait", 10.0,
         )  # max seconds - hard cap to prevent indefinite delay
 
     @override
@@ -169,7 +169,7 @@ class TelegramPlatformAdapter(Platform):
             try:
                 logger.info("Starting Telegram polling...")
                 await self.application.updater.start_polling(
-                    error_callback=self._on_polling_error
+                    error_callback=self._on_polling_error,
                 )
                 logger.info("Telegram Platform Adapter is running.")
                 while self.application.updater.running and not self._terminating:  # noqa: ASYNC110
@@ -178,13 +178,13 @@ class TelegramPlatformAdapter(Platform):
                 if not self._terminating:
                     logger.warning(
                         "Telegram polling loop exited unexpectedly, "
-                        f"retrying in {self._polling_restart_delay}s."
+                        f"retrying in {self._polling_restart_delay}s.",
                     )
             except asyncio.CancelledError:
                 raise
             except (Forbidden, InvalidToken) as e:
                 logger.error(
-                    f"Telegram token is invalid or unauthorized: {e}. Polling stopped."
+                    f"Telegram token is invalid or unauthorized: {e}. Polling stopped.",
                 )
                 break
             except Exception as e:
@@ -246,7 +246,7 @@ class TelegramPlatformAdapter(Platform):
                         if cmd_name in command_dict:
                             logger.warning(
                                 f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
-                                f"'{command_dict[cmd_name]}'"
+                                f"'{command_dict[cmd_name]}'",
                             )
                         command_dict.setdefault(cmd_name, description)
 
@@ -293,7 +293,7 @@ class TelegramPlatformAdapter(Platform):
                 description = description[:30] + "..."
             result.append((cmd_name, description))
 
-        return result if result else None
+        return result or None
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not update.effective_chat:
@@ -307,7 +307,7 @@ class TelegramPlatformAdapter(Platform):
         )
 
     async def message_handler(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
         logger.debug(f"Telegram message: {update.message}")
 
@@ -452,10 +452,10 @@ class TelegramPlatformAdapter(Platform):
         elif update.message.voice:
             file = await update.message.voice.get_file()
 
-            file_basename = os.path.basename(cast(str, file.file_path))
+            file_basename = os.path.basename(cast("str", file.file_path))
             temp_dir = get_astrbot_temp_path()
             temp_path = os.path.join(temp_dir, file_basename)
-            await download_file(cast(str, file.file_path), path=temp_path)
+            await download_file(cast("str", file.file_path), path=temp_path)
             path_wav = os.path.join(
                 temp_dir,
                 f"{file_basename}.wav",
@@ -491,7 +491,7 @@ class TelegramPlatformAdapter(Platform):
                 )
             else:
                 message.message.append(
-                    Comp.File(file=file_path, name=file_name, url=file_path)
+                    Comp.File(file=file_path, name=file_name, url=file_path),
                 )
                 _apply_caption()
 
@@ -510,7 +510,7 @@ class TelegramPlatformAdapter(Platform):
         return message
 
     async def handle_media_group_message(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE,
     ):
         """Handle messages that are part of a media group (album).
 
@@ -556,7 +556,7 @@ class TelegramPlatformAdapter(Platform):
             delay = self.media_group_timeout
             logger.debug(
                 f"Scheduled media group {media_group_id} to be processed in {delay} seconds "
-                f"(already waited {elapsed:.1f}s)"
+                f"(already waited {elapsed:.1f}s)",
             )
 
         # Schedule/reschedule processing (replace_existing=True handles debounce)
@@ -575,6 +575,7 @@ class TelegramPlatformAdapter(Platform):
 
         Args:
             media_group_id: The unique identifier for this media group
+
         """
         if media_group_id not in self.media_group_cache:
             logger.warning(f"Media group {media_group_id} not found in cache")
@@ -587,7 +588,7 @@ class TelegramPlatformAdapter(Platform):
             return
 
         logger.info(
-            f"Processing media group {media_group_id}, total {len(updates_and_contexts)} items"
+            f"Processing media group {media_group_id}, total {len(updates_and_contexts)} items",
         )
 
         # Use the first update to create the base message (with reply, caption, etc.)
@@ -596,7 +597,7 @@ class TelegramPlatformAdapter(Platform):
 
         if not abm:
             logger.warning(
-                f"Failed to convert the first message of media group {media_group_id}"
+                f"Failed to convert the first message of media group {media_group_id}",
             )
             return
 
@@ -610,7 +611,7 @@ class TelegramPlatformAdapter(Platform):
             # Merge only the message components (keep base session/meta from first)
             abm.message.extend(extra.message)
             logger.debug(
-                f"Added {len(extra.message)} components to media group {media_group_id}"
+                f"Added {len(extra.message)} components to media group {media_group_id}",
             )
 
         # Process the merged message

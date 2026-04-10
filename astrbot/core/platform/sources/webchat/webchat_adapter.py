@@ -89,7 +89,7 @@ class WebChatAdapter(Platform):
     ) -> None:
         conversation_id = _extract_conversation_id(session.session_id)
         active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
-            conversation_id
+            conversation_id,
         )
         stream_request_ids = [
             req_id for req_id in active_request_ids if not req_id.startswith("ws_sub_")
@@ -154,7 +154,7 @@ class WebChatAdapter(Platform):
         )
 
     async def _get_message_history(
-        self, message_id: int
+        self, message_id: int,
     ) -> PlatformMessageHistory | None:
         return await db_helper.get_platform_message_history_by_id(message_id)
 
@@ -173,6 +173,7 @@ class WebChatAdapter(Platform):
 
         Returns:
             tuple[list, list[str]]: (消息组件列表, 纯文本列表)
+
         """
 
         async def get_reply_parts(
@@ -247,7 +248,7 @@ class WebChatAdapter(Platform):
         message_event.set_extra("selected_provider", payload.get("selected_provider"))
         message_event.set_extra("selected_model", payload.get("selected_model"))
         message_event.set_extra(
-            "enable_streaming", payload.get("enable_streaming", True)
+            "enable_streaming", payload.get("enable_streaming", True),
         )
         message_event.set_extra("action_type", payload.get("action_type"))
 

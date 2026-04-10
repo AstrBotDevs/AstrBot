@@ -74,6 +74,7 @@ class LarkMessageEvent(AstrMessageEvent):
 
         Returns:
             是否发送成功
+
         """
         if lark_client.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
@@ -89,7 +90,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     .msg_type(msg_type)
                     .uuid(str(uuid.uuid4()))
                     .reply_in_thread(False)
-                    .build()
+                    .build(),
                 )
                 .build()
             )
@@ -115,7 +116,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     .content(content)
                     .msg_type(msg_type)
                     .uuid(str(uuid.uuid4()))
-                    .build()
+                    .build(),
                 )
                 .build()
             )
@@ -145,6 +146,7 @@ class LarkMessageEvent(AstrMessageEvent):
 
         Returns:
             成功返回file_key，失败返回None
+
         """
         if not path or not os.path.exists(path):
             logger.error(f"[Lark] 文件不存在: {path}")
@@ -174,7 +176,7 @@ class LarkMessageEvent(AstrMessageEvent):
 
                 if not response.success():
                     logger.error(
-                        f"[Lark] 无法上传文件({response.code}): {response.msg}"
+                        f"[Lark] 无法上传文件({response.code}): {response.msg}",
                     )
                     return None
 
@@ -207,7 +209,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     file_path = comp.file.replace("file:///", "")
                 elif comp.file and comp.file.startswith("http"):
                     image_file_path = await download_image_by_url(comp.file)
-                    file_path = image_file_path if image_file_path else ""
+                    file_path = image_file_path or ""
                 elif comp.file and comp.file.startswith("base64://"):
                     base64_str = comp.file.removeprefix("base64://")
                     image_data = base64.b64decode(base64_str)
@@ -220,7 +222,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     with open(file_path, "wb") as f:
                         f.write(BytesIO(image_data).getvalue())
                 else:
-                    file_path = comp.file if comp.file else ""
+                    file_path = comp.file or ""
 
                 if image_file is None:
                     if not file_path:
@@ -307,7 +309,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 {
                     "tag": "markdown",
                     "content": reasoning_content,
-                }
+                },
             ],
         }
 
@@ -321,8 +323,8 @@ class LarkMessageEvent(AstrMessageEvent):
                         reasoning_content=reasoning_content,
                         title=title,
                         expanded=False,
-                    )
-                ]
+                    ),
+                ],
             },
         }
 
@@ -341,7 +343,7 @@ class LarkMessageEvent(AstrMessageEvent):
                         reasoning_content=reasoning_content,
                         title=str(comp.data.get("title", "💭 Thinking")),
                         expanded=bool(comp.data.get("expanded", False)),
-                    )
+                    ),
                 )
             elif isinstance(comp, Plain):
                 if comp.text:
@@ -379,9 +381,9 @@ class LarkMessageEvent(AstrMessageEvent):
                     CreateCardRequestBody.builder()
                     .type("card_json")
                     .data(json.dumps(card_json, ensure_ascii=False))
-                    .build()
+                    .build(),
                 )
-                .build()
+                .build(),
             )
         except Exception as e:
             logger.error(f"[Lark] 创建卡片失败: {e}")
@@ -446,6 +448,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: 回复的消息ID（用于回复消息）
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型，如 'open_id', 'chat_id'（用于主动发送）
+
         """
         if lark_client.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
@@ -554,17 +557,17 @@ class LarkMessageEvent(AstrMessageEvent):
         # 发送附件
         for file_comp in file_components:
             await LarkMessageEvent._send_file_message(
-                file_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                file_comp, lark_client, reply_message_id, receive_id, receive_id_type,
             )
 
         for audio_comp in audio_components:
             await LarkMessageEvent._send_audio_message(
-                audio_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                audio_comp, lark_client, reply_message_id, receive_id, receive_id_type,
             )
 
         for media_comp in media_components:
             await LarkMessageEvent._send_media_message(
-                media_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                media_comp, lark_client, reply_message_id, receive_id, receive_id_type,
             )
 
     async def send(self, message: MessageChain) -> None:
@@ -592,10 +595,11 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: 回复的消息ID（用于回复消息）
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型（用于主动发送）
+
         """
         file_path = file_comp.file or ""
         file_key = await LarkMessageEvent._upload_lark_file(
-            lark_client, path=file_path, file_type="stream"
+            lark_client, path=file_path, file_type="stream",
         )
         if not file_key:
             return
@@ -626,6 +630,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: 回复的消息ID（用于回复消息）
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型（用于主动发送）
+
         """
         # 获取音频文件路径
         try:
@@ -699,6 +704,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: 回复的消息ID（用于回复消息）
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型（用于主动发送）
+
         """
         # 获取视频文件路径
         try:
@@ -803,8 +809,8 @@ class LarkMessageEvent(AstrMessageEvent):
                         "tag": "markdown",
                         "content": "",
                         "element_id": "markdown_1",
-                    }
-                ]
+                    },
+                ],
             },
         }
 
@@ -814,7 +820,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 CreateCardRequestBody.builder()
                 .type("card_json")
                 .data(json.dumps(card_json, ensure_ascii=False))
-                .build()
+                .build(),
             )
             .build()
         )
@@ -827,7 +833,7 @@ class LarkMessageEvent(AstrMessageEvent):
 
         if not response.success():
             logger.error(
-                f"[Lark] 创建流式卡片实体失败({response.code}): {response.msg}"
+                f"[Lark] 创建流式卡片实体失败({response.code}): {response.msg}",
             )
             return None
 
@@ -880,7 +886,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 .content(content)
                 .sequence(sequence)
                 .uuid(str(uuid.uuid4()))
-                .build()
+                .build(),
             )
             .build()
         )
@@ -920,7 +926,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 .settings(settings_json)
                 .sequence(sequence)
                 .uuid(str(uuid.uuid4()))
-                .build()
+                .build(),
             )
             .build()
         )
@@ -1046,7 +1052,7 @@ class LarkMessageEvent(AstrMessageEvent):
                             card_id = await self._create_streaming_card()
                             if not card_id:
                                 logger.warning(
-                                    "[Lark] 无法创建流式卡片，回退到非流式发送"
+                                    "[Lark] 无法创建流式卡片，回退到非流式发送",
                                 )
                                 await _consume_rest_and_fallback(generator, delta)
                                 return
@@ -1057,7 +1063,7 @@ class LarkMessageEvent(AstrMessageEvent):
                             )
                             if not sent:
                                 logger.error(
-                                    "[Lark] 发送流式卡片消息失败，回退到非流式发送"
+                                    "[Lark] 发送流式卡片消息失败，回退到非流式发送",
                                 )
                                 await _consume_rest_and_fallback(generator, delta)
                                 return
@@ -1076,7 +1082,7 @@ class LarkMessageEvent(AstrMessageEvent):
         if card_id is None:
             if not fallback_used:
                 await Metric.upload(
-                    msg_event_tick=1, adapter_name=self.platform_meta.name
+                    msg_event_tick=1, adapter_name=self.platform_meta.name,
                 )
                 self._has_send_oper = True
             return

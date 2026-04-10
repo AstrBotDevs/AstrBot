@@ -15,7 +15,6 @@ DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 class EmptyMcpServersError(ValueError):
     """Raised when mcpServers is empty."""
 
-    pass
 
 
 def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
@@ -23,6 +22,7 @@ def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
 
     Raises:
         ValueError: Invalid configuration
+
     """
     if not isinstance(mcp_servers_value, dict):
         raise ValueError("mcpServers must be a JSON object")
@@ -33,7 +33,7 @@ def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
     if not isinstance(extracted, dict):
         raise ValueError(
             "Invalid mcpServers format. Ensure each key in mcpServers is a server name, "
-            "and each value is an object containing fields like command/url."
+            "and each value is an object containing fields like command/url.",
         )
     return extracted
 
@@ -78,7 +78,7 @@ class ToolsRoute(Route):
 
             if not isinstance(mcp_servers, dict):
                 logger.warning(
-                    f"Invalid MCP server config type: {type(mcp_servers).__name__}. Expected object/dict; skipped all MCP servers."
+                    f"Invalid MCP server config type: {type(mcp_servers).__name__}. Expected object/dict; skipped all MCP servers.",
                 )
                 mcp_servers = {}
 
@@ -86,7 +86,7 @@ class ToolsRoute(Route):
             for name, server_config in mcp_servers.items():
                 if not isinstance(server_config, dict):
                     logger.warning(
-                        f"Invalid config for MCP server '{name}' (type: {type(server_config).__name__}); skipped."
+                        f"Invalid config for MCP server '{name}' (type: {type(server_config).__name__}); skipped.",
                     )
                     continue
 
@@ -137,7 +137,7 @@ class ToolsRoute(Route):
                     if key == "mcpServers":
                         try:
                             server_config = _extract_mcp_server_config(
-                                server_data["mcpServers"]
+                                server_data["mcpServers"],
                             )
                         except ValueError as e:
                             return Response().error(f"{e!s}").__dict__
@@ -241,7 +241,7 @@ class ToolsRoute(Route):
                     if key == "mcpServers":
                         try:
                             server_config = _extract_mcp_server_config(
-                                server_data["mcpServers"]
+                                server_data["mcpServers"],
                             )
                         except ValueError as e:
                             return Response().error(f"{e!s}").__dict__
@@ -276,7 +276,7 @@ class ToolsRoute(Route):
                             return (
                                 Response()
                                 .error(
-                                    f"Timed out while disabling MCP server {old_name} before enabling: {e!s}"
+                                    f"Timed out while disabling MCP server {old_name} before enabling: {e!s}",
                                 )
                                 .__dict__
                             )
@@ -285,7 +285,7 @@ class ToolsRoute(Route):
                             return (
                                 Response()
                                 .error(
-                                    f"Failed to disable MCP server {old_name} before enabling: {e!s}"
+                                    f"Failed to disable MCP server {old_name} before enabling: {e!s}",
                                 )
                                 .__dict__
                             )
@@ -393,7 +393,7 @@ class ToolsRoute(Route):
                     return (
                         Response()
                         .error(
-                            "Only one MCP server configuration can be tested at a time"
+                            "Only one MCP server configuration can be tested at a time",
                         )
                         .__dict__
                     )
@@ -445,7 +445,7 @@ class ToolsRoute(Route):
                     origin = "mcp"
                     origin_name = tool.mcp_server_name
                 elif tool.handler_module_path and star_map.get(
-                    tool.handler_module_path
+                    tool.handler_module_path,
                 ):
                     star = star_map[tool.handler_module_path]
                     origin = "plugin"

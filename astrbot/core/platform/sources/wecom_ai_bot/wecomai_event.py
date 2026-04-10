@@ -116,11 +116,10 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         logger.warning("图片数据为空，跳过")
                 except Exception as e:
                     logger.error("处理图片消息失败: %s", e)
-            else:
-                if not suppress_unsupported_log:
-                    logger.warning(
-                        f"[WecomAI] 不支持的消息组件类型: {type(comp)}, 跳过"
-                    )
+            elif not suppress_unsupported_log:
+                logger.warning(
+                    f"[WecomAI] 不支持的消息组件类型: {type(comp)}, 跳过",
+                )
 
         return data
 
@@ -147,7 +146,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         stream_id = raw.get("stream_id", self.session_id)
         pending_response = self.queue_mgr.get_pending_response(stream_id) or {}
         connection_mode = pending_response.get("callback_params", {}).get(
-            "connection_mode"
+            "connection_mode",
         )
         req_id = pending_response.get("callback_params", {}).get("req_id")
 
@@ -213,7 +212,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         stream_id = raw.get("stream_id", self.session_id)
         pending_response = self.queue_mgr.get_pending_response(stream_id) or {}
         connection_mode = pending_response.get("callback_params", {}).get(
-            "connection_mode"
+            "connection_mode",
         )
         req_id = pending_response.get("callback_params", {}).get("req_id")
         back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
@@ -315,7 +314,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         async for chain in generator:
             if self.webhook_client:
                 await self.webhook_client.send_message_chain(
-                    chain, unsupported_only=True
+                    chain, unsupported_only=True,
                 )
 
             if chain.type == "break" and final_data:

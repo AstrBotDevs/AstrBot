@@ -98,7 +98,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False,
     ):
         buffer = None
         async for chain in generator:
@@ -274,8 +274,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 self.message_obj.raw_message,
                 "add_reaction",
             ):
-                await cast(discord.Message, self.message_obj.raw_message).add_reaction(
-                    emoji
+                await cast("discord.Message", self.message_obj.raw_message).add_reaction(
+                    emoji,
                 )
         except Exception as e:
             logger.error(f"[Discord] 添加反应失败: {e}")
@@ -285,7 +285,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         return (
             hasattr(self.message_obj, "raw_message")
             and hasattr(self.message_obj.raw_message, "type")
-            and cast(discord.Interaction, self.message_obj.raw_message).type
+            and cast("discord.Interaction", self.message_obj.raw_message).type
             == discord.InteractionType.application_command
         )
 
@@ -294,7 +294,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         return (
             hasattr(self.message_obj, "raw_message")
             and hasattr(self.message_obj.raw_message, "type")
-            and cast(discord.Interaction, self.message_obj.raw_message).type
+            and cast("discord.Interaction", self.message_obj.raw_message).type
             == discord.InteractionType.component
         )
 
@@ -303,8 +303,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
         if self.is_button_interaction():
             try:
                 return cast(
-                    ComponentInteractionData,
-                    cast(discord.Interaction, self.message_obj.raw_message).data,
+                    "ComponentInteractionData",
+                    cast("discord.Interaction", self.message_obj.raw_message).data,
                 ).get("custom_id", "")
             except Exception:
                 pass
@@ -319,7 +319,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
             return any(
                 mention.id == int(self.message_obj.self_id)
                 for mention in cast(
-                    discord.Message, self.message_obj.raw_message
+                    "discord.Message", self.message_obj.raw_message,
                 ).mentions
             )
         return False
@@ -330,5 +330,5 @@ class DiscordPlatformEvent(AstrMessageEvent):
             self.message_obj.raw_message,
             "clean_content",
         ):
-            return cast(discord.Message, self.message_obj.raw_message).clean_content
+            return cast("discord.Message", self.message_obj.raw_message).clean_content
         return self.message_str

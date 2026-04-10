@@ -150,7 +150,7 @@ class RepoZipUpdator:
         )
 
     async def download_from_repo_url(
-        self, target_path: str, repo_url: str, proxy=""
+        self, target_path: str, repo_url: str, proxy="",
     ) -> None:
         author, repo, branch = self.parse_github_url(repo_url)
 

@@ -43,7 +43,7 @@ class LogRoute(Route):
         )
 
     async def _replay_cached_logs(
-        self, last_event_id: str
+        self, last_event_id: str,
     ) -> AsyncGenerator[str, None]:
         """辅助生成器：重放缓存的日志"""
         try:
@@ -86,7 +86,7 @@ class LogRoute(Route):
                     self.log_broker.unregister(queue)
 
         response = cast(
-            QuartResponse,
+            "QuartResponse",
             await make_response(
                 stream(),
                 {

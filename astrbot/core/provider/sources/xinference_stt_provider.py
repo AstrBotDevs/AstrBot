@@ -128,7 +128,7 @@ class ProviderXinferenceSTT(STTProvider):
             # 3. Perform conversion if needed
             if conversion_type:
                 logger.info(
-                    f"Audio requires conversion ({conversion_type}), using temporary files..."
+                    f"Audio requires conversion ({conversion_type}), using temporary files...",
                 )
                 temp_dir = get_astrbot_temp_path()
                 os.makedirs(temp_dir, exist_ok=True)

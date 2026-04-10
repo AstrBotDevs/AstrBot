@@ -95,7 +95,7 @@ class ProviderOpenAIOfficial(Provider):
             if not text:
                 return
             candidates.append(
-                ProviderOpenAIOfficial._truncate_error_text_candidate(text)
+                ProviderOpenAIOfficial._truncate_error_text_candidate(text),
             )
 
         _append_candidate(str(error))
@@ -104,7 +104,7 @@ class ProviderOpenAIOfficial(Provider):
         if isinstance(body, dict):
             err_obj = body.get("error")
             body_text = ProviderOpenAIOfficial._safe_json_dump(
-                {"error": err_obj} if isinstance(err_obj, dict) else body
+                {"error": err_obj} if isinstance(err_obj, dict) else body,
             )
             _append_candidate(body_text)
             if isinstance(err_obj, dict):
@@ -374,7 +374,7 @@ class ProviderOpenAIOfficial(Provider):
 
             try:
                 resolved_part = await self._resolve_image_part(
-                    url, image_detail=image_detail
+                    url, image_detail=image_detail,
                 )
             except Exception as exc:
                 logger.warning(
@@ -404,7 +404,7 @@ class ProviderOpenAIOfficial(Provider):
         return {**message, "content": new_content}
 
     async def _materialize_context_image_parts(
-        self, context_query: list[dict]
+        self, context_query: list[dict],
     ) -> list[dict]:
         return [
             await self._materialize_message_image_parts(message)
@@ -495,7 +495,7 @@ class ProviderOpenAIOfficial(Provider):
         return bool(value)
 
     def _apply_provider_specific_extra_body_overrides(
-        self, extra_body: dict[str, Any]
+        self, extra_body: dict[str, Any],
     ) -> None:
         if self.provider_config.get("provider") != "ollama":
             return
@@ -729,6 +729,7 @@ class ProviderOpenAIOfficial(Provider):
 
         Returns:
             Normalized plain text string.
+
         """
         # Handle dict format (e.g., {"type": "text", "text": "..."})
         if isinstance(raw_content, dict):
@@ -795,7 +796,7 @@ class ProviderOpenAIOfficial(Provider):
                                 text_val = part.get("text", "")
                                 # Coerce to str in case text is null or non-string
                                 text_parts.append(
-                                    str(text_val) if text_val is not None else ""
+                                    str(text_val) if text_val is not None else "",
                                 )
                         if text_parts:
                             return "".join(text_parts)
@@ -805,14 +806,14 @@ class ProviderOpenAIOfficial(Provider):
         return str(raw_content) if raw_content is not None else ""
 
     async def _parse_openai_completion(
-        self, completion: ChatCompletion, tools: ToolSet | None
+        self, completion: ChatCompletion, tools: ToolSet | None,
     ) -> LLMResponse:
         """Parse OpenAI ChatCompletion into LLMResponse"""
         llm_response = LLMResponse("assistant")
 
         if not completion.choices:
             raise EmptyModelOutputError(
-                f"OpenAI completion has no choices. response_id={completion.id}"
+                f"OpenAI completion has no choices. response_id={completion.id}",
             )
         choice = completion.choices[0]
 
@@ -892,7 +893,7 @@ class ProviderOpenAIOfficial(Provider):
             logger.error(f"OpenAI completion has no usable output: {completion}.")
             raise EmptyModelOutputError(
                 "OpenAI completion has no usable output. "
-                f"response_id={completion.id}, finish_reason={choice.finish_reason}"
+                f"response_id={completion.id}, finish_reason={choice.finish_reason}",
             )
 
         llm_response.raw_completion = completion
@@ -962,7 +963,7 @@ class ProviderOpenAIOfficial(Provider):
 
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
-                message.get("content"), list
+                message.get("content"), list,
             ):
                 reasoning_content = ""
                 new_content = []  # not including think part
@@ -986,7 +987,7 @@ class ProviderOpenAIOfficial(Provider):
                         json.loads(content)
                     except (json.JSONDecodeError, ValueError):
                         message["content"] = json.dumps(
-                            {"result": content}, ensure_ascii=False
+                            {"result": content}, ensure_ascii=False,
                         )
 
     async def _handle_api_error(
@@ -1286,7 +1287,6 @@ class ProviderOpenAIOfficial(Provider):
         extra_user_content_parts: list[ContentPart] | None = None,
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
-
         # 构建内容块列表
         content_blocks = []
 

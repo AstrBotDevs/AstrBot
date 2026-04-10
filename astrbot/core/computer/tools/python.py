@@ -46,8 +46,8 @@ async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult
         for img in images:
             resp.content.append(
                 mcp.types.ImageContent(
-                    type="image", data=img["image/png"], mimeType="image/png"
-                )
+                    type="image", data=img["image/png"], mimeType="image/png",
+                ),
             )
 
             if event.get_platform_name() == "webchat":
@@ -68,7 +68,7 @@ class PythonTool(FunctionTool):
     parameters: dict = field(default_factory=lambda: param_schema)
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False
+        self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
@@ -80,7 +80,7 @@ class PythonTool(FunctionTool):
             result = await sb.python.exec(code, silent=silent)
             return await handle_result(result, context.context.event)
         except Exception as e:
-            return f"Error executing code: {str(e)}"
+            return f"Error executing code: {e!s}"
 
 
 @dataclass
@@ -94,7 +94,7 @@ class LocalPythonTool(FunctionTool):
     parameters: dict = field(default_factory=lambda: param_schema)
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False
+        self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
@@ -103,4 +103,4 @@ class LocalPythonTool(FunctionTool):
             result = await sb.python.exec(code, silent=silent)
             return await handle_result(result, context.context.event)
         except Exception as e:
-            return f"Error executing code: {str(e)}"
+            return f"Error executing code: {e!s}"

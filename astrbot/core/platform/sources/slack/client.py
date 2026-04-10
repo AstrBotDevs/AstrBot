@@ -65,10 +65,11 @@ class SlackWebhookClient:
 
         Returns:
             Response 对象或字典
+
         """
         try:
             # 获取请求体和头部
-            body = cast(bytes, await req.get_data())
+            body = cast("bytes", await req.get_data())
             event_data = json.loads(body.decode("utf-8"))
 
             # Verify Slack request signature
@@ -142,7 +143,7 @@ class SlackSocketClient:
         self.socket_client = None
 
     async def _handle_events(
-        self, _: AsyncBaseSocketModeClient, req: SocketModeRequest
+        self, _: AsyncBaseSocketModeClient, req: SocketModeRequest,
     ) -> None:
         """处理 Socket Mode 事件"""
         try:

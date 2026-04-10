@@ -55,12 +55,12 @@ class AbstractProvider(abc.ABC):
         return meta
 
     async def test(self) -> None:
-        """test the provider is a
+        """Test the provider is a
 
-        raises:
+        Raises:
             Exception: if the provider is not available
+
         """
-        ...
 
 
 class Provider(AbstractProvider):
@@ -165,7 +165,7 @@ class Provider(AbstractProvider):
         """
         if False:  # pragma: no cover - make this an async generator for typing
             yield None  # type: ignore
-        raise NotImplementedError()
+        raise NotImplementedError
 
     async def pop_record(self, context: list) -> None:
         """弹出 context 第一条非系统提示词对话记录"""
@@ -239,6 +239,7 @@ class TTSProvider(AbstractProvider):
 
         Notes:
             子类可以重写此方法返回 True 来启用流式 TTS 支持
+
         """
         return False
 
@@ -265,6 +266,7 @@ class TTSProvider(AbstractProvider):
             - 默认实现会将文本累积后一次性调用 get_audio 生成完整音频
             - 子类可以重写此方法实现真正的流式 TTS
             - 音频数据应该是 WAV 格式的 bytes
+
         """
         accumulated_text = ""
 
@@ -301,7 +303,7 @@ class TTSProvider(AbstractProvider):
         if file_size == 0:
             raise Exception(
                 "TTS test failed: generated audio file is empty (0 bytes). "
-                "Please check your TTS provider configuration, especially required parameters like group_id for MiniMax."
+                "Please check your TTS provider configuration, especially required parameters like group_id for MiniMax.",
             )
 
         # 清理测试文件

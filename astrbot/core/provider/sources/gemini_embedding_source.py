@@ -63,7 +63,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         try:
             result = await self.client.models.embed_content(
                 model=self.model,
-                contents=cast(types.ContentListUnion, text),
+                contents=cast("types.ContentListUnion", text),
                 config=types.EmbedContentConfig(
                     output_dimensionality=self.get_dim(),
                 ),

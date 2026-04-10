@@ -17,7 +17,6 @@ def get_schema_item(schema: dict | None, key_path: str) -> dict | None:
     - 扁平 schema（直接 key 命中）
     - 嵌套 object schema（{type: "object", items: {...}}）
     """
-
     if not isinstance(schema, dict) or not key_path:
         return None
     if key_path in schema:
@@ -44,7 +43,6 @@ def sanitize_filename(name: str) -> str:
     - 将路径分隔符替换为下划线
     - 拒绝空字符串 / "." / ".."
     """
-
     cleaned = os.path.basename(name).strip()
     if not cleaned or cleaned in {".", ".."}:
         return ""
@@ -59,7 +57,6 @@ def sanitize_path_segment(segment: str) -> str:
 
     仅保留 [A-Za-z0-9_-]，其余替换为 "_"
     """
-
     cleaned = []
     for ch in segment:
         if (
@@ -81,14 +78,12 @@ def sanitize_path_segment(segment: str) -> str:
 
 def config_key_to_folder(key_path: str) -> str:
     """将 dot-path 的配置 key 转成稳定的文件夹路径。"""
-
     parts = [sanitize_path_segment(p) for p in key_path.split(".") if p]
     return "/".join(parts) if parts else "_"
 
 
 def normalize_rel_path(rel_path: str | None) -> str | None:
     """规范化用户传入的相对路径，并阻止路径穿越。"""
-
     if not isinstance(rel_path, str):
         return None
     rel = rel_path.replace("\\", "/").lstrip("/")

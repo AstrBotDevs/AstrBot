@@ -48,7 +48,7 @@ def init() -> None:
             click.echo("Done! You can now run 'astrbot run' to start AstrBot")
     except Timeout:
         raise click.ClickException(
-            "Cannot acquire lock file. Please check if another instance is running"
+            "Cannot acquire lock file. Please check if another instance is running",
         )
 
     except Exception as e:

@@ -7,7 +7,7 @@ from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
-def parse_size_to_bytes(value: str | int | float | None) -> int:
+def parse_size_to_bytes(value: str | float | None) -> int:
     """Parse size in MB to bytes."""
     if value is None:
         return 0
@@ -72,7 +72,7 @@ class TempDirCleaner:
                 continue
             total_size += stat.st_size
             files.append(
-                TempFileInfo(path=path, size=stat.st_size, mtime=stat.st_mtime)
+                TempFileInfo(path=path, size=stat.st_size, mtime=stat.st_mtime),
             )
 
         return total_size, files
@@ -81,7 +81,7 @@ class TempDirCleaner:
         if not self._temp_dir.exists():
             return
         for path in sorted(
-            self._temp_dir.rglob("*"), key=lambda p: len(p.parts), reverse=True
+            self._temp_dir.rglob("*"), key=lambda p: len(p.parts), reverse=True,
         ):
             if not path.is_dir():
                 continue

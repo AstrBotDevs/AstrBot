@@ -32,7 +32,7 @@ class ToolSchema:
     @model_validator(mode="after")
     def validate_parameters(self) -> "ToolSchema":
         jsonschema.validate(
-            self.parameters, jsonschema.Draft202012Validator.META_SCHEMA
+            self.parameters, jsonschema.Draft202012Validator.META_SCHEMA,
         )
         return self
 
@@ -70,7 +70,7 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
-            "FunctionTool.call() must be implemented by subclasses or set a handler."
+            "FunctionTool.call() must be implemented by subclasses or set a handler.",
         )
 
 
@@ -134,7 +134,7 @@ class ToolSet:
                     parameters=light_params,
                     description=tool.description,
                     handler=None,
-                )
+                ),
             )
         return ToolSet(light_tools)
 
@@ -155,7 +155,7 @@ class ToolSet:
                     parameters=params,
                     description="",
                     handler=None,
-                )
+                ),
             )
         return ToolSet(param_tools)
 

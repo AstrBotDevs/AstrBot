@@ -34,11 +34,10 @@ class MockShipyardSandboxClient:
             ) as response:
                 if response.status == 200:
                     return await response.json()
-                else:
-                    error_text = await response.text()
-                    raise Exception(
-                        f"Failed to exec operation: {response.status} {error_text}"
-                    )
+                error_text = await response.text()
+                raise Exception(
+                    f"Failed to exec operation: {response.status} {error_text}",
+                )
 
     async def upload_file(self, path: str, remote_path: str) -> dict:
         """Upload a file to the sandbox"""
@@ -54,7 +53,7 @@ class MockShipyardSandboxClient:
             data.add_field(
                 "file",
                 file_content,
-                filename=remote_path.split("/")[-1],
+                filename=remote_path.rsplit("/", maxsplit=1)[-1],
                 content_type="application/octet-stream",
             )
             data.add_field("file_path", remote_path)
@@ -73,19 +72,18 @@ class MockShipyardSandboxClient:
                             "message": "File uploaded successfully",
                             "file_path": remote_path,
                         }
-                    else:
-                        error_text = await response.text()
-                        return {
-                            "success": False,
-                            "error": f"Server returned {response.status}: {error_text}",
-                            "message": "File upload failed",
-                        }
+                    error_text = await response.text()
+                    return {
+                        "success": False,
+                        "error": f"Server returned {response.status}: {error_text}",
+                        "message": "File upload failed",
+                    }
 
         except aiohttp.ClientError as e:
             logger.error(f"Failed to upload file: {e}")
             return {
                 "success": False,
-                "error": f"Connection error: {str(e)}",
+                "error": f"Connection error: {e!s}",
                 "message": "File upload failed",
             }
         except asyncio.TimeoutError:
@@ -105,7 +103,7 @@ class MockShipyardSandboxClient:
             logger.error(f"Unexpected error uploading file: {e}")
             return {
                 "success": False,
-                "error": f"Internal error: {str(e)}",
+                "error": f"Internal error: {e!s}",
                 "message": "File upload failed",
             }
 
@@ -115,7 +113,7 @@ class MockShipyardSandboxClient:
         while loop > 0:
             try:
                 logger.info(
-                    f"Checking health for sandbox {ship_id} on {self.sb_url}..."
+                    f"Checking health for sandbox {ship_id} on {self.sb_url}...",
                 )
                 url = f"{self.sb_url}/health"
                 async with aiohttp.ClientSession() as session:
@@ -131,7 +129,7 @@ class MockShipyardSandboxClient:
 class BoxliteBooter(ComputerBooter):
     async def boot(self, session_id: str) -> None:
         logger.info(
-            f"Booting(Boxlite) for session: {session_id}, this may take a while..."
+            f"Booting(Boxlite) for session: {session_id}, this may take a while...",
         )
         random_port = random.randint(20000, 30000)
         self.box = boxlite.SimpleBox(
@@ -142,13 +140,13 @@ class BoxliteBooter(ComputerBooter):
                 {
                     "host_port": random_port,
                     "guest_port": 8123,
-                }
+                },
             ],
         )
         await self.box.start()
         logger.info(f"Boxlite booter started for session: {session_id}")
         self.mocked = MockShipyardSandboxClient(
-            sb_url=f"http://127.0.0.1:{random_port}"
+            sb_url=f"http://127.0.0.1:{random_port}",
         )
         self._fs = ShipyardFileSystemComponent(
             client=self.mocked,  # type: ignore

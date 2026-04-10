@@ -386,6 +386,7 @@ class KnowledgeBaseManager:
         Raises:
             ValueError: 如果知识库不存在或 URL 为空
             IOError: 如果网络请求失败
+
         """
         kb_helper = await self.get_kb(kb_id)
         if not kb_helper:

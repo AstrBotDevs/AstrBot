@@ -44,7 +44,7 @@ class PersonaRoute(Route):
             folder_id = request.args.get("folder_id")
             if folder_id is not None:
                 personas = await self.persona_mgr.get_personas_by_folder(
-                    folder_id if folder_id else None
+                    folder_id or None,
                 )
             else:
                 personas = await self.persona_mgr.get_all_personas()
@@ -151,9 +151,9 @@ class PersonaRoute(Route):
             persona = await self.persona_mgr.create_persona(
                 persona_id=persona_id,
                 system_prompt=system_prompt,
-                begin_dialogs=begin_dialogs if begin_dialogs else None,
-                tools=tools if tools else None,
-                skills=skills if skills else None,
+                begin_dialogs=begin_dialogs or None,
+                tools=tools or None,
+                skills=skills or None,
                 custom_error_message=custom_error_message,
                 folder_id=folder_id,
                 sort_order=sort_order,
@@ -209,7 +209,7 @@ class PersonaRoute(Route):
 
             if has_custom_error_message:
                 if custom_error_message is not None and not isinstance(
-                    custom_error_message, str
+                    custom_error_message, str,
                 ):
                     return Response().error("自定义报错回复信息必须是字符串").__dict__
                 if isinstance(custom_error_message, str):

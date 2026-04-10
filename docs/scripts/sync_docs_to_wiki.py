@@ -147,7 +147,6 @@ def iter_markdown_links(content: str):
     This scanner intentionally handles inline `[]()` links used in the docs tree.
     It does not parse reference-style links or arbitrary HTML.
     """
-
     index = 0
     while index < len(content):
         label_start = content.find("[", index)
@@ -292,7 +291,7 @@ class LinkResolver:
         self.source_pages = discover_source_pages(str(self.source_root))
 
     def resolve_base_target(
-        self, base_target: str, source_path: str
+        self, base_target: str, source_path: str,
     ) -> ResolutionResult:
         return resolve_link_path(
             base_target=base_target,
@@ -302,7 +301,7 @@ class LinkResolver:
         )
 
     def resolve_markdown_target(
-        self, target: str, source_path: str
+        self, target: str, source_path: str,
     ) -> tuple[str | None, str]:
         parsed_target = parse_doc_target(target)
         if parsed_target is None:
@@ -386,7 +385,7 @@ def rewrite_links(
                     segment.text,
                     source_path=source_path,
                     resolver=resolver,
-                )
+                ),
             )
             continue
 
@@ -404,7 +403,7 @@ def find_unresolved_doc_links(source_root: Path) -> list[str]:
         content = (root / source_path).read_text(encoding="utf-8")
         for link in iter_markdown_links(content):
             resolved_path, _ = resolver.resolve_markdown_target(
-                link.target, source_path
+                link.target, source_path,
             )
             if resolved_path is not None:
                 continue
@@ -523,7 +522,7 @@ def build_sidebar(page_infos: list[PageInfo]) -> str:
 
 
 def build_page_info(
-    source_root: Path, source_path: str, resolver: LinkResolver
+    source_root: Path, source_path: str, resolver: LinkResolver,
 ) -> PageInfo:
     source_file = source_root / source_path
     content = source_file.read_text(encoding="utf-8")
@@ -608,7 +607,7 @@ def sync_docs_to_wiki(source_root: Path, wiki_root: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Sync AstrBot docs content to GitHub wiki pages."
+        description="Sync AstrBot docs content to GitHub wiki pages.",
     )
     parser.add_argument(
         "--source-root",
@@ -635,7 +634,7 @@ def main() -> int:
         return 0
 
     sync_docs_to_wiki(
-        source_root=Path(args.source_root), wiki_root=Path(args.wiki_root)
+        source_root=Path(args.source_root), wiki_root=Path(args.wiki_root),
     )
     return 0
 

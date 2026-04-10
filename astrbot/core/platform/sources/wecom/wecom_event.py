@@ -102,10 +102,10 @@ class WecomPlatformEvent(AstrMessageEvent):
                             if getattr(e, "errcode", None) == 40096:
                                 # 40096: invalid external userid, fallback to regular message API
                                 logger.warning(
-                                    f"kf API error 40096 for user {user_id}, falling back to regular message API"
+                                    f"kf API error 40096 for user {user_id}, falling back to regular message API",
                                 )
                                 self.client.message.send_text(
-                                    self.get_self_id(), user_id, chunk
+                                    self.get_self_id(), user_id, chunk,
                                 )
                             else:
                                 raise
@@ -140,7 +140,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 logger.error(f"微信客服上传语音失败: {e}")
                                 await self.send(
                                     MessageChain().message(
-                                        f"微信客服上传语音失败: {e}"
+                                        f"微信客服上传语音失败: {e}",
                                     ),
                                 )
                                 return
@@ -239,7 +239,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 logger.error(f"企业微信上传语音失败: {e}")
                                 await self.send(
                                     MessageChain().message(
-                                        f"企业微信上传语音失败: {e}"
+                                        f"企业微信上传语音失败: {e}",
                                     ),
                                 )
                                 return

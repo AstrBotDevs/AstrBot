@@ -88,7 +88,7 @@ class _MCPClientDictView(Mapping[str, MCPClient]):
 
 
 def _resolve_timeout(
-    timeout: float | int | str | None = None,
+    timeout: float | str | None = None,
     *,
     env_name: str = MCP_INIT_TIMEOUT_ENV,
     default: float = DEFAULT_MCP_INIT_TIMEOUT_SECONDS,
@@ -104,20 +104,20 @@ def _resolve_timeout(
         timeout_value = float(timeout)
     except (TypeError, ValueError):
         logger.warning(
-            f"超时配置（{source}）={timeout!r} 无效，使用默认值 {default:g} 秒。"
+            f"超时配置（{source}）={timeout!r} 无效，使用默认值 {default:g} 秒。",
         )
         return default
 
     if timeout_value <= 0:
         logger.warning(
-            f"超时配置（{source}）={timeout_value:g} 必须大于 0，使用默认值 {default:g} 秒。"
+            f"超时配置（{source}）={timeout_value:g} 必须大于 0，使用默认值 {default:g} 秒。",
         )
         return default
 
     if timeout_value > MAX_MCP_TIMEOUT_SECONDS:
         logger.warning(
             f"超时配置（{source}）={timeout_value:g} 过大，已限制为最大值 "
-            f"{MAX_MCP_TIMEOUT_SECONDS:g} 秒，以避免长时间等待。"
+            f"{MAX_MCP_TIMEOUT_SECONDS:g} 秒，以避免长时间等待。",
         )
         return MAX_MCP_TIMEOUT_SECONDS
 
@@ -415,7 +415,7 @@ class FunctionToolManager:
             logger.debug(f"  主机: {scheme}://{host}{port}")
 
     async def init_mcp_clients(
-        self, raise_on_all_failed: bool = False
+        self, raise_on_all_failed: bool = False,
     ) -> MCPInitSummary:
         """从项目根目录读取 mcp_server.json 文件，初始化 MCP 服务列表。文件格式如下：
         ```
@@ -487,7 +487,7 @@ class FunctionToolManager:
             if isinstance(result, Exception):
                 if isinstance(result, MCPInitTimeoutError):
                     logger.error(
-                        f"Connected to MCP server {name} timeout ({timeout_display} seconds)"
+                        f"Connected to MCP server {name} timeout ({timeout_display} seconds)",
                     )
                 else:
                     logger.error(f"Failed to initialize MCP server {name}: {result}")
@@ -502,14 +502,14 @@ class FunctionToolManager:
         if failed_services:
             logger.warning(
                 f"The following MCP services failed to initialize: {', '.join(failed_services)}. "
-                f"Please check the mcp_server.json file and server availability."
+                f"Please check the mcp_server.json file and server availability.",
             )
 
         summary = MCPInitSummary(
-            total=len(active_configs), success=success_count, failed=failed_services
+            total=len(active_configs), success=success_count, failed=failed_services,
         )
         logger.info(
-            f"MCP services initialization completed: {summary.success}/{summary.total} successful, {len(summary.failed)} failed."
+            f"MCP services initialization completed: {summary.success}/{summary.total} successful, {len(summary.failed)} failed.",
         )
         if summary.total > 0 and summary.success == 0:
             msg = "All MCP services failed to initialize, please check the mcp_server.json and server availability."
@@ -534,7 +534,7 @@ class FunctionToolManager:
         async with self._runtime_lock:
             if name in self._mcp_server_runtime or name in self._mcp_starting:
                 logger.warning(
-                    f"Connected to MCP server {name}, ignoring this startup request (timeout={timeout:g})."
+                    f"Connected to MCP server {name}, ignoring this startup request (timeout={timeout:g}).",
                 )
                 self._log_safe_mcp_debug_config(cfg)
                 return
@@ -551,7 +551,7 @@ class FunctionToolManager:
             )
         except asyncio.TimeoutError as exc:
             raise MCPInitTimeoutError(
-                f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
+                f"Connected to MCP server {name} timeout ({timeout:g} seconds)",
             ) from exc
         except Exception:
             logger.error(f"Failed to initialize MCP client {name}", exc_info=True)
@@ -635,14 +635,14 @@ class FunctionToolManager:
         return []
 
     async def _cleanup_mcp_client_safely(
-        self, mcp_client: MCPClient, name: str
+        self, mcp_client: MCPClient, name: str,
     ) -> None:
         """安全清理单个 MCP 客户端，避免清理异常中断主流程。"""
         try:
             await mcp_client.cleanup()
         except Exception as cleanup_exc:  # noqa: BLE001 - only log here
             logger.error(
-                f"Failed to cleanup MCP client resources {name}: {cleanup_exc}"
+                f"Failed to cleanup MCP client resources {name}: {cleanup_exc}",
             )
 
     async def _init_mcp_client(self, name: str, config: dict) -> MCPClient:
@@ -732,7 +732,7 @@ class FunctionToolManager:
         name: str,
         config: dict,
         shutdown_event: asyncio.Event | None = None,
-        timeout: float | int | str | None = None,
+        timeout: float | str | None = None,
     ) -> None:
         """Enable a new MCP server and initialize it.
 
@@ -746,6 +746,7 @@ class FunctionToolManager:
         Raises:
             MCPInitTimeoutError: If initialization does not complete within timeout.
             Exception: If there is an error during initialization.
+
         """
         if timeout is None:
             timeout_value = self._enable_timeout_default

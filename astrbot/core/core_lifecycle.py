@@ -106,7 +106,7 @@ class AstrBotCoreLifecycle:
         logger.info("AstrBot v" + VERSION)
         if os.environ.get("TESTING", ""):
             LogManager.configure_logger(
-                logger, self.astrbot_config, override_level="DEBUG"
+                logger, self.astrbot_config, override_level="DEBUG",
             )
             LogManager.configure_trace_logger(self.astrbot_config)
         else:
@@ -258,7 +258,7 @@ class AstrBotCoreLifecycle:
         for task in self.star_context._register_tasks:
             extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
 
-        tasks_ = [event_bus_task, *(extra_tasks if extra_tasks else [])]
+        tasks_ = [event_bus_task, *(extra_tasks or [])]
         if cron_task:
             tasks_.append(cron_task)
         if temp_dir_cleaner_task:

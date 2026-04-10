@@ -71,7 +71,7 @@ class XinferenceRerankProvider(RerankProvider):
 
             if self.model_uid:
                 self.model = cast(
-                    AsyncRESTfulRerankModelHandle,
+                    "AsyncRESTfulRerankModelHandle",
                     await self.client.get_model(self.model_uid),
                 )
 

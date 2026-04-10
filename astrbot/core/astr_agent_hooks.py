@@ -17,7 +17,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         if llm_response and llm_response.reasoning_content:
             # we will use this in result_decorate stage to inject reasoning content to chain
             run_context.context.event.set_extra(
-                "_llm_reasoning_content", llm_response.reasoning_content
+                "_llm_reasoning_content", llm_response.reasoning_content,
             )
 
         await call_event_hook(

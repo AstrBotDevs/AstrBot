@@ -39,7 +39,7 @@ class CommandFilter(HandlerFilter):
         parent_command_names: list[str] | None = None,
     ) -> None:
         self.command_name = command_name
-        self.alias = alias if alias else set()
+        self.alias = alias or set()
         self._original_command_name = command_name
         self.parent_command_names = (
             parent_command_names if parent_command_names is not None else [""]

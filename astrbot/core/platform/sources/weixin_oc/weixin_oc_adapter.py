@@ -8,7 +8,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 from urllib.parse import quote
 
 import qrcode as qrcode_lib
@@ -30,9 +30,6 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from .weixin_oc_client import WeixinOCClient
 from .weixin_oc_event import WeixinOCMessageEvent
-
-if TYPE_CHECKING:  # pragma: no cover - typing-only helper
-    pass
 
 
 @dataclass
@@ -84,7 +81,7 @@ class WeixinOCAdapter(Platform):
 
         self.settings = platform_settings
         self.base_url = str(
-            platform_config.get("weixin_oc_base_url", "https://ilinkai.weixin.qq.com")
+            platform_config.get("weixin_oc_base_url", "https://ilinkai.weixin.qq.com"),
         ).rstrip("/")
         self.bot_type = str(platform_config.get("weixin_oc_bot_type", "3"))
         self.qr_poll_interval = max(
@@ -101,13 +98,13 @@ class WeixinOCAdapter(Platform):
             platform_config.get(
                 "weixin_oc_cdn_base_url",
                 "https://novac2c.cdn.weixin.qq.com/c2c",
-            )
+            ),
         ).rstrip("/")
 
         self.metadata = PlatformMetadata(
             name="weixin_oc",
             description="个人微信",
-            id=cast(str, self.config.get("id", "weixin_oc")),
+            id=cast("str", self.config.get("id", "weixin_oc")),
             support_streaming_message=False,
         )
 
@@ -229,7 +226,7 @@ class WeixinOCAdapter(Platform):
         payload = await self.client.send_typing_state(user_id, ticket, cancel=cancel)
         if int(payload.get("ret") or 0) != 0:
             raise RuntimeError(
-                f"sendtyping failed for {user_id}: {payload.get('errmsg', '')}"
+                f"sendtyping failed for {user_id}: {payload.get('errmsg', '')}",
             )
 
     async def _run_typing_keepalive(self, user_id: str) -> None:
@@ -270,7 +267,7 @@ class WeixinOCAdapter(Platform):
             if not state.owners or state.keepalive_task is not None:
                 return
             state.keepalive_task = asyncio.create_task(
-                self._run_typing_keepalive(user_id)
+                self._run_typing_keepalive(user_id),
             )
 
     async def _typing_keepalive_loop(self, user_id: str) -> None:
@@ -421,7 +418,7 @@ class WeixinOCAdapter(Platform):
             if ticket:
                 if state.cancel_task is None or state.cancel_task.done():
                     state.cancel_task = asyncio.create_task(
-                        self._delayed_cancel_typing(user_id, ticket)
+                        self._delayed_cancel_typing(user_id, ticket),
                     )
 
     async def _cleanup_typing_tasks(self) -> None:
@@ -501,7 +498,7 @@ class WeixinOCAdapter(Platform):
         astrbot_config.save_config()
 
     def _is_login_session_valid(
-        self, login_session: OpenClawLoginSession | None
+        self, login_session: OpenClawLoginSession | None,
     ) -> bool:
         if not login_session:
             return False
@@ -654,15 +651,15 @@ class WeixinOCAdapter(Platform):
         item_type = int(item.get("type") or 0)
 
         if item_type == self.IMAGE_ITEM_TYPE:
-            image_item = cast(dict[str, Any], item.get("image_item", {}) or {})
-            media = cast(dict[str, Any], image_item.get("media", {}) or {})
+            image_item = cast("dict[str, Any]", item.get("image_item", {}) or {})
+            media = cast("dict[str, Any]", image_item.get("media", {}) or {})
             encrypted_query_param = str(media.get("encrypt_query_param", "")).strip()
             if not encrypted_query_param:
                 return None
             image_aes_key = str(image_item.get("aeskey", "")).strip()
             if image_aes_key:
                 aes_key_value = base64.b64encode(bytes.fromhex(image_aes_key)).decode(
-                    "utf-8"
+                    "utf-8",
                 )
             else:
                 aes_key_value = str(media.get("aes_key", "")).strip()
@@ -682,8 +679,8 @@ class WeixinOCAdapter(Platform):
             return Image.fromFileSystem(str(image_path))
 
         if item_type == self.VIDEO_ITEM_TYPE:
-            video_item = cast(dict[str, Any], item.get("video_item", {}) or {})
-            media = cast(dict[str, Any], video_item.get("media", {}) or {})
+            video_item = cast("dict[str, Any]", item.get("video_item", {}) or {})
+            media = cast("dict[str, Any]", video_item.get("media", {}) or {})
             encrypted_query_param = str(media.get("encrypt_query_param", "")).strip()
             aes_key_value = str(media.get("aes_key", "")).strip()
             if not encrypted_query_param or not aes_key_value:
@@ -701,8 +698,8 @@ class WeixinOCAdapter(Platform):
             return Video.fromFileSystem(str(video_path))
 
         if item_type == self.FILE_ITEM_TYPE:
-            file_item = cast(dict[str, Any], item.get("file_item", {}) or {})
-            media = cast(dict[str, Any], file_item.get("media", {}) or {})
+            file_item = cast("dict[str, Any]", item.get("file_item", {}) or {})
+            media = cast("dict[str, Any]", file_item.get("media", {}) or {})
             encrypted_query_param = str(media.get("encrypt_query_param", "")).strip()
             aes_key_value = str(media.get("aes_key", "")).strip()
             if not encrypted_query_param or not aes_key_value:
@@ -724,8 +721,8 @@ class WeixinOCAdapter(Platform):
             return File(name=file_name, file=str(file_path))
 
         if item_type == self.VOICE_ITEM_TYPE:
-            voice_item = cast(dict[str, Any], item.get("voice_item", {}) or {})
-            media = cast(dict[str, Any], voice_item.get("media", {}) or {})
+            voice_item = cast("dict[str, Any]", item.get("voice_item", {}) or {})
+            media = cast("dict[str, Any]", voice_item.get("media", {}) or {})
             encrypted_query_param = str(media.get("encrypt_query_param", "")).strip()
             aes_key_value = str(media.get("aes_key", "")).strip()
             if not encrypted_query_param or not aes_key_value:
@@ -745,7 +742,7 @@ class WeixinOCAdapter(Platform):
         return None
 
     async def _resolve_media_file_path(
-        self, segment: Image | Video | File
+        self, segment: Image | Video | File,
     ) -> Path | None:
         try:
             if isinstance(segment, File):
@@ -817,7 +814,7 @@ class WeixinOCAdapter(Platform):
     ) -> bool:
         if not self.token:
             logger.warning(
-                "weixin_oc(%s): missing token, skip media send", self.meta().id
+                "weixin_oc(%s): missing token, skip media send", self.meta().id,
             )
             return False
         media_path = await self._resolve_media_file_path(segment)
@@ -961,7 +958,7 @@ class WeixinOCAdapter(Platform):
             await self._save_account_state()
 
     def _message_text_from_item_list(
-        self, item_list: list[dict[str, Any]] | None
+        self, item_list: list[dict[str, Any]] | None,
     ) -> str:
         if not item_list:
             return ""
@@ -995,7 +992,7 @@ class WeixinOCAdapter(Platform):
         return "\n".join(text_parts).strip()
 
     async def _item_list_to_components(
-        self, item_list: list[dict[str, Any]] | None
+        self, item_list: list[dict[str, Any]] | None,
     ) -> list[Any]:
         if not item_list:
             return []
@@ -1030,7 +1027,7 @@ class WeixinOCAdapter(Platform):
         if context_token:
             self._context_tokens[from_user_id] = context_token
 
-        item_list = cast(list[dict[str, Any]], msg.get("item_list", []))
+        item_list = cast("list[dict[str, Any]]", msg.get("item_list", []))
         components = await self._item_list_to_components(item_list)
         text = self._message_text_from_item_list(item_list)
         message_id = str(msg.get("message_id") or msg.get("msg_id") or uuid.uuid4().hex)
@@ -1060,7 +1057,7 @@ class WeixinOCAdapter(Platform):
                 platform_meta=self.meta(),
                 session_id=abm.session_id,
                 platform=self,
-            )
+            ),
         )
 
     async def _poll_inbound_updates(self) -> None:
@@ -1116,7 +1113,7 @@ class WeixinOCAdapter(Platform):
         return text.strip()
 
     async def _send_to_session(
-        self, user_id: str, text: str, _components: list[Any] | None = None
+        self, user_id: str, text: str, _components: list[Any] | None = None,
     ) -> bool:
         if not text:
             text = self._message_chain_to_text(MessageChain(_components or []))

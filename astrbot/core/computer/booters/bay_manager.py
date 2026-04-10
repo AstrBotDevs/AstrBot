@@ -60,7 +60,7 @@ class BayContainerManager:
             raise RuntimeError(
                 "Failed to connect to Docker daemon. "
                 "Ensure Docker is installed and running, or configure "
-                "an explicit Bay endpoint instead of auto-start mode."
+                "an explicit Bay endpoint instead of auto-start mode.",
             ) from exc
 
         # 1. Look for an existing managed container
@@ -72,13 +72,12 @@ class BayContainerManager:
                 logger.info("[BayManager] Reusing existing Bay container: %s", cid)
                 self._container = await self._docker.containers.get(existing["Id"])
                 return f"http://127.0.0.1:{self._host_port}"
-            else:
-                # Container exists but stopped — restart it
-                logger.info("[BayManager] Restarting stopped Bay container")
-                container = await self._docker.containers.get(existing["Id"])
-                await container.start()
-                self._container = container
-                return f"http://127.0.0.1:{self._host_port}"
+            # Container exists but stopped — restart it
+            logger.info("[BayManager] Restarting stopped Bay container")
+            container = await self._docker.containers.get(existing["Id"])
+            await container.start()
+            self._container = container
+            return f"http://127.0.0.1:{self._host_port}"
 
         # 2. Pull image if needed
         await self._pull_image_if_needed()
@@ -111,7 +110,7 @@ class BayContainerManager:
             },
         }
         self._container = await self._docker.containers.create_or_replace(
-            BAY_CONTAINER_NAME, config
+            BAY_CONTAINER_NAME, config,
         )
         await self._container.start()
         logger.info("[BayManager] Bay container started: %s", BAY_CONTAINER_NAME)
@@ -129,7 +128,7 @@ class BayContainerManager:
             while loop.time() < deadline:
                 try:
                     async with session.get(
-                        url, timeout=aiohttp.ClientTimeout(total=3)
+                        url, timeout=aiohttp.ClientTimeout(total=3),
                     ) as resp:
                         if resp.status == 200:
                             logger.info("[BayManager] Bay is healthy")
@@ -141,7 +140,7 @@ class BayContainerManager:
                 await asyncio.sleep(HEALTH_POLL_INTERVAL_S)
 
         raise TimeoutError(
-            f"Bay did not become healthy within {timeout}s (last error: {last_error})"
+            f"Bay did not become healthy within {timeout}s (last error: {last_error})",
         )
 
     async def read_credentials(self) -> str:
@@ -202,7 +201,7 @@ class BayContainerManager:
                         return api_key
         except Exception as exc:
             logger.debug(
-                "[BayManager] Failed to read credentials from container: %s", exc
+                "[BayManager] Failed to read credentials from container: %s", exc,
             )
 
         return ""

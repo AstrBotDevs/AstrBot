@@ -185,7 +185,7 @@ def try_capture_follow_up(event: AstrMessageEvent) -> FollowUpCapture | None:
             event.unified_msg_origin,
             ticket,
             order_seq,
-        )
+        ),
     )
     logger.info(
         "Captured follow-up message for active agent run, umo=%s, order_seq=%s",

@@ -99,7 +99,7 @@ async def download_image_by_url(
             f"SSL certificate verification failed for {url}. "
             "Disabling SSL verification (CERT_NONE) as a fallback. "
             "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate and resolve certificate issues."
+            "Please investigate and resolve certificate issues.",
         )
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
@@ -163,13 +163,13 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
-            "SSL 证书验证失败，已关闭 SSL 验证（不安全，仅用于临时下载）。请检查目标服务器的证书配置。"
+            "SSL 证书验证失败，已关闭 SSL 验证（不安全，仅用于临时下载）。请检查目标服务器的证书配置。",
         )
         logger.warning(
             f"SSL certificate verification failed for {url}. "
             "Falling back to unverified connection (CERT_NONE). "
             "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate certificate issues with the remote server."
+            "Please investigate certificate issues with the remote server.",
         )
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False

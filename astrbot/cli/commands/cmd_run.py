@@ -58,7 +58,7 @@ def run(reload: bool, port: str) -> None:
         click.echo("AstrBot has been shut down.")
     except Timeout:
         raise click.ClickException(
-            "Cannot acquire lock file. Please check if another instance is running"
+            "Cannot acquire lock file. Please check if another instance is running",
         )
     except Exception as e:
         raise click.ClickException(f"Runtime error: {e}\n{traceback.format_exc()}")

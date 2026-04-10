@@ -17,7 +17,7 @@ class CommandGroupFilter(HandlerFilter):
         parent_group: CommandGroupFilter | None = None,
     ) -> None:
         self.group_name = group_name
-        self.alias = alias if alias else set()
+        self.alias = alias or set()
         self._original_group_name = group_name
         self.sub_command_filters: list[CommandFilter | CommandGroupFilter] = []
         self.custom_filter_list: list[CustomFilter] = []
@@ -97,7 +97,7 @@ class CommandGroupFilter(HandlerFilter):
                             prefix + "│   ",
                             event=event,
                             cfg=cfg,
-                        )
+                        ),
                     )
 
         return "".join(parts)

@@ -321,7 +321,7 @@ class ConversationRoute(Route):
 
                     if not conversation:
                         failed_items.append(
-                            f"user_id:{user_id}, cid:{cid} - 对话不存在"
+                            f"user_id:{user_id}, cid:{cid} - 对话不存在",
                         )
                         continue
 
@@ -347,7 +347,7 @@ class ConversationRoute(Route):
                 except Exception as e:
                     failed_items.append(f"user_id:{user_id}, cid:{cid} - {e!s}")
                     logger.error(
-                        f"导出对话失败: user_id={user_id}, cid={cid}, error={e!s}"
+                        f"导出对话失败: user_id={user_id}, cid={cid}, error={e!s}",
                     )
 
             if exported_count == 0:

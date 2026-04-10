@@ -50,6 +50,7 @@ class PlatformRoute(Route):
 
         Returns:
             根据平台适配器返回相应的响应
+
         """
         # 根据 webhook_uuid 查找对应的平台
         platform_adapter = self._find_platform_by_uuid(webhook_uuid)
@@ -64,7 +65,7 @@ class PlatformRoute(Route):
             return result
         except NotImplementedError:
             logger.error(
-                f"平台 {platform_adapter.meta().name} 未实现 webhook_callback 方法"
+                f"平台 {platform_adapter.meta().name} 未实现 webhook_callback 方法",
             )
             return Response().error("平台未支持统一 Webhook 模式").__dict__, 500
         except Exception as e:
@@ -79,6 +80,7 @@ class PlatformRoute(Route):
 
         Returns:
             平台适配器实例，未找到则返回 None
+
         """
         for platform in self.platform_manager.platform_insts:
             if platform.config.get("webhook_uuid") == webhook_uuid:
@@ -91,6 +93,7 @@ class PlatformRoute(Route):
 
         Returns:
             包含平台统计信息的响应
+
         """
         try:
             stats = self.platform_manager.get_all_stats()

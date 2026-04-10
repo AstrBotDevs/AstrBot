@@ -38,12 +38,9 @@ class ComputerBooter:
 
         Should return a dict with `success` (bool) and `file_path` (str) keys.
         """
-        ...
 
     async def download_file(self, remote_path: str, local_path: str) -> None:
         """Download file from the computer."""
-        ...
 
     async def available(self) -> bool:
         """Check if the computer is available."""
-        ...

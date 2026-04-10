@@ -124,8 +124,8 @@ class ConversationCommands:
         if stopped_count > 0:
             message.set_result(
                 MessageEventResult().message(
-                    f"已请求停止 {stopped_count} 个运行中的任务。"
-                )
+                    f"已请求停止 {stopped_count} 个运行中的任务。",
+                ),
             )
             return
 
@@ -207,7 +207,7 @@ class ConversationCommands:
         """生成所有对话的标题字典"""
         _titles = {}
         for conv in conversations_all:
-            title = conv.title if conv.title else "新对话"
+            title = conv.title or "新对话"
             _titles[conv.cid] = title
 
         """遍历分页后的对话生成列表显示"""
@@ -237,7 +237,7 @@ class ConversationCommands:
 
             title = _titles.get(conv.cid, "新对话")
             parts.append(
-                f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_name}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+                f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_name}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n",
             )
             global_index += 1
 
@@ -349,7 +349,7 @@ class ConversationCommands:
             )
         else:
             conversation = conversations[index - 1]
-            title = conversation.title if conversation.title else "新对话"
+            title = conversation.title or "新对话"
             await self.context.conversation_manager.switch_conversation(
                 message.unified_msg_origin,
                 conversation.cid,

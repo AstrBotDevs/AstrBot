@@ -6,13 +6,12 @@ from ..message import AudioURLPart, ImageURLPart, Message, TextPart, ThinkPart
 
 @runtime_checkable
 class TokenCounter(Protocol):
-    """
-    Protocol for token counters.
+    """Protocol for token counters.
     Provides an interface for counting tokens in message lists.
     """
 
     def count_tokens(
-        self, messages: list[Message], trusted_token_usage: int = 0
+        self, messages: list[Message], trusted_token_usage: int = 0,
     ) -> int:
         """Count the total tokens in the message list.
 
@@ -24,6 +23,7 @@ class TokenCounter(Protocol):
 
         Returns:
             The total token count.
+
         """
         ...
 
@@ -44,7 +44,7 @@ class EstimateTokenCounter:
     """
 
     def count_tokens(
-        self, messages: list[Message], trusted_token_usage: int = 0
+        self, messages: list[Message], trusted_token_usage: int = 0,
     ) -> int:
         if trusted_token_usage > 0:
             return trusted_token_usage

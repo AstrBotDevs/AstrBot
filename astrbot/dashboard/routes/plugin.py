@@ -92,7 +92,7 @@ class PluginRoute(Route):
             data = await request.get_json()
             version_spec = data.get("astrbot_version", "")
             is_valid, message = self.plugin_manager._validate_astrbot_version_specifier(
-                version_spec
+                version_spec,
             )
             return (
                 Response()
@@ -101,7 +101,7 @@ class PluginRoute(Route):
                         "compatible": is_valid,
                         "message": message,
                         "astrbot_version": version_spec,
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -128,8 +128,7 @@ class PluginRoute(Route):
 
             if success:
                 return Response().ok(None, f"插件 {dir_name} 重载成功。").__dict__
-            else:
-                return Response().error(f"重载失败: {err}").__dict__
+            return Response().error(f"重载失败: {err}").__dict__
 
         except Exception as e:
             logger.error(f"/api/plugin/reload-failed: {traceback.format_exc()}")
@@ -200,7 +199,7 @@ class PluginRoute(Route):
                             continue  # 继续尝试其他URL或使用缓存
 
                         logger.info(
-                            f"成功获取远程插件市场数据，包含 {len(remote_data)} 个插件"
+                            f"成功获取远程插件市场数据，包含 {len(remote_data)} 个插件",
                         )
                         # 获取最新的MD5并保存到缓存
                         current_md5 = await self._fetch_remote_md5(source.md5_url)
@@ -360,7 +359,7 @@ class PluginRoute(Route):
         base_dir = Path(
             self.plugin_manager.reserved_plugin_path
             if plugin.reserved
-            else self.plugin_manager.plugin_store_path
+            else self.plugin_manager.plugin_store_path,
         )
         plugin_dir = base_dir / plugin.root_dir_name
         if not plugin_dir.is_dir():
@@ -416,7 +415,7 @@ class PluginRoute(Route):
                     plugin.desc,
                     plugin.version,
                     plugin.display_name,
-                ]
+                ],
             ):
                 continue
             _plugin_resp.append(_t)
@@ -685,7 +684,7 @@ class PluginRoute(Route):
                 raise result
             if isinstance(result, BaseException):
                 results.append(
-                    {"name": name, "status": "error", "message": str(result)}
+                    {"name": name, "status": "error", "message": str(result)},
                 )
             else:
                 results.append(result)

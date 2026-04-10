@@ -70,6 +70,7 @@ class WecomAIBotServer:
 
         Returns:
             验证响应元组 (content, status_code, headers)
+
         """
         args = request.args
         msg_signature = args.get("msg_signature")
@@ -103,6 +104,7 @@ class WecomAIBotServer:
 
         Returns:
             响应元组 (content, status_code, headers)
+
         """
         args = request.args
         msg_signature = args.get("msg_signature")

@@ -24,7 +24,7 @@ async def _get_browser_component(context: ContextWrapper[AstrAgentContext]) -> A
     if browser is None:
         raise RuntimeError(
             "Current sandbox booter does not support browser capability. "
-            "Please switch to shipyard_neo."
+            "Please switch to shipyard_neo.",
         )
     return browser
 
@@ -56,7 +56,7 @@ class BrowserExecTool(FunctionTool):
                 },
             },
             "required": ["cmd"],
-        }
+        },
     )
 
     async def call(
@@ -83,7 +83,7 @@ class BrowserExecTool(FunctionTool):
             )
             return _to_json(result)
         except Exception as e:
-            return f"Error executing browser command: {str(e)}"
+            return f"Error executing browser command: {e!s}"
 
 
 @dataclass
@@ -118,7 +118,7 @@ class BrowserBatchExecTool(FunctionTool):
                 },
             },
             "required": ["commands"],
-        }
+        },
     )
 
     async def call(
@@ -147,7 +147,7 @@ class BrowserBatchExecTool(FunctionTool):
             )
             return _to_json(result)
         except Exception as e:
-            return f"Error executing browser batch command: {str(e)}"
+            return f"Error executing browser batch command: {e!s}"
 
 
 @dataclass
@@ -166,7 +166,7 @@ class RunBrowserSkillTool(FunctionTool):
                 "tags": {"type": "string"},
             },
             "required": ["skill_key"],
-        }
+        },
     )
 
     async def call(
@@ -193,4 +193,4 @@ class RunBrowserSkillTool(FunctionTool):
             )
             return _to_json(result)
         except Exception as e:
-            return f"Error running browser skill: {str(e)}"
+            return f"Error running browser skill: {e!s}"
