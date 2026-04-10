@@ -347,14 +347,17 @@ class PluginManager:
         *,
         reserved: bool = False,
     ) -> ModuleType:
-        can_prefer_installed_dependencies = False
+        can_attempt_installed_dependency_recovery = False
+        can_preload_installed_dependencies = False
+        install_plan = None
         if os.path.exists(requirements_path) and not reserved:
+            can_attempt_installed_dependency_recovery = True
             install_plan = plan_missing_requirements_install(requirements_path)
-            can_prefer_installed_dependencies = (
+            can_preload_installed_dependencies = (
                 install_plan is not None and not install_plan.version_mismatch_names
             )
 
-        if can_prefer_installed_dependencies:
+        if can_preload_installed_dependencies:
             try:
                 pip_installer.prefer_installed_dependencies(
                     requirements_path=requirements_path
@@ -367,7 +370,9 @@ class PluginManager:
         try:
             return __import__(path, fromlist=[module_str])
         except (ModuleNotFoundError, ImportError) as import_exc:
-            if can_prefer_installed_dependencies:
+            if can_attempt_installed_dependency_recovery and (
+                install_plan is None or not install_plan.version_mismatch_names
+            ):
                 try:
                     logger.info(
                         f"插件 {root_dir_name} 导入失败，尝试从已安装依赖恢复: {import_exc!s}"
@@ -384,6 +389,12 @@ class PluginManager:
                     logger.info(
                         f"插件 {root_dir_name} 已安装依赖恢复失败，将重新安装依赖: {recover_exc!s}"
                     )
+            elif install_plan is not None and install_plan.version_mismatch_names:
+                logger.info(
+                    "插件 %s 预检查检测到版本不匹配，跳过已安装依赖恢复: %s",
+                    root_dir_name,
+                    sorted(install_plan.version_mismatch_names),
+                )
 
             await self._check_plugin_dept_update(target_plugin=root_dir_name)
             return __import__(path, fromlist=[module_str])

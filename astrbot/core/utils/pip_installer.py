@@ -996,6 +996,8 @@ class PipInstaller:
             target_site_packages = get_astrbot_site_packages_path()
             os.makedirs(target_site_packages, exist_ok=True)
             _prepend_sys_path(target_site_packages)
+            # `allow_target_upgrade` only matters for packaged desktop installs that
+            # write into the shared `data/site-packages` target directory.
             args.extend(["--target", target_site_packages])
             if allow_target_upgrade:
                 args.extend(
