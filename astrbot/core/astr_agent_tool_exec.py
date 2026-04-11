@@ -308,12 +308,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     continue
 
         # 获取子代理的历史上下文
+        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
         agent_name = getattr(tool.agent, "name", None)
         subagent_history = []
         if agent_name:
             try:
-                from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
-
                 stored_history = DynamicSubAgentManager.get_subagent_history(
                     umo, agent_name
                 )
@@ -330,7 +330,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         except Exception:
                             continue
                     if subagent_history:
-                        logger.info(
+                        logger.debug(
                             f"[SubAgentHistory] Loaded {len(subagent_history)} history messages for {agent_name}"
                         )
 
@@ -349,45 +349,26 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 contexts = subagent_history
             else:
                 contexts = subagent_history + contexts
-        # 构建子代理的 system_prompt，添加 skills 提示词和公共上下文
+        # 构建子代理的 system_prompt
         subagent_system_prompt = tool.agent.instructions or ""
         subagent_system_prompt = f"# Role\nYour name is {agent_name}(used for tool calling)\n{subagent_system_prompt}\n"
         if agent_name:
             try:
                 from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
 
-                # 注入 skills
                 runtime = prov_settings.get("computer_use_runtime", "local")
-                skills_prompt = DynamicSubAgentManager.build_subagent_skills_prompt(
-                    umo, agent_name, runtime
-                )
-                if skills_prompt:
-                    subagent_system_prompt += f"{skills_prompt}" + "\n"
-                    logger.info(f"[SubAgentSkills] Injected skills for {agent_name}")
-
-                # 注入公共上下文
-                shared_context_prompt = (
-                    DynamicSubAgentManager.build_shared_context_prompt(umo, agent_name)
-                )
-                if shared_context_prompt:
-                    subagent_system_prompt += f"\n{shared_context_prompt}"
-                    logger.info(
-                        f"[SubAgentSharedContext] Injected shared context for {agent_name}"
+                static_subagent_prompt = (
+                    DynamicSubAgentManager.build_static_subagent_prompts(
+                        umo, agent_name
                     )
-
-                # 注入时间信息
-                time_prompt = DynamicSubAgentManager.build_time_prompt(umo)
-                subagent_system_prompt += time_prompt
-
-                # 注入工作目录
-                workdir_prompt = DynamicSubAgentManager.build_workdir_prompt(
-                    umo, agent_name
                 )
-                subagent_system_prompt += workdir_prompt
-
-                # 注入行为规范
-                rule_prompt = DynamicSubAgentManager.build_rule_prompt(umo)
-                subagent_system_prompt += rule_prompt
+                dynamic_subagent_prompt = (
+                    DynamicSubAgentManager.build_dynamic_subagent_prompts(
+                        umo, agent_name, runtime
+                    )
+                )
+                subagent_system_prompt += static_subagent_prompt
+                subagent_system_prompt += dynamic_subagent_prompt
 
             except Exception:
                 pass
@@ -406,11 +387,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
 
         # 保存历史上下文
-        try:
-            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+        if agent_name:
+            try:
+                from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
 
-            agent_name = getattr(tool.agent, "name", None)
-            if agent_name:
                 # 构建当前对话的历史消息
                 current_messages = []
                 # 添加本轮用户输入
@@ -423,8 +403,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     DynamicSubAgentManager.save_subagent_history(
                         umo, agent_name, current_messages
                     )
-        except Exception:
-            pass  # 不影响主流程
+            except Exception:
+                pass  # 不影响主流程
 
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
@@ -468,7 +448,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
                     if subagent_task_id.startswith("__PENDING_TASK_CREATE_FAILED__"):
                         logger.info(
-                            f"[EnhancedSubAgent] Failed to created background task {subagent_task_id} for {agent_name}"
+                            f"[EnhancedSubAgent:BackgroundTask] Failed to created background task {subagent_task_id} for {agent_name}"
                         )
                     else:
                         DynamicSubAgentManager.set_subagent_status(
@@ -478,11 +458,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         )
 
                         logger.info(
-                            f"[EnhancedSubAgent] Created background task {subagent_task_id} for {agent_name}"
+                            f"[EnhancedSubAgent:BackgroundTask] Created background task {subagent_task_id} for {agent_name}"
                         )
         except Exception as e:
             logger.info(
-                f"[EnhancedSubAgent] Failed to created background task {subagent_task_id} for {agent_name}: {e}"
+                f"[EnhancedSubAgent:BackgroundTask] Failed to created background task {subagent_task_id} for {agent_name}: {e}"
             )
 
         original_task_id = uuid.uuid4().hex
@@ -572,74 +552,80 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         execution_time = time.time() - start_time
         success = error_text is None
         session = DynamicSubAgentManager.get_session(umo)
-        if session and agent_name:
-            # if it is enhanced subagent
-            if agent_name in session.subagents:
-                subagent_task_id = tool_args.get("subagent_task_id", None)
-                # store the results of background enhanced subagent task
-                DynamicSubAgentManager.store_subagent_result(
+        ##  if it is enhanced subagent ##
+        if session and agent_name and (agent_name in session.subagents):
+            subagent_task_id = tool_args.get("subagent_task_id", None)
+            # store the results of background enhanced subagent task
+            DynamicSubAgentManager.store_subagent_result(
+                session_id=umo,
+                agent_name=agent_name,
+                task_id=subagent_task_id,
+                success=success,
+                result=result_text.strip() if result_text else "",
+                error=error_text,
+                execution_time=execution_time,
+            )
+            # update subagent status
+            if error_text:
+                DynamicSubAgentManager.set_subagent_status(
                     session_id=umo,
                     agent_name=agent_name,
-                    task_id=subagent_task_id,
-                    success=success,
-                    result=result_text.strip() if result_text else "",
-                    error=error_text,
-                    execution_time=execution_time,
+                    status="FAILED",
                 )
-                # update subagent status
+            else:
+                DynamicSubAgentManager.set_subagent_status(
+                    session_id=umo,
+                    agent_name=agent_name,
+                    status="COMPLETED",
+                )
+
+            # if shared_context is enabled, publish status
+            if session.shared_context_enabled:
+                status_content = f"[EnhancedSubAgent:BackgroundTask] SubAgent '{agent_name}' Task '{subagent_task_id}' Complete. Execution Time: {execution_time:.1f}s"
                 if error_text:
-                    DynamicSubAgentManager.set_subagent_status(
-                        session_id=umo,
-                        agent_name=agent_name,
-                        status="FAILED",
+                    status_content = f"[EnhancedSubAgent:BackgroundTask] SubAgent '{agent_name}' Task '{subagent_task_id}' Failed: {error_text}"
+                DynamicSubAgentManager.add_shared_context(
+                    session_id=umo,
+                    sender=agent_name,
+                    context_type="status",
+                    content=status_content,
+                    target="all",
+                )
+            logger.info(
+                f"[EnhancedSubAgent:BackgroundTask] Stored result for {agent_name} task {subagent_task_id}: "
+                f"success={success}, time={execution_time:.1f}s"
+            )
+
+            try:
+                context_extra = getattr(run_context.context, "extra", None)
+                if context_extra and isinstance(context_extra, dict):
+                    main_agent_runner = context_extra.get("main_agent_runner")
+                    main_agent_is_running = (
+                        main_agent_runner is not None and not main_agent_runner.done()
                     )
                 else:
-                    DynamicSubAgentManager.set_subagent_status(
-                        session_id=umo,
-                        agent_name=agent_name,
-                        status="COMPLETED",
-                    )
-
-                # if shared_context is enabled, publish status
-                if session.shared_context_enabled:
-                    status_content = f"[EnhancedSubAgent] SubAgent '{agent_name}' Task '{subagent_task_id}' Complete. Execution Time: {execution_time:.1f}s"
-                    if error_text:
-                        status_content = f"[EnhancedSubAgent] SubAgent '{agent_name}' Task '{subagent_task_id}' Failed: {error_text}"
-                    DynamicSubAgentManager.add_shared_context(
-                        session_id=umo,
-                        sender=agent_name,
-                        context_type="status",
-                        content=status_content,
-                        target="all",
-                    )
-                logger.info(
-                    f"[EnhancedSubAgent] Stored result for {agent_name} task {subagent_task_id}: "
-                    f"success={success}, time={execution_time:.1f}s"
-                )
-
-                try:
-                    context_extra = getattr(run_context.context, "extra", None)
-                    main_agent_runner = context_extra.get("main_agent_runner", None)
-                    main_agent_is_running = not main_agent_runner.done()
-                except Exception as e:
-                    logger.error("get main agent failed:", e)
                     main_agent_is_running = False
+            except Exception as e:
+                logger.error("Failed to check main agent status: %s", e)
+                # If the main agent status cannot be determined, assume it is still running to avoid concurrent wake-up
+                main_agent_is_running = True
 
-                # Inform user through _wake_main_agent_for_background_result if main agent is over
-                if not main_agent_is_running:
-                    await cls._wake_main_agent_for_background_result(
-                        run_context=run_context,
-                        task_id=task_id,
-                        tool_name=tool.name,
-                        result_text=result_text,
-                        tool_args=tool_args,
-                        note=(
-                            event.get_extra("background_note")
-                            or f"Background task for subagent '{agent_name}' finished."
-                        ),
-                        summary_name=f"Dedicated to subagent `{agent_name}`",
-                        extra_result_fields={"subagent_name": agent_name},
-                    )
+            # Inform user through `_wake_main_agent_for_background_result` if main agent is over
+            if not main_agent_is_running:
+                await cls._wake_main_agent_for_background_result(
+                    run_context=run_context,
+                    task_id=task_id,
+                    tool_name=tool.name,
+                    result_text=result_text,
+                    tool_args=tool_args,
+                    note=(
+                        event.get_extra("background_note")
+                        or f"Background task for subagent '{agent_name}' finished."
+                    ),
+                    summary_name=f"Dedicated to subagent `{agent_name}`",
+                    extra_result_fields={"subagent_name": agent_name},
+                )
+        # if not enhanced subagent
         else:
             await cls._wake_main_agent_for_background_result(
                 run_context=run_context,

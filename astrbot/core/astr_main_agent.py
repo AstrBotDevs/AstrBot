@@ -154,7 +154,6 @@ class MainAgentBuildConfig:
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
     enhanced_subagent: dict = field(default_factory=dict)
-    """Log level for enhanced SubAgent: info or debug."""
 
 
 @dataclass(slots=True)
@@ -1015,7 +1014,6 @@ def _apply_enhanced_subagent_tools(
             WAIT_FOR_SUBAGENT_TOOL,
             DynamicSubAgentManager,
         )
-        from astrbot.core.subagent_logger import SubAgentLogger
 
         # Register dynamic SubAgent management tools
         req.func_tool.add_tool(CREATE_DYNAMIC_SUBAGENT_TOOL)
@@ -1031,7 +1029,6 @@ def _apply_enhanced_subagent_tools(
         req.func_tool.add_tool(WAIT_FOR_SUBAGENT_TOOL)
 
         # Configure logger
-        SubAgentLogger.configure(level=config.enhanced_subagent.get("log_level"))
 
         # Configure DynamicSubAgentManager with settings
         shared_context_enabled = config.enhanced_subagent.get(
@@ -1053,11 +1050,9 @@ def _apply_enhanced_subagent_tools(
             )
         session_id = event.unified_msg_origin
         # Inject enhanced system prompt
-        dynamic_subagent_prompt = DynamicSubAgentManager.build_dynamic_subagent_prompt(
-            session_id
-        )
+        task_router_prompt = DynamicSubAgentManager.build_task_router_prompt(session_id)
 
-        req.system_prompt = f"{req.system_prompt or ''}\n{dynamic_subagent_prompt}\n"
+        req.system_prompt = f"{req.system_prompt or ''}\n{task_router_prompt}\n"
         # Register existing handoff tools from config
         plugin_context = getattr(event, "_plugin_context", None)
         if plugin_context and plugin_context.subagent_orchestrator:
