@@ -5,11 +5,17 @@ from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.computer.computer_client import get_booter
 
-from ..computer_client import get_booter, get_local_booter
-from .permissions import check_admin_permission
+from ..registry import builtin_tool
+from .util import check_admin_permission, is_local_runtime, workspace_root
+
+_COMPUTER_RUNTIME_TOOL_CONFIG = {
+    "provider_settings.computer_use_runtime": ("local", "sandbox"),
+}
 
 
+@builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class ExecuteShellTool(FunctionTool):
     name: str = "astrbot_execute_shell"
@@ -38,8 +44,6 @@ class ExecuteShellTool(FunctionTool):
         }
     )
 
-    is_local: bool = False
-
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
@@ -50,15 +54,25 @@ class ExecuteShellTool(FunctionTool):
         if permission_error := check_admin_permission(context, "Shell execution"):
             return permission_error
 
-        if self.is_local:
-            sb = get_local_booter()
-        else:
-            sb = await get_booter(
-                context.context.context,
-                context.context.event.unified_msg_origin,
-            )
+        sb = await get_booter(
+            context.context.context,
+            context.context.event.unified_msg_origin,
+        )
         try:
-            result = await sb.shell.exec(command, background=background, env=env)
+            cwd: str | None = None
+            if is_local_runtime(context):
+                current_workspace_root = workspace_root(
+                    context.context.event.unified_msg_origin
+                )
+                current_workspace_root.mkdir(parents=True, exist_ok=True)
+                cwd = str(current_workspace_root)
+
+            result = await sb.shell.exec(
+                command,
+                cwd=cwd,
+                background=background,
+                env=env,
+            )
             return json.dumps(result)
         except Exception as e:
             return f"Error executing command: {str(e)}"

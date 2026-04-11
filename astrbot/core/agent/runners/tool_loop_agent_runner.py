@@ -4,9 +4,11 @@ import sys
 import time
 import traceback
 import typing as T
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from mcp.types import (
     BlobResourceContents,
@@ -25,7 +27,7 @@ from tenacity import (
 
 from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
-from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import Json
@@ -45,7 +47,7 @@ from astrbot.core.provider.provider import Provider
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
 from ..context.manager import ContextManager
-from ..context.token_counter import TokenCounter
+from ..context.token_counter import EstimateTokenCounter, TokenCounter
 from ..hooks import BaseAgentRunHooks
 from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
 from ..response import AgentResponseData, AgentStats
@@ -97,6 +99,8 @@ ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
+    TOOL_RESULT_MAX_ESTIMATED_TOKENS = 27_500
+    TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 7000
     EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
     EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
@@ -150,6 +154,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         "high. Continue only if each call is clearly producing new information. "
         "Otherwise, change strategy, adjust arguments, or explain the limitation "
         "to the user."
+    )
+    TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE = (
+        "Truncated tool output preview shown above. "
+        "The tool output was too large to include directly and was written to "
+        "`{overflow_path}`. Use {read_tool_hint} to inspect it. "
+        "Use a narrower window when reading large files."
     )
 
     def _get_persona_custom_error_message(self) -> str | None:
@@ -206,6 +216,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
+        tool_result_overflow_dir: str | None = None,
+        read_tool: FunctionTool | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -217,6 +229,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.truncate_turns = truncate_turns
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
+        self.tool_result_overflow_dir = tool_result_overflow_dir
+        self.read_tool = read_tool
+        self._tool_result_token_counter = EstimateTokenCounter()
         # we will do compress when:
         # 1. before requesting LLM
         # TODO: 2. after LLM output a tool call
@@ -297,6 +312,103 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+
+    def _read_tool_hint(self) -> str:
+        if self.read_tool is not None:
+            return f"`{self.read_tool.name}`"
+        return "the available file-read tool"
+
+    async def _write_tool_result_overflow_file(
+        self,
+        *,
+        tool_call_id: str,
+        content: str,
+    ) -> str:
+        if self.tool_result_overflow_dir is None:
+            raise ValueError("tool_result_overflow_dir is not configured")
+
+        overflow_dir = Path(self.tool_result_overflow_dir).resolve(strict=False)
+        safe_tool_call_id = (
+            "".join(
+                ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
+                for ch in tool_call_id
+            ).strip("._")
+            or "tool_call"
+        )
+        file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"
+        overflow_path = overflow_dir / file_name
+
+        def _run() -> str:
+            overflow_dir.mkdir(parents=True, exist_ok=True)
+            overflow_path.write_text(content, encoding="utf-8")
+            return str(overflow_path)
+
+        return await asyncio.to_thread(_run)
+
+    async def _materialize_large_tool_result(
+        self,
+        *,
+        tool_call_id: str,
+        content: str,
+    ) -> str:
+        if self.tool_result_overflow_dir is None or self.read_tool is None:
+            return content
+
+        estimated_tokens = self._tool_result_token_counter.count_tokens(
+            [Message(role="tool", content=content, tool_call_id=tool_call_id)]
+        )
+        if estimated_tokens <= self.TOOL_RESULT_MAX_ESTIMATED_TOKENS:
+            return content
+
+        preview = self._truncate_tool_result_preview(content, tool_call_id=tool_call_id)
+        try:
+            overflow_path = await self._write_tool_result_overflow_file(
+                tool_call_id=tool_call_id,
+                content=content,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to spill oversized tool result for %s: %s",
+                tool_call_id,
+                exc,
+                exc_info=True,
+            )
+            error_notice = (
+                "Tool output exceeded the inline result limit "
+                f"({estimated_tokens} estimated tokens > "
+                f"{self.TOOL_RESULT_MAX_ESTIMATED_TOKENS}) and could not be written "
+                f"to `{self.tool_result_overflow_dir}`: {exc}"
+            )
+            if not preview:
+                return error_notice
+            return f"{preview}\n\n{error_notice}"
+
+        notice = self.TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE.format(
+            overflow_path=overflow_path,
+            read_tool_hint=self._read_tool_hint(),
+        )
+        if not preview:
+            return notice
+        return f"{preview}\n\n{notice}"
+
+    def _truncate_tool_result_preview(
+        self,
+        content: str,
+        *,
+        tool_call_id: str,
+    ) -> str:
+        preview = content
+        while preview:
+            estimated_tokens = self._tool_result_token_counter.count_tokens(
+                [Message(role="tool", content=preview, tool_call_id=tool_call_id)]
+            )
+            if estimated_tokens <= self.TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS:
+                return preview
+            next_len = len(preview) // 2
+            if next_len <= 0:
+                break
+            preview = preview[:next_len]
+        return preview
 
     async def _iter_llm_responses(
         self, *, include_model: bool = True
@@ -1009,9 +1121,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         logger.warning(
                                             f"[EnhancedSubAgent] Failed to add dynamic tool: {e}"
                                         )
+                            else:
+                                inline_result = "\n\n".join(result_parts)
+                                inline_result = await self._materialize_large_tool_result(
+                                tool_call_id=func_tool_id,
+                                content=inline_result,
+                            )
                             _append_tool_call_result(
                                 func_tool_id,
-                                "\n\n".join(result_parts)
+                                inline_result
                                 + self._build_repeated_tool_call_guidance(
                                     func_tool_name, tool_call_streak
                                 ),

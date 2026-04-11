@@ -9,6 +9,7 @@ import platform
 import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
@@ -20,30 +21,10 @@ from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
-    ANNOTATE_EXECUTION_TOOL,
-    BROWSER_BATCH_EXEC_TOOL,
-    BROWSER_EXEC_TOOL,
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
-    CREATE_SKILL_CANDIDATE_TOOL,
-    CREATE_SKILL_PAYLOAD_TOOL,
-    EVALUATE_SKILL_CANDIDATE_TOOL,
-    EXECUTE_SHELL_TOOL,
-    FILE_DOWNLOAD_TOOL,
-    FILE_UPLOAD_TOOL,
-    GET_EXECUTION_HISTORY_TOOL,
-    GET_SKILL_PAYLOAD_TOOL,
-    LIST_SKILL_CANDIDATES_TOOL,
-    LIST_SKILL_RELEASES_TOOL,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
-    LOCAL_EXECUTE_SHELL_TOOL,
-    LOCAL_PYTHON_TOOL,
-    PROMOTE_SKILL_CANDIDATE_TOOL,
-    PYTHON_TOOL,
-    ROLLBACK_SKILL_RELEASE_TOOL,
-    RUN_BROWSER_SKILL_TOOL,
     SANDBOX_MODE_PROMPT,
-    SYNC_SKILL_RELEASE_TOOL,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
@@ -56,14 +37,37 @@ from astrbot.core.persona_error_reply import (
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider.register import llm_tools
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
-from astrbot.core.tools.cron_tools import (
-    CreateActiveCronTool,
-    DeleteCronJobTool,
-    ListCronJobsTool,
+from astrbot.core.tools.computer_tools import (
+    AnnotateExecutionTool,
+    BrowserBatchExecTool,
+    BrowserExecTool,
+    CreateSkillCandidateTool,
+    CreateSkillPayloadTool,
+    EvaluateSkillCandidateTool,
+    ExecuteShellTool,
+    FileDownloadTool,
+    FileEditTool,
+    FileReadTool,
+    FileUploadTool,
+    FileWriteTool,
+    GetExecutionHistoryTool,
+    GetSkillPayloadTool,
+    GrepTool,
+    ListSkillCandidatesTool,
+    ListSkillReleasesTool,
+    LocalPythonTool,
+    PromoteSkillCandidateTool,
+    PythonTool,
+    RollbackSkillReleaseTool,
+    RunBrowserSkillTool,
+    SyncSkillReleaseTool,
+    normalize_umo_for_workspace,
 )
+from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
@@ -76,6 +80,10 @@ from astrbot.core.tools.web_search_tools import (
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
+)
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_system_tmp_path,
+    get_astrbot_workspaces_path,
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
@@ -295,11 +303,54 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
         req.prompt = f"{prefix}{req.prompt}"
 
 
-def _apply_local_env_tools(req: ProviderRequest) -> None:
+def _get_workspace_path_for_umo(umo: str) -> Path:
+    normalized_umo = normalize_umo_for_workspace(umo)
+    return Path(get_astrbot_workspaces_path()) / normalized_umo
+
+
+def _apply_workspace_extra_prompt(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+) -> None:
+    extra_prompt_path = _get_workspace_path_for_umo(event.unified_msg_origin) / (
+        "EXTRA_PROMPT.md"
+    )
+    if not extra_prompt_path.is_file():
+        return
+
+    try:
+        extra_prompt = extra_prompt_path.read_text(encoding="utf-8").strip()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to read workspace extra prompt for umo=%s from %s: %s",
+            event.unified_msg_origin,
+            extra_prompt_path,
+            exc,
+        )
+        return
+
+    if not extra_prompt:
+        return
+
+    req.system_prompt = (
+        f"{req.system_prompt or ''}\n"
+        "[Workspace Extra Prompt]\n"
+        "The following instructions are loaded from the current workspace "
+        "`EXTRA_PROMPT.md` file.\n"
+        f"{extra_prompt}\n"
+    )
+
+
+def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
-    req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
-    req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
+    tool_mgr = plugin_context.get_llm_tool_manager()
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
     req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
 
 
@@ -770,6 +821,7 @@ async def _decorate_llm_request(
     if tz is None:
         tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
+    _apply_workspace_extra_prompt(event, req)
 
 
 def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
@@ -1074,7 +1126,9 @@ def _apply_enhanced_subagent_tools(
 
 
 def _apply_sandbox_tools(
-    config: MainAgentBuildConfig, req: ProviderRequest, session_id: str
+    config: MainAgentBuildConfig,
+    req: ProviderRequest,
+    session_id: str,
 ) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
@@ -1090,10 +1144,15 @@ def _apply_sandbox_tools(
         os.environ["SHIPYARD_ENDPOINT"] = ep
         os.environ["SHIPYARD_ACCESS_TOKEN"] = at
 
-    req.func_tool.add_tool(EXECUTE_SHELL_TOOL)
-    req.func_tool.add_tool(PYTHON_TOOL)
-    req.func_tool.add_tool(FILE_UPLOAD_TOOL)
-    req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
+    tool_mgr = llm_tools
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(PythonTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileUploadTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileDownloadTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
     if booter == "shipyard_neo":
         # Neo-specific path rule: filesystem tools operate relative to sandbox
         # workspace root. Do not prepend "/workspace".
@@ -1129,22 +1188,22 @@ def _apply_sandbox_tools(
         # Browser tools: only register if profile supports browser
         # (or if capabilities are unknown because sandbox hasn't booted yet)
         if sandbox_capabilities is None or "browser" in sandbox_capabilities:
-            req.func_tool.add_tool(BROWSER_EXEC_TOOL)
-            req.func_tool.add_tool(BROWSER_BATCH_EXEC_TOOL)
-            req.func_tool.add_tool(RUN_BROWSER_SKILL_TOOL)
+            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserExecTool))
+            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserBatchExecTool))
+            req.func_tool.add_tool(tool_mgr.get_builtin_tool(RunBrowserSkillTool))
 
         # Neo-specific tools (always available for shipyard_neo)
-        req.func_tool.add_tool(GET_EXECUTION_HISTORY_TOOL)
-        req.func_tool.add_tool(ANNOTATE_EXECUTION_TOOL)
-        req.func_tool.add_tool(CREATE_SKILL_PAYLOAD_TOOL)
-        req.func_tool.add_tool(GET_SKILL_PAYLOAD_TOOL)
-        req.func_tool.add_tool(CREATE_SKILL_CANDIDATE_TOOL)
-        req.func_tool.add_tool(LIST_SKILL_CANDIDATES_TOOL)
-        req.func_tool.add_tool(EVALUATE_SKILL_CANDIDATE_TOOL)
-        req.func_tool.add_tool(PROMOTE_SKILL_CANDIDATE_TOOL)
-        req.func_tool.add_tool(LIST_SKILL_RELEASES_TOOL)
-        req.func_tool.add_tool(ROLLBACK_SKILL_RELEASE_TOOL)
-        req.func_tool.add_tool(SYNC_SKILL_RELEASE_TOOL)
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetExecutionHistoryTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnnotateExecutionTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillPayloadTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetSkillPayloadTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillCandidateTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillCandidatesTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(EvaluateSkillCandidateTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(PromoteSkillCandidateTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillReleasesTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
 
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
@@ -1153,9 +1212,7 @@ def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> 
     if req.func_tool is None:
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateActiveCronTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(DeleteCronJobTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListCronJobsTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FutureTaskTool))
 
 
 async def _apply_web_search_tools(
@@ -1436,7 +1493,7 @@ async def build_main_agent(
     if config.computer_use_runtime == "sandbox":
         _apply_sandbox_tools(config, req, req.session_id)
     elif config.computer_use_runtime == "local":
-        _apply_local_env_tools(req)
+        _apply_local_env_tools(req, plugin_context)
 
     if config.enhanced_subagent.get("enabled", False):
         # Apply enhanced SubAgent tools
@@ -1475,6 +1532,15 @@ async def build_main_agent(
             if config.tool_schema_mode == "full"
             else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
         )
+
+        if config.computer_use_runtime == "local":
+            tool_prompt += (
+                f"\nCurrent workspace you can use: "
+                f"`{_get_workspace_path_for_umo(event.unified_msg_origin)}`\n"
+                "Unless the user explicitly specifies a different directory, "
+                "perform all file-related operations in this workspace.\n"
+            )
+
         req.system_prompt += f"\n{tool_prompt}\n"
 
     action_type = event.get_extra("action_type")
@@ -1499,6 +1565,14 @@ async def build_main_agent(
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=_get_fallback_chat_providers(
             provider, plugin_context, config.provider_settings
+        ),
+        tool_result_overflow_dir=(
+            get_astrbot_system_tmp_path()
+            if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")
+            else None
+        ),
+        read_tool=(
+            req.func_tool.get_tool("astrbot_file_read_tool") if req.func_tool else None
         ),
     )
 
