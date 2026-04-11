@@ -4,7 +4,9 @@ import asyncio
 from types import SimpleNamespace
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.computer.tools.neo_skills import PromoteSkillCandidateTool
+from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
+    PromoteSkillCandidateTool,
+)
 
 
 class _FakeSkills:
@@ -46,11 +48,11 @@ def test_promote_stable_sync_failure_auto_rolls_back(monkeypatch):
         raise ValueError("sync failed")
 
     monkeypatch.setattr(
-        "astrbot.core.computer.tools.neo_skills.get_booter",
+        "astrbot.core.tools.computer_tools.shipyard_neo.neo_skills.get_booter",
         _fake_get_booter,
     )
     monkeypatch.setattr(
-        "astrbot.core.computer.tools.neo_skills.NeoSkillSyncManager.sync_release",
+        "astrbot.core.tools.computer_tools.shipyard_neo.neo_skills.NeoSkillSyncManager.sync_release",
         _fake_sync_release,
     )
 

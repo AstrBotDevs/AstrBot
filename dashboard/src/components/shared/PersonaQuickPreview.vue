@@ -117,7 +117,9 @@ const defaultPersonaData = {
 
 const normalizedTools = computed(() => (Array.isArray(personaData.value?.tools) ? personaData.value.tools : []))
 const normalizedSkills = computed(() => (Array.isArray(personaData.value?.skills) ? personaData.value.skills : []))
-const allToolsCount = computed(() => Object.keys(toolMetaMap.value).length)
+const allToolsCount = computed(() =>
+  Object.values(toolMetaMap.value).filter((tool) => tool.origin !== 'builtin').length
+)
 const allSkillsCount = computed(() => availableSkills.value.length)
 const resolvedTools = computed(() =>
   normalizedTools.value.map((toolName) => {

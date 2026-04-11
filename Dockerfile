@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
     git \
+    ripgrep \
     && curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean \

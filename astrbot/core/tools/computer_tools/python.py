@@ -8,10 +8,18 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
 from astrbot.core.computer.computer_client import get_booter, get_local_booter
-from astrbot.core.computer.tools.permissions import check_admin_permission
 from astrbot.core.message.message_event_result import MessageChain
 
+from ..registry import builtin_tool
+from .util import check_admin_permission
+
 _OS_NAME = platform.system()
+_SANDBOX_PYTHON_TOOL_CONFIG = {
+    "provider_settings.computer_use_runtime": "sandbox",
+}
+_LOCAL_PYTHON_TOOL_CONFIG = {
+    "provider_settings.computer_use_runtime": "local",
+}
 
 param_schema = {
     "type": "object",
@@ -61,6 +69,7 @@ async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult
     return resp
 
 
+@builtin_tool(config=_SANDBOX_PYTHON_TOOL_CONFIG)
 @dataclass
 class PythonTool(FunctionTool):
     name: str = "astrbot_execute_ipython"
@@ -83,6 +92,7 @@ class PythonTool(FunctionTool):
             return f"Error executing code: {str(e)}"
 
 
+@builtin_tool(config=_LOCAL_PYTHON_TOOL_CONFIG)
 @dataclass
 class LocalPythonTool(FunctionTool):
     name: str = "astrbot_execute_python"

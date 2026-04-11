@@ -1,27 +1,5 @@
 import base64
 
-from astrbot.core.computer.tools import (
-    AnnotateExecutionTool,
-    BrowserBatchExecTool,
-    BrowserExecTool,
-    CreateSkillCandidateTool,
-    CreateSkillPayloadTool,
-    EvaluateSkillCandidateTool,
-    ExecuteShellTool,
-    FileDownloadTool,
-    FileUploadTool,
-    GetExecutionHistoryTool,
-    GetSkillPayloadTool,
-    ListSkillCandidatesTool,
-    ListSkillReleasesTool,
-    LocalPythonTool,
-    PromoteSkillCandidateTool,
-    PythonTool,
-    RollbackSkillReleaseTool,
-    RunBrowserSkillTool,
-    SyncSkillReleaseTool,
-)
-
 LLM_SAFETY_MODE_SYSTEM_PROMPT = """You are running in Safe Mode.
 
 Rules:
@@ -129,28 +107,6 @@ BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT = (
     "The following object describes the background task that completed:\n"
     "{background_task_result}"
 )
-
-
-EXECUTE_SHELL_TOOL = ExecuteShellTool()
-LOCAL_EXECUTE_SHELL_TOOL = ExecuteShellTool(is_local=True)
-PYTHON_TOOL = PythonTool()
-LOCAL_PYTHON_TOOL = LocalPythonTool()
-FILE_UPLOAD_TOOL = FileUploadTool()
-FILE_DOWNLOAD_TOOL = FileDownloadTool()
-BROWSER_EXEC_TOOL = BrowserExecTool()
-BROWSER_BATCH_EXEC_TOOL = BrowserBatchExecTool()
-RUN_BROWSER_SKILL_TOOL = RunBrowserSkillTool()
-GET_EXECUTION_HISTORY_TOOL = GetExecutionHistoryTool()
-ANNOTATE_EXECUTION_TOOL = AnnotateExecutionTool()
-CREATE_SKILL_PAYLOAD_TOOL = CreateSkillPayloadTool()
-GET_SKILL_PAYLOAD_TOOL = GetSkillPayloadTool()
-CREATE_SKILL_CANDIDATE_TOOL = CreateSkillCandidateTool()
-LIST_SKILL_CANDIDATES_TOOL = ListSkillCandidatesTool()
-EVALUATE_SKILL_CANDIDATE_TOOL = EvaluateSkillCandidateTool()
-PROMOTE_SKILL_CANDIDATE_TOOL = PromoteSkillCandidateTool()
-LIST_SKILL_RELEASES_TOOL = ListSkillReleasesTool()
-ROLLBACK_SKILL_RELEASE_TOOL = RollbackSkillReleaseTool()
-SYNC_SKILL_RELEASE_TOOL = SyncSkillReleaseTool()
 
 # we prevent astrbot from connecting to known malicious hosts
 # these hosts are base64 encoded
