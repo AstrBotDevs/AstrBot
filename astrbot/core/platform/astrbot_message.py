@@ -1,5 +1,6 @@
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from astrbot.core.message.components import BaseMessageComponent
 
@@ -55,7 +56,7 @@ class AstrBotMessage:
     sender: MessageMember  # 发送者
     message: list[BaseMessageComponent]  # 消息链使用 Nakuru 的消息链格式
     message_str: str  # 最直观的纯文本消息字符串
-    raw_message: object
+    raw_message: Any
     timestamp: int  # 消息时间戳
 
     def __init__(self) -> None:

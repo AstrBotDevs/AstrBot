@@ -317,7 +317,7 @@ WebUI 的配置文件在 `CONFIG_METADATA_3` 中。
 
 未来将会逐步淘汰此配置元数据。
 """
-CONFIG_METADATA_2 = {
+CONFIG_METADATA_2: Any = {
     "platform_group": {
         "metadata": {
             "platform": {

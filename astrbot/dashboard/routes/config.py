@@ -1289,7 +1289,7 @@ class ConfigRoute(Route):
 
     async def _get_astrbot_config(self):
         config = self.config
-        metadata = copy.deepcopy(CONFIG_METADATA_2)
+        metadata: Any = copy.deepcopy(CONFIG_METADATA_2)
         _pg: Any = metadata["platform_group"]
         _pg_meta: Any = _pg["metadata"]
         _platform_meta: Any = _pg_meta["platform"]
@@ -1304,8 +1304,8 @@ class ConfigRoute(Route):
         _pg2: Any = metadata["platform_group"]
         _pg_meta2: Any = _pg2["metadata"]
         _platform_tmpl: Any = _pg_meta2["platform"]
-        platform_default_tmpl = _platform_tmpl["config_template"]
-        platform_i18n_translations = {}
+        platform_default_tmpl: Any = _platform_tmpl["config_template"]
+        platform_i18n_translations: dict[str, Any] = {}
         logo_registration_tasks = []
         for platform in platform_registry:
             if platform.default_config_tmpl:
@@ -1326,7 +1326,7 @@ class ConfigRoute(Route):
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
         _provider_tmpl: Any = metadata["provider_group"]
         _provider_tmpl2: Any = _provider_tmpl["metadata"]["provider"]
-        provider_default_tmpl = _provider_tmpl2["config_template"]
+        provider_default_tmpl: Any = _provider_tmpl2["config_template"]
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl

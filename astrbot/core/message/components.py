@@ -73,6 +73,11 @@ class ComponentType(str, Enum):
     Location = "Location"  # TODO
     Music = "Music"
     Json = "Json"
+    # Discord-specific component types
+    DiscordEmbed = "DiscordEmbed"
+    DiscordButton = "DiscordButton"
+    DiscordReference = "DiscordReference"
+    DiscordView = "DiscordView"
     Unknown = "Unknown"
 
 

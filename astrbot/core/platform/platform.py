@@ -123,6 +123,7 @@ class Platform(abc.ABC):
 
     async def terminate(self) -> None:
         """终止一个平台的运行实例｡"""
+        self._status = PlatformStatus.STOPPED
 
     @abc.abstractmethod
     def meta(self) -> PlatformMetadata:
@@ -144,8 +145,9 @@ class Platform(abc.ABC):
         """提交一个事件到事件队列｡"""
         self._event_queue.put_nowait(event)
 
-    def get_client(self) -> object:
+    def get_client(self) -> object | None:
         """获取平台的客户端对象｡"""
+        return None
 
     async def webhook_callback(self, request: Any) -> Any:
         """统一 Webhook 回调入口｡
