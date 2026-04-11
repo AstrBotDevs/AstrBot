@@ -37,7 +37,8 @@
     "providerDefaultUpdated": "已将 default 配置文件的默认对话提供商设置为 {id}",
     "computerAccessUpdateFailed": "更新 Agent 电脑访问权限失败",
     "computerAccessAllowed": "已允许 Agent 访问和使用电脑",
-    "computerAccessDenied": "已禁止 Agent 访问和使用电脑"
+    "computerAccessDenied": "已禁止 Agent 访问和使用电脑",
+    "step3HelpItem3": "如需更多细化权限与能力配置，可前往 配置文件 -> 普通配置 -> 使用电脑能力 继续设置。"
   },
   "resources": {
     "title": "相关资源",

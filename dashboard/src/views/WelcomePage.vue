@@ -177,6 +177,7 @@
           <ol class="computer-access-help-list">
             <li>{{ tm('onboard.step3HelpItem1') }}</li>
             <li>{{ tm('onboard.step3HelpItem2') }}</li>
+            <li>{{ tm('onboard.step3HelpItem3') }}</li>
           </ol>
         </v-card-text>
         <v-card-actions class="px-6 pb-4">

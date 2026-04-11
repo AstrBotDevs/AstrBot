@@ -37,7 +37,8 @@
     "providerDefaultUpdated": "Default chat provider in config file \"default\" has been set to {id}",
     "computerAccessUpdateFailed": "Failed to update Agent computer access",
     "computerAccessAllowed": "Agent is now allowed to access and use the computer",
-    "computerAccessDenied": "Agent is no longer allowed to access and use the computer"
+    "computerAccessDenied": "Agent is no longer allowed to access and use the computer",
+    "step3HelpItem3": "For more detailed control, configure the Computer Access options under Settings -> General -> Computer Access."
   },
   "resources": {
     "title": "Resources",
