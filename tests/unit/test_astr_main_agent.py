@@ -40,7 +40,9 @@ def mock_context():
         return_value=(None, None, None, False)
     )
     ctx.persona_manager.get_persona_v3_by_id = MagicMock(return_value=None)
-    ctx.get_llm_tool_manager.return_value = MagicMock()
+    tool_mgr = MagicMock()
+    tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
+    ctx.get_llm_tool_manager.return_value = tool_mgr
     ctx.subagent_orchestrator = None
     return ctx
 
@@ -1479,7 +1481,7 @@ class TestApplyLlmSafetyMode:
 class TestApplySandboxTools:
     """Tests for _apply_sandbox_tools function."""
 
-    def test_apply_sandbox_tools_creates_toolset_if_none(self):
+    def test_apply_sandbox_tools_creates_toolset_if_none(self, mock_context):
         """Test that ToolSet is created when func_tool is None."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1494,7 +1496,7 @@ class TestApplySandboxTools:
         assert req.func_tool is not None
         assert isinstance(req.func_tool, ToolSet)
 
-    def test_apply_sandbox_tools_adds_required_tools(self):
+    def test_apply_sandbox_tools_adds_required_tools(self, mock_context):
         """Test that all required sandbox tools are added."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1512,7 +1514,7 @@ class TestApplySandboxTools:
         assert "astrbot_upload_file" in tool_names
         assert "astrbot_download_file" in tool_names
 
-    def test_apply_sandbox_tools_adds_sandbox_prompt(self):
+    def test_apply_sandbox_tools_adds_sandbox_prompt(self, mock_context):
         """Test that sandbox mode prompt is added to system_prompt."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1526,7 +1528,7 @@ class TestApplySandboxTools:
 
         assert "sandboxed environment" in req.system_prompt
 
-    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch):
+    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
         """Test sandbox tools with shipyard booter configuration."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1548,7 +1550,7 @@ class TestApplySandboxTools:
         assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
         assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
 
-    def test_apply_sandbox_tools_shipyard_missing_endpoint(self):
+    def test_apply_sandbox_tools_shipyard_missing_endpoint(self, mock_context):
         """Test that shipyard config is skipped when endpoint is missing."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1571,7 +1573,7 @@ class TestApplySandboxTools:
             in mock_logger.error.call_args[0][0]
         )
 
-    def test_apply_sandbox_tools_shipyard_missing_access_token(self):
+    def test_apply_sandbox_tools_shipyard_missing_access_token(self, mock_context):
         """Test that shipyard config is skipped when access token is missing."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1590,7 +1592,7 @@ class TestApplySandboxTools:
 
         mock_logger.error.assert_called_once()
 
-    def test_apply_sandbox_tools_preserves_existing_toolset(self):
+    def test_apply_sandbox_tools_preserves_existing_toolset(self, mock_context):
         """Test that existing tools are preserved when adding sandbox tools."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1609,7 +1611,7 @@ class TestApplySandboxTools:
         assert "existing_tool" in req.func_tool.names()
         assert "astrbot_execute_shell" in req.func_tool.names()
 
-    def test_apply_sandbox_tools_appends_to_existing_system_prompt(self):
+    def test_apply_sandbox_tools_appends_to_existing_system_prompt(self, mock_context):
         """Test that sandbox prompt is appended to existing system prompt."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1624,7 +1626,7 @@ class TestApplySandboxTools:
         assert req.system_prompt.startswith("Base prompt")
         assert "sandboxed environment" in req.system_prompt
 
-    def test_apply_sandbox_tools_with_none_system_prompt(self):
+    def test_apply_sandbox_tools_with_none_system_prompt(self, mock_context):
         """Test that sandbox prompt is applied when system_prompt is None."""
         module = ama
         config = module.MainAgentBuildConfig(
