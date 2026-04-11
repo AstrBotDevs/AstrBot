@@ -7,11 +7,16 @@ import pytest
 
 import astrbot.api.message_components as Comp
 from tests.fixtures.helpers import (
+    NoopAwaitable,
     create_mock_file,
     create_mock_update,
     make_platform_config,
 )
-from tests.fixtures.mocks.telegram import create_mock_telegram_modules
+from tests.fixtures.mocks.telegram import (
+    MockTelegramBuilder,
+    MockTelegramNetworkError,
+    create_mock_telegram_modules,
+)
 
 _TELEGRAM_PLATFORM_ADAPTER = None
 _TELEGRAM_PLATFORM_EVENT = None
@@ -212,3 +217,170 @@ async def test_telegram_final_segment_splits_long_plaintext_when_markdown_fails(
     assert len(second_call["text"]) == 18
     assert "parse_mode" not in first_call
     assert "parse_mode" not in second_call
+
+
+@pytest.mark.asyncio
+async def test_telegram_polling_error_requests_rebuild_after_threshold():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter._loop = asyncio.get_running_loop()
+
+    assert not adapter._polling_recovery_requested.is_set()
+
+    for _ in range(adapter._polling_recovery_threshold):
+        adapter._on_polling_error(MockTelegramNetworkError("proxy disconnected"))
+
+    await asyncio.sleep(0)
+
+    assert adapter._polling_recovery_requested.is_set()
+
+
+@pytest.mark.asyncio
+async def test_telegram_run_rebuilds_application_after_repeated_polling_errors():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    app_one = MockTelegramBuilder.create_application()
+    app_one.updater.running = True
+    app_two = MockTelegramBuilder.create_application()
+    app_two.updater.running = True
+    created_apps = [app_one, app_two]
+
+    builder = MagicMock()
+    builder.token.return_value = builder
+    builder.base_url.return_value = builder
+    builder.base_file_url.return_value = builder
+    builder.build.side_effect = created_apps
+
+    adapter = None
+
+    def start_polling_side_effect(*args, **kwargs):
+        nonlocal adapter
+        error_callback = kwargs["error_callback"]
+        assert adapter is not None
+
+        async def _emit_errors():
+            await asyncio.sleep(0)
+            for _ in range(adapter._polling_recovery_threshold):
+                error_callback(MockTelegramNetworkError("proxy disconnected"))
+
+        asyncio.create_task(_emit_errors())
+        return NoopAwaitable()
+
+    app_one.updater.start_polling.side_effect = start_polling_side_effect
+
+    async def second_start_polling(*args, **kwargs):
+        assert adapter is not None
+        adapter._terminating = True
+
+    app_two.updater.start_polling.side_effect = second_start_polling
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config("telegram"),
+            {},
+            asyncio.Queue(),
+        )
+        await adapter.run()
+
+    assert builder.build.call_count == 2
+    app_one.updater.stop.assert_awaited()
+    app_one.bot.delete_my_commands.assert_not_awaited()
+    app_one.stop.assert_awaited()
+    app_one.shutdown.assert_awaited()
+    app_two.initialize.assert_awaited()
+    app_two.start.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_telegram_recreate_application_is_skipped_during_termination():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter._terminating = True
+    adapter._polling_recovery_requested.set()
+
+    await adapter._recreate_application()
+
+    assert not adapter._polling_recovery_requested.is_set()
+
+
+@pytest.mark.asyncio
+async def test_telegram_run_rebuilds_fresh_application_after_recreate_init_failure():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    module_globals = TelegramPlatformAdapter.__init__.__globals__
+    app_one = MockTelegramBuilder.create_application()
+    app_one.updater.running = True
+    app_two = MockTelegramBuilder.create_application()
+    app_three = MockTelegramBuilder.create_application()
+    app_three.updater.running = True
+    created_apps = [app_one, app_two, app_three]
+
+    builder = MagicMock()
+    builder.token.return_value = builder
+    builder.base_url.return_value = builder
+    builder.base_file_url.return_value = builder
+    builder.build.side_effect = created_apps
+
+    adapter = None
+
+    def first_start_polling(*args, **kwargs):
+        nonlocal adapter
+        error_callback = kwargs["error_callback"]
+        assert adapter is not None
+
+        async def _emit_errors():
+            await asyncio.sleep(0)
+            for _ in range(adapter._polling_recovery_threshold):
+                error_callback(MockTelegramNetworkError("proxy disconnected"))
+
+        asyncio.create_task(_emit_errors())
+        return NoopAwaitable()
+
+    app_one.updater.start_polling.side_effect = first_start_polling
+    app_two.initialize.side_effect = TimeoutError("init timeout")
+
+    async def final_start_polling(*args, **kwargs):
+        assert adapter is not None
+        adapter._terminating = True
+
+    app_three.updater.start_polling.side_effect = final_start_polling
+
+    with patch.dict(
+        module_globals,
+        {
+            "ApplicationBuilder": MagicMock(return_value=builder),
+            "AsyncIOScheduler": MagicMock(
+                return_value=MockTelegramBuilder.create_scheduler()
+            ),
+        },
+    ):
+        adapter = TelegramPlatformAdapter(
+            make_platform_config(
+                "telegram",
+                telegram_polling_restart_delay=0.1,
+            ),
+            {},
+            asyncio.Queue(),
+        )
+        await adapter.run()
+
+    assert builder.build.call_count == 3
+    app_two.stop.assert_awaited()
+    app_two.shutdown.assert_awaited()
+    app_three.initialize.assert_awaited()
+    app_three.start.assert_awaited()
