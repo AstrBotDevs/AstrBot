@@ -411,8 +411,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
             except Exception:
                 pass
-
-        llm_resp, runner_messages = await ctx.tool_loop_agent(
+        runner_messages = []
+        llm_resp = await ctx.tool_loop_agent(
             event=event,
             chat_provider_id=prov_id,
             prompt=input_,
@@ -423,7 +423,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             max_steps=agent_max_step,
             tool_call_timeout=run_context.tool_call_timeout,
             stream=stream,
-            return_runner_messages=True,
+            runner_messages=runner_messages,
         )
 
         # 保存历史上下文
