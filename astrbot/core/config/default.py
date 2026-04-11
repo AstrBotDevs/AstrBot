@@ -198,11 +198,11 @@ DEFAULT_CONFIG = {
     },
     "enhanced_subagent": {
         "enabled": False,
-        "log_level": "debug",
         "max_subagent_count": 3,
         "auto_cleanup_per_turn": True,
-        "shared_context_enabled": False,
+        "shared_context_enabled": True,
         "shared_context_maxlen": 200,
+        "max_subagent_history": 500,
     },
     "provider_stt_settings": {
         "enable": False,

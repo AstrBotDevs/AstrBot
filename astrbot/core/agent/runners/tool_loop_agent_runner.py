@@ -1123,10 +1123,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         )
                             else:
                                 inline_result = "\n\n".join(result_parts)
-                                inline_result = await self._materialize_large_tool_result(
-                                tool_call_id=func_tool_id,
-                                content=inline_result,
-                            )
+                                inline_result = (
+                                    await self._materialize_large_tool_result(
+                                        tool_call_id=func_tool_id,
+                                        content=inline_result,
+                                    )
+                                )
                             _append_tool_call_result(
                                 func_tool_id,
                                 inline_result

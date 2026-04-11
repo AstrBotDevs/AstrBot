@@ -423,13 +423,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             max_steps=agent_max_step,
             tool_call_timeout=run_context.tool_call_timeout,
             stream=stream,
-            return_runner_messages=True
+            return_runner_messages=True,
         )
 
         # 保存历史上下文
         if agent_name and runner_messages:
             try:
                 from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
                 DynamicSubAgentManager.update_subagent_history(
                     umo, agent_name, runner_messages
                 )
