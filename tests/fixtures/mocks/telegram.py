@@ -28,6 +28,9 @@ def create_mock_telegram_modules():
     mock_telegram.constants.ChatAction.UPLOAD_PHOTO = "upload_photo"
     mock_telegram.error = MagicMock()
     mock_telegram.error.BadRequest = Exception
+    mock_telegram.error.Forbidden = Exception
+    mock_telegram.error.InvalidToken = Exception
+    mock_telegram.error.NetworkError = Exception
     mock_telegram.ReactionTypeCustomEmoji = MagicMock
     mock_telegram.ReactionTypeEmoji = MagicMock
 
@@ -126,10 +129,12 @@ class MockTelegramBuilder:
         app.initialize = AsyncMock()
         app.start = AsyncMock()
         app.stop = AsyncMock()
+        app.shutdown = AsyncMock()
         app.add_handler = MagicMock()
         app.updater = MagicMock()
         app.updater.start_polling = MagicMock(return_value=NoopAwaitable())
         app.updater.stop = AsyncMock()
+        app.updater.running = False
         return app
 
     @staticmethod
