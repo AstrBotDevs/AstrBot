@@ -73,7 +73,8 @@ class DynamicSubAgentManager:
     _shared_context_maxlen: int = 200  # 公共上下文保留的历史消息条数
     _max_subagent_history: int = 500  # 每个subagent最多保留的历史消息条数
     _tools_blacklist: set[str] = {
-        "send_shared_context_for_main_agentcreate_dynamic_subagent",
+        "send_shared_context_for_main_agent",
+        "create_dynamic_subagent",
         "protect_subagent",
         "unprotect_subagent",
         "reset_subagent",
