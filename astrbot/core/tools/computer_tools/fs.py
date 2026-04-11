@@ -73,6 +73,7 @@ def _restricted_env_path_labels(umo: str) -> list[str]:
         "data/skills",
         f"data/workspaces/{normalized_umo}",
         get_astrbot_system_tmp_path(),
+        get_astrbot_temp_path(),
     ]
 
 
@@ -93,6 +94,7 @@ def _read_allowed_roots(umo: str) -> tuple[Path, ...]:
         Path(get_astrbot_skills_path()).resolve(strict=False),
         _workspace_root(umo),
         Path(get_astrbot_system_tmp_path()).resolve(strict=False),
+        Path(get_astrbot_temp_path()).resolve(strict=False),
     )
 
 
