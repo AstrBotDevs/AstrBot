@@ -70,8 +70,8 @@ class DynamicSubAgentManager:
     _max_subagent_count: int = 3
     _auto_cleanup_per_turn: bool = True
     _shared_context_enabled: bool = False
-    _shared_context_maxlen: int = 200
-
+    _shared_context_maxlen: int = 200   # 公共上下文保留的历史消息条数
+    _max_subagent_history: int = 500   # 每个subagent最多保留的历史消息条数
     _tools_blacklist: set[str] = {
         "send_shared_context_for_main_agentcreate_dynamic_subagent",
         "protect_subagent",
@@ -251,10 +251,10 @@ class DynamicSubAgentManager:
         )
 
     @classmethod
-    def save_subagent_history(
+    def update_subagent_history(
         cls, session_id: str, agent_name: str, current_messages: list
     ) -> None:
-        """Save conversation history for a subagent"""
+        """Update conversation history for a subagent"""
         session = cls.get_session(session_id)
         if not session or agent_name not in session.protected_agents:
             return
@@ -262,9 +262,21 @@ class DynamicSubAgentManager:
         if agent_name not in session.subagent_histories:
             session.subagent_histories[agent_name] = []
 
-        # 追加新消息
         if isinstance(current_messages, list):
-            session.subagent_histories[agent_name].extend(current_messages)
+            _MAX_TOOL_RESULT_LEN = 2000
+            for msg in current_messages:
+                if isinstance(msg, dict) and msg.get("role") == "system": # 移除system消息
+                    current_messages.remove(msg)
+                # 对过长的 tool 结果做截断，避免单条消息占用过多空间
+                if (isinstance(msg, dict) and msg.get("role") == "tool" and isinstance(msg.get("content"), str) and len(msg["content"]) > _MAX_TOOL_RESULT_LEN
+                ):
+                    msg["content"] = (
+                            msg["content"][:_MAX_TOOL_RESULT_LEN] + "\n...[truncated]"
+                    )
+
+        session.subagent_histories[agent_name].extend(current_messages)
+        if cls._max_subagent_history < len(session.subagent_histories[agent_name]):
+            session.subagent_histories[agent_name] = session.subagent_histories[agent_name][-cls._max_subagent_history:]
 
         logger.debug(
             "[EnhancedSubAgent:History] Saved messages for %s, current len=%d",

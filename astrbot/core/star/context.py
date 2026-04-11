@@ -159,7 +159,7 @@ class Context:
         max_steps: int = 30,
         tool_call_timeout: int = 120,
         **kwargs: Any,
-    ) -> LLMResponse:
+    ) -> LLMResponse | tuple[LLMResponse, list[Any]]:
         """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.
         If you do not pass the agent_context parameter, the method will recreate a new agent context.
 
@@ -250,6 +250,11 @@ class Context:
         llm_resp = agent_runner.get_final_llm_resp()
         if not llm_resp:
             raise Exception("Agent did not produce a final LLM response")
+        if kwargs.get("return_runner_messages", False):
+            runner_messages = []
+            for msg in agent_runner.run_context.messages:
+                runner_messages.append(msg.model_dump())
+            return llm_resp, runner_messages
         return llm_resp
 
     async def get_current_chat_provider_id(self, umo: str) -> str:

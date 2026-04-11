@@ -373,7 +373,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             except Exception:
                 pass
 
-        llm_resp = await ctx.tool_loop_agent(
+        llm_resp, runner_messages = await ctx.tool_loop_agent(
             event=event,
             chat_provider_id=prov_id,
             prompt=input_,
@@ -384,25 +384,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             max_steps=agent_max_step,
             tool_call_timeout=run_context.tool_call_timeout,
             stream=stream,
+            return_runner_messages=True
         )
 
         # 保存历史上下文
-        if agent_name:
+        if agent_name and runner_messages:
             try:
                 from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
-
-                # 构建当前对话的历史消息
-                current_messages = []
-                # 添加本轮用户输入
-                current_messages.append({"role": "user", "content": input_})
-                # 添加助手回复
-                current_messages.append(
-                    {"role": "assistant", "content": llm_resp.completion_text}
+                DynamicSubAgentManager.update_subagent_history(
+                    umo, agent_name, runner_messages
                 )
-                if current_messages:
-                    DynamicSubAgentManager.save_subagent_history(
-                        umo, agent_name, current_messages
-                    )
             except Exception:
                 pass  # 不影响主流程
 
