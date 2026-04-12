@@ -9,6 +9,18 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
+class MockTelegramNetworkError(Exception):
+    """Mock telegram.error.NetworkError used in tests."""
+
+
+class MockTelegramForbidden(Exception):
+    """Mock telegram.error.Forbidden used in tests."""
+
+
+class MockTelegramInvalidToken(Exception):
+    """Mock telegram.error.InvalidToken used in tests."""
+
+
 def create_mock_telegram_modules():
     """创建 Telegram 相关的 mock 模块。
 
@@ -28,6 +40,9 @@ def create_mock_telegram_modules():
     mock_telegram.constants.ChatAction.UPLOAD_PHOTO = "upload_photo"
     mock_telegram.error = MagicMock()
     mock_telegram.error.BadRequest = Exception
+    mock_telegram.error.Forbidden = MockTelegramForbidden
+    mock_telegram.error.InvalidToken = MockTelegramInvalidToken
+    mock_telegram.error.NetworkError = MockTelegramNetworkError
     mock_telegram.ReactionTypeCustomEmoji = MagicMock
     mock_telegram.ReactionTypeEmoji = MagicMock
 
@@ -73,7 +88,9 @@ def mock_telegram_modules():
     monkeypatch.setitem(sys.modules, "telegram.constants", mocks["telegram"].constants)
     monkeypatch.setitem(sys.modules, "telegram.error", mocks["telegram"].error)
     monkeypatch.setitem(sys.modules, "telegram.ext", mocks["telegram.ext"])
-    monkeypatch.setitem(sys.modules, "telegramify_markdown", mocks["telegramify_markdown"])
+    monkeypatch.setitem(
+        sys.modules, "telegramify_markdown", mocks["telegramify_markdown"]
+    )
     monkeypatch.setitem(sys.modules, "apscheduler", mocks["apscheduler"])
     monkeypatch.setitem(
         sys.modules, "apscheduler.schedulers", mocks["apscheduler"].schedulers
@@ -120,16 +137,16 @@ class MockTelegramBuilder:
         from tests.fixtures.helpers import NoopAwaitable
 
         app = MagicMock()
-        app.bot = MagicMock()
-        app.bot.username = "test_bot"
-        app.bot.base_url = "https://api.telegram.org/bottest_token_123/"
+        app.bot = MockTelegramBuilder.create_bot()
         app.initialize = AsyncMock()
         app.start = AsyncMock()
         app.stop = AsyncMock()
+        app.shutdown = AsyncMock()
         app.add_handler = MagicMock()
         app.updater = MagicMock()
         app.updater.start_polling = MagicMock(return_value=NoopAwaitable())
         app.updater.stop = AsyncMock()
+        app.updater.running = False
         return app
 
     @staticmethod
