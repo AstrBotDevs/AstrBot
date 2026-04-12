@@ -160,13 +160,13 @@ def _validate_stdio_args(command_name: str, args: object) -> None:
         if "\x00" in arg or "\r" in arg or "\n" in arg:
             raise ValueError("MCP stdio args cannot contain control characters.")
 
-    if command_name in {"python", "python3", "py"}:
-        if any(arg in _PYTHON_INLINE_CODE_FLAGS for arg in args):
+    if command_name.startswith("python") or command_name == "py":
+        if any(arg == "-c" or (arg.startswith("-") and not arg.startswith("--") and "c" in arg) for arg in args):
             raise ValueError(
-                "MCP stdio Python servers must be launched from a module or file; inline code flags such as `-c` are not allowed."
+                "MCP stdio Python servers must be launched from a module or file; inline code flags such as -c are not allowed."
             )
-    elif command_name in {"node", "deno", "bun"}:
-        if any(arg in _JS_INLINE_CODE_FLAGS for arg in args):
+    elif command_name in {"node", "deno", "bun"} or command_name.startswith("node"):
+        if any(arg in _JS_INLINE_CODE_FLAGS or arg == "eval" or (arg.startswith("-") and not arg.startswith("--") and any(c in arg for c in "ep")) for arg in args):
             raise ValueError(
                 "MCP stdio JavaScript servers must be launched from a package or file; inline eval flags are not allowed."
             )
