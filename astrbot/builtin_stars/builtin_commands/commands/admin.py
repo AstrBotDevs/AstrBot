@@ -10,68 +10,43 @@ class AdminCommands:
 
     async def op(self, event: AstrMessageEvent, admin_id: str = "") -> None:
         """授权管理员。op <admin_id>"""
+        umo = event.unified_msg_origin
         if not admin_id:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /op <id> 授权管理员；/deop <id> 取消管理员。可通过 /sid 获取 ID。",
+                    "Usage: /op <id> to authorize admin; /deop <id> to deauthorize admin. Get the ID via /sid.",
                 ),
             )
             return
-        self.context.get_config()["admins_id"].append(str(admin_id))
-        self.context.get_config().save_config()
-        event.set_result(MessageEventResult().message("授权成功。"))
+        cfg = self.context.get_config(umo=umo)
+        cfg["admins_id"].append(str(admin_id))
+        cfg.save_config()
+        event.set_result(MessageEventResult().message("✅ Authorized successfully."))
 
     async def deop(self, event: AstrMessageEvent, admin_id: str = "") -> None:
         """取消授权管理员。deop <admin_id>"""
+        umo = event.unified_msg_origin
+        cfg = self.context.get_config(umo=umo)
         if not admin_id:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /deop <id> 取消管理员。可通过 /sid 获取 ID。",
+                    "Usage: /deop <id> to deauthorize admin. Get the ID via /sid.",
                 ),
             )
             return
         try:
-            self.context.get_config()["admins_id"].remove(str(admin_id))
-            self.context.get_config().save_config()
-            event.set_result(MessageEventResult().message("取消授权成功。"))
-        except ValueError:
-            event.set_result(
-                MessageEventResult().message("此用户 ID 不在管理员名单内。"),
-            )
-
-    async def wl(self, event: AstrMessageEvent, sid: str = "") -> None:
-        """添加白名单。wl <sid>"""
-        if not sid:
-            event.set_result(
-                MessageEventResult().message(
-                    "使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。",
-                ),
-            )
-            return
-        cfg = self.context.get_config(umo=event.unified_msg_origin)
-        cfg["platform_settings"]["id_whitelist"].append(str(sid))
-        cfg.save_config()
-        event.set_result(MessageEventResult().message("添加白名单成功。"))
-
-    async def dwl(self, event: AstrMessageEvent, sid: str = "") -> None:
-        """删除白名单。dwl <sid>"""
-        if not sid:
-            event.set_result(
-                MessageEventResult().message(
-                    "使用方法: /dwl <id> 删除白名单。可通过 /sid 获取 ID。",
-                ),
-            )
-            return
-        try:
-            cfg = self.context.get_config(umo=event.unified_msg_origin)
-            cfg["platform_settings"]["id_whitelist"].remove(str(sid))
+            cfg["admins_id"].remove(str(admin_id))
             cfg.save_config()
-            event.set_result(MessageEventResult().message("删除白名单成功。"))
+            event.set_result(
+                MessageEventResult().message("✅ Deauthorized successfully.")
+            )
         except ValueError:
-            event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
+            event.set_result(
+                MessageEventResult().message("⚠️ ID not found in admin list."),
+            )
 
     async def update_dashboard(self, event: AstrMessageEvent) -> None:
         """更新管理面板"""
-        await event.send(MessageChain().message("正在尝试更新管理面板..."))
+        await event.send(MessageChain().message("⏳ Updating dashboard..."))
         await download_dashboard(version=f"v{VERSION}", latest=False)
-        await event.send(MessageChain().message("管理面板更新完成。"))
+        await event.send(MessageChain().message("✅ Dashboard updated successfully."))
