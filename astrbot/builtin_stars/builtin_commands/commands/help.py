@@ -48,7 +48,12 @@ class HelpCommand:
                     or item.get("original_command")
                     or item.get("handler_name")
                 )
-                if not effective or effective in ["set", "unset", "help"]:
+                if not effective or effective in [
+                    "set",
+                    "unset",
+                    "help",
+                    "dashboard_update",
+                ]:
                     continue
 
                 description = item.get("description") or ""
