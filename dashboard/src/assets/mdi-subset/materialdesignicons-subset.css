@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 243 icons */
+/* Auto-generated MDI subset – 248 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -34,6 +34,10 @@
 
 .mdi-account-heart::before {
   content: "\F0899";
+}
+
+.mdi-account-voice::before {
+  content: "\F05CB";
 }
 
 .mdi-alert::before {
@@ -232,8 +236,20 @@
   content: "\F0167";
 }
 
+.mdi-code-braces::before {
+  content: "\F0169";
+}
+
 .mdi-code-json::before {
   content: "\F0626";
+}
+
+.mdi-code-tags::before {
+  content: "\F0174";
+}
+
+.mdi-code-tags-check::before {
+  content: "\F0694";
 }
 
 .mdi-cog::before {
@@ -342,6 +358,14 @@
 
 .mdi-emoticon::before {
   content: "\F0C68";
+}
+
+.mdi-emoticon-confused::before {
+  content: "\F10DE";
+}
+
+.mdi-emoticon-confused-outline::before {
+  content: "\F10DF";
 }
 
 .mdi-export::before {
@@ -516,10 +540,6 @@
   content: "\F0EFE";
 }
 
-.mdi-image-outline::before {
-  content: "\F0976";
-}
-
 .mdi-import::before {
   content: "\F02FA";
 }
@@ -608,10 +628,6 @@
   content: "\F035D";
 }
 
-.mdi-menu-open::before {
-  content: "\F0BAB";
-}
-
 .mdi-menu-right::before {
   content: "\F035F";
 }
@@ -624,8 +640,8 @@
   content: "\F0369";
 }
 
-.mdi-message-text-outline::before {
-  content: "\F036A";
+.mdi-microphone::before {
+  content: "\F036C";
 }
 
 .mdi-microphone-message::before {
@@ -710,6 +726,10 @@
 
 .mdi-pencil-ruler::before {
   content: "\F1353";
+}
+
+.mdi-phone-in-talk::before {
+  content: "\F03F6";
 }
 
 .mdi-pin::before {
