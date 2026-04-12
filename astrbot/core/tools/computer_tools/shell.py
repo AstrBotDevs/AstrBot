@@ -73,6 +73,6 @@ class ExecuteShellTool(FunctionTool):
                 background=background,
                 env=env,
             )
-            return json.dumps(result)
+            return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             return f"Error executing command: {str(e)}"
