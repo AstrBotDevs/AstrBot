@@ -161,12 +161,25 @@ def _validate_stdio_args(command_name: str, args: object) -> None:
             raise ValueError("MCP stdio args cannot contain control characters.")
 
     if command_name.startswith("python") or command_name == "py":
-        if any(arg == "-c" or (arg.startswith("-") and not arg.startswith("--") and "c" in arg) for arg in args):
+        if any(
+            arg == "-c"
+            or (arg.startswith("-") and not arg.startswith("--") and "c" in arg)
+            for arg in args
+        ):
             raise ValueError(
                 "MCP stdio Python servers must be launched from a module or file; inline code flags such as -c are not allowed."
             )
     elif command_name in {"node", "deno", "bun"} or command_name.startswith("node"):
-        if any(arg in _JS_INLINE_CODE_FLAGS or arg == "eval" or (arg.startswith("-") and not arg.startswith("--") and any(c in arg for c in "ep")) for arg in args):
+        if any(
+            arg in _JS_INLINE_CODE_FLAGS
+            or arg == "eval"
+            or (
+                arg.startswith("-")
+                and not arg.startswith("--")
+                and any(c in arg for c in "ep")
+            )
+            for arg in args
+        ):
             raise ValueError(
                 "MCP stdio JavaScript servers must be launched from a package or file; inline eval flags are not allowed."
             )
@@ -175,8 +188,12 @@ def _validate_stdio_args(command_name: str, args: object) -> None:
         for i, arg in enumerate(args):
             if arg in _DENIED_DOCKER_ARGS:
                 denied.append(arg)
-            elif arg in {"--network", "--net", "--pid", "--ipc"} and i + 1 < len(args) and args[i+1] == "host":
-                denied.append(f"{arg} {args[i+1]}")
+            elif (
+                arg in {"--network", "--net", "--pid", "--ipc"}
+                and i + 1 < len(args)
+                and args[i + 1] == "host"
+            ):
+                denied.append(f"{arg} {args[i + 1]}")
         if denied:
             raise ValueError(
                 f"MCP stdio Docker args are unsafe and not allowed: {', '.join(denied)}."
