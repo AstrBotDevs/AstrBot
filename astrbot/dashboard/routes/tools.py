@@ -3,7 +3,7 @@ import traceback
 from quart import request
 
 from astrbot.core import logger
-from astrbot.core.agent.mcp_client import MCPTool
+from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 from astrbot.core.tools.registry import get_builtin_tool_config_statuses
@@ -153,6 +153,11 @@ class ToolsRoute(Route):
                     .__dict__
                 )
 
+            try:
+                validate_mcp_stdio_config(server_config)
+            except ValueError as e:
+                return Response().error(f"{e!s}").__dict__
+
             config = self.tool_mgr.load_mcp_config()
 
             if name in config["mcpServers"]:
@@ -255,6 +260,11 @@ class ToolsRoute(Route):
                 for key, value in old_config.items():
                     if key != "active":  # 除了active之外的所有字段都保留
                         server_config[key] = value
+
+            try:
+                validate_mcp_stdio_config(server_config)
+            except ValueError as e:
+                return Response().error(f"{e!s}").__dict__
 
             # config["mcpServers"][name] = server_config
             if is_rename:
@@ -414,6 +424,11 @@ class ToolsRoute(Route):
                     .error("MCP server configuration cannot be empty")
                     .__dict__
                 )
+
+            try:
+                validate_mcp_stdio_config(config)
+            except ValueError as e:
+                return Response().error(f"{e!s}").__dict__
 
             tools_name = await self.tool_mgr.test_mcp_server_connection(config)
             return (

@@ -110,6 +110,10 @@
 
             <small style="color: grey">*{{ tm('dialogs.addServer.tips.timeoutConfig') }}</small>
 
+            <v-alert type="info" variant="tonal" density="compact" class="mt-3">
+              {{ tm('dialogs.addServer.tips.transportRecommendation') }}
+            </v-alert>
+
             <div class="monaco-container" style="margin-top: 16px;">
               <VueMonacoEditor v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{
                 minimap: {
