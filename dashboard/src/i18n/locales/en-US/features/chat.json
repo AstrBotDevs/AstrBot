@@ -56,6 +56,10 @@
   "ipython": {
     "output": "Output"
   },
+  "toolStatus": {
+    "done": "Done",
+    "running": "Running"
+  },
   "conversation": {
     "newConversation": "New Conversation",
     "noHistory": "No conversation history",
@@ -158,4 +162,4 @@
     "partialFailure": "{failed} of {total} conversations failed to delete",
     "requestFailed": "Failed to delete conversations. Please try again."
   }
-} 
+}

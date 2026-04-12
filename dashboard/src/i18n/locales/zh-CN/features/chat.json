@@ -56,6 +56,10 @@
   "ipython": {
     "output": "输出"
   },
+  "toolStatus": {
+    "done": "已完成",
+    "running": "运行中"
+  },
   "conversation": {
     "newConversation": "新的聊天",
     "noHistory": "暂无对话历史",
@@ -158,4 +162,4 @@
     "partialFailure": "{total} 个对话中有 {failed} 个删除失败",
     "requestFailed": "删除对话失败，请重试。"
   }
-} 
+}

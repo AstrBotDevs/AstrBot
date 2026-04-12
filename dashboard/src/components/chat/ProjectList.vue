@@ -1,162 +1,228 @@
 <template>
-    <div>
-        <!-- 项目按钮 -->
-        <div style="padding: 0 8px 0px 8px; opacity: 0.6;">
-            <v-btn block variant="text" class="project-btn" @click="toggleExpanded" prepend-icon="mdi-folder-outline">
-                {{ tm('project.title') }}
-                <template v-slot:append>
-                    <v-icon size="small">{{ expanded ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
-                </template>
-            </v-btn>
-        </div>
-
-        <!-- 项目列表 -->
-        <v-expand-transition>
-            <div v-show="expanded" style="padding: 0 8px;">
-                <v-list density="compact" nav class="project-list" style="background-color: transparent;">
-                    <v-list-item @click="$emit('createProject')" class="create-project-item" rounded="lg">
-                        <template v-slot:prepend>
-                            <span class="project-emoji"><v-icon size="small">mdi-plus</v-icon></span>
-                        </template>
-                        <v-list-item-title style="font-size: 13px;">{{ tm('project.create') }}</v-list-item-title>
-                    </v-list-item>
-                    <v-list-item v-for="project in projects" :key="project.project_id"
-                        @click="$emit('selectProject', project.project_id)" rounded="lg" class="project-item">
-                        <template v-slot:prepend>
-                            <span class="project-emoji">{{ project.emoji || '📁' }}</span>
-                        </template>
-                        <v-list-item-title class="project-title">{{ project.title }}</v-list-item-title>
-                        <template v-slot:append>
-                            <div class="project-actions">
-                                <v-btn icon="mdi-pencil" size="x-small" variant="text" class="edit-project-btn"
-                                    @click.stop="$emit('editProject', project)" />
-                                <v-btn icon="mdi-delete" size="x-small" variant="text" class="delete-project-btn"
-                                    color="error" @click.stop="handleDeleteProject(project)" />
-                            </div>
-                        </template>
-                    </v-list-item>
-                </v-list>
-            </div>
-        </v-expand-transition>
+  <div class="project-list-shell">
+    <!-- 项目按钮 -->
+    <div class="project-button-wrap">
+      <v-btn block variant="text" class="project-btn" @click="toggleExpanded">
+        <v-icon size="20" class="project-action-icon mr-2">
+          mdi-folder-outline
+        </v-icon>
+        <span class="project-btn-title">{{ tm("project.title") }}</span>
+        <v-spacer />
+        <v-icon size="18" class="project-toggle-icon">
+          {{ expanded ? "mdi-chevron-up" : "mdi-chevron-down" }}
+        </v-icon>
+      </v-btn>
     </div>
+
+    <!-- 项目列表 -->
+    <v-expand-transition>
+      <div v-show="expanded" class="project-list-wrap">
+        <button
+          class="project-row create-project-item"
+          type="button"
+          @click="$emit('createProject')"
+        >
+          <span class="project-emoji">
+            <v-icon size="18">mdi-plus</v-icon>
+          </span>
+          <span class="project-title">{{ tm("project.create") }}</span>
+        </button>
+
+        <button
+          v-for="project in projects"
+          :key="project.project_id"
+          class="project-row project-item"
+          :class="{ active: selectedProjectId === project.project_id }"
+          type="button"
+          @click="$emit('selectProject', project.project_id)"
+        >
+          <span class="project-emoji">{{ project.emoji || "📁" }}</span>
+          <span class="project-title">{{ project.title }}</span>
+          <span class="project-actions">
+            <v-btn
+              icon="mdi-pencil"
+              size="x-small"
+              variant="text"
+              class="edit-project-btn"
+              @click.stop="$emit('editProject', project)"
+            />
+            <v-btn
+              icon="mdi-delete"
+              size="x-small"
+              variant="text"
+              class="delete-project-btn"
+              color="error"
+              @click.stop="handleDeleteProject(project)"
+            />
+          </span>
+        </button>
+      </div>
+    </v-expand-transition>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
-import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
+import { ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
 export interface Project {
-    project_id: string;
-    title: string;
-    emoji?: string;
-    description?: string;
-    created_at: string;
-    updated_at: string;
+  project_id: string;
+  title: string;
+  emoji?: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface Props {
-    projects: Project[];
-    initialExpanded?: boolean;
+  projects: Project[];
+  initialExpanded?: boolean;
+  selectedProjectId?: string | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    initialExpanded: false
+  initialExpanded: false,
+  selectedProjectId: null,
 });
 
 const emit = defineEmits<{
-    selectProject: [projectId: string];
-    createProject: [];
-    editProject: [project: Project];
-    deleteProject: [projectId: string];
+  selectProject: [projectId: string];
+  createProject: [];
+  editProject: [project: Project];
+  deleteProject: [projectId: string];
 }>();
 
-const { tm } = useModuleI18n('features/chat');
+const { tm } = useModuleI18n("features/chat");
 
 const confirmDialog = useConfirmDialog();
 
 const expanded = ref(props.initialExpanded);
 
 // 从 localStorage 读取项目展开状态
-const savedProjectsExpandedState = localStorage.getItem('projectsExpanded');
+const savedProjectsExpandedState = localStorage.getItem("projectsExpanded");
 if (savedProjectsExpandedState !== null) {
-    expanded.value = JSON.parse(savedProjectsExpandedState);
+  expanded.value = JSON.parse(savedProjectsExpandedState);
 }
 
 function toggleExpanded() {
-    expanded.value = !expanded.value;
-    localStorage.setItem('projectsExpanded', JSON.stringify(expanded.value));
+  expanded.value = !expanded.value;
+  localStorage.setItem("projectsExpanded", JSON.stringify(expanded.value));
 }
 
 async function handleDeleteProject(project: Project) {
-    const message = tm('project.confirmDelete', { title: project.title });
-    if (await askForConfirmation(message, confirmDialog)) {
-        emit('deleteProject', project.project_id);
-    }
+  const message = tm("project.confirmDelete", { title: project.title });
+  if (await askForConfirmation(message, confirmDialog)) {
+    emit("deleteProject", project.project_id);
+  }
 }
 </script>
 
 <style scoped>
+.project-list-shell {
+  margin-top: 6px;
+}
+
+.project-button-wrap {
+  opacity: 0.6;
+}
+
 .project-btn {
-    justify-content: flex-start;
-    background-color: transparent !important;
-    border-radius: 20px;
-    padding: 8px 16px !important;
-    text-transform: none;
+  justify-content: flex-start;
+  background-color: transparent !important;
+  border-radius: 8px;
+  padding: 8px 12px !important;
+  text-transform: none;
+  font-weight: 500;
 }
 
-.project-item {
-    border-radius: 16px !important;
-    padding: 4px 12px !important;
-    margin-bottom: 2px;
+.project-action-icon {
+  color: currentcolor;
 }
 
-.project-item:hover {
-    background-color: rgba(103, 58, 183, 0.05);
+.project-btn-title {
+  min-width: 0;
+}
+
+.project-toggle-icon {
+  margin-left: 10px;
+}
+
+.project-list-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.project-row {
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-row:hover,
+.project-row.active {
+  background: var(--chat-session-active-bg);
 }
 
 .project-item:hover .project-actions {
-    opacity: 1;
-    visibility: visible;
+  opacity: 1;
+  visibility: visible;
 }
 
 .project-emoji {
-    font-size: 16px;
-    margin-right: 6px;
+  width: 20px;
+  flex: 0 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
 }
 
 .project-title {
-    font-size: 13px;
-    font-weight: 500;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .project-actions {
-    display: flex;
-    gap: 2px;
-    opacity: 0;
-    visibility: hidden;
-    transition: all 0.2s ease;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
 }
 
 .edit-project-btn,
 .delete-project-btn {
-    opacity: 0.7;
-    transition: opacity 0.2s ease;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
 }
 
 .edit-project-btn:hover,
 .delete-project-btn:hover {
-    opacity: 1;
+  opacity: 1;
 }
 
 .create-project-item {
-    border-radius: 16px !important;
-    padding: 4px 12px !important;
-    opacity: 0.7;
+  opacity: 0.7;
 }
 
 .create-project-item:hover {
-    background-color: rgba(103, 58, 183, 0.08);
-    opacity: 1;
+  opacity: 1;
 }
 </style>

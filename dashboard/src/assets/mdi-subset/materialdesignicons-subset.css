@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 256 icons */
+/* Auto-generated MDI subset – 243 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -34,10 +34,6 @@
 
 .mdi-account-heart::before {
   content: "\F0899";
-}
-
-.mdi-account-voice::before {
-  content: "\F05CB";
 }
 
 .mdi-alert::before {
@@ -180,10 +176,6 @@
   content: "\F0132";
 }
 
-.mdi-checkbox-multiple-marked-outline::before {
-  content: "\F0139";
-}
-
 .mdi-chevron-double-left::before {
   content: "\F013D";
 }
@@ -242,14 +234,6 @@
 
 .mdi-code-json::before {
   content: "\F0626";
-}
-
-.mdi-code-tags::before {
-  content: "\F0174";
-}
-
-.mdi-code-tags-check::before {
-  content: "\F0694";
 }
 
 .mdi-cog::before {
@@ -360,14 +344,6 @@
   content: "\F0C68";
 }
 
-.mdi-emoticon-confused::before {
-  content: "\F10DE";
-}
-
-.mdi-emoticon-confused-outline::before {
-  content: "\F10DF";
-}
-
 .mdi-export::before {
   content: "\F0207";
 }
@@ -440,10 +416,6 @@
   content: "\F0A4D";
 }
 
-.mdi-file-upload-outline::before {
-  content: "\F0A4E";
-}
-
 .mdi-file-word-box::before {
   content: "\F022D";
 }
@@ -454,14 +426,6 @@
 
 .mdi-filter-variant::before {
   content: "\F0236";
-}
-
-.mdi-flash::before {
-  content: "\F0241";
-}
-
-.mdi-flash-off::before {
-  content: "\F0243";
 }
 
 .mdi-folder::before {
@@ -552,6 +516,10 @@
   content: "\F0EFE";
 }
 
+.mdi-image-outline::before {
+  content: "\F0976";
+}
+
 .mdi-import::before {
   content: "\F02FA";
 }
@@ -576,16 +544,8 @@
   content: "\F0309";
 }
 
-.mdi-keyboard-outline::before {
-  content: "\F097B";
-}
-
 .mdi-label::before {
   content: "\F0315";
-}
-
-.mdi-lan-connect::before {
-  content: "\F0318";
 }
 
 .mdi-language-markdown::before {
@@ -648,12 +608,12 @@
   content: "\F035D";
 }
 
-.mdi-menu-right::before {
-  content: "\F035F";
+.mdi-menu-open::before {
+  content: "\F0BAB";
 }
 
-.mdi-message-off-outline::before {
-  content: "\F164E";
+.mdi-menu-right::before {
+  content: "\F035F";
 }
 
 .mdi-message-outline::before {
@@ -666,10 +626,6 @@
 
 .mdi-message-text-outline::before {
   content: "\F036A";
-}
-
-.mdi-microphone::before {
-  content: "\F036C";
 }
 
 .mdi-microphone-message::before {
@@ -754,10 +710,6 @@
 
 .mdi-pencil-ruler::before {
   content: "\F1353";
-}
-
-.mdi-phone-in-talk::before {
-  content: "\F03F6";
 }
 
 .mdi-pin::before {
@@ -1034,10 +986,6 @@
 
 .mdi-wrench::before {
   content: "\F05B7";
-}
-
-.mdi-wrench-outline::before {
-  content: "\F0BE0";
 }
 
 .mdi-zip-box::before {
