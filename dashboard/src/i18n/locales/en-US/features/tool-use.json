@@ -95,7 +95,8 @@
         "sync": "Sync"
       },
       "tips": {
-        "timeoutConfig": "Please configure tool call timeout separately in the configuration page"
+        "timeoutConfig": "Please configure tool call timeout separately in the configuration page",
+        "transportRecommendation": "Prefer Streamable HTTP or SSE mode. Stdio mode starts a local process on the AstrBot host and should only be used for trusted MCP servers."
       }
     },
     "serverDetail": {
