@@ -8,7 +8,10 @@
       <v-progress-circular indeterminate size="32" width="3" />
     </div>
 
-    <div v-else class="messages-list">
+    <v-virtual-scroll v-else class="messages-list" ref="virtualScrollRef"
+            :items="activeMessages" :item-height="dynamicEstimatedItemHeight"
+            @scroll="handleVirtualScroll"
+    >
       <div
         v-for="(msg, msgIndex) in messages"
         :key="msg.id || `${msgIndex}-${msg.created_at || ''}`"
@@ -214,7 +217,7 @@
           </div>
         </div>
       </div>
-    </div>
+    </v-virtual-scroll>
 
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
 
@@ -277,11 +280,23 @@ const { tm } = useModuleI18n("features/chat");
 const customMarkdownTags = ["ref"];
 const downloadingFiles = ref(new Set<string>());
 const messageListRoot = ref<HTMLElement | null>(null);
+const virtualScrollRef = ref<{ scrollToIndex: (index: number) => void } | null>(null);
+const messageHeights = reactive(new Map<string, number>());
+let resizeObserver: ResizeObserver | null = null;
 const imagePreview = reactive({ visible: false, url: "" });
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
 
 const messages = computed(() => props.messages || []);
+const dynamicEstimatedItemHeight = computed(() => {
+  const msgs = messages.value;
+  if (!msgs.length) return 120;
+  let total = 0;
+  for (let i = 0; i < msgs.length; i++) {
+    total += getEstimatedItemHeight(msgs[i], i);
+  }
+  return Math.max(120, Math.min(total / msgs.length, 300));
+});
 
 function isUserMessage(message: ChatRecord) {
   return messageContent(message).type === "user";
@@ -364,10 +379,61 @@ function scrollToMessage(messageId?: string | number) {
   );
   if (index < 0) return;
   nextTick(() => {
-    const rows = messageListRoot.value?.querySelectorAll(".message-row");
-    rows?.[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    virtualScrollRef.value?.scrollToIndex(index);
   });
 }
+
+function handleVirtualScroll(event: Event) {
+  const el = event.target as HTMLElement;
+  if (!el) return;
+  const { scrollTop, scrollHeight, clientHeight } = el;
+  const distance = scrollHeight - scrollTop - clientHeight;
+  shouldStickToBottom.value = distance < 80;
+}
+
+async function scrollToBottom() {
+  if (messages.value.length === 0) return;
+  shouldStickToBottom.value = true;
+  await nextTick();
+  const lastIndex = messages.value.length - 1;
+  const scroll = () => {
+    virtualScrollRef.value?.scrollToIndex(lastIndex);
+  };
+  scroll();
+  requestAnimationFrame(scroll);
+  setTimeout(scroll, 200);
+}
+
+const observeHeight = (el: HTMLElement | null, id: string | number | undefined) => {
+  if (el && resizeObserver) {
+    const stringId = id ? String(id) : el.dataset.index || "unknown";
+    el.setAttribute("data-id", stringId);
+    resizeObserver.observe(el);
+  }
+};
+
+const getEstimatedItemHeight = (msg: ChatRecord, index: number) => {
+  const id = msg.id ? String(msg.id) : `idx-${index}`;
+  const cached = messageHeights.get(id);
+  if (cached) return cached;
+
+  let h = 80;
+  const parts = messageParts(msg);
+
+  if (messageContent(msg).reasoning) h += 100;
+
+  for (const part of parts) {
+    if (part.type === "plain") {
+      const lines = Math.ceil(String(part.text || "").length / 50);
+      h += lines * 20;
+    }
+    if (part.type === "image") h += 250;
+    if (part.type === "tool_call") h += 150;
+  }
+
+  return Math.min(h, 500);
+};
+
 
 function showMessageMeta(message: ChatRecord, msgIndex: number) {
   return !messageContent(message).isLoading && !isMessageStreaming(msgIndex);
@@ -557,15 +623,17 @@ function formatDuration(seconds: number) {
 }
 
 .messages-list {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
 }
 
 .message-row {
   display: flex;
   gap: 10px;
-  max-width: 100%;
+  max-width: 75%;
+  padding-bottom: 22px;
+  margin: 0 auto;
 }
 
 .message-row.from-user {
