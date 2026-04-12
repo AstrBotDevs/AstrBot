@@ -5,9 +5,9 @@
       <v-progress-circular indeterminate size="48" width="4" color="primary"></v-progress-circular>
     </div>
     <!-- 聊天消息列表 -->
-    <div class="message-list" :class="{ 'loading-blur': isLoadingMessages }" @mouseup="handleTextSelection">
-      <v-virtual-scroll ref="virtualScroll" :items="messages" :height="containerHeight"
-        :item-height="estimatedItemHeight" @scroll="onScroll">
+    <v-virtual-scroll ref="virtualScroll" :items="messages" :height="containerHeight" class="message-list"
+      :class="{ 'loading-blur': isLoadingMessages }" @mouseup="handleTextSelection" :item-height="estimatedItemHeight"
+      @scroll="onScroll">
         <template #default="{ item: msg, index }">
           <div class="message-item fade-in" :data-message-index="index" :key="index">
             <!-- 用户消息 -->
@@ -154,7 +154,6 @@
           </div>
         </template>
       </v-virtual-scroll>
-    </div>
 
     <!-- 浮动引用按钮 -->
     <div v-if="selectedText.content && selectedText.messageIndex !== null" class="selection-quote-button" :style="{
@@ -1146,39 +1145,18 @@ export default {
 
 /* 消息列表样式 */
 .message-list {
-    max-width: 80%;
     margin: 0 auto;
     width: 100%;
     padding: 0 16px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-/* 虚拟滚动容器样式 */
-.message-list :deep(.v-virtual-scroll) {
-  height: 100%;
-  overflow-y: auto !important;
-  scrollbar-width: thin;
-  scrollbar-color: var(--v-theme-border) transparent;
-}
-
-.message-list :deep(.v-virtual-scroll)::-webkit-scrollbar {
-  width: 8px;
-}
-
-.message-list :deep(.v-virtual-scroll)::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.message-list :deep(.v-virtual-scroll)::-webkit-scrollbar-thumb {
-  background-color: var(--v-theme-border);
-  border-radius: 4px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    box-sizing:border-box;
 }
 
 .message-item {
+    max-width: 75%;
+    margin: 0 auto;
     margin-bottom: 12px;
     animation: fadeIn 0.3s ease-out;
 }
