@@ -50,6 +50,14 @@ class PersonaCommands:
 
         return lines
 
+    def _get_persona_by_id(self, persona_id: str) -> "Persona | None":
+        if not persona_id:
+            return None
+        return next(
+            (p for p in self.context.persona_manager.personas if p.persona_id == persona_id),
+            None,
+        )
+
     async def persona(self, message: AstrMessageEvent) -> None:
         l = message.message_str.split(" ")  # noqa: E741
         umo = message.unified_msg_origin
@@ -149,23 +157,19 @@ class PersonaCommands:
 
             msg = "\n".join(lines)
             message.set_result(MessageEventResult().message(msg).use_t2i(False))
+            
         elif l[1] == "view":
             if len(l) == 2:
                 message.set_result(MessageEventResult().message("请输入人格情景名"))
                 return
             ps = l[2].strip()
-            if persona := next(
-                builtins.filter(
-                    lambda persona: persona["name"] == ps,
-                    self.context.provider_manager.personas,
-                ),
-                None,
-            ):
+            if persona := self._get_persona_by_id(ps):
                 msg = f"人格{ps}的详细信息：\n"
-                msg += f"{persona['prompt']}\n"
+                msg += f"{persona.system_prompt}\n"
             else:
                 msg = f"人格{ps}不存在"
             message.set_result(MessageEventResult().message(msg))
+            
         elif l[1] == "unset":
             if not cid:
                 message.set_result(
@@ -177,6 +181,7 @@ class PersonaCommands:
                 "[%None]",
             )
             message.set_result(MessageEventResult().message("取消人格成功。"))
+            
         else:
             ps = "".join(l[1:]).strip()
             if not cid:
@@ -186,13 +191,7 @@ class PersonaCommands:
                     ),
                 )
                 return
-            if persona := next(
-                builtins.filter(
-                    lambda persona: persona["name"] == ps,
-                    self.context.provider_manager.personas,
-                ),
-                None,
-            ):
+            if persona := self._get_persona_by_id(ps):
                 await self.context.conversation_manager.update_conversation_persona_id(
                     message.unified_msg_origin,
                     ps,
