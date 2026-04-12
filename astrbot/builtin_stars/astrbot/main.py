@@ -36,9 +36,9 @@ class Main(star.Star):
         if self.ltm_enabled(event) and self.ltm and has_image_or_plain:
             need_active = await self.ltm.need_active_reply(event)
 
-            group_icl_enable = self.context.get_config()["provider_ltm_settings"][
-                "group_icl_enable"
-            ]
+            group_icl_enable = self.context.get_config(umo=event.unified_msg_origin)[
+                "provider_ltm_settings"
+            ]["group_icl_enable"]
             if group_icl_enable:
                 """记录对话"""
                 try:
