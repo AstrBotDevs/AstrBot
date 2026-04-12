@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia';
 import config from '@/config';
 
-export const useCustomizerStore = defineStore("customizer", {
+export const useCustomizerStore = defineStore({
+  id: 'customizer',
   state: () => ({
     Sidebar_drawer: config.Sidebar_drawer,
     Customizer_drawer: config.Customizer_drawer,
