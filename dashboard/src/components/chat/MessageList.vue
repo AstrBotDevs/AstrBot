@@ -1,181 +1,180 @@
 <template>
-    <div class="messages-container" ref="messageContainer" :class="{ 'is-dark': isDark }">
-        <!-- 加载指示器 -->
-        <div v-if="isLoadingMessages" class="loading-overlay" :class="{ 'is-dark': isDark }">
-            <v-progress-circular indeterminate size="48" width="4" color="primary"></v-progress-circular>
-        </div>
-        <!-- 聊天消息列表 -->
-        <div class="message-list" :class="{ 'loading-blur': isLoadingMessages }" @mouseup="handleTextSelection">
-            <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
-                <!-- 用户消息 -->
-                <div v-if="msg.content.type == 'user'" class="user-message">
-                    <div class="message-bubble user-bubble" :class="{ 'has-audio': hasAudio(msg.content.message) }"
-                        :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
-                        <!-- 遍历 message parts -->
-                        <template v-for="(part, partIndex) in msg.content.message" :key="partIndex">
-                            <!-- 引用消息 -->
-                            <div v-if="part.type === 'reply'" class="reply-quote"
-                                @click="scrollToMessage(part.message_id)">
-                                <v-icon size="small" class="reply-quote-icon">mdi-reply</v-icon>
-                                <span class="reply-quote-text">{{ getReplyContent(part.message_id) }}</span>
-                            </div>
+  <div class="messages-container" ref="messageContainer" :class="{ 'is-dark': isDark }">
+    <!-- 加载指示器 -->
+    <div v-if="isLoadingMessages" class="loading-overlay" :class="{ 'is-dark': isDark }">
+      <v-progress-circular indeterminate size="48" width="4" color="primary"></v-progress-circular>
+    </div>
+    <!-- 聊天消息列表 -->
+    <div class="message-list" :class="{ 'loading-blur': isLoadingMessages }" @mouseup="handleTextSelection">
+      <v-virtual-scroll ref="virtualScroll" :items="messages" :height="containerHeight"
+        :item-height="estimatedItemHeight" @scroll="onScroll">
+        <template #default="{ item: msg, index }">
+          <div class="message-item fade-in" :data-message-index="index" :key="index">
+            <!-- 用户消息 -->
+            <div v-if="msg.content.type == 'user'" class="user-message">
+              <div class="message-bubble user-bubble" :class="{ 'has-audio': hasAudio(msg.content.message) }"
+                :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
+                <!-- 遍历 message parts -->
+                <template v-for="(part, partIndex) in msg.content.message" :key="partIndex">
+                  <!-- 引用消息 -->
+                  <div v-if="part.type === 'reply'" class="reply-quote" @click="scrollToMessage(part.message_id)">
+                    <v-icon size="small" class="reply-quote-icon">mdi-reply</v-icon>
+                    <span class="reply-quote-text">{{ getReplyContent(part.message_id) }}</span>
+                  </div>
 
-                            <!-- 纯文本 -->
-                            <pre v-else-if="part.type === 'plain' && part.text"
-                                style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ part.text }}</pre>
+                  <!-- 纯文本 -->
+                  <div v-else-if="part.type === 'plain' && part.text"
+                    style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ part.text }}</div>
 
-                            <!-- 图片附件 -->
-                            <div v-else-if="part.type === 'image' && part.embedded_url" class="image-attachments">
-                                <div class="image-attachment">
-                                    <img :src="part.embedded_url" class="attached-image"
-                                        @click="openImagePreview(part.embedded_url)" />
-                                </div>
-                            </div>
-
-                            <!-- 音频附件 -->
-                            <div v-else-if="part.type === 'record' && part.embedded_url" class="audio-attachment">
-                                <audio controls class="audio-player">
-                                    <source :src="part.embedded_url" type="audio/wav">
-                                    {{ t('messages.errors.browser.audioNotSupported') }}
-                                </audio>
-                            </div>
-
-                            <!-- 文件附件 -->
-                            <div v-else-if="part.type === 'file' && part.embedded_file" class="file-attachments">
-                                <div class="file-attachment">
-                                    <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
-                                        :download="part.embedded_file.filename" class="file-link"
-                                        :class="{ 'is-dark': isDark }" :style="isDark ? {
-                                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                            borderColor: 'rgba(255, 255, 255, 0.1)',
-                                            color: 'var(--v-theme-secondary)'
-                                        } : {}">
-                                        <v-icon size="small" class="file-icon"
-                                            :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
-                                        <span class="file-name">{{ part.embedded_file.filename }}</span>
-                                    </a>
-                                    <a v-else @click="downloadFile(part.embedded_file)"
-                                        class="file-link file-link-download" :class="{ 'is-dark': isDark }" :style="isDark ? {
-                                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                            borderColor: 'rgba(255, 255, 255, 0.1)',
-                                            color: 'var(--v-theme-secondary)'
-                                        } : {}">
-                                        <v-icon size="small" class="file-icon"
-                                            :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
-                                        <span class="file-name">{{ part.embedded_file.filename }}</span>
-                                        <v-icon v-if="downloadingFiles.has(part.embedded_file.attachment_id)"
-                                            size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
-                                        <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
-                                    </a>
-                                </div>
-                            </div>
-                        </template>
+                  <!-- 图片附件 -->
+                  <div v-else-if="part.type === 'image' && part.embedded_url" class="image-attachments">
+                    <div class="image-attachment">
+                      <img :src="part.embedded_url" class="attached-image"
+                        @click="openImagePreview(part.embedded_url)" />
                     </div>
-                </div>
+                  </div>
 
-                <!-- Bot Messages -->
-                <div v-else class="bot-message">
-                    <v-avatar class="bot-avatar" size="36">
-                        <v-progress-circular :index="index" v-if="isStreaming && index === messages.length - 1"
-                            indeterminate size="28" width="2"></v-progress-circular>
-                        <v-icon v-else-if="messages[index - 1]?.content.type !== 'bot'" size="64"
-                            color="#8fb6d2">mdi-star-four-points-small</v-icon>
-                    </v-avatar>
-                    <div class="bot-message-content">
-                        <div class="message-bubble bot-bubble">
-                            <!-- Loading state -->
-                            <div v-if="msg.content.isLoading" class="loading-container">
-                                <span class="loading-text">{{ tm('message.loading') }}</span>
-                            </div>
+                  <!-- 音频附件 -->
+                  <div v-else-if="part.type === 'record' && part.embedded_url" class="audio-attachment">
+                    <audio controls class="audio-player">
+                      <source :src="part.embedded_url" type="audio/wav">
+                      {{ t('messages.errors.browser.audioNotSupported') }}
+                    </audio>
+                  </div>
 
-                            <template v-else>
-                                <!-- Reasoning Block (Collapsible) - 放在最前面 -->
-                                <ReasoningBlock v-if="msg.content.reasoning && msg.content.reasoning.trim()"
-                                    :reasoning="msg.content.reasoning" :is-dark="isDark"
-                                    class="mt-2"
-                                    :initial-expanded="isReasoningExpanded(index)" />
-
-                                <MessagePartsRenderer :parts="msg.content.message" :is-dark="isDark"
-                                    :current-time="currentTime" :downloading-files="downloadingFiles"
-                                    @open-image-preview="openImagePreview" @download-file="downloadFile" />
-                            </template>
-                        </div>
-                        <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
-                            <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at)
-                                }}</span>
-                            <!-- Agent Stats Menu -->
-                            <v-menu v-if="msg.content.agentStats" location="bottom" open-on-hover
-                                :close-on-content-click="false">
-                                <template v-slot:activator="{ props }">
-                                    <v-icon v-bind="props" size="x-small"
-                                        class="stats-info-icon">mdi-information-outline</v-icon>
-                                </template>
-                                <v-card class="stats-menu-card" variant="elevated" elevation="3">
-                                    <v-card-text class="stats-menu-content">
-                                        <div class="stats-menu-row">
-                                            <span class="stats-menu-label">{{ tm('stats.inputTokens') }}</span>
-                                            <span class="stats-menu-value">{{
-                                                getInputTokens(msg.content.agentStats.token_usage) }}</span>
-                                        </div>
-                                        <div class="stats-menu-row">
-                                            <span class="stats-menu-label">{{ tm('stats.outputTokens') }}</span>
-                                            <span class="stats-menu-value">{{ msg.content.agentStats.token_usage.output
-                                                || 0 }}</span>
-                                        </div>
-                                        <div class="stats-menu-row"
-                                            v-if="msg.content.agentStats.token_usage.input_cached > 0">
-                                            <span class="stats-menu-label">{{ tm('stats.cachedTokens') }}</span>
-                                            <span class="stats-menu-value">{{
-                                                msg.content.agentStats.token_usage.input_cached }}</span>
-                                        </div>
-                                        <div class="stats-menu-row"
-                                            v-if="msg.content.agentStats.time_to_first_token > 0">
-                                            <span class="stats-menu-label">{{ tm('stats.ttft') }}</span>
-                                            <span class="stats-menu-value">{{
-                                                formatTTFT(msg.content.agentStats.time_to_first_token) }}</span>
-                                        </div>
-                                        <div class="stats-menu-row">
-                                            <span class="stats-menu-label">{{ tm('stats.duration') }}</span>
-                                            <span class="stats-menu-value">{{
-                                                formatAgentDuration(msg.content.agentStats) }}</span>
-                                        </div>
-                                    </v-card-text>
-                                </v-card>
-                            </v-menu>
-                            <v-btn :icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
-                                :class="{ 'copy-success': isCopySuccess(index), 'copy-failed': isCopyFailure(index) }"
-                                @click="copyBotMessage(msg.content.message, index)" :title="getCopyTitle(index)" />
-                            <v-btn icon="mdi-reply-outline" size="x-small" variant="text" class="reply-message-btn"
-                                @click="$emit('replyMessage', msg, index)" :title="tm('actions.reply')" />
-                            
-                            <!-- Refs Visualization -->
-                            <ActionRef :refs="msg.content.refs" @open-refs="openRefsSidebar" />
-                        </div>
+                  <!-- 文件附件 -->
+                  <div v-else-if="part.type === 'file' && part.embedded_file" class="file-attachments">
+                    <div class="file-attachment">
+                      <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
+                        :download="part.embedded_file.filename" class="file-link" :class="{ 'is-dark': isDark }" :style="isDark ? {
+                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                          borderColor: 'rgba(255, 255, 255, 0.1)',
+                          color: 'var(--v-theme-secondary)'
+                        } : {}">
+                        <v-icon size="small" class="file-icon"
+                          :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
+                        <span class="file-name">{{ part.embedded_file.filename }}</span>
+                      </a>
+                      <a v-else @click="downloadFile(part.embedded_file)" class="file-link file-link-download"
+                        :class="{ 'is-dark': isDark }" :style="isDark ? {
+                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                          borderColor: 'rgba(255, 255, 255, 0.1)',
+                          color: 'var(--v-theme-secondary)'
+                        } : {}">
+                        <v-icon size="small" class="file-icon"
+                          :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
+                        <span class="file-name">{{ part.embedded_file.filename }}</span>
+                        <v-icon v-if="downloadingFiles.has(part.embedded_file.attachment_id)" size="small"
+                          class="download-icon">mdi-loading mdi-spin</v-icon>
+                        <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
+                      </a>
                     </div>
-                </div>
+                  </div>
+                </template>
+              </div>
+              <v-avatar class="user-avatar">
+              </v-avatar>
             </div>
-        </div>
 
-        <!-- 浮动引用按钮 -->
-        <div v-if="selectedText.content && selectedText.messageIndex !== null" class="selection-quote-button" :style="{
-            top: selectedText.position.top + 'px',
-            left: selectedText.position.left + 'px',
-            position: 'fixed'
-        }">
-            <v-btn size="large" rounded="xl" @click="handleQuoteSelected" class="quote-btn"
-                :class="{ 'dark-mode': isDark }">
-                <v-icon left small>mdi-reply</v-icon>
-                引用
-            </v-btn>
-        </div>
+            <!-- Bot Messages -->
+            <div v-else class="bot-message">
+              <v-avatar class="bot-avatar" size="36">
+                <v-progress-circular :index="index" v-if="isStreaming && index === messages.length - 1" indeterminate
+                  size="28" width="2"></v-progress-circular>
+                <v-icon v-else-if="messages[index - 1]?.content.type !== 'bot'" size="64"
+                  color="#8fb6d2">mdi-star-four-points-small</v-icon>
+              </v-avatar>
+              <div class="bot-message-content">
+                <div class="message-bubble bot-bubble">
+                  <!-- Loading state -->
+                  <div v-if="msg.content.isLoading" class="loading-container">
+                    <span class="loading-text">{{ tm('message.loading') }}</span>
+                  </div>
+
+                  <template v-else>
+                    <!-- Reasoning Block (Collapsible) - 放在最前面 -->
+                    <ReasoningBlock v-if="msg.content.reasoning && msg.content.reasoning.trim()"
+                      :reasoning="msg.content.reasoning" :is-dark="isDark" class="mt-2"
+                      :initial-expanded="isReasoningExpanded(index)" />
+
+                    <MessagePartsRenderer :parts="msg.content.message" :is-dark="isDark" :current-time="currentTime"
+                      :downloading-files="downloadingFiles" @open-image-preview="openImagePreview"
+                      @download-file="downloadFile" />
+                  </template>
+                </div>
+                <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
+                  <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at)
+                  }}</span>
+                  <!-- Agent Stats Menu -->
+                  <v-menu v-if="msg.content.agentStats" location="bottom" open-on-hover :close-on-content-click="false">
+                    <template v-slot:activator="{ props }">
+                      <v-icon v-bind="props" size="x-small" class="stats-info-icon">mdi-information-outline</v-icon>
+                    </template>
+                    <v-card class="stats-menu-card" variant="elevated" elevation="3">
+                      <v-card-text class="stats-menu-content">
+                        <div class="stats-menu-row">
+                          <span class="stats-menu-label">{{ tm('stats.inputTokens') }}</span>
+                          <span class="stats-menu-value">{{
+                            getInputTokens(msg.content.agentStats.token_usage) }}</span>
+                        </div>
+                        <div class="stats-menu-row">
+                          <span class="stats-menu-label">{{ tm('stats.outputTokens') }}</span>
+                          <span class="stats-menu-value">{{ msg.content.agentStats.token_usage.output
+                            || 0 }}</span>
+                        </div>
+                        <div class="stats-menu-row" v-if="msg.content.agentStats.token_usage.input_cached > 0">
+                          <span class="stats-menu-label">{{ tm('stats.cachedTokens') }}</span>
+                          <span class="stats-menu-value">{{
+                            msg.content.agentStats.token_usage.input_cached }}</span>
+                        </div>
+                        <div class="stats-menu-row" v-if="msg.content.agentStats.time_to_first_token > 0">
+                          <span class="stats-menu-label">{{ tm('stats.ttft') }}</span>
+                          <span class="stats-menu-value">{{
+                            formatTTFT(msg.content.agentStats.time_to_first_token) }}</span>
+                        </div>
+                        <div class="stats-menu-row">
+                          <span class="stats-menu-label">{{ tm('stats.duration') }}</span>
+                          <span class="stats-menu-value">{{
+                            formatAgentDuration(msg.content.agentStats) }}</span>
+                        </div>
+                      </v-card-text>
+                    </v-card>
+                  </v-menu>
+                  <v-btn :icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
+                    :class="{ 'copy-success': isCopySuccess(index), 'copy-failed': isCopyFailure(index) }"
+                    @click="copyBotMessage(msg.content.message, index)" :title="getCopyTitle(index)" />
+                  <v-btn icon="mdi-reply-outline" size="x-small" variant="text" class="reply-message-btn"
+                    @click="$emit('replyMessage', msg, index)" :title="tm('actions.reply')" />
+
+                  <!-- Refs Visualization -->
+                  <ActionRef :refs="msg.content.refs" @open-refs="openRefsSidebar" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </v-virtual-scroll>
     </div>
 
-    <!-- 图片预览 Overlay -->
-    <v-overlay v-model="imagePreview.show" class="image-preview-overlay" @click="closeImagePreview">
-        <div class="image-preview-container" @click.stop>
-            <img :src="imagePreview.url" class="preview-image" @click="closeImagePreview" />
-        </div>
-    </v-overlay>
+    <!-- 浮动引用按钮 -->
+    <div v-if="selectedText.content && selectedText.messageIndex !== null" class="selection-quote-button" :style="{
+      top: selectedText.position.top + 'px',
+      left: selectedText.position.left + 'px',
+      position: 'fixed'
+    }">
+      <v-btn size="large" rounded="xl" @click="handleQuoteSelected" class="quote-btn" :class="{ 'dark-mode': isDark }">
+        <v-icon left small>mdi-reply</v-icon>
+        引用
+      </v-btn>
+    </div>
+  </div>
+
+  <!-- 图片预览 Overlay -->
+  <v-overlay v-model="imagePreview.show" class="image-preview-overlay" @click="closeImagePreview">
+    <div class="image-preview-container" @click.stop>
+      <img :src="imagePreview.url" class="preview-image" @click="closeImagePreview" />
+    </div>
+  </v-overlay>
 </template>
 
 <script>
@@ -267,16 +266,25 @@ export default {
                 url: ''
             },
             // Web search results mapping: { 'uuid.idx': { url, title, snippet } }
-            webSearchResults: {}
+            webSearchResults: {},
+            // 虚拟滚动容器
+            containerHeight: 0,
+            estimatedItemHeight: 180
         };
     },
     async mounted() {
         this.initCodeCopyButtons();
         this.initImageClickEvents();
-        this.addScrollListener();
         this.scrollToBottom();
         this.startElapsedTimeTimer();
         this.extractWebSearchResults();
+
+        // 初始化虚拟滚动容器高度
+        this.$nextTick(() => {
+          this.updateContainerHeight();
+          // 监听窗口大小变化
+          window.addEventListener("resize", this.updateContainerHeight);
+        });
     },
     updated() {
         this.initCodeCopyButtons();
@@ -287,6 +295,27 @@ export default {
         this.extractWebSearchResults();
     },
     methods: {
+        // 虚拟滚动相关方法
+        updateContainerHeight() {
+          if (this.$refs.messageContainer) {
+            const container = this.$refs.messageContainer;
+            this.containerHeight = container.clientHeight;
+          }
+        },
+
+        onScroll(event) {
+          // 更新用户是否在底部附近的状态
+          const target = event.target;
+          if (target) {
+            const scrollTop = target.scrollTop;
+            const scrollHeight = target.scrollHeight;
+            const clientHeight = target.clientHeight;
+
+            this.isUserNearBottom =
+              scrollHeight - scrollTop - clientHeight <= this.scrollThreshold;
+          }
+        },
+
         // 从消息中提取 web_search_tavily 的搜索结果
         extractWebSearchResults() {
             const results = {};
@@ -301,7 +330,7 @@ export default {
                         return;
                     }
                     
-                    part.tool_calls.forEach(toolCall => {
+                    part.tool_calls?.forEach(toolCall => {
                         // 检查是否是支持引用解析的 web_search 工具调用
                         if (
                             !['web_search_baidu', 'web_search_tavily', 'web_search_bocha', 'web_search_brave'].includes(toolCall.name) ||
@@ -350,7 +379,8 @@ export default {
             }
 
             // 获取被选中的元素，找到对应的message-item
-            const range = selection.getRangeAt(0);
+            const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+            if (!range) return;
             const startContainer = range.startContainer;
             let messageItem = null;
             let node = startContainer.parentElement;
@@ -369,15 +399,23 @@ export default {
             }
 
             // 获取message-item在messages数组中的索引
-            const messageItems = this.$refs.messageContainer?.querySelectorAll('.message-item');
+            const messageIndexAttr = messageItem.getAttribute("data-message-index");
             let messageIndex = -1;
-            if (messageItems) {
+            if (messageIndexAttr !== null) {
+              // 如果元素有 data-message-index 属性，直接使用它
+              messageIndex = parseInt(messageIndexAttr, 10);
+            } else {
+              // 备选方案：如果没有 data-message-index 属性，回退到 DOM 索引
+              const messageContainer = this.$refs.messageContainer;
+              const messageItems = messageContainer?.querySelectorAll(".message-item");
+              if (messageItems) {
                 for (let i = 0; i < messageItems.length; i++) {
-                    if (messageItems[i] === messageItem) {
-                        messageIndex = i;
-                        break;
-                    }
+                  if (messageItems[i] === messageItem) {
+                    messageIndex = i;
+                    break;
+                  }
                 }
+              }
             }
 
             if (messageIndex === -1) {
@@ -448,15 +486,44 @@ export default {
             const msgIndex = this.messages.findIndex(m => m.id === messageId);
             if (msgIndex === -1) return;
 
+            // 使用 data-message-index 属性查找渲染的消息项
             const container = this.$refs.messageContainer;
-            const messageItems = container?.querySelectorAll('.message-item');
-            if (messageItems && messageItems[msgIndex]) {
-                messageItems[msgIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            if (!container) return;
+            
+            // 查找具有对应 data-message-index 属性的消息项
+            const messageItem = container.querySelector(`.message-item[data-message-index="${msgIndex}"]`);
+            if (messageItem) {
+                // 如果消息在 DOM 中，直接滚动到它
+                messageItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 // 高亮一下
-                messageItems[msgIndex].classList.add('highlight-message');
+                messageItem.classList.add('highlight-message');
                 setTimeout(() => {
-                    messageItems[msgIndex].classList.remove('highlight-message');
+                    messageItem.classList.remove('highlight-message');
                 }, 2000);
+            } else {
+                // 如果消息不在 DOM 中（虚拟滚动未渲染），尝试使用虚拟滚动 API
+                // 首先尝试获取虚拟滚动组件的引用
+                const virtualScroll = this.$refs.virtualScroll;
+                if (virtualScroll && typeof virtualScroll.scrollToIndex === "function") {
+                    // 使用虚拟滚动组件的 scrollToIndex 方法
+                    virtualScroll.scrollToIndex(msgIndex, { behavior: "smooth", block: "center" });
+                } else {
+                    // 备选方案：计算估计的滚动位置
+                    this.$nextTick(() => {
+                      // 等待下一帧，然后尝试再次查找元素
+                      const retryItem = container.querySelector(`.message-item[data-message-index="${msgIndex}"]`);
+                      if (retryItem) {
+                        retryItem.scrollIntoView({
+                          behavior: "smooth",
+                          block: "center",
+                        });
+                        retryItem.classList.add("highlight-message");
+                        setTimeout(() => {
+                          retryItem.classList.remove("highlight-message");
+                        }, 2000);
+                      }
+                    });
+                }
             }
         },
 
@@ -732,13 +799,7 @@ export default {
             });
         },
 
-        // 添加滚动事件监听器
-        addScrollListener() {
-            const container = this.$refs.messageContainer;
-            if (container) {
-                container.addEventListener('scroll', this.throttledHandleScroll);
-            }
-        },
+        // 不再需要手动添加滚动监听器，因为 v-virtual-scroll 已经通过 @scroll 事件处理
 
         // 节流处理滚动事件
         throttledHandleScroll() {
@@ -750,34 +811,19 @@ export default {
             }, 50); // 50ms 节流
         },
 
-        // 处理滚动事件
-        handleScroll() {
-            const container = this.$refs.messageContainer;
-            if (container) {
-                const { scrollTop, scrollHeight, clientHeight } = container;
-                const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
-
-                // 判断用户是否在底部附近
-                this.isUserNearBottom = distanceFromBottom <= this.scrollThreshold;
-            }
-        },
+        // 不再使用，因为滚动事件现在通过 onScroll 方法处理
 
         // 组件销毁时移除监听器
         beforeUnmount() {
-            const container = this.$refs.messageContainer;
-            if (container) {
-                container.removeEventListener('scroll', this.throttledHandleScroll);
-            }
             // 清理定时器
             if (this.scrollTimer) {
                 clearTimeout(this.scrollTimer);
                 this.scrollTimer = null;
             }
             // 清理 elapsed time 计时器
-            if (this.elapsedTimeTimer) {
-                clearInterval(this.elapsedTimeTimer);
-                this.elapsedTimeTimer = null;
-            }
+            this.stopElapsedTimeTimer();
+            // 清理窗口大小变化监听器
+            window.removeEventListener("resize", this.updateContainerHeight);
         },
 
         // 格式化消息时间，支持别名显示
@@ -813,44 +859,66 @@ export default {
 
         // Start timer for updating elapsed time
         startElapsedTimeTimer() {
-            // Update every 12ms for sub-second precision, then every second after 1s
-            let fastUpdateCount = 0;
-            const fastUpdateInterval = 12;
-            const slowUpdateInterval = 1000;
-
+            // 清理之前的定时器
+            this.stopElapsedTimeTimer();
+            
             const updateTime = () => {
-                this.currentTime = Date.now() / 1000;
+              this.currentTime = Date.now() / 1000;
 
-                // Check if there are any running tool calls
-                const hasRunningToolCalls = this.messages.some(msg =>
-                    Array.isArray(msg.content.message) && msg.content.message.some(part =>
-                        part.type === 'tool_call' && part.tool_calls?.some(tc => !tc.finished_ts)
-                    )
-                );
-
-                if (hasRunningToolCalls) {
-                    // Check if any running tool call is under 1 second
-                    const hasSubSecondToolCall = this.messages.some(msg =>
-                        Array.isArray(msg.content.message) && msg.content.message.some(part =>
-                            part.type === 'tool_call' && part.tool_calls?.some(tc =>
-                                !tc.finished_ts && (this.currentTime - tc.ts) < 1
-                            )
-                        )
-                    );
-
-                    if (hasSubSecondToolCall) {
-                        fastUpdateCount++;
-                        this.elapsedTimeTimer = setTimeout(updateTime, fastUpdateInterval);
-                    } else {
-                        this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
-                    }
-                } else {
-                    // No running tool calls, check again after 1 second
-                    this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
-                }
+              // 一次性检查所有条件
+              const { hasRunning, hasSubSecond } = this.checkToolCallStatus();
+              
+              let nextInterval = 1000; // 默认1秒
+              
+              if (hasRunning) {
+                nextInterval = hasSubSecond ? 12 : 1000;
+              }
+              
+              this.elapsedTimeTimer = setTimeout(updateTime, nextInterval);
             };
-
+            
             updateTime();
+          },
+
+          stopElapsedTimeTimer() {
+            if (this.elapsedTimeTimer) {
+              clearTimeout(this.elapsedTimeTimer);
+              this.elapsedTimeTimer = null;
+            }
+          },
+
+          checkToolCallStatus() {
+            for (const { content } of this.messages) {
+              for (const part of content?.message ?? []) { // 可选参数减少赋值和嵌套
+                if (part?.type !== 'tool_call') continue; // 使用卫语句减少嵌套
+                
+                for (const { finished_ts, ts } of part.tool_calls ?? []) {
+                  if (finished_ts === undefined && this.currentTime - ts < 1) {
+                    return { hasRunning: true, hasSubSecond: true };
+                  }
+                }
+              }
+            }
+            
+            return { hasRunning: false, hasSubSecond: false };
+          },
+          
+          isToolCallPart(part) {
+            return part?.type === 'tool_call' && Array.isArray(part.tool_calls);
+          },
+
+          // 类型谓词：检查是否为纯文本类型的MessagePart
+          isPlainPart(part) {
+            return (
+              !!part &&
+              typeof part === "object" &&
+              part !== null &&
+              "type" in part &&
+              part.type === "plain" &&
+              "text" in part &&
+              typeof part.text === "string" &&
+              !part.text.trim()
+            );
         },
 
         // Get elapsed time string for a tool call
@@ -970,8 +1038,8 @@ export default {
 .messages-container {
     height: 100%;
     max-height: 100%;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
+    max-width: 100%;
+    overflow: hidden;
     padding: 16px;
     display: flex;
     flex-direction: column;
@@ -1078,9 +1146,36 @@ export default {
 
 /* 消息列表样式 */
 .message-list {
-    max-width: 900px;
+    max-width: 80%;
     margin: 0 auto;
     width: 100%;
+    padding: 0 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* 虚拟滚动容器样式 */
+.message-list :deep(.v-virtual-scroll) {
+  height: 100%;
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--v-theme-border) transparent;
+}
+
+.message-list :deep(.v-virtual-scroll)::-webkit-scrollbar {
+  width: 8px;
+}
+
+.message-list :deep(.v-virtual-scroll)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.message-list :deep(.v-virtual-scroll)::-webkit-scrollbar-thumb {
+  background-color: var(--v-theme-border);
+  border-radius: 4px;
 }
 
 .message-item {
