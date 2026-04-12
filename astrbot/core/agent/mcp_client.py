@@ -171,7 +171,12 @@ def _validate_stdio_args(command_name: str, args: object) -> None:
                 "MCP stdio JavaScript servers must be launched from a package or file; inline eval flags are not allowed."
             )
     elif command_name == "docker":
-        denied = [arg for arg in args if arg in _DENIED_DOCKER_ARGS]
+        denied = []
+        for i, arg in enumerate(args):
+            if arg in _DENIED_DOCKER_ARGS:
+                denied.append(arg)
+            elif arg in {"--network", "--net", "--pid", "--ipc"} and i + 1 < len(args) and args[i+1] == "host":
+                denied.append(f"{arg} {args[i+1]}")
         if denied:
             raise ValueError(
                 f"MCP stdio Docker args are unsafe and not allowed: {', '.join(denied)}."
