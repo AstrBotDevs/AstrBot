@@ -18,6 +18,7 @@ on:
 
 jobs:
   stale:
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-latest
     permissions:
       issues: write

@@ -1,0 +1,68 @@
+﻿{
+    "title": "Управление базами знаний",
+    "subtitle": "Централизованное управление всеми знаниями AstrBot",
+    "list": {
+        "title": "Мои базы знаний",
+        "subtitle": "Все доступные коллекции знаний",
+        "create": "Создать базу",
+        "refresh": "Обновить",
+        "empty": "Баз знаний пока нет",
+        "loading": "Загрузка...",
+        "documents": "док.",
+        "chunks": "фрагм.",
+        "sessionConfig": "Профиль",
+        "initError": "Ошибка инициализации"
+    },
+    "card": {
+        "edit": "Изменить",
+        "delete": "Удалить",
+        "open": "Открыть",
+        "docCount": "Документов: {count}",
+        "chunkCount": "Фрагментов: {count}"
+    },
+    "create": {
+        "title": "Создание базы знаний",
+        "nameLabel": "Название",
+        "namePlaceholder": "Придумайте имя для базы",
+        "descriptionLabel": "Описание",
+        "descriptionPlaceholder": "Для чего нужна эта база?",
+        "emojiLabel": "Иконка",
+        "embeddingModelLabel": "Embedding модель",
+        "rerankModelLabel": "Rerank модель (опционально)",
+        "providerInfo": "Провайдер: {id} | Размерность: {dimensions}",
+        "rerankProviderInfo": "Провайдер: {id}",
+        "cancel": "Отмена",
+        "submit": "Создать",
+        "nameRequired": "Введите название базы знаний"
+    },
+    "edit": {
+        "title": "Редактирование",
+        "submit": "Сохранить"
+    },
+    "delete": {
+        "title": "Удаление",
+        "confirmText": "Вы уверены, что хотите удалить базу знаний «{name}»?",
+        "warning": "Это действие необратимо. Все документы, фрагменты и настройки будут навсегда удалены.",
+        "cancel": "Отмена",
+        "confirm": "Удалить"
+    },
+    "emoji": {
+        "title": "Выберите иконку",
+        "close": "Закрыть",
+        "categories": {
+            "books": "Книги и документы",
+            "emotions": "Эмоции",
+            "objects": "Вещи",
+            "symbols": "Символы"
+        }
+    },
+    "messages": {
+        "createSuccess": "База знаний создана",
+        "createFailed": "Ошибка создания",
+        "updateSuccess": "Обновлено успешно",
+        "updateFailed": "Ошибка обновления",
+        "deleteSuccess": "Удалено успешно",
+        "deleteFailed": "Ошибка удаления",
+        "loadError": "Не удалось загрузить список"
+    }
+}

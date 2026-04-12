@@ -78,7 +78,7 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 ```bash
 uv tool install astrbot
 astrbot init # 仅首次执行此命令以初始化环境
-astrbot
+astrbot run
 ```
 
 > 需要安装 [uv](https://docs.astral.sh/uv/)。
@@ -91,6 +91,9 @@ astrbot
 ```bash
 uv tool upgrade astrbot
 ```
+
+> [!WARNING]
+> 通过 `uv` 部署的 AstrBot **不支持在 WebUI 中进行版本升级**。如需更新，请通过命令行执行上述命令。
 
 ### Docker 部署
 
@@ -185,6 +188,7 @@ yay -S astrbot-git
 | Coze | LLMOps 平台 |
 | OpenAI Whisper | 语音转文本 |
 | SenseVoice | 语音转文本 |
+| Xiaomi MiMo Omni | 语音转文本 |
 | OpenAI TTS | 文本转语音 |
 | Gemini TTS | 文本转语音 |
 | GPT-Sovits-Inference | 文本转语音 |
@@ -194,6 +198,7 @@ yay -S astrbot-git
 | 阿里云百炼 TTS | 文本转语音 |
 | Azure TTS | 文本转语音 |
 | Minimax TTS | 文本转语音 |
+| Xiaomi MiMo TTS | 文本转语音 |
 | 火山引擎 TTS | 文本转语音 |
 
 ## ❤️ 贡献
@@ -218,15 +223,19 @@ pre-commit install
 
 ### QQ 群组
 
-- 9 群: 1076659624 (新)
-- 10 群: 1078079676 (新)
-- 1 群：322154837
-- 3 群：630166526
-- 5 群：822130018
-- 6 群：753075035
-- 7 群：743746109
-- 8 群：1030353265
-- 开发者群：975206796
+- 12 群：916228568 (新)
+- 9 群：1076659624 (人满)
+- 10 群：1078079676 (人满)
+- 11 群：704659519 (人满)
+- 1 群：322154837 (人满)
+- 3 群：630166526 (人满)
+- 4 群：1077826412 (人满)
+- 5 群：822130018 (人满)
+- 6 群：753075035 (人满)
+- 7 群：743746109 (人满)
+- 8 群：1030353265 (人满)
+- 开发者群（偏闲聊吹水）：975206796
+- 开发者群（正式）：1039761811
 
 ### Discord 频道
 

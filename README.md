@@ -1,4 +1,5 @@
-![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
+![astrbot-github-banner-v2-light-0405_副本](https://github.com/user-attachments/assets/36fb04e4-cc75-4454-bd8b-049d11aa86f9)
+
 
 <div align="center">
 
@@ -32,7 +33,7 @@
 <a href="https://astrbot.app/">Documentation</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">Roadmap</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a> ｜
 <a href="mailto:community@astrbot.app">Email Support</a>
 </div>
 
@@ -78,7 +79,7 @@ For users who want to quickly experience AstrBot, are familiar with command-line
 ```bash
 uv tool install astrbot
 astrbot init # Only execute this command for the first time to initialize the environment
-astrbot
+astrbot run
 ```
 
 > Requires [uv](https://docs.astral.sh/uv/) to be installed.
@@ -91,6 +92,9 @@ Update `astrbot`:
 ```bash
 uv tool upgrade astrbot
 ```
+
+> [!WARNING]
+> AstrBot deployed via `uv` **does not support upgrading through the WebUI**. To update, please run the command above from the command line.
 
 ### Docker Deployment
 
@@ -154,6 +158,7 @@ Connect AstrBot to your favorite chat platform.
 | LINE | Official |
 | Satori | Official |
 | Misskey | Official |
+| Mattermost | Official |
 | WhatsApp (Coming Soon) | Official |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | Community |
 | [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | Community |
@@ -184,6 +189,7 @@ Connect AstrBot to your favorite chat platform.
 | Coze | LLMOps Platforms |
 | OpenAI Whisper | Speech-to-Text Services |
 | SenseVoice | Speech-to-Text Services |
+| Xiaomi MiMo Omni | Speech-to-Text Services |
 | OpenAI TTS | Text-to-Speech Services |
 | Gemini TTS | Text-to-Speech Services |
 | GPT-Sovits-Inference | Text-to-Speech Services |
@@ -193,6 +199,7 @@ Connect AstrBot to your favorite chat platform.
 | Alibaba Cloud Bailian TTS | Text-to-Speech Services |
 | Azure TTS | Text-to-Speech Services |
 | Minimax TTS | Text-to-Speech Services |
+| Xiaomi MiMo TTS | Text-to-Speech Services |
 | Volcano Engine TTS | Text-to-Speech Services |
 
 ## ❤️ Sponsors
@@ -225,16 +232,20 @@ pre-commit install
 
 ### QQ Groups
 
-- Group 9: 1076659624 (New)
-- Group 10: 1078079676 (New)
-- Group 1: 322154837
-- Group 3: 630166526
-- Group 5: 822130018
-- Group 6: 753075035
-- Group 7: 743746109
-- Group 8: 1030353265
+- Group 12: 916228568 (New)
+- Group 9: 1076659624 (Full)
+- Group 10: 1078079676 (Full)
+- Group 11: 704659519 (Full)
+- Group 1: 322154837 (Full)
+- Group 3: 630166526 (Full)
+- Group 4: 1077826412 (Full)
+- Group 5: 822130018 (Full)
+- Group 6: 753075035 (Full)
+- Group 7: 743746109 (Full)
+- Group 8: 1030353265 (Full)
 
-- Developer Group: 975206796
+- Developer Group(Chit-chat): 975206796
+- Developer Group(Formal): 1039761811
 
 ### Discord Server
 

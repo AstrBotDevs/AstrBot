@@ -60,7 +60,7 @@ def mock_astrbot_message():
             Image("test image"),
             "test image",
             OrderMessage(
-                1,
+                index=1,
                 text="test image",
                 type=KookMessageType.IMAGE,
             ),
@@ -70,7 +70,7 @@ def mock_astrbot_message():
             Video("test video"),
             "test video",
             OrderMessage(
-                1,
+                index=1,
                 text="test video",
                 type=KookMessageType.VIDEO,
             ),
@@ -80,7 +80,7 @@ def mock_astrbot_message():
             mock_file_message("test file"),
             "test file",
             OrderMessage(
-                1,
+                index=1,
                 text="test file",
                 type=KookMessageType.FILE,
             ),
@@ -90,8 +90,8 @@ def mock_astrbot_message():
             mock_record_message("./tests/file.wav"),
             "./tests/file.wav",
             OrderMessage(
-                1,
-                text='[{"type": "card", "modules": [{"src": "./tests/file.wav", "title": "./tests/file.wav", "type": "audio"}]}]',
+                index=1,
+                text='[{"type": "card", "modules": [{"type": "audio", "src": "./tests/file.wav", "title": "./tests/file.wav"}]}]',
                 type=KookMessageType.CARD,
             ),
             None,
@@ -100,7 +100,7 @@ def mock_astrbot_message():
             Plain("test plain"),
             "test plain",
             OrderMessage(
-                1,
+                index=1,
                 text="test plain",
                 type=KookMessageType.KMARKDOWN,
             ),
@@ -110,7 +110,7 @@ def mock_astrbot_message():
             At(qq="test at"),
             "test at",
             OrderMessage(
-                1,
+                index=1,
                 text="(met)test at(met)",
                 type=KookMessageType.KMARKDOWN,
             ),
@@ -120,7 +120,7 @@ def mock_astrbot_message():
             AtAll(qq="all"),
             "test atAll",
             OrderMessage(
-                1,
+                index=1,
                 text="(met)all(met)",
                 type=KookMessageType.KMARKDOWN,
             ),
@@ -130,7 +130,7 @@ def mock_astrbot_message():
             Reply(id="test reply"),
             "test reply",
             OrderMessage(
-                1,
+                index=1,
                 text="",
                 type=KookMessageType.KMARKDOWN,
                 reply_id="test reply",
@@ -141,7 +141,7 @@ def mock_astrbot_message():
             Json(data={"test": "json"}),
             "test json",
             OrderMessage(
-                1,
+                index=1,
                 text='[{"test": "json"}]',
                 type=KookMessageType.CARD,
             ),
@@ -159,7 +159,7 @@ async def test_kook_event_warp_message(
     input_message: BaseMessageComponent,
     upload_asset_return: str,
     expected_output: OrderMessage,
-    expected_error: type[Exception] | None,
+    expected_error: type[BaseException] | None,
 ):
     client = await mock_kook_client(
         upload_asset_return,
@@ -185,39 +185,4 @@ async def test_kook_event_warp_message(
 
     result = await event._wrap_message(1, input_message)
     assert result == expected_output
-
-
-# @pytest.mark.asyncio
-# @pytest.mark.parametrize(
-#     "message_chain,send_text_expected_output,expected_error",
-#     [
-#         (
-#             MessageChain(
-#                 chain=[
-#                     Image(file="test image"),
-#                     Plain(text="test plain"),
-#                 ],
-#             ),
-#             ""
-#         ),
-#     ],
-# )
-# async def test_kook_event_send():
-#     client = await mock_kook_client(
-#         "",
-#         "",
-#     )
-
-#     event = KookEvent(
-#         "",
-#         mock_astrbot_message(),
-#         PlatformMetadata(
-#             name="test",
-#             id="test",
-#             description="test",
-#         ),
-#         "",
-#         client,
-#     )
-
-#     await event.send(message=mock_astrbot_message())
+    

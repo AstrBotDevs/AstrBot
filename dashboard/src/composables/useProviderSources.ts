@@ -204,11 +204,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const advancedSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null
 
-    const excluded = ['id', 'key', 'api_base', 'enable', 'type', 'provider_type', 'provider']
+    const excluded = new Set(['id', 'key', 'api_base', 'enable', 'type', 'provider_type', 'provider'])
     const advanced: Record<string, any> = {}
 
     for (const key of Object.keys(editableProviderSource.value)) {
-      if (excluded.includes(key)) continue
       Object.defineProperty(advanced, key, {
         get() {
           return editableProviderSource.value![key]
@@ -216,7 +215,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         set(val) {
           editableProviderSource.value![key] = val
         },
-        enumerable: true
+        enumerable: !excluded.has(key)
       })
     }
 
@@ -291,6 +290,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return inputs.includes('image')
   }
 
+  function supportsAudioInput(meta: any) {
+    const inputs = meta?.modalities?.input || []
+    return inputs.includes('audio')
+  }
+
   function supportsToolCall(meta: any) {
     return Boolean(meta?.tool_call)
   }
@@ -322,9 +326,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       coze: 'agent_runner',
       dashscope: 'chat_completion',
       openai_whisper_api: 'speech_to_text',
+      mimo_stt_api: 'speech_to_text',
       openai_whisper_selfhost: 'speech_to_text',
       sensevoice_stt_selfhost: 'speech_to_text',
       openai_tts_api: 'text_to_speech',
+      mimo_tts_api: 'text_to_speech',
       edge_tts: 'text_to_speech',
       gsvi_tts_api: 'text_to_speech',
       fishaudio_tts_api: 'text_to_speech',
@@ -345,13 +351,27 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     selectedProviderSource.value = source
     selectedProviderSourceOriginalId.value = source?.id || null
     suppressSourceWatch = true
-    editableProviderSource.value = source ? JSON.parse(JSON.stringify(source)) : null
+    editableProviderSource.value = source
+      ? ensureProviderSourceDefaults(JSON.parse(JSON.stringify(source)))
+      : null
     nextTick(() => {
       suppressSourceWatch = false
     })
     availableModels.value = []
     modelMetadata.value = {}
     isSourceModified.value = false
+  }
+
+  function ensureProviderSourceDefaults(source: any) {
+    if (!source || typeof source !== 'object') {
+      return source
+    }
+
+    if (source.provider === 'ollama' && source.ollama_disable_thinking === undefined) {
+      source.ollama_disable_thinking = false
+    }
+
+    return source
   }
 
   function extractSourceFieldsFromTemplate(template: Record<string, any>) {
@@ -389,14 +409,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     const newId = generateUniqueSourceId(template.id)
-    const newSource = {
+    const newSource = ensureProviderSourceDefaults({
       ...extractSourceFieldsFromTemplate(template),
       id: newId,
       type: template.type,
       provider_type: template.provider_type,
       provider: template.provider,
       enable: true
-    }
+    })
 
     providerSources.value.push(newSource)
     selectedProviderSource.value = newSource
@@ -528,11 +548,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     let modalities: string[]
 
     if (!metadata) {
-      modalities = ['text', 'image', 'tool_use']
+      modalities = ['text', 'image', 'audio', 'tool_use']
     } else {
       modalities = ['text']
       if (supportsImageInput(metadata)) {
         modalities.push('image')
+      }
+      if (supportsAudioInput(metadata)) {
+        modalities.push('audio')
       }
       if (supportsToolCall(metadata)) {
         modalities.push('tool_use')
@@ -590,9 +613,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   async function testProvider(provider: any) {
     testingProviders.value.push(provider.id)
     try {
+      const startTime = performance.now()
       const response = await axios.get('/api/config/provider/check_one', { params: { id: provider.id } })
       if (response.data.status === 'ok' && response.data.data.error === null) {
-        showMessage(tm('models.testSuccess', { id: provider.id }))
+        const latency = Math.max(0, Math.round(performance.now() - startTime))
+        showMessage(tm('models.testSuccessWithLatency', { id: provider.id, latency }))
       } else {
         throw new Error(response.data.data.error || tm('models.testError'))
       }
@@ -670,6 +695,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     getSourceDisplayName,
     getModelMetadata,
     supportsImageInput,
+    supportsAudioInput,
     supportsToolCall,
     supportsReasoning,
     formatContextLimit,

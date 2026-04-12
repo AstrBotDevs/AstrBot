@@ -91,6 +91,15 @@ type WsStreamContext = {
 
 const STREAMING_STORAGE_KEY = 'enableStreaming';
 const TRANSPORT_MODE_STORAGE_KEY = 'chatTransportMode';
+const HIDDEN_TOOL_CALL_NAMES = new Set(['send_message_to_user']);
+
+function isHiddenToolCall(toolCall: ToolCall | { name?: unknown } | null | undefined): boolean {
+    if (!toolCall || typeof toolCall !== 'object') {
+        return false;
+    }
+    const name = toolCall.name;
+    return typeof name === 'string' && HIDDEN_TOOL_CALL_NAMES.has(name);
+}
 
 export function useMessages(
     currSessionId: Ref<string>,
@@ -489,6 +498,9 @@ export function useMessages(
                     } catch {
                         return;
                     }
+                    if (isHiddenToolCall(toolCallData)) {
+                        return;
+                    }
 
                     const toolCall: ToolCall = {
                         id: toolCallData.id,
@@ -526,6 +538,9 @@ export function useMessages(
                     try {
                         resultData = JSON.parse(String(chunkJson.data || '{}'));
                     } catch {
+                        return;
+                    }
+                    if (isHiddenToolCall(resultData)) {
                         return;
                     }
 
@@ -658,7 +673,18 @@ export function useMessages(
 
         // 如果 message 是数组 (新格式)，遍历并填充 embedded 字段
         if (Array.isArray(message)) {
+            const filteredMessage: MessagePart[] = [];
             for (const part of message as MessagePart[]) {
+                if (part.type === 'tool_call' && Array.isArray(part.tool_calls)) {
+                    const visibleToolCalls = part.tool_calls.filter(
+                        (toolCall) => !isHiddenToolCall(toolCall),
+                    );
+                    if (!visibleToolCalls.length) {
+                        continue;
+                    }
+                    part.tool_calls = visibleToolCalls;
+                }
+
                 if (part.type === 'image' && part.attachment_id) {
                     part.embedded_url = await getAttachment(part.attachment_id);
                 } else if (part.type === 'record' && part.attachment_id) {
@@ -671,7 +697,9 @@ export function useMessages(
                     };
                 }
                 // plain, reply, tool_call, video 保持原样
+                filteredMessage.push(part);
             }
+            content.message = filteredMessage;
         }
 
         // 处理 agent_stats (snake_case -> camelCase)
@@ -727,6 +755,7 @@ export function useMessages(
     function buildBackendMessageParts(
         prompt: string,
         stagedFiles: { attachment_id: string; url: string; original_name: string; type: string }[],
+        audioAttachmentId: string,
         replyTo: ReplyInfo | null
     ): MessagePart[] {
         const parts: MessagePart[] = [];
@@ -752,6 +781,13 @@ export function useMessages(
             parts.push({
                 type: partType as 'image' | 'record' | 'file',
                 attachment_id: f.attachment_id
+            });
+        }
+
+        if (audioAttachmentId) {
+            parts.push({
+                type: 'record',
+                attachment_id: audioAttachmentId
             });
         }
 
@@ -888,7 +924,7 @@ export function useMessages(
     async function sendMessage(
         prompt: string,
         stagedFiles: { attachment_id: string; url: string; original_name: string; type: string }[],
-        audioName: string,
+        audioAttachmentId: string,
         selectedProviderId: string,
         selectedModelName: string,
         replyTo: ReplyInfo | null = null
@@ -928,10 +964,12 @@ export function useMessages(
             });
         }
 
-        if (audioName) {
+        if (audioAttachmentId) {
+            const embeddedUrl = await getAttachment(audioAttachmentId);
             userMessageParts.push({
                 type: 'record',
-                embedded_url: audioName
+                attachment_id: audioAttachmentId,
+                embedded_url: embeddedUrl
             });
         }
 
@@ -959,8 +997,13 @@ export function useMessages(
             userStopRequested.value = false;
             currentRunningSessionId.value = currSessionId.value;
 
-            const backendMessageParts = buildBackendMessageParts(prompt, stagedFiles, replyTo);
-            const hasAttachmentOrReply = stagedFiles.length > 0 || !!replyTo;
+            const backendMessageParts = buildBackendMessageParts(
+                prompt,
+                stagedFiles,
+                audioAttachmentId,
+                replyTo
+            );
+            const hasAttachmentOrReply = stagedFiles.length > 0 || !!audioAttachmentId || !!replyTo;
 
             if (transportMode.value === 'websocket') {
                 await sendMessageViaWebSocket(

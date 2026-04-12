@@ -244,6 +244,8 @@ class ProviderManager:
                     provider = self.provider_insts[0] if self.provider_insts else None
             elif provider_type == ProviderType.SPEECH_TO_TEXT:
                 provider_id = config["provider_stt_settings"].get("provider_id")
+                if not config["provider_stt_settings"].get("enable"):
+                    return None
                 if not provider_id:
                     return None
                 provider = self.inst_map.get(provider_id)
@@ -253,6 +255,8 @@ class ProviderManager:
                     )
             elif provider_type == ProviderType.TEXT_TO_SPEECH:
                 provider_id = config["provider_tts_settings"].get("provider_id")
+                if not config["provider_tts_settings"].get("enable"):
+                    return None
                 if not provider_id:
                     return None
                 provider = self.inst_map.get(provider_id)
@@ -357,6 +361,8 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
+            case "longcat_chat_completion":
+                from .sources.longcat_source import ProviderLongCat as ProviderLongCat
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
             case "groq_chat_completion":
@@ -375,6 +381,10 @@ class ProviderManager:
                 from .sources.anthropic_source import (
                     ProviderAnthropic as ProviderAnthropic,
                 )
+            case "kimi_code_chat_completion":
+                from .sources.kimi_code_source import (
+                    ProviderKimiCode as ProviderKimiCode,
+                )
             case "googlegenai_chat_completion":
                 from .sources.gemini_source import (
                     ProviderGoogleGenAI as ProviderGoogleGenAI,
@@ -387,6 +397,10 @@ class ProviderManager:
                 from .sources.whisper_api_source import (
                     ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI,
                 )
+            case "mimo_stt_api":
+                from .sources.mimo_stt_api_source import (
+                    ProviderMiMoSTTAPI as ProviderMiMoSTTAPI,
+                )
             case "openai_whisper_selfhost":
                 from .sources.whisper_selfhosted_source import (
                     ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost,
@@ -398,6 +412,10 @@ class ProviderManager:
             case "openai_tts_api":
                 from .sources.openai_tts_api_source import (
                     ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
+                )
+            case "mimo_tts_api":
+                from .sources.mimo_tts_api_source import (
+                    ProviderMiMoTTSAPI as ProviderMiMoTTSAPI,
                 )
             case "genie_tts":
                 from .sources.genie_tts import (
@@ -458,6 +476,10 @@ class ProviderManager:
             case "bailian_rerank":
                 from .sources.bailian_rerank_source import (
                     BailianRerankProvider as BailianRerankProvider,
+                )
+            case "nvidia_rerank":
+                from .sources.nvidia_rerank_source import (
+                    NvidiaRerankProvider as NvidiaRerankProvider,
                 )
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
@@ -808,6 +830,8 @@ class ProviderManager:
             config.save_config()
             # load instance
             await self.load_provider(new_config)
+            # sync in-memory config for API queries (e.g., embedding provider list)
+            self.providers_config = astrbot_config["provider"]
 
     async def terminate(self) -> None:
         if self._mcp_init_task and not self._mcp_init_task.done():

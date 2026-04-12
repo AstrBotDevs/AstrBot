@@ -1,0 +1,1641 @@
+{
+    "ai_group": {
+        "name": "AI",
+        "agent_runner": {
+            "description": "Запуск агентов (Agent Runner)",
+            "hint": "Выберите среду для работы AI-диалогов. По умолчанию используется встроенный агент AstrBot, поддерживающий базу знаний, персонализацию и вызов технических инструментов. Не изменяйте этот раздел, если не планируете использовать сторонние платформы, такие как Dify, Coze или DeerFlow.",
+            "provider_settings": {
+                "enable": {
+                    "description": "Включить",
+                    "hint": "Главный переключатель для AI-диалогов"
+                },
+                "agent_runner_type": {
+                    "description": "Запуск (Runner)",
+                    "labels": [
+                        "Встроенный агент",
+                        "Dify",
+                        "Coze",
+                        "Приложение Alibaba Cloud Bailian",
+                        "DeerFlow"
+                    ]
+                },
+                "coze_agent_runner_provider_id": {
+                    "description": "ID провайдера Coze Agent Runner"
+                },
+                "dify_agent_runner_provider_id": {
+                    "description": "ID провайдера Dify Agent Runner"
+                },
+                "dashscope_agent_runner_provider_id": {
+                    "description": "ID провайдера Alibaba Cloud Bailian"
+                },
+                "deerflow_agent_runner_provider_id": {
+                    "description": "ID провайдера DeerFlow Agent Runner"
+                }
+            }
+        },
+        "ai": {
+            "description": "Модель",
+            "hint": "При использовании сторонних сред запуска модель чата и модель описания изображений могут не работать напрямую, но некоторые плагины всё равно зависят от этих настроек.",
+            "provider_settings": {
+                "default_provider_id": {
+                    "description": "Модель чата по умолчанию",
+                    "hint": "Если пусто, используется первая доступная модель"
+                },
+                "fallback_chat_models": {
+                    "description": "Резервные модели чата (ID)",
+                    "hint": "Если текущая модель недоступна, запрос будет перенаправлен на эти модели по порядку."
+                },
+                "default_image_caption_provider_id": {
+                    "description": "Модель описания изображений",
+                    "hint": "Оставьте пустым для отключения; полезно для моделей без поддержки мультимодальности"
+                },
+                "image_caption_prompt": {
+                    "description": "Промпт для описания изображений"
+                }
+            },
+            "provider_stt_settings": {
+                "enable": {
+                    "description": "Включить преобразование речи в текст (STT)",
+                    "hint": "Главный переключатель для STT"
+                },
+                "provider_id": {
+                    "description": "Модель STT по умолчанию",
+                    "hint": "Пользователи могут выбирать другие модели STT через команду /provider."
+                }
+            },
+            "provider_tts_settings": {
+                "enable": {
+                    "description": "Включить преобразование текста в речь (TTS)",
+                    "hint": "Главный переключатель для TTS"
+                },
+                "provider_id": {
+                    "description": "Модель TTS по умолчанию"
+                },
+                "trigger_probability": {
+                    "description": "Вероятность срабатывания TTS"
+                }
+            }
+        },
+        "persona": {
+            "description": "Персонаж",
+            "hint": "Установите персонажа по умолчанию для AI-диалогов. Управлять персонажами можно на вкладке «Персонажи».",
+            "provider_settings": {
+                "default_personality": {
+                    "description": "Персонаж по умолчанию"
+                }
+            }
+        },
+        "knowledgebase": {
+            "description": "База знаний",
+            "kb_names": {
+                "description": "Список баз знаний",
+                "hint": "Поддерживается выбор нескольких баз"
+            },
+            "kb_fusion_top_k": {
+                "description": "Кол-во результатов (Fusion Search)",
+                "hint": "Количество результатов после объединения данных из нескольких баз знаний"
+            },
+            "kb_final_top_k": {
+                "description": "Итоговое кол-во результатов",
+                "hint": "Количество результатов, извлекаемых из базы знаний. Высокие значения дают больше данных, но могут добавить шума. Настройте по необходимости."
+            },
+            "kb_agentic_mode": {
+                "description": "Агентский режим извлечения (Agentic Retrieval)",
+                "hint": "Если включено, извлечение из базы знаний становится инструментом (Tool) для LLM, позволяя модели самой решать, когда обращаться к базе. Требует поддержки вызова функций (function calling) в модели."
+            }
+        },
+        "websearch": {
+            "description": "Поиск в сети",
+            "provider_settings": {
+                "web_search": {
+                    "description": "Включить поиск в сети"
+                },
+                "websearch_provider": {
+                    "description": "Провайдер поиска"
+                },
+                "websearch_tavily_key": {
+                    "description": "API-ключ Tavily",
+                    "hint": "Можно добавить несколько ключей для ротации."
+                },
+                "websearch_bocha_key": {
+                    "description": "API-ключ BoCha",
+                    "hint": "Можно добавить несколько ключей для ротации."
+                },
+                "websearch_brave_key": {
+                    "description": "API-ключ Brave Search",
+                    "hint": "Можно добавить несколько ключей для ротации."
+                },
+                "websearch_baidu_app_builder_key": {
+                    "description": "API-ключ Baidu Qianfan APP Builder",
+                    "hint": "Ссылка: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
+                },
+                "web_search_link": {
+                    "description": "Показывать ссылки на источники"
+                }
+            }
+        },
+        "file_extract": {
+            "description": "Извлечение из файлов",
+            "provider_settings": {
+                "file_extract": {
+                    "enable": {
+                        "description": "Включить извлечение из файлов"
+                    },
+                    "provider": {
+                        "description": "Провайдер извлечения"
+                    },
+                    "moonshotai_api_key": {
+                        "description": "API-ключ Moonshot AI"
+                    }
+                }
+            }
+        },
+        "agent_computer_use": {
+            "description": "Использование компьютера (Agent Computer Use)",
+            "hint": "Позволяет AstrBot получать доступ к вашему компьютеру или песочнице для выполнения сложных задач. Подробнее: [Использование компьютера](https://docs.astrbot.app/use/computer.html).",
+            "provider_settings": {
+                "computer_use_runtime": {
+                    "description": "Среда выполнения (Runtime)",
+                    "hint": "Среда, к которой разрешён доступ Agent: `local` — локальная среда компьютера, `sandbox` — изолированная песочница, `none` — запретить доступ к любым средам."
+                },
+                "computer_use_require_admin": {
+                    "description": "Требовать права администратора AstrBot",
+                    "hint": "Если включено, только администраторы смогут использовать возможности управления компьютером. Добавить администраторов можно в конфиге платформы."
+                },
+                "sandbox": {
+                    "booter": {
+                        "description": "Драйвер среды песочницы"
+                    },
+                    "shipyard_neo_endpoint": {
+                        "description": "Эндпоинт Shipyard Neo API",
+                        "hint": "Адрес Bay API, по умолчанию http://127.0.0.1:8114."
+                    },
+                    "shipyard_neo_access_token": {
+                        "description": "Токен доступа Shipyard Neo",
+                        "hint": "Ключ Bay API (sk-bay-...). Оставьте пустым для автопоиска в credentials.json."
+                    },
+                    "shipyard_neo_profile": {
+                        "description": "Профиль Shipyard Neo",
+                        "hint": "Профиль песочницы, например, python-default."
+                    },
+                    "shipyard_neo_ttl": {
+                        "description": "TTL песочницы Shipyard Neo",
+                        "hint": "Время жизни песочницы в секундах."
+                    },
+                    "shipyard_endpoint": {
+                        "description": "Эндпоинт Shipyard API",
+                        "hint": "Адрес API для доступа к сервису Shipyard."
+                    },
+                    "shipyard_access_token": {
+                        "description": "Токен доступа Shipyard",
+                        "hint": "Токен доступа для работы с сервисом Shipyard."
+                    },
+                    "shipyard_ttl": {
+                        "description": "TTL сессии Shipyard",
+                        "hint": "Время жизни сессии в секундах."
+                    },
+                    "shipyard_max_sessions": {
+                        "description": "Макс. количество сессий Shipyard",
+                        "hint": "Максимальное количество сессий Shipyard, которое может поддерживать экземпляр."
+                    }
+                }
+            }
+        },
+        "proactive_capability": {
+            "description": "Проактивный агент",
+            "hint": "AstrBot будет просыпаться, выполнять ваши задачи и сообщать о результатах. См. [Проактивный агент](https://docs.astrbot.app/en/use/proactive-agent.html)",
+            "provider_settings": {
+                "proactive_capability": {
+                    "add_cron_tools": {
+                        "description": "Включить",
+                        "hint": "Если включено, агенту будут переданы инструменты для проактивной работы. Вы сможете поручать задачи на будущее, и они будут выполнены по расписанию."
+                    }
+                }
+            }
+        },
+        "truncate_and_compress": {
+            "hint": "[Управление контекстом](https://docs.astrbot.app/en/use/context-compress.html)",
+            "description": "Стратегия управления контекстом",
+            "provider_settings": {
+                "max_context_length": {
+                    "description": "Макс. количество раундов диалога",
+                    "hint": "При превышении удаляются старые сообщения. 1 раунд = 1 пара запрос-ответ. -1 означает без ограничений."
+                },
+                "dequeue_context_length": {
+                    "description": "Кол-во удаляемых раундов",
+                    "hint": "Сколько раундов удалять за один раз при достижении лимита."
+                },
+                "context_limit_reached_strategy": {
+                    "description": "Действие при переполнении окна контекста",
+                    "labels": [
+                        "Обрезать по раундам",
+                        "Сжать с помощью LLM"
+                    ],
+                    "hint": "При выборе 'Обрезать' удаляются старые сообщения. При выборе 'Сжать' используется модель для суммаризации контекста."
+                },
+                "llm_compress_instruction": {
+                    "description": "Инструкция для сжатия контекста",
+                    "hint": "Если пусто, используется промпт по умолчанию."
+                },
+                "llm_compress_keep_recent": {
+                    "description": "Сохранять последние раунды при сжатии",
+                    "hint": "Всегда оставлять последние N раундов диалога без изменений при сжатии."
+                },
+                "llm_compress_provider_id": {
+                    "description": "Модель для сжатия контекста",
+                    "hint": "Если не выбрано, произойдет откат к стратегии удаления сообщений."
+                }
+            }
+        },
+        "others": {
+            "description": "Прочие настройки",
+            "provider_settings": {
+                "display_reasoning_text": {
+                    "description": "Отображать процесс рассуждения (Reasoning)"
+                },
+                "llm_safety_mode": {
+                    "description": "Безопасный режим",
+                    "hint": "Добавляет защитные фильтры к ответам модели."
+                },
+                "safety_mode_strategy": {
+                    "description": "Стратегия безопасного режима",
+                    "hint": "Как применять защитные фильтры."
+                },
+                "identifier": {
+                    "description": "Идентификация пользователя",
+                    "hint": "Если включено, информация об ID пользователя будет включена в промпт."
+                },
+                "group_name_display": {
+                    "description": "Отображать название группы",
+                    "hint": "Если включено, название группы будет включено в промпт на поддерживаемых платформах (OneBot v11)."
+                },
+                "datetime_system_prompt": {
+                    "description": "Осведомленность о реальном времени",
+                    "hint": "Если включено, информация о текущем времени будет добавлена в системный промпт."
+                },
+                "show_tool_use_status": {
+                    "description": "Выводить статус вызова функций"
+                },
+                "show_tool_call_result": {
+                    "description": "Выводить результаты работы инструментов",
+                    "hint": "Работает только при включенном статусе вызова функций. Показывает макс. 70 символов."
+                },
+                "sanitize_context_by_modalities": {
+                    "description": "Очистка истории по модальностям",
+                    "hint": "Если включено, очищает контекст перед запросом, удаляя блоки (например, изображения), которые не поддерживаются выбранным провайдером."
+                },
+                "max_quoted_fallback_images": {
+                    "description": "Лимит загрузки изображений из пересланных сообщений",
+                    "hint": "Максимальное количество изображений при парсинге цитируемых сообщений."
+                },
+                "quoted_message_parser": {
+                    "max_component_chain_depth": {
+                        "description": "Глубина парсинга богатого текста",
+                        "hint": "Максимальная глубина рекурсии при парсинге сложных компонентов в пересланных сообщениях."
+                    },
+                    "max_forward_node_depth": {
+                        "description": "Глубина вложенности пересылок",
+                        "hint": "Максимальная глубина парсинга вложенных пересланных узлов."
+                    },
+                    "max_forward_fetch": {
+                        "description": "Лимит рекурсивного получения пересылок",
+                        "hint": "Максимальное количество операций get_forward_msg."
+                    },
+                    "warn_on_action_failure": {
+                        "description": "Предупреждать при ошибке парсинга пересылок",
+                        "hint": "Если включено, логирует предупреждения при неудачных попытках получения сообщений."
+                    }
+                },
+                "max_agent_step": {
+                    "description": "Макс. количество раундов вызова инструментов"
+                },
+                "tool_call_timeout": {
+                    "description": "Таймаут вызова инструмента (сек)"
+                },
+                "tool_schema_mode": {
+                    "description": "Режим схемы инструментов",
+                    "hint": "Skills-like сначала отправляет имя/описание и дозапрашивает параметры; Full отправляет полную схему сразу.",
+                    "labels": [
+                        "Skills-like (двухэтапный)",
+                        "Полная схема (Full)"
+                    ]
+                },
+                "streaming_response": {
+                    "description": "Потоковый вывод (Streaming)"
+                },
+                "unsupported_streaming_strategy": {
+                    "description": "Для платформ без поддержки стриминга",
+                    "hint": "Выберите метод обработки, если платформа не поддерживает потоковые ответы. 'Сегментированный ответ' отправляет части текста по мере появления знаков препинания.",
+                    "labels": [
+                        "Сегментированный ответ в реальном времени",
+                        "Отключить стриминг"
+                    ]
+                },
+                "wake_prefix": {
+                    "description": "Дополнительный префикс пробуждения LLM",
+                    "hint": "Если префикс пробуждения '/', а дополнительные — 'chat', то потребуется '/chat' для активации LLM."
+                },
+                "prompt_prefix": {
+                    "description": "Промпт пользователя",
+                    "hint": "Вы можете использовать {{prompt}} как заполнитель для ввода. Если заполнитель не указан, он будет добавлен перед текстом пользователя."
+                },
+                "image_compress_enabled": {
+                    "description": "Включить сжатие изображений",
+                    "hint": "Когда включено, большие локальные изображения сжимаются перед отправкой в мультимодальные модели."
+                },
+                "image_compress_options": {
+                    "description": "Настройки сжатия изображений",
+                    "hint": "Управляет ограничением размера, качеством JPEG и минимальным порогом размера для сжатия.",
+                    "max_size": {
+                        "description": "Максимальная длина стороны",
+                        "hint": "Максимальная длина стороны сжатого изображения в пикселях. Более крупные изображения пропорционально уменьшаются."
+                    },
+                    "quality": {
+                        "description": "Качество JPEG",
+                        "hint": "Качество JPEG от 1 до 100. Более высокие значения сохраняют больше деталей, но увеличивают размер файла."
+                    }
+                },
+                "reachability_check": {
+                    "description": "Проверка доступности провайдеров",
+                    "hint": "При выполнении команды /provider проверяет связь со всеми моделями. Это может расходовать токены."
+                }
+            },
+            "provider_tts_settings": {
+                "dual_output": {
+                    "description": "Выводить и голос, и текст при включенном TTS"
+                }
+            }
+        }
+    },
+    "platform_group": {
+        "name": "Платформы",
+        "platform": {
+            "description": "Адаптеры сообщений",
+            "active_send_mode": {
+                "description": "Использовать API активной отправки"
+            },
+            "appid": {
+                "description": "ID приложения",
+                "hint": "Обязательно для QQ Official Bot. См. документацию."
+            },
+            "callback_server_host": {
+                "description": "Хост callback-сервера",
+                "hint": "Оставьте пустым для отключения."
+            },
+            "card_template_id": {
+                "description": "ID шаблона карточки",
+                "hint": "Необязательно. Для интерактивных карточек DingTalk."
+            },
+            "discord_activity_name": {
+                "description": "Название активности Discord",
+                "hint": "Статус бота в Discord. Оставьте пустым для отключения."
+            },
+            "discord_allow_bot_messages": {
+                "description": "Разрешить сообщения от ботов",
+                "hint": "Если включено, AstrBot будет получать сообщения от других Discord-ботов. Полезно для взаимодействия между ботами (например, пересылка сообщений). По умолчанию отключено."
+            },
+            "discord_command_register": {
+                "description": "Регистрировать слэш-команды Discord",
+                "hint": "Если включено, команды плагинов будут зарегистрированы как /команды Discord."
+            },
+            "discord_proxy": {
+                "description": "Proxy URL для Discord",
+                "hint": "Формат: http://ip:port"
+            },
+            "discord_token": {
+                "description": "Токен бота Discord",
+                "hint": "Введите сюда токен вашего Discord-бота."
+            },
+            "enable": {
+                "description": "Включить",
+                "hint": "Включить этот адаптер. Отключенные адаптеры не будут получать сообщения."
+            },
+            "enable_group_c2c": {
+                "description": "Включить личные сообщения из списка",
+                "hint": "Позволяет боту получать личные сообщения из списка QQ (может потребоваться добавление в друзья)."
+            },
+            "enable_guild_direct_message": {
+                "description": "Включить ЛС в гильдиях",
+                "hint": "Позволяет боту получать прямые сообщения в рамках гильдий."
+            },
+            "id": {
+                "description": "Имя бота",
+                "hint": "Отображаемое имя бота"
+            },
+            "is_sandbox": {
+                "description": "Режим песочницы"
+            },
+            "kf_name": {
+                "description": "Имя аккаунта службы поддержки WeChat",
+                "hint": "Необязательно. См. https://kf.weixin.qq.com/kf/frame#/accounts"
+            },
+            "lark_bot_name": {
+                "description": "Имя бота Lark",
+                "hint": "Должно быть точным для работы через @ упоминания."
+            },
+            "lark_connection_mode": {
+                "description": "Режим подписки",
+                "labels": [
+                    "Режим длинного соединения",
+                    "Режим Webhook"
+                ]
+            },
+            "lark_encrypt_key": {
+                "description": "Ключ шифрования",
+                "hint": "Для расшифровки данных обратного вызова Lark."
+            },
+            "lark_verification_token": {
+                "description": "Токен верификации",
+                "hint": "Для проверки запросов обратного вызова Lark."
+            },
+            "misskey_allow_insecure_downloads": {
+                "description": "Разрешить небезопасные загрузки (без SSL)",
+                "hint": "Отключает проверку SSL если у удаленного сервера проблемы с сертификатами. Используйте с осторожностью."
+            },
+            "misskey_default_visibility": {
+                "description": "Видимость постов по умолчанию",
+                "hint": "public — всем, home — в ленте, followers — только подписчикам."
+            },
+            "misskey_download_chunk_size": {
+                "description": "Размер чанка загрузки (байт)",
+                "hint": "Влияет на потребление памяти при загрузке файлов."
+            },
+            "misskey_download_timeout": {
+                "description": "Таймаут загрузки (сек)",
+                "hint": "Максимльное время на загрузку файлов из сети."
+            },
+            "misskey_enable_chat": {
+                "description": "Включить ответы в чатах",
+                "hint": "Бот будет отвечать на личные сообщения в Misskey."
+            },
+            "misskey_enable_file_upload": {
+                "description": "Включить загрузку файлов в Misskey",
+                "hint": "Бот будет загружать файлы из сообщений в хранилище Misskey."
+            },
+            "misskey_instance_url": {
+                "description": "URL инстанса Misskey",
+                "hint": "Например, https://misskey.example"
+            },
+            "misskey_local_only": {
+                "description": "Только локально (без федерации)",
+                "hint": "Посты бота будут видны только на текущем инстансе."
+            },
+            "misskey_max_download_bytes": {
+                "description": "Макс. размер загрузки (байт)",
+                "hint": "Лимит на размер загружаемых файлов для предотвращения нехватки памяти."
+            },
+            "misskey_token": {
+                "description": "Токен доступа Misskey",
+                "hint": "Токен доступа к API, созданный в настройках сервиса подключения."
+            },
+            "misskey_upload_concurrency": {
+                "description": "Лимит одновременных загрузок",
+                "hint": "По умолчанию 3."
+            },
+            "misskey_upload_folder": {
+                "description": "ID папки в хранилище",
+                "hint": "Необязательно. Если пусто — в корень."
+            },
+            "port": {
+                "description": "Порт callback-сервера",
+                "hint": "Оставьте пустым для отключения."
+            },
+            "satori_api_base_url": {
+                "description": "Эндпоинт Satori API",
+                "hint": "Базовый URL для Satori API."
+            },
+            "satori_auto_reconnect": {
+                "description": "Автоматическое переподключение",
+                "hint": "Переподключать WebSocket при разрыве."
+            },
+            "satori_endpoint": {
+                "description": "WebSocket эндпоинт Satori",
+                "hint": "WebSocket-эндпоинт для событий Satori."
+            },
+            "satori_heartbeat_interval": {
+                "description": "Интервал сердцебиения Satori",
+                "hint": "Интервал в секундах между отправкой heartbeat-сообщений."
+            },
+            "satori_reconnect_delay": {
+                "description": "Задержка переподключения Satori",
+                "hint": "Задержка перед попыткой переподключения (в секундах)."
+            },
+            "satori_token": {
+                "description": "Токен Satori",
+                "hint": "Токен для аутентификации в Satori API."
+            },
+            "secret": {
+                "description": "Секрет (Secret)",
+                "hint": "Обязательно."
+            },
+            "slack_connection_mode": {
+                "description": "Режим соединения Slack",
+                "hint": "webhook — через вебхуки, socket — через Socket Mode."
+            },
+            "slack_webhook_host": {
+                "description": "Хост вебхука Slack",
+                "hint": "Действительно только если режим подключения Slack установлен как `webhook`."
+            },
+            "slack_webhook_path": {
+                "description": "Путь вебхука Slack",
+                "hint": "Действительно только если режим подключения Slack установлен как `webhook`."
+            },
+            "slack_webhook_port": {
+                "description": "Порт вебхука Slack",
+                "hint": "Действительно только если режим подключения Slack установлен как `webhook`."
+            },
+            "telegram_command_auto_refresh": {
+                "description": "Автообновление команд Telegram",
+                "hint": "Если включено, AstrBot автоматически обновляет команды Telegram во время выполнения. (Одна эта настройка не имеет эффекта)"
+            },
+            "telegram_command_register": {
+                "description": "Регистрация команд Telegram",
+                "hint": "Если включено, AstrBot автоматически регистрирует команды Telegram."
+            },
+            "telegram_command_register_interval": {
+                "description": "Интервал автообновления команд Telegram",
+                "hint": "Интервал автоматического обновления команд Telegram в секундах."
+            },
+            "telegram_token": {
+                "description": "Токен бота",
+                "hint": "Если вы находитесь в материковом Китае, установите прокси или измените api_base в разделе «Другие настройки»."
+            },
+            "mattermost_url": {
+                "description": "URL Mattermost",
+                "hint": "Адрес сервиса Mattermost, например https://chat.example.com."
+            },
+            "mattermost_bot_token": {
+                "description": "Bot Token Mattermost",
+                "hint": "Токен доступа, созданный после добавления bot-аккаунта в Mattermost."
+            },
+            "mattermost_reconnect_delay": {
+                "description": "Задержка переподключения Mattermost",
+                "hint": "Сколько секунд ждать перед переподключением после разрыва WebSocket. По умолчанию 5 секунд."
+            },
+            "type": {
+                "description": "Тип адаптера"
+            },
+            "unified_webhook_mode": {
+                "description": "Единый режим Webhook",
+                "hint": "Использовать общий вход вебхуков AstrBot без открытия новых портов. URL: /api/platform/webhook/{uuid}."
+            },
+            "webhook_uuid": {
+                "description": "UUID вебхука",
+                "hint": "Создается автоматически при добавлении платформы."
+            },
+            "wecom_ai_bot_name": {
+                "description": "Имя бота WeCom AI",
+                "hint": "Должно быть указано верно, иначе некоторые команды не будут работать."
+            },
+            "wecom_ai_bot_connection_mode": {
+                "description": "Режим соединения WeCom AI",
+                "hint": "webhook требует Token/AESKey; long_connection требует BotID/Secret."
+            },
+            "wecomaibot_friend_message_welcome_text": {
+                "description": "Приветствие в ЛС WeCom AI",
+                "hint": "Отправляется при первом входе пользователя в чат за день."
+            },
+            "wecomaibot_init_respond_text": {
+                "description": "Начальный текст ответа WeCom AI",
+                "hint": "Первое сообщение, которое отправляет бот при получении запроса."
+            },
+            "wecomaibot_token": {
+                "description": "Токен WeCom AI",
+                "hint": "Используется для аутентификации в режиме обратного вызова webhook."
+            },
+            "wecomaibot_encoding_aes_key": {
+                "description": "EncodingAESKey для ИИ-бота WeCom",
+                "hint": "Используется для шифрования/дешифрования сообщений в режиме обратного вызова webhook."
+            },
+            "wecomaibot_ws_bot_id": {
+                "description": "BotID для длинного соединения",
+                "hint": "Учетные данные BotID для режима длительного соединения ИИ-бота WeCom."
+            },
+            "wecomaibot_ws_secret": {
+                "description": "Secret для длинного соединения",
+                "hint": "Учетные данные Secret для режима длительного соединения ИИ-бота WeCom."
+            },
+            "wecomaibot_ws_url": {
+                "description": "WebSocket URL для длинного соединения",
+                "hint": "По умолчанию используется wss://openws.work.weixin.qq.com, обычно не требует изменений."
+            },
+            "wecomaibot_heartbeat_interval": {
+                "description": "Интервал сердцебиения соединения",
+                "hint": "Интервал пульса (в секундах) в режиме длительного соединения. Рекомендуется 30 секунд."
+            },
+            "wpp_active_message_poll": {
+                "description": "Включить активный опрос сообщений",
+                "hint": "Включите, только если сообщения WeChat приходят с задержкой."
+            },
+            "wpp_active_message_poll_interval": {
+                "description": "Интервал опроса сообщений",
+                "hint": "По умолчанию 3 сек."
+            },
+            "ws_reverse_host": {
+                "description": "Хост реверсивного WebSocket",
+                "hint": "AstrBot выступает в роли сервера."
+            },
+            "ws_reverse_port": {
+                "description": "Порт реверсивного WebSocket"
+            },
+            "ws_reverse_token": {
+                "description": "Токен реверсивного WebSocket",
+                "hint": "Токен обратного WebSocket (Reverse WebSocket). Если не задан, проверка токена будет отключена."
+            },
+            "msg_push_webhook_url": {
+                "description": "URL вебхука для пуш-сообщений WeCom",
+                "hint": "Рекомендуется для корректной отправки всех типов сообщений."
+            },
+            "only_use_webhook_url_to_send": {
+                "description": "Отправлять ответы только через Webhook",
+                "hint": "Все ответы WeCom AI Bot будут идти через вебхук пуш-сообщений. Поддерживает больше типов контента."
+            },
+            "weixin_oc_base_url": {
+                "description": "URL API iLink",
+                "hint": "Значение по умолчанию: https://ilinkai.weixin.qq.com"
+            },
+            "weixin_oc_bot_type": {
+                "description": "bot_type (параметр входа по QR)",
+                "hint": "Значение по умолчанию: 3"
+            },
+            "weixin_oc_qr_poll_interval": {
+                "description": "Интервал опроса статуса QR (сек)",
+                "hint": "Пауза между запросами статуса QR-кода."
+            },
+            "weixin_oc_long_poll_timeout_ms": {
+                "description": "Таймаут long-poll getUpdates (мс)",
+                "hint": "Параметр таймаута запроса получения сообщений."
+            },
+            "weixin_oc_api_timeout_ms": {
+                "description": "Таймаут HTTP запроса (мс)",
+                "hint": "Общий таймаут для HTTP запросов."
+            },
+            "weixin_oc_token": {
+                "description": "Token после входа (опционально)",
+                "hint": "Автоматически сохраняется после QR логина; для сложных сценариев можно ввести вручную."
+            },
+            "kook_bot_token": {
+                "description": "Токен бота",
+                "type": "string",
+                "hint": "Обязательно. Токен бота, полученный на платформе разработчиков KOOK."
+            },
+            "kook_bot_nickname": {
+                "description": "Никнейм бота",
+                "type": "string",
+                "hint": "Сообщения от пользователя с таким никнеймом будут игнорироваться."
+            },
+            "kook_reconnect_delay": {
+                "description": "Задержка переподключения",
+                "type": "int",
+                "hint": "Задержка перед повторным подключением (в секундах), используется стратегия экспоненциальной задержки (exponential backoff)."
+            },
+            "kook_max_reconnect_delay": {
+                "description": "Макс. задержка переподключения",
+                "type": "int",
+                "hint": "Максимальное значение задержки для повторного подключения (в секундах)."
+            },
+            "kook_max_retry_delay": {
+                "description": "Макс. задержка повтора",
+                "type": "int",
+                "hint": "Максимальное время задержки для повторных попыток (в секундах)."
+            },
+            "kook_heartbeat_interval": {
+                "description": "Интервал сердцебиения",
+                "type": "int",
+                "hint": "Интервал времени для проверки пульса (в секундах)."
+            },
+            "kook_heartbeat_timeout": {
+                "description": "Таймаут сердцебиения",
+                "type": "int",
+                "hint": "Длительность ожидания (таймаут) для проверки пульса (в секундах)."
+            },
+            "kook_max_heartbeat_failures": {
+                "description": "Макс. количество сбоев сердцебиения",
+                "type": "int",
+                "hint": "Максимально допустимое количество сбоев пульса; если лимит превышен, соединение будет разорвано."
+            },
+            "kook_max_consecutive_failures": {
+                "description": "Макс. количество последовательных сбоев",
+                "type": "int",
+                "hint": "Максимально допустимое количество последовательных сбоев; если лимит превышен, повторные попытки будут остановлены."
+            }
+        },
+        "general": {
+            "description": "Общие",
+            "admins_id": {
+                "description": "ID администраторов"
+            },
+            "platform_settings": {
+                "unique_session": {
+                    "description": "Изолировать сессии",
+                    "hint": "У каждого участника группы будет свой независимый контекст."
+                },
+                "friend_message_needs_wake_prefix": {
+                    "description": "Личные сообщения требуют префикс пробуждения"
+                },
+                "reply_prefix": {
+                    "description": "Префикс текста ответа"
+                },
+                "reply_with_mention": {
+                    "description": "Упоминать отправителя в ответе"
+                },
+                "reply_with_quote": {
+                    "description": "Цитировать сообщение отправителя в ответе"
+                },
+                "forward_threshold": {
+                    "description": "Порог количества слов для пересылки"
+                },
+                "empty_mention_waiting": {
+                    "description": "Реагировать на пустое упоминание (@бота)"
+                }
+            },
+            "wake_prefix": {
+                "description": "Префикс пробуждения"
+            },
+            "disable_builtin_commands": {
+                "description": "Отключить встроенные команды",
+                "hint": "Отключает help, provider, model и другие базовые команды."
+            }
+        },
+        "whitelist": {
+            "description": "Белый список",
+            "platform_settings": {
+                "enable_id_white_list": {
+                    "description": "Включить белый список",
+                    "hint": "Бот будет отвечать только в разрешенных сессиях."
+                },
+                "id_whitelist": {
+                    "description": "Список разрешенных ID",
+                    "hint": "Используйте /sid для получения ID."
+                },
+                "id_whitelist_log": {
+                    "description": "Выводить логи",
+                    "hint": "Логировать попытки доступа от пользователей не из белого списка."
+                },
+                "wl_ignore_admin_on_group": {
+                    "description": "Администраторы в группах обходят белый список"
+                },
+                "wl_ignore_admin_on_friend": {
+                    "description": "Администраторы в ЛС обходят белый список"
+                }
+            }
+        },
+        "rate_limit": {
+            "description": "Лимит частоты",
+            "platform_settings": {
+                "rate_limit": {
+                    "time": {
+                        "description": "Время лимита сообщений (сек)"
+                    },
+                    "count": {
+                        "description": "Количество сообщений для лимита"
+                    },
+                    "strategy": {
+                        "description": "Стратегия лимитирования"
+                    }
+                }
+            }
+        },
+        "content_safety": {
+            "description": "Безопасность контента",
+            "content_safety": {
+                "also_use_in_response": {
+                    "description": "Проверять также ответы модели"
+                },
+                "baidu_aip": {
+                    "enable": {
+                        "description": "Использовать Baidu Content Safety",
+                        "hint": "Требуется установка библиотеки baidu-aip."
+                    },
+                    "app_id": {
+                        "description": "App ID"
+                    },
+                    "api_key": {
+                        "description": "API Key"
+                    },
+                    "secret_key": {
+                        "description": "Secret Key"
+                    }
+                },
+                "internal_keywords": {
+                    "enable": {
+                        "description": "Проверка по ключевым словам"
+                    },
+                    "extra_keywords": {
+                        "description": "Дополнительные слова",
+                        "hint": "Список запрещенных слов, поддерживает регулярные выражения."
+                    }
+                }
+            }
+        },
+        "t2i": {
+            "description": "Текст в изображение",
+            "t2i": {
+                "description": "Вывод текста картинкой"
+            },
+            "t2i_word_threshold": {
+                "description": "Порог количества слов для перевода в картинку"
+            }
+        },
+        "others": {
+            "description": "Прочие настройки",
+            "platform_settings": {
+                "ignore_bot_self_message": {
+                    "description": "Игнорировать собственные сообщения бота"
+                },
+                "ignore_at_all": {
+                    "description": "Игнорировать события @all"
+                },
+                "no_permission_reply": {
+                    "description": "Ответ при отсутствии прав у пользователя"
+                }
+            },
+            "platform_specific": {
+                "lark": {
+                    "pre_ack_emoji": {
+                        "enable": {
+                            "description": "[Lark] Пре-эмодзи подтверждения"
+                        },
+                        "emojis": {
+                            "description": "Список эмодзи (Lark Enum Names)",
+                            "hint": "Справка по именам эмодзи Lark."
+                        }
+                    }
+                },
+                "telegram": {
+                    "pre_ack_emoji": {
+                        "enable": {
+                            "description": "[Telegram] Пре-эмодзи подтверждения"
+                        },
+                        "emojis": {
+                            "description": "Список эмодзи (Unicode)",
+                            "hint": "Telegram поддерживает ограниченный набор реакций."
+                        }
+                    }
+                },
+                "discord": {
+                    "pre_ack_emoji": {
+                        "enable": {
+                            "description": "[Discord] Пре-эмодзи подтверждения"
+                        },
+                        "emojis": {
+                            "description": "Список эмодзи (Unicode или имя эмодзи)",
+                            "hint": "Введите Unicode эмодзи, напр. 👍, 🤔, ⏳"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "plugin_group": {
+        "name": "Плагины",
+        "plugin": {
+            "description": "Управление плагинами",
+            "plugin_set": {
+                "description": "Доступные плагины",
+                "hint": "Все невыключенные плагины включены по умолчанию. Если плагин отключен на странице плагинов, выбор здесь не будет иметь силы."
+            }
+        }
+    },
+    "ext_group": {
+        "name": "Расширения (Extensions)",
+        "segmented_reply": {
+            "description": "Сегментированный ответ",
+            "platform_settings": {
+                "segmented_reply": {
+                    "enable": {
+                        "description": "Включить сегментированные ответы"
+                    },
+                    "only_llm_result": {
+                        "description": "Сегментировать только ответы LLM"
+                    },
+                    "interval_method": {
+                        "description": "Метод интервала",
+                        "hint": "random — случайное время, log — расчет на основе длины сообщения: $y=log_{log\\_base}(x)$, где x — количество знаков, y — секунды."
+                    },
+                    "interval": {
+                        "description": "Случайный интервал времени",
+                        "hint": "Формат: минимум,максимум (напр., 1.5,3.5)"
+                    },
+                    "log_base": {
+                        "description": "Основание логарифма",
+                        "hint": "Основание для логарифмических интервалов, по умолчанию 2.6. Диапазон: 1.0-10.0."
+                    },
+                    "words_count_threshold": {
+                        "description": "Порог сегментации (количество знаков)",
+                        "hint": "Порог количества знаков для сегментированного ответа. Сообщения короче этого лимита будут сегментированы, длиннее — отправлены целиком."
+                    },
+                    "split_mode": {
+                        "description": "Режим разделения",
+                        "hint": "Используется для сегментации сообщения. По умолчанию разделяется знаками препинания (точка, вопрос и т.д.). Например, `[。？！]` удалит все точки, вопросительные и восклицательные знаки. re.findall(r'<regex>', text)",
+                        "labels": [
+                            "Регулярное выражение",
+                            "Список слов"
+                        ]
+                    },
+                    "regex": {
+                        "description": "Регулярное выражение для сегментации",
+                        "hint": "Используется для поиска точек разделения с помощью регулярного выражения. Рекомендуется использовать паттерны, соответствующие разделителям."
+                    },
+                    "split_words": {
+                        "description": "Список слов-разделителей",
+                        "hint": "Разделять при обнаружении любого слова из списка"
+                    },
+                    "content_cleanup_rule": {
+                        "description": "Регулярное выражение для фильтрации контента",
+                        "hint": "Удаляет указанный контент из сегментированных частей. Например, `[。?!]` удалит точки, вопросы и восклицательные знаки."
+                    }
+                }
+            }
+        },
+        "ltm": {
+            "description": "Контекстная осведомленность в группах (ранее — Улучшение памяти чата)",
+            "provider_ltm_settings": {
+                "group_icl_enable": {
+                    "description": "Включить осведомленность о контексте группы"
+                },
+                "group_message_max_cnt": {
+                    "description": "Максимальное количество сообщений"
+                },
+                "image_caption": {
+                    "description": "Автоматическое понимание изображений",
+                    "hint": "Требуется настройка модели описания изображений для группового чата."
+                },
+                "image_caption_provider_id": {
+                    "description": "Модель описания изображений для групп",
+                    "hint": "Используется для понимания изображений в контексте группового чата, настраивается отдельно от основной модели."
+                },
+                "active_reply": {
+                    "enable": {
+                        "description": "Активный ответ"
+                    },
+                    "method": {
+                        "description": "Метод активного ответа"
+                    },
+                    "possibility_reply": {
+                        "description": "Вероятность ответа",
+                        "hint": "Значение от 0.0 до 1.0"
+                    },
+                    "whitelist": {
+                        "description": "Белый список для активных ответов",
+                        "hint": "Фильтрация отключена, если список пуст. Используйте /sid для получения ID."
+                    }
+                }
+            }
+        }
+    },
+    "system_group": {
+        "name": "Система",
+        "system": {
+            "description": "Системные настройки",
+            "t2i_strategy": {
+                "description": "Стратегия текст-в-изображение",
+                "hint": "Стратегия текст-в-изображение. `remote` — удаленный рендеринг, `local` — библиотека PIL. Для локального режима положите font.ttf в data/."
+            },
+            "t2i_endpoint": {
+                "description": "Эндпоинт API сервиса текст-в-изображение",
+                "hint": "Использовать API AstrBot, если пусто"
+            },
+            "t2i_template": {
+                "description": "Пользовательский шаблон текст-в-изображение",
+                "hint": "Если включено, можно использовать свои HTML-шаблоны."
+            },
+            "t2i_active_template": {
+                "description": "Текущий активный шаблон рендеринга",
+                "hint": "Значение управляется на странице шаблонов."
+            },
+            "log_level": {
+                "description": "Уровень логирования консоли",
+                "hint": "Уровень логирования в консоли."
+            },
+            "log_file_enable": {
+                "description": "Включить логирование в файл",
+                "hint": "Записывать логи в файл."
+            },
+            "log_file_path": {
+                "description": "Путь к файлу логов",
+                "hint": "Пути относительно data/, напр. logs/astrbot.log."
+            },
+            "log_file_max_mb": {
+                "description": "Макс. размер файла логов (МБ)",
+                "hint": "Ротация при достижении размера. По умолчанию 20МБ."
+            },
+            "temp_dir_max_size": {
+                "description": "Лимит размера временной директории (МБ)",
+                "hint": "Лимит временной папки (МБ). Система проверяет каждые 10 минут и удаляет старое при переполнении."
+            },
+            "trace_log_enable": {
+                "description": "Включить логирование трассировки",
+                "hint": "Записывать трассировку в отдельный файл."
+            },
+            "trace_log_path": {
+                "description": "Путь к файлу логов трассировки",
+                "hint": "Относительные пути определяются относительно директории данных, например, logs/astrbot.trace.log; абсолютные пути также поддерживаются."
+            },
+            "trace_log_max_mb": {
+                "description": "Макс. размер файла логов трассировки (МБ)",
+                "hint": "Ротация при достижении размера. По умолчанию 20МБ."
+            },
+            "pip_install_arg": {
+                "description": "Дополнительные аргументы установки pip",
+                "hint": "При установке зависимостей можно указать аргументы pip, напр. --break-system-package."
+            },
+            "pypi_index_url": {
+                "description": "URL репозитория PyPI",
+                "hint": "URL репозитория PyPI. По умолчанию: [https://mirrors.aliyun.com/pypi/simple/](https://mirrors.aliyun.com/pypi/simple/)"
+            },
+            "callback_api_base": {
+                "description": "Внешний адрес для Callback API",
+                "hint": "Используется для сервисов, требующих обратных выливов (например, в песочнице)."
+            },
+            "dashboard": {
+                "ssl": {
+                    "enable": {
+                        "description": "Включить HTTPS для WebUI",
+                        "hint": "Если включено, панель управления работает по HTTPS."
+                    },
+                    "cert_file": {
+                        "description": "Путь к файлу сертификата SSL",
+                        "hint": "Путь к файлу сертификата (PEM)."
+                    },
+                    "key_file": {
+                        "description": "Путь к ключу SSL",
+                        "hint": "Путь к приватному ключу (PEM)."
+                    },
+                    "ca_certs": {
+                        "description": "Путь к сертификату CA SSL",
+                        "hint": "Опционально. Путь к сертификату CA."
+                    }
+                }
+            },
+            "timezone": {
+                "description": "Часовой пояс",
+                "hint": "Например, Europe/Moscow."
+            },
+            "http_proxy": {
+                "description": "HTTP прокси",
+                "hint": "Формат: http://user:pass@ip:port"
+            },
+            "no_proxy": {
+                "description": "Список исключений прокси"
+            }
+        }
+    },
+    "provider_group": {
+        "provider": {
+            "genie_onnx_model_dir": {
+                "description": "Директория моделей ONNX",
+                "hint": "Путь к директории с файлами моделей ONNX"
+            },
+            "genie_language": {
+                "description": "Язык"
+            },
+            "xai_native_search": {
+                "description": "Включить нативный поиск",
+                "hint": "Если включено, использует Live Search от xAI для веб-запросов (тарифицируется отдельно). Применимо только к провайдерам xAI."
+            },
+            "rerank_api_base": {
+                "description": "Base URL API модели Rerank",
+                "hint": "Полный URL запроса формируется путём добавления суффикса к Base URL (по умолчанию /v1/rerank)."
+            },
+            "rerank_api_suffix": {
+                "description": "Суффикс пути API",
+                "hint": "Суффикс пути, добавляемый к base_url, например /v1/rerank. Оставьте пустым, чтобы не добавлять."
+            },
+            "rerank_api_key": {
+                "description": "API Key",
+                "hint": "Оставьте пустым, если API key не требуется."
+            },
+            "rerank_model": {
+                "description": "Имя модели Rerank"
+            },
+            "return_documents": {
+                "description": "Возвращать исходные документы в результатах Rerank",
+                "hint": "По умолчанию false для снижения сетевой нагрузки."
+            },
+            "instruct": {
+                "description": "Описание задачи для Rerank",
+                "hint": "Эффективно только для моделей qwen3-rerank. Рекомендуется писать на английском."
+            },
+            "nvidia_rerank_api_base": {
+                "description": "Базовый URL API"
+            },
+            "nvidia_rerank_api_key": {
+                "description": "API-ключ"
+            },
+            "nvidia_rerank_model": {
+                "description": "Название модели Rerank",
+                "hint": "Укажите название модели в соответствии с документацией NVIDIA."
+            },
+            "nvidia_rerank_model_endpoint": {
+                "description": "Пользовательский endpoint модели",
+                "hint": "Пользовательский суффикс URL endpoint, по умолчанию /reranking."
+            },
+            "nvidia_rerank_truncate": {
+                "description": "Стратегия усечения текста",
+                "hint": "Определяет, следует ли усекать входной текст, если он слишком длинный и не помещается в максимальную длину контекста модели."
+            },
+            "launch_model_if_not_running": {
+                "description": "Автозапуск модели",
+                "hint": "Если модель не запущена в Xinference, попытаться запустить её автоматически. Рекомендуется отключать в продакшене."
+            },
+            "modalities": {
+                "description": "Возможности модели",
+                "hint": "Поддерживаемые модальности. Если модель не поддерживает изображения, снимите галочку с 'Image'.",
+                "labels": [
+                    "Текст",
+                    "Изображение",
+                    "Аудио",
+                    "Инструменты"
+                ]
+            },
+            "custom_headers": {
+                "description": "Заголовки запроса",
+                "hint": "Пары ключ/значение будут добавлены в заголовки запроса (default_headers). Значения должны быть строками."
+            },
+            "custom_extra_body": {
+                "description": "Параметры тела запроса",
+                "hint": "Добавление дополнительных параметров в запрос (temperature, top_p и др.).",
+                "template_schema": {
+                    "temperature": {
+                        "description": "Температура",
+                        "hint": "Контролирует случайность, обычно от 0 до 2. Чем выше, тем более случайные ответы.",
+                        "name": "Температура"
+                    },
+                    "top_p": {
+                        "description": "Top-p семплирование",
+                        "hint": "Параметр ядерного семплирования (Nucleus sampling), обычно 0-1.",
+                        "name": "Top-p"
+                    },
+                    "max_tokens": {
+                        "description": "Макс. токенов",
+                        "hint": "Максимальное количество генерируемых токенов.",
+                        "name": "Макс. токены"
+                    }
+                }
+            },
+            "gpt_weights_path": {
+                "description": "Путь к файлу модели GPT",
+                "hint": "Файл .ckpt. Используйте абсолютный путь без кавычек. Оставьте пустым для использования встроенной модели GPT_SoVITS."
+            },
+            "sovits_weights_path": {
+                "description": "Путь к файлу модели SoVITS",
+                "hint": "Файл .pth. Используйте абсолютный путь без кавычек. Оставьте пустым для использования встроенной модели GPT_SoVITS."
+            },
+            "gsv_default_parms": {
+                "description": "Параметры GPT_SoVITS по умолчанию",
+                "hint": "Путь к эталонному аудио и текст обязательны; остальные параметры опциональны.",
+                "gsv_ref_audio_path": {
+                    "description": "Путь к эталонному аудио",
+                    "hint": "Обязательно! Используйте абсолютный путь без кавычек."
+                },
+                "gsv_prompt_text": {
+                    "description": "Текст эталонного аудио",
+                    "hint": "Обязательно! Укажите содержание эталонного аудио."
+                },
+                "gsv_prompt_lang": {
+                    "description": "Язык текста эталонного аудио",
+                    "hint": "Язык текста эталонного аудио; по умолчанию китайский."
+                },
+                "gsv_aux_ref_audio_paths": {
+                    "description": "Пути к вспомогательным эталонным аудио",
+                    "hint": "Вспомогательные файлы эталонного аудио; опционально."
+                },
+                "gsv_text_lang": {
+                    "description": "Язык текста",
+                    "hint": "По умолчанию китайский."
+                },
+                "gsv_top_k": {
+                    "description": "Разнообразие речи",
+                    "hint": ""
+                },
+                "gsv_top_p": {
+                    "description": "Порог ядерного семплирования",
+                    "hint": ""
+                },
+                "gsv_temperature": {
+                    "description": "Случайность речи",
+                    "hint": ""
+                },
+                "gsv_text_split_method": {
+                    "description": "Метод разделения текста",
+                    "hint": "Варианты: `cut0` без разделения, `cut1` каждые 4 предложения, `cut2` каждые 50 знаков, `cut3` по китайской точке, `cut4` по английской точке, `cut5` по знакам препинания."
+                },
+                "gsv_batch_size": {
+                    "description": "Размер пакета (Batch size)",
+                    "hint": ""
+                },
+                "gsv_batch_threshold": {
+                    "description": "Порог пакета (Batch threshold)",
+                    "hint": "API Key"
+                },
+                "gsv_split_bucket": {
+                    "description": "Разделять текст на корзины для параллельной обработки",
+                    "hint": "API Base URL"
+                },
+                "gsv_speed_factor": {
+                    "description": "Скорость воспроизведения речи",
+                    "hint": "1 — исходная скорость."
+                },
+                "gsv_fragment_interval": {
+                    "description": "Интервал между сегментами речи",
+                    "hint": "Скорость речи для синтеза, диапазон [0.5, 2], по умолчанию 1.0. Большее значение — быстрее."
+                },
+                "gsv_streaming_mode": {
+                    "description": "Включить потоковый режим",
+                    "hint": "голос"
+                },
+                "gsv_seed": {
+                    "description": "Случайное число (Seed)",
+                    "hint": "Для воспроизводимости результатов."
+                },
+                "gsv_parallel_infer": {
+                    "description": "Параллельный вывод (Inference)",
+                    "hint": "reference_id"
+                },
+                "gsv_repetition_penalty": {
+                    "description": "Штраф за повторение",
+                    "hint": "API Key"
+                },
+                "gsv_media_type": {
+                    "description": "Тип медиафайла",
+                    "hint": "Рекомендуется: wav"
+                }
+            },
+            "embedding_dimensions": {
+                "description": "Размерность эмбеддингов",
+                "hint": "Размерность векторов эмбеддингов. Зависит от модели. Должно быть указано верно для работы векторной базы данных."
+            },
+            "embedding_model": {
+                "description": "Модель эмбеддингов",
+                "hint": "Имя модели эмбеддингов."
+            },
+            "embedding_api_key": {
+                "description": "API Base URL"
+            },
+            "embedding_api_base": {
+                "description": "Адрес прокси-сервера"
+            },
+            "openai_embedding": {
+                "hint": "Если тест не проходит, попробуйте добавить /v1 в конец embedding_api_base для совместимости с некоторыми версиями OpenAI API."
+            },
+            "gemini_embedding": {
+                "hint": "Gemini Embedding не требует ручного добавления /v1beta."
+            },
+            "volcengine_cluster": {
+                "description": "Кластер Volcengine",
+                "hint": "Для моделей клонирования голоса выберите volcano_icl или volcano_icl_concurr; по умолчанию volcano_tts."
+            },
+            "volcengine_voice_type": {
+                "description": "Голос Volcengine",
+                "hint": "Введите ID голоса (Voice_type)."
+            },
+            "volcengine_speed_ratio": {
+                "description": "Скорость речи",
+                "hint": "Скорость речи, от 0.2 до 3.0, по умолчанию 1.0."
+            },
+            "volcengine_volume_ratio": {
+                "description": "Громкость",
+                "hint": "Громкость, от 0.0 до 2.0, по умолчанию 1.0."
+            },
+            "azure_tts_voice": {
+                "description": "Стиль голоса",
+                "hint": "Системное имя голоса"
+            },
+            "azure_tts_style": {
+                "description": "Стиль",
+                "hint": "Стиль речи. Может выражать эмоции (счастье, сочувствие, спокойствие)."
+            },
+            "azure_tts_role": {
+                "description": "Роль (опционально)",
+                "hint": "Ролевая модель. Голос может имитировать разные возрасты и пол без смены имени голоса. Если роль не поддерживается, атрибут игнорируется."
+            },
+            "azure_tts_rate": {
+                "description": "Скорость речи",
+                "hint": "Контролирует скорость речи. От 0.5x до 2x от оригинала."
+            },
+            "azure_tts_volume": {
+                "description": "Громкость речи",
+                "hint": "Контролирует громкость. От 0.0 до 100.0. По умолчанию 100.0."
+            },
+            "azure_tts_region": {
+                "description": "Регион API",
+                "hint": "Регион обработки данных Azure TTS."
+            },
+            "azure_tts_subscription_key": {
+                "description": "Ключ подписки (Subscription Key)",
+                "hint": "Ключ подписки Azure TTS (не токен)."
+            },
+            "dashscope_tts_voice": {
+                "description": "Голос"
+            },
+            "gm_resp_image_modal": {
+                "description": "Включить визуальную модальность",
+                "hint": "Если включено, ответы могут содержать изображения. Требует поддержки моделью. Совет: для генерации изображений отключите 'Распознавание участников'."
+            },
+            "gm_native_search": {
+                "description": "Включить нативный поиск",
+                "hint": "Если включено, инструменты функций отключаются. Проверьте лимиты бесплатной квоты."
+            },
+            "gm_native_coderunner": {
+                "description": "Включить нативный исполнитель кода",
+                "hint": "Если включено, инструменты функций отключаются."
+            },
+            "gm_url_context": {
+                "description": "Включить контекст URL",
+                "hint": "Если включено, инструменты функций отключаются."
+            },
+            "gm_safety_settings": {
+                "description": "Фильтры безопасности",
+                "hint": "Настройка уровня фильтрации контента. См. документацию Gemini API.",
+                "harassment": {
+                    "description": "Харрасмент",
+                    "hint": "Негативные или вредные комментарии"
+                },
+                "hate_speech": {
+                    "description": "Язык вражды",
+                    "hint": "Грубый, неуважительный или нецензурный контент"
+                },
+                "sexually_explicit": {
+                    "description": "Сексуально откровенный контент",
+                    "hint": "Упоминания сексуальных актов или другой непристойный контент"
+                },
+                "dangerous_content": {
+                    "description": "Опасный контент",
+                    "hint": "Контент, поощряющий или способствующий вредному поведению"
+                }
+            },
+            "gm_thinking_config": {
+                "description": "Настройки рассуждения (Thinking)",
+                "budget": {
+                    "description": "Бюджет рассуждения",
+                    "hint": "Указывает модели количество токенов рассуждения. См. документацию Google."
+                },
+                "level": {
+                    "description": "Уровень рассуждения",
+                    "hint": "Рекомендуется для моделей Gemini 3+. Позволяет контролировать процесс рассуждения."
+                }
+            },
+            "anth_thinking_config": {
+                "description": "Настройки рассуждения (Thinking)",
+                "type": {
+                    "description": "Тип рассуждения",
+                    "hint": "Установите 'adaptive' для Opus 4.6+ / Sonnet 4.6+ (рекомендуется)."
+                },
+                "budget": {
+                    "description": "Бюджет рассуждения",
+                    "hint": "Параметр budget_tokens (минимум 1024). Устарело для моделей 4.6+."
+                },
+                "effort": {
+                    "description": "Уровень усилий",
+                    "hint": "Контролирует глубину рассуждений в режиме 'adaptive'."
+                }
+            },
+            "minimax-group-id": {
+                "description": "Группа пользователей",
+                "hint": "Доступно в Управлении аккаунтом -> Основная информация."
+            },
+            "minimax-langboost": {
+                "description": "Целевой язык/диалект",
+                "hint": "Улучшает распознавание и качество речи для определенных языков/диалектов."
+            },
+            "minimax-voice-speed": {
+                "description": "Скорость речи",
+                "hint": "API Key"
+            },
+            "minimax-voice-vol": {
+                "description": "Громкость",
+                "hint": "Громкость синтеза от 0 до 10. Чем выше, тем громче."
+            },
+            "minimax-voice-pitch": {
+                "description": "Высота голоса",
+                "hint": "Высота голоса от -12 до 12."
+            },
+            "minimax-is-timber-weight": {
+                "description": "Включить смешанные голоса",
+                "hint": "Смешивание до четырех голосов с весами. Если включено, настройки одиночного голоса игнорируются."
+            },
+            "minimax-timber-weight": {
+                "description": "Смешанные голоса",
+                "hint": "Список голосов и их весов (JSON-строка). См. документацию API."
+            },
+            "minimax-voice-id": {
+                "description": "Одиночный голос",
+                "hint": "ID одиночного голоса; см. официальную документацию."
+            },
+            "minimax-voice-emotion": {
+                "description": "Эмоция",
+                "hint": "Эмоция речи. 'auto' выбирает эмоцию на основе текста."
+            },
+            "minimax-voice-latex": {
+                "description": "Читать формулы LaTeX",
+                "hint": "Чтение формул LaTeX (требуется правильное форматирование)."
+            },
+            "minimax-voice-english-normalization": {
+                "description": "Нормализация английского текста",
+                "hint": "Улучшает чтение чисел, но немного увеличивает задержку."
+            },
+            "rag_options": {
+                "description": "Опции RAG",
+                "hint": "Настройки извлечения из базы знаний. В приложениях Bailian отключает многоэтапные диалоги.",
+                "pipeline_ids": {
+                    "description": "Список ID баз знаний",
+                    "hint": "Извлечение из указанных баз данных Bailian."
+                },
+                "file_ids": {
+                    "description": "ID неструктурированных документов",
+                    "hint": "Извлечение из указанных документов Bailian."
+                },
+                "output_reference": {
+                    "description": "Выводить ссылки на источники",
+                    "hint": "Добавлять источники в конец ответа. По умолчанию False."
+                }
+            },
+            "sensevoice_hint": {
+                "description": "Развертывание SenseVoice",
+                "hint": "Перед включением установите необходимые библиотеки: funasr, torch и др. Также требуется ffmpeg."
+            },
+            "is_emotion": {
+                "description": "Распознавание эмоций",
+                "hint": "Включить распознавание эмоций (радость, грусть, гнев и т.д.)."
+            },
+            "stt_model": {
+                "description": "Имя модели",
+                "hint": "Имя модели на ModelScope."
+            },
+            "variables": {
+                "description": "Фиксированные переменные воркфлоу",
+                "hint": "Входные переменные для воркфлоу. Можно также задавать через /set в чате."
+            },
+            "dashscope_app_type": {
+                "description": "Тип приложения",
+                "hint": "Тип приложения Bailian."
+            },
+            "timeout": {
+                "description": "Таймаут (сек)",
+                "hint": "Максимальное время ожидания ответа."
+            },
+            "mimo-stt-system-prompt": {
+                "description": "Системный промпт",
+                "hint": "System prompt, который управляет поведением MiMo STT при распознавании."
+            },
+            "mimo-stt-user-prompt": {
+                "description": "Пользовательский промпт",
+                "hint": "Дополнительный user prompt для MiMo STT, который помогает задать формат результата."
+            },
+            "openai-tts-voice": {
+                "description": "API Base URL",
+                "hint": "Голоса OpenAI TTS: alloy, echo и др."
+            },
+            "mimo-tts-voice": {
+                "description": "Голос",
+                "hint": "Имя голоса MiMo TTS. Поддерживаются значения 'mimo_default', 'default_en' и 'default_zh'."
+            },
+            "mimo-tts-format": {
+                "description": "Формат вывода",
+                "hint": "Формат аудио, создаваемого MiMo TTS. Поддерживаются 'wav', 'mp3' и 'pcm'."
+            },
+            "mimo-tts-style-prompt": {
+                "description": "Подсказка стиля",
+                "hint": "Добавляется в начало синтезируемого текста в виде тега <style>...</style> и управляет скоростью, эмоцией, ролью или манерой речи. Необязательно."
+            },
+            "mimo-tts-dialect": {
+                "description": "Диалект",
+                "hint": "Объединяется с подсказкой стиля внутри начального тега <style>...</style>, например северо-восточный, сычуаньский, хэнаньский или кантонский вариант речи. Необязательно."
+            },
+            "mimo-tts-seed-text": {
+                "description": "Начальный текст",
+                "hint": "Отправляется как необязательное user-сообщение для настройки тона и манеры речи. Не добавляется к самому тексту синтеза."
+            },
+            "fishaudio-tts-character": {
+                "description": "Персонаж",
+                "hint": "Персонаж Fishaudio. По умолчанию Klee."
+            },
+            "fishaudio-tts-reference-id": {
+                "description": "Coze API Key",
+                "hint": "ID модели Fishaudio; используется вместо имени роли."
+            },
+            "whisper_hint": {
+                "description": "Заметки по локальному развертыванию Whisper",
+                "hint": "Перед включением установите openai-whisper и ffmpeg."
+            },
+            "whisper_device": {
+                "description": "Устройство инференса",
+                "hint": "Устройство для инференса Whisper. На Apple Silicon можно выбрать mps; в остальных средах рекомендуется cpu. Если выбран mps, но он недоступен, AstrBot автоматически переключится на cpu."
+            },
+            "id": {
+                "description": "ID провайдера"
+            },
+            "type": {
+                "description": "Тип провайдера"
+            },
+            "provider_type": {
+                "description": "Тип возможностей провайдера"
+            },
+            "enable": {
+                "description": "Включить"
+            },
+            "key": {
+                "description": "Ключ Coze API для доступа к сервисам Coze."
+            },
+            "api_base": {
+                "description": "Bot ID"
+            },
+            "proxy": {
+                "description": "API Base URL",
+                "hint": "Индивидуальный прокси для этого провайдера."
+            },
+            "model": {
+                "description": "Имя модели",
+                "hint": "Имя модели, напр. gpt-4o-mini."
+            },
+            "max_context_tokens": {
+                "description": "Размер окна контекста модели",
+                "hint": "Максимальное количество токенов контекста. Если 0 — автозаполнение."
+            },
+            "dify_api_key": {
+                "description": "Базовый URL для Coze API. По умолчанию: https://api.coze.cn",
+                "hint": "API-ключ Dify (обязательно)."
+            },
+            "dify_api_base": {
+                "description": "API Base URL",
+                "hint": "Base URL API Dify. По умолчанию: https://api.dify.ai/v1"
+            },
+            "dify_api_type": {
+                "description": "Тип приложения Dify",
+                "hint": "Тип API Dify (chat, agent, workflow и т.д.)."
+            },
+            "dify_workflow_output_key": {
+                "description": "Имя выходной переменной воркфлоу Dify",
+                "hint": "Имя выходной переменной для типа 'workflow'."
+            },
+            "dify_query_input_key": {
+                "description": "Имя переменной ввода промпта",
+                "hint": "Имя переменной для текста сообщения."
+            },
+            "coze_api_key": {
+                "description": "Coze API Key",
+                "hint": "Coze API key for accessing Coze services."
+            },
+            "bot_id": {
+                "description": "Bot ID",
+                "hint": "Bot ID Coze, полученный на платформе."
+            },
+            "coze_api_base": {
+                "description": "API Base URL",
+                "hint": "Base URL for the Coze API. Default: https://api.coze.cn"
+            },
+            "deerflow_api_base": {
+                "description": "API Base URL",
+                "hint": "URL шлюза DeerFlow. По умолчанию: http://127.0.0.1:2026"
+            },
+            "deerflow_api_key": {
+                "description": "API-ключ DeerFlow",
+                "hint": "Опционально. Заполните, если шлюз защищен Bearer-авторизацией."
+            },
+            "deerflow_auth_header": {
+                "description": "Заголовок Authorization",
+                "hint": "Опционально. Свой заголовок Authorization; приоритетнее ключа."
+            },
+            "deerflow_assistant_id": {
+                "description": "ID ассистента",
+                "hint": "Assistant ID для LangGraph. По умолчанию lead_agent."
+            },
+            "deerflow_model_name": {
+                "description": "Переопределение имени модели",
+                "hint": "Опционально. Переопределяет модель DeerFlow."
+            },
+            "deerflow_thinking_enabled": {
+                "description": "Включить режим рассуждения (Thinking)"
+            },
+            "deerflow_plan_mode": {
+                "description": "Включить режим планирования (Plan)",
+                "hint": "Управляет is_plan_mode в DeerFlow."
+            },
+            "deerflow_subagent_enabled": {
+                "description": "Включить субагента",
+                "hint": "Управляет subagent_enabled в DeerFlow."
+            },
+            "deerflow_max_concurrent_subagents": {
+                "description": "Макс. параллельных субагентов",
+                "hint": "Максимум параллельных субагентов. По умолчанию 3."
+            },
+            "deerflow_recursion_limit": {
+                "description": "Лимит рекурсии",
+                "hint": "Лимит рекурсии для LangGraph."
+            },
+            "auto_save_history": {
+                "description": "История диалогов управляется Coze",
+                "hint": "Если включено, Coze управляет историей. Локальный контекст AstrBot будет работать в режиме чтения."
+            }
+        }
+    },
+    "help": {
+        "documentation": "Официальная документация",
+        "support": "Группа поддержки",
+        "helpText": "Непонятно, как настроить? См. {documentation} или {support}.",
+        "helpPrefix": "Непонятно, как настроить? См.",
+        "helpMiddle": "или",
+        "helpSuffix": "."
+    }
+}

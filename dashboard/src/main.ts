@@ -10,20 +10,46 @@ import VueApexCharts from 'vue3-apexcharts';
 
 import print from 'vue3-print-nb';
 import { loader } from '@guolao/vue-monaco-editor'
+import * as monaco from 'monaco-editor';
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
+import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
+import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
+import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import axios from 'axios';
+import { waitForRouterReadyInBackground } from './utils/routerReadiness.mjs';
+
+(self as any).MonacoEnvironment = {
+  getWorker(_: string, label: string) {
+    if (label === 'json') {
+      return new jsonWorker();
+    }
+    if (label === 'css' || label === 'scss' || label === 'less') {
+      return new cssWorker();
+    }
+    if (label === 'html' || label === 'handlebars' || label === 'razor') {
+      return new htmlWorker();
+    }
+    if (label === 'typescript' || label === 'javascript') {
+      return new tsWorker();
+    }
+    return new editorWorker();
+  },
+};
 
 // 初始化新的i18n系统，等待完成后再挂载应用
-setupI18n().then(() => {
+setupI18n().then(async () => {
   console.log('🌍 新i18n系统初始化完成');
   
   const app = createApp(App);
-  app.use(router);
   const pinia = createPinia();
   app.use(pinia);
+  app.use(router);
   app.use(print);
   app.use(VueApexCharts);
   app.use(vuetify);
   app.use(confirmPlugin);
+  await router.isReady();
   app.mount('#app');
   
   // 挂载后同步 Vuetify 主题
@@ -49,14 +75,15 @@ setupI18n().then(() => {
   
   // 即使i18n初始化失败，也要挂载应用（使用回退机制）
   const app = createApp(App);
-  app.use(router);
   const pinia = createPinia();
   app.use(pinia);
+  app.use(router);
   app.use(print);
   app.use(VueApexCharts);
   app.use(vuetify);
   app.use(confirmPlugin);
   app.mount('#app');
+  waitForRouterReadyInBackground(router);
   
   // 挂载后同步 Vuetify 主题
   import('./stores/customizer').then(({ useCustomizerStore }) => {
@@ -109,8 +136,4 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
   return _origFetch(input, { ...init, headers });
 };
 
-loader.config({
-  paths: {
-    vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.54.0/min/vs',
-  },
-})
+loader.config({ monaco })

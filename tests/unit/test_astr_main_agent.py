@@ -39,7 +39,10 @@ def mock_context():
     ctx.persona_manager.resolve_selected_persona = AsyncMock(
         return_value=(None, None, None, False)
     )
-    ctx.get_llm_tool_manager.return_value = MagicMock()
+    ctx.persona_manager.get_persona_v3_by_id = MagicMock(return_value=None)
+    tool_mgr = MagicMock()
+    tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
+    ctx.get_llm_tool_manager.return_value = tool_mgr
     ctx.subagent_orchestrator = None
     return ctx
 
@@ -367,6 +370,52 @@ class TestApplyKb:
         assert req.func_tool is not None
 
 
+class TestBuiltinToolInjection:
+    """Tests for builtin tool injection paths."""
+
+    @pytest.mark.asyncio
+    async def test_apply_web_search_tools_uses_builtin_tool_manager(
+        self, mock_event, mock_context
+    ):
+        """Test web search tool injection through the builtin tool manager."""
+        module = ama
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {
+                "web_search": True,
+                "websearch_provider": "baidu_ai_search",
+            }
+        }
+        builtin_tool = MagicMock(spec=FunctionTool)
+        builtin_tool.name = "web_search_baidu"
+        tool_mgr = MagicMock()
+        tool_mgr.get_builtin_tool.return_value = builtin_tool
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        await module._apply_web_search_tools(mock_event, req, mock_context)
+
+        tool_mgr.get_builtin_tool.assert_called_once_with(module.BaiduWebSearchTool)
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("web_search_baidu") is builtin_tool
+
+    def test_proactive_cron_job_tools_uses_builtin_tool_manager(self, mock_context):
+        """Test cron tool injection through the builtin tool manager."""
+        module = ama
+        req = ProviderRequest()
+        tool_mgr = MagicMock()
+
+        future_task_tool = MagicMock(spec=FunctionTool)
+        future_task_tool.name = "future_task"
+        tool_mgr.get_builtin_tool.return_value = future_task_tool
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        module._proactive_cron_job_tools(req, mock_context)
+
+        tool_mgr.get_builtin_tool.assert_called_once_with(module.FutureTaskTool)
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("future_task") is future_task_tool
+
+
 class TestApplyFileExtract:
     """Tests for _apply_file_extract function."""
 
@@ -538,6 +587,64 @@ class TestEnsurePersonaAndSkills:
 
         assert req.func_tool is not None
 
+    @pytest.mark.asyncio
+    async def test_subagent_dedupe_uses_default_persona_tools(
+        self, mock_event, mock_context
+    ):
+        """Test dedupe uses resolved default persona tools in subagent mode."""
+        module = ama
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+        mock_context.persona_manager.get_persona_v3_by_id = MagicMock(
+            return_value={"name": "default", "tools": ["tool_a"]}
+        )
+
+        tool_a = FunctionTool(
+            name="tool_a",
+            parameters={"type": "object", "properties": {}},
+            description="tool a",
+        )
+        tool_b = FunctionTool(
+            name="tool_b",
+            parameters={"type": "object", "properties": {}},
+            description="tool b",
+        )
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.func_list = [tool_a, tool_b]
+        tmgr.get_full_tool_set.return_value = ToolSet([tool_a, tool_b])
+        tmgr.get_func.side_effect = lambda name: {
+            "tool_a": tool_a,
+            "tool_b": tool_b,
+        }.get(name)
+
+        handoff = MagicMock()
+        handoff.name = "transfer_to_planner"
+        mock_context.subagent_orchestrator = MagicMock(handoffs=[handoff])
+        mock_context.get_config.return_value = {
+            "subagent_orchestrator": {
+                "main_enable": True,
+                "remove_main_duplicate_tools": True,
+                "agents": [
+                    {
+                        "name": "planner",
+                        "enabled": True,
+                        "persona_id": "default",
+                    }
+                ],
+            }
+        }
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert req.func_tool is not None
+        assert "transfer_to_planner" in req.func_tool.names()
+        assert "tool_a" not in req.func_tool.names()
+        assert "tool_b" in req.func_tool.names()
+
 
 class TestDecorateLlmRequest:
     """Tests for _decorate_llm_request function."""
@@ -617,7 +724,7 @@ class TestModalitiesFix:
 
         module._modalities_fix(mock_provider, req)
 
-        assert "[图片]" in req.prompt
+        assert "[Image]" in req.prompt
         assert req.image_urls == []
 
     def test_modalities_fix_tool_not_supported(self, mock_provider):
@@ -803,6 +910,28 @@ class TestPluginToolFix:
             module._plugin_tool_fix(mock_event, req)
 
         assert "mcp_tool" in req.func_tool.names()
+
+    def test_plugin_tool_fix_preserves_tools_without_plugin_origin(self, mock_event):
+        """Tools without handler_module_path should not be filtered out."""
+        module = ama
+        handoff_tool = FunctionTool(
+            name="transfer_to_demo_agent",
+            description="Delegate to demo agent",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path=None,
+            active=True,
+        )
+
+        tool_set = ToolSet()
+        tool_set.add_tool(handoff_tool)
+
+        req = ProviderRequest(func_tool=tool_set)
+        mock_event.plugins_name = ["other_plugin"]
+
+        with patch("astrbot.core.astr_main_agent.star_map"):
+            module._plugin_tool_fix(mock_event, req)
+
+        assert "transfer_to_demo_agent" in req.func_tool.names()
 
 
 class TestBuildMainAgent:
@@ -1352,7 +1481,7 @@ class TestApplyLlmSafetyMode:
 class TestApplySandboxTools:
     """Tests for _apply_sandbox_tools function."""
 
-    def test_apply_sandbox_tools_creates_toolset_if_none(self):
+    def test_apply_sandbox_tools_creates_toolset_if_none(self, mock_context):
         """Test that ToolSet is created when func_tool is None."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1367,7 +1496,7 @@ class TestApplySandboxTools:
         assert req.func_tool is not None
         assert isinstance(req.func_tool, ToolSet)
 
-    def test_apply_sandbox_tools_adds_required_tools(self):
+    def test_apply_sandbox_tools_adds_required_tools(self, mock_context):
         """Test that all required sandbox tools are added."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1385,7 +1514,7 @@ class TestApplySandboxTools:
         assert "astrbot_upload_file" in tool_names
         assert "astrbot_download_file" in tool_names
 
-    def test_apply_sandbox_tools_adds_sandbox_prompt(self):
+    def test_apply_sandbox_tools_adds_sandbox_prompt(self, mock_context):
         """Test that sandbox mode prompt is added to system_prompt."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1399,7 +1528,7 @@ class TestApplySandboxTools:
 
         assert "sandboxed environment" in req.system_prompt
 
-    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch):
+    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
         """Test sandbox tools with shipyard booter configuration."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1421,7 +1550,7 @@ class TestApplySandboxTools:
         assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
         assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
 
-    def test_apply_sandbox_tools_shipyard_missing_endpoint(self):
+    def test_apply_sandbox_tools_shipyard_missing_endpoint(self, mock_context):
         """Test that shipyard config is skipped when endpoint is missing."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1444,7 +1573,7 @@ class TestApplySandboxTools:
             in mock_logger.error.call_args[0][0]
         )
 
-    def test_apply_sandbox_tools_shipyard_missing_access_token(self):
+    def test_apply_sandbox_tools_shipyard_missing_access_token(self, mock_context):
         """Test that shipyard config is skipped when access token is missing."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1463,7 +1592,7 @@ class TestApplySandboxTools:
 
         mock_logger.error.assert_called_once()
 
-    def test_apply_sandbox_tools_preserves_existing_toolset(self):
+    def test_apply_sandbox_tools_preserves_existing_toolset(self, mock_context):
         """Test that existing tools are preserved when adding sandbox tools."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1482,7 +1611,7 @@ class TestApplySandboxTools:
         assert "existing_tool" in req.func_tool.names()
         assert "astrbot_execute_shell" in req.func_tool.names()
 
-    def test_apply_sandbox_tools_appends_to_existing_system_prompt(self):
+    def test_apply_sandbox_tools_appends_to_existing_system_prompt(self, mock_context):
         """Test that sandbox prompt is appended to existing system prompt."""
         module = ama
         config = module.MainAgentBuildConfig(
@@ -1497,7 +1626,7 @@ class TestApplySandboxTools:
         assert req.system_prompt.startswith("Base prompt")
         assert "sandboxed environment" in req.system_prompt
 
-    def test_apply_sandbox_tools_with_none_system_prompt(self):
+    def test_apply_sandbox_tools_with_none_system_prompt(self, mock_context):
         """Test that sandbox prompt is applied when system_prompt is None."""
         module = ama
         config = module.MainAgentBuildConfig(

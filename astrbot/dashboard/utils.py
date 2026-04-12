@@ -1,11 +1,14 @@
 import base64
 import traceback
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
-from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+if TYPE_CHECKING:
+    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 async def generate_tsne_visualization(

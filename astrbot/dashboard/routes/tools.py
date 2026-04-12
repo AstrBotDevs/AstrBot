@@ -6,6 +6,7 @@ from astrbot.core import logger
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
+from astrbot.core.tools.registry import get_builtin_tool_config_statuses
 
 from .route import Response, Route, RouteContext
 
@@ -428,10 +429,43 @@ class ToolsRoute(Route):
     async def get_tool_list(self):
         """Get all registered tools."""
         try:
-            tools = self.tool_mgr.func_list
+            tools = list(self.tool_mgr.func_list)
+            existing_names = {tool.name for tool in tools}
+            for tool in self.tool_mgr.iter_builtin_tools():
+                if tool.name not in existing_names:
+                    tools.append(tool)
+
+            conf_list = self.core_lifecycle.astrbot_config_mgr.get_conf_list()
+            conf_name_map = {conf["id"]: conf["name"] for conf in conf_list}
+            config_entries = []
+            for conf_id, conf in self.core_lifecycle.astrbot_config_mgr.confs.items():
+                config_entries.append(
+                    {
+                        "conf_id": conf_id,
+                        "conf_name": conf_name_map.get(conf_id, conf_id),
+                        "config": conf,
+                    }
+                )
+
             tools_dict = []
             for tool in tools:
-                if isinstance(tool, MCPTool):
+                readonly = False
+                builtin_config_statuses = []
+                builtin_config_tags = []
+                if self.tool_mgr.is_builtin_tool(tool.name):
+                    origin = "builtin"
+                    origin_name = "AstrBot Core"
+                    readonly = True
+                    builtin_config_statuses = get_builtin_tool_config_statuses(
+                        tool.name,
+                        config_entries,
+                    )
+                    builtin_config_tags = [
+                        status
+                        for status in builtin_config_statuses
+                        if status["enabled"]
+                    ]
+                elif isinstance(tool, MCPTool):
                     origin = "mcp"
                     origin_name = tool.mcp_server_name
                 elif tool.handler_module_path and star_map.get(
@@ -451,6 +485,9 @@ class ToolsRoute(Route):
                     "active": tool.active,
                     "origin": origin,
                     "origin_name": origin_name,
+                    "readonly": readonly,
+                    "builtin_config_statuses": builtin_config_statuses,
+                    "builtin_config_tags": builtin_config_tags,
                 }
                 tools_dict.append(tool_info)
             return Response().ok(data=tools_dict).__dict__
@@ -469,6 +506,13 @@ class ToolsRoute(Route):
                 return (
                     Response()
                     .error("Missing required parameters: name or activate")
+                    .__dict__
+                )
+
+            if self.tool_mgr.is_builtin_tool(tool_name):
+                return (
+                    Response()
+                    .error("Builtin tools are read-only and cannot be toggled.")
                     .__dict__
                 )
 

@@ -123,6 +123,10 @@
           "description": "BoCha API Key",
           "hint": "可添加多个 Key 进行轮询。"
         },
+        "websearch_brave_key": {
+          "description": "Brave Search API Key",
+          "hint": "可添加多个 Key 进行轮询。"
+        },
         "websearch_baidu_app_builder_key": {
           "description": "百度千帆智能云 APP Builder API Key",
           "hint": "参考:[https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -150,11 +154,11 @@
     },
     "agent_computer_use": {
       "description": "使用电脑能力",
-      "hint": "让 AstrBot 访问和使用你的电脑或者隔离的沙盒环境，以执行更复杂的任务。详见: [沙盒模式](https://docs.astrbot.app/use/astrbot-agent-sandbox.html), [Skills](https://docs.astrbot.app/use/skills.html)。",
+      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [电脑使用](https://docs.astrbot.app/use/computer.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
-          "hint": "sandbox 代表在沙箱环境中运行, local 代表在本地环境中运行, none 代表不启用。如果上传了 skills，选择 none 会导致其无法被 Agent 正常使用。"
+          "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
         },
         "computer_use_require_admin": {
           "description": "需要 AstrBot 管理员权限",
@@ -337,6 +341,22 @@
           "description": "用户提示词",
           "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。"
         },
+        "image_compress_enabled": {
+          "description": "启用图片压缩",
+          "hint": "启用后，发送给多模态模型前会先压缩本地大图片。"
+        },
+        "image_compress_options": {
+          "description": "图片压缩配置",
+          "hint": "用于控制图片压缩的尺寸、质量和触发阈值。",
+          "max_size": {
+            "description": "最大边长",
+            "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。"
+          },
+          "quality": {
+            "description": "JPEG 质量",
+            "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。"
+          }
+        },
         "reachability_check": {
           "description": "提供商可达性检测",
           "hint": "/provider 命令列出模型时并发检测连通性。开启后会主动调用模型测试连通性,可能产生额外 token 消耗。"
@@ -371,6 +391,10 @@
       "discord_activity_name": {
         "description": "Discord 活动名称",
         "hint": "可选的 Discord 活动名称。留空则不设置活动。"
+      },
+      "discord_allow_bot_messages": {
+        "description": "允许接收机器人消息",
+        "hint": "启用后，AstrBot 将接收来自其他 Discord 机器人的消息。适用于机器人间通信场景（如消息转发）。默认关闭。"
       },
       "discord_command_register": {
         "description": "注册 Discord 指令",
@@ -534,9 +558,25 @@
         "description": "Telegram 命令自动刷新间隔",
         "hint": "Telegram 命令自动刷新间隔，单位为秒。"
       },
+      "telegram_polling_restart_delay": {
+        "description": "Telegram 轮询重启延迟",
+        "hint": "当轮询意外结束尝试自动重启时的延迟时间，单位为秒。默认为 5s。"
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
+      },
+      "mattermost_url": {
+        "description": "Mattermost URL",
+        "hint": "Mattermost 服务地址，例如 https://chat.example.com。"
+      },
+      "mattermost_bot_token": {
+        "description": "Mattermost Bot Token",
+        "hint": "在 Mattermost 中创建 Bot 账户后生成的访问令牌。"
+      },
+      "mattermost_reconnect_delay": {
+        "description": "Mattermost 重连延迟",
+        "hint": "WebSocket 断开后的重连等待时间，单位为秒。默认 5 秒。"
       },
       "type": {
         "description": "适配器类型"
@@ -616,15 +656,34 @@
         "description": "仅使用 Webhook 发送消息",
         "hint": "可选。启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。如果不需要打字机效果，强烈建议使用此选项。"
       },
+      "weixin_oc_base_url": {
+        "description": "Base URL 地址",
+        "hint": "默认值: https://ilinkai.weixin.qq.com"
+      },
+      "weixin_oc_bot_type": {
+        "description": "扫码参数 bot_type",
+        "hint": "默认值: 3"
+      },
+      "weixin_oc_qr_poll_interval": {
+        "description": "二维码状态轮询间隔（秒）",
+        "hint": "每隔多少秒轮询一次二维码状态。"
+      },
+      "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates 长轮询超时时间（毫秒）",
+        "hint": "会话消息拉取接口超时参数。"
+      },
+      "weixin_oc_api_timeout_ms": {
+        "description": "HTTP 请求超时（毫秒）",
+        "hint": "通用 API 请求超时参数。"
+      },
+      "weixin_oc_token": {
+        "description": "登录后 token（可留空）",
+        "hint": "扫码登录成功后会自动写入；高级场景可手动填写。"
+      },
       "kook_bot_token": {
         "description": "机器人 Token",
         "type": "string",
         "hint": "必填项。从 KOOK 开发者平台获取的机器人 Token"
-      },
-      "kook_bot_nickname": {
-        "description": "Bot Nickname",
-        "type": "string",
-        "hint": "可选项。若发送者昵称与此值一致，将忽略该消息。"
       },
       "kook_reconnect_delay": {
         "description": "重连延迟",
@@ -704,11 +763,11 @@
       "platform_settings": {
         "enable_id_white_list": {
           "description": "启用白名单",
-          "hint": "启用后,只有在白名单内的会话会被响应。"
+          "hint": "启用后,只有在白名单内的会话会被响应，白名单列表为空时代表不启用白名单（所有 ID 都会被放行）。"
         },
         "id_whitelist": {
           "description": "白名单 ID 列表",
-          "hint": "使用 /sid 获取 ID。"
+          "hint": "使用 /sid 获取 ID。列表为空时表示该白名单不启用（即所有 ID 都在白名单内）。"
         },
         "id_whitelist_log": {
           "description": "输出日志",
@@ -876,7 +935,8 @@
             ]
           },
           "regex": {
-            "description": "分段正则表达式"
+            "description": "分段正则表达式",
+            "hint": "用于按正则规则识别分段点。建议使用能匹配分隔符的表达式。"
           },
           "split_words": {
             "description": "分段词列表",
@@ -1037,7 +1097,11 @@
       },
       "rerank_api_base": {
         "description": "重排序模型 API Base URL",
-        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。"
+        "hint": "最终请求路径由 Base URL 和路径后缀拼接而成（默认为 /v1/rerank）。"
+      },
+      "rerank_api_suffix": {
+        "description": "API URL 路径后缀",
+        "hint": "追加到 base_url 后的路径后缀，如 /v1/rerank。留空则不追加。"
       },
       "rerank_api_key": {
         "description": "API Key",
@@ -1054,6 +1118,24 @@
         "description": "自定义排序任务类型说明",
         "hint": "仅在使用 qwen3-rerank 模型时生效。建议使用英文撰写。"
       },
+      "nvidia_rerank_api_base": {
+        "description": "API Base URL"
+      },
+      "nvidia_rerank_api_key": {
+        "description": "API Key"
+      },
+      "nvidia_rerank_model": {
+        "description": "重排序模型名称",
+        "hint": "请参照NVIDIA Docs中模型名称填写。"
+      },
+      "nvidia_rerank_model_endpoint": {
+        "description": "自定义模型端点",
+        "hint": "自定义URL末尾端点，默认为 /reranking"
+      },
+      "nvidia_rerank_truncate": {
+        "description": "文本截断策略",
+        "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。"
+      },
       "launch_model_if_not_running": {
         "description": "模型未运行时自动启动",
         "hint": "如果模型当前未在 Xinference 服务中运行，是否尝试自动启动它。在生产环境中建议关闭。"
@@ -1064,12 +1146,17 @@
         "labels": [
           "文本",
           "图像",
+          "音频",
           "工具使用"
         ]
       },
       "custom_headers": {
         "description": "自定义添加请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
+      },
+      "ollama_disable_thinking": {
+        "description": "关闭思考模式",
+        "hint": "关闭 Ollama 思考模式。"
       },
       "custom_extra_body": {
         "description": "自定义请求体参数",
@@ -1195,7 +1282,7 @@
         "description": "API Base URL"
       },
       "openai_embedding": {
-        "hint": "OpenAI Embedding 会在请求时自动补上 /v1。"
+        "hint": "如果测试不通过，可以尝试添加 /v1 在末尾以兼容部分 OpenAI API 版本。"
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding 无需手动添加 /v1beta。"
@@ -1393,9 +1480,37 @@
         "description": "超时时间",
         "hint": "超时时间，单位为秒。"
       },
+      "mimo-stt-system-prompt": {
+        "description": "系统提示词",
+        "hint": "用于指导 MiMo STT 转录行为的 system prompt。"
+      },
+      "mimo-stt-user-prompt": {
+        "description": "用户提示词",
+        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。"
+      },
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "mimo-tts-voice": {
+        "description": "音色",
+        "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。"
+      },
+      "mimo-tts-format": {
+        "description": "输出格式",
+        "hint": "MiMo TTS 生成音频的格式。支持 'wav'、'mp3'、'pcm'。"
+      },
+      "mimo-tts-style-prompt": {
+        "description": "风格提示词",
+        "hint": "会以 <style>...</style> 标签形式添加到待合成文本开头，用于控制语速、情绪、角色或风格，例如 开心、变快、孙悟空、悄悄话。可留空。"
+      },
+      "mimo-tts-dialect": {
+        "description": "方言",
+        "hint": "会与风格提示词一起写入开头的 <style>...</style> 标签中，例如 东北话、四川话、河南话、粤语。可留空。"
+      },
+      "mimo-tts-seed-text": {
+        "description": "种子文本",
+        "hint": "作为可选的 user 消息发送，用于辅助调节语气和风格，不会拼接到待合成文本中。"
       },
       "fishaudio-tts-character": {
         "description": "character",
@@ -1408,6 +1523,10 @@
       "whisper_hint": {
         "description": "本地部署 Whisper 模型须知",
         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。"
+      },
+      "whisper_device": {
+        "description": "推理设备",
+        "hint": "Whisper 推理设备。Apple Silicon 可选 mps；其他环境建议使用 cpu。若指定 mps 但当前环境不可用，将自动回退到 cpu。"
       },
       "id": {
         "description": "ID"
