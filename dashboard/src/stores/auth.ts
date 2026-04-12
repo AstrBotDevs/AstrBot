@@ -3,8 +3,7 @@ import { router } from '@/router';
 import axios from 'axios';
 import { createLoginProof, type LoginChallenge } from '@/utils/authLoginProof';
 
-export const useAuthStore = defineStore({
-  id: 'auth',
+export const useAuthStore = defineStore("auth", {
   state: () => ({
     // @ts-ignore
     username: '',
