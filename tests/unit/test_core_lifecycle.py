@@ -262,93 +262,78 @@ class TestAstrBotCoreLifecycleErrorHandling:
 class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     """Tests for startup warning when default chat provider is unset."""
 
+    @staticmethod
+    def _make_provider(provider_id: str):
+        provider = MagicMock()
+        provider.provider_config = {"id": provider_id}
+        return provider
+
     def test_warns_for_multiple_enabled_chat_providers_without_default(
         self, mock_log_broker, mock_db
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-        config = {
-            "provider_settings": {"default_provider_id": ""},
-            "provider_sources": [
-                {"id": "openai_source", "provider_type": "chat_completion"}
-            ],
-            "provider": [
-                {
-                    "id": "openai_source/model-a",
-                    "provider_source_id": "openai_source",
-                    "enable": True,
-                },
-                {
-                    "id": "agent_runner_provider",
-                    "provider_type": "agent_runner",
-                    "enable": True,
-                },
-                {
-                    "id": "openai_source/model-b",
-                    "provider_source_id": "openai_source",
-                    "enable": True,
-                },
-            ],
-        }
+        provider_a = self._make_provider("openai_source/model-a")
+        provider_b = self._make_provider("openai_source/model-b")
+        lifecycle.provider_manager = MagicMock(
+            provider_settings={"default_provider_id": ""},
+            provider_insts=[provider_a, provider_b],
+            curr_provider_inst=provider_b,
+        )
 
         with patch("astrbot.core.core_lifecycle.logger") as mock_logger:
-            lifecycle._warn_about_unset_default_chat_provider(config)
+            lifecycle._warn_about_unset_default_chat_provider()
 
         mock_logger.warning.assert_called_once()
         assert mock_logger.warning.call_args[0][1] == 2
-        assert mock_logger.warning.call_args[0][2] == "openai_source/model-a"
+        assert mock_logger.warning.call_args[0][2] == "openai_source/model-b"
 
     def test_warns_only_once_per_lifecycle(self, mock_log_broker, mock_db):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-        config = {
-            "provider_settings": {"default_provider_id": ""},
-            "provider_sources": [
-                {"id": "openai_source", "provider_type": "chat_completion"}
+        lifecycle.provider_manager = MagicMock(
+            provider_settings={"default_provider_id": ""},
+            provider_insts=[
+                self._make_provider("openai_source/model-a"),
+                self._make_provider("openai_source/model-b"),
             ],
-            "provider": [
-                {
-                    "id": "openai_source/model-a",
-                    "provider_source_id": "openai_source",
-                    "enable": True,
-                },
-                {
-                    "id": "openai_source/model-b",
-                    "provider_source_id": "openai_source",
-                    "enable": True,
-                },
-            ],
-        }
+            curr_provider_inst=self._make_provider("openai_source/model-a"),
+        )
 
         with patch("astrbot.core.core_lifecycle.logger") as mock_logger:
-            lifecycle._warn_about_unset_default_chat_provider(config)
-            lifecycle._warn_about_unset_default_chat_provider(config)
+            lifecycle._warn_about_unset_default_chat_provider()
+            lifecycle._warn_about_unset_default_chat_provider()
 
         mock_logger.warning.assert_called_once()
+
+    def test_does_not_warn_with_single_enabled_chat_provider_without_default(
+        self, mock_log_broker, mock_db
+    ):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle.provider_manager = MagicMock(
+            provider_settings={"default_provider_id": ""},
+            provider_insts=[self._make_provider("openai_source/model-a")],
+            curr_provider_inst=self._make_provider("openai_source/model-a"),
+        )
+
+        with patch("astrbot.core.core_lifecycle.logger") as mock_logger:
+            lifecycle._warn_about_unset_default_chat_provider()
+
+        mock_logger.warning.assert_not_called()
 
     def test_does_not_warn_when_default_chat_provider_is_set(
         self, mock_log_broker, mock_db
     ):
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
-        config = {
-            "provider_settings": {"default_provider_id": "openai_source/model-a"},
-            "provider_sources": [
-                {"id": "openai_source", "provider_type": "chat_completion"}
+        lifecycle.provider_manager = MagicMock(
+            provider_settings={"default_provider_id": "openai_source/model-a"},
+            provider_insts=[
+                self._make_provider("openai_source/model-a"),
+                self._make_provider("openai_source/model-b"),
             ],
-            "provider": [
-                {
-                    "id": "openai_source/model-a",
-                    "provider_source_id": "openai_source",
-                    "enable": True,
-                },
-                {
-                    "id": "openai_source/model-b",
-                    "provider_source_id": "openai_source",
-                    "enable": True,
-                },
-            ],
-        }
+            curr_provider_inst=self._make_provider("openai_source/model-a"),
+        )
 
         with patch("astrbot.core.core_lifecycle.logger") as mock_logger:
-            lifecycle._warn_about_unset_default_chat_provider(config)
+            lifecycle._warn_about_unset_default_chat_provider()
 
         mock_logger.warning.assert_not_called()
 
