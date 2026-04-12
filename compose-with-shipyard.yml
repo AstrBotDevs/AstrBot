@@ -4,10 +4,7 @@ version: '3.8'
 
 services:
   astrbot:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: astrbot:kimi-code
+    image: soulter/astrbot:latest
     container_name: astrbot
     restart: always
     ports: # mappings description: https://github.com/AstrBotDevs/AstrBot/issues/497
