@@ -1288,7 +1288,7 @@ export const useExtensionPage = () => {
   const checkAlreadyInstalled = () => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     const installedRepos = new Set(data.map((ext) => ext.repo?.toLowerCase()));
-    const installedNames = new Set(data.map((ext) => ext.name.replace(/_/g, '-')));//统一格式，以防下面的匹配不生效
+    const installedNames = new Set(data.map((ext) => normalizeStr(ext.name).replace(/_/g, '-')));//统一格式，以防下面的匹配不生效
     const installedByRepo = new Map(
       data
         .filter((ext) => ext.repo)
