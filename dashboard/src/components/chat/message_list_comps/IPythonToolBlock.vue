@@ -24,7 +24,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { ensureShikiLanguages, renderShikiCode } from '@/utils/shiki';
+import { ensureShikiLanguages, escapeHtml, renderShikiCode } from '@/utils/shiki';
 
 const props = defineProps({
     toolCall: {
@@ -90,7 +90,7 @@ const highlightedCode = computed(() => {
         );
     } catch (err) {
         console.error('Failed to highlight code:', err);
-        return `<pre><code>${code.value}</code></pre>`;
+        return `<pre><code>${escapeHtml(code.value)}</code></pre>`;
     }
 });
 

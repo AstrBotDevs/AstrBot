@@ -12,6 +12,15 @@ function normalizeLanguage(language) {
   return normalized || "text";
 }
 
+export function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 export async function getShikiHighlighter() {
   if (!highlighterPromise) {
     highlighterPromise = getSingletonHighlighter({
@@ -25,16 +34,17 @@ export async function getShikiHighlighter() {
 
 export async function ensureShikiLanguages(languages = []) {
   const highlighter = await getShikiHighlighter();
+  const languagesToLoad = [...new Set(languages.map(normalizeLanguage))].filter(
+    (language) => language !== "text",
+  );
 
-  for (const language of new Set(languages.map(normalizeLanguage))) {
-    if (language === "text") continue;
-
-    try {
-      await highlighter.loadLanguage(language);
-    } catch (err) {
-      console.warn(`Failed to load Shiki language "${language}".`, err);
-    }
-  }
+  await Promise.all(
+    languagesToLoad.map((language) =>
+      highlighter.loadLanguage(language).catch((err) => {
+        console.warn(`Failed to load Shiki language "${language}".`, err);
+      }),
+    ),
+  );
 
   return highlighter;
 }

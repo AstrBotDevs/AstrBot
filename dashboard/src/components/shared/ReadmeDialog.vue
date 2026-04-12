@@ -6,7 +6,7 @@ import axios from "axios";
 import DOMPurify from "dompurify";
 import { useI18n } from "@/i18n/composables";
 import {
-  collectMarkdownFenceLanguages,
+  escapeHtml,
   ensureShikiLanguages,
   normalizeShikiLanguage,
   renderShikiCode,
@@ -59,6 +59,99 @@ const scrollContainer = ref(null);
 const renderedHtml = ref("");
 const isDark = computed(() => theme.global.current.value.dark);
 
+const MARKDOWN_SANITIZE_OPTIONS = {
+  ALLOWED_TAGS: [
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "br",
+    "hr",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "pre",
+    "code",
+    "a",
+    "img",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "strong",
+    "em",
+    "del",
+    "s",
+    "details",
+    "summary",
+    "div",
+    "span",
+    "input",
+    "button",
+    "svg",
+    "rect",
+    "path",
+    "polyline",
+  ],
+  ALLOWED_ATTR: [
+    "href",
+    "src",
+    "alt",
+    "title",
+    "class",
+    "id",
+    "target",
+    "rel",
+    "type",
+    "checked",
+    "disabled",
+    "open",
+    "align",
+    "width",
+    "height",
+    "viewBox",
+    "fill",
+    "stroke",
+    "stroke-width",
+    "points",
+    "d",
+    "x",
+    "y",
+    "rx",
+    "ry",
+    "data-code-block-index",
+  ],
+};
+
+const CODE_BLOCK_SANITIZE_OPTIONS = {
+  ALLOWED_TAGS: ["div", "span", "button", "svg", "rect", "path", "polyline", "pre", "code"],
+  ALLOWED_ATTR: [
+    "class",
+    "title",
+    "type",
+    "width",
+    "height",
+    "viewBox",
+    "fill",
+    "stroke",
+    "stroke-width",
+    "points",
+    "d",
+    "x",
+    "y",
+    "rx",
+    "ry",
+    "style",
+    "tabindex",
+  ],
+};
+
 function slugifyHeading(text, slugCounts) {
   const base = (text || "")
     .trim()
@@ -80,6 +173,10 @@ onUnmounted(() => {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
 });
 
+function sanitizeHighlightedBlock(html) {
+  return DOMPurify.sanitize(html, CODE_BLOCK_SANITIZE_OPTIONS);
+}
+
 async function updateRenderedHtml() {
   const source = content.value;
   const renderId = ++lastRenderId.value;
@@ -91,9 +188,13 @@ async function updateRenderedHtml() {
   }
 
   let highlighter = null;
+  const env = {};
+  const tokens = md.parse(source, env);
 
   try {
-    const languages = collectMarkdownFenceLanguages(md, source);
+    const languages = tokens
+      .filter((token) => token.type === "fence")
+      .map((token) => normalizeShikiLanguage(token.info));
     highlighter = await ensureShikiLanguages(languages);
   } catch (err) {
     console.error("Failed to initialize Shiki for README dialog:", err);
@@ -107,92 +208,26 @@ async function updateRenderedHtml() {
     const token = tokens[idx];
     const lang = normalizeShikiLanguage(token.info);
     const code = token.content;
+    const escapedLangLabel =
+      lang && lang !== "text" ? escapeHtml(lang) : "";
     const highlighted = highlighter
       ? renderShikiCode(highlighter, code, lang, isDark.value ? "dark" : "light")
-      : `<pre class="shiki shiki-fallback"><code>${md.utils.escapeHtml(code)}</code></pre>`;
-    const html = `<div class="code-block-wrapper">
-      ${lang && lang !== "text" ? `<span class="code-lang-label">${lang}</span>` : ""}
+      : `<pre class="shiki shiki-fallback"><code>${escapeHtml(code)}</code></pre>`;
+    const html = sanitizeHighlightedBlock(`<div class="code-block-wrapper">
+      ${escapedLangLabel ? `<span class="code-lang-label">${escapedLangLabel}</span>` : ""}
       <button class="copy-code-btn" title="${t("core.common.copy")}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
       </button>
       ${highlighted}
-    </div>`;
+    </div>`);
 
     const placeholderIndex = highlightedBlocks.push(html) - 1;
     return `<div data-code-block-index="${placeholderIndex}"></div>`;
   };
 
-  const rawHtml = md.render(source);
+  const rawHtml = md.renderer.render(tokens, md.options, env);
 
-  const cleanHtml = DOMPurify.sanitize(rawHtml, {
-    ALLOWED_TAGS: [
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "p",
-      "br",
-      "hr",
-      "ul",
-      "ol",
-      "li",
-      "blockquote",
-      "pre",
-      "code",
-      "a",
-      "img",
-      "table",
-      "thead",
-      "tbody",
-      "tr",
-      "th",
-      "td",
-      "strong",
-      "em",
-      "del",
-      "s",
-      "details",
-      "summary",
-      "div",
-      "span",
-      "input",
-      "button",
-      "svg",
-      "rect",
-      "path",
-      "polyline",
-    ],
-    ALLOWED_ATTR: [
-      "href",
-      "src",
-      "alt",
-      "title",
-      "class",
-      "id",
-      "target",
-      "rel",
-      "type",
-      "checked",
-      "disabled",
-      "open",
-      "align",
-      "width",
-      "height",
-      "viewBox",
-      "fill",
-      "stroke",
-      "stroke-width",
-      "points",
-      "d",
-      "x",
-      "y",
-      "rx",
-      "ry",
-      "data-code-block-index",
-    ],
-  });
+  const cleanHtml = DOMPurify.sanitize(rawHtml, MARKDOWN_SANITIZE_OPTIONS);
 
   const tempDiv = document.createElement("div");
   tempDiv.innerHTML = cleanHtml;
