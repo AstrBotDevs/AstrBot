@@ -443,7 +443,9 @@ class DiscordPlatformAdapter(Platform):
                 await asyncio.wait_for(ctx.defer(), timeout=2.5)
                 followup_webhook = ctx.followup
             except asyncio.TimeoutError:
-                logger.warning(f"[Discord] Defer command '{cmd_name}' timeout. Network might be too slow.")
+                logger.warning(
+                    f"[Discord] Defer command '{cmd_name}' timeout. Network might be too slow."
+                )
                 return
             except Exception as e:
                 logger.warning(f"[Discord] Failed to defer command '{cmd_name}': {e}")
