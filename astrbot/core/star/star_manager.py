@@ -581,7 +581,7 @@ class PluginManager:
                 f"AstrBot 当前版本 {VERSION} 无法被解析，无法校验插件版本范围。",
             )
 
-        if current_version not in specifier:
+        if not specifier.contains(current_version, prereleases=True):
             return (
                 False,
                 f"当前 AstrBot 版本为 {VERSION}，不满足插件要求的 astrbot_version: {normalized_spec}",

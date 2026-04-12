@@ -95,7 +95,8 @@
         "sync": "同步"
       },
       "tips": {
-        "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置"
+        "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置",
+        "transportRecommendation": "建议优先使用 Streamable HTTP 或 SSE 模式。stdio 模式会在 AstrBot 主机上启动本地进程，仅适合可信 MCP 服务器。"
       }
     },
     "serverDetail": {
