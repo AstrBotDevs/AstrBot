@@ -95,7 +95,7 @@
                         :is-dark="isDark"
                       >
                         <template #label>
-                          <v-icon size="16">mdi-code-braces</v-icon>
+                          <v-icon size="16">mdi-code-json</v-icon>
                           <span>{{ tool.name || "python" }}</span>
                           <span class="tool-call-inline-status">
                             {{ toolCallStatusText(tool) }}

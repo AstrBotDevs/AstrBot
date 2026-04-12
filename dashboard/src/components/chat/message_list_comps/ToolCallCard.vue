@@ -76,7 +76,7 @@ const displayToolName = computed(() => props.toolCall.name || "tool");
 const toolCallIcon = computed(() => {
   const name = String(props.toolCall.name || "");
   if (name === "astrbot_execute_ipython" || name === "astrbot_execute_python") {
-    return "mdi-code-braces";
+    return "mdi-code-json";
   }
   if (name.includes("web_search") || name.includes("tavily")) {
     return "mdi-web";
