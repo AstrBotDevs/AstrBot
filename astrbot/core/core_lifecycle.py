@@ -59,6 +59,7 @@ class AstrBotCoreLifecycle:
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
+        self._default_chat_provider_warning_emitted = False
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
@@ -96,6 +97,65 @@ class AstrBotCoreLifecycle:
             )
         except Exception as e:
             logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
+
+    @staticmethod
+    def _is_chat_provider_config(
+        provider_config: dict, provider_sources: dict[str, dict]
+    ) -> bool:
+        if provider_config.get("provider_type") == "chat_completion":
+            return True
+
+        provider_source_id = provider_config.get("provider_source_id")
+        if not provider_source_id:
+            return False
+
+        provider_source = provider_sources.get(provider_source_id, {})
+        if provider_source.get("provider_type") == "chat_completion":
+            return True
+
+        provider_source_type = provider_source.get("type", "")
+        return isinstance(provider_source_type, str) and (
+            "chat_completion" in provider_source_type
+        )
+
+    def _warn_about_unset_default_chat_provider(self, config: dict) -> None:
+        if self._default_chat_provider_warning_emitted:
+            return
+
+        provider_settings = config.get("provider_settings", {})
+        default_provider_id = provider_settings.get("default_provider_id", "")
+        if default_provider_id:
+            return
+
+        provider_sources = {
+            source.get("id"): source
+            for source in config.get("provider_sources", [])
+            if isinstance(source, dict) and source.get("id")
+        }
+        enabled_chat_provider_ids: list[str] = []
+        for provider in config.get("provider", []):
+            if not isinstance(provider, dict):
+                continue
+            if not provider.get("enable", True):
+                continue
+            if not self._is_chat_provider_config(provider, provider_sources):
+                continue
+
+            provider_id = provider.get("id")
+            if isinstance(provider_id, str) and provider_id:
+                enabled_chat_provider_ids.append(provider_id)
+
+        if len(enabled_chat_provider_ids) <= 1:
+            return
+
+        self._default_chat_provider_warning_emitted = True
+        logger.warning(
+            "Detected %d enabled chat providers but `provider_settings.default_provider_id` is empty. "
+            "AstrBot will use `%s` as the startup fallback chat provider. "
+            "Set a default chat model in the WebUI configuration page to avoid unexpected provider switching.",
+            len(enabled_chat_provider_ids),
+            enabled_chat_provider_ids[0],
+        )
 
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
@@ -202,6 +262,9 @@ class AstrBotCoreLifecycle:
 
         # 根据配置实例化各个 Provider
         await self.provider_manager.initialize()
+        self._warn_about_unset_default_chat_provider(
+            self.astrbot_config_mgr.default_conf
+        )
 
         await self.kb_manager.initialize()
 
