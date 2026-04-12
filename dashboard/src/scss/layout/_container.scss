@@ -2,7 +2,7 @@ html {
   overflow-y: auto;
 }
 .v-main {
-  margin-right: 20px;
+  margin: 0;
 }
 
 .top-header {
@@ -10,7 +10,7 @@ html {
 }
 @media (max-width: 1279px) {
   .v-main {
-    margin: 0 10px;
+    margin: 0;
   }
 }
 .spacer {
