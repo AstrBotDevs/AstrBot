@@ -1318,7 +1318,7 @@ export const useExtensionPage = () => {
       
       plugin.installed =
         installedRepos.has(plugin.repo?.toLowerCase()) ||
-        installedNames.has(plugin.name.replace(/_/g, '-'));//统一格式，防止匹配失败
+        installedNames.has(normalizeStr(plugin.name).replace(/_/g, '-'));//统一格式，防止匹配失败
     }
   
     let installed = [];
