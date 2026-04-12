@@ -11,11 +11,13 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
-import aiohttp
-
 from astrbot import logger
 from astrbot.core import sp
-from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+from astrbot.core.agent.mcp_client import (
+    MCPClient,
+    MCPTool,
+    _quick_test_mcp_connection,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.tools.registry import (
     ensure_builtin_tools_loaded,
@@ -24,6 +26,8 @@ from astrbot.core.tools.registry import (
     iter_builtin_tool_classes,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+from .mcp_sync_providers import SyncedMcpServer, get_mcp_sync_provider
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
@@ -144,70 +148,6 @@ PY_TO_JSON_TYPE = {
 }
 # alias
 FuncTool = FunctionTool
-
-
-def _prepare_config(config: dict) -> dict:
-    """准备配置，处理嵌套格式"""
-    if config.get("mcpServers"):
-        first_key = next(iter(config["mcpServers"]))
-        config = config["mcpServers"][first_key]
-    config.pop("active", None)
-    return config
-
-
-async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
-    """快速测试 MCP 服务器可达性"""
-    import aiohttp
-
-    cfg = _prepare_config(config.copy())
-
-    url = cfg["url"]
-    headers = cfg.get("headers", {})
-    timeout = cfg.get("timeout", 10)
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            if cfg.get("transport") == "streamable_http":
-                test_payload = {
-                    "jsonrpc": "2.0",
-                    "method": "initialize",
-                    "id": 0,
-                    "params": {
-                        "protocolVersion": "2024-11-05",
-                        "capabilities": {},
-                        "clientInfo": {"name": "test-client", "version": "1.2.3"},
-                    },
-                }
-                async with session.post(
-                    url,
-                    headers={
-                        **headers,
-                        "Content-Type": "application/json",
-                        "Accept": "application/json, text/event-stream",
-                    },
-                    json=test_payload,
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                ) as response:
-                    if response.status == 200:
-                        return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
-            else:
-                async with session.get(
-                    url,
-                    headers={
-                        **headers,
-                        "Accept": "application/json, text/event-stream",
-                    },
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                ) as response:
-                    if response.status == 200:
-                        return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
-
-    except asyncio.TimeoutError:
-        return False, f"连接超时: {timeout}秒"
-    except Exception as e:
-        return False, f"{e!s}"
 
 
 class FunctionToolManager:
@@ -553,8 +493,19 @@ class FunctionToolManager:
             raise MCPInitTimeoutError(
                 f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
             ) from exc
-        except Exception:
-            logger.error(f"Failed to initialize MCP client {name}", exc_info=True)
+        except Exception as e:
+            msg = str(e).lower()
+            is_invalid_key = (
+                "invalid apikey" in msg or "invalid authorization key" in msg
+            )
+            if is_invalid_key and str(cfg.get("provider", "")).lower() == "mcprouter":
+                logger.warning(
+                    f"Failed to initialize MCP client {name}: MCPRouter API key is invalid (please re-sync or update the API key): {e!s}",
+                )
+            elif is_invalid_key:
+                logger.warning(f"Failed to initialize MCP client {name}: {e!s}")
+            else:
+                logger.error(f"Failed to initialize MCP client {name}", exc_info=True)
             raise
         finally:
             if mcp_client is None:
@@ -916,71 +867,117 @@ class FunctionToolManager:
             logger.error(f"保存 MCP 配置失败: {e}")
             return False
 
-    async def sync_modelscope_mcp_servers(self, access_token: str) -> None:
-        """从 ModelScope 平台同步 MCP 服务器配置"""
-        base_url = "https://www.modelscope.cn/openapi/v1"
-        url = f"{base_url}/mcp/servers/operational"
-        headers = {
-            "Authorization": f"Bearer {access_token.strip()}",
-            "Content-Type": "application/json",
+    async def _enable_mcp_servers_with_concurrency_limit(
+        self,
+        server_names: list[str],
+        config: dict,
+        *,
+        max_concurrency: int = 5,
+        timeout_seconds: int = 30,
+    ) -> tuple[int, dict[str, str]]:
+        sem = asyncio.Semaphore(max_concurrency)
+        failures: dict[str, str] = {}
+
+        async def _enable_one(name: str) -> bool:
+            async with sem:
+                try:
+                    if name in self.mcp_client_dict:
+                        await self.disable_mcp_server(name, timeout=10)
+                    await self.enable_mcp_server(
+                        name=name,
+                        config=config["mcpServers"][name],
+                        timeout=timeout_seconds,
+                    )
+                    return True
+                except Exception as e:
+                    failures[name] = str(e)
+                    logger.warning(f"启用 MCP 服务器失败: {name}, err={e!s}")
+                    return False
+
+        results = await asyncio.gather(*[_enable_one(n) for n in server_names])
+        enabled_count = sum(1 for ok in results if ok)
+        return enabled_count, failures
+
+    async def sync_mcp_servers_from_provider(
+        self,
+        provider_name: str,
+        payload: dict[str, Any],
+        *,
+        max_concurrency: int = 5,
+    ) -> dict[str, Any]:
+        provider = get_mcp_sync_provider(provider_name)
+        servers: list[SyncedMcpServer] = await provider.fetch(payload)
+        if not servers:
+            return {
+                "provider": provider_name,
+                "synced": 0,
+                "enabled": 0,
+                "failed": 0,
+                "failed_servers": [],
+            }
+
+        local_mcp_config = self.load_mcp_config()
+        local_mcp_config.setdefault("mcpServers", {})
+
+        for item in servers:
+            local_mcp_config["mcpServers"][item.name] = item.config
+
+        if not self.save_mcp_config(local_mcp_config):
+            raise RuntimeError("保存 MCP 配置失败，已取消同步启用")
+
+        enabled_count, failures = await self._enable_mcp_servers_with_concurrency_limit(
+            [item.name for item in servers],
+            local_mcp_config,
+            max_concurrency=max_concurrency,
+        )
+
+        return {
+            "provider": provider_name,
+            "synced": len(servers),
+            "enabled": enabled_count,
+            "failed": len(failures),
+            "failed_servers": sorted(failures.keys()),
         }
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        mcp_server_list = data.get("data", {}).get(
-                            "mcp_server_list",
-                            [],
-                        )
-                        local_mcp_config = self.load_mcp_config()
+    async def list_mcp_servers_from_provider(
+        self,
+        provider_name: str,
+        payload: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        provider = get_mcp_sync_provider(provider_name)
+        return await provider.list_servers(payload)
 
-                        synced_count = 0
-                        for server in mcp_server_list:
-                            server_name = server["name"]
-                            operational_urls = server.get("operational_urls", [])
-                            if not operational_urls:
-                                continue
-                            url_info = operational_urls[0]
-                            server_url = url_info.get("url")
-                            if not server_url:
-                                continue
-                            # 添加到配置中(同名会覆盖)
-                            local_mcp_config["mcpServers"][server_name] = {
-                                "url": server_url,
-                                "transport": "sse",
-                                "active": True,
-                                "provider": "modelscope",
-                            }
-                            synced_count += 1
+    async def sync_modelscope_mcp_servers(self, access_token: str) -> None:
+        await self.sync_mcp_servers_from_provider(
+            "modelscope",
+            {"access_token": access_token},
+        )
 
-                        if synced_count > 0:
-                            self.save_mcp_config(local_mcp_config)
-                            tasks = []
-                            for server in mcp_server_list:
-                                name = server["name"]
-                                tasks.append(
-                                    self.enable_mcp_server(
-                                        name=name,
-                                        config=local_mcp_config["mcpServers"][name],
-                                    ),
-                                )
-                            await asyncio.gather(*tasks)
-                            logger.info(
-                                f"从 ModelScope 同步了 {synced_count} 个 MCP 服务器",
-                            )
-                        else:
-                            logger.warning("没有找到可用的 ModelScope MCP 服务器")
-                    else:
-                        raise Exception(
-                            f"ModelScope API 请求失败: HTTP {response.status}",
-                        )
-
-        except aiohttp.ClientError as e:
-            raise Exception(f"网络连接错误: {e!s}")
-        except Exception as e:
-            raise Exception(f"同步 ModelScope MCP 服务器时发生错误: {e!s}")
+    async def sync_mcprouter_mcp_servers(
+        self,
+        api_key: str,
+        *,
+        app_url: str = "",
+        app_name: str = "AstrBot",
+        api_base: str = "https://api.mcprouter.to/v1",
+        limit: int = 100,
+        max_servers: int = 30,
+        query: str = "",
+        server_keys: str | list[str] | None = None,
+    ) -> dict[str, Any]:
+        return await self.sync_mcp_servers_from_provider(
+            "mcprouter",
+            {
+                "api_key": api_key,
+                "app_url": app_url,
+                "app_name": app_name,
+                "api_base": api_base,
+                "limit": limit,
+                "max_servers": max_servers,
+                "query": query,
+                "server_keys": server_keys,
+            },
+        )
 
     def __str__(self) -> str:
         return str(self.func_list)
