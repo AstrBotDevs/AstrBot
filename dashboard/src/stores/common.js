@@ -1,8 +1,7 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
 
-export const useCommonStore = defineStore({
-  id: 'common',
+export const useCommonStore = defineStore("common", {
   state: () => ({
     // @ts-ignore
     eventSource: null,
