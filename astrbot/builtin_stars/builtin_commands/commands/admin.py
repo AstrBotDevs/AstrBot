@@ -19,8 +19,11 @@ class AdminCommands:
             )
             return
         cfg = self.context.get_config(umo=umo)
-        cfg["admins_id"].append(str(admin_id))
-        cfg.save_config()
+        admins = list(cfg.get("admins_id", []))
+        if str(admin_id) not in admins:
+            admins.append(str(admin_id))
+            cfg["admins_id"] = admins
+            cfg.save_config()
         event.set_result(MessageEventResult().message("✅ Authorized successfully."))
 
     async def deop(self, event: AstrMessageEvent, admin_id: str = "") -> None:
