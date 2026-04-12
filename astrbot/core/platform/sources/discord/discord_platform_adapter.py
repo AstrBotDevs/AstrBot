@@ -444,8 +444,10 @@ class DiscordPlatformAdapter(Platform):
                 followup_webhook = ctx.followup
             except asyncio.TimeoutError:
                 logger.warning(f"[Discord] Defer command '{cmd_name}' timeout. Network might be too slow.")
+                return
             except Exception as e:
                 logger.warning(f"[Discord] Failed to defer command '{cmd_name}': {e}")
+                return
 
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] Callback triggered: {cmd_name}")
