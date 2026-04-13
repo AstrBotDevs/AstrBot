@@ -51,24 +51,25 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self._is_vllm_detected = False
 
     def _is_vllm(self) -> bool:
-        """检测是否是vLLM（vLLM不支持dimensions参数）"""
-        # 先检查运行时检测标志
+        """检测是否是 vLLM（vLLM 不支持 dimensions 参数）"""
+        # 1. 优先检查运行时已证实的标记
         if self._is_vllm_detected:
             return True
-        # 方法1：检查provider_id是否包含vllm
+        
+        # 2. [核心修改] 检查 API Key 是否为 "vllm"
+        api_key = self.provider_config.get("embedding_api_key", "")
+        if api_key and api_key.lower() == "vllm":
+            logger.info("[OpenAI Embedding] vLLM mode enabled by API Key 'vllm'.")
+            return True
+        
+        # 3. 辅助检查：ID 或 URL 中是否显式包含 "vllm"
         provider_id = self.provider_config.get("id", "").lower()
-        if "vllm" in provider_id:
-            logger.info(f"[OpenAI Embedding] Detected vLLM by provider id: {provider_id}")
-            return True
-        # 方法2：检查api_base中的特征端口或主机名
         api_base = self.api_base_normalized.lower()
-        if "vllm" in api_base:
-            logger.info(f"[OpenAI Embedding] Detected vLLM by api_base keyword")
+        if "vllm" in provider_id or "vllm" in api_base:
+            logger.info(f"[OpenAI Embedding] Detected vLLM by id/api_base: {provider_id}")
             return True
-        # 方法3：检查常见的vLLM端口（8000, 8001等）
-        if ":8000" in api_base or ":8001" in api_base or ":8002" in api_base:
-            logger.info(f"[OpenAI Embedding] Detected vLLM by common port in api_base: {api_base}")
-            return True
+        
+        # 4. 移除对端口 (8000, 8001) 的静态判定，避免误伤其他兼容服务
         return False
 
     def _mark_as_vllm(self) -> None:
