@@ -247,7 +247,7 @@ class DynamicSubAgentManager:
     @classmethod
     def protect_subagent(cls, session_id: str, agent_name: str) -> None:
         """Mark a subagent as protected from auto cleanup and history retention"""
-        session = cls.get_or_create_session(session_id)
+        session = cls._get_or_create_session(session_id)
         session.protected_agents.add(agent_name)
         logger.debug(
             "[EnhancedSubAgent:History] Initialized history for protected agent: %s",
@@ -266,13 +266,14 @@ class DynamicSubAgentManager:
         if agent_name not in session.subagent_histories:
             session.subagent_histories[agent_name] = []
 
+        filtered_messages = []
         if isinstance(current_messages, list):
             _MAX_TOOL_RESULT_LEN = 2000
             for msg in current_messages:
                 if (
                     isinstance(msg, dict) and msg.get("role") == "system"
                 ):  # 移除system消息
-                    current_messages.remove(msg)
+                    continue
                 # 对过长的 tool 结果做截断，避免单条消息占用过多空间
                 if (
                     isinstance(msg, dict)
@@ -283,8 +284,9 @@ class DynamicSubAgentManager:
                     msg["content"] = (
                         msg["content"][:_MAX_TOOL_RESULT_LEN] + "\n...[truncated]"
                     )
+                    filtered_messages.append(msg)
 
-        session.subagent_histories[agent_name].extend(current_messages)
+        session.subagent_histories[agent_name].extend(filtered_messages)
         if cls._max_subagent_history < len(session.subagent_histories[agent_name]):
             session.subagent_histories[agent_name] = session.subagent_histories[
                 agent_name
@@ -419,7 +421,7 @@ class DynamicSubAgentManager:
             target: Target agent or "all" for broadcast
         """
 
-        session = cls.get_or_create_session(session_id)
+        session = cls._get_or_create_session(session_id)
         if not session.shared_context_enabled:
             return "__SHARED_CONTEXT_ADDED_FAILED__: Shared context disabled."
         if (sender not in list(session.subagents.keys())) and (sender != "System"):
@@ -650,7 +652,7 @@ class DynamicSubAgentManager:
     @classmethod
     def set_shared_context_enabled(cls, session_id: str, enabled: bool) -> None:
         """Enable or disable shared context for a session"""
-        session = cls.get_or_create_session(session_id)
+        session = cls._get_or_create_session(session_id)
         session.shared_context_enabled = enabled
         logger.info(
             "[EnhancedSubAgent:SharedContext] Shared context %s",
@@ -659,7 +661,7 @@ class DynamicSubAgentManager:
 
     @classmethod
     def set_subagent_status(cls, session_id: str, agent_name: str, status: str) -> None:
-        session = cls.get_or_create_session(session_id)
+        session = cls._get_or_create_session(session_id)
         if agent_name in session.subagents:
             session.subagent_status[agent_name] = status
 
@@ -668,7 +670,7 @@ class DynamicSubAgentManager:
         return cls._sessions.get(session_id, None)
 
     @classmethod
-    def get_or_create_session(cls, session_id: str) -> DynamicSubAgentSession:
+    def _get_or_create_session(cls, session_id: str) -> DynamicSubAgentSession:
         if session_id not in cls._sessions:
             cls._sessions[session_id] = DynamicSubAgentSession(session_id=session_id)
         return cls._sessions[session_id]
@@ -678,7 +680,7 @@ class DynamicSubAgentManager:
         cls, session_id: str, config: DynamicSubAgentConfig
     ) -> tuple:
         # Check max count limit
-        session = cls.get_or_create_session(session_id)
+        session = cls._get_or_create_session(session_id)
         if (
             config.name not in session.subagents
         ):  # Only count as new if not replacing existing
@@ -783,7 +785,7 @@ class DynamicSubAgentManager:
         Returns:
             task_id: 任务ID，格式为简单的递增数字字符串
         """
-        session = cls.get_or_create_session(session_id)
+        session = cls._get_or_create_session(session_id)
 
         # 初始化
         if agent_name not in session.subagent_background_results:
@@ -817,26 +819,32 @@ class DynamicSubAgentManager:
         return task_id
 
     @classmethod
+    def _ensure_task_store(
+        cls, session: DynamicSubAgentSession, agent_name: str
+    ) -> dict[str, SubAgentExecutionResult]:
+        if agent_name not in session.subagent_background_results:
+            session.subagent_background_results[agent_name] = {}
+        return session.subagent_background_results[agent_name]
+
+    @staticmethod
+    def _is_task_completed(result: SubAgentExecutionResult) -> bool:
+        return (
+            result.result != "" and result.result is not None
+        ) or result.completed_at > 0
+
+    @classmethod
     def get_pending_subagent_tasks(cls, session_id: str, agent_name: str) -> list[str]:
         """获取 SubAgent 的所有 pending 任务 ID 列表（按创建时间排序）"""
         session = cls.get_session(session_id)
-        if not session or agent_name not in session.subagent_background_results:
+        if not session:
             return []
 
-        # 按 created_at 排序
-        pending = [
-            task_id
-            for task_id, result in session.subagent_background_results[
-                agent_name
-            ].items()
-            if not result.result and result.completed_at == 0.0
-        ]
-        return sorted(
-            pending,
-            key=lambda tid: (
-                session.subagent_background_results[agent_name][tid].created_at
-            ),
-        )
+        store = session.subagent_background_results.get(agent_name)
+        if not store:
+            return []
+
+        pending = [tid for tid, res in store.items() if not cls._is_task_completed(res)]
+        return sorted(pending, key=lambda tid: store[tid].created_at)
 
     @classmethod
     def get_latest_task_id(cls, session_id: str, agent_name: str) -> str | None:
@@ -877,10 +885,9 @@ class DynamicSubAgentManager:
             execution_time: 执行耗时
             metadata: 额外元数据
         """
-        session = cls.get_or_create_session(session_id)
+        session = cls._get_or_create_session(session_id)
 
-        if agent_name not in session.subagent_background_results:
-            session.subagent_background_results[agent_name] = {}
+        task_store = cls._ensure_task_store(session, agent_name)
 
         if task_id is None:
             # 如果没有指定task_id，尝试找最新的pending任务
@@ -893,33 +900,25 @@ class DynamicSubAgentManager:
                 )
                 return
 
-        if task_id not in session.subagent_background_results[agent_name]:
+        if task_id not in task_store:
             # 如果任务不存在，先创建一个占位
-            session.subagent_background_results[agent_name][task_id] = (
-                SubAgentExecutionResult(
-                    task_id=task_id,
-                    agent_name=agent_name,
-                    success=False,
-                    result="",
-                    created_at=time.time(),
-                    metadata=metadata or {},
-                )
+            task_store[task_id] = SubAgentExecutionResult(
+                task_id=task_id,
+                agent_name=agent_name,
+                success=False,
+                result="",
+                created_at=time.time(),
+                metadata=metadata or {},
             )
 
         # 更新结果
-        session.subagent_background_results[agent_name][task_id].success = success
-        session.subagent_background_results[agent_name][task_id].result = result
-        session.subagent_background_results[agent_name][task_id].error = error
-        session.subagent_background_results[agent_name][
-            task_id
-        ].execution_time = execution_time
-        session.subagent_background_results[agent_name][
-            task_id
-        ].completed_at = time.time()
+        task_store[task_id].success = success
+        task_store[task_id].result = result
+        task_store[task_id].error = error
+        task_store[task_id].execution_time = execution_time
+        task_store[task_id].completed_at = time.time()
         if metadata:
-            session.subagent_background_results[agent_name][task_id].metadata.update(
-                metadata
-            )
+            task_store[task_id].metadata.update(metadata)
 
     @classmethod
     def get_subagent_result(
@@ -952,7 +951,7 @@ class DynamicSubAgentManager:
             completed.sort(key=lambda x: x[1].created_at, reverse=True)
             return completed[0][1]
 
-        return session.subagent_background_results[agent_name].get(task_id)
+        return session.subagent_background_results[agent_name].get(task_id, None)
 
     @classmethod
     def has_subagent_result(
@@ -966,19 +965,19 @@ class DynamicSubAgentManager:
             task_id: 任务ID，如果为None则检查是否有任何已完成的任务
         """
         session = cls.get_session(session_id)
-        if not session or agent_name not in session.subagent_background_results:
+        task_store = cls._ensure_task_store(session, agent_name)
+        if not session or not task_store:
             return False
 
         if task_id is None:
             # 检查是否有任何已完成的任务
             return any(
-                r.result != "" or r.completed_at > 0
-                for r in session.subagent_background_results[agent_name].values()
+                r.result != "" or r.completed_at > 0 for r in task_store.values()
             )
 
-        if task_id not in session.subagent_background_results[agent_name]:
+        if task_id not in task_store:
             return False
-        result = session.subagent_background_results[agent_name][task_id]
+        result = task_store[task_id]
         return result.result != "" or result.completed_at > 0
 
     @classmethod
@@ -993,7 +992,8 @@ class DynamicSubAgentManager:
             task_id: 任务ID，如果为None则清除该Agent所有任务
         """
         session = cls.get_session(session_id)
-        if not session or agent_name not in session.subagent_background_results:
+        task_store = cls._ensure_task_store(session, agent_name)
+        if not session or not task_store:
             return
 
         if task_id is None:
@@ -1002,7 +1002,7 @@ class DynamicSubAgentManager:
             session.background_task_counters.pop(agent_name, None)
         else:
             # 清除特定任务
-            session.subagent_background_results[agent_name].pop(task_id, None)
+            task_store.pop(task_id, None)
 
     @classmethod
     def get_subagent_status(cls, session_id: str, agent_name: str) -> str:
@@ -1013,7 +1013,9 @@ class DynamicSubAgentManager:
             agent_name: SubAgent 名称
         """
         session = cls.get_session(session_id)
-        return session.subagent_status[agent_name]
+        if not session:
+            return "UNKNOWN"
+        return session.subagent_status.get(agent_name, "UNKNOWN")
 
     @classmethod
     def get_all_subagent_status(cls, session_id: str) -> dict:
@@ -1259,7 +1261,7 @@ class ProtectSubagentTool(FunctionTool):
         if not name:
             return "Error: name required"
         session_id = context.context.event.unified_msg_origin
-        session = DynamicSubAgentManager.get_or_create_session(session_id)
+        session = DynamicSubAgentManager._get_or_create_session(session_id)
         if name not in session.subagents:
             return f"Error: Subagent {name} not found. Available subagents: {session.subagents.keys()}"
         DynamicSubAgentManager.protect_subagent(session_id, name)
@@ -1548,7 +1550,7 @@ parameter
                 if result and (result.result != "" or result.completed_at > 0):
                     return f"SubAgent '{result.agent_name}' execution completed\n Task id: {result.task_id}\n Execution time: {result.execution_time:.1f}s\n--- Result ---\n{result.result}\n"
                 else:
-                    return f"SubAgent '{result.agent_name}' execution completed with empty results. \n Task id: {result.task_id}\n Execution time: {result.execution_time:.1f}s\n"
+                    return f"SubAgent '{subagent_name}' task {task_id} execution completed with empty results."
             elif status == "FAILED":
                 result = DynamicSubAgentManager.get_subagent_result(
                     session_id, subagent_name, task_id

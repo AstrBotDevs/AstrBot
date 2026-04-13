@@ -917,33 +917,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if not req.func_tool:
                     return
 
-                # First check if it's a dynamically created subagent tool
-                func_tool = None
-                run_context_context = getattr(self.run_context, "context", None)
-                if run_context_context is not None:
-                    event = getattr(run_context_context, "event", None)
-                    if event is not None:
-                        session_id = getattr(
-                            self.run_context.context.event, "unified_msg_origin", None
-                        )
-                        if session_id:
-                            try:
-                                from astrbot.core.dynamic_subagent_manager import (
-                                    DynamicSubAgentManager,
-                                )
-
-                                dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(
-                                    session_id
-                                )
-                                for h in dynamic_handoffs:
-                                    if (
-                                        h.name == func_tool_name
-                                        or f"transfer_to_{h.name}" == func_tool_name
-                                    ):
-                                        func_tool = h
-                                        break
-                            except Exception:
-                                pass
+                # Prefer dynamic tools when available
+                func_tool = self._resolve_dynamic_tool(func_tool_name)
 
                 # If not found in dynamic tools, check regular tool sets
                 if func_tool is None:
@@ -1079,48 +1054,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         if result_parts:
                             result_content = "\n\n".join(result_parts)
                             # Check for dynamic tool creation marker
-                            if result_content.startswith("__DYNAMIC_TOOL_CREATED__:"):
-                                parts = result_content.split(":", 3)
-                                if len(parts) >= 4:
-                                    new_tool_name = parts[1]
-                                    new_tool_obj_name = parts[2]
-                                    logger.info(
-                                        f"[EnhancedSubAgent] Tool created: {new_tool_name}"
-                                    )
-                                    # Try to add the new tool to func_tool set
-                                    try:
-                                        from astrbot.core.dynamic_subagent_manager import (
-                                            DynamicSubAgentManager,
-                                        )
-
-                                        session_id = getattr(
-                                            self.run_context.context.event,
-                                            "unified_msg_origin",
-                                            None,
-                                        )
-                                        if session_id:
-                                            handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(
-                                                session_id
-                                            )
-                                            for handoff in handoffs:
-                                                if (
-                                                    handoff.name == new_tool_obj_name
-                                                    or handoff.name
-                                                    == new_tool_name.replace(
-                                                        "transfer_to_", ""
-                                                    )
-                                                ):
-                                                    if self.req.func_tool:
-                                                        self.req.func_tool.add_tool(
-                                                            handoff
-                                                        )
-                                                    logger.info(
-                                                        f"[EnhancedSubAgent] Added {handoff.name} to func_tool set"
-                                                    )
-                                    except Exception as e:
-                                        logger.warning(
-                                            f"[EnhancedSubAgent] Failed to add dynamic tool: {e}"
-                                        )
+                            self._maybe_register_dynamic_tool_from_result(
+                                result_content
+                            )
 
                             inline_result = "\n\n".join(result_parts)
                             inline_result = await self._materialize_large_tool_result(
@@ -1414,3 +1350,68 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     abort_task.cancel()
                     with suppress(asyncio.CancelledError):
                         await abort_task
+
+    def _resolve_dynamic_tool(self, func_tool_name: str):
+        run_context_context = getattr(self.run_context, "context", None)
+        if run_context_context is None:
+            return None
+
+        event = getattr(run_context_context, "event", None)
+        if event is None:
+            return None
+
+        session_id = getattr(event, "unified_msg_origin", None)
+        if not session_id:
+            return None
+
+        try:
+            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+            dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(
+                session_id
+            )
+        except Exception:
+            return None
+
+        for h in dynamic_handoffs:
+            if h.name == func_tool_name or f"transfer_to_{h.name}" == func_tool_name:
+                return h
+        return None
+
+    def _maybe_register_dynamic_tool_from_result(self, result_content: str) -> None:
+        if not result_content.startswith("__DYNAMIC_TOOL_CREATED__:"):
+            return
+
+        parts = result_content.split(":", 3)
+        if len(parts) < 4:
+            return
+
+        new_tool_name = parts[1]
+        new_tool_obj_name = parts[2]
+        logger.info(f"[EnhancedSubAgent] Tool created: {new_tool_name}")
+
+        run_context_context = getattr(self.run_context, "context", None)
+        event = (
+            getattr(run_context_context, "event", None) if run_context_context else None
+        )
+        session_id = getattr(event, "unified_msg_origin", None) if event else None
+        if not session_id:
+            return
+
+        try:
+            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+            handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(session_id)
+        except Exception as e:
+            logger.warning(f"[EnhancedSubAgent] Failed to load dynamic handoffs: {e}")
+            return
+
+        for handoff in handoffs:
+            if (
+                handoff.name == new_tool_obj_name
+                or handoff.name == new_tool_name.replace("transfer_to_", "")
+            ):
+                if self.req.func_tool:
+                    self.req.func_tool.add_tool(handoff)
+                logger.info(f"[EnhancedSubAgent] Added {handoff.name} to func_tool set")
+                break

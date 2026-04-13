@@ -22,7 +22,6 @@ from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
 from astrbot.core.cron.events import CronMessageEvent
-from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     CommandResult,
@@ -346,72 +345,27 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 except Exception:
                     continue
 
-        # 获取子代理的历史上下文
-        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
-
-        agent_name = getattr(tool.agent, "name", None)
-        subagent_history = []
-        if agent_name:
-            try:
-                stored_history = DynamicSubAgentManager.get_subagent_history(
-                    umo, agent_name
-                )
-                if stored_history:
-                    # 将历史消息转换为 Message 对象
-                    for hist_msg in stored_history:
-                        try:
-                            if isinstance(hist_msg, dict):
-                                subagent_history.append(
-                                    Message.model_validate(hist_msg)
-                                )
-                            elif isinstance(hist_msg, Message):
-                                subagent_history.append(hist_msg)
-                        except Exception:
-                            continue
-                    if subagent_history:
-                        logger.debug(
-                            f"[SubAgentHistory] Loaded {len(subagent_history)} history messages for {agent_name}"
-                        )
-
-            except Exception as e:
-                logger.warning(
-                    f"[SubAgentHistory] Failed to load history for {agent_name}: {e}"
-                )
-
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
         stream = prov_settings.get("streaming_response", False)
 
+        # 获取子代理的历史上下文
+        subagent_history, agent_name = cls._load_subagent_history(umo, tool)
         # 如果有历史上下文，合并到 contexts 中
         if subagent_history:
             if contexts is None:
                 contexts = subagent_history
             else:
                 contexts = subagent_history + contexts
+
         # 构建子代理的 system_prompt
-        subagent_system_prompt = tool.agent.instructions or ""
-        subagent_system_prompt = f"# Role\nYour name is {agent_name}(used for tool calling)\n{subagent_system_prompt}\n"
-        if agent_name:
-            try:
-                from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+        subagent_system_prompt = cls._build_subagent_system_prompt(
+            umo, tool, prov_settings
+        )
 
-                runtime = prov_settings.get("computer_use_runtime", "local")
-                static_subagent_prompt = (
-                    DynamicSubAgentManager.build_static_subagent_prompts(
-                        umo, agent_name
-                    )
-                )
-                dynamic_subagent_prompt = (
-                    DynamicSubAgentManager.build_dynamic_subagent_prompts(
-                        umo, agent_name, runtime
-                    )
-                )
-                subagent_system_prompt += static_subagent_prompt
-                subagent_system_prompt += dynamic_subagent_prompt
-
-            except Exception:
-                pass
+        # 用于存储本轮的完整历史上下文
         runner_messages = []
+
         llm_resp = await ctx.tool_loop_agent(
             event=event,
             chat_provider_id=prov_id,
@@ -427,15 +381,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
 
         # 保存历史上下文
-        if agent_name and runner_messages:
-            try:
-                from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
-
-                DynamicSubAgentManager.update_subagent_history(
-                    umo, agent_name, runner_messages
-                )
-            except Exception:
-                pass  # 不影响主流程
+        cls._save_subagent_history(agent_name, runner_messages, umo)
 
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
@@ -463,38 +409,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         umo = event.unified_msg_origin
         agent_name = getattr(tool.agent, "name", None)
 
-        # check if enhanced subAgent
-        subagent_task_id = None
-        try:
-            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
-
-            if agent_name:
-                session = DynamicSubAgentManager.get_session(umo)
-                if session and (agent_name in session.subagents):
-                    subagent_task_id = (
-                        DynamicSubAgentManager.create_pending_subagent_task(
-                            session_id=umo, agent_name=agent_name
-                        )
-                    )
-
-                    if subagent_task_id.startswith("__PENDING_TASK_CREATE_FAILED__"):
-                        logger.info(
-                            f"[EnhancedSubAgent:BackgroundTask] Failed to created background task {subagent_task_id} for {agent_name}"
-                        )
-                    else:
-                        DynamicSubAgentManager.set_subagent_status(
-                            session_id=umo,
-                            agent_name=agent_name,
-                            status="RUNNING",
-                        )
-
-                        logger.info(
-                            f"[EnhancedSubAgent:BackgroundTask] Created background task {subagent_task_id} for {agent_name}"
-                        )
-        except Exception as e:
-            logger.info(
-                f"[EnhancedSubAgent:BackgroundTask] Failed to created background task {subagent_task_id} for {agent_name}: {e}"
-            )
+        # check if enhanced subagent
+        subagent_task_id = cls._register_enhanced_subagent_task(umo, agent_name)
 
         original_task_id = uuid.uuid4().hex
 
@@ -516,24 +432,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         asyncio.create_task(_run_handoff_in_background())
 
-        if subagent_task_id:
-            text_content = mcp.types.TextContent(
-                type="text",
-                text=(
-                    f"Background task submitted. subagent_task_id={subagent_task_id}. "
-                    f"SubAgent '{agent_name}' is working on the task. "
-                    f"Use wait_for_subagent(subagent_name='{agent_name}', task_id='{subagent_task_id}') to get the result."
-                ),
-            )
-        else:
-            text_content = mcp.types.TextContent(
-                type="text",
-                text=(
-                    f"Background task submitted. task_id={original_task_id}. "
-                    f"SubAgent '{agent_name}' is working on the task. "
-                    f"You will be notified when it finishes."
-                ),
-            )
+        text_content = cls._build_background_submission_message(
+            agent_name, original_task_id, subagent_task_id
+        )
         yield mcp.types.CallToolResult(content=[text_content])
 
     @classmethod
@@ -581,82 +482,21 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             )
 
         execution_time = time.time() - start_time
-        success = error_text is None
-        session = DynamicSubAgentManager.get_session(umo)
-        ##  if it is enhanced subagent ##
-        if session and agent_name and (agent_name in session.subagents):
-            subagent_task_id = tool_args.get("subagent_task_id", None)
-            # store the results of background enhanced subagent task
-            DynamicSubAgentManager.store_subagent_result(
-                session_id=umo,
+        is_enhanced, _ = cls._is_enhanced_subagent(umo, agent_name)
+        # if it is enhanced subagent
+        if is_enhanced:
+            await cls._handle_enhanced_subagent_background_result(
+                cls=cls,
+                umo=umo,
                 agent_name=agent_name,
-                task_id=subagent_task_id,
-                success=success,
-                result=result_text.strip() if result_text else "",
-                error=error_text,
+                task_id=tool_args.get("subagent_task_id"),
+                result_text=result_text,
+                error_text=error_text,
                 execution_time=execution_time,
+                run_context=run_context,
+                tool=tool,
+                tool_args=tool_args,
             )
-            # update subagent status
-            if error_text:
-                DynamicSubAgentManager.set_subagent_status(
-                    session_id=umo,
-                    agent_name=agent_name,
-                    status="FAILED",
-                )
-            else:
-                DynamicSubAgentManager.set_subagent_status(
-                    session_id=umo,
-                    agent_name=agent_name,
-                    status="COMPLETED",
-                )
-
-            # if shared_context is enabled, publish status
-            if session.shared_context_enabled:
-                status_content = f"[EnhancedSubAgent:BackgroundTask] SubAgent '{agent_name}' Task '{subagent_task_id}' Complete. Execution Time: {execution_time:.1f}s"
-                if error_text:
-                    status_content = f"[EnhancedSubAgent:BackgroundTask] SubAgent '{agent_name}' Task '{subagent_task_id}' Failed: {error_text}"
-                DynamicSubAgentManager.add_shared_context(
-                    session_id=umo,
-                    sender=agent_name,
-                    context_type="status",
-                    content=status_content,
-                    target="all",
-                )
-            logger.info(
-                f"[EnhancedSubAgent:BackgroundTask] Stored result for {agent_name} task {subagent_task_id}: "
-                f"success={success}, time={execution_time:.1f}s"
-            )
-
-            try:
-                context_extra = getattr(run_context.context, "extra", None)
-                if context_extra and isinstance(context_extra, dict):
-                    main_agent_runner = context_extra.get("main_agent_runner")
-                    main_agent_is_running = (
-                        main_agent_runner is not None and not main_agent_runner.done()
-                    )
-                else:
-                    main_agent_is_running = False
-            except Exception as e:
-                logger.error("Failed to check main agent status: %s", e)
-                # If the main agent status cannot be determined, assume it is still running to avoid concurrent wake-up
-                main_agent_is_running = True
-
-            # Inform user through `_wake_main_agent_for_background_result` if main agent is over
-            if not main_agent_is_running:
-                await cls._wake_main_agent_for_background_result(
-                    run_context=run_context,
-                    task_id=task_id,
-                    tool_name=tool.name,
-                    result_text=result_text,
-                    tool_args=tool_args,
-                    note=(
-                        event.get_extra("background_note")
-                        or f"Background task for subagent '{agent_name}' finished."
-                    ),
-                    summary_name=f"Dedicated to subagent `{agent_name}`",
-                    extra_result_fields={"subagent_name": agent_name},
-                )
-        # if not enhanced subagent
         else:
             await cls._wake_main_agent_for_background_result(
                 run_context=run_context,
@@ -918,6 +758,260 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if not res:
             return
         yield res
+
+    @staticmethod
+    def _load_subagent_history(
+        umo: str, tool: HandoffTool
+    ) -> tuple[list[Message], str]:
+        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+        agent_name = getattr(tool.agent, "name", None)
+        subagent_history = []
+        if agent_name:
+            try:
+                stored_history = DynamicSubAgentManager.get_subagent_history(
+                    umo, agent_name
+                )
+                if stored_history:
+                    # 将历史消息转换为 Message 对象
+                    for hist_msg in stored_history:
+                        try:
+                            if isinstance(hist_msg, dict):
+                                subagent_history.append(
+                                    Message.model_validate(hist_msg)
+                                )
+                            elif isinstance(hist_msg, Message):
+                                subagent_history.append(hist_msg)
+                        except Exception:
+                            continue
+                    if subagent_history:
+                        logger.debug(
+                            f"[SubAgentHistory] Loaded {len(subagent_history)} history messages for {agent_name}"
+                        )
+
+            except Exception as e:
+                logger.warning(
+                    f"[SubAgentHistory] Failed to load history for {agent_name}: {e}"
+                )
+        return subagent_history, agent_name
+
+    @staticmethod
+    def _build_subagent_system_prompt(
+        umo: str, tool: HandoffTool, prov_settings: dict
+    ) -> str:
+        agent_name = getattr(tool.agent, "name", None)
+        base = tool.agent.instructions or ""
+        subagent_system_prompt = (
+            f"# Role\nYour name is {agent_name}(used for tool calling)\n{base}\n"
+        )
+        if agent_name:
+            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+            runtime = prov_settings.get("computer_use_runtime", "local")
+            static_subagent_prompt = (
+                DynamicSubAgentManager.build_static_subagent_prompts(umo, agent_name)
+            )
+            dynamic_subagent_prompt = (
+                DynamicSubAgentManager.build_dynamic_subagent_prompts(
+                    umo, agent_name, runtime
+                )
+            )
+            subagent_system_prompt += static_subagent_prompt
+            subagent_system_prompt += dynamic_subagent_prompt
+        return subagent_system_prompt
+
+    @staticmethod
+    def _save_subagent_history(
+        umo: str, runner_messages: list[Message], agent_name: str
+    ) -> None:
+        if agent_name and runner_messages:
+            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+            DynamicSubAgentManager.update_subagent_history(
+                umo, agent_name, runner_messages
+            )
+        else:
+            return
+
+    @staticmethod
+    def _register_enhanced_subagent_task(
+        umo: str, agent_name: str | None
+    ) -> str | None:
+        if not agent_name:
+            return None
+        try:
+            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+            session = DynamicSubAgentManager.get_session(umo)
+            if session and (agent_name in session.subagents):
+                subagent_task_id = DynamicSubAgentManager.create_pending_subagent_task(
+                    session_id=umo, agent_name=agent_name
+                )
+
+                if subagent_task_id.startswith("__PENDING_TASK_CREATE_FAILED__"):
+                    logger.info(
+                        f"[EnhancedSubAgent:BackgroundTask] Failed to created background task {subagent_task_id} for {agent_name}"
+                    )
+                else:
+                    DynamicSubAgentManager.set_subagent_status(
+                        session_id=umo,
+                        agent_name=agent_name,
+                        status="RUNNING",
+                    )
+
+                    logger.info(
+                        f"[EnhancedSubAgent:BackgroundTask] Created background task {subagent_task_id} for {agent_name}"
+                    )
+                return subagent_task_id
+        except Exception as e:
+            logger.info(
+                f"[EnhancedSubAgent:BackgroundTask] Failed to created background task for {agent_name}: {e}"
+            )
+            return None
+
+    @staticmethod
+    def _build_background_submission_message(
+        agent_name: str | None,
+        original_task_id: str,
+        subagent_task_id: str | None,
+    ) -> mcp.types.TextContent:
+        if subagent_task_id:
+            return mcp.types.TextContent(
+                type="text",
+                text=(
+                    f"Background task submitted. subagent_task_id={subagent_task_id}. "
+                    f"SubAgent '{agent_name}' is working on the task. "
+                    f"Use wait_for_subagent(subagent_name='{agent_name}', task_id='{subagent_task_id}') to get the result."
+                ),
+            )
+        else:
+            return mcp.types.TextContent(
+                type="text",
+                text=(
+                    f"Background task submitted. task_id={original_task_id}. "
+                    f"SubAgent '{agent_name}' is working on the task. "
+                    f"You will be notified when it finishes."
+                ),
+            )
+
+    @staticmethod
+    def _is_enhanced_subagent(umo: str, agent_name: str | None) -> tuple[bool, T.Any]:
+        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+        if not agent_name:
+            return False, None
+        session = DynamicSubAgentManager.get_session(umo)
+        if session and agent_name in session.subagents:
+            return True, session
+        return False, session
+
+    @staticmethod
+    async def _handle_enhanced_subagent_background_result(
+        cls,
+        *,
+        umo: str,
+        agent_name: str,
+        task_id: str | None,
+        result_text: str,
+        error_text: str | None,
+        execution_time: float,
+        run_context: ContextWrapper[AstrAgentContext],
+        tool: HandoffTool,
+        tool_args: dict,
+    ) -> None:
+        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+        success = error_text is None
+        DynamicSubAgentManager.store_subagent_result(
+            session_id=umo,
+            agent_name=agent_name,
+            task_id=task_id,
+            success=success,
+            result=result_text.strip() if result_text else "",
+            error=error_text,
+            execution_time=execution_time,
+        )
+
+        DynamicSubAgentManager.set_subagent_status(
+            session_id=umo,
+            agent_name=agent_name,
+            status="FAILED" if error_text else "COMPLETED",
+        )
+
+        session = DynamicSubAgentManager.get_session(umo)
+        if session and session.shared_context_enabled:
+            status_content = (
+                f"[EnhancedSubAgent:BackgroundTask] SubAgent '{agent_name}' Task '{task_id}' "
+                f"{'Failed: ' + error_text if error_text else f'Complete. Execution Time: {execution_time:.1f}s'}"
+            )
+            DynamicSubAgentManager.add_shared_context(
+                session_id=umo,
+                sender=agent_name,
+                context_type="status",
+                content=status_content,
+                target="all",
+            )
+
+        logger.info(
+            "[EnhancedSubAgent:BackgroundTask] Stored result for %s task %s: success=%s, time=%.1fs",
+            agent_name,
+            task_id,
+            success,
+            execution_time,
+        )
+
+        if not await cls._maybe_wake_main_agent_after_background(
+            run_context=run_context,
+            tool=tool,
+            task_id=task_id,
+            agent_name=agent_name,
+            result_text=result_text,
+            tool_args=tool_args,
+        ):
+            return
+
+    @classmethod
+    async def _maybe_wake_main_agent_after_background(
+        cls,
+        *,
+        run_context: ContextWrapper[AstrAgentContext],
+        tool: HandoffTool,
+        task_id: str,
+        agent_name: str | None,
+        result_text: str,
+        tool_args: dict,
+    ) -> bool:
+        event = run_context.context.event
+        try:
+            context_extra = getattr(run_context.context, "extra", None)
+            if context_extra and isinstance(context_extra, dict):
+                main_agent_runner = context_extra.get("main_agent_runner")
+                main_agent_is_running = (
+                    main_agent_runner is not None and not main_agent_runner.done()
+                )
+            else:
+                main_agent_is_running = False
+        except Exception as e:  # noqa: BLE001
+            logger.error("Failed to check main agent status: %s", e)
+            main_agent_is_running = True
+
+        if main_agent_is_running:
+            return False
+
+        await cls._wake_main_agent_for_background_result(
+            run_context=run_context,
+            task_id=task_id,
+            tool_name=tool.name,
+            result_text=result_text,
+            tool_args=tool_args,
+            note=(
+                event.get_extra("background_note")
+                or f"Background task for subagent '{agent_name}' finished."
+            ),
+            summary_name=f"Dedicated to subagent `{agent_name}`",
+            extra_result_fields={"subagent_name": agent_name},
+        )
+        return True
 
 
 async def call_local_llm_tool(
