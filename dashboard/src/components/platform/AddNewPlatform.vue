@@ -860,17 +860,15 @@ export default {
         // 过滤出属于该平台的路由，并保持顺序
         const routes = [];
         for (const [umop, confId] of Object.entries(routingTable)) {
-          if (this.isUmopMatchPlatform(umop, platformId)) {
-            const parsedUmop = this.parseUmop(umop);
-            if (parsedUmop) {
-              routes.push({
-                umop: umop,
-                originalUmop: umop, // 保存原始 UMOP 用于更新时查找
-                messageType: parsedUmop.messageType === '' || parsedUmop.messageType === '*' ? '*' : parsedUmop.messageType,
-                sessionId: parsedUmop.sessionId === '' || parsedUmop.sessionId === '*' ? '*' : parsedUmop.sessionId,
-                configId: confId
-              });
-            }
+          const parsedUmop = this.parseUmop(umop);
+          if (this.isParsedUmopMatchPlatform(parsedUmop, platformId)) {
+            routes.push({
+              umop: umop,
+              originalUmop: umop, // 保存原始 UMOP 用于更新时查找
+              messageType: parsedUmop.messageType || '*',
+              sessionId: parsedUmop.sessionId || '*',
+              configId: confId
+            });
           }
         }
 
@@ -993,6 +991,10 @@ export default {
 
     isUmopMatchPlatform(umop, platformId) {
       const parsedUmop = this.parseUmop(umop);
+      return this.isParsedUmopMatchPlatform(parsedUmop, platformId);
+    },
+
+    isParsedUmopMatchPlatform(parsedUmop, platformId) {
       if (!parsedUmop) return false;
       return parsedUmop.platform === platformId || parsedUmop.platform === '' || parsedUmop.platform === '*';
     },
