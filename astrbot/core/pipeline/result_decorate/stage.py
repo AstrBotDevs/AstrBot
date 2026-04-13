@@ -5,6 +5,7 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
+from astrbot.core.i18n import t
 from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
@@ -289,7 +290,16 @@ class ResultDecorateStage(Stage):
                         ),
                     )
                 else:
-                    result.chain.insert(0, Plain(f"🤔 思考: {reasoning_content}\n"))
+                    result.chain.insert(
+                        0,
+                        Plain(
+                            t(
+                                "pipeline.reasoning_prefix",
+                                locale=self.ctx.get_current_language(),
+                                reasoning_content=reasoning_content,
+                            ),
+                        ),
+                    )
 
             if should_tts and tts_provider:
                 new_chain = []

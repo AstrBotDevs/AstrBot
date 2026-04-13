@@ -25,6 +25,11 @@
     "step3SelectLabel": "电脑访问权限",
     "step3Allow": "允许",
     "step3Deny": "不允许",
+    "step4Title": "选择语言",
+    "step4Desc": "设置 AstrBot 首选语言。",
+    "step4SelectLabel": "语言",
+    "step4Chinese": "简体中文",
+    "step4English": "English",
     "configure": "去配置",
     "save": "保存",
     "skip": "跳过",
@@ -38,7 +43,10 @@
     "computerAccessUpdateFailed": "更新 Agent 电脑访问权限失败",
     "computerAccessAllowed": "已允许 Agent 访问和使用电脑",
     "computerAccessDenied": "已禁止 Agent 访问和使用电脑",
-    "step3HelpItem3": "如需更多细化权限与能力配置，可前往 配置文件 -> 普通配置 -> 使用电脑能力 继续设置。"
+    "step3HelpItem3": "如需更多细化权限与能力配置，可前往 配置文件 -> 普通配置 -> 使用电脑能力 继续设置。",
+    "languageUpdateFailed": "更新语言设置失败",
+    "languageUpdated": "语言设置已更新",
+    "languageRestartConfirm": "应用语言切换之后需要重启 AstrBot。是否立即重启？"
   },
   "resources": {
     "title": "相关资源",

@@ -15,6 +15,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.i18n import normalize_language
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
@@ -437,6 +438,10 @@ class Context:
             # 使用默认配置
             return self._config
         return self.astrbot_config_mgr.get_conf(umo)
+
+    def get_current_language(self) -> str:
+        """Get the current runtime reply language."""
+        return normalize_language(self._config.get("language"))
 
     async def send_message(
         self,

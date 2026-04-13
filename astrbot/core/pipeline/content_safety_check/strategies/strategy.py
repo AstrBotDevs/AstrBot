@@ -26,9 +26,9 @@ class StrategySelector:
                 ),
             )
 
-    def check(self, content: str) -> tuple[bool, str]:
+    def check(self, content: str, locale: str | None = None) -> tuple[bool, str]:
         for strategy in self.enabled_strategies:
-            ok, info = strategy.check(content)
+            ok, info = strategy.check(content, locale=locale)
             if not ok:
                 return False, info
         return True, ""

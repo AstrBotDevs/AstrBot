@@ -987,6 +987,14 @@
     "name": "System",
     "system": {
       "description": "System Settings",
+      "language": {
+        "description": "System Language",
+        "hint": "Language used for AstrBot runtime replies. Currently supports Simplified Chinese and English.",
+        "labels": [
+          "Simplified Chinese",
+          "English"
+        ]
+      },
       "t2i_strategy": {
         "description": "Text-to-Image Strategy",
         "hint": "Text-to-image strategy. `remote` uses a remote HTML-based rendering service, `local` uses PIL for local rendering. When using local, place a TTF font named 'font.ttf' in the data/ directory to customize the font."

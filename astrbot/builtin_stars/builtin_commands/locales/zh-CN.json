@@ -1,0 +1,33 @@
+{
+  "help": {
+    "no_enabled_builtin_commands": "没有已启用的内置指令。"
+  },
+  "sid": {
+    "info": "UMO: 「{sid}」\nUID: 「{user_id}」\n*使用 UMO 设置白名单和配置文件路由，使用 UID 设置管理员列表。\n\n当前会话信息：\n机器人 ID: 「{platform}」\n消息类型: 「{message_type}」\n会话 ID: 「{session_id}」\n\n",
+    "group_whitelist": "\n\n当前群聊 ID: 「{group_id}」。将此 ID 加入白名单可允许整个群聊。"
+  },
+  "dashboard": {
+    "updating": "⏳ 正在更新管理面板...",
+    "updated": "✅ 管理面板更新成功。"
+  },
+  "scene": {
+    "group_unique_on": "群聊+会话隔离开启",
+    "group_unique_off": "群聊+会话隔离关闭",
+    "private": "私聊"
+  },
+  "conversation": {
+    "reset_admin_required": "在 {scene_name} 场景下，reset 指令需要管理员权限。你(ID {sender_id})不是管理员，无法执行此操作。",
+    "reset_success": "✅ 会话已重置。",
+    "no_provider": "😕 未找到可用的 LLM 提供商，请先配置。",
+    "no_conversation": "😕 当前未处于对话状态。请使用 /new 创建一个对话。",
+    "stop_requested": "✅ 已请求停止 {count} 个正在运行的任务。",
+    "no_running_tasks": "✅ 当前会话没有正在运行的任务。",
+    "new_created": "✅ 已创建新对话。",
+    "switched_new": "✅ 已切换到新对话：{conversation_id}。"
+  },
+  "setunset": {
+    "set_success": "会话 {session_id} 变量 {key} 存储成功。使用 /unset 移除。",
+    "unset_not_found": "没有那个变量名。格式 /unset 变量名。",
+    "unset_success": "会话 {session_id} 变量 {key} 移除成功。"
+  }
+}
