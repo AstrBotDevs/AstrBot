@@ -171,7 +171,7 @@ def _decode_escaped_text(value: str) -> str:
 @dataclass
 class FileReadTool(FunctionTool):
     name: str = "astrbot_file_read_tool"
-    description: str = "read file content."
+    description: str = "read file content. Supports text, image (OCR), and PDF (text extraction) files."
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
