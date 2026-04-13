@@ -255,7 +255,6 @@ import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue"
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import {
-  useMessages,
   type ChatContent,
   type ChatRecord,
   type MessagePart,
@@ -338,14 +337,14 @@ const dynamicEstimatedItemHeight = computed(() => {
 });
 
 // 使用 props 提供的方法，如果未提供则使用默认实现
-const isUserMessage = props.isUserMessage || ((message: ChatRecord) => message.role === 'user');
+const isUserMessage = props.isUserMessage || ((message: ChatRecord) => message.content?.type === 'user');
 const isMessageStreaming = props.isMessageStreaming || ((message: ChatRecord, index: number) => false);
 const messageContent = props.messageContent || ((message: ChatRecord) => ({
-  message: message.content || '',
-  reasoning: message.reasoning,
-  refs: message.refs,
-  agentStats: message.agent_stats,
-  isLoading: false,
+  message: message.content?.message || [],
+  reasoning: message.content?.reasoning,
+  refs: message.content?.refs,
+  agentStats: message.content?.agentStats,
+  isLoading: message.content?.isLoading || false,
 }));
 
 function messageParts(message: ChatRecord): MessagePart[] {
@@ -448,7 +447,6 @@ async function scrollToBottom() {
   await nextTick();
   const lastIndex = messages.value.length - 1;
   
-  // 尝试滚动到底部，使用 requestAnimationFrame 确保在下一帧执行
   const scroll = () => {
     virtualScrollRef.value?.scrollToIndex(lastIndex);
   };
