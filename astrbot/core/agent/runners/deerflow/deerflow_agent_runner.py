@@ -410,18 +410,20 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         )
         return messages
 
-    def _build_runtime_context(self, thread_id: str) -> dict[str, T.Any]:
-        runtime_context: dict[str, T.Any] = {
+    def _build_runtime_configurable(self, thread_id: str) -> dict[str, T.Any]:
+        runtime_configurable: dict[str, T.Any] = {
             "thread_id": thread_id,
             "thinking_enabled": self.thinking_enabled,
             "is_plan_mode": self.plan_mode,
             "subagent_enabled": self.subagent_enabled,
         }
         if self.subagent_enabled:
-            runtime_context["max_concurrent_subagents"] = self.max_concurrent_subagents
+            runtime_configurable["max_concurrent_subagents"] = (
+                self.max_concurrent_subagents
+            )
         if self.model_name:
-            runtime_context["model_name"] = self.model_name
-        return runtime_context
+            runtime_configurable["model_name"] = self.model_name
+        return runtime_configurable
 
     def _build_payload(
         self,
@@ -430,16 +432,19 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         image_urls: list[str],
         system_prompt: str | None,
     ) -> dict[str, T.Any]:
+        runtime_configurable = self._build_runtime_configurable(thread_id)
         return {
             "assistant_id": self.assistant_id,
             "input": {
                 "messages": self._build_messages(prompt, image_urls, system_prompt),
             },
             "stream_mode": ["values", "messages-tuple", "custom"],
-            # LangGraph 0.6+ prefers context instead of configurable.
-            "context": self._build_runtime_context(thread_id),
+            # DeerFlow 2.0 consumes runtime overrides from config.configurable.
+            # Keep the legacy context mirror for older compat paths.
+            "context": dict(runtime_configurable),
             "config": {
                 "recursion_limit": self.recursion_limit,
+                "configurable": runtime_configurable,
             },
         }
 

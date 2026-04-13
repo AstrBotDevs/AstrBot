@@ -1604,26 +1604,26 @@
       },
       "deerflow_assistant_id": {
         "description": "Assistant ID",
-        "hint": "LangGraph assistant_id，默认为 lead_agent。"
+        "hint": "DeerFlow 2.0 LangGraph assistant_id，默认为 lead_agent。"
       },
       "deerflow_model_name": {
         "description": "模型名称覆盖",
-        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。"
+        "hint": "可选。覆盖 DeerFlow 默认模型（对应运行时 configurable 的 model_name）。"
       },
       "deerflow_thinking_enabled": {
         "description": "启用思考模式"
       },
       "deerflow_plan_mode": {
         "description": "启用计划模式",
-        "hint": "对应 DeerFlow 的 is_plan_mode。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 is_plan_mode。"
       },
       "deerflow_subagent_enabled": {
         "description": "启用子智能体",
-        "hint": "对应 DeerFlow 的 subagent_enabled。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 subagent_enabled。"
       },
       "deerflow_max_concurrent_subagents": {
         "description": "子智能体最大并发数",
-        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。"
       },
       "deerflow_recursion_limit": {
         "description": "递归深度上限",

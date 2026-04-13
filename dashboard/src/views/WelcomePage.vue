@@ -200,7 +200,6 @@ import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useToast } from '@/utils/toast';
 import { MarkdownRender } from 'markstream-vue';
 import 'markstream-vue/index.css';
-import 'highlight.js/styles/github.css';
 
 type StepState = 'pending' | 'completed' | 'skipped';
 type ComputerAccessRuntime = 'local' | 'none';
