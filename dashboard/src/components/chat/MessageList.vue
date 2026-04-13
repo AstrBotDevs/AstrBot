@@ -244,7 +244,7 @@
 import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, toRef, watch } from "vue";
 import { VVirtualScroll } from 'vuetify/components';
 import axios from "axios";
-import { MarkdownCodeBlockNode, setCustomComponents } from "markstream-vue";
+import { setCustomComponents } from "markstream-vue";
 import "markstream-vue/index.css";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
@@ -254,10 +254,11 @@ import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
-import {
-  type ChatContent,
-  type ChatRecord,
-  type MessagePart,
+import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import type {
+  ChatContent,
+  ChatRecord,
+  MessagePart,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
 
@@ -295,7 +296,7 @@ const currSessionIdRef = toRef(props, 'currSessionId');
 
 setCustomComponents("chat-message", {
   ref: RefNode,
-  code_block: MarkdownCodeBlockNode,
+  code_block: ThemeAwareMarkdownCodeBlock,
 });
 
 const { tm } = useModuleI18n("features/chat");

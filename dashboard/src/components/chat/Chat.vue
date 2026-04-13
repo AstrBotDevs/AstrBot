@@ -444,7 +444,7 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
 import axios from "axios";
-import { MarkdownCodeBlockNode, setCustomComponents } from "markstream-vue";
+import { setCustomComponents } from "markstream-vue";
 import "markstream-vue/index.css";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
@@ -456,6 +456,7 @@ import ProjectView from "@/components/chat/ProjectView.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import MessageList from "@/components/chat/MessageList.vue";
 import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
+import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
   useMessages,
@@ -480,7 +481,7 @@ const props = withDefaults(defineProps<{ chatboxMode?: boolean }>(), {
 
 setCustomComponents("chat-message", {
   ref: RefNode,
-  code_block: MarkdownCodeBlockNode,
+  code_block: ThemeAwareMarkdownCodeBlock,
 });
 
 const route = useRoute();
