@@ -2,6 +2,7 @@
   "extends": "@vue/tsconfig/tsconfig.json",
   "include": ["vite.config.*"],
   "compilerOptions": {
+    "outDir": "dist",
     "composite": true,
     "allowJs": true,
     "types": ["node"]
