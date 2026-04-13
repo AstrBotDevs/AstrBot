@@ -5,6 +5,9 @@
     "outDir": "dist",
     "composite": true,
     "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "moduleResolution": "node",
     "types": ["node"]
   }
 }
