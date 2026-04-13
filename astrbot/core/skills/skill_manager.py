@@ -274,12 +274,17 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
 
 
 class SkillManager:
-    def __init__(self, skills_root: str | None = None) -> None:
+    def __init__(
+        self, skills_root: str | None = None, workspace_skills_root: str | None = None
+    ) -> None:
         self.skills_root = skills_root or get_astrbot_skills_path()
+        self.workspace_skills_root = workspace_skills_root
         data_path = Path(get_astrbot_data_path())
         self.config_path = str(data_path / SKILLS_CONFIG_FILENAME)
         self.sandbox_skills_cache_path = str(data_path / SANDBOX_SKILLS_CACHE_FILENAME)
         os.makedirs(self.skills_root, exist_ok=True)
+        if self.workspace_skills_root:
+            os.makedirs(self.workspace_skills_root, exist_ok=True)
 
     def _load_config(self) -> dict:
         if not os.path.exists(self.config_path):
@@ -430,6 +435,34 @@ class SkillManager:
                 sandbox_exists=sandbox_exists,
             )
 
+        # Scan workspace-local skills (if workspace_skills_root is set)
+        if self.workspace_skills_root and os.path.isdir(self.workspace_skills_root):
+            for entry in sorted(Path(self.workspace_skills_root).iterdir()):
+                if not entry.is_dir():
+                    continue
+                skill_name = entry.name
+                skill_md = _normalize_skill_markdown_path(entry)
+                if skill_md is None:
+                    continue
+                # Workspace skills are always active and workspace-local
+                description = ""
+                try:
+                    content = skill_md.read_text(encoding="utf-8")
+                    description = _parse_frontmatter_description(content)
+                except Exception:
+                    description = ""
+                path_str = str(skill_md).replace("\\", "/")
+                skills_by_name[skill_name] = SkillInfo(
+                    name=skill_name,
+                    description=description,
+                    path=path_str,
+                    active=True,
+                    source_type="workspace_only",
+                    source_label="workspace",
+                    local_exists=True,
+                    sandbox_exists=False,
+                )
+
         if runtime == "sandbox":
             cache = self._load_sandbox_skills_cache()
             for item in cache.get("skills", []):
@@ -541,12 +574,21 @@ class SkillManager:
         *,
         overwrite: bool = True,
         skill_name_hint: str | None = None,
+        install_to_workspace: bool = False,
     ) -> str:
         zip_path_obj = Path(zip_path)
         if not zip_path_obj.exists():
             raise FileNotFoundError(f"Zip file not found: {zip_path}")
         if not zipfile.is_zipfile(zip_path):
             raise ValueError("Uploaded file is not a valid zip archive.")
+
+        # Determine target skills root (global or workspace)
+        if install_to_workspace:
+            if not self.workspace_skills_root:
+                raise ValueError("Workspace skills root not configured")
+            target_skills_root = self.workspace_skills_root
+        else:
+            target_skills_root = self.skills_root
 
         installed_skills = []
 
@@ -605,7 +647,7 @@ class SkillManager:
                     else:
                         target_name = candidate_name
 
-                    dest_dir = Path(self.skills_root) / target_name
+                    dest_dir = Path(target_skills_root) / target_name
                     if dest_dir.exists():
                         conflict_dirs.append(str(dest_dir))
 
@@ -638,7 +680,7 @@ class SkillManager:
                             "SKILL.md not found in the root of the zip archive."
                         )
 
-                    dest_dir = Path(self.skills_root) / skill_name
+                    dest_dir = Path(target_skills_root) / skill_name
                     if dest_dir.exists() and overwrite:
                         shutil.rmtree(dest_dir)
                     elif dest_dir.exists() and not overwrite:
@@ -679,7 +721,7 @@ class SkillManager:
                         if normalized_path is None:
                             continue
 
-                        dest_dir = Path(self.skills_root) / skill_name
+                        dest_dir = Path(target_skills_root) / skill_name
                         if dest_dir.exists():
                             if not overwrite:
                                 raise FileExistsError(

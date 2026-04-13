@@ -17,6 +17,35 @@ def workspace_root(umo: str) -> Path:
     return (Path(get_astrbot_workspaces_path()) / normalized_umo).resolve(strict=False)
 
 
+def init_workspace(umo: str) -> Path:
+    """Initialize workspace for local runtime.
+
+    Creates the workspace directory with:
+    - EXTRA_PROMPT.md: for custom system prompt instructions
+    - skills/: for workspace-local skills
+
+    Returns the workspace root path.
+    """
+    root = workspace_root(umo)
+    root.mkdir(parents=True, exist_ok=True)
+
+    # Create EXTRA_PROMPT.md if not exists
+    extra_prompt_path = root / "EXTRA_PROMPT.md"
+    if not extra_prompt_path.exists():
+        extra_prompt_path.write_text(
+            "# System Extra Instructions\n\n"
+            "Add your custom system prompt instructions here.\n"
+            "These will be automatically loaded and applied to the agent's system prompt.\n",
+            encoding="utf-8",
+        )
+
+    # Create skills directory if not exists
+    skills_dir = root / "skills"
+    skills_dir.mkdir(exist_ok=True)
+
+    return root
+
+
 def is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
     cfg = context.context.context.get_config(
         umo=context.context.event.unified_msg_origin

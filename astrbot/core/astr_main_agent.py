@@ -361,11 +361,19 @@ def _build_local_mode_prompt() -> str:
         if system_name.lower() == "windows"
         else "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
     )
-    return (
-        "You have access to the host local environment and can execute shell commands and Python code. "
-        f"Current operating system: {system_name}. "
-        f"{shell_hint}"
-    )
+    lines = [
+        "You have access to the host local environment and can execute shell commands and Python code.",
+        f"Current operating system: {system_name}.",
+        shell_hint,
+        "",
+        "You can write and modify the EXTRA_PROMPT.md file in the current workspace",
+        "to customize your own system prompt instructions. This file will be automatically",
+        "loaded and applied to your system prompt in subsequent conversations.",
+        "",
+        "When installing skills, unless explicitly specified otherwise, prefer installing",
+        "them to the workspace/skills directory for better isolation and portability.",
+    ]
+    return " ".join(lines)
 
 
 async def _ensure_persona_and_skills(
