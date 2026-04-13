@@ -22,6 +22,11 @@ if TYPE_CHECKING:
     from astrbot.core.star.context import Context
 
 
+class CronJobSchedulingError(Exception):
+    """Raised when a cron job fails to be scheduled."""
+    pass
+
+
 class CronJobManager:
     """Central scheduler for BasicCronJob and ActiveAgentCronJob."""
 
@@ -59,7 +64,10 @@ class CronJobManager:
                     job.job_id,
                 )
                 continue
-            self._schedule_job(job)
+            try:
+                self._schedule_job(job)
+            except CronJobSchedulingError:
+                continue  # Error already logged in _schedule_job
 
     async def add_basic_job(
         self,
@@ -181,8 +189,9 @@ class CronJobManager:
                     job.job_id, next_run_time=self._get_next_run_time(job.job_id)
                 )
             )
-        except Exception as e:
-            logger.error(f"Failed to schedule cron job {job.job_id}: {e!s}")
+        except (ValueError, TypeError) as e:
+            logger.exception("Failed to schedule cron job %s", job.job_id)
+            raise CronJobSchedulingError(str(e)) from e
 
     def _get_next_run_time(self, job_id: str):
         aps_job = self.scheduler.get_job(job_id)
