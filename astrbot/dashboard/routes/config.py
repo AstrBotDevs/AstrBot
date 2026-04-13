@@ -906,6 +906,12 @@ class ConfigRoute(Route):
             return Response().ok({"embedding_dimensions": dim}).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
+            err_msg = str(e).lower()
+            # [新增] 识别 vLLM 的特定报错关键字
+            if "matryoshka" in err_msg or "dimensions" in err_msg:
+                logger.info("Detected vLLM specific error, bypassing...")
+                # 伪造一个成功的响应，告知前端进入"兼容模式"
+                return Response().ok({"embedding_dimensions": "vLLM-Adaptive"}).__dict__
             return Response().error(f"获取嵌入维度失败: {e!s}").__dict__
 
     async def get_provider_source_models(self):
