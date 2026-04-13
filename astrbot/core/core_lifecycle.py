@@ -102,32 +102,24 @@ class AstrBotCoreLifecycle:
         if self._default_chat_provider_warning_emitted:
             return
 
-        provider_manager = getattr(self, "provider_manager", None)
-        if provider_manager is None:
+        pm = getattr(self, "provider_manager", None)
+        if not pm or pm.provider_settings.get("default_provider_id"):
             return
 
-        default_provider_id = provider_manager.provider_settings.get(
-            "default_provider_id", ""
-        )
-        if default_provider_id:
+        providers = pm.provider_insts
+        if len(providers) <= 1:
             return
 
-        enabled_chat_providers = provider_manager.provider_insts
-        if len(enabled_chat_providers) <= 1:
-            return
-
-        fallback_provider = (
-            provider_manager.curr_provider_inst or enabled_chat_providers[0]
-        )
-        fallback_provider_id = fallback_provider.provider_config.get("id", "unknown")
+        fallback = pm.curr_provider_inst or providers[0]
+        fallback_id = fallback.provider_config.get("id", "unknown")
 
         self._default_chat_provider_warning_emitted = True
         logger.warning(
             "Detected %d enabled chat providers but `provider_settings.default_provider_id` is empty. "
             "AstrBot will use `%s` as the startup fallback chat provider. "
             "Set a default chat model in the WebUI configuration page to avoid unexpected provider switching.",
-            len(enabled_chat_providers),
-            fallback_provider_id,
+            len(providers),
+            fallback_id,
         )
 
     async def initialize(self) -> None:
