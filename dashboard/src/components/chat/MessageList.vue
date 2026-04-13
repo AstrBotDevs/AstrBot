@@ -9,18 +9,20 @@
     </div>
 
     <v-virtual-scroll v-else class="messages-list" ref="virtualScrollRef"
-            :items="activeMessages" :item-height="dynamicEstimatedItemHeight"
+            :items="messages" :item-height="dynamicEstimatedItemHeight"
             @scroll="handleVirtualScroll"
     >
-      <div
-        v-for="(msg, msgIndex) in messages"
-        :key="msg.id || `${msgIndex}-${msg.created_at || ''}`"
-        class="message-row"
-        :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
-      >
+      <template #default="{ item: msg, index: msgIndex }">
+        <div
+          :key="msg.id || `${msgIndex}-${msg.created_at || ''}`"
+          :data-index="`idx-${msgIndex}`"
+          :ref="(el) => observeHeight(el as HTMLElement, msg.id)"
+          class="message-row"
+          :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
+        >
         <v-avatar v-if="!isUserMessage(msg)" class="bot-avatar" size="48">
           <v-progress-circular
-            v-if="isMessageStreaming(msgIndex)"
+            v-if="isMessageStreaming(msg, msgIndex)"
             indeterminate
             size="22"
             width="2"
@@ -43,7 +45,7 @@
                 :reasoning="messageContent(msg).reasoning || ''"
                 :is-dark="isDark"
                 :initial-expanded="false"
-                :is-streaming="isMessageStreaming(msgIndex)"
+                :is-streaming="isMessageStreaming(msg, msgIndex)"
                 :has-non-reasoning-content="hasNonReasoningContent(msg)"
               />
 
@@ -216,7 +218,8 @@
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </template>
     </v-virtual-scroll>
 
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
@@ -238,7 +241,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch, type Ref } from "vue";
+import { VVirtualScroll } from 'vuetify/components';
 import axios from "axios";
 import { MarkdownCodeBlockNode, setCustomComponents } from "markstream-vue";
 import "markstream-vue/index.css";
@@ -250,26 +254,37 @@ import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
-import type {
-  ChatContent,
-  ChatRecord,
-  MessagePart,
+import {
+  useMessages,
+  type ChatContent,
+  type ChatRecord,
+  type MessagePart,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
 
 const props = withDefaults(
   defineProps<{
+    currSessionId: Ref<string>;
+    getSession: () => void;
     messages: ChatRecord[];
-    isDark?: boolean;
-    isStreaming?: boolean;
     isLoadingMessages?: boolean;
+    isDark?: boolean;
+    shouldStickToBottom?: boolean;
+    autoScroll?: boolean;
   }>(),
   {
-    isDark: false,
-    isStreaming: false,
+    currSessionId: () => ref(""),
+    getSession: () => {},
     isLoadingMessages: false,
+    isDark: false,
+    shouldStickToBottom: undefined,
+    autoScroll: true,
   },
 );
+
+const emit = defineEmits<{
+  'update:shouldStickToBottom': [value: boolean];
+}>();
 
 setCustomComponents("chat-message", {
   ref: RefNode,
@@ -280,14 +295,21 @@ const { tm } = useModuleI18n("features/chat");
 const customMarkdownTags = ["ref"];
 const downloadingFiles = ref(new Set<string>());
 const messageListRoot = ref<HTMLElement | null>(null);
-const virtualScrollRef = ref<{ scrollToIndex: (index: number) => void } | null>(null);
+const virtualScrollRef = ref<InstanceType<typeof VVirtualScroll> | null>(null);
 const messageHeights = reactive(new Map<string, number>());
 let resizeObserver: ResizeObserver | null = null;
 const imagePreview = reactive({ visible: false, url: "" });
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
+const internalShouldStickToBottom = ref(true);
 
 const messages = computed(() => props.messages || []);
+const shouldStickToBottom = computed(() => {
+  if (props.shouldStickToBottom !== undefined) {
+    return props.shouldStickToBottom;
+  }
+  return internalShouldStickToBottom.value;
+});
 const dynamicEstimatedItemHeight = computed(() => {
   const msgs = messages.value;
   if (!msgs.length) return 120;
@@ -295,26 +317,28 @@ const dynamicEstimatedItemHeight = computed(() => {
   for (let i = 0; i < msgs.length; i++) {
     total += getEstimatedItemHeight(msgs[i], i);
   }
-  return Math.max(120, Math.min(total / msgs.length, 300));
+  return Math.max(180, Math.min(total / msgs.length, 500));
 });
 
-function isUserMessage(message: ChatRecord) {
-  return messageContent(message).type === "user";
-}
-
-function messageContent(message: ChatRecord): ChatContent {
-  return message.content || { type: "bot", message: [] };
-}
+const {
+  isUserMessage,
+  isMessageStreaming,
+  messageContent,
+} = useMessages({
+  currentSessionId: props.currSessionId,
+  onSessionsChanged: props.getSession,
+  onStreamUpdate: (sessionId) => {
+    if (sessionId === props.currSessionId.value && shouldStickToBottom.value) {
+      scrollToBottom();
+    }
+  },
+});
 
 function messageParts(message: ChatRecord): MessagePart[] {
   const parts = messageContent(message).message;
   if (Array.isArray(parts)) return parts;
   if (typeof parts === "string") return [{ type: "plain", text: parts }];
   return [];
-}
-
-function isMessageStreaming(messageIndex: number) {
-  return props.isStreaming && messageIndex === messages.value.length - 1;
 }
 
 function hasNonReasoningContent(message: ChatRecord) {
@@ -388,12 +412,25 @@ function handleVirtualScroll(event: Event) {
   if (!el) return;
   const { scrollTop, scrollHeight, clientHeight } = el;
   const distance = scrollHeight - scrollTop - clientHeight;
-  shouldStickToBottom.value = distance < 80;
+  const newValue = distance < 80;
+  
+  if (props.shouldStickToBottom !== undefined) {
+    emit('update:shouldStickToBottom', newValue);
+  } else {
+    internalShouldStickToBottom.value = newValue;
+  }
 }
 
 async function scrollToBottom() {
-  if (messages.value.length === 0) return;
-  shouldStickToBottom.value = true;
+  const msgs = messages.value;
+  if (msgs.length === 0) return;
+  
+  if (props.shouldStickToBottom !== undefined) {
+    emit('update:shouldStickToBottom', true);
+  } else {
+    internalShouldStickToBottom.value = true;
+  }
+  
   await nextTick();
   const lastIndex = messages.value.length - 1;
   const scroll = () => {
@@ -401,7 +438,8 @@ async function scrollToBottom() {
   };
   scroll();
   requestAnimationFrame(scroll);
-  setTimeout(scroll, 200);
+  // 使用延迟+多次滚动，确保能滚动到最后一条消息。
+  setTimeout(scroll, 400);
 }
 
 const observeHeight = (el: HTMLElement | null, id: string | number | undefined) => {
@@ -436,7 +474,7 @@ const getEstimatedItemHeight = (msg: ChatRecord, index: number) => {
 
 
 function showMessageMeta(message: ChatRecord, msgIndex: number) {
-  return !messageContent(message).isLoading && !isMessageStreaming(msgIndex);
+  return !messageContent(message).isLoading && !isMessageStreaming(message, msgIndex);
 }
 
 function messageRefs(message: ChatRecord) {
@@ -600,6 +638,44 @@ function formatDuration(seconds: number) {
   const restSeconds = Math.round(seconds % 60);
   return `${minutes}m ${restSeconds}s`;
 }
+
+watch(
+  [messages, shouldStickToBottom],
+  ([newMessages, newShouldStickToBottom], [oldMessages]) => {
+    if (!props.autoScroll) return;
+    
+    const messagesChanged = newMessages !== oldMessages;
+    const hasNewMessages = newMessages.length > (oldMessages?.length || 0);
+    
+    if (newShouldStickToBottom && (messagesChanged || hasNewMessages)) {
+      nextTick(() => {
+        scrollToBottom();
+      });
+    }
+  },
+  { immediate: true }
+);
+
+onMounted(() => {
+  resizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const id = entry.target.getAttribute("data-id");
+      if (id) {
+        messageHeights.set(id, entry.contentRect.height);
+      }
+    }
+  });
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+});
+
+defineExpose({
+  scrollToBottom,
+  scrollToMessage,
+  virtualScrollRef
+});
 </script>
 
 <style scoped>
@@ -607,7 +683,11 @@ function formatDuration(seconds: number) {
   --chat-border: rgba(var(--v-border-color), 0.16);
   --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
   width: 100%;
+  flex: 1;  
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 0 18px;
   color: rgb(var(--v-theme-on-surface));
 }
 

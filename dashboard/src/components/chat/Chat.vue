@@ -341,243 +341,17 @@
             <div class="welcome-title">{{ tm("welcome.title") }}</div>
           </div>
 
-          <v-virtual-scroll v-if="!loadingMessages && activeMessages.length"
-            class="messages-list" ref="virtualScrollRef"
-            :items="activeMessages" :item-height="dynamicEstimatedItemHeight"
-            @scroll="handleVirtualScroll"
-          >
-            <template #default="{ item: msg, index: msgIndex }">
-              <div
-                :key="msg.id || `${msgIndex}-${msg.created_at || ''}`"
-                :data-index="`idx-${msgIndex}`"
-                :ref="(el) => observeHeight(el as HTMLElement, msg.id)"
-                class="message-row"
-                :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
-              >
-                <v-avatar v-if="!isUserMessage(msg)" class="bot-avatar" size="56">
-                  <v-progress-circular
-                    style="margin-top: -4px"
-                    v-if="isMessageStreaming(msg, msgIndex)"
-                    indeterminate
-                    size="22"
-                    width="2"
-                  />
-                  <span v-else class="bot-avatar-symbol" aria-hidden="true">
-                    ✦
-                  </span>
-                </v-avatar>
-
-                <div class="message-stack">
-                  <div
-                    class="message-bubble"
-                    :class="{
-                      user: isUserMessage(msg),
-                      bot: !isUserMessage(msg),
-                    }"
-                  >
-                    <div
-                      v-if="messageContent(msg).isLoading"
-                      class="loading-message"
-                    >
-                      <span>{{ tm("message.loading") }}</span>
-                    </div>
-
-                    <template v-else>
-                      <ReasoningBlock
-                        v-if="messageContent(msg).reasoning"
-                        :reasoning="messageContent(msg).reasoning || ''"
-                        :is-dark="isDark"
-                        :initial-expanded="false"
-                        :is-streaming="isMessageStreaming(msg, msgIndex)"
-                        :has-non-reasoning-content="hasNonReasoningContent(msg)"
-                      />
-
-                      <template
-                        v-for="(part, partIndex) in messageParts(msg)"
-                        :key="`${msgIndex}-${partIndex}-${part.type}`"
-                      >
-                        <button
-                          v-if="part.type === 'reply'"
-                          class="reply-quote"
-                          type="button"
-                          @click="scrollToMessage(part.message_id)"
-                        >
-                          <v-icon size="15">mdi-reply</v-icon>
-                          <span>{{
-                            replyPreview(part.message_id, part.selected_text)
-                          }}</span>
-                        </button>
-
-                        <div
-                          v-else-if="part.type === 'plain' && isUserMessage(msg)"
-                          class="plain-content"
-                        >
-                          {{ part.text || "" }}
-                        </div>
-
-                        <MarkdownMessagePart
-                          v-else-if="part.type === 'plain'"
-                          :content="part.text || ''"
-                          :refs="resolvedMessageRefs(msg)"
-                          :is-dark="isDark"
-                          :custom-html-tags="customMarkdownTags"
-                        />
-
-                        <button
-                          v-else-if="part.type === 'image'"
-                          class="image-part"
-                          type="button"
-                          @click="openImage(partUrl(part))"
-                        >
-                          <img
-                            :src="partUrl(part)"
-                            :alt="part.filename || 'image'"
-                          />
-                        </button>
-
-                        <audio
-                          v-else-if="part.type === 'record'"
-                          class="audio-part"
-                          controls
-                          :src="partUrl(part)"
-                        />
-
-                        <video
-                          v-else-if="part.type === 'video'"
-                          class="video-part"
-                          controls
-                          :src="partUrl(part)"
-                        />
-
-                        <div v-else-if="part.type === 'file'" class="file-part">
-                          <v-icon size="20">mdi-file-document-outline</v-icon>
-                          <span>{{ part.filename || "file" }}</span>
-                          <v-btn
-                            icon="mdi-download"
-                            size="x-small"
-                            variant="text"
-                            :loading="
-                              downloadingFiles.has(
-                                part.attachment_id || part.filename || '',
-                              )
-                            "
-                            @click="downloadPart(part)"
-                          />
-                        </div>
-
-                        <div
-                          v-else-if="part.type === 'tool_call'"
-                          class="tool-call-block"
-                        >
-                          <template
-                            v-for="tool in part.tool_calls || []"
-                            :key="tool.id || tool.name"
-                          >
-                            <ToolCallItem
-                              v-if="isIPythonToolCall(tool)"
-                              :is-dark="isDark"
-                            >
-                              <template #label>
-                                <v-icon size="16">mdi-code-json</v-icon>
-                                <span>{{ tool.name || "python" }}</span>
-                                <span class="tool-call-inline-status">
-                                  {{ toolCallStatusText(tool) }}
-                                </span>
-                              </template>
-                              <template #details>
-                                <IPythonToolBlock
-                                  :tool-call="normalizeToolCall(tool)"
-                                  :is-dark="isDark"
-                                  :show-header="false"
-                                  :force-expanded="true"
-                                />
-                              </template>
-                            </ToolCallItem>
-                            <ToolCallCard
-                              v-else
-                              :tool-call="normalizeToolCall(tool)"
-                              :is-dark="isDark"
-                            />
-                          </template>
-                        </div>
-
-                        <div v-else class="unknown-part">
-                          {{ formatJson(part) }}
-                        </div>
-                      </template>
-                    </template>
-                  </div>
-
-                  <div v-if="showMessageMeta(msg, msgIndex)" class="message-meta">
-                    <span v-if="msg.created_at">{{
-                      formatTime(msg.created_at)
-                    }}</span>
-                    <v-btn
-                      v-if="!isUserMessage(msg)"
-                      icon="mdi-content-copy"
-                      size="x-small"
-                      variant="text"
-                      @click="copyMessage(msg)"
-                    />
-                    <v-btn
-                      icon="mdi-reply-outline"
-                      size="x-small"
-                      variant="text"
-                      @click="setReplyTarget(msg)"
-                    />
-                    <v-menu
-                      v-if="messageContent(msg).agentStats"
-                      location="bottom"
-                    >
-                      <template #activator="{ props: statsProps }">
-                        <v-btn
-                          v-bind="statsProps"
-                          icon="mdi-information-outline"
-                          size="x-small"
-                          variant="text"
-                        />
-                      </template>
-                      <v-card class="stats-card" elevation="4">
-                        <div class="stats-row">
-                          <span>{{ tm("stats.inputTokens") }}</span>
-                          <strong>{{
-                            inputTokens(messageContent(msg).agentStats)
-                          }}</strong>
-                        </div>
-                        <div class="stats-row">
-                          <span>{{ tm("stats.outputTokens") }}</span>
-                          <strong>{{
-                            outputTokens(messageContent(msg).agentStats)
-                          }}</strong>
-                        </div>
-                        <div
-                          v-if="agentTtft(messageContent(msg).agentStats)"
-                          class="stats-row"
-                        >
-                          <span>{{ tm("stats.ttft") }}</span>
-                          <strong>{{
-                            agentTtft(messageContent(msg).agentStats)
-                          }}</strong>
-                        </div>
-                        <div class="stats-row">
-                          <span>{{ tm("stats.duration") }}</span>
-                          <strong>{{
-                            agentDuration(messageContent(msg).agentStats)
-                          }}</strong>
-                        </div>
-                      </v-card>
-                    </v-menu>
-                    <div v-if="messageRefs(msg).length" class="message-meta-refs">
-                      <ActionRef
-                        :refs="resolvedMessageRefs(msg)"
-                        @open-refs="openRefsSidebar"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </template>
-          </v-virtual-scroll>
+          <MessageList
+            v-if="!loadingMessages && activeMessages.length"
+            ref="messageListRef"
+            :current-session-id="currSessionId"
+            :get-session="getSessions"
+            :messages="activeMessages"
+            :is-dark="isDark"
+            :is-loading-messages="loadingMessages"
+            :should-stick-to-bottom="shouldStickToBottom"
+            @update:should-stick-to-bottom="shouldStickToBottom = $event"
+          />
         </section>
 
         <section class="composer-shell">
@@ -650,20 +424,6 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
-    <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
-
-    <v-overlay
-      v-model="imagePreview.visible"
-      class="image-preview-overlay"
-      @click="closeImage"
-    >
-      <img
-        :src="imagePreview.url"
-        class="preview-image"
-        alt="preview"
-        @click.stop
-      />
-    </v-overlay>
   </div>
 </template>
 
@@ -691,14 +451,8 @@ import ProjectDialog, {
 import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
 import ProjectView from "@/components/chat/ProjectView.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
-import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
-import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
+import MessageList from "@/components/chat/MessageList.vue";
 import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
-import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
-import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
   useMessages,
@@ -782,17 +536,11 @@ const savingSessionTitle = ref(false);
 const projectSessions = ref<Session[]>([]);
 const loadingSessions = ref(false);
 const draft = ref("");
-const downloadingFiles = ref(new Set<string>());
-const messagesContainer = ref<HTMLElement | null>(null);
-const virtualScrollRef = ref<{ scrollToIndex: (index: number) => void } | null>(null);
-const messageHeights = reactive(new Map<string, number>());
-let resizeObserver: ResizeObserver | null = null;
+const messageListRef = ref<InstanceType<typeof MessageList> | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
 const replyTarget = ref<ChatRecord | null>(null);
 const imagePreview = reactive({ visible: false, url: "" });
-const refsSidebarOpen = ref(false);
-const selectedRefs = ref<Record<string, unknown> | null>(null);
 const enableStreaming = ref(true);
 const isRecording = ref(false);
 const sendShortcut = ref<"enter" | "shift_enter">("enter");
@@ -807,15 +555,6 @@ const chatSidebarDrawer = computed({
 const isSidebarCollapsed = computed(() =>
   lgAndUp.value ? sidebarCollapsed.value : !customizer.chatSidebarOpen,
 );
-const dynamicEstimatedItemHeight = computed(() => {
-  const msgs = activeMessages.value;
-  if (!msgs.length) return 120;
-  let total = 0;
-  for (let i = 0; i < msgs.length; i++) {
-    total += getEstimatedItemHeight(msgs[i], i);
-  }
-  return Math.max(120, Math.min(total / msgs.length, 300));
-});
 
 const {
   loadingMessages,
@@ -824,9 +563,6 @@ const {
   sessionProjects,
   activeMessages,
   isSessionRunning,
-  isUserMessage,
-  isMessageStreaming,
-  messageContent,
   messageParts,
   loadSessionMessages,
   createLocalExchange,
@@ -912,18 +648,9 @@ onMounted(async () => {
   } finally {
     loadingSessions.value = false;
   }
-  resizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      const id = entry.target.getAttribute("data-id");
-      if (id) {
-        messageHeights.set(id, entry.contentRect.height);
-      }
-    }
-  });
 });
 
 onBeforeUnmount(() => {
-  resizeObserver?.disconnect();
   cleanupMediaCache();
 });
 
@@ -939,12 +666,6 @@ watch(
     }
   },
 );
-
-watch(activeMessages, () => {
-  if (shouldStickToBottom.value) {
-    scrollToBottom();
-  }
-}, { flush: "post" });
 
 function getRouteSessionId() {
   const raw = route.params.conversationId;
@@ -1184,43 +905,10 @@ function buildOutgoingParts(text: string): MessagePart[] {
   return parts;
 }
 
-function hasNonReasoningContent(message: ChatRecord) {
-  return messageParts(message).some((part) => {
-    if (part.type === "reply") return false;
-    if (part.type === "plain") return Boolean(String(part.text || "").trim());
-    return true;
-  });
-}
-
 function updateTitleFromText(sessionId: string, text: string) {
   const session = sessions.value.find((item) => item.session_id === sessionId);
   if (!session || session.display_name || !text) return;
   updateSessionTitle(sessionId, text.slice(0, 40));
-}
-
-function partUrl(part: MessagePart) {
-  if (part.embedded_url) return part.embedded_url;
-  if (part.embedded_file?.url) return part.embedded_file.url;
-  if (part.attachment_id)
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
-  if (part.filename)
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
-  return "";
-}
-
-function formatJson(value: unknown) {
-  if (typeof value === "string") {
-    const parsed = parseJsonSafe(value);
-    if (parsed !== value) return JSON.stringify(parsed, null, 2);
-    return value;
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value ?? "");
-  }
 }
 
 function replyPreview(messageId?: string | number, fallback?: string) {
@@ -1241,131 +929,6 @@ function plainTextFromMessage(message: ChatRecord) {
 
 function truncate(value: string, max: number) {
   return value.length > max ? `${value.slice(0, max)}...` : value;
-}
-
-function scrollToMessage(messageId?: string | number) {
-  if (!messageId) return;
-  const index = activeMessages.value.findIndex(
-    (message) => String(message.id) === String(messageId),
-  );
-  if (index < 0) return;
-  nextTick(() => {
-    virtualScrollRef.value?.scrollToIndex(index);
-  });
-}
-
-function setReplyTarget(message: ChatRecord) {
-  replyTarget.value = message;
-  nextTick(() => inputRef.value?.focusInput?.());
-}
-
-function showMessageMeta(message: ChatRecord, msgIndex: number) {
-  return (
-    !messageContent(message).isLoading && !isMessageStreaming(message, msgIndex)
-  );
-}
-
-function messageRefs(message: ChatRecord) {
-  return resolvedMessageRefs(message).used;
-}
-
-function resolvedMessageRefs(message: ChatRecord) {
-  return normalizeRefs(messageContent(message).refs);
-}
-
-function normalizeRefs(refs: unknown) {
-  if (!refs) return { used: [] as Array<Record<string, unknown>> };
-  const used = Array.isArray((refs as any)?.used)
-    ? (refs as any).used
-    : Array.isArray(refs)
-    ? refs
-    : [];
-
-  return {
-    used: normalizeRefItems(used),
-  };
-}
-
-function normalizeRefItems(items: unknown[]) {
-  return items
-    .map((item: any) => ({
-      index: item?.index,
-      title: item?.title || item?.url || tm("refs.title"),
-      url: item?.url,
-      snippet: item?.snippet,
-      favicon: item?.favicon,
-    }))
-    .filter((item) => item.url);
-}
-
-function openRefsSidebar(refs: unknown) {
-  selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
-  refsSidebarOpen.value = true;
-}
-
-function normalizeToolCall(tool: Record<string, unknown>) {
-  const normalized = { ...tool };
-  normalized.args = normalized.args ?? normalized.arguments ?? {};
-  normalized.ts = normalized.ts ?? Date.now() / 1000;
-  if (normalized.result && typeof normalized.result === "object") {
-    normalized.result = JSON.stringify(normalized.result, null, 2);
-  }
-  return normalized;
-}
-
-function isIPythonToolCall(tool: Record<string, unknown>) {
-  const name = String(tool.name || "").toLowerCase();
-  return name.includes("python") || name.includes("ipython");
-}
-
-function toolCallStatusText(tool: Record<string, unknown>) {
-  if (tool.finished_ts) return tm("toolStatus.done");
-  return tm("toolStatus.running");
-}
-
-function parseJsonSafe(value: unknown) {
-  if (typeof value !== "string") return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
-
-async function copyMessage(message: ChatRecord) {
-  const text = plainTextFromMessage(message);
-  if (!text) return;
-  await navigator.clipboard?.writeText(text);
-}
-
-async function downloadPart(part: MessagePart) {
-  const key = part.attachment_id || part.filename || "";
-  if (!key) return;
-  downloadingFiles.value = new Set(downloadingFiles.value).add(key);
-  try {
-    const response = await axios.get(partUrl(part), { responseType: "blob" });
-    const url = URL.createObjectURL(response.data);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = part.filename || "file";
-    anchor.click();
-    URL.revokeObjectURL(url);
-  } finally {
-    const next = new Set(downloadingFiles.value);
-    next.delete(key);
-    downloadingFiles.value = next;
-  }
-}
-
-function openImage(url: string) {
-  imagePreview.url = url;
-  imagePreview.visible = true;
-}
-
-function closeImage() {
-  imagePreview.visible = false;
-  imagePreview.url = "";
 }
 
 async function handleFilesSelected(files: FileList) {
@@ -1391,56 +954,13 @@ function stopRecording() {
   isRecording.value = false;
 }
 
-function handleVirtualScroll(event: Event) {
-  const el = event.target as HTMLElement;
-  if (!el) return;
-  const { scrollTop, scrollHeight, clientHeight } = el;
-  const distance = scrollHeight - scrollTop - clientHeight;
-  shouldStickToBottom.value = distance < 80;
-}
-
 async function scrollToBottom() {
   if (activeMessages.value.length === 0) return;
   shouldStickToBottom.value = true;
   await nextTick();
-  const lastIndex = activeMessages.value.length - 1;
-  const scroll = () => {
-    virtualScrollRef.value?.scrollToIndex(lastIndex);
-  };
-  scroll();
-  requestAnimationFrame(scroll);
-  setTimeout(scroll, 200);
+  messageListRef.value?.scrollToBottom();
 }
 
-const observeHeight = (el: HTMLElement | null, id: string | number | undefined) => {
-  if (el && resizeObserver) {
-    const stringId = id ? String(id) : el.dataset.index || "unknown";
-    el.setAttribute("data-id", stringId);
-    resizeObserver.observe(el);
-  }
-};
-
-const getEstimatedItemHeight = (msg: ChatRecord, index: number) => {
-  const id = msg.id ? String(msg.id) : `idx-${index}`;
-  const cached = messageHeights.get(id);
-  if (cached) return cached;
-
-  let h = 80;
-  const parts = messageParts(msg);
-
-  if (messageContent(msg).reasoning) h += 100;
-
-  for (const part of parts) {
-    if (part.type === "plain") {
-      const lines = Math.ceil(String(part.text || "").length / 50);
-      h += lines * 20;
-    }
-    if (part.type === "image") h += 250;
-    if (part.type === "tool_call") h += 150;
-  }
-
-  return Math.min(h, 500);
-};
 
 async function stopCurrentSession() {
   if (!currSessionId.value) return;
@@ -1455,58 +975,12 @@ function toggleTheme() {
   customizer.SET_UI_THEME(isDark.value ? "PurpleTheme" : "PurpleThemeDark");
 }
 
-function formatTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function inputTokens(stats: any) {
-  const usage = stats?.token_usage || {};
-  return (usage.input_other || 0) + (usage.input_cached || 0);
-}
-
-function outputTokens(stats: any) {
-  return stats?.token_usage?.output || 0;
-}
-
-function agentDuration(stats: any) {
-  const directDuration = readPositiveNumber(stats, [
-    "duration",
-    "total_duration",
-  ]);
-  if (directDuration !== null) return formatDuration(directDuration);
-
-  const startTime = readPositiveNumber(stats, ["start_time"]);
-  const endTime = readPositiveNumber(stats, ["end_time"]);
-  if (startTime === null || endTime === null || endTime < startTime) return "-";
-  return formatDuration(endTime - startTime);
-}
-
-function agentTtft(stats: any) {
-  const ttft = readPositiveNumber(stats, [
-    "time_to_first_token",
-    "ttft",
-    "first_token_latency",
-  ]);
-  if (ttft === null) return "";
-  return formatDuration(ttft);
-}
-
 function readPositiveNumber(source: any, keys: string[]) {
   for (const key of keys) {
     const value = Number(source?.[key]);
     if (Number.isFinite(value) && value > 0) return value;
   }
   return null;
-}
-
-function formatDuration(seconds: number) {
-  if (seconds < 1) return `${Math.round(seconds * 1000)}ms`;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const restSeconds = Math.round(seconds % 60);
-  return `${minutes}m ${restSeconds}s`;
 }
 </script>
 
