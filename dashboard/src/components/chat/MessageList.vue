@@ -241,7 +241,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch, type Ref } from "vue";
+import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, toRef, watch } from "vue";
 import { VVirtualScroll } from 'vuetify/components';
 import axios from "axios";
 import { MarkdownCodeBlockNode, setCustomComponents } from "markstream-vue";
@@ -264,27 +264,35 @@ import { useModuleI18n } from "@/i18n/composables";
 
 const props = withDefaults(
   defineProps<{
-    currSessionId: Ref<string>;
+    currSessionId: string;
     getSession: () => void;
     messages: ChatRecord[];
     isLoadingMessages?: boolean;
     isDark?: boolean;
     shouldStickToBottom?: boolean;
     autoScroll?: boolean;
+    isUserMessage?: (message: ChatRecord) => boolean;
+    isMessageStreaming?: (message: ChatRecord, index: number) => boolean;
+    messageContent?: (message: ChatRecord) => ChatContent;
   }>(),
   {
-    currSessionId: () => ref(""),
+    currSessionId: "",
     getSession: () => {},
     isLoadingMessages: false,
     isDark: false,
     shouldStickToBottom: undefined,
     autoScroll: true,
+    isUserMessage: undefined,
+    isMessageStreaming: undefined,
+    messageContent: undefined,
   },
 );
 
 const emit = defineEmits<{
   'update:shouldStickToBottom': [value: boolean];
 }>();
+
+const currSessionIdRef = toRef(props, 'currSessionId');
 
 setCustomComponents("chat-message", {
   ref: RefNode,
@@ -313,26 +321,32 @@ const shouldStickToBottom = computed(() => {
 const dynamicEstimatedItemHeight = computed(() => {
   const msgs = messages.value;
   if (!msgs.length) return 120;
+  
+  // 采样最近的消息来计算平均高度，避免 O(N) 遍历
+  const sampleSize = Math.min(msgs.length, 10); // 最多采样10条消息
+  const startIndex = Math.max(0, msgs.length - sampleSize);
   let total = 0;
-  for (let i = 0; i < msgs.length; i++) {
+  let count = 0;
+  
+  for (let i = startIndex; i < msgs.length; i++) {
     total += getEstimatedItemHeight(msgs[i], i);
+    count++;
   }
-  return Math.max(180, Math.min(total / msgs.length, 500));
+  
+  const average = count > 0 ? total / count : 200;
+  return Math.max(180, Math.min(average, 500));
 });
 
-const {
-  isUserMessage,
-  isMessageStreaming,
-  messageContent,
-} = useMessages({
-  currentSessionId: props.currSessionId,
-  onSessionsChanged: props.getSession,
-  onStreamUpdate: (sessionId) => {
-    if (sessionId === props.currSessionId.value && shouldStickToBottom.value) {
-      scrollToBottom();
-    }
-  },
-});
+// 使用 props 提供的方法，如果未提供则使用默认实现
+const isUserMessage = props.isUserMessage || ((message: ChatRecord) => message.role === 'user');
+const isMessageStreaming = props.isMessageStreaming || ((message: ChatRecord, index: number) => false);
+const messageContent = props.messageContent || ((message: ChatRecord) => ({
+  message: message.content || '',
+  reasoning: message.reasoning,
+  refs: message.refs,
+  agentStats: message.agent_stats,
+  isLoading: false,
+}));
 
 function messageParts(message: ChatRecord): MessagePart[] {
   const parts = messageContent(message).message;
@@ -433,13 +447,22 @@ async function scrollToBottom() {
   
   await nextTick();
   const lastIndex = messages.value.length - 1;
+  
+  // 尝试滚动到底部，使用 requestAnimationFrame 确保在下一帧执行
   const scroll = () => {
     virtualScrollRef.value?.scrollToIndex(lastIndex);
   };
+  
+  // 立即尝试一次
   scroll();
-  requestAnimationFrame(scroll);
-  // 使用延迟+多次滚动，确保能滚动到最后一条消息。
-  setTimeout(scroll, 400);
+  
+  // 在下一帧再尝试一次，确保虚拟滚动已更新
+  requestAnimationFrame(() => {
+    scroll();
+    
+    // 如果虚拟滚动支持，可以尝试使用更精确的滚动方法
+    // 这里我们不再使用 setTimeout workaround
+  });
 }
 
 const observeHeight = (el: HTMLElement | null, id: string | number | undefined) => {
@@ -656,13 +679,33 @@ watch(
   { immediate: true }
 );
 
+// 监听会话ID变化，清理 messageHeights 缓存，避免内存泄漏
+watch(currSessionIdRef, (newSessionId, oldSessionId) => {
+  if (newSessionId !== oldSessionId) {
+    messageHeights.clear();
+  }
+});
+
 onMounted(() => {
   resizeObserver = new ResizeObserver((entries) => {
+    let shouldScroll = false;
+    
     for (const entry of entries) {
       const id = entry.target.getAttribute("data-id");
       if (id) {
         messageHeights.set(id, entry.contentRect.height);
+        // 如果高度发生变化且当前应该粘在底部，则标记需要滚动
+        if (shouldStickToBottom.value) {
+          shouldScroll = true;
+        }
       }
+    }
+    
+    // 如果高度变化且应该粘在底部，则触发滚动到底部
+    if (shouldScroll && props.autoScroll) {
+      nextTick(() => {
+        scrollToBottom();
+      });
     }
   });
 });

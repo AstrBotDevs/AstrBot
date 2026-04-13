@@ -344,12 +344,15 @@
           <MessageList
             v-if="!loadingMessages && activeMessages.length"
             ref="messageListRef"
-            :current-session-id="currSessionId"
+            :current-session-id="currSessionId.value"
             :get-session="getSessions"
             :messages="activeMessages"
             :is-dark="isDark"
             :is-loading-messages="loadingMessages"
             :should-stick-to-bottom="shouldStickToBottom"
+            :is-user-message="isUserMessage"
+            :is-message-streaming="isMessageStreaming"
+            :message-content="messageContent"
             @update:should-stick-to-bottom="shouldStickToBottom = $event"
           />
         </section>
@@ -563,6 +566,9 @@ const {
   sessionProjects,
   activeMessages,
   isSessionRunning,
+  isUserMessage,
+  isMessageStreaming,
+  messageContent,
   messageParts,
   loadSessionMessages,
   createLocalExchange,
@@ -973,14 +979,6 @@ async function stopCurrentSession() {
 
 function toggleTheme() {
   customizer.SET_UI_THEME(isDark.value ? "PurpleTheme" : "PurpleThemeDark");
-}
-
-function readPositiveNumber(source: any, keys: string[]) {
-  for (const key of keys) {
-    const value = Number(source?.[key]);
-    if (Number.isFinite(value) && value > 0) return value;
-  }
-  return null;
 }
 </script>
 
