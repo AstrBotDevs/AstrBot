@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 248 icons */
+/* Auto-generated MDI subset – 247 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -234,10 +234,6 @@
 
 .mdi-cloud-upload::before {
   content: "\F0167";
-}
-
-.mdi-code-braces::before {
-  content: "\F0169";
 }
 
 .mdi-code-json::before {

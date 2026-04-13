@@ -183,7 +183,6 @@ import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { enableKatex, enableMermaid, MarkdownCodeBlockNode, setCustomComponents } from 'markstream-vue'
 import 'markstream-vue/index.css'
 import 'katex/dist/katex.min.css'
-import 'highlight.js/styles/github.css';
 import axios from 'axios';
 import { useToast } from '@/utils/toast'
 import ReasoningBlock from './message_list_comps/ReasoningBlock.vue';
