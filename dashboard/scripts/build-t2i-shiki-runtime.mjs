@@ -43,6 +43,10 @@ const themeSpecs = [
   ["github-dark", "github-dark"],
 ];
 
+// Shiki exposes plain text as a built-in special language, so we keep it
+// in the supported language list without importing a package for it.
+const builtInLanguageSpecs = ["text"];
+
 const languageAliases = {
   bat: "powershell",
   cjs: "javascript",
@@ -96,7 +100,10 @@ function buildVirtualSource() {
     )
     .join("\n");
 
-  const supportedLanguages = languageSpecs.map(([runtimeName]) => runtimeName);
+  const supportedLanguages = [
+    ...builtInLanguageSpecs,
+    ...languageSpecs.map(([runtimeName]) => runtimeName),
+  ];
 
   return `import { createHighlighterCoreSync, createJavaScriptRegexEngine } from ${shikiImport};
 ${languageImports}

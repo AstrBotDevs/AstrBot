@@ -24,7 +24,23 @@ def get_shiki_runtime() -> str:
     runtime_path = (
         Path(__file__).resolve().parent / "template" / "shiki_runtime.iife.js"
     )
-    runtime = runtime_path.read_text(encoding="utf-8")
+    if not runtime_path.exists():
+        logger.error(
+            "T2I Shiki runtime not found at %s. Run `cd dashboard && pnpm run build:t2i-shiki-runtime` to regenerate it. Continuing without code highlighting.",
+            runtime_path,
+        )
+        return ""
+
+    try:
+        runtime = runtime_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as err:
+        logger.warning(
+            "Failed to load T2I Shiki runtime from %s: %s. Continuing without code highlighting.",
+            runtime_path,
+            err,
+        )
+        return ""
+
     return runtime.replace("</script", "<\\/script")
 
 
@@ -143,9 +159,8 @@ class NetworkRenderStrategy(RenderStrategy):
             template_name = "base"
         tmpl_str = await self.get_template(name=template_name)
         text_base64 = base64.b64encode(text.encode("utf-8")).decode("ascii")
-        text = text.replace("`", "\\`")
         return await self.render_custom_template(
             tmpl_str,
-            {"text": text, "text_base64": text_base64, "version": f"v{VERSION}"},
+            {"text_base64": text_base64, "version": f"v{VERSION}"},
             return_url,
         )
