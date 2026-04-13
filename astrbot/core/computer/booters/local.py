@@ -9,8 +9,6 @@ import sys
 from dataclasses import dataclass
 from typing import Any
 
-from python_ripgrep import search
-
 from astrbot.api import logger
 from astrbot.core.computer.file_read_utils import (
     detect_text_encoding,
@@ -221,15 +219,57 @@ class LocalFileSystemComponent(FileSystemComponent):
         before_context: int | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            results = search(
-                patterns=[pattern],
-                paths=[path] if path else None,
-                globs=[glob] if glob else None,
-                after_context=after_context,
-                before_context=before_context,
-                line_number=True,
-            )
-            return {"success": True, "content": _truncate_long_lines("".join(results))}
+            search_path = path if path else "."
+
+            # Try ripgrep first, fallback to grep
+            if shutil.which("rg"):
+                cmd = ["rg", "--line-number", "--color=never"]
+                if glob:
+                    cmd.extend(["--glob", glob])
+                if after_context:
+                    cmd.extend(["--after-context", str(after_context)])
+                if before_context:
+                    cmd.extend(["--before-context", str(before_context)])
+                cmd.extend([pattern, search_path])
+            elif shutil.which("grep"):
+                cmd = ["grep", "-rn", "--color=never"]
+                if after_context:
+                    cmd.extend(["-A", str(after_context)])
+                if before_context:
+                    cmd.extend(["-B", str(before_context)])
+                # grep doesn't support glob directly, use include if available
+                if glob and shutil.which("grep"):
+                    # Try to use --include if grep supports it (GNU grep)
+                    cmd.extend(["--include", glob])
+                cmd.extend([pattern, search_path])
+            else:
+                return {
+                    "success": False,
+                    "error": "Neither ripgrep (rg) nor grep is available on the system",
+                }
+
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                # grep returns exit code 1 when no matches found, which is not an error
+                if result.returncode not in (0, 1):
+                    return {
+                        "success": False,
+                        "error": f"Search command failed with exit code {result.returncode}: {result.stderr}",
+                    }
+                output = result.stdout if result.stdout else ""
+                return {"success": True, "content": _truncate_long_lines(output)}
+            except subprocess.TimeoutExpired:
+                return {
+                    "success": False,
+                    "error": "Search command timed out after 30 seconds",
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Search failed: {str(e)}"}
 
         return await asyncio.to_thread(_run)
 
