@@ -35,6 +35,7 @@
     "mcpServersQuickSelect": "MCP Servers Quick Select",
     "searchTools": "Search Tools",
     "selectedTools": "Selected Tools",
+    "builtinToolDisabledHint": "Builtin tools cannot be enabled or disabled here yet. Please enable or disable the corresponding config items in the config file.",
     "noToolsAvailable": "No tools available",
     "noToolsFound": "No matching tools found",
     "loadingTools": "Loading tools...",

@@ -142,7 +142,8 @@ class DiscordPlatformAdapter(Platform):
             return
 
         proxy = self.config.get("discord_proxy") or None
-        self.client = DiscordBotClient(token, proxy)
+        allow_bot_messages = bool(self.config.get("discord_allow_bot_messages"))
+        self.client = DiscordBotClient(token, proxy, allow_bot_messages)
         self.client.on_message_received = on_received
 
         async def callback() -> None:
@@ -435,6 +436,21 @@ class DiscordPlatformAdapter(Platform):
         async def dynamic_callback(
             ctx: discord.ApplicationContext, params: str | None = None
         ) -> None:
+            # 1. 嘗試立即响应，防止超时 (移到最前面)
+            followup_webhook = None
+            try:
+                # 設定 2.5 秒超時，避免卡死整個 event loop
+                await asyncio.wait_for(ctx.defer(), timeout=2.5)
+                followup_webhook = ctx.followup
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"[Discord] Defer command '{cmd_name}' timeout. Network might be too slow."
+                )
+                return
+            except Exception as e:
+                logger.warning(f"[Discord] Failed to defer command '{cmd_name}': {e}")
+                return
+
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] Callback triggered: {cmd_name}")
             logger.debug(f"[Discord] Callback context: {ctx}")
@@ -448,14 +464,6 @@ class DiscordPlatformAdapter(Platform):
                 f"Raw params: '{params}'. "
                 f"Built command string: '{message_str_for_filter}'",
             )
-
-            # 尝试立即响应，防止超时
-            followup_webhook = None
-            try:
-                await ctx.defer()
-                followup_webhook = ctx.followup
-            except Exception as e:
-                logger.warning(f"[Discord] Failed to defer command '{cmd_name}': {e}")
 
             # 2. 构建 AstrBotMessage
             channel = ctx.channel

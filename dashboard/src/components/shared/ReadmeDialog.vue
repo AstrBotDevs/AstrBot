@@ -1,11 +1,16 @@
 <script setup>
 import { ref, watch, computed, onUnmounted } from "vue";
+import { useTheme } from "vuetify";
 import MarkdownIt from "markdown-it";
-import hljs from "highlight.js";
 import axios from "axios";
 import DOMPurify from "dompurify";
-import "highlight.js/styles/github-dark.css";
 import { useI18n } from "@/i18n/composables";
+import {
+  escapeHtml,
+  ensureShikiLanguages,
+  normalizeShikiLanguage,
+  renderShikiCode,
+} from "@/utils/shiki";
 
 // 1. 在 setup 作用域创建 MarkdownIt 实例
 const md = new MarkdownIt({
@@ -41,6 +46,7 @@ const props = defineProps({
 
 const emit = defineEmits(["update:show"]);
 const { t, locale } = useI18n();
+const theme = useTheme();
 
 const content = ref(null);
 const error = ref(null);
@@ -48,7 +54,103 @@ const loading = ref(false);
 const isEmpty = ref(false);
 const copyFeedbackTimer = ref(null);
 const lastRequestId = ref(0);
+const lastRenderId = ref(0);
 const scrollContainer = ref(null);
+const renderedHtml = ref("");
+const isDark = computed(() => theme.global.current.value.dark);
+
+const MARKDOWN_SANITIZE_OPTIONS = {
+  ALLOWED_TAGS: [
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "br",
+    "hr",
+    "ul",
+    "ol",
+    "li",
+    "blockquote",
+    "pre",
+    "code",
+    "a",
+    "img",
+    "table",
+    "thead",
+    "tbody",
+    "tr",
+    "th",
+    "td",
+    "strong",
+    "em",
+    "del",
+    "s",
+    "details",
+    "summary",
+    "div",
+    "span",
+    "input",
+    "button",
+    "svg",
+    "rect",
+    "path",
+    "polyline",
+  ],
+  ALLOWED_ATTR: [
+    "href",
+    "src",
+    "alt",
+    "title",
+    "class",
+    "id",
+    "target",
+    "rel",
+    "type",
+    "checked",
+    "disabled",
+    "open",
+    "align",
+    "width",
+    "height",
+    "viewBox",
+    "fill",
+    "stroke",
+    "stroke-width",
+    "points",
+    "d",
+    "x",
+    "y",
+    "rx",
+    "ry",
+    "data-code-block-index",
+  ],
+};
+
+const CODE_BLOCK_SANITIZE_OPTIONS = {
+  ALLOWED_TAGS: ["div", "span", "button", "svg", "rect", "path", "polyline", "pre", "code"],
+  ALLOWED_ATTR: [
+    "class",
+    "title",
+    "type",
+    "width",
+    "height",
+    "viewBox",
+    "fill",
+    "stroke",
+    "stroke-width",
+    "points",
+    "d",
+    "x",
+    "y",
+    "rx",
+    "ry",
+    "style",
+    "tabindex",
+  ],
+};
 
 function slugifyHeading(text, slugCounts) {
   const base = (text || "")
@@ -71,104 +173,62 @@ onUnmounted(() => {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
 });
 
-// 渲染后的 HTML
-const renderedHtml = computed(() => {
-  // 强制依赖 locale，确保语言切换时重新渲染
-  const _ = locale?.value;
-  if (!content.value) return "";
+function sanitizeHighlightedBlock(html) {
+  return DOMPurify.sanitize(html, CODE_BLOCK_SANITIZE_OPTIONS);
+}
 
-  // 设置 fence 规则，直接使用当前作用域的 t 函数
+async function updateRenderedHtml() {
+  const source = content.value;
+  const renderId = ++lastRenderId.value;
+  void locale?.value;
+
+  if (!source) {
+    renderedHtml.value = "";
+    return;
+  }
+
+  let highlighter = null;
+  const env = {};
+  const tokens = md.parse(source, env);
+
+  try {
+    const languages = tokens
+      .filter((token) => token.type === "fence")
+      .map((token) => normalizeShikiLanguage(token.info));
+    highlighter = await ensureShikiLanguages(languages);
+  } catch (err) {
+    console.error("Failed to initialize Shiki for README dialog:", err);
+  }
+
+  if (renderId !== lastRenderId.value) return;
+
+  const highlightedBlocks = [];
+
   md.renderer.rules.fence = (tokens, idx) => {
     const token = tokens[idx];
-    const lang = token.info.trim() || "";
+    const lang = normalizeShikiLanguage(token.info);
     const code = token.content;
-
-    const highlighted =
-      lang && hljs.getLanguage(lang)
-        ? hljs.highlight(code, { language: lang }).value
-        : md.utils.escapeHtml(code);
-
-    return `<div class="code-block-wrapper">
-      ${lang ? `<span class="code-lang-label">${lang}</span>` : ""}
+    const escapedLangLabel =
+      lang && lang !== "text" ? escapeHtml(lang) : "";
+    const highlighted = highlighter
+      ? renderShikiCode(highlighter, code, lang, isDark.value ? "dark" : "light")
+      : `<pre class="shiki shiki-fallback"><code>${escapeHtml(code)}</code></pre>`;
+    const html = sanitizeHighlightedBlock(`<div class="code-block-wrapper">
+      ${escapedLangLabel ? `<span class="code-lang-label">${escapedLangLabel}</span>` : ""}
       <button class="copy-code-btn" title="${t("core.common.copy")}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
       </button>
-      <pre class="hljs"><code class="language-${lang}">${highlighted}</code></pre>
-    </div>`;
+      ${highlighted}
+    </div>`);
+
+    const placeholderIndex = highlightedBlocks.push(html) - 1;
+    return `<div data-code-block-index="${placeholderIndex}"></div>`;
   };
 
-  const rawHtml = md.render(content.value);
+  const rawHtml = md.renderer.render(tokens, md.options, env);
 
-  const cleanHtml = DOMPurify.sanitize(rawHtml, {
-    ALLOWED_TAGS: [
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "p",
-      "br",
-      "hr",
-      "ul",
-      "ol",
-      "li",
-      "blockquote",
-      "pre",
-      "code",
-      "a",
-      "img",
-      "table",
-      "thead",
-      "tbody",
-      "tr",
-      "th",
-      "td",
-      "strong",
-      "em",
-      "del",
-      "s",
-      "details",
-      "summary",
-      "div",
-      "span",
-      "input",
-      "button",
-      "svg",
-      "rect",
-      "path",
-      "polyline",
-    ],
-    ALLOWED_ATTR: [
-      "href",
-      "src",
-      "alt",
-      "title",
-      "class",
-      "id",
-      "target",
-      "rel",
-      "type",
-      "checked",
-      "disabled",
-      "open",
-      "align",
-      "width",
-      "height",
-      "viewBox",
-      "fill",
-      "stroke",
-      "stroke-width",
-      "points",
-      "d",
-      "x",
-      "y",
-      "rx",
-      "ry",
-    ],
-  });
+  const cleanHtml = DOMPurify.sanitize(rawHtml, MARKDOWN_SANITIZE_OPTIONS);
 
-  // 3. 后处理方案：完全隔离，安全性最高
   const tempDiv = document.createElement("div");
   tempDiv.innerHTML = cleanHtml;
 
@@ -185,15 +245,21 @@ const renderedHtml = computed(() => {
 
   tempDiv.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href");
-    // 强制所有外部链接使用安全的 _blank 策略
     if (href && (href.startsWith("http") || href.startsWith("//"))) {
       link.setAttribute("target", "_blank");
       link.setAttribute("rel", "noopener noreferrer");
     }
   });
 
-  return tempDiv.innerHTML;
-});
+  tempDiv.querySelectorAll("[data-code-block-index]").forEach((placeholder) => {
+    const index = Number(placeholder.getAttribute("data-code-block-index"));
+    placeholder.outerHTML = highlightedBlocks[index] || "";
+  });
+
+  if (renderId === lastRenderId.value) {
+    renderedHtml.value = tempDiv.innerHTML;
+  }
+}
 
 const modeConfig = computed(() => {
   if (props.mode === "changelog") {
@@ -278,6 +344,10 @@ watch(
   },
   { immediate: true },
 );
+
+watch([content, locale, isDark], () => {
+  updateRenderedHtml();
+}, { immediate: true });
 
 function handleContainerClick(event) {
   const btn = event.target.closest(".copy-code-btn");
@@ -549,22 +619,32 @@ const showActionArea = computed(() => {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
-:deep(.markdown-body pre.hljs) {
+:deep(.markdown-body pre.shiki) {
   padding: 16px;
   padding-top: 32px;
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
-  background-color: #0d1117;
   border-radius: 6px;
   margin: 0;
+  border: 1px solid rgba(128, 128, 128, 0.18);
 }
 
-:deep(.markdown-body pre.hljs code) {
+:deep(.markdown-body pre.shiki code) {
   background-color: transparent;
   padding: 0;
   border-radius: 0;
-  color: #c9d1d9;
+  color: inherit;
+}
+
+:deep(.markdown-body pre.shiki .line) {
+  display: block;
+  min-height: 1.45em;
+}
+
+:deep(.markdown-body pre.shiki.shiki-fallback) {
+  background-color: #f6f8fa;
+  color: #24292f;
 }
 :deep(.markdown-body ul),
 :deep(.markdown-body ol) {
@@ -679,13 +759,4 @@ const showActionArea = computed(() => {
   margin-top: 12px;
 }
 
-:deep(.markdown-body .hljs-keyword),
-:deep(.markdown-body .hljs-selector-tag),
-:deep(.markdown-body .hljs-title),
-:deep(.markdown-body .hljs-section),
-:deep(.markdown-body .hljs-doctag),
-:deep(.markdown-body .hljs-name),
-:deep(.markdown-body .hljs-strong) {
-  font-weight: bold;
-}
 </style>

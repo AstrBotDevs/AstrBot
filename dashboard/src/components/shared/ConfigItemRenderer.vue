@@ -71,7 +71,7 @@
 
     <div
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options && itemMeta?.render_type === 'checkbox'"
-      class="d-flex flex-wrap gap-20"
+      class="checkbox-group d-flex flex-wrap"
     >
       <v-checkbox
         v-for="(option, optionIndex) in itemMeta.options"
@@ -80,8 +80,9 @@
         @update:model-value="emitUpdate"
         :label="getLabel(itemMeta, optionIndex, option)"
         :value="option"
-        class="mr-2"
+        class="config-checkbox"
         color="primary"
+        density="compact"
         hide-details
       ></v-checkbox>
     </div>
@@ -356,8 +357,29 @@ function getSpecialSubtype(value) {
   background-color: rgba(0, 0, 0, 0.5);
 }
 
-.gap-20 {
-  gap: 20px;
+.checkbox-group {
+  gap: 6px 12px;
+}
+
+.config-checkbox {
+  margin-right: 0;
+}
+
+.config-checkbox :deep(.v-selection-control) {
+  min-height: 28px;
+}
+
+.config-checkbox :deep(.v-selection-control__wrapper) {
+  width: 18px;
+  height: 18px;
+}
+
+.config-checkbox :deep(.v-icon) {
+  font-size: 18px;
+}
+
+.config-checkbox :deep(.v-label) {
+  font-size: 0.9rem;
 }
 
 :deep(.v-field__input) {

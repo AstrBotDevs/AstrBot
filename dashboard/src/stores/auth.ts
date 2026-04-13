@@ -2,8 +2,7 @@ import { defineStore } from 'pinia';
 import { router } from '@/router';
 import axios from 'axios';
 
-export const useAuthStore = defineStore({
-  id: 'auth',
+export const useAuthStore = defineStore("auth", {
   state: () => ({
     // @ts-ignore
     username: '',
