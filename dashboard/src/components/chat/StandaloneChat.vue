@@ -174,7 +174,7 @@ import {
   ref,
 } from "vue";
 import axios from "axios";
-import { MarkdownCodeBlockNode, setCustomComponents } from "markstream-vue";
+import { setCustomComponents } from "markstream-vue";
 import "markstream-vue/index.css";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
@@ -183,6 +183,7 @@ import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.
 import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
+import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
   useMessages,
@@ -201,7 +202,7 @@ const props = withDefaults(defineProps<{ configId?: string | null }>(), {
 
 setCustomComponents("chat-message", {
   ref: RefNode,
-  code_block: MarkdownCodeBlockNode,
+  code_block: ThemeAwareMarkdownCodeBlock,
 });
 
 const { tm } = useModuleI18n("features/chat");
