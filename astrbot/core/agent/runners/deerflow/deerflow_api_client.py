@@ -157,6 +157,21 @@ class DeerFlowAPIClient:
                 )
             return await resp.json()
 
+    async def delete_thread(self, thread_id: str, timeout: float = 20) -> None:
+        session = self._get_session()
+        url = f"{self.api_base}/api/threads/{thread_id}"
+        async with session.delete(
+            url,
+            headers=self.headers,
+            timeout=timeout,
+            proxy=self.proxy,
+        ) as resp:
+            if resp.status not in (200, 202, 204, 404):
+                text = await resp.text()
+                raise Exception(
+                    f"DeerFlow delete thread failed: {resp.status}. {text}",
+                )
+
     async def stream_run(
         self,
         thread_id: str,
