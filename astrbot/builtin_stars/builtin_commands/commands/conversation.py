@@ -24,67 +24,60 @@ async def _cleanup_deerflow_thread_if_present(
     context: star.Context,
     umo: str,
 ) -> None:
-    thread_id = await sp.get_async(
-        scope="umo",
-        scope_id=umo,
-        key=DEERFLOW_THREAD_ID_KEY,
-        default="",
-    )
-    if not thread_id:
-        return
-
-    cfg = context.get_config(umo=umo)
-    provider_id = cfg["provider_settings"].get(
-        DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-        "",
-    )
-    if not provider_id:
-        return
-
-    provider_config = next(
-        (
-            provider
-            for provider in context.provider_manager.providers_config
-            if provider.get("id") == provider_id
-        ),
-        None,
-    )
-    if not provider_config:
-        logger.warning(
-            "Failed to resolve DeerFlow provider config for remote thread cleanup: provider_id=%s",
-            provider_id,
-        )
-        return
-
-    merged_provider_config = context.provider_manager.get_merged_provider_config(
-        provider_config,
-    )
-    client = DeerFlowAPIClient(
-        api_base=merged_provider_config.get(
-            "deerflow_api_base",
-            "http://127.0.0.1:2026",
-        ),
-        api_key=merged_provider_config.get("deerflow_api_key", ""),
-        auth_header=merged_provider_config.get("deerflow_auth_header", ""),
-        proxy=merged_provider_config.get("proxy", ""),
-    )
     try:
-        await client.delete_thread(thread_id)
+        thread_id = await sp.get_async(
+            scope="umo",
+            scope_id=umo,
+            key=DEERFLOW_THREAD_ID_KEY,
+            default="",
+        )
+        if not thread_id:
+            return
+
+        cfg = context.get_config(umo=umo)
+        provider_id = cfg["provider_settings"].get(
+            DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
+            "",
+        )
+        if not provider_id:
+            return
+
+        merged_provider_config = context.provider_manager.get_provider_config_by_id(
+            provider_id,
+            merged=True,
+        )
+        if not merged_provider_config:
+            logger.warning(
+                "Failed to resolve DeerFlow provider config for remote thread cleanup: provider_id=%s",
+                provider_id,
+            )
+            return
+
+        client = DeerFlowAPIClient(
+            api_base=merged_provider_config.get(
+                "deerflow_api_base",
+                "http://127.0.0.1:2026",
+            ),
+            api_key=merged_provider_config.get("deerflow_api_key", ""),
+            auth_header=merged_provider_config.get("deerflow_auth_header", ""),
+            proxy=merged_provider_config.get("proxy", ""),
+        )
+        try:
+            await client.delete_thread(thread_id)
+        finally:
+            try:
+                await client.close()
+            except Exception as e:
+                logger.warning(
+                    "Failed to close DeerFlow API client after thread cleanup: %s",
+                    e,
+                )
     except Exception as e:
         logger.warning(
-            "Failed to delete DeerFlow thread %s for session %s: %s",
-            thread_id,
+            "Failed to clean up DeerFlow thread for session %s: %s",
             umo,
             e,
         )
-    finally:
-        try:
-            await client.close()
-        except Exception as e:
-            logger.warning(
-                "Failed to close DeerFlow API client after thread cleanup: %s",
-                e,
-            )
 
 
 async def _clear_third_party_agent_runner_state(
