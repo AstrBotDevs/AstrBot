@@ -304,12 +304,15 @@ const customMarkdownTags = ["ref"];
 const downloadingFiles = ref(new Set<string>());
 const messageListRoot = ref<HTMLElement | null>(null);
 const virtualScrollRef = ref<InstanceType<typeof VVirtualScroll> | null>(null);
-const messageHeights = reactive(new Map<string, number>());
+const messageHeights = new Map<string, number>();
 let resizeObserver: ResizeObserver | null = null;
 const imagePreview = reactive({ visible: false, url: "" });
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
 const internalShouldStickToBottom = ref(true);
+let pendingBottomSyncFrame: number | null = null;
+let bottomSyncToken = 0;
+let throttledScrollFrame: number | null = null;
 
 const messages = computed(() => props.messages || []);
 const shouldStickToBottom = computed(() => {
@@ -321,9 +324,8 @@ const shouldStickToBottom = computed(() => {
 const dynamicEstimatedItemHeight = computed(() => {
   const msgs = messages.value;
   if (!msgs.length) return 120;
-  
-  // 采样最近的消息来计算平均高度，避免 O(N) 遍历
-  const sampleSize = Math.min(msgs.length, 10); // 最多采样10条消息
+
+  const sampleSize = Math.min(msgs.length, 10);
   const startIndex = Math.max(0, msgs.length - sampleSize);
   let total = 0;
   let count = 0;
@@ -446,22 +448,62 @@ async function scrollToBottom() {
   }
   
   await nextTick();
-  const lastIndex = messages.value.length - 1;
-  
-  const scroll = () => {
-    virtualScrollRef.value?.scrollToIndex(lastIndex);
+
+  bottomSyncToken += 1;
+  const currentToken = bottomSyncToken;
+
+  if (pendingBottomSyncFrame !== null) {
+    cancelAnimationFrame(pendingBottomSyncFrame);
+    pendingBottomSyncFrame = null;
+  }
+
+  let previousScrollHeight = -1;
+  let stableFrameCount = 0;
+  let frameCount = 0;
+
+  const syncBottom = () => {
+    if (currentToken !== bottomSyncToken) return;
+
+    const scrollEl = getScrollElement();
+    if (!scrollEl || !virtualScrollRef.value) {
+      pendingBottomSyncFrame = null;
+      return;
+    }
+
+    const lastIndex = messages.value.length - 1;
+    virtualScrollRef.value.scrollToIndex(lastIndex);
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+
+    const currentScrollHeight = scrollEl.scrollHeight;
+    const distanceToBottom =
+      currentScrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
+
+    if (currentScrollHeight === previousScrollHeight) {
+      stableFrameCount += 1;
+    } else {
+      stableFrameCount = 0;
+      previousScrollHeight = currentScrollHeight;
+    }
+
+    frameCount += 1;
+    const isSynced = distanceToBottom <= 2 && stableFrameCount >= 1;
+    const shouldContinue = !isSynced && frameCount < 12;
+
+    if (shouldContinue) {
+      pendingBottomSyncFrame = requestAnimationFrame(syncBottom);
+      return;
+    }
+
+    pendingBottomSyncFrame = null;
   };
-  
-  // 立即尝试一次
-  scroll();
-  
-  // 在下一帧再尝试一次，确保虚拟滚动已更新
-  requestAnimationFrame(() => {
-    scroll();
-    
-    // 如果虚拟滚动支持，可以尝试使用更精确的滚动方法
-    // 这里我们不再使用 setTimeout workaround
-  });
+
+  pendingBottomSyncFrame = requestAnimationFrame(syncBottom);
+}
+
+function getScrollElement() {
+  const root = virtualScrollRef.value?.$el;
+  if (!(root instanceof HTMLElement)) return null;
+  return root;
 }
 
 const observeHeight = (el: HTMLElement | null, id: string | number | undefined) => {
@@ -685,6 +727,14 @@ watch(currSessionIdRef, (newSessionId, oldSessionId) => {
   }
 });
 
+const throttledScrollToBottom = () => {
+  if (throttledScrollFrame !== null) return;
+  throttledScrollFrame = requestAnimationFrame(() => {
+    scrollToBottom();
+    throttledScrollFrame = null;
+  });
+};
+
 onMounted(() => {
   resizeObserver = new ResizeObserver((entries) => {
     let shouldScroll = false;
@@ -693,23 +743,32 @@ onMounted(() => {
       const id = entry.target.getAttribute("data-id");
       if (id) {
         messageHeights.set(id, entry.contentRect.height);
-        // 如果高度发生变化且当前应该粘在底部，则标记需要滚动
         if (shouldStickToBottom.value) {
           shouldScroll = true;
         }
       }
     }
     
-    // 如果高度变化且应该粘在底部，则触发滚动到底部
     if (shouldScroll && props.autoScroll) {
-      nextTick(() => {
-        scrollToBottom();
-      });
+      throttledScrollToBottom();
     }
   });
+
+  // 监听容器高度变化，确保内容加载（如图片）后能正确滚动到底部
+  const container = virtualScrollRef.value?.$el?.querySelector('.v-virtual-scroll__container');
+  if (container) {
+    resizeObserver.observe(container);
+  }
 });
 
 onBeforeUnmount(() => {
+  bottomSyncToken += 1;
+  if (pendingBottomSyncFrame !== null) {
+    cancelAnimationFrame(pendingBottomSyncFrame);
+  }
+  if (throttledScrollFrame !== null) {
+    cancelAnimationFrame(throttledScrollFrame);
+  }
   resizeObserver?.disconnect();
 });
 
