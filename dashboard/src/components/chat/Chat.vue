@@ -344,7 +344,7 @@
           <MessageList
             v-if="!loadingMessages && activeMessages.length"
             ref="messageListRef"
-            :current-session-id="currSessionId"
+            :curr-session-id="currSessionId"
             :get-session="getSessions"
             :messages="activeMessages"
             :is-dark="isDark"

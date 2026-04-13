@@ -508,14 +508,14 @@ function getScrollElement() {
 
 const observeHeight = (el: HTMLElement | null, id: string | number | undefined) => {
   if (el && resizeObserver) {
-    const stringId = id ? String(id) : el.dataset.index || "unknown";
+    const stringId = (id !== undefined && id !== null) ? String(id) : el.dataset.index || "unknown";
     el.setAttribute("data-id", stringId);
     resizeObserver.observe(el);
   }
 };
 
 const getEstimatedItemHeight = (msg: ChatRecord, index: number) => {
-  const id = msg.id ? String(msg.id) : `idx-${index}`;
+  const id = (msg.id !== undefined && msg.id !== null) ? String(msg.id) : "idx-" + index;
   const cached = messageHeights.get(id);
   if (cached) return cached;
 
