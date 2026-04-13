@@ -9,7 +9,6 @@ import { useCommonStore } from '@/stores/common';
 import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue';
 import 'markstream-vue/index.css';
 import 'katex/dist/katex.min.css';
-import 'highlight.js/styles/github.css';
 import { useI18n } from '@/i18n/composables';
 import { router } from '@/router';
 import { useRoute } from 'vue-router';

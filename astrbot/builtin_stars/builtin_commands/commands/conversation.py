@@ -1,9 +1,12 @@
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core import logger
 from astrbot.core.agent.runners.deerflow.constants import (
+    DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
     DEERFLOW_PROVIDER_TYPE,
     DEERFLOW_THREAD_ID_KEY,
 )
+from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .utils.rst_scene import RstScene
@@ -15,6 +18,85 @@ THIRD_PARTY_AGENT_RUNNER_KEY = {
     DEERFLOW_PROVIDER_TYPE: DEERFLOW_THREAD_ID_KEY,
 }
 THIRD_PARTY_AGENT_RUNNER_STR = ", ".join(THIRD_PARTY_AGENT_RUNNER_KEY.keys())
+
+
+async def _cleanup_deerflow_thread_if_present(
+    context: star.Context,
+    umo: str,
+) -> None:
+    try:
+        thread_id = await sp.get_async(
+            scope="umo",
+            scope_id=umo,
+            key=DEERFLOW_THREAD_ID_KEY,
+            default="",
+        )
+        if not thread_id:
+            return
+
+        cfg = context.get_config(umo=umo)
+        provider_id = cfg["provider_settings"].get(
+            DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
+            "",
+        )
+        if not provider_id:
+            return
+
+        merged_provider_config = context.provider_manager.get_provider_config_by_id(
+            provider_id,
+            merged=True,
+        )
+        if not merged_provider_config:
+            logger.warning(
+                "Failed to resolve DeerFlow provider config for remote thread cleanup: provider_id=%s",
+                provider_id,
+            )
+            return
+
+        client = DeerFlowAPIClient(
+            api_base=merged_provider_config.get(
+                "deerflow_api_base",
+                "http://127.0.0.1:2026",
+            ),
+            api_key=merged_provider_config.get("deerflow_api_key", ""),
+            auth_header=merged_provider_config.get("deerflow_auth_header", ""),
+            proxy=merged_provider_config.get("proxy", ""),
+        )
+        try:
+            await client.delete_thread(thread_id)
+        finally:
+            try:
+                await client.close()
+            except Exception as e:
+                logger.warning(
+                    "Failed to close DeerFlow API client after thread cleanup: %s",
+                    e,
+                )
+    except Exception as e:
+        logger.warning(
+            "Failed to clean up DeerFlow thread for session %s: %s",
+            umo,
+            e,
+        )
+
+
+async def _clear_third_party_agent_runner_state(
+    context: star.Context,
+    umo: str,
+    agent_runner_type: str,
+) -> None:
+    session_key = THIRD_PARTY_AGENT_RUNNER_KEY.get(agent_runner_type)
+    if not session_key:
+        return
+
+    if agent_runner_type == DEERFLOW_PROVIDER_TYPE:
+        await _cleanup_deerflow_thread_if_present(context, umo)
+
+    await sp.remove_async(
+        scope="umo",
+        scope_id=umo,
+        key=session_key,
+    )
 
 
 class ConversationCommands:
@@ -65,10 +147,10 @@ class ConversationCommands:
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             active_event_registry.stop_all(umo, exclude=message)
-            await sp.remove_async(
-                scope="umo",
-                scope_id=umo,
-                key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
+            await _clear_third_party_agent_runner_state(
+                self.context,
+                umo,
+                agent_runner_type,
             )
             message.set_result(
                 MessageEventResult().message("✅ Conversation reset successfully.")
@@ -139,10 +221,10 @@ class ConversationCommands:
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
-            await sp.remove_async(
-                scope="umo",
-                scope_id=message.unified_msg_origin,
-                key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
+            await _clear_third_party_agent_runner_state(
+                self.context,
+                message.unified_msg_origin,
+                agent_runner_type,
             )
             message.set_result(
                 MessageEventResult().message("✅ New conversation created.")
