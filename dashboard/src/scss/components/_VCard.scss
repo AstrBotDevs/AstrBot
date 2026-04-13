@@ -1,8 +1,9 @@
-// Outline Card
 .v-card--variant-outlined {
-  border-color: rgba(var(--v-theme-borderLight), 0.36);
+  border-color: rgba(var(--v-theme-borderLight), 0.5);
+  border-width: 1px;
+
   .v-divider {
-    border-color: rgba(var(--v-theme-borderLight), 0.36);
+    border-color: rgba(var(--v-theme-borderLight), 0.5);
   }
 }
 
@@ -13,14 +14,52 @@
 .v-card {
   width: 100%;
   overflow: visible;
+  border-radius: 12px;
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+
   &.withbg {
     background-color: rgb(var(--v-theme-background));
   }
+
   &.overflow-hidden {
     overflow: hidden;
+  }
+
+  &:hover {
+    &:not(.v-card--flat):not(.v-card--variant-outlined) {
+      box-shadow: $box-shadow-md;
+    }
   }
 }
 
 .v-card-item {
   padding: $card-item-spacer-xy;
+}
+
+.v-card-title {
+  font-size: $card-title-size;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.v-card-subtitle {
+  font-size: 0.8125rem;
+  color: rgb(var(--v-theme-secondaryText));
+  margin-top: 4px;
+}
+
+.v-theme--PurpleThemeDark {
+  .v-card {
+    background: rgb(var(--v-theme-surface));
+
+    &.v-card--variant-outlined {
+      border-color: rgba(var(--v-theme-borderLight), 0.4);
+    }
+  }
+
+  .v-card-subtitle {
+    color: rgb(var(--v-theme-secondaryText));
+  }
 }

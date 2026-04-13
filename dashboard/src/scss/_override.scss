@@ -10,16 +10,11 @@ html {
 
 .v-divider {
   opacity: 1;
-  border-color: rgba(var(--v-theme-borderLight), 0.36);
+  border-color: rgba(var(--v-theme-borderLight), 0.5);
 }
 
 .v-selection-control {
   flex: unset;
-}
-
-.v-overlay.v-snackbar {
-  --v-layout-left: 0px !important;
-  --v-layout-right: 0px !important;
 }
 
 .customizer-btn .icon {
@@ -40,40 +35,324 @@ html {
   }
 }
 
-pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Helvetica Neue", monospace;
+pre,
+code,
+.markdown pre,
+.markdown code,
+.release-notes pre,
+.release-notes code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono",
+    "Helvetica Neue", monospace;
   color: var(--astrbot-code-color);
 }
 
-// Dark mode global overrides
+.v-chip {
+  border-radius: 8px;
+  font-weight: 500;
+
+  &.v-chip--density-comfortable {
+    height: 28px;
+  }
+
+  &.v-chip--density-compact {
+    height: 24px;
+  }
+}
+
+.v-tooltip {
+  .v-overlay__content {
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    padding: 8px 12px;
+  }
+}
+
+.v-menu {
+  .v-overlay__content {
+    border-radius: 12px;
+    box-shadow: $box-shadow-lg;
+  }
+}
+
+.v-dialog {
+  .v-overlay__scrim {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .v-overlay__content {
+    border-radius: 16px;
+
+    &.dialog-transition-enter-active,
+    &.dialog-transition-leave-active {
+      transition:
+        opacity 0.25s ease,
+        transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    &.dialog-transition-enter-from {
+      opacity: 0;
+      transform: scale(0.95) translateY(10px);
+    }
+
+    &.dialog-transition-leave-to {
+      opacity: 0;
+      transform: scale(0.98) translateY(-5px);
+    }
+  }
+
+  .v-card {
+    overflow: hidden;
+  }
+}
+
+.v-snackbar {
+  .v-snackbar__wrapper {
+    border-radius: 12px;
+    box-shadow: $box-shadow-lg;
+    min-width: auto;
+    max-width: 400px;
+
+    &.v-snackbar--variant-elevated {
+      background: rgb(var(--v-theme-surface));
+      color: rgb(var(--v-theme-on-surface));
+    }
+
+    &.v-snackbar--variant-flat {
+      border-radius: 12px;
+    }
+
+    &.v-snackbar--variant-outlined {
+      border: 1px solid rgba(var(--v-theme-borderLight), 0.5);
+    }
+
+    .v-snackbar__action {
+      margin-inline-start: 16px;
+
+      .v-btn {
+        border-radius: 8px;
+        font-weight: 500;
+      }
+    }
+
+    .v-snackbar__close {
+      .v-btn {
+        opacity: 0.6;
+
+        &:hover {
+          opacity: 1;
+        }
+      }
+    }
+  }
+
+  .v-snackbar__wrapper.snackbar-transition-enter-active,
+  .v-snackbar__wrapper.snackbar-transition-leave-active {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .v-snackbar__wrapper.snackbar-transition-enter-from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+
+  .v-snackbar__wrapper.snackbar-transition-leave-to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+}
+
+.v-badge {
+  .v-badge__badge {
+    border-radius: 6px;
+    font-size: 0.6875rem;
+    height: 18px;
+    min-width: 18px;
+  }
+}
+
+.v-progress-linear {
+  border-radius: 4px;
+
+  .v-progress-linear__background {
+    border-radius: 4px;
+  }
+
+  .v-progress-linear__determinate {
+    border-radius: 4px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+.v-progress-circular {
+  .v-progress-circular__underlay {
+    stroke: rgba(var(--v-theme-borderLight), 0.3);
+  }
+
+  .v-progress-circular__overlay {
+    transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateX(10px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-10px);
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(15px);
+}
+
+.fade-scale-enter-active,
+.fade-scale-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.fade-scale-enter-from,
+.fade-scale-leave-to {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+.v-avatar {
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+}
+
+.v-expansion-panel {
+  border-radius: 12px !important;
+
+  &::before {
+    display: none;
+  }
+
+  .v-expansion-panel-text__wrapper {
+    padding: 0 24px 20px;
+  }
+
+  .v-expansion-panel-title {
+    padding: 14px 24px;
+    font-weight: 500;
+  }
+}
+
+.v-alert {
+  border-radius: 12px;
+
+  .v-alert__prepend {
+    align-self: flex-start;
+    padding-top: 2px;
+  }
+
+  &.v-alert--prominent {
+    .v-alert__prepend {
+      padding-top: 8px;
+    }
+  }
+}
+
+.v-skeleton-loader {
+  .v-skeleton-loader__bone {
+    border-radius: 6px;
+  }
+
+  .v-skeleton-loader__heading,
+  .v-skeleton-loader__text {
+    border-radius: 6px;
+  }
+
+  .v-skeleton-loader__avatar {
+    border-radius: 50%;
+  }
+}
+
 .v-theme--PurpleThemeDark {
-  // Override code text color for dark mode
   --astrbot-code-color: rgb(var(--v-theme-on-surface-variant));
 
-  // Soften flat primary buttons for dark mode
   .v-btn--variant-flat.bg-primary {
-    background-color: rgba(var(--v-theme-primary), 0.85) !important;
+    background-color: rgba(var(--v-theme-primary), 0.9) !important;
   }
 
-  // Timeline dots: use a muted version
   .v-timeline-item .v-timeline-divider__dot .v-timeline-divider__inner-dot {
-    opacity: 0.85;
+    opacity: 0.9;
   }
 
-  // Use a darker scrim for overlays and dialogs in dark mode.
   .v-overlay__scrim {
-    background-color: rgba(var(--v-theme-background), 0.72) !important;
-    opacity: 1 !important;
+    background-color: rgba(var(--v-theme-background), 0.65) !important;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
   }
 
-  // Ensure dialog/card surfaces use the dark surface color
   .v-overlay__content > .v-card {
     background-color: rgb(var(--v-theme-surface)) !important;
   }
 
-  // Links inside markdown - slightly muted
   .markdown-content a,
   .markstream-vue a {
     color: rgb(var(--v-theme-primary));
+  }
+
+  .v-divider {
+    border-color: rgba(var(--v-theme-borderLight), 0.3);
+  }
+
+  .v-chip {
+    &.v-chip--variant-outlined {
+      border-color: rgba(var(--v-theme-borderLight), 0.4);
+    }
+  }
+
+  .v-progress-circular {
+    .v-progress-circular__underlay {
+      stroke: rgba(255, 255, 255, 0.1);
+    }
+  }
+
+  .v-snackbar {
+    .v-snackbar__wrapper {
+      &.v-snackbar--variant-elevated {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      }
+    }
+  }
+
+  .v-expansion-panel {
+    background: rgb(var(--v-theme-surface-variant)) !important;
+
+    .v-expansion-panel-title {
+      &:hover:not(.v-expansion-panel-title--active) {
+        background: rgba(255, 255, 255, 0.04);
+      }
+    }
+  }
+
+  .v-alert {
+    &.v-alert--variant-tonal {
+      background: rgba(var(--v-theme-on-surface), 0.08) !important;
+    }
   }
 }

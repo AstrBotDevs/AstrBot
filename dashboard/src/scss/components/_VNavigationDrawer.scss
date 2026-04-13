@@ -1,3 +1,32 @@
 .v-navigation-drawer__scrim.fade-transition-leave-to {
   display: none;
 }
+
+.v-navigation-drawer {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &.v-navigation-drawer--rail {
+    .v-list-item {
+      justify-content: center;
+      padding-inline: 12px;
+
+      .v-list-item-title {
+        display: none;
+      }
+
+      .v-list-item__append {
+        display: none;
+      }
+    }
+  }
+}
+
+.v-theme--PurpleThemeDark {
+  .v-navigation-drawer {
+    background: rgb(var(--v-theme-surface)) !important;
+  }
+
+  .v-navigation-drawer__scrim {
+    background: rgba(0, 0, 0, 0.4);
+  }
+}

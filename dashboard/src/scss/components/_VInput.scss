@@ -1,7 +1,84 @@
 .v-label {
-  font-size: 0.975rem;
+  font-size: 0.875rem;
+  font-weight: 400;
 }
+
 .v-switch .v-label,
 .v-checkbox .v-label {
   opacity: 1;
+}
+
+.v-text-field .v-input,
+.v-textarea .v-input,
+.v-select .v-input,
+.v-autocomplete .v-input {
+  --v-input-padding-top: 8px;
+}
+
+.v-input__details {
+  padding-top: 4px;
+}
+
+.v-messages {
+  font-size: 0.75rem;
+  min-height: 18px;
+}
+
+.v-checkbox,
+.v-switch {
+  .v-input__control {
+    height: auto;
+  }
+
+  .v-selection-control {
+    min-height: auto;
+  }
+}
+
+.v-data-table {
+  .v-checkbox {
+    .v-selection-control {
+      align-items: center;
+    }
+
+    .v-selection-control__wrapper {
+      flex-shrink: 0;
+    }
+
+    .v-input--density-default {
+      --v-input-control-height: 40px;
+    }
+  }
+
+  thead {
+    .v-checkbox {
+      .v-input--density-default {
+        --v-input-control-height: 48px;
+      }
+
+      .v-selection-control {
+        align-items: center;
+      }
+
+      .v-selection-control__input {
+        width: 18px;
+        height: 18px;
+      }
+    }
+  }
+
+  tbody {
+    .v-checkbox {
+      .v-selection-control__input {
+        width: 18px;
+        height: 18px;
+      }
+    }
+  }
+}
+
+.v-theme--PurpleThemeDark {
+  .v-label {
+    opacity: 0.9;
+  }
 }

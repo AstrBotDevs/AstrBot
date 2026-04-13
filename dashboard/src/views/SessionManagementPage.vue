@@ -1,10 +1,11 @@
-﻿<template>
+<template>
   <div class="session-management-page">
     <v-container fluid class="pa-0">
       <v-card flat>
         <v-card-title class="d-flex align-center py-3 px-4">
           <span class="text-h4">{{ tm('customRules.title') }}</span>
-          <v-btn icon="mdi-information-outline" size="small" variant="text" href="https://astrbot.app/use/custom-rules.html" target="_blank"></v-btn>
+          <v-btn icon="mdi-information-outline" size="small" variant="text"
+            href="https://astrbot.app/use/custom-rules.html" target="_blank"></v-btn>
           <v-chip size="small" class="ml-1">{{ totalItems }} {{ tm('customRules.rulesCount') }}</v-chip>
           <v-row class="me-4 ms-4" dense>
             <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :label="tm('search.placeholder')"
@@ -128,24 +129,27 @@
             </v-col>
             <v-col cols="12" md="6" lg="3">
               <v-select v-model="batchLlmStatus" :items="statusOptions" item-title="label" item-value="value"
-                :label="tm('batchOperations.llmStatus')" hide-details clearable variant="solo-filled" flat density="comfortable">
+                :label="tm('batchOperations.llmStatus')" hide-details clearable variant="solo-filled" flat
+                density="comfortable">
               </v-select>
             </v-col>
             <v-col cols="12" md="6" lg="3">
               <v-select v-model="batchTtsStatus" :items="statusOptions" item-title="label" item-value="value"
-                :label="tm('batchOperations.ttsStatus')" hide-details clearable variant="solo-filled" flat density="comfortable">
+                :label="tm('batchOperations.ttsStatus')" hide-details clearable variant="solo-filled" flat
+                density="comfortable">
               </v-select>
             </v-col>
             <v-col cols="12" md="6" lg="3">
-              <v-select v-model="batchChatProvider" :items="batchChatProviderOptions" item-title="label" item-value="value"
-                :label="tm('batchOperations.chatProvider')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              <v-select v-model="batchChatProvider" :items="batchChatProviderOptions" item-title="label"
+                item-value="value" :label="tm('batchOperations.chatProvider')" hide-details clearable
+                variant="solo-filled" flat density="comfortable">
               </v-select>
             </v-col>
           </v-row>
           <v-row dense class="mt-3">
             <v-col cols="12" class="d-flex justify-end">
-              <v-btn color="primary" variant="tonal" size="large" @click="applyBatchChanges"
-                :disabled="!canApplyBatch" :loading="batchUpdating" prepend-icon="mdi-check-all">
+              <v-btn color="primary" variant="tonal" size="large" @click="applyBatchChanges" :disabled="!canApplyBatch"
+                :loading="batchUpdating" prepend-icon="mdi-check-all">
                 {{ tm('batchOperations.apply') }}
               </v-btn>
             </v-col>
@@ -161,18 +165,21 @@
             {{ tm('groups.count', { count: groups.length }) }}
           </v-chip>
           <v-spacer></v-spacer>
-          <v-btn v-if="selectedItems.length > 0 && groups.length > 0" color="info" variant="tonal" size="small" class="mr-2">
+          <v-btn v-if="selectedItems.length > 0 && groups.length > 0" color="info" variant="tonal" size="small"
+            class="mr-2">
             <v-icon start>mdi-folder-plus</v-icon>
             {{ tm('groups.addToGroup') }}
             <v-menu activator="parent">
               <v-list density="compact">
                 <v-list-item v-for="g in groups" :key="g.id" @click="addSelectedToGroup(g.id)">
-                  <v-list-item-title>{{ tm('groups.customGroupOption', { name: g.name, count: g.umo_count }) }}</v-list-item-title>
+                  <v-list-item-title>{{ tm('groups.customGroupOption', { name: g.name, count: g.umo_count })
+                    }}</v-list-item-title>
                 </v-list-item>
               </v-list>
             </v-menu>
           </v-btn>
-          <v-btn color="success" variant="tonal" size="small" @click="openCreateGroupDialog" prepend-icon="mdi-folder-plus">
+          <v-btn color="success" variant="tonal" size="small" @click="openCreateGroupDialog"
+            prepend-icon="mdi-folder-plus">
             {{ tm('groups.create') }}
           </v-btn>
         </v-card-title>
@@ -183,7 +190,8 @@
                 <div class="d-flex align-center justify-space-between">
                   <div>
                     <div class="font-weight-bold">{{ group.name }}</div>
-                    <div class="text-caption text-grey">{{ tm('groups.sessionsCount', { count: group.umo_count }) }}</div>
+                    <div class="text-caption text-grey">{{ tm('groups.sessionsCount', { count: group.umo_count }) }}
+                    </div>
                   </div>
                   <div>
                     <v-btn icon size="small" variant="text" @click="openEditGroupDialog(group)">
@@ -210,49 +218,64 @@
             {{ groupDialogMode === 'create' ? tm('groups.create') : tm('groups.edit') }}
           </v-card-title>
           <v-card-text>
-            <v-text-field v-model="editingGroup.name" :label="tm('groups.name')" variant="outlined" hide-details class="mb-4"></v-text-field>
+            <v-text-field v-model="editingGroup.name" :label="tm('groups.name')" variant="outlined" hide-details
+              class="mb-4"></v-text-field>
             <v-row dense>
               <!-- 左侧：可选会话 -->
               <v-col cols="5">
-                <div class="text-subtitle-2 mb-2">{{ tm('groups.availableSessions', { count: unselectedUmos.length }) }}</div>
-                <v-text-field v-model="groupMemberSearch" :placeholder="tm('groups.searchPlaceholder')" variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
+                <div class="text-subtitle-2 mb-2">{{ tm('groups.availableSessions', { count: unselectedUmos.length }) }}
+                </div>
+                <v-text-field v-model="groupMemberSearch" :placeholder="tm('groups.searchPlaceholder')"
+                  variant="outlined" density="compact" hide-details class="mb-2" clearable
+                  prepend-inner-icon="mdi-magnify"></v-text-field>
                 <v-list density="compact" class="transfer-list" lines="one">
-                  <v-list-item v-for="umo in filteredUnselectedUmos" :key="umo" @click="addToGroup(umo)" class="transfer-item">
+                  <v-list-item v-for="umo in filteredUnselectedUmos" :key="umo" @click="addToGroup(umo)"
+                    class="transfer-item">
                     <template v-slot:prepend>
                       <v-icon size="small" color="grey">mdi-plus</v-icon>
                     </template>
                     <v-list-item-title class="text-caption">{{ formatUmoShort(umo) }}</v-list-item-title>
                   </v-list-item>
                   <v-list-item v-if="filteredUnselectedUmos.length === 0 && !loadingUmos">
-                    <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMatch') }}</v-list-item-title>
+                    <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMatch')
+                      }}</v-list-item-title>
                   </v-list-item>
                   <v-list-item v-if="loadingUmos">
-                    <v-list-item-title class="text-center"><v-progress-circular indeterminate size="20"></v-progress-circular></v-list-item-title>
+                    <v-list-item-title class="text-center"><v-progress-circular indeterminate
+                        size="20"></v-progress-circular></v-list-item-title>
                   </v-list-item>
                 </v-list>
               </v-col>
               <!-- 中间：操作按钮 -->
               <v-col cols="2" class="d-flex flex-column align-center justify-center">
-                <v-btn icon size="small" variant="tonal" color="primary" class="mb-2" @click="addAllToGroup" :disabled="unselectedUmos.length === 0">
+                <v-btn icon size="small" variant="tonal" color="primary" class="mb-2" @click="addAllToGroup"
+                  :disabled="unselectedUmos.length === 0">
                   <v-icon>mdi-chevron-double-right</v-icon>
                 </v-btn>
-                <v-btn icon size="small" variant="tonal" color="error" @click="removeAllFromGroup" :disabled="editingGroup.umos.length === 0">
+                <v-btn icon size="small" variant="tonal" color="error" @click="removeAllFromGroup"
+                  :disabled="editingGroup.umos.length === 0">
                   <v-icon>mdi-chevron-double-left</v-icon>
                 </v-btn>
               </v-col>
               <!-- 右侧：已选会话 -->
               <v-col cols="5">
-                <div class="text-subtitle-2 mb-2">{{ tm('groups.selectedSessions', { count: editingGroup.umos.length }) }}</div>
-                <v-text-field v-model="groupSelectedSearch" :placeholder="tm('groups.searchPlaceholder')" variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
+                <div class="text-subtitle-2 mb-2">{{ tm('groups.selectedSessions', { count: editingGroup.umos.length })
+                  }}
+                </div>
+                <v-text-field v-model="groupSelectedSearch" :placeholder="tm('groups.searchPlaceholder')"
+                  variant="outlined" density="compact" hide-details class="mb-2" clearable
+                  prepend-inner-icon="mdi-magnify"></v-text-field>
                 <v-list density="compact" class="transfer-list" lines="one">
-                  <v-list-item v-for="umo in filteredSelectedUmos" :key="umo" @click="removeFromGroup(umo)" class="transfer-item">
+                  <v-list-item v-for="umo in filteredSelectedUmos" :key="umo" @click="removeFromGroup(umo)"
+                    class="transfer-item">
                     <template v-slot:prepend>
                       <v-icon size="small" color="error">mdi-minus</v-icon>
                     </template>
                     <v-list-item-title class="text-caption">{{ formatUmoShort(umo) }}</v-list-item-title>
                   </v-list-item>
                   <v-list-item v-if="editingGroup.umos.length === 0">
-                    <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMembers') }}</v-list-item-title>
+                    <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMembers')
+                      }}</v-list-item-title>
                   </v-list-item>
                 </v-list>
               </v-col>
@@ -428,17 +451,17 @@
 
               <v-row dense>
                 <v-col cols="12">
-                  <v-select v-model="kbConfig.kb_ids" :items="kbOptions" item-title="label" item-value="value" :disabled="availableKbs.length === 0"
-                    :label="tm('ruleEditor.kbConfig.selectKbs')" variant="outlined" hide-details multiple chips
-                    closable-chips clearable />
+                  <v-select v-model="kbConfig.kb_ids" :items="kbOptions" item-title="label" item-value="value"
+                    :disabled="availableKbs.length === 0" :label="tm('ruleEditor.kbConfig.selectKbs')"
+                    variant="outlined" hide-details multiple chips closable-chips clearable />
                 </v-col>
                 <v-col cols="12" md="6">
                   <v-text-field v-model.number="kbConfig.top_k" :label="tm('ruleEditor.kbConfig.topK')"
-                    variant="outlined" hide-details type="number" min="1" max="20" class="mt-3"/>
+                    variant="outlined" hide-details type="number" min="1" max="20" class="mt-3" />
                 </v-col>
                 <v-col cols="12" md="6">
                   <v-checkbox v-model="kbConfig.enable_rerank" :label="tm('ruleEditor.kbConfig.enableRerank')"
-                    color="primary" hide-details class="mt-3"/>
+                    color="primary" hide-details class="mt-3" />
                 </v-col>
               </v-row>
 
@@ -769,8 +792,8 @@ export default {
     },
 
     canApplyBatch() {
-      const hasChanges = this.batchLlmStatus !== null || this.batchTtsStatus !== null || 
-                         this.batchChatProvider !== null || this.batchTtsProvider !== null
+      const hasChanges = this.batchLlmStatus !== null || this.batchTtsStatus !== null ||
+        this.batchChatProvider !== null || this.batchTtsProvider !== null
       if (this.batchScope === 'selected') {
         return hasChanges && this.selectedItems.length > 0
       }

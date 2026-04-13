@@ -1,3 +1,51 @@
 .v-text-field input {
-  font-size: 0.8rem;
+  font-size: 0.875rem;
+}
+
+.v-textarea textarea {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.v-text-field {
+  .v-field__input {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  &.v-text-field--enclosed {
+    .v-field__input {
+      padding-top: 12px;
+      padding-bottom: 12px;
+    }
+  }
+}
+
+.v-select,
+.v-autocomplete {
+  .v-field--variant-solo-filled {
+    .v-label.v-field-label {
+      opacity: 1 !important;
+    }
+
+    .v-field__input {
+      padding-top: 18px;
+      padding-bottom: 6px;
+    }
+  }
+
+  &.v-input--density-comfortable {
+    .v-field--variant-solo-filled {
+      .v-field__input {
+        padding-top: 16px;
+        padding-bottom: 4px;
+      }
+    }
+  }
+}
+
+.v-field--variant-solo-filled {
+  .v-label.v-field-label {
+    opacity: 1 !important;
+  }
 }

@@ -16,4 +16,36 @@
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
   }
+
+  pre {
+    background: rgb(var(--v-theme-preBg)) !important;
+    border: 1px solid rgba(var(--v-theme-borderLight), 0.3);
+    border-radius: 10px;
+  }
+
+  code {
+    background: rgba(var(--v-theme-codeBg), 0.5);
+    border-radius: 4px;
+    padding: 2px 6px;
+  }
+}
+
+pre {
+  border-radius: 10px;
+  padding: 16px;
+  overflow-x: auto;
+
+  code {
+    background: transparent;
+    padding: 0;
+  }
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono",
+    "Helvetica Neue", monospace;
+  font-size: 0.8125rem;
+  background: rgba(var(--v-theme-codeBg), 0.8);
+  border-radius: 4px;
+  padding: 2px 6px;
 }

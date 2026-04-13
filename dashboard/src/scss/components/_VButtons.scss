@@ -1,8 +1,10 @@
-//
-// Light Buttons
-//
-
 .v-btn {
+  text-transform: none;
+  letter-spacing: $btn-letter-spacing;
+  font-weight: $btn-font-weight;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+
   &.bg-lightsecondary {
     &:hover,
     &:active,
@@ -11,13 +13,100 @@
       color: $white !important;
     }
   }
+
+  &.v-btn--variant-tonal {
+    .v-btn__overlay {
+      opacity: 0.08;
+    }
+
+    &:hover {
+      .v-btn__overlay {
+        opacity: 0.12;
+      }
+    }
+  }
+
+  &.v-btn--variant-outlined {
+    border-width: 1px;
+
+    &:hover {
+      border-width: 1px;
+    }
+  }
+
+  &.v-btn--variant-text {
+    &:hover {
+      background: rgba(var(--v-theme-primary), 0.08);
+    }
+  }
+
+  &.v-btn--density-comfortable {
+    &.v-btn--size-default {
+      height: 36px;
+      padding: 0 16px;
+    }
+  }
+
+  &.v-btn--density-compact {
+    &.v-btn--size-default {
+      height: 32px;
+      padding: 0 12px;
+    }
+  }
 }
 
-.v-btn {
-  text-transform: capitalize;
-  letter-spacing: $btn-letter-spacing;
-}
 .v-btn--icon.v-btn--density-default {
-  width: calc(var(--v-btn-height) + 6px);
-  height: calc(var(--v-btn-height) + 6px);
+  width: calc(var(--v-btn-height) + 4px);
+  height: calc(var(--v-btn-height) + 4px);
+  border-radius: 10px;
+}
+
+.v-btn--icon.v-btn--density-comfortable {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.v-btn--icon.v-btn--density-compact {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.v-btn-group {
+  .v-btn {
+    border-radius: 0;
+
+    &:first-child {
+      border-top-left-radius: 10px;
+      border-bottom-left-radius: 10px;
+    }
+
+    &:last-child {
+      border-top-right-radius: 10px;
+      border-bottom-right-radius: 10px;
+    }
+  }
+}
+
+.v-theme--PurpleThemeDark {
+  .v-btn {
+    &.v-btn--variant-tonal {
+      .v-btn__overlay {
+        opacity: 0.15;
+      }
+
+      &:hover {
+        .v-btn__overlay {
+          opacity: 0.2;
+        }
+      }
+    }
+
+    &.v-btn--variant-text {
+      &:hover {
+        background: rgba(var(--v-theme-primary), 0.12);
+      }
+    }
+  }
 }

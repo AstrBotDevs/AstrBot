@@ -1,84 +1,129 @@
-/*This is for the logo*/
 .leftSidebar {
   border: 0px;
-  border-right: 1px solid rgba(var(--v-theme-borderLight), 0.45);
+  border-right: 1px solid rgba(var(--v-theme-borderLight), 0.6);
   box-shadow: none !important;
+  background: rgb(var(--v-theme-surface)) !important;
 }
+
 .listitem {
   overflow-y: auto;
+
   .v-list {
     color: rgb(var(--v-theme-secondaryText));
   }
+
   .v-list-group__items .v-list-item,
   .v-list-item {
-    border-radius: $border-radius-root;
+    border-radius: 10px;
+    margin: 2px 8px;
     padding-inline-start: calc(12px + var(--indent-padding) / 2) !important;
+    transition: all 0.2s ease;
+
     &:hover {
-      color: rgb(var(--v-theme-secondary));
+      background: rgba(var(--v-theme-primary), 0.08);
+      color: rgb(var(--v-theme-primary));
+    }
+
+    &.v-list-item--active {
+      background: rgba(var(--v-theme-primary), 0.12);
+      color: rgb(var(--v-theme-primary));
+
+      .v-list-item-title {
+        font-weight: 500;
+      }
     }
   }
+
   .v-list-item--density-default.v-list-item--one-line {
-    min-height: 40px;
+    min-height: 42px;
+  }
+
+  .v-list-item-title {
+    font-size: 0.875rem;
+    font-weight: 400;
+  }
+
+  .v-list-item__prepend {
+    > .v-icon {
+      opacity: 0.8;
+      margin-inline-end: 8px !important;
+    }
+
+    > .v-list-item__spacer {
+      width: 8px !important;
+    }
+  }
+
+  .v-list-item--active .v-list-item__prepend > .v-icon {
+    opacity: 1;
+    color: rgb(var(--v-theme-primary));
   }
 }
 
-// 深色主题下的侧边栏悬停和选中样式
 .v-theme--PurpleThemeDark .leftSidebar {
   .listitem {
     .v-list-group__items .v-list-item,
     .v-list-item {
       &:hover {
+        background: rgba(var(--v-theme-primary), 0.15);
         color: rgb(var(--v-theme-primary)) !important;
-        
+
         .v-list-item-title {
           color: rgb(var(--v-theme-primary)) !important;
         }
-        
+
         .v-icon {
           color: rgb(var(--v-theme-primary)) !important;
         }
       }
-      
-      // 选中状态的样式
+
       &.v-list-item--active {
+        background: rgba(var(--v-theme-primary), 0.2);
         color: rgb(var(--v-theme-primary)) !important;
-        
+
         .v-list-item-title {
           color: rgb(var(--v-theme-primary)) !important;
         }
-        
+
         .v-icon {
           color: rgb(var(--v-theme-primary)) !important;
         }
       }
     }
   }
+
   .v-list-item--density-default.v-list-item--one-line {
-    min-height: 40px;
+    min-height: 42px;
   }
 }
+
 .v-navigation-drawer--rail {
   .scrollnavbar .v-list .v-list-group__items,
   .hide-menu {
     opacity: 1;
   }
+
   .leftPadding {
     margin-left: 0px;
   }
 }
+
 @media only screen and (min-width: 1170px) {
   .mini-sidebar {
     .logo {
       width: 90px;
       overflow: hidden;
     }
+
     .leftSidebar:hover {
-      box-shadow: $box-shadow !important;
+      box-shadow: $box-shadow-md !important;
     }
+
     .v-navigation-drawer--expand-on-hover:hover {
       .logo {
         width: 100%;
       }
+
       .v-list .v-list-group__items,
       .hide-menu {
         opacity: 1;
@@ -87,20 +132,36 @@
   }
 }
 
-// 新的flex布局样式
 .leftSidebar {
   .sidebar-container {
     display: flex;
     flex-direction: column;
     height: 100%;
-    
+
     .flex-grow-1 {
       flex: 1 1 auto;
       overflow-y: auto;
+
+      &::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      &::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      &::-webkit-scrollbar-thumb {
+        background: rgba(var(--v-theme-borderLight), 0.5);
+        border-radius: 3px;
+
+        &:hover {
+          background: rgba(var(--v-theme-borderLight), 0.8);
+        }
+      }
     }
-    
+
     .sidebar-footer {
-      padding: 16px;
+      padding: 12px 16px;
       background: inherit;
       display: flex;
       flex-direction: column;
@@ -108,17 +169,33 @@
       font-size: 13px;
       text-align: center;
       flex-shrink: 0;
-      
+      border-top: 1px solid rgba(var(--v-theme-borderLight), 0.4);
+
       .v-btn {
         width: 100%;
         max-width: 180px;
-        margin-bottom: 8px !important;
+        margin-bottom: 6px !important;
+        border-radius: 10px;
       }
 
       .sidebar-footer-btn {
         justify-content: flex-start;
         text-align: left;
+        font-size: 0.8125rem;
+
+        ::v-deep(.v-btn__prepend) {
+          margin-inline-end: 10px;
+        }
       }
     }
   }
+}
+
+.hidden-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

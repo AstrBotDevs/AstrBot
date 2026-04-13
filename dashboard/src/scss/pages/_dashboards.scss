@@ -1,7 +1,7 @@
 .bubble-shape {
   position: relative;
   &:before {
-    content: '';
+    content: "";
     position: absolute;
     width: 210px;
     height: 210px;
@@ -11,7 +11,7 @@
     opacity: 0.5;
   }
   &:after {
-    content: '';
+    content: "";
     position: absolute;
     width: 210px;
     height: 210px;
@@ -28,7 +28,7 @@
 .bubble-shape-sm {
   position: relative;
   &::before {
-    content: '';
+    content: "";
     position: absolute;
     width: 210px;
     height: 210px;
@@ -37,7 +37,7 @@
     right: -130px;
   }
   &::after {
-    content: '';
+    content: "";
     position: absolute;
     width: 210px;
     height: 210px;

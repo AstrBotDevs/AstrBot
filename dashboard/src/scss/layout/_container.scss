@@ -1,16 +1,20 @@
 html {
   overflow-y: auto;
 }
+
 .v-main {
   margin: 0;
 }
 
 .top-header {
-  border-bottom: 1px solid rgba(var(--v-theme-borderLight), 0.5);
+  border-bottom: 1px solid rgba(var(--v-theme-borderLight), 0.6);
+  background: rgb(var(--v-theme-surface)) !important;
 }
+
 .spacer {
-  padding: 100px 0;
+  padding: 80px 0;
 }
+
 @media (max-width: 800px) {
   .spacer {
     padding: 40px 0;
@@ -19,27 +23,28 @@ html {
 
 .page-wrapper {
   min-height: calc(100vh - 100px);
-  padding: 8px;
-  // border-radius: $border-radius-root;
+  padding: 16px;
   background: rgb(var(--v-theme-containerBg));
+  border-radius: 0;
 }
+
 $sizes: (
-  'display-1': 44px,
-  'display-2': 40px,
-  'display-3': 30px,
-  'h1': 36px,
-  'h2': 30px,
-  'h3': 21px,
-  'h4': 18px,
-  'h5': 16px,
-  'h6': 14px,
-  'text-8': 8px,
-  'text-10': 10px,
-  'text-13': 13px,
-  'text-18': 18px,
-  'text-20': 20px,
-  'text-24': 24px,
-  'body-text-1': 10px
+  "display-1": 40px,
+  "display-2": 36px,
+  "display-3": 28px,
+  "h1": 32px,
+  "h2": 26px,
+  "h3": 20px,
+  "h4": 18px,
+  "h5": 16px,
+  "h6": 14px,
+  "text-8": 8px,
+  "text-10": 10px,
+  "text-13": 13px,
+  "text-18": 18px,
+  "text-20": 20px,
+  "text-24": 24px,
+  "body-text-1": 10px,
 );
 
 @each $pixel, $size in $sizes {
@@ -54,12 +59,14 @@ $sizes: (
   top: 25%;
   right: 10px;
   border-radius: 50% 50% 4px;
+
   .icon {
     animation: progress-circular-rotate 1.4s linear infinite;
     transform-origin: center center;
     transition: all 0.2s ease-in-out;
   }
 }
+
 .w-100 {
   width: 100%;
 }
@@ -76,19 +83,17 @@ $sizes: (
   color: rgb(255, 255, 255) !important;
 }
 
-// font family
-
 body {
   .Poppins {
-    font-family: 'Poppins', $cjk-sans-fallback, sans-serif !important;
+    font-family: "Poppins", $cjk-sans-fallback, sans-serif !important;
   }
 
   .Inter {
-    font-family: 'Inter', $cjk-sans-fallback, sans-serif !important;
+    font-family: "Inter", $cjk-sans-fallback, sans-serif !important;
   }
 
   .Outfit {
-    font-family: 'Outfit', $cjk-sans-fallback, sans-serif !important;
+    font-family: "Outfit", $cjk-sans-fallback, sans-serif !important;
   }
 }
 
@@ -100,6 +105,7 @@ body {
     opacity: 1;
   }
 }
+
 @keyframes bounce {
   0%,
   20%,
@@ -123,5 +129,16 @@ body {
   }
   90% {
     transform: translate3d(0, -2px, 0);
+  }
+}
+
+.v-theme--PurpleThemeDark {
+  .top-header {
+    background: rgb(var(--v-theme-surface)) !important;
+    border-bottom-color: rgba(var(--v-theme-borderLight), 0.4);
+  }
+
+  .page-wrapper {
+    background: rgb(var(--v-theme-containerBg));
   }
 }

@@ -334,10 +334,22 @@ export default {
 
 :deep(.console-log-line) {
   display: block;
-  margin-bottom: 2px;
+  margin: 0;
+  padding: 2px 0;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, var(--astrbot-font-cjk-mono), monospace;
   font-size: 12px;
   white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+#term {
+  pre {
+    margin: 0 !important;
+    padding: 2px 0 !important;
+    display: block;
+    line-height: 1.4 !important;
+    font-size: 12px;
+  }
 }
 
 :deep(.fade-in) {
