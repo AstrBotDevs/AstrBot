@@ -632,7 +632,6 @@ class ProviderOpenAIOfficial(Provider):
             stream=True,
             stream_options=stream_options,
             extra_body=extra_body,
-            stream_options={"include_usage": True},
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
@@ -748,8 +747,10 @@ class ProviderOpenAIOfficial(Provider):
             # Clear buffer when thinking block closes
             thinking_buffer = ""
 
-        # Strip leading whitespace
-        completion_text = completion_text.lstrip()
+        # Don't strip leading whitespace to preserve markdown formatting like ## headers
+        # The previous lstrip() was causing issues with markdown content split across chunks
+        # If the LLM output starts with whitespace, it's likely intentional formatting
+        # completion_text = completion_text.lstrip()
 
         return completion_text, thinking_buffer, reasoning_content, has_content
 
