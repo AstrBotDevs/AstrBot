@@ -31,94 +31,7 @@
       </v-card-title>
       <v-card-subtitle>{{ tm("theme.subtitle") }}</v-card-subtitle>
       <v-card-text>
-        <!-- Row 1: Preset selector + theme mode -->
-        <div class="d-flex flex-wrap align-center ga-4 mb-4 ml-3">
-          <v-select
-            v-model="selectedThemePreset"
-            :items="presetOptions"
-            :label="tm('theme.customize.preset')"
-            hide-details
-            variant="outlined"
-            density="compact"
-            style="min-width: 200px; max-width: 280px"
-            @update:model-value="applyThemePreset"
-          />
-          <v-btn-toggle
-            v-model="themeMode"
-            mandatory
-            density="compact"
-            color="primary"
-          >
-            <v-btn value="light" size="small">
-              <v-icon class="mr-1" size="18">mdi-white-balance-sunny</v-icon>
-              {{ tm("theme.customize.light") }}
-            </v-btn>
-            <v-btn value="dark" size="small">
-              <v-icon class="mr-1" size="18">mdi-moon-waning-crescent</v-icon>
-              {{ tm("theme.customize.dark") }}
-            </v-btn>
-            <v-btn value="auto" size="small">
-              <v-icon class="mr-1" size="18">mdi-sync</v-icon>
-              {{ tm("theme.customize.auto") }}
-            </v-btn>
-          </v-btn-toggle>
-          <v-tooltip location="top">
-            <template #activator="{ props }">
-              <v-icon v-bind="props" size="16" color="primary" class="ml-1"
-                >mdi-help-circle-outline</v-icon
-              >
-            </template>
-            <span>{{ tm("theme.customize.autoSwitchDesc") }}</span>
-          </v-tooltip>
-        </div>
-
-        <!-- Row 2: Color pickers + reset -->
-        <v-card variant="outlined" class="pa-3">
-          <div class="text-body-2 text-medium-emphasis mb-3">
-            {{ tm("theme.customize.colors") }}
-          </div>
-          <div class="d-flex flex-wrap align-center ga-4">
-            <div class="d-flex align-center ga-3">
-              <v-text-field
-                v-model="primaryColor"
-                type="color"
-                :label="tm('theme.customize.primary')"
-                hide-details
-                variant="outlined"
-                density="compact"
-                style="width: 140px"
-              />
-              <div
-                class="color-preview"
-                :style="{ backgroundColor: primaryColor }"
-              />
-            </div>
-            <div class="d-flex align-center ga-3">
-              <v-text-field
-                v-model="secondaryColor"
-                type="color"
-                :label="tm('theme.customize.secondary')"
-                hide-details
-                variant="outlined"
-                density="compact"
-                style="width: 140px"
-              />
-              <div
-                class="color-preview"
-                :style="{ backgroundColor: secondaryColor }"
-              />
-            </div>
-            <v-btn
-              size="small"
-              variant="tonal"
-              color="primary"
-              @click="resetThemeColors"
-            >
-              <v-icon class="mr-1" size="16">mdi-restore</v-icon>
-              {{ tm("theme.customize.reset") }}
-            </v-btn>
-          </div>
-        </v-card>
+        <ThemeCustomizer />
       </v-card-text>
     </v-card>
 
@@ -351,26 +264,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import axios, { AxiosError } from "@/utils/request";
+import { computed, onMounted, ref } from "vue";
+import axios, { AxiosError } from 'axios';
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
-import MigrationDialog from "@/components/shared/MigrationDialog.vue";
 import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
+import ThemeCustomizer from "@/components/shared/ThemeCustomizer.vue";
+import MigrationDialog from "@/components/shared/MigrationDialog.vue";
 import BackupDialog from "@/components/shared/BackupDialog.vue";
 import StorageCleanupPanel from "@/components/shared/StorageCleanupPanel.vue";
 import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 import { useModuleI18n } from "@/i18n/composables";
-import { useTheme } from "vuetify";
-import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
-import {
-  LIGHT_THEME_NAME,
-  DARK_THEME_NAME,
-  ThemeMode,
-} from "@/theme/constants";
 import { useToastStore } from "@/stores/toast";
-import { useCustomizerStore } from "@/stores/customizer";
-import {
+import type {
   ApiKey,
   ApiKeyActionResponse,
   ApiKeyCreatePayload,
@@ -381,170 +287,10 @@ import {
 
 const { tm } = useModuleI18n("features/settings");
 const toastStore = useToastStore();
-const theme = useTheme();
-const customizer = useCustomizerStore();
 
-// Theme mode toggle (light/dark/auto)
-const themeMode = computed({
-  get() {
-    if (customizer.autoSwitchTheme) return "auto";
-    return customizer.isDarkTheme ? "dark" : "light";
-  },
-  set(mode: ThemeMode) {
-    if (mode === "auto") {
-      customizer.SET_AUTO_SYNC(true);
-      customizer.APPLY_SYSTEM_THEME();
-      return;
-    }
-
-    customizer.SET_AUTO_SYNC(false);
-    const newTheme = mode === "dark" ? DARK_THEME_NAME : LIGHT_THEME_NAME;
-    customizer.SET_UI_THEME(newTheme);
-  },
-});
-
-const getStoredColor = (key: string, fallback: string) => {
-  const stored =
-    typeof window !== "undefined" ? localStorage.getItem(key) : null;
-  return stored || fallback;
-};
-
-const primaryColor = ref(
-  getStoredColor("themePrimary", BlueBusinessLightTheme.colors.primary),
-);
-const secondaryColor = ref(
-  getStoredColor("themeSecondary", BlueBusinessLightTheme.colors.secondary),
-);
-
-// Theme presets based on MD3 color system
-const themePresets = [
-  {
-    id: "blue-business",
-    name: "活力商务蓝",
-    nameEn: "Business Blue",
-    primary: "#005FB0",
-    secondary: "#565E71",
-    tertiary: "#006B5B",
-  },
-  {
-    id: "purple-default",
-    name: "优雅紫",
-    nameEn: "Elegant Purple",
-    primary: "#6750A4",
-    secondary: "#625B71",
-    tertiary: "#7D5260",
-  },
-  {
-    id: "teal-fresh",
-    name: "自然清新绿",
-    nameEn: "Nature Green",
-    primary: "#386A20",
-    secondary: "#55624C",
-    tertiary: "#19686A",
-  },
-  {
-    id: "orange-warm",
-    name: "温暖橙棕",
-    nameEn: "Warm Orange",
-    primary: "#9C4323",
-    secondary: "#77574E",
-    tertiary: "#6C5D2F",
-  },
-  {
-    id: "ocean-breeze",
-    name: "海洋清风",
-    nameEn: "Ocean Breeze",
-    primary: "#0077B6",
-    secondary: "#4A5568",
-    tertiary: "#00B4D8",
-  },
-  {
-    id: "rose-romantic",
-    name: "浪漫玫瑰",
-    nameEn: "Romantic Rose",
-    primary: "#BE185D",
-    secondary: "#9F1239",
-    tertiary: "#DB2777",
-  },
-];
-
-// Get stored preset or default to blue-business name
-const selectedThemePreset = ref(
-  localStorage.getItem("themePreset") || themePresets[0].name,
-);
-
-// Simple array for dropdown display
-const presetOptions = themePresets.map((p) => p.name);
-
-const applyThemePreset = (presetName: string) => {
-  const preset = themePresets.find((p) => p.name === presetName);
-  if (!preset) return;
-
-  // Store the preset selection (store by name for display consistency)
-  localStorage.setItem("themePreset", presetName);
-  selectedThemePreset.value = presetName;
-
-  // Update primary and secondary colors
-  primaryColor.value = preset.primary;
-  secondaryColor.value = preset.secondary;
-  localStorage.setItem("themePrimary", preset.primary);
-  localStorage.setItem("themeSecondary", preset.secondary);
-
-  // Apply to themes
-  applyThemeColors(preset.primary, preset.secondary);
-
-  toastStore.add({
-    message: tm("theme.customize.presetApplied") || "主题已应用",
-    color: "success",
-  });
-};
-
-const resolveThemes = () => {
-  if (theme?.themes?.value) return theme.themes.value;
-  if (theme?.global?.themes?.value) return theme.global.themes.value;
-  return null;
-};
-
-const applyThemeColors = (primary: string, secondary: string) => {
-  const themes = resolveThemes();
-  if (!themes) return;
-  [LIGHT_THEME_NAME, DARK_THEME_NAME].forEach((name) => {
-    const themeDef = themes[name];
-    if (!themeDef?.colors) return;
-    if (primary) themeDef.colors.primary = primary;
-    if (secondary) themeDef.colors.secondary = secondary;
-    if (primary && themeDef.colors.darkprimary)
-      themeDef.colors.darkprimary = primary;
-    if (secondary && themeDef.colors.darksecondary)
-      themeDef.colors.darksecondary = secondary;
-  });
-};
-
-applyThemeColors(primaryColor.value, secondaryColor.value);
-
-watch(primaryColor, (value) => {
-  if (!value) return;
-  localStorage.setItem("themePrimary", value);
-  applyThemeColors(value, secondaryColor.value);
-});
-
-watch(secondaryColor, (value) => {
-  if (!value) return;
-  localStorage.setItem("themeSecondary", value);
-  applyThemeColors(primaryColor.value, value);
-});
-
-const resetThemeColors = () => {
-  primaryColor.value = BlueBusinessLightTheme.colors.primary;
-  secondaryColor.value = BlueBusinessLightTheme.colors.secondary;
-  localStorage.removeItem("themePrimary");
-  localStorage.removeItem("themeSecondary");
-  applyThemeColors(primaryColor.value, secondaryColor.value);
-};
-
-const wfr = ref(null);
-const migrationDialog = ref(null);
-const backupDialog = ref(null);
+const wfr = ref<any>(null);
+const migrationDialog = ref<any>(null);
+const backupDialog = ref<any>(null);
 const apiKeys = ref<ApiKey[]>([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref("");

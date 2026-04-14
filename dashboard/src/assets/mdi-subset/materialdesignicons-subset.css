@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 247 icons */
+/* Auto-generated MDI subset – 252 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -316,6 +316,10 @@
   content: "\F164B";
 }
 
+.mdi-database-import::before {
+  content: "\F095D";
+}
+
 .mdi-database-off::before {
   content: "\F1640";
 }
@@ -350,6 +354,10 @@
 
 .mdi-download::before {
   content: "\F01DA";
+}
+
+.mdi-earth::before {
+  content: "\F01E7";
 }
 
 .mdi-emoticon::before {
@@ -652,6 +660,10 @@
   content: "\F0375";
 }
 
+.mdi-moon-waning-crescent::before {
+  content: "\F0F65";
+}
+
 .mdi-music-note-outline::before {
   content: "\F0F74";
 }
@@ -694,6 +706,10 @@
 
 .mdi-page-last::before {
   content: "\F0601";
+}
+
+.mdi-palette::before {
+  content: "\F03D8";
 }
 
 .mdi-paperclip::before {
@@ -898,6 +914,10 @@
 
 .mdi-subdirectory-arrow-right::before {
   content: "\F060D";
+}
+
+.mdi-sync::before {
+  content: "\F04E6";
 }
 
 .mdi-text::before {
