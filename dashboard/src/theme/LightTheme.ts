@@ -1,4 +1,4 @@
-import type { ThemeTypes } from '@/types/themeTypes/ThemeType';
+import type { ThemeTypes } from '@/types/theme';
 
 const PurpleTheme: ThemeTypes = {
   name: 'PurpleTheme',

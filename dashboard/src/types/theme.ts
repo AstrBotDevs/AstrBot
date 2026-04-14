@@ -1,10 +1,21 @@
+export type ThemeMode = "light" | "dark" | "auto";
+
+export interface ThemePreset {
+  id: string;
+  name: string;
+  nameEn: string;
+  primary: string;
+  secondary: string;
+  tertiary: string;
+}
+
 export type ThemeTypes = {
   name: string;
   dark: boolean;
   variables?: object;
   colors: {
-    primary?: string;
-    secondary?: string;
+    primary: string;
+    secondary: string;
     info?: string;
     success?: string;
     accent?: string;
