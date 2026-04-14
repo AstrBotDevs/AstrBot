@@ -438,11 +438,6 @@ class ProviderOpenAIOfficial(Provider):
             image_fallback_used,
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
-        """创建带代理的 HTTP 客户端"""
-        proxy = provider_config.get("proxy", "")
-        return create_proxy_client("OpenAI", proxy)
-
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = None
@@ -450,6 +445,8 @@ class ProviderOpenAIOfficial(Provider):
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
         self.custom_headers = provider_config.get("custom_headers", {})
+        self.client: AsyncOpenAI | AsyncAzureOpenAI | None = None
+        self._client_alive = False
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
 
@@ -460,6 +457,7 @@ class ProviderOpenAIOfficial(Provider):
                 self.custom_headers[key] = str(self.custom_headers[key])
 
         self.client = self._create_openai_client()
+        self._client_alive = True
 
         self.default_params = inspect.signature(
             self.client.chat.completions.create,
@@ -476,12 +474,16 @@ class ProviderOpenAIOfficial(Provider):
 
         return create_proxy_client("OpenAI", proxy)
 
-    def _create_openai_client(self) -> AsyncOpenAI | AsyncAzureOpenAI:
+    def _create_openai_client(
+        self,
+        api_key: str | None = None,
+    ) -> AsyncOpenAI | AsyncAzureOpenAI:
         """创建 OpenAI/Azure 客户端实例，将初始化逻辑解耦以便复用。"""
+        api_key = api_key or self.chosen_api_key
         if "api_version" in self.provider_config:
             # Using Azure OpenAI API
             return AsyncAzureOpenAI(
-                api_key=self.chosen_api_key,
+                api_key=api_key,
                 api_version=self.provider_config.get("api_version", None),
                 default_headers=self.custom_headers,
                 base_url=self.provider_config.get("api_base", ""),
@@ -491,42 +493,19 @@ class ProviderOpenAIOfficial(Provider):
         else:
             # Using OpenAI Official API
             return AsyncOpenAI(
-                api_key=self.chosen_api_key,
+                api_key=api_key,
                 base_url=self.provider_config.get("api_base", None),
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
                 http_client=self._create_http_client(self.provider_config),
             )
 
-    def _is_underlying_client_closed(self) -> bool:
-        """集中处理对 openai SDK 私有属性的访问，便于未来替换为公开 API。
-
-        注意：此处直接访问了 openai 库的私有属性 `_client`，
-        依赖其内部实现（httpx.AsyncClient 实例暴露的 is_closed 属性）。
-        若 openai 库未来版本调整了内部结构，此处可能失效。
-        目前 openai SDK 尚未提供检查底层连接是否已关闭的公开 API。
-        若未来 SDK 提供了类似 self.client.is_closed() 的公开方法，
-        应及时将此处替换为对应的公开接口。
-
-        当检测逻辑因 SDK 内部结构变更而抛出 AttributeError 时，会：
-        1. 记录 warning 日志，提示可能的 SDK 变更；
-        2. 保守地视为"已关闭"，触发后续的 client 重建逻辑。
-        """
-        try:
-            return bool(self.client and self.client._client.is_closed)
-        except AttributeError:
-            logger.warning(
-                "无法检测 OpenAI client 是否已关闭，"
-                "可能是 SDK 内部结构变更导致；"
-                "将保守视为已关闭并触发 client 重建。"
-            )
-            return True
-
     def _ensure_client(self) -> None:
-        """确保 client 可用。如果 client 为 None 或底层连接已关闭，则重新创建。"""
-        if self.client is None or self._is_underlying_client_closed():
+        """确保 client 可用，仅在真实 API 调用前按需重建。"""
+        if self.client is None or not self._client_alive:
             logger.warning("检测到 OpenAI client 已关闭或未初始化，正在重新创建...")
             self.client = self._create_openai_client()
+            self._client_alive = True
             self.default_params = inspect.signature(
                 self.client.chat.completions.create,
             ).parameters.keys()
@@ -1191,9 +1170,10 @@ class ProviderOpenAIOfficial(Provider):
         retry_cnt = 0
         for retry_cnt in range(max_retries):
             try:
-                self._ensure_client()
                 self.chosen_api_key = chosen_key
-                self.client.api_key = chosen_key
+                self._ensure_client()
+                if self.client is not None:
+                    self.client.api_key = chosen_key
                 llm_response = await self._query(payloads, func_tool)
                 break
             except Exception as e:
@@ -1264,9 +1244,10 @@ class ProviderOpenAIOfficial(Provider):
         retry_cnt = 0
         for retry_cnt in range(max_retries):
             try:
-                self._ensure_client()
                 self.chosen_api_key = chosen_key
-                self.client.api_key = chosen_key
+                self._ensure_client()
+                if self.client is not None:
+                    self.client.api_key = chosen_key
                 async for response in self._query_stream(payloads, func_tool):
                     yield response
                 break
@@ -1320,16 +1301,15 @@ class ProviderOpenAIOfficial(Provider):
         return new_contexts
 
     def get_current_key(self) -> str:
-        self._ensure_client()
-        return self.client.api_key
+        return self.chosen_api_key
 
     def get_keys(self) -> list[str]:
         return self.api_keys
 
     def set_key(self, key) -> None:
         self.chosen_api_key = key
-        self._ensure_client()
-        self.client.api_key = key
+        if self.client is not None:
+            self.client.api_key = key
 
     async def assemble_context(
         self,
@@ -1408,12 +1388,7 @@ class ProviderOpenAIOfficial(Provider):
         return image_data
 
     async def terminate(self):
-        """关闭 client 并将引用置为 None。
-
-        通过 try/finally 确保即使 close() 抛出异常，
-        self.client 也会被清空，避免配置重载（reload）期间
-        复用已关闭的 client 导致 APIConnectionError。
-        """
+        """关闭 client 并将引用置为 None，确保后续仅在真实调用时重建。"""
         if self.client:
             try:
                 await self.client.close()
@@ -1421,3 +1396,4 @@ class ProviderOpenAIOfficial(Provider):
                 logger.warning(f"关闭 OpenAI client 时出错: {e}")
             finally:
                 self.client = None
+                self._client_alive = False
