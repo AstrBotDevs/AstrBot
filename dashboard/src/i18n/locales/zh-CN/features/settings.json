@@ -23,6 +23,19 @@
       "title": "主题颜色",
       "primary": "主色",
       "secondary": "辅助色",
+      "info": "信息色",
+      "presets": "预设",
+      "presetNames": {
+        "Indigo": "靛蓝",
+        "Violet": "紫罗兰",
+        "Rose": "玫瑰",
+        "Pink": "粉色",
+        "Orange": "橙色",
+        "Emerald": "翡翠",
+        "Sky": "天蓝",
+        "Slate": "板岩",
+        "Zinc": "锌灰"
+      },
       "reset": "恢复默认"
     }
   },

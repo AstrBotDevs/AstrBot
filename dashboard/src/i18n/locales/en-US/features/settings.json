@@ -23,6 +23,19 @@
       "title": "Theme Colors",
       "primary": "Primary Color",
       "secondary": "Secondary Color",
+      "info": "Info Color",
+      "presets": "Presets",
+      "presetNames": {
+        "Indigo": "Indigo",
+        "Violet": "Violet",
+        "Rose": "Rose",
+        "Pink": "Pink",
+        "Orange": "Orange",
+        "Emerald": "Emerald",
+        "Sky": "Sky",
+        "Slate": "Slate",
+        "Zinc": "Zinc"
+      },
       "reset": "Reset to Default"
     }
   },

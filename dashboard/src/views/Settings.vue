@@ -1,6 +1,7 @@
 <template>
 
-    <div style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 24px;">
+    <div
+        style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 24px;">
 
         <v-list lines="two">
             <v-list-subheader>{{ tm('network.title') }}</v-list-subheader>
@@ -19,27 +20,41 @@
 
             <v-list-item :subtitle="tm('theme.subtitle')" :title="tm('theme.customize.title')">
                 <v-row class="mt-2" dense>
-                    <v-col cols="4" sm="2">
-                        <v-text-field
-                            v-model="primaryColor"
-                            type="color"
-                            :label="tm('theme.customize.primary')"
-                            hide-details
-                            variant="outlined"
-                            density="compact"
-                            style="max-width: 220px;"
-                        />
+                    <v-col cols="4" sm="3">
+                        <div class="d-flex align-center" style="gap: 4px">
+                            <v-text-field v-model="primaryColor" :label="tm('theme.customize.primary')" hide-details
+                                variant="outlined" density="compact" style="flex: 1" />
+                            <input v-model="primaryColor" type="color"
+                                style="width: 32px; height: 32px; border: none; border-radius: 4px; cursor: pointer; padding: 0; flex-shrink: 0" />
+                        </div>
                     </v-col>
-                    <v-col cols="4" sm="2   ">
-                        <v-text-field
-                            v-model="secondaryColor"
-                            type="color"
-                            :label="tm('theme.customize.secondary')"
-                            hide-details
-                            variant="outlined"
-                            density="compact"
-                            style="max-width: 220px;"
-                        />
+                    <v-col cols="4" sm="3">
+                        <div class="d-flex align-center" style="gap: 4px">
+                            <v-text-field v-model="secondaryColor" :label="tm('theme.customize.secondary')" hide-details
+                                variant="outlined" density="compact" style="flex: 1" />
+                            <input v-model="secondaryColor" type="color"
+                                style="width: 32px; height: 32px; border: none; border-radius: 4px; cursor: pointer; padding: 0; flex-shrink: 0" />
+                        </div>
+                    </v-col>
+                    <v-col cols="4" sm="3">
+                        <div class="d-flex align-center" style="gap: 4px">
+                            <v-text-field v-model="infoColor" :label="tm('theme.customize.info')" hide-details
+                                variant="outlined" density="compact" style="flex: 1" />
+                            <input v-model="infoColor" type="color"
+                                style="width: 32px; height: 32px; border: none; border-radius: 4px; cursor: pointer; padding: 0; flex-shrink: 0" />
+                        </div>
+                    </v-col>
+                    <v-col cols="12">
+                        <div class="d-flex align-center flex-wrap" style="gap: 6px; margin-top: 4px">
+                            <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('theme.customize.presets')
+                            }}</span>
+                            <v-btn v-for="preset in colorPresets" :key="preset.name" size="small" variant="outlined"
+                                :style="{ borderColor: preset.primary, color: preset.primary }" class="preset-btn"
+                                @click="applyPreset(preset)">
+                                <span class="preset-dot" :style="{ backgroundColor: preset.primary }"></span>
+                                {{ tm('theme.customize.presetNames.' + preset.name) }}
+                            </v-btn>
+                        </div>
                     </v-col>
                     <v-col cols="12">
                         <v-btn size="small" variant="tonal" color="primary" @click="resetThemeColors">
@@ -60,7 +75,8 @@
             </v-list-item>
 
             <v-list-item :subtitle="tm('system.restart.subtitle')" :title="tm('system.restart.title')">
-                <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button') }}</v-btn>
+                <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button')
+                    }}</v-btn>
             </v-list-item>
 
             <v-list-item class="py-2">
@@ -75,17 +91,9 @@
                         <span>{{ tm('apiKey.manageTitle') }}</span>
                         <v-tooltip location="top">
                             <template #activator="{ props }">
-                                <v-btn
-                                    v-bind="props"
-                                    icon
-                                    size="x-small"
-                                    variant="text"
-                                    class="ml-2"
-                                    :aria-label="tm('apiKey.docsLink')"
-                                    href="https://docs.astrbot.app/dev/openapi.html"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
+                                <v-btn v-bind="props" icon size="x-small" variant="text" class="ml-2"
+                                    :aria-label="tm('apiKey.docsLink')" href="https://docs.astrbot.app/dev/openapi.html"
+                                    target="_blank" rel="noopener noreferrer">
                                     <v-icon size="18">mdi-help-circle-outline</v-icon>
                                 </v-btn>
                             </template>
@@ -95,23 +103,12 @@
                 </template>
                 <v-row class="mt-2" dense>
                     <v-col cols="12" md="4">
-                        <v-text-field
-                            v-model="newApiKeyName"
-                            :label="tm('apiKey.name')"
-                            variant="outlined"
-                            density="compact"
-                            hide-details
-                        />
+                        <v-text-field v-model="newApiKeyName" :label="tm('apiKey.name')" variant="outlined"
+                            density="compact" hide-details />
                     </v-col>
                     <v-col cols="12" md="3">
-                        <v-select
-                            v-model="newApiKeyExpiresInDays"
-                            :items="apiKeyExpiryOptions"
-                            :label="tm('apiKey.expiresInDays')"
-                            variant="outlined"
-                            density="compact"
-                            hide-details
-                        />
+                        <v-select v-model="newApiKeyExpiresInDays" :items="apiKeyExpiryOptions"
+                            :label="tm('apiKey.expiresInDays')" variant="outlined" density="compact" hide-details />
                     </v-col>
                     <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
                         <v-alert type="warning" variant="tonal" density="comfortable">
@@ -128,13 +125,9 @@
                     <v-col cols="12">
                         <div class="text-caption text-medium-emphasis mb-1">{{ tm('apiKey.scopes') }}</div>
                         <v-chip-group v-model="newApiKeyScopes" multiple>
-                            <v-chip
-                                v-for="scope in availableScopes"
-                                :key="scope.value"
-                                :value="scope.value"
+                            <v-chip v-for="scope in availableScopes" :key="scope.value" :value="scope.value"
                                 :color="newApiKeyScopes.includes(scope.value) ? 'primary' : undefined"
-                                :variant="newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'"
-                            >
+                                :variant="newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'">
                                 {{ scope.label }}
                             </v-chip>
                         </v-chip-group>
@@ -171,33 +164,22 @@
                                     <td><code>{{ item.key_prefix }}</code></td>
                                     <td>{{ (item.scopes || []).join(', ') }}</td>
                                     <td>
-                                        <v-chip
-                                            size="small"
+                                        <v-chip size="small"
                                             :color="item.is_revoked || item.is_expired ? 'error' : 'success'"
-                                            variant="tonal"
-                                        >
-                                            {{ item.is_revoked || item.is_expired ? tm('apiKey.status.inactive') : tm('apiKey.status.active') }}
+                                            variant="tonal">
+                                            {{ item.is_revoked || item.is_expired ? tm('apiKey.status.inactive') :
+                                                tm('apiKey.status.active') }}
                                         </v-chip>
                                     </td>
                                     <td>{{ formatDate(item.last_used_at) }}</td>
                                     <td>{{ formatDate(item.created_at) }}</td>
                                     <td>
-                                        <v-btn
-                                            v-if="!item.is_revoked"
-                                            size="x-small"
-                                            color="warning"
-                                            variant="tonal"
-                                            class="mr-2"
-                                            @click="revokeApiKey(item.key_id)"
-                                        >
+                                        <v-btn v-if="!item.is_revoked" size="x-small" color="warning" variant="tonal"
+                                            class="mr-2" @click="revokeApiKey(item.key_id)">
                                             {{ tm('apiKey.revoke') }}
                                         </v-btn>
-                                        <v-btn
-                                            size="x-small"
-                                            color="error"
-                                            variant="tonal"
-                                            @click="deleteApiKey(item.key_id)"
-                                        >
+                                        <v-btn size="x-small" color="error" variant="tonal"
+                                            @click="deleteApiKey(item.key_id)">
                                             {{ tm('apiKey.delete') }}
                                         </v-btn>
                                     </td>
@@ -214,9 +196,10 @@
             </v-list-item>
         </v-list>
 
-            <v-list-item :subtitle="tm('system.migration.subtitle')" :title="tm('system.migration.title')">
-                <v-btn style="margin-top: 16px;" color="primary" @click="startMigration">{{ tm('system.migration.button') }}</v-btn>
-            </v-list-item>
+        <v-list-item :subtitle="tm('system.migration.subtitle')" :title="tm('system.migration.title')">
+            <v-btn style="margin-top: 16px;" color="primary" @click="startMigration">{{ tm('system.migration.button')
+                }}</v-btn>
+        </v-list-item>
 
     </div>
 
@@ -252,6 +235,29 @@ const getStoredColor = (key, fallback) => {
 
 const primaryColor = ref(getStoredColor('themePrimary', PurpleTheme.colors.primary));
 const secondaryColor = ref(getStoredColor('themeSecondary', PurpleTheme.colors.secondary));
+const infoColor = ref(getStoredColor('themeInfo', PurpleTheme.colors.info));
+
+const colorPresets = [
+    { name: 'Indigo', primary: '#6366F1', secondary: '#6366F1', info: '#818CF8' },
+    { name: 'Violet', primary: '#8B5CF6', secondary: '#8B5CF6', info: '#A78BFA' },
+    { name: 'Rose', primary: '#F43F5E', secondary: '#F43F5E', info: '#FB7185' },
+    { name: 'Pink', primary: '#F472B6', secondary: '#F472B6', info: '#F9A8D4' },
+    { name: 'Orange', primary: '#F97316', secondary: '#F97316', info: '#FB923C' },
+    { name: 'Emerald', primary: '#10B981', secondary: '#10B981', info: '#34D399' },
+    { name: 'Sky', primary: '#0EA5E9', secondary: '#0EA5E9', info: '#38BDF8' },
+    { name: 'Slate', primary: '#64748B', secondary: '#64748B', info: '#94A3B8' },
+    { name: 'Zinc', primary: '#52525B', secondary: '#52525B', info: '#71717A' },
+];
+
+const applyPreset = (preset) => {
+    primaryColor.value = preset.primary;
+    secondaryColor.value = preset.secondary;
+    infoColor.value = preset.info;
+    localStorage.setItem('themePrimary', preset.primary);
+    localStorage.setItem('themeSecondary', preset.secondary);
+    localStorage.setItem('themeInfo', preset.info);
+    applyThemeColors(preset.primary, preset.secondary, preset.info);
+};
 
 const resolveThemes = () => {
     if (theme?.themes?.value) return theme.themes.value;
@@ -259,7 +265,7 @@ const resolveThemes = () => {
     return null;
 };
 
-const applyThemeColors = (primary, secondary) => {
+const applyThemeColors = (primary, secondary, info) => {
     const themes = resolveThemes();
     if (!themes) return;
     ['PurpleTheme', 'PurpleThemeDark'].forEach((name) => {
@@ -267,23 +273,30 @@ const applyThemeColors = (primary, secondary) => {
         if (!themeDef?.colors) return;
         if (primary) themeDef.colors.primary = primary;
         if (secondary) themeDef.colors.secondary = secondary;
+        if (info) themeDef.colors.info = info;
         if (primary && themeDef.colors.darkprimary) themeDef.colors.darkprimary = primary;
         if (secondary && themeDef.colors.darksecondary) themeDef.colors.darksecondary = secondary;
     });
 };
 
-applyThemeColors(primaryColor.value, secondaryColor.value);
+applyThemeColors(primaryColor.value, secondaryColor.value, infoColor.value);
 
 watch(primaryColor, (value) => {
     if (!value) return;
     localStorage.setItem('themePrimary', value);
-    applyThemeColors(value, secondaryColor.value);
+    applyThemeColors(value, secondaryColor.value, infoColor.value);
 });
 
 watch(secondaryColor, (value) => {
     if (!value) return;
     localStorage.setItem('themeSecondary', value);
-    applyThemeColors(primaryColor.value, value);
+    applyThemeColors(primaryColor.value, value, infoColor.value);
+});
+
+watch(infoColor, (value) => {
+    if (!value) return;
+    localStorage.setItem('themeInfo', value);
+    applyThemeColors(primaryColor.value, secondaryColor.value, value);
 });
 
 const wfr = ref(null);
@@ -482,12 +495,30 @@ const openBackupDialog = () => {
 const resetThemeColors = () => {
     primaryColor.value = PurpleTheme.colors.primary;
     secondaryColor.value = PurpleTheme.colors.secondary;
+    infoColor.value = PurpleTheme.colors.info;
     localStorage.removeItem('themePrimary');
     localStorage.removeItem('themeSecondary');
-    applyThemeColors(primaryColor.value, secondaryColor.value);
+    localStorage.removeItem('themeInfo');
+    applyThemeColors(primaryColor.value, secondaryColor.value, infoColor.value);
 };
 
 onMounted(() => {
     loadApiKeys();
 });
 </script>
+
+<style scoped>
+.preset-btn {
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.preset-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+</style>
