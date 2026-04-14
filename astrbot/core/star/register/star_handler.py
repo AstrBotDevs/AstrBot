@@ -482,7 +482,7 @@ def register_on_agent_begin(**kwargs):
     """
 
     def decorator(awaitable):
-        _ = get_handler_or_create(awaitable, EventType.OnAgentBegin, **kwargs)
+        _ = get_handler_or_create(awaitable, EventType.OnAgentBeginEvent, **kwargs)
         return awaitable
 
     return decorator
@@ -512,7 +512,7 @@ def register_on_agent_done(**kwargs):
     """
 
     def decorator(awaitable):
-        _ = get_handler_or_create(awaitable, EventType.OnAgentDone, **kwargs)
+        _ = get_handler_or_create(awaitable, EventType.OnAgentDoneEvent, **kwargs)
         return awaitable
 
     return decorator

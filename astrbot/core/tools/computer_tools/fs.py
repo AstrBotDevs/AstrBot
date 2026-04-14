@@ -132,7 +132,7 @@ def _resolve_user_path(path: str, *, local_env: bool, umo: str) -> Path:
 
 def _is_path_within_allowed_roots(path: str, umo: str) -> bool:
     resolved = _resolve_user_path(path, local_env=True, umo=umo)
-    return any(
+    return any( 
         resolved == allowed_root or resolved.is_relative_to(allowed_root)
         for allowed_root in _read_allowed_roots(umo)
     )
