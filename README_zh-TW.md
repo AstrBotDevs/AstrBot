@@ -156,10 +156,12 @@ yay -S astrbot-git
 | Discord | 官方維護 |
 | LINE | 官方維護 |
 | Satori | 官方維護 |
+| KOOK | 官方維護 |
 | Misskey | 官方維護 |
+| Mattermost | 官方維護 |
 | Whatsapp（即將支援） | 官方維護 |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | 社群維護 |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | 社群維護 |
+| [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | 社群維護 |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | 社群維護 |
 
 ## 支援的模型服務

@@ -156,10 +156,12 @@ yay -S astrbot-git
 | Discord | Официальная |
 | LINE | Официальная |
 | Satori | Официальная |
+| KOOK | Официальная |
 | Misskey | Официальная |
+| Mattermost | Официальная |
 | WhatsApp (Скоро) | Официальная |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | Сообщество |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | Сообщество |
+| [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | Сообщество |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | Сообщество |
 
 ## Поддерживаемые сервисы моделей
