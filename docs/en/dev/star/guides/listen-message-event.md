@@ -291,6 +291,8 @@ async def on_llm_resp(self, event: AstrMessageEvent, resp: LLMResponse): # Note 
 
 #### On Agent Begin
 
+> Requires AstrBot version > v4.23.1
+
 When the Agent starts running, the `on_agent_begin` hook is triggered.
 
 ```python
@@ -306,6 +308,8 @@ async def on_agent_begin(self, event: AstrMessageEvent, run_context: ContextWrap
 > You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
 
 #### Before LLM Tool Call
+
+> Requires AstrBot version > v4.23.1
 
 When the Agent is about to call an LLM tool, the `on_using_llm_tool` hook is triggered.
 
@@ -328,6 +332,8 @@ async def on_using_llm_tool(
 > You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
 
 #### After LLM Tool Call
+
+> Requires AstrBot version > v4.23.1
 
 After the LLM tool call completes, the `on_llm_tool_respond` hook is triggered.
 
@@ -353,6 +359,8 @@ async def on_llm_tool_respond(
 > You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
 
 #### On Agent Done
+
+> Requires AstrBot version > v4.23.1
 
 After the Agent finishes running, the `on_agent_done` hook is triggered. This hook is triggered after `on_llm_response`.
 
