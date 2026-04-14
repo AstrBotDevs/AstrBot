@@ -371,6 +371,31 @@ function toggleTheme() {
   customizer.TOGGLE_DARK_MODE();
 }
 
+function autoSwitchTheme() {
+  // 根据浏览器主题同步页面主题
+  customizer.APPLY_SYSTEM_THEME();
+}
+
+function autoSwitchThemeListener(e: MediaQueryListEvent) {
+  if (customizer.autoSwitchTheme) {
+    autoSwitchTheme();
+  }
+}
+
+// 通过 watch 变量来添加和移除监听器
+watch(() => customizer.autoSwitchTheme, (isAuto) => {
+  if (typeof window === 'undefined') return;
+
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+  if (isAuto) {
+    autoSwitchTheme();
+    mediaQuery.addEventListener('change', autoSwitchThemeListener);
+  } else {
+    mediaQuery.removeEventListener('change', autoSwitchThemeListener);
+  }
+}, { immediate: true });
+
 function openReleaseNotesDialog(body: string, tag: string) {
   selectedReleaseNotes.value = body;
   selectedReleaseTag.value = tag;
