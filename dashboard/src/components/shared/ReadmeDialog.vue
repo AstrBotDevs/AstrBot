@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, computed, onUnmounted } from "vue";
-import { useTheme } from "vuetify";
+import { useCustomizerStore } from "@/stores/customizer";
 import MarkdownIt from "markdown-it";
 import axios from "axios";
 import DOMPurify from "dompurify";
@@ -46,7 +46,6 @@ const props = defineProps({
 
 const emit = defineEmits(["update:show"]);
 const { t, locale } = useI18n();
-const theme = useTheme();
 
 const content = ref(null);
 const error = ref(null);
@@ -57,7 +56,8 @@ const lastRequestId = ref(0);
 const lastRenderId = ref(0);
 const scrollContainer = ref(null);
 const renderedHtml = ref("");
-const isDark = computed(() => theme.global.current.value.dark);
+const customizer = useCustomizerStore();
+const isDark = computed(() => customizer.isDarkTheme);
 
 const MARKDOWN_SANITIZE_OPTIONS = {
   ALLOWED_TAGS: [

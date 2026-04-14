@@ -12,7 +12,6 @@ import 'katex/dist/katex.min.css';
 import { useI18n } from '@/i18n/composables';
 import { router } from '@/router';
 import { useRoute } from 'vue-router';
-import { useTheme } from 'vuetify';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import { useLanguageSwitcher } from '@/i18n/composables';
 import type { Locale } from '@/i18n/types';
@@ -23,7 +22,6 @@ enableKatex();
 enableMermaid();
 
 const customizer = useCustomizerStore();
-const theme = useTheme();
 const { t } = useI18n();
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
@@ -369,10 +367,8 @@ function updateDashboard() {
     });
 }
 
-function toggleDarkMode() {
-  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+function toggleTheme() {
+  customizer.TOGGLE_DARK_MODE();
 }
 
 function openReleaseNotesDialog(body: string, tag: string) {
@@ -680,17 +676,17 @@ onMounted(async () => {
 
       <!-- 主题切换 -->
       <v-list-item
-        @click="toggleDarkMode()"
+        @click="toggleTheme()"
         class="styled-menu-item"
         rounded="md"
       >
         <template v-slot:prepend>
           <v-icon>
-            {{ useCustomizerStore().uiTheme === 'PurpleThemeDark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}
+            {{ customizer.isDarkTheme ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}
           </v-icon>
         </template>
         <v-list-item-title>
-          {{ useCustomizerStore().uiTheme === 'PurpleThemeDark' ? t('core.header.buttons.theme.light') : t('core.header.buttons.theme.dark') }}
+          {{ customizer.isDarkTheme ? t('core.header.buttons.theme.light') : t('core.header.buttons.theme.dark') }}
         </v-list-item-title>
       </v-list-item>
 

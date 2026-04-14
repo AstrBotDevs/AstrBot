@@ -365,9 +365,8 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
-const isDark = computed(
-  () => useCustomizerStore().uiTheme === "PurpleThemeDark",
-);
+const customizer = useCustomizerStore();
+const isDark = computed(() => customizer.isDarkTheme);
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);

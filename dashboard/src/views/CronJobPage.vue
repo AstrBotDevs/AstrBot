@@ -232,13 +232,13 @@
 <script setup lang="ts">
 import axios from 'axios'
 import { computed, onMounted, ref } from 'vue'
-import { useTheme } from 'vuetify'
+import { useCustomizerStore } from '@/stores/customizer'
 import { useModuleI18n } from '@/i18n/composables'
 
 const { tm } = useModuleI18n('features/cron')
-const theme = useTheme()
+const customizerStore = useCustomizerStore()
 
-const isDark = computed(() => theme.global.current.value.dark)
+const isDark = computed(() => customizerStore.isDarkTheme)
 const loading = ref(false)
 const jobs = ref<any[]>([])
 const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([])

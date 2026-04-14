@@ -248,7 +248,7 @@
                         </div>
 
                         <!-- 消息列表组件 -->
-                        <MessageList v-else :messages="formattedMessages" :isDark="isDark" />
+                        <MessageList v-else :messages="formattedMessages" :isDark="customizerStore.isDarkTheme" />
                     </div>
                 </v-card-text>
 
@@ -528,12 +528,6 @@ export default {
                 messageTypes: this.messageTypeFilter,
                 search: this.search
             };
-        },
-
-        // 检测是否为暗色模式
-        isDark() {
-            console.log('isDark', this.customizerStore.uiTheme);
-            return this.customizerStore.uiTheme === 'PurpleThemeDark';
         },
 
         // 将对话历史转换为 MessageList 组件期望的格式

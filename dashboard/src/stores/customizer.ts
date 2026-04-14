@@ -33,8 +33,8 @@ export const useCustomizerStore = defineStore("customizer", {
       this.uiTheme = payload;
       localStorage.setItem("uiTheme", payload);
 
-      if (typeof vuetify.theme?.change === "function") {
-        vuetify.theme.change(payload);
+      if (typeof (vuetify.theme as any).change === "function") {
+        (vuetify.theme as any).change(payload);
       } else if (vuetify.theme?.global) {
         vuetify.theme.global.name.value = payload;
       }

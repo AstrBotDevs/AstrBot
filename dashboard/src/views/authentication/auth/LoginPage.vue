@@ -6,20 +6,16 @@ import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from '@/i18n/composables';
-import { useTheme } from 'vuetify';
 
 const cardVisible = ref(false);
 const router = useRouter();
 const authStore = useAuthStore();
 const customizer = useCustomizerStore();
 const { tm: t } = useModuleI18n('features/auth');
-const theme = useTheme();
 
 // 主题切换函数
 function toggleTheme() {
-  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+  customizer.TOGGLE_DARK_MODE();
 }
 
 onMounted(async () => {
@@ -53,10 +49,10 @@ onMounted(async () => {
               style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(var(--v-theme-primary), 0.45) !important;"></v-divider>
             <v-btn @click="toggleTheme" class="theme-toggle-btn" icon variant="text" size="small">
               <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
-                {{ customizer.uiTheme === 'PurpleThemeDark' ? 'mdi-white-balance-sunny' : 'mdi-weather-night' }}
+                {{ customizer.isDarkTheme ? 'mdi-white-balance-sunny' : 'mdi-weather-night' }}
               </v-icon>
               <v-tooltip activator="parent" location="top">
-                {{ customizer.uiTheme === 'PurpleThemeDark' ? t('theme.switchToLight') : t('theme.switchToDark') }}
+                {{ customizer.isDarkTheme ? t('theme.light') : t('theme.dark') }}
               </v-tooltip>
             </v-btn>
           </div>

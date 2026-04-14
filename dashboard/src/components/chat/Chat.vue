@@ -267,7 +267,7 @@
                 }}</v-icon>
               </template>
               <v-list-item-title>{{
-                isDark ? tm("modes.lightMode") : tm("modes.darkMode")
+                isDark ? tm("modes.light") : tm("modes.dark")
               }}</v-list-item-title>
             </v-list-item>
           </div>
@@ -848,7 +848,7 @@ watch(transportMode, (mode) => {
   localStorage.setItem("chat.transportMode", mode);
 });
 
-const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
+const isDark = computed(() => customizer.isDarkTheme);
 const canSend = computed(
   () =>
     Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value,
@@ -1394,7 +1394,7 @@ async function stopCurrentSession() {
 }
 
 function toggleTheme() {
-  customizer.SET_UI_THEME(isDark.value ? "PurpleTheme" : "PurpleThemeDark");
+  customizer.TOGGLE_DARK_MODE();
 }
 
 function formatTime(value: string) {

@@ -214,7 +214,7 @@
 import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
-import { useTheme } from 'vuetify'
+import { useCustomizerStore } from '@/stores/customizer'
 import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue'
 import PersonaSelector from '@/components/shared/PersonaSelector.vue'
 import ProviderSelector from '@/components/shared/ProviderSelector.vue'
@@ -237,12 +237,12 @@ type SubAgentConfig = {
 }
 
 const { tm } = useModuleI18n('features/subagent')
-const theme = useTheme()
+const customizerStore = useCustomizerStore()
 const confirmDialog = useConfirmDialog()
 
 const loading = ref(false)
 const saving = ref(false)
-const isDark = computed(() => theme.global.current.value.dark)
+const isDark = computed(() => customizerStore.isDarkTheme)
 
 const snackbar = ref({
   show: false,

@@ -207,8 +207,10 @@
 import type { ApexOptions } from 'apexcharts'
 import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useTheme } from 'vuetify'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { useTheme } from 'vuetify';
+import { useCustomizerStore } from '@/stores/customizer';
+import type { ThemeTypes } from '@/types/theme';
 
 type TokenRange = 1 | 3 | 7
 type ChartSeries = Array<{
@@ -278,29 +280,16 @@ interface ProviderTokenStatsResponse {
 
 const { locale } = useI18n()
 const { tm: t } = useModuleI18n('features/stats')
-const theme = useTheme()
+const theme = useTheme();
+const customizer = useCustomizerStore()
 const loading = ref(true)
 const errorMessage = ref('')
 const baseStats = ref<BaseStatsResponse | null>(null)
 const providerStats = ref<ProviderTokenStatsResponse | null>(null)
 const selectedRange = ref<TokenRange>(1)
 const lastUpdatedAt = ref<Date | null>(null)
-const isDark = computed(() => theme.global.current.value.dark)
-const themePalette = computed(() => {
-  const colors = theme.global.current.value.colors as Record<string, string>
-  return {
-    primary: colors.primary,
-    secondary: colors.secondary,
-    info: colors.info,
-    success: colors.success,
-    warning: colors.warning,
-    accent: colors.accent,
-    border: colors.border ?? colors.borderLight ?? colors.primary,
-    mutedText: colors.secondaryText ?? colors.primaryText ?? colors.primary,
-    lightPrimary: colors.lightprimary ?? colors.surface ?? colors.background,
-    lightSecondary: colors.lightsecondary ?? colors.surface ?? colors.background
-  }
-})
+const isDark = computed(() => customizer.isDarkTheme)
+const themeColors = computed(() => theme.current.value.colors as ThemeTypes['colors'])
 
 let refreshTimer: number | null = null
 
@@ -537,29 +526,20 @@ const startTimeLabel = computed(() =>
   formatDateTime(baseStats.value?.start_time ?? 0)
 )
 
-const providerChartColors = computed(() =>
-  isDark.value
-    ? [
-        '#6F8FAF',
-        '#7E9A73',
-        '#A78468',
-        '#8A78A8',
-        '#6B9995',
-        '#B07A87',
-        '#8C8F62',
-        '#7C8798'
-      ]
-    : [
-        '#5F7E9B',
-        '#708865',
-        '#9A7557',
-        '#786696',
-        '#5D8985',
-        '#9C6674',
-        '#80844F',
-        '#69788D'
-      ]
-)
+const providerChartColors = computed(() => {
+  const colors = theme.current.value.colors;
+  // A harmonious palette derived from theme colors
+  return [
+    colors.primary,
+    colors.secondary,
+    colors.info,
+    colors.success,
+    colors.warning,
+    colors.accent ?? '#FFAB91',
+    (colors as any).darkprimary ?? colors.primary,
+    (colors as any).darksecondary ?? colors.secondary,
+  ];
+})
 
 const messageChartOptions = computed<ApexOptions>(() => ({
   chart: {
@@ -571,7 +551,7 @@ const messageChartOptions = computed<ApexOptions>(() => ({
   theme: {
     mode: isDark.value ? 'dark' : 'light'
   },
-  colors: [themePalette.value.primary],
+  colors: [themeColors.value.primary],
   stroke: {
     curve: 'smooth',
     width: 2.4
@@ -581,7 +561,7 @@ const messageChartOptions = computed<ApexOptions>(() => ({
     opacity: 0.12
   },
   grid: {
-    borderColor: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
+    borderColor: hexToRgba(themeColors.value.border ?? themeColors.value.borderLight ?? themeColors.value.primary, isDark.value ? 0.4 : 0.26),
     strokeDashArray: 0
   },
   dataLabels: { enabled: false },
@@ -589,15 +569,15 @@ const messageChartOptions = computed<ApexOptions>(() => ({
     type: 'datetime',
     labels: {
       datetimeUTC: false,
-      style: { colors: themePalette.value.mutedText }
+      style: { colors: themeColors.value.secondaryText ?? themeColors.value.primaryText ?? themeColors.value.primary }
     },
-    axisBorder: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) },
-    axisTicks: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) }
+    axisBorder: { color: hexToRgba(themeColors.value.border ?? themeColors.value.borderLight ?? themeColors.value.primary, isDark.value ? 0.4 : 0.26) },
+    axisTicks: { color: hexToRgba(themeColors.value.border ?? themeColors.value.borderLight ?? themeColors.value.primary, isDark.value ? 0.4 : 0.26) }
   },
   yaxis: {
     labels: {
       formatter: (value) => formatCompactNumber(Number(value)),
-      style: { colors: themePalette.value.mutedText }
+      style: { colors: themeColors.value.secondaryText ?? themeColors.value.primaryText ?? themeColors.value.primary }
     }
   },
   tooltip: {
@@ -630,21 +610,21 @@ const providerChartOptions = computed<ApexOptions>(() => ({
   colors: providerChartColors.value,
   dataLabels: { enabled: false },
   grid: {
-    borderColor: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26)
+    borderColor: hexToRgba(themeColors.value.border ?? themeColors.value.borderLight ?? themeColors.value.primary, isDark.value ? 0.4 : 0.26)
   },
   xaxis: {
     type: 'datetime',
     labels: {
       datetimeUTC: false,
-      style: { colors: themePalette.value.mutedText }
+      style: { colors: themeColors.value.secondaryText ?? themeColors.value.primaryText ?? themeColors.value.primary }
     },
-    axisBorder: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) },
-    axisTicks: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) }
+    axisBorder: { color: hexToRgba(themeColors.value.border ?? themeColors.value.borderLight ?? themeColors.value.primary, isDark.value ? 0.4 : 0.26) },
+    axisTicks: { color: hexToRgba(themeColors.value.border ?? themeColors.value.borderLight ?? themeColors.value.primary, isDark.value ? 0.4 : 0.26) }
   },
   yaxis: {
     labels: {
       formatter: (value) => formatCompactNumber(Number(value)),
-      style: { colors: themePalette.value.mutedText }
+      style: { colors: themeColors.value.secondaryText ?? themeColors.value.primaryText ?? themeColors.value.primary }
     }
   },
   tooltip: {
@@ -657,7 +637,7 @@ const providerChartOptions = computed<ApexOptions>(() => ({
     position: 'top',
     horizontalAlign: 'left',
     labels: {
-      colors: themePalette.value.mutedText
+      colors: themeColors.value.secondaryText ?? themeColors.value.primaryText ?? themeColors.value.primary
     }
   }
 }))

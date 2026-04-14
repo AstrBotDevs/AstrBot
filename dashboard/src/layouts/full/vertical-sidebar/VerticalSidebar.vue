@@ -1,7 +1,6 @@
 <script setup>
 import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue';
-import { useTheme } from 'vuetify';
-import { useCustomizerStore } from '../../../stores/customizer';
+import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems from './sidebarItem';
 import NavItem from './NavItem.vue';
@@ -11,7 +10,6 @@ import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
 const { t, locale } = useI18n();
 
 const customizer = useCustomizerStore();
-const theme = useTheme();
 
 function collectGroupValues(items, values = new Set()) {
   items.forEach((item) => {
@@ -86,7 +84,7 @@ const minSidebarWidth = 200;
 const maxSidebarWidth = 300;
 const isResizing = ref(false);
 
-const isDark = computed(() => customizer.uiTheme === 'PurpleThemeDark');
+const isDark = computed(() => customizer.isDarkTheme);
 const themeColors = computed(() => theme.current.value.colors);
 const iframeBackground = computed(() => isDark.value ? themeColors.value.surface || 'white' : 'white');
 const dragHeaderBackground = computed(() => isDark.value ? themeColors.value.mcpCardBg || themeColors.value.surface || 'white' : '#f0f0f0');
