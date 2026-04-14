@@ -2,7 +2,7 @@
   text-transform: none;
   letter-spacing: $btn-letter-spacing;
   font-weight: $btn-font-weight;
-  border-radius: 10px;
+  border-radius: $border-radius-root;
   transition: all 0.2s ease;
 
   &.bg-lightsecondary {
