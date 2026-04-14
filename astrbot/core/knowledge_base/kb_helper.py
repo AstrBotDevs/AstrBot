@@ -338,7 +338,9 @@ class KBHelper:
                 else:
                     raise KnowledgeBaseUploadError(
                         stage="chunking",
-                        user_message=("分块失败：文档内容为空，未生成任何可索引文本块。"),
+                        user_message=(
+                            "分块失败：文档内容为空，未生成任何可索引文本块。"
+                        ),
                         details={"file_name": file_name},
                     )
 
