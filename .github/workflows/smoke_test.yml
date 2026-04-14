@@ -13,10 +13,23 @@ on:
 
 jobs:
   smoke-test:
-    name: Run smoke tests
-    runs-on: ubuntu-latest
+    name: Smoke test (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        python-version:
+          - '3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
+          - '3.14'
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -26,33 +39,21 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
-      
-      - name: Install UV package manager
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install uv
         run: |
-          pip install uv
+          python -m pip install --upgrade pip
+          python -m pip install uv
 
       - name: Install dependencies
         run: |
-          uv sync
+          uv pip install --system -r requirements.txt
         timeout-minutes: 15
 
       - name: Run smoke tests
         run: |
-          uv run main.py &
-          APP_PID=$!
-
-          echo "Waiting for application to start..."
-          for i in {1..60}; do
-            if curl -f http://localhost:6185 > /dev/null 2>&1; then
-              echo "Application started successfully!"
-              kill $APP_PID
-              exit 0
-            fi
-            sleep 1
-          done
-
-          echo "Application failed to start within 30 seconds"
-          kill $APP_PID 2>/dev/null || true
-          exit 1
+          python scripts/smoke_startup_check.py
         timeout-minutes: 2

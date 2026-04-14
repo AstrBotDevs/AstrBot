@@ -76,12 +76,13 @@ AstrBot は、主要なインスタントメッセージングアプリと統合
 AstrBot を素早く試したいユーザーで、コマンドラインに慣れており `uv` 環境を自分でインストールできる場合は、`uv` のワンクリックデプロイをおすすめします ⚡️:
 
 ```bash
-uv tool install astrbot
+uv tool install astrbot --python 3.12
 astrbot init # 初回のみ実行して環境を初期化します
 astrbot run
 ```
 
 > [uv](https://docs.astral.sh/uv/) のインストールが必要です。
+> AstrBot には Python 3.12 以降が必要です。`--python 3.12` を指定すると、`uv` は Python 3.12 で tool 環境を作成します。
 
 > [!NOTE]
 > macOS ユーザーの場合：macOS のセキュリティチェックにより、`astrbot` コマンドの初回実行に時間がかかる場合があります（約 10〜20 秒）。
@@ -89,7 +90,7 @@ astrbot run
 `astrbot` の更新：
 
 ```bash
-uv tool upgrade astrbot
+uv tool upgrade astrbot --python 3.12
 ```
 
 > [!WARNING]
@@ -156,10 +157,12 @@ AstrBot をよく使うチャットプラットフォームに接続できます
 | Discord | 公式 |
 | LINE | 公式 |
 | Satori | 公式 |
+| KOOK | 公式 |
 | Misskey | 公式 |
+| Mattermost | 公式 |
 | WhatsApp (近日対応予定) | 公式 |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | コミュニティ |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | コミュニティ |
+| [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | コミュニティ |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | コミュニティ |
 
 
