@@ -1093,6 +1093,10 @@ def _apply_enhanced_subagent_tools(
             shared_context_maxlen=config.enhanced_subagent.get(
                 "shared_context_maxlen", 200
             ),
+            max_subagent_history=config.enhanced_subagent.get("max_subagent_history", 500),
+            tools_blacklist=config.enhanced_subagent.get("tools_blacklist", None),
+            tools_whitelist=config.enhanced_subagent.get("tools_whitelist", None),
+            execution_timeout=config.enhanced_subagent.get("execution_timeout", 600)
         )
 
         # Enable shared context if configured

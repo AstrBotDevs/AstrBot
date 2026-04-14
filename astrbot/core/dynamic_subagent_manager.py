@@ -29,6 +29,7 @@ class DynamicSubAgentConfig:
     provider_id: str | None = None
     description: str = ""
     workdir: str | None = None
+    execution_timeout: float = 600.0
 
 
 @dataclass
@@ -72,6 +73,7 @@ class DynamicSubAgentManager:
     _shared_context_enabled: bool = False
     _shared_context_maxlen: int = 200  # 公共上下文保留的历史消息条数
     _max_subagent_history: int = 500  # 每个subagent最多保留的历史消息条数
+    _execution_timeout: float = 600.0  # SubAgent 执行超时时间（秒） 总时长
     _tools_blacklist: set[str] = {
         "send_shared_context_for_main_agent",
         "create_dynamic_subagent",
@@ -189,7 +191,10 @@ class DynamicSubAgentManager:
         shared_context_enabled: bool = False,
         shared_context_maxlen: int = 200,
         max_subagent_history: int = 500,
-        **kwargsr,
+        tools_blacklist: set[str] = None,
+        tools_inherent: set[str] = None,
+        execution_timeout: float = 600.0,
+        **kwargs,
     ) -> None:
         """Configure DynamicSubAgentManager settings"""
         cls._max_subagent_count = max_subagent_count
@@ -197,6 +202,33 @@ class DynamicSubAgentManager:
         cls._shared_context_enabled = shared_context_enabled
         cls._shared_context_maxlen = shared_context_maxlen
         cls._max_subagent_history = max_subagent_history
+        cls._execution_timeout = execution_timeout
+        if tools_inherent is None:
+            cls._tools_inherent = {
+                "astrbot_execute_shell",
+                "astrbot_execute_python",
+            }
+        else:
+            cls._tools_inherent = tools_inherent
+        if tools_blacklist is None:
+            cls._tools_blacklist = {
+                "send_shared_context_for_main_agent",
+                "create_dynamic_subagent",
+                "stop_subagent",
+                "protect_subagent",
+                "unprotect_subagent",
+                "reset_subagent",
+                "remove_dynamic_subagent",
+                "list_dynamic_subagent",
+                "wait_for_subagent",
+                "view_shared_context",
+            }
+        else:
+            cls._tools_blacklist = tools_blacklist
+
+    @classmethod
+    def get_execution_timeout(cls) -> float:
+        return cls._execution_timeout
 
     @classmethod
     def is_auto_cleanup_per_turn(cls) -> bool:
@@ -737,33 +769,52 @@ class DynamicSubAgentManager:
         session = cls._sessions.pop(session_id, None)
         if not session:
             return {"status": "not_found", "cleaned_agents": []}
-        cleaned = list(session.subagents.keys())
-        for name in cleaned:
-            logger.info("[EnhancedSubAgent:Cleanup] Cleaned: %s", name)
-        return {"status": "cleaned", "cleaned_agents": cleaned}
+        else:
+            cleaned = list(session.subagents.keys())
+            for name in cleaned:
+                logger.info("[EnhancedSubAgent:Cleanup] Cleaned: %s", name)
+            return {"status": "cleaned", "cleaned_agents": cleaned}
 
     @classmethod
     def remove_subagent(cls, session_id: str, agent_name: str) -> str:
         session = cls.get_session(session_id)
+        if session.subagent_status[agent_name] == "RUNNING":
+            return f"__SUBAGENT_REMOVE_FAILED__: {agent_name} is still RUNNING. Waiting for finish first."
+
+        def _remove_by_name(name):
+            session.subagents.pop(name, None)
+            session.protected_agents.discard(name)
+            session.handoff_tools.pop(name, None)
+            session.subagent_histories.pop(name, None)
+            session.subagent_background_results.pop(name, None)
+            session.background_task_counters.pop(name, None)
+            # 清理公共上下文中包含该Agent的内容
+            cls.cleanup_shared_context_by_agent(session_id, name)
+
         if agent_name == "all":
-            session.subagents.clear()
-            session.handoff_tools.clear()
-            session.subagent_histories.clear()
-            session.shared_context.clear()
-            session.subagent_background_results.clear()
-            session.background_task_counters.clear()
-            return "__SUBAGENT_REMOVED__: All subagents have been removed."
+            if "RUNNING" in session.subagent_status.values():
+                removed = 0
+                for subagent_name in session.subagents.keys():
+                    if session.subagent_status[subagent_name] == "RUNNING":
+                        continue
+                    _remove_by_name(agent_name)
+                    removed += 1
+                return f"__SUBAGENT_REMOVED__: Removed {removed} subagents. {len(session.subagents.keys())} subagents are reserved because they are still running."
+            else:
+                session.subagents.clear()
+                session.handoff_tools.clear()
+                session.protected_agents.clear()
+                session.subagent_histories.clear()
+                session.shared_context.clear()
+                session.subagent_background_results.clear()
+                session.background_task_counters.clear()
+                logger.info("[EnhancedSubAgent:Cleanup] All subagents cleaned.")
+                return "__SUBAGENT_REMOVED__: All subagents have been removed."
         else:
             if agent_name not in session.subagents:
                 return f"__SUBAGENT_REMOVE_FAILED__: {agent_name} not found. Available subagent names {list(session.subagents.keys())}"
             else:
-                session.subagents.pop(agent_name, None)
-                session.handoff_tools.pop(agent_name, None)
-                session.subagent_histories.pop(agent_name, None)
-                session.subagent_background_results.pop(agent_name, None)
-                session.background_task_counters.pop(agent_name, None)
-                # 清理公共上下文中包含该Agent的内容
-                cls.cleanup_shared_context_by_agent(session_id, agent_name)
+                _remove_by_name(agent_name)
                 logger.info("[EnhancedSubAgent:Cleanup] Cleaned: %s", agent_name)
                 return f"__SUBAGENT_REMOVED__: Subagent {agent_name} has been removed."
 

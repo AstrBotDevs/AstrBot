@@ -363,22 +363,51 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             umo, tool, prov_settings
         )
 
+        # 获取子代理的超时时间
+        execution_timeout = cls._get_subagent_execution_timeout()
+
         # 用于存储本轮的完整历史上下文
         runner_messages = []
 
-        llm_resp = await ctx.tool_loop_agent(
-            event=event,
-            chat_provider_id=prov_id,
-            prompt=input_,
-            image_urls=image_urls,
-            system_prompt=subagent_system_prompt,
-            tools=toolset,
-            contexts=contexts,
-            max_steps=agent_max_step,
-            tool_call_timeout=run_context.tool_call_timeout,
-            stream=stream,
-            runner_messages=runner_messages,
-        )
+        # 构建 tool_loop_agent 协程
+        async def _run_subagent():
+            return await ctx.tool_loop_agent(
+                event=event,
+                chat_provider_id=prov_id,
+                prompt=input_,
+                image_urls=image_urls,
+                system_prompt=subagent_system_prompt,
+                tools=toolset,
+                contexts=contexts,
+                max_steps=agent_max_step,
+                tool_call_timeout=run_context.tool_call_timeout,
+                stream=stream,
+                runner_messages=runner_messages,
+            )
+
+        # 添加执行超时控制
+        if execution_timeout > 0:
+            try:
+                llm_resp = await asyncio.wait_for(
+                    _run_subagent(),
+                    timeout=execution_timeout
+                )
+            except asyncio.TimeoutError:
+                error_msg = f"SubAgent '{agent_name}' execution timeout after {execution_timeout:.1f} seconds."
+                logger.warning(f"[SubAgentTimeout] {error_msg}")
+
+                cls._handle_subagent_timeout(
+                    umo=umo,
+                    agent_name=agent_name
+                )
+
+                yield mcp.types.CallToolResult(
+                    content=[mcp.types.TextContent(type="text", text=f"error: {error_msg}")]
+                )
+                return
+        else:
+            # 不设置超时
+            llm_resp = await _run_subagent()
 
         # 保存历史上下文
         cls._save_subagent_history(agent_name, runner_messages, umo)
@@ -462,18 +491,32 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         event = run_context.context.event
         umo = event.unified_msg_origin
         agent_name = getattr(tool.agent, "name", None)
+        # 获取SubAgent的超时时间
+        execution_timeout = cls._get_subagent_execution_timeout()
 
         try:
-            async for r in cls._execute_handoff(
-                tool,
-                run_context,
-                image_urls_prepared=True,
-                **tool_args,
-            ):
-                if isinstance(r, mcp.types.CallToolResult):
-                    for content in r.content:
-                        if isinstance(content, mcp.types.TextContent):
-                            result_text += content.text + "\n"
+            async def _run():
+                nonlocal result_text
+                async for r in cls._execute_handoff(
+                    tool,
+                    run_context,
+                    image_urls_prepared=True,
+                    **tool_args,
+                ):
+                    if isinstance(r, mcp.types.CallToolResult):
+                        for content in r.content:
+                            if isinstance(content, mcp.types.TextContent):
+                                result_text += content.text + "\n"
+
+            if execution_timeout > 0:
+                await asyncio.wait_for(_run(), timeout=execution_timeout)
+            else:
+                await _run()
+
+        except asyncio.TimeoutError:
+            error_text = f"Execution timeout after {execution_timeout:.1f} seconds."
+            result_text = f"error: Background SubAgent '{agent_name}' {error_text}"
+            logger.warning(f"[EnhancedSubAgent:BackgroundTask] {error_text}")
 
         except Exception as e:
             error_text = str(e)
@@ -482,8 +525,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             )
 
         execution_time = time.time() - start_time
-        is_enhanced, _ = cls._is_enhanced_subagent(umo, agent_name)
-        # if it is enhanced subagent
+        # Check if it's enhanced subagent
+        is_enhanced = cls._is_enhanced_subagent(umo, agent_name)
         if is_enhanced:
             await cls._handle_enhanced_subagent_background_result(
                 cls=cls,
@@ -895,15 +938,35 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             )
 
     @staticmethod
-    def _is_enhanced_subagent(umo: str, agent_name: str | None) -> tuple[bool, T.Any]:
-        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+    def _get_subagent_execution_timeout() -> float:
+        try:
+            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+            return DynamicSubAgentManager.get_execution_timeout()
+        except Exception:
+            return -1
 
+    @staticmethod
+    def _handle_subagent_timeout(
+        umo: str,
+        agent_name: str,
+    ) -> None:
+        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+        DynamicSubAgentManager.set_subagent_status(
+            session_id=umo,
+            agent_name=agent_name,
+            status="FAILED",
+        )
+
+
+    @staticmethod
+    def _is_enhanced_subagent(umo: str, agent_name: str | None) -> bool:
+        from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
         if not agent_name:
-            return False, None
+            return False
         session = DynamicSubAgentManager.get_session(umo)
         if session and agent_name in session.subagents:
-            return True, session
-        return False, session
+            return True
+        return False
 
     @staticmethod
     async def _handle_enhanced_subagent_background_result(
@@ -921,43 +984,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ) -> None:
         from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
 
-        success = error_text is None
-        DynamicSubAgentManager.store_subagent_result(
-            session_id=umo,
-            agent_name=agent_name,
-            task_id=task_id,
-            success=success,
-            result=result_text.strip() if result_text else "",
-            error=error_text,
-            execution_time=execution_time,
-        )
-
         DynamicSubAgentManager.set_subagent_status(
             session_id=umo,
             agent_name=agent_name,
-            status="FAILED" if error_text else "COMPLETED",
-        )
-
-        session = DynamicSubAgentManager.get_session(umo)
-        if session and session.shared_context_enabled:
-            status_content = (
-                f"[EnhancedSubAgent:BackgroundTask] SubAgent '{agent_name}' Task '{task_id}' "
-                f"{'Failed: ' + error_text if error_text else f'Complete. Execution Time: {execution_time:.1f}s'}"
-            )
-            DynamicSubAgentManager.add_shared_context(
-                session_id=umo,
-                sender=agent_name,
-                context_type="status",
-                content=status_content,
-                target="all",
-            )
-
-        logger.info(
-            "[EnhancedSubAgent:BackgroundTask] Stored result for %s task %s: success=%s, time=%.1fs",
-            agent_name,
-            task_id,
-            success,
-            execution_time,
+            status="FAILED"
         )
 
         if not await cls._maybe_wake_main_agent_after_background(
@@ -997,21 +1027,21 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         if main_agent_is_running:
             return False
-
-        await cls._wake_main_agent_for_background_result(
-            run_context=run_context,
-            task_id=task_id,
-            tool_name=tool.name,
-            result_text=result_text,
-            tool_args=tool_args,
-            note=(
-                event.get_extra("background_note")
-                or f"Background task for subagent '{agent_name}' finished."
-            ),
-            summary_name=f"Dedicated to subagent `{agent_name}`",
-            extra_result_fields={"subagent_name": agent_name},
-        )
-        return True
+        else:
+            await cls._wake_main_agent_for_background_result(
+                run_context=run_context,
+                task_id=task_id,
+                tool_name=tool.name,
+                result_text=result_text,
+                tool_args=tool_args,
+                note=(
+                    event.get_extra("background_note")
+                    or f"Background task for subagent '{agent_name}' finished."
+                ),
+                summary_name=f"Dedicated to subagent `{agent_name}`",
+                extra_result_fields={"subagent_name": agent_name},
+            )
+            return True
 
 
 async def call_local_llm_tool(
