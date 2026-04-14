@@ -76,12 +76,13 @@ AstrBot は、主要なインスタントメッセージングアプリと統合
 AstrBot を素早く試したいユーザーで、コマンドラインに慣れており `uv` 環境を自分でインストールできる場合は、`uv` のワンクリックデプロイをおすすめします ⚡️:
 
 ```bash
-uv tool install astrbot
+uv tool install astrbot --python 3.12
 astrbot init # 初回のみ実行して環境を初期化します
 astrbot run
 ```
 
 > [uv](https://docs.astral.sh/uv/) のインストールが必要です。
+> AstrBot には Python 3.12 以降が必要です。`--python 3.12` を指定すると、`uv` は Python 3.12 で tool 環境を作成します。
 
 > [!NOTE]
 > macOS ユーザーの場合：macOS のセキュリティチェックにより、`astrbot` コマンドの初回実行に時間がかかる場合があります（約 10〜20 秒）。
@@ -89,7 +90,7 @@ astrbot run
 `astrbot` の更新：
 
 ```bash
-uv tool upgrade astrbot
+uv tool upgrade astrbot --python 3.12
 ```
 
 > [!WARNING]
