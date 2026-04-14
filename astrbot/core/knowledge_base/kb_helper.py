@@ -422,7 +422,10 @@ class KBHelper:
                 ) from exc
             return doc
         except Exception as e:
-            logger.error(f"上传文档失败: {e}", exc_info=True)
+            if isinstance(e, KnowledgeBaseUploadError):
+                logger.warning(f"上传文档失败: {e}")
+            else:
+                logger.error(f"上传文档失败: {e}", exc_info=True)
             # if file_path.exists():
             #     file_path.unlink()
 
