@@ -26,12 +26,6 @@
   &.overflow-hidden {
     overflow: hidden;
   }
-
-  &:hover {
-    &:not(.v-card--flat):not(.v-card--variant-outlined) {
-      box-shadow: $box-shadow-md;
-    }
-  }
 }
 
 .v-card-item {

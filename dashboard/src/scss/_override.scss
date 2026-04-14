@@ -4,7 +4,7 @@ html {
   }
 }
 
-.v-row + .v-row {
+.v-row+.v-row {
   margin-top: 0px;
 }
 
@@ -75,11 +75,6 @@ code,
 }
 
 .v-dialog {
-  .v-overlay__scrim {
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-  }
-
   .v-overlay__content {
     border-radius: 16px;
 
@@ -303,11 +298,9 @@ code,
 
   .v-overlay__scrim {
     background-color: rgba(var(--v-theme-background), 0.65) !important;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
   }
 
-  .v-overlay__content > .v-card {
+  .v-overlay__content>.v-card {
     background-color: rgb(var(--v-theme-surface)) !important;
   }
 
