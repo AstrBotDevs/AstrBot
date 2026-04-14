@@ -229,8 +229,8 @@ class EventType(enum.Enum):
     OnWaitingLLMRequestEvent = enum.auto()  # 等待调用 LLM（在获取锁之前，仅通知）
     OnLLMRequestEvent = enum.auto()  # 收到 LLM 请求（可以是用户也可以是插件）
     OnLLMResponseEvent = enum.auto()  # LLM 响应后
-    OnAgentBegin = enum.auto()  # Agent 开始运行
-    OnAgentDone = enum.auto()  # Agent 运行完成
+    OnAgentBeginEvent = enum.auto()  # Agent 开始运行
+    OnAgentDoneEvent = enum.auto()  # Agent 运行完成
     OnDecoratingResultEvent = enum.auto()  # 发送消息前
     OnCallingFuncToolEvent = enum.auto()  # 调用函数工具
     OnUsingLLMToolEvent = enum.auto()  # 使用 LLM 工具
