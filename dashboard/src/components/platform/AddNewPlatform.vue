@@ -860,17 +860,15 @@ export default {
         // 过滤出属于该平台的路由，并保持顺序
         const routes = [];
         for (const [umop, confId] of Object.entries(routingTable)) {
-          if (this.isUmopMatchPlatform(umop, platformId)) {
-            const parts = umop.split(':');
-            if (parts.length === 3) {
-              routes.push({
-                umop: umop,
-                originalUmop: umop, // 保存原始 UMOP 用于更新时查找
-                messageType: parts[1] === '' || parts[1] === '*' ? '*' : parts[1],
-                sessionId: parts[2] === '' || parts[2] === '*' ? '*' : parts[2],
-                configId: confId
-              });
-            }
+          const parsedUmop = this.parseUmop(umop);
+          if (this.isParsedUmopMatchPlatform(parsedUmop, platformId)) {
+            routes.push({
+              umop: umop,
+              originalUmop: umop, // 保存原始 UMOP 用于更新时查找
+              messageType: parsedUmop.messageType || '*',
+              sessionId: parsedUmop.sessionId || '*',
+              configId: confId
+            });
           }
         }
 
@@ -992,11 +990,29 @@ export default {
     },
 
     isUmopMatchPlatform(umop, platformId) {
-      if (!umop) return false;
-      const parts = umop.split(':');
-      if (parts.length !== 3) return false;
-      const platform = parts[0];
-      return platform === platformId || platform === '' || platform === '*';
+      const parsedUmop = this.parseUmop(umop);
+      return this.isParsedUmopMatchPlatform(parsedUmop, platformId);
+    },
+
+    isParsedUmopMatchPlatform(parsedUmop, platformId) {
+      if (!parsedUmop) return false;
+      return parsedUmop.platform === platformId || parsedUmop.platform === '' || parsedUmop.platform === '*';
+    },
+
+    parseUmop(umop) {
+      if (!umop) return null;
+
+      const firstSeparatorIndex = umop.indexOf(':');
+      if (firstSeparatorIndex === -1) return null;
+
+      const secondSeparatorIndex = umop.indexOf(':', firstSeparatorIndex + 1);
+      if (secondSeparatorIndex === -1) return null;
+
+      return {
+        platform: umop.slice(0, firstSeparatorIndex),
+        messageType: umop.slice(firstSeparatorIndex + 1, secondSeparatorIndex),
+        sessionId: umop.slice(secondSeparatorIndex + 1)
+      };
     },
 
     // 获取消息类型标签
