@@ -4,9 +4,11 @@ import sys
 import time
 import traceback
 import typing as T
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from mcp.types import (
     BlobResourceContents,
@@ -25,7 +27,7 @@ from tenacity import (
 
 from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
-from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import Json
@@ -45,7 +47,7 @@ from astrbot.core.provider.provider import Provider
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
 from ..context.manager import ContextManager
-from ..context.token_counter import TokenCounter
+from ..context.token_counter import EstimateTokenCounter, TokenCounter
 from ..hooks import BaseAgentRunHooks
 from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
 from ..response import AgentResponseData, AgentStats
@@ -95,16 +97,70 @@ class _ToolExecutionInterrupted(Exception):
 
 ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
 
-USER_INTERRUPTION_MESSAGE = (
-    "[SYSTEM: User actively interrupted the response generation. "
-    "Partial output before interruption is preserved.]"
-)
-
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
+    TOOL_RESULT_MAX_ESTIMATED_TOKENS = 27_500
+    TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 7000
     EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
     EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
+    USER_INTERRUPTION_MESSAGE = (
+        "[SYSTEM: User actively interrupted the response generation. "
+        "Partial output before interruption is preserved.]"
+    )
+    FOLLOW_UP_NOTICE_TEMPLATE = (
+        "\n\n[SYSTEM NOTICE] User sent follow-up messages while tool execution "
+        "was in progress. Prioritize these follow-up instructions in your next "
+        "actions. In your very next action, briefly acknowledge to the user "
+        "that their follow-up message(s) were received before continuing.\n"
+        "{follow_up_lines}"
+    )
+    MAX_STEPS_REACHED_PROMPT = (
+        "Maximum tool call limit reached. "
+        "Stop calling tools, and based on the information you have gathered, "
+        "summarize your task and findings, and reply to the user directly."
+    )
+    SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE = (
+        "You have decided to call tool(s): {tool_names}. Now call the tool(s) "
+        "with required arguments using the tool schema, and follow the existing "
+        "tool-use rules."
+    )
+    SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION = (
+        "This is the second-stage tool execution step. "
+        "You must do exactly one of the following: "
+        "1. Call one of the selected tools using the provided tool schema. "
+        "2. If calling a tool is no longer possible or appropriate, reply to the user "
+        "with a brief explanation of why. "
+        "Do not return an empty response. "
+        "Do not ignore the selected tools without explanation."
+    )
+    REPEATED_TOOL_NOTICE_L1_THRESHOLD = 3
+    REPEATED_TOOL_NOTICE_L2_THRESHOLD = 4
+    REPEATED_TOOL_NOTICE_L3_THRESHOLD = 5
+    REPEATED_TOOL_NOTICE_L1_TEMPLATE = (
+        "\n\n[SYSTEM NOTICE] By the way, you have executed the same tool "
+        "`{tool_name}` {streak} times consecutively. Double-check whether another "
+        "tool, different arguments, or a summary would move the task forward better."
+    )
+    REPEATED_TOOL_NOTICE_L2_TEMPLATE = (
+        "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
+        "`{tool_name}` {streak} times consecutively. Unless this repetition is "
+        "clearly necessary, stop repeating the same action and either switch "
+        "tools, refine parameters, or summarize what is still missing."
+    )
+    REPEATED_TOOL_NOTICE_L3_TEMPLATE = (
+        "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
+        "`{tool_name}` {streak} times consecutively. Repetition is now very "
+        "high. Continue only if each call is clearly producing new information. "
+        "Otherwise, change strategy, adjust arguments, or explain the limitation "
+        "to the user."
+    )
+    TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE = (
+        "Truncated tool output preview shown above. "
+        "The tool output was too large to include directly and was written to "
+        "`{overflow_path}`. Use {read_tool_hint} to inspect it. "
+        "Use a narrower window when reading large files."
+    )
 
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
@@ -160,6 +216,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
+        tool_result_overflow_dir: str | None = None,
+        read_tool: FunctionTool | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -171,6 +229,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.truncate_turns = truncate_turns
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
+        self.tool_result_overflow_dir = tool_result_overflow_dir
+        self.read_tool = read_tool
+        self._tool_result_token_counter = EstimateTokenCounter()
         # we will do compress when:
         # 1. before requesting LLM
         # TODO: 2. after LLM output a tool call
@@ -209,6 +270,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
+        self._last_tool_name: str | None = None
+        self._same_tool_streak = 0
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -249,6 +312,103 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+
+    def _read_tool_hint(self) -> str:
+        if self.read_tool is not None:
+            return f"`{self.read_tool.name}`"
+        return "the available file-read tool"
+
+    async def _write_tool_result_overflow_file(
+        self,
+        *,
+        tool_call_id: str,
+        content: str,
+    ) -> str:
+        if self.tool_result_overflow_dir is None:
+            raise ValueError("tool_result_overflow_dir is not configured")
+
+        overflow_dir = Path(self.tool_result_overflow_dir).resolve(strict=False)
+        safe_tool_call_id = (
+            "".join(
+                ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
+                for ch in tool_call_id
+            ).strip("._")
+            or "tool_call"
+        )
+        file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"
+        overflow_path = overflow_dir / file_name
+
+        def _run() -> str:
+            overflow_dir.mkdir(parents=True, exist_ok=True)
+            overflow_path.write_text(content, encoding="utf-8")
+            return str(overflow_path)
+
+        return await asyncio.to_thread(_run)
+
+    async def _materialize_large_tool_result(
+        self,
+        *,
+        tool_call_id: str,
+        content: str,
+    ) -> str:
+        if self.tool_result_overflow_dir is None or self.read_tool is None:
+            return content
+
+        estimated_tokens = self._tool_result_token_counter.count_tokens(
+            [Message(role="tool", content=content, tool_call_id=tool_call_id)]
+        )
+        if estimated_tokens <= self.TOOL_RESULT_MAX_ESTIMATED_TOKENS:
+            return content
+
+        preview = self._truncate_tool_result_preview(content, tool_call_id=tool_call_id)
+        try:
+            overflow_path = await self._write_tool_result_overflow_file(
+                tool_call_id=tool_call_id,
+                content=content,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to spill oversized tool result for %s: %s",
+                tool_call_id,
+                exc,
+                exc_info=True,
+            )
+            error_notice = (
+                "Tool output exceeded the inline result limit "
+                f"({estimated_tokens} estimated tokens > "
+                f"{self.TOOL_RESULT_MAX_ESTIMATED_TOKENS}) and could not be written "
+                f"to `{self.tool_result_overflow_dir}`: {exc}"
+            )
+            if not preview:
+                return error_notice
+            return f"{preview}\n\n{error_notice}"
+
+        notice = self.TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE.format(
+            overflow_path=overflow_path,
+            read_tool_hint=self._read_tool_hint(),
+        )
+        if not preview:
+            return notice
+        return f"{preview}\n\n{notice}"
+
+    def _truncate_tool_result_preview(
+        self,
+        content: str,
+        *,
+        tool_call_id: str,
+    ) -> str:
+        preview = content
+        while preview:
+            estimated_tokens = self._tool_result_token_counter.count_tokens(
+                [Message(role="tool", content=preview, tool_call_id=tool_call_id)]
+            )
+            if estimated_tokens <= self.TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS:
+                return preview
+            next_len = len(preview) // 2
+            if next_len <= 0:
+                break
+            preview = preview[:next_len]
+        return preview
 
     async def _iter_llm_responses(
         self, *, include_model: bool = True
@@ -413,12 +573,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         follow_up_lines = "\n".join(
             f"{idx}. {ticket.text}" for idx, ticket in enumerate(follow_ups, start=1)
         )
-        return (
-            "\n\n[SYSTEM NOTICE] User sent follow-up messages while tool execution "
-            "was in progress. Prioritize these follow-up instructions in your next "
-            "actions. In your very next action, briefly acknowledge to the user "
-            "that their follow-up message(s) were received before continuing.\n"
-            f"{follow_up_lines}"
+        return self.FOLLOW_UP_NOTICE_TEMPLATE.format(
+            follow_up_lines=follow_up_lines,
         )
 
     def _merge_follow_up_notice(self, content: str) -> str:
@@ -426,6 +582,35 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not notice:
             return content
         return f"{content}{notice}"
+
+    def _track_tool_call_streak(self, tool_name: str) -> int:
+        if tool_name == self._last_tool_name:
+            self._same_tool_streak += 1
+        else:
+            self._last_tool_name = tool_name
+            self._same_tool_streak = 1
+        return self._same_tool_streak
+
+    def _build_repeated_tool_call_guidance(self, tool_name: str, streak: int) -> str:
+        if streak < self.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
+            return ""
+
+        if streak >= self.REPEATED_TOOL_NOTICE_L3_THRESHOLD:
+            return self.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
+                tool_name=tool_name,
+                streak=streak,
+            )
+
+        if streak >= self.REPEATED_TOOL_NOTICE_L2_THRESHOLD:
+            return self.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
+                tool_name=tool_name,
+                streak=streak,
+            )
+
+        return self.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
+            tool_name=tool_name,
+            streak=streak,
+        )
 
     @override
     async def step(self):
@@ -483,7 +668,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if self._is_stop_requested():
                     llm_resp_result = LLMResponse(
                         role="assistant",
-                        completion_text=USER_INTERRUPTION_MESSAGE,
+                        completion_text=self.USER_INTERRUPTION_MESSAGE,
                         reasoning_content=llm_response.reasoning_content,
                         reasoning_signature=llm_response.reasoning_signature,
                     )
@@ -681,7 +866,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.run_context.messages.append(
                 Message(
                     role="user",
-                    content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                    content=self.MAX_STEPS_REACHED_PROMPT,
                 )
             )
             # 再执行最后一步
@@ -712,6 +897,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
+            tool_call_streak = self._track_tool_call_streak(func_tool_name)
             yield _HandleFunctionToolsResult.from_message_chain(
                 MessageChain(
                     type="tool_call",
@@ -859,9 +1045,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         "The tool has returned a data type that is not supported."
                                     )
                         if result_parts:
+                            inline_result = "\n\n".join(result_parts)
+                            inline_result = await self._materialize_large_tool_result(
+                                tool_call_id=func_tool_id,
+                                content=inline_result,
+                            )
                             _append_tool_call_result(
                                 func_tool_id,
-                                "\n\n".join(result_parts),
+                                inline_result
+                                + self._build_repeated_tool_call_guidance(
+                                    func_tool_name, tool_call_streak
+                                ),
                             )
 
                     elif resp is None:
@@ -875,7 +1069,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         self.stats.end_time = time.time()
                         _append_tool_call_result(
                             func_tool_id,
-                            "The tool has no return value, or has sent the result directly to the user.",
+                            "The tool has no return value, or has sent the result directly to the user."
+                            + self._build_repeated_tool_call_guidance(
+                                func_tool_name, tool_call_streak
+                            ),
                         )
                     else:
                         # 不应该出现其他类型
@@ -884,7 +1081,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
                         _append_tool_call_result(
                             func_tool_id,
-                            "*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*",
+                            "*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*"
+                            + self._build_repeated_tool_call_guidance(
+                                func_tool_name, tool_call_streak
+                            ),
                         )
 
                 try:
@@ -902,7 +1102,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 logger.warning(traceback.format_exc())
                 _append_tool_call_result(
                     func_tool_id,
-                    f"error: {e!s}",
+                    f"error: {e!s}"
+                    + self._build_repeated_tool_call_guidance(
+                        func_tool_name, tool_call_streak
+                    ),
                 )
 
         # yield the last tool call result
@@ -942,11 +1145,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 contexts.append(msg.model_dump())  # type: ignore[call-arg]
             elif isinstance(msg, dict):
                 contexts.append(copy.deepcopy(msg))
-        instruction = (
-            "You have decided to call tool(s): "
-            + ", ".join(tool_names)
-            + ". Now call the tool(s) with required arguments using the tool schema, "
-            "and follow the existing tool-use rules."
+        instruction = self.SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE.format(
+            tool_names=", ".join(tool_names)
         )
         if extra_instruction:
             instruction = f"{instruction}\n{extra_instruction}"
@@ -1017,14 +1217,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     repair_contexts = self._build_tool_requery_context(
                         tool_names,
-                        extra_instruction=(
-                            "This is the second-stage tool execution step. "
-                            "You must do exactly one of the following: "
-                            "1. Call one of the selected tools using the provided tool schema. "
-                            "2. If calling a tool is no longer possible or appropriate, reply to the user with a brief explanation of why. "
-                            "Do not return an empty response. "
-                            "Do not ignore the selected tools without explanation."
-                        ),
+                        extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
                     repair_resp = await self.provider.text_chat(
                         contexts=repair_contexts,
@@ -1066,7 +1259,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.role != "assistant":
             llm_resp = LLMResponse(
                 role="assistant",
-                completion_text=USER_INTERRUPTION_MESSAGE,
+                completion_text=self.USER_INTERRUPTION_MESSAGE,
             )
         self.final_llm_resp = llm_resp
         self._aborted = True

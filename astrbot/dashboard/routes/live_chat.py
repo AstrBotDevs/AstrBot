@@ -198,7 +198,12 @@ class LiveChatRoute(Route):
         self, accumulated_text: str, accumulated_parts: list
     ) -> dict:
         """从消息中提取 web_search 引用。"""
-        supported = ["web_search_tavily", "web_search_bocha"]
+        supported = [
+            "web_search_baidu",
+            "web_search_tavily",
+            "web_search_bocha",
+            "web_search_brave",
+        ]
         web_search_results = {}
         tool_call_parts = [
             p

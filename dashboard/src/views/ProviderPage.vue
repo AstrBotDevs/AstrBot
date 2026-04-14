@@ -5,7 +5,7 @@
       <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-4">
         <div>
           <h1 class="text-h1 font-weight-bold mb-2">
-            <v-icon color="black" class="me-2">mdi-creation</v-icon>{{ tm('title') }}
+            <v-icon class="me-2">mdi-creation</v-icon>{{ tm('title') }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4">
             {{ tm('subtitle') }}
@@ -100,6 +100,7 @@
                         :loading-models="loadingModels"
                         :is-source-modified="isSourceModified"
                         :supports-image-input="supportsImageInput"
+                        :supports-audio-input="supportsAudioInput"
                         :supports-tool-call="supportsToolCall"
                         :supports-reasoning="supportsReasoning"
                         :format-context-limit="formatContextLimit"
@@ -174,6 +175,7 @@
 
     <!-- 添加提供商对话框 -->
     <AddNewProvider v-model:show="showAddProviderDialog" :metadata="configSchema"
+      :current-provider-type="selectedProviderType"
       @select-template="selectProviderTemplate" />
 
     <!-- 手动添加模型对话框 -->
@@ -324,6 +326,7 @@ const {
   resolveSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
+  supportsAudioInput,
   supportsToolCall,
   supportsReasoning,
   formatContextLimit,

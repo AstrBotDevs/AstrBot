@@ -123,6 +123,10 @@
           "description": "BoCha API Key",
           "hint": "可添加多个 Key 进行轮询。"
         },
+        "websearch_brave_key": {
+          "description": "Brave Search API Key",
+          "hint": "可添加多个 Key 进行轮询。"
+        },
         "websearch_baidu_app_builder_key": {
           "description": "百度千帆智能云 APP Builder API Key",
           "hint": "参考:[https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -150,11 +154,11 @@
     },
     "agent_computer_use": {
       "description": "使用电脑能力",
-      "hint": "让 AstrBot 访问和使用你的电脑或者隔离的沙盒环境，以执行更复杂的任务。详见: [沙盒模式](https://docs.astrbot.app/use/astrbot-agent-sandbox.html), [Skills](https://docs.astrbot.app/use/skills.html)。",
+      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [电脑使用](https://docs.astrbot.app/use/computer.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
-          "hint": "sandbox 代表在沙箱环境中运行, local 代表在本地环境中运行, none 代表不启用。如果上传了 skills，选择 none 会导致其无法被 Agent 正常使用。"
+          "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
         },
         "computer_use_require_admin": {
           "description": "需要 AstrBot 管理员权限",
@@ -388,6 +392,10 @@
         "description": "Discord 活动名称",
         "hint": "可选的 Discord 活动名称。留空则不设置活动。"
       },
+      "discord_allow_bot_messages": {
+        "description": "允许接收机器人消息",
+        "hint": "启用后，AstrBot 将接收来自其他 Discord 机器人的消息。适用于机器人间通信场景（如消息转发）。默认关闭。"
+      },
       "discord_command_register": {
         "description": "注册 Discord 指令",
         "hint": "启用后，自动将插件指令注册为 Discord 斜杠指令"
@@ -557,6 +565,18 @@
       "telegram_token": {
         "description": "Bot Token",
         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
+      },
+      "mattermost_url": {
+        "description": "Mattermost URL",
+        "hint": "Mattermost 服务地址，例如 https://chat.example.com。"
+      },
+      "mattermost_bot_token": {
+        "description": "Mattermost Bot Token",
+        "hint": "在 Mattermost 中创建 Bot 账户后生成的访问令牌。"
+      },
+      "mattermost_reconnect_delay": {
+        "description": "Mattermost 重连延迟",
+        "hint": "WebSocket 断开后的重连等待时间，单位为秒。默认 5 秒。"
       },
       "type": {
         "description": "适配器类型"
@@ -1077,7 +1097,11 @@
       },
       "rerank_api_base": {
         "description": "重排序模型 API Base URL",
-        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。"
+        "hint": "最终请求路径由 Base URL 和路径后缀拼接而成（默认为 /v1/rerank）。"
+      },
+      "rerank_api_suffix": {
+        "description": "API URL 路径后缀",
+        "hint": "追加到 base_url 后的路径后缀，如 /v1/rerank。留空则不追加。"
       },
       "rerank_api_key": {
         "description": "API Key",
@@ -1094,6 +1118,24 @@
         "description": "自定义排序任务类型说明",
         "hint": "仅在使用 qwen3-rerank 模型时生效。建议使用英文撰写。"
       },
+      "nvidia_rerank_api_base": {
+        "description": "API Base URL"
+      },
+      "nvidia_rerank_api_key": {
+        "description": "API Key"
+      },
+      "nvidia_rerank_model": {
+        "description": "重排序模型名称",
+        "hint": "请参照NVIDIA Docs中模型名称填写。"
+      },
+      "nvidia_rerank_model_endpoint": {
+        "description": "自定义模型端点",
+        "hint": "自定义URL末尾端点，默认为 /reranking"
+      },
+      "nvidia_rerank_truncate": {
+        "description": "文本截断策略",
+        "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。"
+      },
       "launch_model_if_not_running": {
         "description": "模型未运行时自动启动",
         "hint": "如果模型当前未在 Xinference 服务中运行，是否尝试自动启动它。在生产环境中建议关闭。"
@@ -1104,6 +1146,7 @@
         "labels": [
           "文本",
           "图像",
+          "音频",
           "工具使用"
         ]
       },
@@ -1481,6 +1524,10 @@
         "description": "本地部署 Whisper 模型须知",
         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。"
       },
+      "whisper_device": {
+        "description": "推理设备",
+        "hint": "Whisper 推理设备。Apple Silicon 可选 mps；其他环境建议使用 cpu。若指定 mps 但当前环境不可用，将自动回退到 cpu。"
+      },
       "id": {
         "description": "ID"
       },
@@ -1557,26 +1604,26 @@
       },
       "deerflow_assistant_id": {
         "description": "Assistant ID",
-        "hint": "LangGraph assistant_id，默认为 lead_agent。"
+        "hint": "DeerFlow 2.0 LangGraph assistant_id，默认为 lead_agent。"
       },
       "deerflow_model_name": {
         "description": "模型名称覆盖",
-        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。"
+        "hint": "可选。覆盖 DeerFlow 默认模型（对应运行时 configurable 的 model_name）。"
       },
       "deerflow_thinking_enabled": {
         "description": "启用思考模式"
       },
       "deerflow_plan_mode": {
         "description": "启用计划模式",
-        "hint": "对应 DeerFlow 的 is_plan_mode。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 is_plan_mode。"
       },
       "deerflow_subagent_enabled": {
         "description": "启用子智能体",
-        "hint": "对应 DeerFlow 的 subagent_enabled。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 subagent_enabled。"
       },
       "deerflow_max_concurrent_subagents": {
         "description": "子智能体最大并发数",
-        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。"
       },
       "deerflow_recursion_limit": {
         "description": "递归深度上限",

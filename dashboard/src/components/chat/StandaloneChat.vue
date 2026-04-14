@@ -1,356 +1,617 @@
 <template>
-    <v-card class="standalone-chat-card" elevation="0" rounded="0">
-        <v-card-text class="standalone-chat-container">
-            <div class="chat-layout">
-                <!-- 聊天内容区域 -->
-                <div class="chat-content-panel">
-                    <MessageList v-if="messages && messages.length > 0" :messages="messages" :isDark="isDark"
-                        :isStreaming="isStreaming || isConvRunning" @openImagePreview="openImagePreview"
-                        ref="messageList" />
-                    <div class="welcome-container fade-in" v-else>
-                        <div class="welcome-title">
-                            <span>Hello, I'm</span>
-                            <span class="bot-name">AstrBot ⭐</span>
-                        </div>
-                        <p class="text-caption text-medium-emphasis mt-2">
-                            测试配置: {{ configId || 'default' }}
-                        </p>
-                    </div>
+  <div class="standalone-chat">
+    <section ref="messagesContainer" class="standalone-messages">
+      <div v-if="initializing" class="standalone-state">
+        <v-progress-circular indeterminate size="28" width="3" />
+      </div>
 
-                    <!-- 输入区域 -->
-                    <ChatInput
-                        v-model:prompt="prompt"
-                        :stagedImagesUrl="stagedImagesUrl"
-                        :stagedAudioUrl="stagedAudioUrl"
-                        :disabled="false"
-                        :is-running="isStreaming || isConvRunning"
-                        :enableStreaming="enableStreaming"
-                        :isRecording="isRecording"
-                        :session-id="currSessionId || null"
-                        :current-session="getCurrentSession"
-                        :config-id="configId"
-                        @send="handleSendMessage"
-                        @stop="handleStopMessage"
-                        @toggleStreaming="toggleStreaming"
-                        @removeImage="removeImage"
-                        @removeAudio="removeAudio"
-                        @startRecording="handleStartRecording"
-                        @stopRecording="handleStopRecording"
-                        @pasteImage="handlePaste"
-                        @fileSelect="handleFileSelect"
-                        @openLiveMode=""
-                        ref="chatInputRef"
-                    />
-                </div>
+      <div v-else-if="!activeMessages.length" class="standalone-state">
+        <div class="welcome-title">{{ tm("welcome.title") }}</div>
+      </div>
+
+      <div v-else class="message-list">
+        <div
+          v-for="(msg, msgIndex) in activeMessages"
+          :key="msg.id || `${msgIndex}-${msg.created_at || ''}`"
+          class="message-row"
+          :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
+        >
+          <div class="message-stack">
+            <div
+              class="message-bubble"
+              :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
+            >
+              <div v-if="messageContent(msg).isLoading" class="loading-message">
+                {{ tm("message.loading") }}
+              </div>
+
+              <template v-else>
+                <ReasoningBlock
+                  v-if="messageContent(msg).reasoning"
+                  :reasoning="messageContent(msg).reasoning || ''"
+                  :is-dark="isDark"
+                  :initial-expanded="false"
+                  :is-streaming="isMessageStreaming(msg, msgIndex)"
+                  :has-non-reasoning-content="hasNonReasoningContent(msg)"
+                />
+
+                <template
+                  v-for="(part, partIndex) in messageParts(msg)"
+                  :key="`${msgIndex}-${partIndex}-${part.type}`"
+                >
+                  <div
+                    v-if="part.type === 'plain' && isUserMessage(msg)"
+                    class="plain-content"
+                  >
+                    {{ part.text || "" }}
+                  </div>
+
+                  <MarkdownMessagePart
+                    v-else-if="part.type === 'plain'"
+                    :content="part.text || ''"
+                    :refs="messageRefs(msg)"
+                    :is-dark="isDark"
+                    :custom-html-tags="customMarkdownTags"
+                  />
+
+                  <button
+                    v-else-if="part.type === 'image'"
+                    class="image-part"
+                    type="button"
+                    @click="openImage(partUrl(part))"
+                  >
+                    <img :src="partUrl(part)" :alt="part.filename || 'image'" />
+                  </button>
+
+                  <audio
+                    v-else-if="part.type === 'record'"
+                    class="audio-part"
+                    controls
+                    :src="partUrl(part)"
+                  />
+
+                  <video
+                    v-else-if="part.type === 'video'"
+                    class="video-part"
+                    controls
+                    :src="partUrl(part)"
+                  />
+
+                  <div v-else-if="part.type === 'file'" class="file-part">
+                    <v-icon size="20">mdi-file-document-outline</v-icon>
+                    <span>{{ part.filename || "file" }}</span>
+                  </div>
+
+                  <div
+                    v-else-if="part.type === 'tool_call'"
+                    class="tool-call-block"
+                  >
+                    <template
+                      v-for="tool in part.tool_calls || []"
+                      :key="tool.id || tool.name"
+                    >
+                      <ToolCallItem
+                        v-if="isIPythonToolCall(tool)"
+                        :is-dark="isDark"
+                      >
+                        <template #label>
+                          <v-icon size="16">mdi-code-json</v-icon>
+                          <span>{{ tool.name || "python" }}</span>
+                          <span class="tool-call-inline-status">
+                            {{ toolCallStatusText(tool) }}
+                          </span>
+                        </template>
+                        <template #details>
+                          <IPythonToolBlock
+                            :tool-call="normalizeToolCall(tool)"
+                            :is-dark="isDark"
+                            :show-header="false"
+                            :force-expanded="true"
+                          />
+                        </template>
+                      </ToolCallItem>
+                      <ToolCallCard
+                        v-else
+                        :tool-call="normalizeToolCall(tool)"
+                        :is-dark="isDark"
+                      />
+                    </template>
+                  </div>
+
+                  <pre v-else class="unknown-part">{{ formatJson(part) }}</pre>
+                </template>
+              </template>
             </div>
-        </v-card-text>
-    </v-card>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <!-- 图片预览对话框 -->
-    <v-dialog v-model="imagePreviewDialog" max-width="90vw" max-height="90vh">
-        <v-card class="image-preview-card" elevation="8">
-            <v-card-title class="d-flex justify-space-between align-center pa-4">
-                <span>{{ t('core.common.imagePreview') }}</span>
-                <v-btn icon="mdi-close" variant="text" @click="imagePreviewDialog = false" />
-            </v-card-title>
-            <v-card-text class="text-center pa-4">
-                <img :src="previewImageUrl" class="preview-image-large" />
-            </v-card-text>
-        </v-card>
-    </v-dialog>
+    <section class="standalone-composer">
+      <ChatInput
+        ref="inputRef"
+        v-model:prompt="draft"
+        :staged-images-url="stagedImagesUrl"
+        :staged-audio-url="stagedAudioUrl"
+        :staged-files="stagedNonImageFiles"
+        :disabled="sending || initializing"
+        :enable-streaming="enableStreaming"
+        :is-recording="false"
+        :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
+        :session-id="currSessionId || null"
+        :current-session="currentSession"
+        :config-id="configId || 'default'"
+        send-shortcut="enter"
+        @send="sendCurrentMessage"
+        @stop="stopCurrentSession"
+        @toggle-streaming="enableStreaming = !enableStreaming"
+        @remove-image="removeImage"
+        @remove-audio="removeAudio"
+        @remove-file="removeFile"
+        @paste-image="handlePaste"
+        @file-select="handleFilesSelected"
+      />
+    </section>
+
+    <v-overlay
+      v-model="imagePreview.visible"
+      class="image-preview-overlay"
+      scrim="rgba(0, 0, 0, 0.86)"
+      @click="closeImage"
+    >
+      <img class="preview-image" :src="imagePreview.url" alt="preview" />
+    </v-overlay>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import axios from 'axios';
-import { useCustomizerStore } from '@/stores/customizer';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { useTheme } from 'vuetify';
-import MessageList from '@/components/chat/MessageList.vue';
-import ChatInput from '@/components/chat/ChatInput.vue';
-import { useMessages } from '@/composables/useMessages';
-import { useMediaHandling } from '@/composables/useMediaHandling';
-import { useRecording } from '@/composables/useRecording';
-import { useToast } from '@/utils/toast';
-import { buildWebchatUmoDetails } from '@/utils/chatConfigBinding';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+} from "vue";
+import axios from "axios";
+import { setCustomComponents } from "markstream-vue";
+import "markstream-vue/index.css";
+import ChatInput from "@/components/chat/ChatInput.vue";
+import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
+import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
+import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
+import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
+import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
+import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
+import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import { useMediaHandling } from "@/composables/useMediaHandling";
+import {
+  useMessages,
+  type ChatRecord,
+  type MessagePart,
+  type TransportMode,
+} from "@/composables/useMessages";
+import type { Session } from "@/composables/useSessions";
+import { useModuleI18n } from "@/i18n/composables";
+import { useCustomizerStore } from "@/stores/customizer";
+import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
 
-interface Props {
-    configId?: string | null;
-}
-
-const props = withDefaults(defineProps<Props>(), {
-    configId: null
+const props = withDefaults(defineProps<{ configId?: string | null }>(), {
+  configId: "default",
 });
 
-const { t } = useI18n();
-const { error: showError } = useToast();
+setCustomComponents("chat-message", {
+  ref: RefNode,
+  code_block: ThemeAwareMarkdownCodeBlock,
+});
 
+const { tm } = useModuleI18n("features/chat");
+const customizer = useCustomizerStore();
+const currSessionId = ref("");
+const currentSession = ref<Session | null>(null);
+const draft = ref("");
+const initializing = ref(false);
+const enableStreaming = ref(true);
+const shouldStickToBottom = ref(true);
+const messagesContainer = ref<HTMLElement | null>(null);
+const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
+const imagePreview = reactive({ visible: false, url: "" });
 
-// UI 状态
-const imagePreviewDialog = ref(false);
-const previewImageUrl = ref('');
-
-// 会话管理（不使用 useSessions 避免路由跳转）
-const currSessionId = ref('');
-const getCurrentSession = computed(() => null); // 独立测试模式不需要会话信息
-
-async function bindConfigToSession(sessionId: string) {
-    const confId = (props.configId || '').trim();
-    if (!confId || confId === 'default') {
-        return;
-    }
-
-    const umoDetails = buildWebchatUmoDetails(sessionId, false);
-
-    await axios.post('/api/config/umo_abconf_route/update', {
-        umo: umoDetails.umo,
-        conf_id: confId
-    });
-}
-
-async function newSession() {
-    try {
-        const response = await axios.get('/api/chat/new_session');
-        const sessionId = response.data.data.session_id;
-
-        try {
-            await bindConfigToSession(sessionId);
-        } catch (err) {
-            console.error('Failed to bind config to session', err);
-        }
-
-        currSessionId.value = sessionId;
-
-        return sessionId;
-    } catch (err) {
-        console.error(err);
-        throw err;
-    }
-}
-
-function updateSessionTitle(sessionId: string, title: string) {
-    // 独立模式不需要更新会话标题
-}
-
-function getSessions() {
-    // 独立模式不需要加载会话列表
-}
+const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
+const customMarkdownTags = ["ref"];
 
 const {
-    stagedImagesUrl,
-    stagedAudioUrl,
-    stagedFiles,
-    getMediaFile,
-    processAndUploadImage,
-    handlePaste,
-    removeImage,
-    removeAudio,
-    clearStaged,
-    cleanupMediaCache
+  stagedFiles,
+  stagedImagesUrl,
+  stagedAudioUrl,
+  stagedNonImageFiles,
+  processAndUploadImage,
+  processAndUploadFile,
+  handlePaste,
+  removeImage,
+  removeAudio,
+  removeFile,
+  clearStaged,
+  cleanupMediaCache,
 } = useMediaHandling();
 
-const { isRecording, startRecording: startRec, stopRecording: stopRec } = useRecording();
-
 const {
-    messages,
-    isStreaming,
-    isConvRunning,
-    enableStreaming,
-    getSessionMessages: getSessionMsg,
-    sendMessage: sendMsg,
-    stopMessage: stopMsg,
-    toggleStreaming
-} = useMessages(currSessionId, getMediaFile, updateSessionTitle, getSessions);
-
-// 组件引用
-const messageList = ref<InstanceType<typeof MessageList> | null>(null);
-const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null);
-
-// 输入状态
-const prompt = ref('');
-
-const isDark = computed(() => useCustomizerStore().uiTheme === 'PurpleThemeDark');
-
-function openImagePreview(imageUrl: string) {
-    previewImageUrl.value = imageUrl;
-    imagePreviewDialog.value = true;
-}
-
-async function handleStartRecording() {
-    await startRec();
-}
-
-async function handleStopRecording() {
-    const audioFilename = await stopRec();
-    stagedAudioUrl.value = audioFilename;
-}
-
-async function handleFileSelect(files: FileList) {
-    for (const file of files) {
-        await processAndUploadImage(file);
+  sending,
+  activeMessages,
+  isSessionRunning,
+  isMessageStreaming,
+  isUserMessage,
+  messageContent,
+  messageParts,
+  createLocalExchange,
+  sendMessageStream,
+  stopSession,
+} = useMessages({
+  currentSessionId: currSessionId,
+  onStreamUpdate: () => {
+    if (shouldStickToBottom.value) {
+      scrollToBottom();
     }
-}
+  },
+});
 
-async function handleSendMessage() {
-    if (!prompt.value.trim() && stagedFiles.value.length === 0 && !stagedAudioUrl.value) {
-        return;
-    }
-
-    try {
-        if (!currSessionId.value) {
-            await newSession();
-        }
-
-        const promptToSend = prompt.value.trim();
-        const audioNameToSend = stagedAudioUrl.value;
-        const filesToSend = stagedFiles.value.map(f => ({
-            attachment_id: f.attachment_id,
-            url: f.url,
-            original_name: f.original_name,
-            type: f.type
-        }));
-
-        // 清空输入和附件
-        prompt.value = '';
-        clearStaged();
-
-        // 获取选择的提供商和模型
-        const selection = chatInputRef.value?.getCurrentSelection();
-        const selectedProviderId = selection?.providerId || '';
-        const selectedModelName = selection?.modelName || '';
-
-        await sendMsg(
-            promptToSend,
-            filesToSend,
-            audioNameToSend,
-            selectedProviderId,
-            selectedModelName
-        );
-
-        // 滚动到底部
-        nextTick(() => {
-            messageList.value?.scrollToBottom();
-        });
-    } catch (err) {
-        console.error('Failed to send message:', err);
-        showError(t('features.chat.errors.sendMessageFailed'));
-        // 恢复输入内容，让用户可以重试
-        // 注意：附件已经上传到服务器，所以不恢复附件
-    }
-}
-
-async function handleStopMessage() {
-    await stopMsg();
-}
+const transportMode = computed<TransportMode>(() =>
+  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
+    ? "websocket"
+    : "sse",
+);
 
 onMounted(async () => {
-    // 独立模式在挂载时创建新会话
-    try {
-        await newSession();
-    } catch (err) {
-        console.error('Failed to create initial session:', err);
-        showError(t('features.chat.errors.createSessionFailed'));
-    }
+  await ensureSession();
+  inputRef.value?.focusInput();
 });
 
 onBeforeUnmount(() => {
-    cleanupMediaCache();
+  cleanupMediaCache();
 });
+
+async function ensureSession() {
+  if (currSessionId.value) return currSessionId.value;
+  initializing.value = true;
+  try {
+    const response = await axios.get("/api/chat/new_session");
+    const session = response.data?.data as Session;
+    currSessionId.value = session.session_id;
+    currentSession.value = session;
+    await bindConfigToSession(session.session_id);
+    return session.session_id;
+  } finally {
+    initializing.value = false;
+  }
+}
+
+async function bindConfigToSession(sessionId: string) {
+  const confId = props.configId || "default";
+  const umo = buildWebchatUmoDetails(sessionId, false).umo;
+  await axios.post("/api/config/umo_abconf_route/update", {
+    umo,
+    conf_id: confId,
+  });
+}
+
+async function sendCurrentMessage() {
+  if (!draft.value.trim() && !stagedFiles.value.length) return;
+  const sessionId = await ensureSession();
+  const text = draft.value.trim();
+  const parts = buildOutgoingParts(text);
+  const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  const selection = inputRef.value?.getCurrentSelection();
+  const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
+
+  draft.value = "";
+  clearStaged();
+  scrollToBottom();
+
+  sendMessageStream({
+    sessionId,
+    messageId,
+    parts,
+    transport: transportMode.value,
+    enableStreaming: enableStreaming.value,
+    selectedProvider: selection?.providerId || "",
+    selectedModel: selection?.modelName || "",
+    botRecord,
+  });
+}
+
+function buildOutgoingParts(text: string): MessagePart[] {
+  const parts: MessagePart[] = [];
+  if (text) {
+    parts.push({ type: "plain", text });
+  }
+  stagedFiles.value.forEach((file) => {
+    parts.push({
+      type: file.type,
+      attachment_id: file.attachment_id,
+      filename: file.filename,
+      embedded_url: file.url,
+    });
+  });
+  return parts;
+}
+
+function hasNonReasoningContent(message: ChatRecord) {
+  return messageParts(message).some((part) => {
+    if (part.type === "reply") return false;
+    if (part.type === "plain") return Boolean(String(part.text || "").trim());
+    return true;
+  });
+}
+
+async function stopCurrentSession() {
+  if (!currSessionId.value) return;
+  await stopSession(currSessionId.value);
+}
+
+async function handleFilesSelected(files: FileList) {
+  const selectedFiles = Array.from(files || []);
+  for (const file of selectedFiles) {
+    if (file.type.startsWith("image/")) {
+      await processAndUploadImage(file);
+    } else {
+      await processAndUploadFile(file);
+    }
+  }
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    const container = messagesContainer.value;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+    shouldStickToBottom.value = true;
+  });
+}
+
+function messageRefs(message: ChatRecord) {
+  const refs = messageContent(message).refs;
+  if (refs && typeof refs === "object" && Array.isArray(refs.used)) {
+    return refs as { used?: Array<Record<string, unknown>> };
+  }
+  return null;
+}
+
+function partUrl(part: MessagePart) {
+  if (part.embedded_url) return part.embedded_url;
+  if (part.embedded_file?.url) return part.embedded_file.url;
+  if (part.attachment_id)
+    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
+      part.attachment_id,
+    )}`;
+  if (part.filename)
+    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+  return "";
+}
+
+function normalizeToolCall(tool: Record<string, unknown>) {
+  const normalized = { ...tool };
+  normalized.args = parseJsonSafe(normalized.args || normalized.arguments);
+  normalized.result = parseJsonSafe(normalized.result);
+  if (!normalized.ts) normalized.ts = Date.now() / 1000;
+  if (normalized.result && typeof normalized.result === "object") {
+    normalized.result = JSON.stringify(normalized.result, null, 2);
+  }
+  return normalized;
+}
+
+function isIPythonToolCall(tool: Record<string, unknown>) {
+  const name = String(tool.name || "").toLowerCase();
+  return name.includes("python") || name.includes("ipython");
+}
+
+function toolCallStatusText(tool: Record<string, unknown>) {
+  if (tool.finished_ts) return tm("toolStatus.done");
+  return tm("toolStatus.running");
+}
+
+function formatJson(value: unknown) {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value ?? "");
+  }
+}
+
+function parseJsonSafe(value: unknown) {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function openImage(url: string) {
+  imagePreview.url = url;
+  imagePreview.visible = true;
+}
+
+function closeImage() {
+  imagePreview.visible = false;
+  imagePreview.url = "";
+}
 </script>
 
 <style scoped>
-/* 基础动画 */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+.standalone-chat {
+  --standalone-muted: rgba(var(--v-theme-on-surface), 0.62);
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--v-theme-background));
 }
 
-.standalone-chat-card {
-    width: 100%;
-    height: 100%;
-    max-height: 100%;
-    overflow: hidden;
+.standalone-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 22px 14px;
 }
 
-.standalone-chat-container {
-    width: 100%;
-    height: 100%;
-    max-height: 100%;
-    padding: 0;
-    overflow: hidden;
-}
-
-.chat-layout {
-    height: 100%;
-    max-height: 100%;
-    display: flex;
-    overflow: hidden;
-}
-
-.chat-content-panel {
-    height: 100%;
-    max-height: 100%;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.conversation-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px;
-    padding-left: 16px;
-    border-bottom: 1px solid var(--v-theme-border);
-    width: 100%;
-    padding-right: 32px;
-    flex-shrink: 0;
-}
-
-.conversation-header-info h4 {
-    margin: 0;
-    font-weight: 500;
-}
-
-.conversation-header-actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
-
-.welcome-container {
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
+.standalone-state {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .welcome-title {
-    font-size: 28px;
-    margin-bottom: 8px;
+  font-size: 24px;
+  font-weight: 700;
 }
 
-.bot-name {
-    font-weight: 700;
-    margin-left: 8px;
-    color: var(--v-theme-secondary);
+.message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-.fade-in {
-    animation: fadeIn 0.3s ease-in-out;
+.message-row {
+  display: flex;
 }
 
-.preview-image-large {
-    max-width: 100%;
-    max-height: 70vh;
-    object-fit: contain;
+.message-row.from-user {
+  justify-content: flex-end;
+}
+
+.message-stack {
+  max-width: 88%;
+}
+
+.from-user .message-stack {
+  max-width: 70%;
+}
+
+.message-bubble {
+  border-radius: 8px;
+  padding: 10px 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.message-bubble.user {
+  padding: 12px 18px;
+  border-radius: 1.5rem;
+  background: rgba(var(--v-theme-primary), 0.12);
+}
+
+.message-bubble.bot {
+  padding-left: 0;
+  background: transparent;
+}
+
+.plain-content {
+  white-space: pre-wrap;
+}
+
+.loading-message,
+.tool-call-inline-status {
+  color: var(--standalone-muted);
+}
+
+.image-part {
+  display: block;
+  border: 0;
+  padding: 0;
+  margin-top: 8px;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.image-part img {
+  max-width: min(360px, 100%);
+  max-height: 320px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.audio-part,
+.video-part {
+  display: block;
+  max-width: 100%;
+  margin-top: 8px;
+}
+
+.video-part {
+  max-height: 320px;
+  border-radius: 8px;
+}
+
+.file-part {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tool-call-block {
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.message-bubble.bot
+  > .tool-call-block:first-child
+  :deep(.tool-call-card:first-child) {
+  margin-top: 0;
+}
+
+.unknown-part {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.standalone-composer {
+  position: relative;
+  z-index: 1;
+  padding-bottom: 10px;
+  background: rgb(var(--v-theme-background));
+}
+
+.standalone-composer::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  top: -32px;
+  height: 32px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--v-theme-background), 0),
+    rgb(var(--v-theme-background))
+  );
+}
+
+.standalone-composer :deep(.input-area) {
+  border-top: 0;
+}
+
+.image-preview-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image {
+  max-width: min(92vw, 1000px);
+  max-height: 88vh;
+  border-radius: 8px;
+  object-fit: contain;
 }
 </style>

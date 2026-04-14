@@ -24,7 +24,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { createHighlighter } from 'shiki';
+import { ensureShikiLanguages, escapeHtml, renderShikiCode } from '@/utils/shiki';
 
 const props = defineProps({
     toolCall: {
@@ -82,13 +82,15 @@ const highlightedCode = computed(() => {
         return '';
     }
     try {
-        return shikiHighlighter.value.codeToHtml(code.value, {
-            lang: 'python',
-            theme: props.isDark ? 'min-dark' : 'github-light'
-        });
+        return renderShikiCode(
+            shikiHighlighter.value,
+            code.value,
+            'python',
+            props.isDark ? 'dark' : 'light'
+        );
     } catch (err) {
         console.error('Failed to highlight code:', err);
-        return `<pre><code>${code.value}</code></pre>`;
+        return `<pre><code>${escapeHtml(code.value)}</code></pre>`;
     }
 });
 
@@ -101,10 +103,7 @@ const displayExpanded = computed(() => {
 
 onMounted(async () => {
     try {
-        shikiHighlighter.value = await createHighlighter({
-            themes: ['min-dark', 'github-light'],
-            langs: ['python']
-        });
+        shikiHighlighter.value = await ensureShikiLanguages(['python']);
         shikiReady.value = true;
     } catch (err) {
         console.error('Failed to initialize Shiki:', err);
@@ -139,6 +138,20 @@ onMounted(async () => {
     overflow-x: auto;
 }
 
+:deep(.code-highlighted pre.shiki) {
+    margin: 0;
+    padding: 16px;
+    border-radius: 6px;
+    overflow: auto;
+}
+
+:deep(.code-highlighted pre.shiki code) {
+    display: block;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+}
+
 .code-fallback {
     margin: 0;
     padding: 12px;
@@ -150,7 +163,7 @@ onMounted(async () => {
 }
 
 .code-fallback.dark-theme {
-    background-color: transparent;
+    background-color: rgb(var(--v-theme-codeBg));
 }
 
 .result-section {
@@ -178,7 +191,7 @@ onMounted(async () => {
 }
 
 .result-content.dark-theme {
-    background-color: transparent;
+    background-color: rgb(var(--v-theme-codeBg));
 }
 
 .animate-fade-in {

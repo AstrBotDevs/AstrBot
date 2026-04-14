@@ -121,6 +121,10 @@
                     "description": "API-ключ BoCha",
                     "hint": "Можно добавить несколько ключей для ротации."
                 },
+                "websearch_brave_key": {
+                    "description": "API-ключ Brave Search",
+                    "hint": "Можно добавить несколько ключей для ротации."
+                },
                 "websearch_baidu_app_builder_key": {
                     "description": "API-ключ Baidu Qianfan APP Builder",
                     "hint": "Ссылка: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -148,11 +152,11 @@
         },
         "agent_computer_use": {
             "description": "Использование компьютера (Agent Computer Use)",
-            "hint": "Позволяет AstrBot получать доступ к вашему компьютеру или песочнице для выполнения сложных задач. См. [Режим песочницы](https://docs.astrbot.app/use/astrbot-agent-sandbox.html), [Навыки](https://docs.astrbot.app/use/skills.html)",
+            "hint": "Позволяет AstrBot получать доступ к вашему компьютеру или песочнице для выполнения сложных задач. Подробнее: [Использование компьютера](https://docs.astrbot.app/use/computer.html).",
             "provider_settings": {
                 "computer_use_runtime": {
                     "description": "Среда выполнения (Runtime)",
-                    "hint": "'sandbox' означает запуск в изолированной среде, 'local' — локально на вашем ПК, 'none' — отключено. Если навыки загружены, выбор 'none' сделает их недоступными для агента."
+                    "hint": "Среда, к которой разрешён доступ Agent: `local` — локальная среда компьютера, `sandbox` — изолированная песочница, `none` — запретить доступ к любым средам."
                 },
                 "computer_use_require_admin": {
                     "description": "Требовать права администратора AstrBot",
@@ -386,6 +390,10 @@
                 "description": "Название активности Discord",
                 "hint": "Статус бота в Discord. Оставьте пустым для отключения."
             },
+            "discord_allow_bot_messages": {
+                "description": "Разрешить сообщения от ботов",
+                "hint": "Если включено, AstrBot будет получать сообщения от других Discord-ботов. Полезно для взаимодействия между ботами (например, пересылка сообщений). По умолчанию отключено."
+            },
             "discord_command_register": {
                 "description": "Регистрировать слэш-команды Discord",
                 "hint": "Если включено, команды плагинов будут зарегистрированы как /команды Discord."
@@ -551,6 +559,18 @@
             "telegram_token": {
                 "description": "Токен бота",
                 "hint": "Если вы находитесь в материковом Китае, установите прокси или измените api_base в разделе «Другие настройки»."
+            },
+            "mattermost_url": {
+                "description": "URL Mattermost",
+                "hint": "Адрес сервиса Mattermost, например https://chat.example.com."
+            },
+            "mattermost_bot_token": {
+                "description": "Bot Token Mattermost",
+                "hint": "Токен доступа, созданный после добавления bot-аккаунта в Mattermost."
+            },
+            "mattermost_reconnect_delay": {
+                "description": "Задержка переподключения Mattermost",
+                "hint": "Сколько секунд ждать перед переподключением после разрыва WebSocket. По умолчанию 5 секунд."
             },
             "type": {
                 "description": "Тип адаптера"
@@ -1076,7 +1096,11 @@
             },
             "rerank_api_base": {
                 "description": "Base URL API модели Rerank",
-                "hint": "AstrBot добавляет /v1/rerank к URL запроса."
+                "hint": "Полный URL запроса формируется путём добавления суффикса к Base URL (по умолчанию /v1/rerank)."
+            },
+            "rerank_api_suffix": {
+                "description": "Суффикс пути API",
+                "hint": "Суффикс пути, добавляемый к base_url, например /v1/rerank. Оставьте пустым, чтобы не добавлять."
             },
             "rerank_api_key": {
                 "description": "API Key",
@@ -1093,6 +1117,24 @@
                 "description": "Описание задачи для Rerank",
                 "hint": "Эффективно только для моделей qwen3-rerank. Рекомендуется писать на английском."
             },
+            "nvidia_rerank_api_base": {
+                "description": "Базовый URL API"
+            },
+            "nvidia_rerank_api_key": {
+                "description": "API-ключ"
+            },
+            "nvidia_rerank_model": {
+                "description": "Название модели Rerank",
+                "hint": "Укажите название модели в соответствии с документацией NVIDIA."
+            },
+            "nvidia_rerank_model_endpoint": {
+                "description": "Пользовательский endpoint модели",
+                "hint": "Пользовательский суффикс URL endpoint, по умолчанию /reranking."
+            },
+            "nvidia_rerank_truncate": {
+                "description": "Стратегия усечения текста",
+                "hint": "Определяет, следует ли усекать входной текст, если он слишком длинный и не помещается в максимальную длину контекста модели."
+            },
             "launch_model_if_not_running": {
                 "description": "Автозапуск модели",
                 "hint": "Если модель не запущена в Xinference, попытаться запустить её автоматически. Рекомендуется отключать в продакшене."
@@ -1103,6 +1145,7 @@
                 "labels": [
                     "Текст",
                     "Изображение",
+                    "Аудио",
                     "Инструменты"
                 ]
             },
@@ -1475,6 +1518,10 @@
             "whisper_hint": {
                 "description": "Заметки по локальному развертыванию Whisper",
                 "hint": "Перед включением установите openai-whisper и ffmpeg."
+            },
+            "whisper_device": {
+                "description": "Устройство инференса",
+                "hint": "Устройство для инференса Whisper. На Apple Silicon можно выбрать mps; в остальных средах рекомендуется cpu. Если выбран mps, но он недоступен, AstrBot автоматически переключится на cpu."
             },
             "id": {
                 "description": "ID провайдера"

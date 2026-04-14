@@ -6,12 +6,15 @@
 import json
 import os
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import jieba
 from rank_bm25 import BM25Okapi
 
-from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+
+if TYPE_CHECKING:
+    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 @dataclass
@@ -73,7 +76,7 @@ class SparseRetriever:
         top_k_sparse = 0
         chunks = []
         for kb_id in kb_ids:
-            vec_db: FaissVecDB = kb_options.get(kb_id, {}).get("vec_db")
+            vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
             if not vec_db:
                 continue
             result = await vec_db.document_storage.get_documents(
