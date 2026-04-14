@@ -21,7 +21,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             run_context,
         )
 
-    async def on_agent_done(self, run_context, llm_response) -> None:
+    async def on_agent_done(self, run_context: ContextWrapper[AstrAgentContext], llm_response: LLMResponse) -> None:
         # 执行事件钩子
         if llm_response and llm_response.reasoning_content:
             # we will use this in result_decorate stage to inject reasoning content to chain
