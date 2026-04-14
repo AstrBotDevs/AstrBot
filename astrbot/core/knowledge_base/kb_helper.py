@@ -329,11 +329,20 @@ class KBHelper:
                     ) from exc
 
             if not chunks_text or not any(chunk.strip() for chunk in chunks_text):
-                raise KnowledgeBaseUploadError(
-                    stage="chunking",
-                    user_message=("分块失败：文档内容为空，未生成任何可索引文本块。"),
-                    details={"file_name": file_name},
-                )
+                if pre_chunked_text is not None:
+                    raise KnowledgeBaseUploadError(
+                        stage="validation",
+                        user_message=("预分块文本为空，未提供任何可索引文本块。"),
+                        details={"file_name": file_name},
+                    )
+                else:
+                    raise KnowledgeBaseUploadError(
+                        stage="chunking",
+                        user_message=(
+                            "分块失败：文档内容为空，未生成任何可索引文本块。"
+                        ),
+                        details={"file_name": file_name},
+                    )
 
             contents = []
             metadatas = []
@@ -423,7 +432,7 @@ class KBHelper:
             return doc
         except Exception as e:
             if isinstance(e, KnowledgeBaseUploadError):
-                logger.warning(f"上传文档失败: {e}")
+                logger.warning(f"上传文档失败: {e}", extra={"details": e.details})
             else:
                 logger.error(f"上传文档失败: {e}", exc_info=True)
             # if file_path.exists():
