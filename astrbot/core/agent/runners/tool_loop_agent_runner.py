@@ -270,7 +270,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context = run_context
         self._aborted = False
         # Use external abort signal if provided (for SubAgent), otherwise create new one
-        self._abort_signal = external_abort_signal if external_abort_signal is not None else asyncio.Event()
+        self._abort_signal = (
+            external_abort_signal
+            if external_abort_signal is not None
+            else asyncio.Event()
+        )
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
         self._last_tool_name: str | None = None
@@ -1281,7 +1285,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         manual_stop: bool = False,
     ) -> AgentResponse:
         """终结被中断的步骤
-        
+
         Args:
             llm_resp: LLM响应对象
             manual_stop: 是否是主Agent手动停止SubAgent（True时使用不同的消息提示）
@@ -1290,10 +1294,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             logger.info("SubAgent execution was manually stopped by main agent.")
         else:
             logger.info("Agent execution was requested to stop by user.")
-        
+
         if llm_resp is None:
             llm_resp = LLMResponse(role="assistant", completion_text="")
-        
+
         # 根据停止类型选择不同的消息
         if llm_resp.role != "assistant":
             if manual_stop:
@@ -1308,7 +1312,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 role="assistant",
                 completion_text=interruption_msg,
             )
-        
+
         self.final_llm_resp = llm_resp
         self._aborted = True
         self._transition_state(AgentState.DONE)

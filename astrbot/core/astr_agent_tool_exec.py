@@ -389,20 +389,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if execution_timeout > 0:
             try:
                 llm_resp = await asyncio.wait_for(
-                    _run_subagent(),
-                    timeout=execution_timeout
+                    _run_subagent(), timeout=execution_timeout
                 )
             except asyncio.TimeoutError:
                 error_msg = f"SubAgent '{agent_name}' execution timeout after {execution_timeout:.1f} seconds."
                 logger.warning(f"[SubAgentTimeout] {error_msg}")
 
-                cls._handle_subagent_timeout(
-                    umo=umo,
-                    agent_name=agent_name
-                )
+                cls._handle_subagent_timeout(umo=umo, agent_name=agent_name)
 
                 yield mcp.types.CallToolResult(
-                    content=[mcp.types.TextContent(type="text", text=f"error: {error_msg}")]
+                    content=[
+                        mcp.types.TextContent(type="text", text=f"error: {error_msg}")
+                    ]
                 )
                 return
         else:
@@ -495,6 +493,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         execution_timeout = cls._get_subagent_execution_timeout()
 
         try:
+
             async def _run():
                 nonlocal result_text
                 async for r in cls._execute_handoff(
@@ -941,6 +940,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     def _get_subagent_execution_timeout() -> float:
         try:
             from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
             return DynamicSubAgentManager.get_execution_timeout()
         except Exception:
             return -1
@@ -951,16 +951,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         agent_name: str,
     ) -> None:
         from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
         DynamicSubAgentManager.set_subagent_status(
             session_id=umo,
             agent_name=agent_name,
             status="FAILED",
         )
 
-
     @staticmethod
     def _is_enhanced_subagent(umo: str, agent_name: str | None) -> bool:
         from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
         if not agent_name:
             return False
         session = DynamicSubAgentManager.get_session(umo)
@@ -985,9 +986,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
 
         DynamicSubAgentManager.set_subagent_status(
-            session_id=umo,
-            agent_name=agent_name,
-            status="FAILED"
+            session_id=umo, agent_name=agent_name, status="FAILED"
         )
 
         if not await cls._maybe_wake_main_agent_after_background(
