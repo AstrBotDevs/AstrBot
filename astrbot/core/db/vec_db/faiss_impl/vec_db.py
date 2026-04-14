@@ -157,7 +157,7 @@ class FaissVecDB(BaseVecDB):
         # 批量插入向量到 FAISS
         try:
             vectors_array = np.asarray(vectors, dtype=np.float32)
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             raise KnowledgeBaseUploadError(
                 stage="embedding",
                 user_message=(
