@@ -157,11 +157,12 @@ Connect AstrBot to your favorite chat platform.
 | Discord | Official |
 | LINE | Official |
 | Satori | Official |
+| KOOK | Official |
 | Misskey | Official |
 | Mattermost | Official |
 | WhatsApp (Coming Soon) | Official |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | Community |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | Community |
+| [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | Community |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | Community |
 
 ## Supported Model Services

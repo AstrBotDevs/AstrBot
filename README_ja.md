@@ -156,10 +156,12 @@ AstrBot をよく使うチャットプラットフォームに接続できます
 | Discord | 公式 |
 | LINE | 公式 |
 | Satori | 公式 |
+| KOOK | 公式 |
 | Misskey | 公式 |
+| Mattermost | 公式 |
 | WhatsApp (近日対応予定) | 公式 |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | コミュニティ |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | コミュニティ |
+| [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | コミュニティ |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | コミュニティ |
 
 
