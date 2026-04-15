@@ -103,6 +103,7 @@ class ProviderAnthropic(Provider):
             api_key=self.chosen_api_key,
             timeout=self.timeout,
             base_url=self.base_url,
+            default_headers=self.custom_headers,
             http_client=self._create_http_client(provider_config),
         )
 
@@ -111,9 +112,7 @@ class ProviderAnthropic(Provider):
         proxy = provider_config.get("proxy", "")
         if proxy:
             logger.info(f"[Anthropic] 使用代理: {proxy}")
-            return httpx.AsyncClient(proxy=proxy, headers=self.custom_headers)
-        if self.custom_headers:
-            return httpx.AsyncClient(headers=self.custom_headers)
+            return httpx.AsyncClient(proxy=proxy)
         return None
 
     def _apply_thinking_config(self, payloads: dict) -> None:
@@ -573,7 +572,7 @@ class ProviderAnthropic(Provider):
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
-            payloads["system"] = system_prompt
+            payloads["system"] = [{"type": "text", "text": system_prompt}]
 
         llm_response = None
         try:
@@ -636,7 +635,7 @@ class ProviderAnthropic(Provider):
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
-            payloads["system"] = system_prompt
+            payloads["system"] = [{"type": "text", "text": system_prompt}]
 
         async for llm_response in self._query_stream(payloads, func_tool):
             yield llm_response
