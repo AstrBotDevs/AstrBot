@@ -147,8 +147,8 @@
     >
       <v-slider
         v-if="itemMeta?.slider"
-        :model-value="toNumber(numericTemp ?? modelValue)"
-        @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
+        :model-value="toValidNumber(numericTemp ?? modelValue)"
+        @update:model-value="val => { numericTemp = val; emitUpdate(toValidNumber(val)) }"
         @end="numericTemp = null"
         :min="itemMeta?.slider?.min ?? 0"
         :max="itemMeta?.slider?.max ?? 100"
@@ -161,7 +161,7 @@
       <v-text-field
         :model-value="numericTemp ?? modelValue"
         @update:model-value="val => (numericTemp = val)"
-        @blur="() => { if (numericTemp != null) { emitUpdate(toNumber(numericTemp)); } numericTemp = null }"
+        @blur="handleNumericBlur"
         density="compact"
         variant="outlined"
         class="config-field"
@@ -276,6 +276,27 @@ const { getRaw } = useModuleI18n('features/config-metadata')
 
 function emitUpdate(val) {
   emit('update:modelValue', val)
+}
+
+function toValidNumber(val) {
+  if (val === null || val === undefined || val === '') {
+    return 0
+  }
+  if (typeof val === 'number') {
+    return isNaN(val) ? 0 : val
+  }
+  const n = parseFloat(val)
+  return isNaN(n) ? 0 : n
+}
+
+function handleNumericBlur() {
+  if (numericTemp.value !== null && numericTemp.value !== undefined) {
+    if (numericTemp.value === '') {
+    } else {
+      emitUpdate(toValidNumber(numericTemp.value))
+    }
+  }
+  numericTemp.value = null
 }
 
 function toNumber(val) {
