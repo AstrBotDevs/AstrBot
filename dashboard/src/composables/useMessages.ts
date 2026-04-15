@@ -86,6 +86,7 @@ export function useMessages(options: UseMessagesOptions) {
   const messagesBySession = reactive<Record<string, ChatRecord[]>>({});
   const loadedSessions = reactive<Record<string, boolean>>({});
   const activeConnections = reactive<Record<string, ActiveConnection>>({});
+  const attachmentBlobCache = new Map<string, string>();
   const sessionProjects = reactive<Record<string, ChatSessionProject | null>>(
     {},
   );
@@ -129,6 +130,47 @@ export function useMessages(options: UseMessagesOptions) {
     return !isUserMessage(msg) && msgIndex === activeMessages.value.length - 1;
   }
 
+  async function resolvePartMedia(part: MessagePart): Promise<void> {
+    if (part.embedded_url) return;
+    let url: string;
+    let cacheKey: string;
+    if (part.attachment_id) {
+      cacheKey = `att:${part.attachment_id}`;
+      url = `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
+    } else if (part.filename) {
+      cacheKey = `file:${part.filename}`;
+      url = `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+    } else {
+      return;
+    }
+    const cached = attachmentBlobCache.get(cacheKey);
+    if (cached) {
+      part.embedded_url = cached;
+      return;
+    }
+    try {
+      const resp = await axios.get(url, { responseType: "blob" });
+      const blobUrl = URL.createObjectURL(resp.data);
+      attachmentBlobCache.set(cacheKey, blobUrl);
+      part.embedded_url = blobUrl;
+    } catch (e) {
+      console.error("Failed to resolve media:", cacheKey, e);
+    }
+  }
+
+  async function resolveRecordMedia(records: ChatRecord[]) {
+    const mediaTypes = ["image", "record", "video"];
+    const tasks: Promise<void>[] = [];
+    for (const record of records) {
+      for (const part of record.content?.message || []) {
+        if (mediaTypes.includes(part.type) && !part.embedded_url && (part.attachment_id || part.filename)) {
+          tasks.push(resolvePartMedia(part));
+        }
+      }
+    }
+    await Promise.all(tasks);
+  }
+
   async function loadSessionMessages(sessionId: string) {
     if (!sessionId) return;
     loadingMessages.value = true;
@@ -138,7 +180,9 @@ export function useMessages(options: UseMessagesOptions) {
       });
       const payload = response.data?.data || {};
       const history = payload.history || [];
-      messagesBySession[sessionId] = history.map(normalizeHistoryRecord);
+      const records = history.map(normalizeHistoryRecord);
+      await resolveRecordMedia(records);
+      messagesBySession[sessionId] = records;
       sessionProjects[sessionId] = normalizeSessionProject(payload.project);
       loadedSessions[sessionId] = true;
     } catch (error) {
@@ -438,7 +482,14 @@ export function useMessages(options: UseMessagesOptions) {
         .replace("[FILE]", "")
         .replace("[VIDEO]", "")
         .split("|", 1)[0];
-      messageContent(botRecord).message.push({ type: msgType, filename });
+      const mediaPart: MessagePart = { type: msgType, filename };
+      if (msgType !== "file") {
+        resolvePartMedia(mediaPart).then(() => {
+          messageContent(botRecord).message.push(mediaPart);
+        });
+      } else {
+        messageContent(botRecord).message.push(mediaPart);
+      }
     }
   }
 
