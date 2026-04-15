@@ -86,7 +86,7 @@ export function useMessages(options: UseMessagesOptions) {
   const messagesBySession = reactive<Record<string, ChatRecord[]>>({});
   const loadedSessions = reactive<Record<string, boolean>>({});
   const activeConnections = reactive<Record<string, ActiveConnection>>({});
-  const attachmentBlobCache = new Map<string, string>();
+  const attachmentBlobCache = new Map<string, Promise<string>>();
   const sessionProjects = reactive<Record<string, ChatSessionProject | null>>(
     {},
   );
@@ -99,6 +99,10 @@ export function useMessages(options: UseMessagesOptions) {
 
   onBeforeUnmount(() => {
     cleanupConnections();
+    for (const promise of attachmentBlobCache.values()) {
+      promise.then((url) => URL.revokeObjectURL(url)).catch(() => {});
+    }
+    attachmentBlobCache.clear();
   });
 
   function isSessionRunning(sessionId: string) {
@@ -143,17 +147,17 @@ export function useMessages(options: UseMessagesOptions) {
     } else {
       return;
     }
-    const cached = attachmentBlobCache.get(cacheKey);
-    if (cached) {
-      part.embedded_url = cached;
-      return;
+    let promise = attachmentBlobCache.get(cacheKey);
+    if (!promise) {
+      promise = axios
+        .get(url, { responseType: "blob" })
+        .then((resp) => URL.createObjectURL(resp.data));
+      attachmentBlobCache.set(cacheKey, promise);
     }
     try {
-      const resp = await axios.get(url, { responseType: "blob" });
-      const blobUrl = URL.createObjectURL(resp.data);
-      attachmentBlobCache.set(cacheKey, blobUrl);
-      part.embedded_url = blobUrl;
+      part.embedded_url = await promise;
     } catch (e) {
+      attachmentBlobCache.delete(cacheKey);
       console.error("Failed to resolve media:", cacheKey, e);
     }
   }
