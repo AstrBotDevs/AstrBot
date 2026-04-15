@@ -527,6 +527,18 @@ class ProviderOpenAIOfficial(Provider):
                 omit_empty_parameter_field=omit_empty_param_field,
             )
             if tool_list:
+                # 清洗Gemini中的examples字段
+                if "gemini" in model:
+                    def remove_examples(schema):
+                        if isinstance(schema, dict):
+                            schema.pop("examples", None)
+                            for val in schema.values():
+                                remove_examples(val)
+                        elif isinstance(schema, list):
+                            for item in schema:
+                                remove_examples(item)
+
+                    remove_examples(tool_list)
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
@@ -599,6 +611,18 @@ class ProviderOpenAIOfficial(Provider):
                 omit_empty_parameter_field=omit_empty_param_field,
             )
             if tool_list:
+                # 清洗Gemini中的examples字段
+                if "gemini" in model:
+                    def remove_examples(schema):
+                        if isinstance(schema, dict):
+                            schema.pop("examples", None)
+                            for val in schema.values():
+                                remove_examples(val)
+                        elif isinstance(schema, list):
+                            for item in schema:
+                                remove_examples(item)
+
+                    remove_examples(tool_list)
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
