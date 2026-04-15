@@ -290,8 +290,8 @@ function toValidNumber(val) {
 }
 
 function handleNumericBlur() {
-  // 只有当用户实际输入了有效值时才触发更新
-  if (numericTemp.value !== null && numericTemp.value !== undefined && numericTemp.value !== '') {
+  const hasValidInput = numericTemp.value !== null && numericTemp.value !== undefined && numericTemp.value !== ''
+  if (hasValidInput) {
     emitUpdate(toValidNumber(numericTemp.value))
   }
   numericTemp.value = null
