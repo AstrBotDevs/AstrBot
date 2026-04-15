@@ -51,7 +51,7 @@ def check_env() -> None:
 
     site_packages_path = get_astrbot_site_packages_path()
     if site_packages_path not in sys.path:
-        sys.path.insert(0, site_packages_path)
+        sys.path.append(site_packages_path)
 
     os.makedirs(get_astrbot_config_path(), exist_ok=True)
     os.makedirs(get_astrbot_plugin_path(), exist_ok=True)

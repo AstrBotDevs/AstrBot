@@ -76,12 +76,13 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 对于想快速体验 AstrBot、且熟悉命令行并能够自行安装 `uv` 环境的用户，我们推荐使用 `uv` 一键部署方式 ⚡️。
 
 ```bash
-uv tool install astrbot
+uv tool install astrbot --python 3.12
 astrbot init # 仅首次执行此命令以初始化环境
 astrbot run
 ```
 
 > 需要安装 [uv](https://docs.astral.sh/uv/)。
+> AstrBot 需要 Python 3.12 或更高版本。`--python 3.12` 会确保 `uv` 使用 Python 3.12 创建 tool 环境。
 
 > [!NOTE]
 > 对于 macOS 用户：由于 macOS 安全检查，首次运行 `astrbot` 命令可能需要较长时间（约 10-20 秒）。
@@ -89,7 +90,7 @@ astrbot run
 更新 `astrbot`：
 
 ```bash
-uv tool upgrade astrbot
+uv tool upgrade astrbot --python 3.12
 ```
 
 > [!WARNING]
@@ -156,10 +157,12 @@ yay -S astrbot-git
 | **Discord** | 官方维护 |
 | **LINE** | 官方维护 |
 | **Satori** | 官方维护 |
+| **KOOK** | 官方维护 |
 | **Misskey** | 官方维护 |
+| **Mattermost** | 官方维护 |
 | **Whatsapp (将支持)** | 官方维护 |
 | [**Matrix**](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | 社区维护 |
-| [**KOOK**](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | 社区维护 |
+| [**Rocket.Chat**](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | 社区维护 |
 | [**VoceChat**](https://github.com/HikariFroya/astrbot_plugin_vocechat) | 社区维护 |
 
 ## 支持的模型提供商

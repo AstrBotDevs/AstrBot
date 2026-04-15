@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import logging
 import os
 import random
 import uuid
@@ -15,6 +16,13 @@ from botpy import Client
 from botpy.http import Route
 from botpy.types import message
 from botpy.types.message import MarkdownPayload, Media
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -62,6 +70,20 @@ def _patch_qq_botpy_formdata() -> None:
 
 
 _patch_qq_botpy_formdata()
+
+# Retry decorator for QQ Official API transient errors (HTTP 500/504)
+_qqofficial_retry = retry(
+    retry=retry_if_exception_type(
+        (
+            botpy.errors.ServerError,
+            botpy.errors.SequenceNumberError,
+        )
+    ),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
 
 
 # ============ 文本分块常量 ============
@@ -427,8 +449,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         # 媒体上传失败标记
         media_upload_failed = False
         upload_error_hint = None
-
-
 
         match source:
             case botpy.message.GroupMessage():

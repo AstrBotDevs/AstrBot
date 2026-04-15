@@ -505,6 +505,26 @@ class ProviderManager:
                 pc = merged_config
         return pc
 
+    def get_provider_config_by_id(
+        self,
+        provider_id: str,
+        *,
+        merged: bool = False,
+    ) -> dict | None:
+        """Get a provider config by id.
+
+        Args:
+            provider_id: Provider id to resolve.
+            merged: Whether to merge provider_source config into the provider config.
+        """
+        for provider_config in self.providers_config:
+            if provider_config.get("id") != provider_id:
+                continue
+            if merged:
+                return self.get_merged_provider_config(provider_config)
+            return copy.deepcopy(provider_config)
+        return None
+
     def _resolve_env_key_list(self, provider_config: dict) -> dict:
         keys = provider_config.get("key", [])
         if not isinstance(keys, list):
