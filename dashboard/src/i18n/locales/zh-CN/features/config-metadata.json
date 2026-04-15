@@ -154,11 +154,11 @@
     },
     "agent_computer_use": {
       "description": "使用电脑能力",
-      "hint": "让 AstrBot 访问和使用你的电脑或者隔离的沙盒环境，以执行更复杂的任务。详见: [沙盒模式](https://docs.astrbot.app/use/astrbot-agent-sandbox.html), [Skills](https://docs.astrbot.app/use/skills.html)。",
+      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [电脑使用](https://docs.astrbot.app/use/computer.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
-          "hint": "sandbox 代表在沙箱环境中运行, local 代表在本地环境中运行, none 代表不启用。如果上传了 skills，选择 none 会导致其无法被 Agent 正常使用。"
+          "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
         },
         "computer_use_require_admin": {
           "description": "需要 AstrBot 管理员权限",
@@ -399,6 +399,10 @@
       "discord_activity_name": {
         "description": "Discord 活动名称",
         "hint": "可选的 Discord 活动名称。留空则不设置活动。"
+      },
+      "discord_allow_bot_messages": {
+        "description": "允许接收机器人消息",
+        "hint": "启用后，AstrBot 将接收来自其他 Discord 机器人的消息。适用于机器人间通信场景（如消息转发）。默认关闭。"
       },
       "discord_command_register": {
         "description": "注册 Discord 指令",
@@ -1123,22 +1127,22 @@
         "hint": "仅在使用 qwen3-rerank 模型时生效。建议使用英文撰写。"
       },
       "nvidia_rerank_api_base": {
-          "description": "API Base URL"
+        "description": "API Base URL"
       },
       "nvidia_rerank_api_key": {
-          "description": "API Key"
+        "description": "API Key"
       },
       "nvidia_rerank_model": {
-          "description": "重排序模型名称",
-          "hint": "请参照NVIDIA Docs中模型名称填写。"
+        "description": "重排序模型名称",
+        "hint": "请参照NVIDIA Docs中模型名称填写。"
       },
       "nvidia_rerank_model_endpoint": {
-          "description": "自定义模型端点",
-          "hint": "自定义URL末尾端点，默认为 /reranking"
+        "description": "自定义模型端点",
+        "hint": "自定义URL末尾端点，默认为 /reranking"
       },
       "nvidia_rerank_truncate": {
-          "description": "文本截断策略",
-          "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。"
+        "description": "文本截断策略",
+        "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。"
       },
       "launch_model_if_not_running": {
         "description": "模型未运行时自动启动",
@@ -1608,26 +1612,26 @@
       },
       "deerflow_assistant_id": {
         "description": "Assistant ID",
-        "hint": "LangGraph assistant_id，默认为 lead_agent。"
+        "hint": "DeerFlow 2.0 LangGraph assistant_id，默认为 lead_agent。"
       },
       "deerflow_model_name": {
         "description": "模型名称覆盖",
-        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。"
+        "hint": "可选。覆盖 DeerFlow 默认模型（对应运行时 configurable 的 model_name）。"
       },
       "deerflow_thinking_enabled": {
         "description": "启用思考模式"
       },
       "deerflow_plan_mode": {
         "description": "启用计划模式",
-        "hint": "对应 DeerFlow 的 is_plan_mode。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 is_plan_mode。"
       },
       "deerflow_subagent_enabled": {
         "description": "启用子智能体",
-        "hint": "对应 DeerFlow 的 subagent_enabled。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 subagent_enabled。"
       },
       "deerflow_max_concurrent_subagents": {
         "description": "子智能体最大并发数",
-        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。"
       },
       "deerflow_recursion_limit": {
         "description": "递归深度上限",

@@ -37,6 +37,7 @@
     "mcpServersQuickSelect": "MCP 服务器快速选择",
     "searchTools": "搜索工具",
     "selectedTools": "已选择的工具",
+    "builtinToolDisabledHint": "暂不支持在这里启用和停用内置工具，请在配置文件中启用和停用工具对应的配置项。",
     "noToolsAvailable": "暂无可用工具",
     "noToolsFound": "未找到匹配的工具",
     "loadingTools": "正在加载工具...",

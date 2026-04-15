@@ -47,6 +47,15 @@
       "originName": "Origin Name",
       "readonly": "Read-only",
       "actions": "Actions"
+    },
+    "configTags": {
+      "tooltipTitle": "This tool is enabled in config file {config} because:",
+      "conditions": {
+        "truthy": "{key} is enabled",
+        "equals": "{key} = {expected}",
+        "in": "{key} matched {expected}",
+        "fallback": "{key} is currently {actual}"
+      }
     }
   },
   "marketplace": {
@@ -86,7 +95,8 @@
         "sync": "Sync"
       },
       "tips": {
-        "timeoutConfig": "Please configure tool call timeout separately in the configuration page"
+        "timeoutConfig": "Please configure tool call timeout separately in the configuration page",
+        "transportRecommendation": "Prefer Streamable HTTP or SSE mode. Stdio mode starts a local process on the AstrBot host and should only be used for trusted MCP servers."
       }
     },
     "serverDetail": {

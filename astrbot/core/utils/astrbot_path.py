@@ -247,3 +247,14 @@ def get_astrbot_knowledge_base_path() -> str:
 def get_astrbot_backups_path() -> str:
     """获取Astrbot备份目录路径"""
     return os.path.realpath(os.path.join(get_astrbot_data_path(), "backups"))
+
+
+def get_astrbot_system_tmp_path() -> str:
+    """获取Astrbot系统临时目录路径 (/tmp/.astrbot)"""
+    return "/tmp/.astrbot"
+
+
+def get_astrbot_workspaces_path() -> str:
+    """获取Astrbot工作区目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "workspaces"))
+

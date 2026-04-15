@@ -98,7 +98,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Build and Push Nightly Image
-        uses: docker/build-push-action@v7.0.0
+        uses: docker/build-push-action@v7.1.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -183,7 +183,7 @@ jobs:
           password: ${{ secrets.GHCR_GITHUB_TOKEN }}
 
       - name: Build and Push Release Image
-        uses: docker/build-push-action@v7.0.0
+        uses: docker/build-push-action@v7.1.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64

@@ -152,11 +152,11 @@
         },
         "agent_computer_use": {
             "description": "Использование компьютера (Agent Computer Use)",
-            "hint": "Позволяет AstrBot получать доступ к вашему компьютеру или песочнице для выполнения сложных задач. См. [Режим песочницы](https://docs.astrbot.app/use/astrbot-agent-sandbox.html), [Навыки](https://docs.astrbot.app/use/skills.html)",
+            "hint": "Позволяет AstrBot получать доступ к вашему компьютеру или песочнице для выполнения сложных задач. Подробнее: [Использование компьютера](https://docs.astrbot.app/use/computer.html).",
             "provider_settings": {
                 "computer_use_runtime": {
                     "description": "Среда выполнения (Runtime)",
-                    "hint": "'sandbox' означает запуск в изолированной среде, 'local' — локально на вашем ПК, 'none' — отключено. Если навыки загружены, выбор 'none' сделает их недоступными для агента."
+                    "hint": "Среда, к которой разрешён доступ Agent: `local` — локальная среда компьютера, `sandbox` — изолированная песочница, `none` — запретить доступ к любым средам."
                 },
                 "computer_use_require_admin": {
                     "description": "Требовать права администратора AstrBot",
@@ -401,6 +401,10 @@
             "discord_activity_name": {
                 "description": "Название активности Discord",
                 "hint": "Статус бота в Discord. Оставьте пустым для отключения."
+            },
+            "discord_allow_bot_messages": {
+                "description": "Разрешить сообщения от ботов",
+                "hint": "Если включено, AstrBot будет получать сообщения от других Discord-ботов. Полезно для взаимодействия между ботами (например, пересылка сообщений). По умолчанию отключено."
             },
             "discord_command_register": {
                 "description": "Регистрировать слэш-команды Discord",

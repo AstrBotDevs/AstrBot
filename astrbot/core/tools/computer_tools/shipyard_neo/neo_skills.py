@@ -10,7 +10,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
 
-from .permissions import check_admin_permission
+from astrbot.core.tools.computer_tools.util import check_admin_permission
 
 
 def _to_jsonable(model_like: Any) -> Any:
