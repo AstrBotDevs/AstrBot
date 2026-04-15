@@ -845,6 +845,8 @@ export default {
             switch (extension) {
                 case 'pdf':
                     return 'mdi-file-pdf-box';
+                case 'epub':
+                    return 'mdi-book-open-page-variant';
                 case 'doc':
                 case 'docx':
                     return 'mdi-file-word-box';
