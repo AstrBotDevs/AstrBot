@@ -20,11 +20,28 @@
             </div>
 
             <v-timeline align="start" side="end" density="compact" class="welcome-timeline" truncate-line="both">
-              <v-timeline-item :dot-color="platformStepState === 'completed' ? 'success' : 'primary'"
-                :icon="platformStepState === 'completed' ? 'mdi-check' : 'mdi-numeric-1'" fill-dot size="small">
+              <v-timeline-item :dot-color="providerStepState === 'completed' ? 'success' : 'primary'"
+                icon="mdi-numeric-1" fill-dot size="small">
                 <div class="pl-2">
                   <div class="text-h6 font-weight-bold mb-1">{{ tm('onboard.step1Title') }}</div>
                   <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step1Desc') }}</p>
+                  <div class="d-flex align-center">
+                    <v-btn color="primary" variant="flat" rounded="pill" class="px-6" @click="openProviderDialog">
+                      {{ tm('onboard.configure') }}
+                    </v-btn>
+                    <div v-if="providerStepState === 'completed'"
+                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3">
+                      {{ tm('onboard.completed') }}
+                    </div>
+                  </div>
+                </div>
+              </v-timeline-item>
+
+              <v-timeline-item :dot-color="platformStepState === 'completed' ? 'success' : 'primary'"
+                icon="mdi-numeric-2" fill-dot size="small">
+                <div class="pl-2">
+                  <div class="text-h6 font-weight-bold mb-1">{{ tm('onboard.step2Title') }}</div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step2Desc') }}</p>
                   <div class="d-flex align-center">
                     <v-btn color="primary" variant="flat" rounded="pill" class="px-6" :loading="loadingPlatformDialog"
                       @click="openPlatformDialog">
@@ -38,22 +55,37 @@
                 </div>
               </v-timeline-item>
 
-              <v-timeline-item :dot-color="providerStepState === 'completed' ? 'success' : 'primary'"
-                :icon="providerStepState === 'completed' ? 'mdi-check' : 'mdi-numeric-2'" fill-dot size="small">
+              <v-timeline-item :dot-color="computerAccessStepState === 'completed' ? 'success' : 'primary'"
+                icon="mdi-numeric-3" fill-dot size="small">
                 <div class="pl-2">
-                  <div class="text-h6 font-weight-bold mb-1"
-                    :class="{ 'text-medium-emphasis': platformStepState !== 'completed' }">{{ tm('onboard.step2Title')
-                    }}
-                  </div>
-                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step2Desc') }}</p>
-                  <div class="d-flex align-center">
-                    <v-btn color="primary" variant="flat" rounded="pill" class="px-6" @click="openProviderDialog">
-                      {{ tm('onboard.configure') }}
+                  <div class="d-flex align-center mb-1">
+                    <div class="text-h6 font-weight-bold">{{ tm('onboard.step3Title') }}</div>
+                    <v-btn
+                      icon
+                      variant="text"
+                      density="comfortable"
+                      size="small"
+                      class="ml-1"
+                      @click="showComputerAccessHelpDialog = true"
+                    >
+                      <span class="text-body-2 font-weight-bold">?</span>
                     </v-btn>
-                    <div v-if="providerStepState === 'completed'"
-                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3">
-                      {{ tm('onboard.completed') }}
-                    </div>
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step3Desc') }}</p>
+                  <div class="d-flex flex-wrap align-center ga-3">
+                    <v-select
+                      v-model="computerAccessRuntime"
+                      :items="computerAccessOptions"
+                      item-title="title"
+                      item-value="value"
+                      :label="tm('onboard.step3SelectLabel')"
+                      :loading="savingComputerAccess"
+                      :disabled="savingComputerAccess"
+                      hide-details
+                      density="comfortable"
+                      variant="outlined"
+                      class="computer-access-select"
+                    />
                   </div>
                 </div>
               </v-timeline-item>
@@ -136,6 +168,26 @@
     <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="platformMetadata" :config_data="platformConfigData"
       @refresh-config="loadPlatformConfigBase" />
     <ProviderConfigDialog v-model="showProviderDialog" />
+    <v-dialog v-model="showComputerAccessHelpDialog" max-width="640">
+      <v-card>
+        <v-card-title class="text-h3 font-weight-bold pa-4">
+          {{ tm('onboard.step3HelpTitle') }}
+        </v-card-title>
+        <v-card-text>
+          <ol class="computer-access-help-list">
+            <li>{{ tm('onboard.step3HelpItem1') }}</li>
+            <li>{{ tm('onboard.step3HelpItem2') }}</li>
+            <li>{{ tm('onboard.step3HelpItem3') }}</li>
+          </ol>
+        </v-card-text>
+        <v-card-actions class="px-6 pb-4">
+          <v-spacer />
+          <v-btn color="primary" variant="text" @click="showComputerAccessHelpDialog = false">
+            {{ tm('onboard.step3HelpClose') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -148,9 +200,9 @@ import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useToast } from '@/utils/toast';
 import { MarkdownRender } from 'markstream-vue';
 import 'markstream-vue/index.css';
-import 'highlight.js/styles/github.css';
 
 type StepState = 'pending' | 'completed' | 'skipped';
+type ComputerAccessRuntime = 'local' | 'none';
 
 const { tm } = useModuleI18n('features/welcome');
 const { locale } = useI18n();
@@ -158,6 +210,7 @@ const { success: showSuccess, error: showError } = useToast();
 
 const showAddPlatformDialog = ref(false);
 const showProviderDialog = ref(false);
+const showComputerAccessHelpDialog = ref(false);
 const loadingPlatformDialog = ref(false);
 
 const platformMetadata = ref<Record<string, any>>({});
@@ -167,6 +220,10 @@ const providerCountBeforeOpen = ref(0);
 
 const platformStepState = ref<StepState>('pending');
 const providerStepState = ref<StepState>('pending');
+const computerAccessStepState = ref<StepState>('pending');
+const computerAccessRuntime = ref<ComputerAccessRuntime>('none');
+const savedComputerAccessRuntime = ref<ComputerAccessRuntime>('none');
+const savingComputerAccess = ref(false);
 const welcomeAnnouncementRaw = ref<unknown>(null);
 
 function resolveWelcomeAnnouncement(raw: unknown, currentLocale: string) {
@@ -276,6 +333,11 @@ async function loadPlatformConfigBase() {
   platformConfigData.value = res.data.data.config || {};
 }
 
+async function fetchDefaultConfig() {
+  const res = await axios.get('/api/config/abconf', { params: { id: 'default' } });
+  return res.data?.data?.config || {};
+}
+
 function getChatProvidersFromTemplatePayload(payload: any) {
   const providers = payload?.providers || [];
   const sources = payload?.provider_sources || [];
@@ -315,8 +377,7 @@ async function syncDefaultConfigProviderIfNeeded() {
   const targetProviderId = pickDefaultProviderId(providers);
   if (!targetProviderId) return;
 
-  const configRes = await axios.get('/api/config/abconf', { params: { id: 'default' } });
-  const configData = configRes.data?.data?.config || {};
+  const configData = await fetchDefaultConfig();
   if (!configData.provider_settings) {
     configData.provider_settings = {};
   }
@@ -334,6 +395,62 @@ async function syncDefaultConfigProviderIfNeeded() {
   }
 
   showSuccess(tm('onboard.providerDefaultUpdated', { id: targetProviderId }));
+}
+
+function normalizeComputerAccessRuntime(runtime: unknown): ComputerAccessRuntime {
+  return runtime === 'local' || runtime === 'sandbox' ? 'local' : 'none';
+}
+
+function syncComputerAccessRuntime(configData: any) {
+  const providerSettings = configData?.provider_settings || {};
+  const currentRuntime = providerSettings?.computer_use_runtime;
+  const normalizedRuntime = normalizeComputerAccessRuntime(currentRuntime);
+
+  computerAccessRuntime.value = normalizedRuntime;
+  savedComputerAccessRuntime.value = normalizedRuntime;
+  computerAccessStepState.value =
+    currentRuntime === 'local' || currentRuntime === 'none' || currentRuntime === 'sandbox'
+      ? 'completed'
+      : 'pending';
+}
+
+const computerAccessOptions = computed(() => [
+  { title: tm('onboard.step3Allow'), value: 'local' },
+  { title: tm('onboard.step3Deny'), value: 'none' }
+]);
+
+async function saveComputerAccessRuntime() {
+  savingComputerAccess.value = true;
+  try {
+    const configData = await fetchDefaultConfig();
+    if (!configData.provider_settings) {
+      configData.provider_settings = {};
+    }
+
+    configData.provider_settings.computer_use_runtime = computerAccessRuntime.value;
+
+    const updateRes = await axios.post('/api/config/astrbot/update', {
+      conf_id: 'default',
+      config: configData
+    });
+    if (updateRes.data.status !== 'ok') {
+      throw new Error(updateRes.data.message || tm('onboard.computerAccessUpdateFailed'));
+    }
+
+    savedComputerAccessRuntime.value = computerAccessRuntime.value;
+    computerAccessStepState.value = 'completed';
+    showSuccess(
+      tm(
+        computerAccessRuntime.value === 'local'
+          ? 'onboard.computerAccessAllowed'
+          : 'onboard.computerAccessDenied'
+      )
+    );
+  } catch (err: any) {
+    showError(err?.response?.data?.message || err?.message || tm('onboard.computerAccessUpdateFailed'));
+  } finally {
+    savingComputerAccess.value = false;
+  }
 }
 
 async function loadWelcomeAnnouncement() {
@@ -363,6 +480,13 @@ onMounted(async () => {
     if (providers.length > 0) {
       providerStepState.value = 'completed';
     }
+  } catch (e) {
+    console.error(e);
+  }
+
+  try {
+    const defaultConfig = await fetchDefaultConfig();
+    syncComputerAccessRuntime(defaultConfig);
   } catch (e) {
     console.error(e);
   }
@@ -416,6 +540,18 @@ watch(showProviderDialog, async (visible, wasVisible) => {
     showError(err?.response?.data?.message || err?.message || tm('onboard.providerUpdateFailed'));
   }
 });
+
+watch(computerAccessRuntime, async (value, oldValue) => {
+  if (value === oldValue) return;
+  if (value === savedComputerAccessRuntime.value) return;
+  if (savingComputerAccess.value) return;
+
+  try {
+    await saveComputerAccessRuntime();
+  } catch {
+    computerAccessRuntime.value = savedComputerAccessRuntime.value;
+  }
+});
 </script>
 
 <style scoped>
@@ -429,5 +565,15 @@ watch(showProviderDialog, async (visible, wasVisible) => {
 
 .welcome-announcement-markdown {
   line-height: 1.7;
+}
+
+.computer-access-select {
+  max-width: 240px;
+  min-width: 220px;
+}
+
+.computer-access-help-list {
+  margin: 0;
+  padding-left: 1.25rem;
 }
 </style>

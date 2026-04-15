@@ -47,6 +47,15 @@
       "originName": "来源名称",
       "readonly": "只读",
       "actions": "操作"
+    },
+    "configTags": {
+      "tooltipTitle": "该工具在配置文件 {config} 中启用，因为：",
+      "conditions": {
+        "truthy": "启用了 {key}",
+        "equals": "{key} = {expected}",
+        "in": "{key} 命中了 {expected}",
+        "fallback": "{key} 当前值为 {actual}"
+      }
     }
   },
   "marketplace": {
@@ -86,7 +95,8 @@
         "sync": "同步"
       },
       "tips": {
-        "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置"
+        "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置",
+        "transportRecommendation": "建议优先使用 Streamable HTTP 或 SSE 模式。stdio 模式会在 AstrBot 主机上启动本地进程，仅适合可信 MCP 服务器。"
       }
     },
     "serverDetail": {

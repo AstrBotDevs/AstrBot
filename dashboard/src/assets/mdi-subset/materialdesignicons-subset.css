@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 256 icons */
+/* Auto-generated MDI subset – 247 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -178,10 +178,6 @@
 
 .mdi-checkbox-marked::before {
   content: "\F0132";
-}
-
-.mdi-checkbox-multiple-marked-outline::before {
-  content: "\F0139";
 }
 
 .mdi-chevron-double-left::before {
@@ -440,10 +436,6 @@
   content: "\F0A4D";
 }
 
-.mdi-file-upload-outline::before {
-  content: "\F0A4E";
-}
-
 .mdi-file-word-box::before {
   content: "\F022D";
 }
@@ -454,14 +446,6 @@
 
 .mdi-filter-variant::before {
   content: "\F0236";
-}
-
-.mdi-flash::before {
-  content: "\F0241";
-}
-
-.mdi-flash-off::before {
-  content: "\F0243";
 }
 
 .mdi-folder::before {
@@ -576,16 +560,8 @@
   content: "\F0309";
 }
 
-.mdi-keyboard-outline::before {
-  content: "\F097B";
-}
-
 .mdi-label::before {
   content: "\F0315";
-}
-
-.mdi-lan-connect::before {
-  content: "\F0318";
 }
 
 .mdi-language-markdown::before {
@@ -652,20 +628,12 @@
   content: "\F035F";
 }
 
-.mdi-message-off-outline::before {
-  content: "\F164E";
-}
-
 .mdi-message-outline::before {
   content: "\F0365";
 }
 
 .mdi-message-text::before {
   content: "\F0369";
-}
-
-.mdi-message-text-outline::before {
-  content: "\F036A";
 }
 
 .mdi-microphone::before {
@@ -1034,10 +1002,6 @@
 
 .mdi-wrench::before {
   content: "\F05B7";
-}
-
-.mdi-wrench-outline::before {
-  content: "\F0BE0";
 }
 
 .mdi-zip-box::before {

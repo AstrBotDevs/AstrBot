@@ -76,12 +76,13 @@ AstrBot est une plateforme de chatbot Agent tout-en-un open source qui s'intègr
 Pour les utilisateurs qui veulent découvrir AstrBot rapidement, qui sont familiers avec la ligne de commande et peuvent installer eux-mêmes l'environnement `uv`, nous recommandons la méthode de déploiement en un clic avec `uv` ⚡️ :
 
 ```bash
-uv tool install astrbot
+uv tool install astrbot --python 3.12
 astrbot init # Exécutez cette commande uniquement la première fois pour initialiser l'environnement
 astrbot run
 ```
 
 > [uv](https://docs.astral.sh/uv/) doit être installé.
+> AstrBot nécessite Python 3.12 ou une version plus récente. L'option `--python 3.12` garantit que `uv` crée l'environnement tool avec Python 3.12.
 
 > [!NOTE]
 > Pour les utilisateurs macOS : en raison des vérifications de sécurité de macOS, la première exécution de la commande `astrbot` peut prendre plus de temps (environ 10-20s).
@@ -89,7 +90,7 @@ astrbot run
 Mettre à jour `astrbot` :
 
 ```bash
-uv tool upgrade astrbot
+uv tool upgrade astrbot --python 3.12
 ```
 
 > [!WARNING]
@@ -156,10 +157,12 @@ Connectez AstrBot à vos plateformes de chat préférées.
 | Discord | Officielle |
 | LINE | Officielle |
 | Satori | Officielle |
+| KOOK | Officielle |
 | Misskey | Officielle |
+| Mattermost | Officielle |
 | WhatsApp (Bientôt disponible) | Officielle |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | Communauté |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | Communauté |
+| [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | Communauté |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | Communauté |
 
 ## Services de modèles pris en charge
