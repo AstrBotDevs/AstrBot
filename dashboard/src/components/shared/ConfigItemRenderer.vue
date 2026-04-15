@@ -290,11 +290,9 @@ function toValidNumber(val) {
 }
 
 function handleNumericBlur() {
-  if (numericTemp.value !== null && numericTemp.value !== undefined) {
-    if (numericTemp.value === '') {
-    } else {
-      emitUpdate(toValidNumber(numericTemp.value))
-    }
+  // 只有当用户实际输入了有效值时才触发更新
+  if (numericTemp.value !== null && numericTemp.value !== undefined && numericTemp.value !== '') {
+    emitUpdate(toValidNumber(numericTemp.value))
   }
   numericTemp.value = null
 }
