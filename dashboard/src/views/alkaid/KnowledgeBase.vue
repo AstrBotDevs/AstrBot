@@ -830,6 +830,7 @@ export default {
             if (files.length > 0) {
                 this.selectedFile = files[0];
             }
+            event.target.value = '';
         },
 
         onFileDrop(event) {
@@ -884,11 +885,7 @@ export default {
                 formData.append('chunk_overlap', this.overlap);
             }
 
-            axios.post('/api/plug/alkaid/kb/collection/add_file', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
-            })
+            axios.post('/api/plug/alkaid/kb/collection/add_file', formData)
                 .then(response => {
                     if (response.data.status === 'ok') {
                         this.showSnackbar(this.tm('messages.operationSuccess', { message: response.data.message }));

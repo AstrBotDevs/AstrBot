@@ -84,9 +84,7 @@
                 @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="fileInput?.click()">
                 <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
                 <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
-                <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}.txt, .md, .pdf,
-                  .docx, .epub,
-                  .xls, .xlsx</p>
+                <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
                 <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
                 <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
                 <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.epub,.xls,.xlsx"
@@ -369,6 +367,7 @@ const handleFileSelect = (event: Event) => {
     const newFiles = Array.from(target.files)
     addFiles(newFiles)
   }
+  target.value = ''
 }
 
 // 添加文件（检查数量限制）
@@ -432,9 +431,7 @@ const uploadFiles = async () => {
     formData.append('tasks_limit', uploadSettings.value.tasks_limit.toString())
     formData.append('max_retries', uploadSettings.value.max_retries.toString())
 
-    const response = await axios.post('/api/kb/document/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    const response = await axios.post('/api/kb/document/upload', formData)
 
     if (response.data.status === 'ok') {
       const result = response.data.data
