@@ -29,6 +29,9 @@ from ..register import register_provider_adapter
     "anthropic_chat_completion",
     "Anthropic Claude API 提供商适配器",
 )
+DEFAULT_ANTHROPIC_MAX_TOKENS = 4096
+
+
 class ProviderAnthropic(Provider):
     @staticmethod
     def _ensure_usable_response(
@@ -264,6 +267,15 @@ class ProviderAnthropic(Provider):
 
         return system_prompt, new_messages
 
+    def _get_max_tokens(self) -> int:
+        """Get max_tokens from provider config with validation."""
+        value = self.provider_config.get("max_tokens", DEFAULT_ANTHROPIC_MAX_TOKENS)
+        try:
+            value = int(value)
+            return max(value, 1)
+        except (TypeError, ValueError):
+            return DEFAULT_ANTHROPIC_MAX_TOKENS
+
     def _extract_usage(self, usage: Usage) -> TokenUsage:
         # https://docs.claude.com/en/docs/build-with-claude/prompt-caching#tracking-cache-performance
         return TokenUsage(
@@ -293,7 +305,7 @@ class ProviderAnthropic(Provider):
         extra_body = self.provider_config.get("custom_extra_body", {})
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 1024
+            payloads["max_tokens"] = self._get_max_tokens()
         self._apply_thinking_config(payloads)
 
         try:
@@ -389,7 +401,7 @@ class ProviderAnthropic(Provider):
         reasoning_signature = ""
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 1024
+            payloads["max_tokens"] = self._get_max_tokens()
         self._apply_thinking_config(payloads)
 
         async with self.client.messages.stream(
