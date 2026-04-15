@@ -285,8 +285,8 @@ function toValidNumber(val) {
   if (typeof val === 'number') {
     return isNaN(val) ? 0 : val
   }
-  const n = parseFloat(val)
-  return isNaN(n) ? 0 : n
+  const n = Number(val)
+  return Number.isFinite(n) ? n : 0
 }
 
 function handleNumericBlur() {
