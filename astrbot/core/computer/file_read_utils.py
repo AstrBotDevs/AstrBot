@@ -310,7 +310,7 @@ async def _compress_image_bytes_to_base64(data: bytes) -> dict[str, str | int]:
                 IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
                 IMAGE_COMPRESS_DEFAULT_QUALITY,
                 IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
-            )
+            ),
         )
         try:
             compressed_bytes = compressed_path.read_bytes()
@@ -450,7 +450,7 @@ def _validate_text_output(content: str) -> str | None:
         )
 
     content_tokens = _TOKEN_COUNTER.count_tokens(
-        [Message(role="user", content=content)]
+        [Message(role="user", content=content)],
     )
     if content_tokens > _MAX_FILE_READ_TOKENS:
         return (
@@ -668,10 +668,10 @@ async def read_file_tool_result(
                     type="image",
                     data=base64_data,
                     mimeType=str(
-                        compressed_payload.get("mime_type", "") or "image/jpeg"
+                        compressed_payload.get("mime_type", "") or "image/jpeg",
                     ),
-                )
-            ]
+                ),
+            ],
         )
 
     if offset is None and limit is None:

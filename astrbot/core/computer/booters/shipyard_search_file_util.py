@@ -92,7 +92,7 @@ def build_search_command(
             glob=glob,
             after_context=after_context,
             before_context=before_context,
-        )
+        ),
     )
     grep_command = _quote_command(
         _build_grep_command(
@@ -101,7 +101,7 @@ def build_search_command(
             glob=glob,
             after_context=after_context,
             before_context=before_context,
-        )
+        ),
     )
     return (
         "if command -v rg >/dev/null 2>&1; then "

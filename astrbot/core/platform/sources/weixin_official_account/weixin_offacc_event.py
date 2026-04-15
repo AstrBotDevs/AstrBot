@@ -125,7 +125,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                             logger.error(f"微信公众平台上传语音失败: {e}")
                             await self.send(
                                 MessageChain().message(
-                                    f"微信公众平台上传语音失败: {e}"
+                                    f"微信公众平台上传语音失败: {e}",
                                 ),
                             )
                             return

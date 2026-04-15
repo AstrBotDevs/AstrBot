@@ -19,7 +19,7 @@ def workspace_root(umo: str) -> Path:
 
 def is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
     cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
+        umo=context.context.event.unified_msg_origin,
     )
     provider_settings = cfg.get("provider_settings", {})
     runtime = str(provider_settings.get("computer_use_runtime", "local"))

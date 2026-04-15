@@ -12,8 +12,6 @@ from . import __version__
 from .commands import bk, conf, init, plug, run, uninstall
 from .i18n import t
 
-from .banner import logo_tmpl
-
 
 def print_version_detail() -> None:
     """Print detailed version info (same for --version and version command)"""
@@ -70,7 +68,6 @@ def cli() -> None:
     """Astrbot
     Agentic IM Chatbot infrastructure that integrates lots of IM platforms, LLMs, plugins and AI feature, and can be your openclaw alternative. ✨
     """
-    pass
 
 
 @click.command()

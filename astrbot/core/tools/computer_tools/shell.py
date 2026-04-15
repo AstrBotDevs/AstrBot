@@ -62,7 +62,7 @@ class ExecuteShellTool(FunctionTool):
             cwd: str | None = None
             if is_local_runtime(context):
                 current_workspace_root = workspace_root(
-                    context.context.event.unified_msg_origin
+                    context.context.event.unified_msg_origin,
                 )
                 current_workspace_root.mkdir(parents=True, exist_ok=True)
                 cwd = str(current_workspace_root)

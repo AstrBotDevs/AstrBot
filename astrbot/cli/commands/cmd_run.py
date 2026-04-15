@@ -397,7 +397,7 @@ def run(
                 click.echo()
             else:
                 dashboard_url = f"http://{host or 'localhost'}:{port or '6185'}"
-                click.echo(f"[模式] 完整模式（含本地 Dashboard）")
+                click.echo("[模式] 完整模式（含本地 Dashboard）")
                 click.echo()
                 click.echo(f"[Dashboard] 请访问: {dashboard_url}")
                 click.echo()

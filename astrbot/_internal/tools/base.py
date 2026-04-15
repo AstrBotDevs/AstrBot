@@ -96,6 +96,9 @@ class ToolSet:
 
     def add(self, tool: ToolSchema) -> None:
         """Add a tool to the set."""
+        existing = self._tools.get(tool.name)
+        if existing is not None and not getattr(tool, "active", True) and getattr(existing, "active", True):
+            return  # Don't overwrite active with inactive
         self._tools[tool.name] = tool
 
     def add_tool(self, tool: ToolSchema) -> None:

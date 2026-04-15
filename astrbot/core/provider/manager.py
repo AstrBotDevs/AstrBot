@@ -532,6 +532,7 @@ class ProviderManager:
         Args:
             provider_id: Provider id to resolve.
             merged: Whether to merge provider_source config into the provider config.
+
         """
         for provider_config in self.providers_config:
             if provider_config.get("id") != provider_id:

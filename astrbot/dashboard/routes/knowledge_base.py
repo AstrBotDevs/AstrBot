@@ -213,7 +213,7 @@ class KnowledgeBaseRoute(Route):
                         {
                             "file_name": file_info["file_name"],
                             "error": self._format_failed_doc_error(
-                                file_info["file_name"], e
+                                file_info["file_name"], e,
                             ),
                         },
                     )

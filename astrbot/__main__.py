@@ -25,7 +25,6 @@ from astrbot.core.utils.io import (
     get_dashboard_version,
 )
 
-
 # 将父目录添加到 sys.path
 sys.path.append(Path(__file__).parent.as_posix())
 

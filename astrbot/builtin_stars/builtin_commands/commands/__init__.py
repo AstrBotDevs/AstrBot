@@ -10,6 +10,6 @@ __all__ = [
     "AdminCommands",
     "ConversationCommands",
     "HelpCommand",
-    "SetUnsetCommands",
     "SIDCommand",
+    "SetUnsetCommands",
 ]

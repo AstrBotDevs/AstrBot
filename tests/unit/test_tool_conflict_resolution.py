@@ -103,7 +103,7 @@ class TestFunctionToolManagerGetFunc:
     def test_returns_last_active_tool(self):
         """Should return the last active tool when multiple have same name."""
         manager = FunctionToolManager()
-        manager._func_list = [
+        manager.func_list = [
             make_tool("web_search", active=True),
             make_tool("web_search", active=True),
         ]
@@ -117,7 +117,7 @@ class TestFunctionToolManagerGetFunc:
         """Should prefer active tool over inactive tool with same name."""
         manager = FunctionToolManager()
         # Use internal list for test setup (property setter triggers ty error)
-        manager._func_list = [
+        manager.func_list = [
             make_tool("web_search", active=False),
             make_tool("web_search", active=True),
         ]
@@ -125,12 +125,12 @@ class TestFunctionToolManagerGetFunc:
         result = manager.get_func("web_search")
         assert result is not None
         assert result.active is True
-        assert result is manager._func_list[1]
+        assert result is manager.func_list[1]
 
     def test_inactive_cannot_override_active(self):
         """Inactive tool after active should not be returned."""
         manager = FunctionToolManager()
-        manager._func_list = [
+        manager.func_list = [
             make_tool("web_search", active=True),
             make_tool("web_search", active=False),
         ]
@@ -143,7 +143,7 @@ class TestFunctionToolManagerGetFunc:
     def test_fallback_to_last_when_none_active(self):
         """Should return last tool with matching name when none are active."""
         manager = FunctionToolManager()
-        manager._func_list = [
+        manager.func_list = [
             make_tool("web_search", active=False),
             make_tool("web_search", active=False),
         ]
@@ -156,7 +156,7 @@ class TestFunctionToolManagerGetFunc:
     def test_returns_none_when_not_found(self):
         """Should return None when tool name not found."""
         manager = FunctionToolManager()
-        manager._func_list = [make_tool("other_tool")]
+        manager.func_list = [make_tool("other_tool")]
 
         result = manager.get_func("web_search")
         assert result is None
@@ -168,7 +168,7 @@ class TestFunctionToolManagerGetFullToolSet:
     def test_deduplicates_by_name_using_add_tool(self):
         """Should deduplicate tools using add_tool logic."""
         manager = FunctionToolManager()
-        manager._func_list = [
+        manager.func_list = [
             make_tool("web_search", active=False),
             make_tool("web_search", active=True),
             make_tool("code_search", active=True),
@@ -187,7 +187,7 @@ class TestFunctionToolManagerGetFullToolSet:
         """Should not deep copy tools, preserving object identity."""
         manager = FunctionToolManager()
         tool = make_tool("web_search")
-        manager._func_list = [tool]
+        manager.func_list = [tool]
 
         toolset = manager.get_full_tool_set()
 
@@ -202,7 +202,7 @@ class TestFunctionToolManagerGetFullToolSet:
         manager = FunctionToolManager()
         # Simulate: built-in tool registered first (disabled)
         # Then MCP tool registered (enabled)
-        manager._func_list = [
+        manager.func_list = [
             make_tool("web_search", active=False),  # Built-in, disabled
             make_tool("web_search", active=True),  # MCP, enabled
         ]
@@ -221,7 +221,7 @@ class TestFunctionToolManagerGetFullToolSet:
     def test_disabled_mcp_cannot_override_enabled_builtin(self):
         """Disabled MCP tool should not override enabled built-in tool."""
         manager = FunctionToolManager()
-        manager._func_list = [
+        manager.func_list = [
             make_tool("web_search", active=True),  # Built-in, enabled
             make_tool("web_search", active=False),  # MCP, disabled
         ]

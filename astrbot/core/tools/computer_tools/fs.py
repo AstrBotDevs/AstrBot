@@ -102,7 +102,7 @@ def _is_restricted_env(context: ContextWrapper[AstrAgentContext]) -> bool:
     if not is_local_runtime(context):
         return False
     cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
+        umo=context.context.event.unified_msg_origin,
     )
     provider_settings = cfg.get("provider_settings", {})
     require_admin = provider_settings.get("computer_use_require_admin", True)
@@ -152,7 +152,7 @@ def _normalize_rw_path(
         allowed = ", ".join(_restricted_env_path_labels(umo))
         raise PermissionError(
             "Read access is restricted for this user. "
-            f"Allowed directories: {allowed}. Blocked path: {normalized_path}."
+            f"Allowed directories: {allowed}. Blocked path: {normalized_path}.",
         )
     return normalized_path
 
@@ -192,7 +192,7 @@ class FileReadTool(FunctionTool):
                 },
             },
             "required": ["path"],
-        }
+        },
     )
 
     def _validate_read_window(
@@ -271,7 +271,7 @@ class FileWriteTool(FunctionTool):
                 },
             },
             "required": ["path", "content"],
-        }
+        },
     )
 
     async def call(
@@ -346,7 +346,7 @@ class FileEditTool(FunctionTool):
                 },
             },
             "required": ["path", "old", "new"],
-        }
+        },
     )
 
     async def call(
@@ -448,7 +448,7 @@ class GrepTool(FunctionTool):
                 },
             },
             "required": ["pattern"],
-        }
+        },
     )
 
     def _resolve_context_options(
@@ -538,7 +538,7 @@ class GrepTool(FunctionTool):
                 blocked = ", ".join(disallowed)
                 raise PermissionError(
                     "Read access is restricted for this user. "
-                    f"Allowed directories: {allowed}. Blocked paths: {blocked}."
+                    f"Allowed directories: {allowed}. Blocked paths: {blocked}.",
                 )
 
         return normalized
@@ -635,7 +635,7 @@ class FileUploadTool(FunctionTool):
                 # },
             },
             "required": ["local_path"],
-        }
+        },
     )
 
     async def call(
@@ -674,7 +674,7 @@ class FileUploadTool(FunctionTool):
             return f"File uploaded successfully to {file_path}"
         except Exception as e:
             logger.error(f"Error uploading file {local_path}: {e}")
-            return f"Error uploading file: {str(e)}"
+            return f"Error uploading file: {e!s}"
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -700,7 +700,7 @@ class FileDownloadTool(FunctionTool):
                 },
             },
             "required": ["remote_path"],
-        }
+        },
     )
 
     async def call(
@@ -719,7 +719,7 @@ class FileDownloadTool(FunctionTool):
             name = os.path.basename(remote_path)
 
             local_path = os.path.join(
-                get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
+                get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
             )
 
             # Download file from sandbox
@@ -730,7 +730,7 @@ class FileDownloadTool(FunctionTool):
                 try:
                     name = os.path.basename(local_path)
                     await context.context.event.send(
-                        MessageChain(chain=[File(name=name, file=local_path)])
+                        MessageChain(chain=[File(name=name, file=local_path)]),
                     )
                 except Exception as e:
                     logger.error(f"Error sending file message: {e}")
@@ -746,4 +746,4 @@ class FileDownloadTool(FunctionTool):
             return f"File downloaded successfully to {local_path}"
         except Exception as e:
             logger.error(f"Error downloading file {remote_path}: {e}")
-            return f"Error downloading file: {str(e)}"
+            return f"Error downloading file: {e!s}"

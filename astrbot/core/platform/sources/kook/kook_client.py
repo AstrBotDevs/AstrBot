@@ -124,7 +124,7 @@ class KookClient:
 
                 gateway_url: str = resp_content.data.url
                 logger.info(
-                    f"[KOOK] 获取gateway成功: {gateway_url.split('?', maxsplit=1)[0]}"
+                    f"[KOOK] 获取gateway成功: {gateway_url.split('?', maxsplit=1)[0]}",
                 )
                 return gateway_url
 

@@ -20,11 +20,12 @@ from typing import Any
 import aiohttp
 
 from astrbot import logger
-from astrbot._internal.tools.base import FunctionTool, ToolSchema, ToolSet
 
 # Re-export MCP-related constants and exceptions from protocols
 from astrbot._internal.protocols._mcp import (
     DEFAULT_MCP_CONFIG as _DEFAULT_MCP_CONFIG,
+)
+from astrbot._internal.protocols._mcp import (
     MCPAllServicesFailedError,
     MCPInitError,
     MCPInitSummary,
@@ -33,10 +34,10 @@ from astrbot._internal.protocols._mcp import (
 )
 from astrbot._internal.protocols._mcp.client import (
     McpClient,
-    _prepare_config,
     _quick_test_mcp_connection,
 )
 from astrbot._internal.protocols._mcp.tool import MCPTool
+from astrbot._internal.tools.base import FunctionTool, ToolSchema, ToolSet
 
 __all__ = [
     "DEFAULT_MCP_CONFIG",
@@ -146,7 +147,6 @@ def _get_astrbot_data_path() -> str:
 # Builtin tools stubs - these functions don't exist in the new architecture
 def _ensure_builtin_tools_loaded() -> None:
     """No-op in new architecture."""
-    pass
 
 
 def _get_builtin_tool_class(name: str) -> type[FunctionTool] | None:
@@ -257,6 +257,7 @@ class FunctionToolManager:
             func_args: Function arguments list, format: [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
             desc: Function description
             handler: Handler function
+
         """
         # Check if the tool has been added before
         self.remove_func(name)
@@ -359,7 +360,7 @@ class FunctionToolManager:
         Therefore, a later loaded inactive tool will not override an already active tool;
         MCP tools can still override disabled builtin tools when needed.
         """
-        tool_set = ToolSet()
+        tool_set = ToolSet(namespace="default")
         for tool in self.func_list:
             tool_set.add_tool(tool)
         return tool_set
@@ -383,7 +384,7 @@ class FunctionToolManager:
         if "command" in cfg:
             cmd = cfg["command"]
             executable = str(
-                cmd[0] if isinstance(cmd, (list, tuple)) and cmd else cmd
+                cmd[0] if isinstance(cmd, (list, tuple)) and cmd else cmd,
             )
             args_val = cfg.get("args", [])
             args_count = (
@@ -714,6 +715,7 @@ class FunctionToolManager:
 
         Returns:
             Tuple of (success, message)
+
         """
         success, error_msg = await _quick_test_mcp_connection(config)
         if not success:
@@ -751,6 +753,7 @@ class FunctionToolManager:
         Raises:
             MCPInitTimeoutError: If initialization does not complete within timeout.
             Exception: If there is an error during initialization.
+
         """
         if timeout is None:
             timeout_value = self._enable_timeout_default
@@ -781,6 +784,7 @@ class FunctionToolManager:
         Raises:
             MCPShutdownTimeoutError: If shutdown does not complete within timeout.
                 Only raised when disabling a specific server (name is not None).
+
         """
         if name:
             async with self._runtime_lock:
@@ -838,6 +842,7 @@ class FunctionToolManager:
 
         Returns:
             False if not found
+
         """
         func_tool = self.get_func(name)
         if func_tool is not None:
@@ -868,6 +873,7 @@ class FunctionToolManager:
         Args:
             name: Tool name
             star_map: Optional star_map for plugin dependency checking (ignored in new architecture)
+
         """
         func_tool = self.get_func(name)
         if func_tool is not None:

@@ -1566,7 +1566,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             result = await session.execute(
                 select(ChatUIProject).where(
-                    col(ChatUIProject.project_id) == project_id
+                    col(ChatUIProject.project_id) == project_id,
                 ),
             )
             return result.scalar_one_or_none()

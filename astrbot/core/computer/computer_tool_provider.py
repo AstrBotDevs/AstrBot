@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 def _get_local_tools() -> list[ToolSchema]:
     from astrbot.core.computer.tools import ExecuteShellTool, LocalPythonTool
 
-    shell = ExecuteShellTool(is_local=True)
+    shell = ExecuteShellTool()
     python = LocalPythonTool()
     return [shell, python]  # type: ignore[return-value]
 
