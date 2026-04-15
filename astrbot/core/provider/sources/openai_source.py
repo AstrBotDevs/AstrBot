@@ -181,6 +181,15 @@ class ProviderOpenAIOfficial(Provider):
             return True
         return False
 
+    @staticmethod
+    def _clean_gemini_tool_list(schema: Any) -> Any:
+        """非破坏性地递归移除 JSON Schema 中的 examples 字段，以适配 Gemini。"""
+        if isinstance(schema, dict):
+            return {k: ProviderOpenAIOfficial._clean_gemini_tool_list(v) for k, v in schema.items() if k != "examples"}
+        if isinstance(schema, list):
+            return [ProviderOpenAIOfficial._clean_gemini_tool_list(i) for i in schema]
+        return schema
+        
     @classmethod
     def _encode_image_file_to_data_url(
         cls,
@@ -528,17 +537,9 @@ class ProviderOpenAIOfficial(Provider):
             )
             if tool_list:
                 # 清洗Gemini中的examples字段
-                if "gemini" in model:
-                    def remove_examples(schema):
-                        if isinstance(schema, dict):
-                            schema.pop("examples", None)
-                            for val in schema.values():
-                                remove_examples(val)
-                        elif isinstance(schema, list):
-                            for item in schema:
-                                remove_examples(item)
-
-                    remove_examples(tool_list)
+                model_basename = model.split("/")[-1] if "/" in model else model
+                if model_basename.startswith("gemini"):
+                    tool_list = self._clean_gemini_tool_list(tool_list)
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
@@ -612,17 +613,9 @@ class ProviderOpenAIOfficial(Provider):
             )
             if tool_list:
                 # 清洗Gemini中的examples字段
-                if "gemini" in model:
-                    def remove_examples(schema):
-                        if isinstance(schema, dict):
-                            schema.pop("examples", None)
-                            for val in schema.values():
-                                remove_examples(val)
-                        elif isinstance(schema, list):
-                            for item in schema:
-                                remove_examples(item)
-
-                    remove_examples(tool_list)
+                model_basename = model.split("/")[-1] if "/" in model else model
+                if model_basename.startswith("gemini"):
+                    tool_list = self._clean_gemini_tool_list(tool_list)
                 payloads["tools"] = tool_list
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
