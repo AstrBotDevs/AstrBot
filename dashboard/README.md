@@ -16,7 +16,7 @@ dashboard
     composables
     i18n          # 国际化配置
     layouts       # 页面布局
-    plugins       # Vite 插件初始化逻辑
+    plugins       # Vue 插件初始化逻辑
     router        # 路由定义
     scss          # SASS/SCSS样式文件
     stores        # Pinia 状态管理（localStorage 持久化）
