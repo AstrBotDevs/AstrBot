@@ -160,7 +160,7 @@ yay -S astrbot-git
 | **KOOK** | 官方维护 |
 | **Misskey** | 官方维护 |
 | **Mattermost** | 官方维护 |
-| **WhatsApp (将支持)** | 官方维护 |
+| **WhatsApp（将支持）** | 官方维护 |
 | [**Matrix**](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | 社区维护 |
 | [**Rocket.Chat**](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | 社区维护 |
 | [**VoceChat**](https://github.com/HikariFroya/astrbot_plugin_vocechat) | 社区维护 |
