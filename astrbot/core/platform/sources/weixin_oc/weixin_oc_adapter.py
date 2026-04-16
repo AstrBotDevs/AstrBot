@@ -149,6 +149,7 @@ class WeixinOCAdapter(Platform):
         self._sync_buf = ""
         self._qr_expired_count = 0
         self._context_tokens: dict[str, str] = {}
+        self._context_tokens_dirty = False
         self._typing_states: dict[str, TypingSessionState] = {}
         self._last_inbound_error = ""
         self._recent_message_cache_size = self._get_int_config(
@@ -538,12 +539,31 @@ class WeixinOCAdapter(Platform):
         saved_base = str(self.config.get("weixin_oc_base_url", "")).strip()
         if saved_base:
             self.base_url = saved_base.rstrip("/")
+        raw_context_tokens = self.config.get("weixin_oc_context_tokens", {})
+        if isinstance(raw_context_tokens, dict):
+            normalized_context_tokens: dict[str, str] = {}
+            for user_id, context_token in raw_context_tokens.items():
+                normalized_user_id = str(user_id).strip()
+                normalized_context_token = str(context_token).strip()
+                if not normalized_user_id or not normalized_context_token:
+                    continue
+                normalized_context_tokens[normalized_user_id] = normalized_context_token
+            self._context_tokens = normalized_context_tokens
 
     async def _save_account_state(self) -> None:
+        normalized_context_tokens: dict[str, str] = {}
+        for user_id, context_token in self._context_tokens.items():
+            normalized_user_id = str(user_id).strip()
+            normalized_context_token = str(context_token).strip()
+            if not normalized_user_id or not normalized_context_token:
+                continue
+            normalized_context_tokens[normalized_user_id] = normalized_context_token
+        self._context_tokens = normalized_context_tokens
         self.config["weixin_oc_token"] = self.token or ""
         self.config["weixin_oc_account_id"] = self.account_id or ""
         self.config["weixin_oc_sync_buf"] = self._sync_buf
         self.config["weixin_oc_base_url"] = self.base_url
+        self.config["weixin_oc_context_tokens"] = self._context_tokens
 
         for platform in astrbot_config.get("platform", []):
             if not isinstance(platform, dict):
@@ -556,8 +576,10 @@ class WeixinOCAdapter(Platform):
             platform["weixin_oc_account_id"] = self.account_id or ""
             platform["weixin_oc_sync_buf"] = self._sync_buf
             platform["weixin_oc_base_url"] = self.base_url
+            platform["weixin_oc_context_tokens"] = self._context_tokens
             break
 
+        self._context_tokens_dirty = False
         self._sync_client_state()
         astrbot_config.save_config()
 
@@ -1445,7 +1467,10 @@ class WeixinOCAdapter(Platform):
 
         context_token = str(msg.get("context_token", "")).strip()
         if context_token:
-            self._context_tokens[from_user_id] = context_token
+            previous_context_token = self._context_tokens.get(from_user_id)
+            if previous_context_token != context_token:
+                self._context_tokens[from_user_id] = context_token
+                self._context_tokens_dirty = True
 
         item_list = cast(list[dict[str, Any]], msg.get("item_list", []))
         reply_component = None
@@ -1539,9 +1564,10 @@ class WeixinOCAdapter(Platform):
             )
             return
 
+        should_save_state = False
         if data.get("get_updates_buf"):
             self._sync_buf = str(data.get("get_updates_buf"))
-            await self._save_account_state()
+            should_save_state = True
 
         for msg in data.get("msgs", []) if isinstance(data.get("msgs"), list) else []:
             if self._shutdown_event.is_set():
@@ -1549,6 +1575,8 @@ class WeixinOCAdapter(Platform):
             if not isinstance(msg, dict):
                 continue
             await self._handle_inbound_message(msg)
+        if should_save_state or self._context_tokens_dirty:
+            await self._save_account_state()
 
     def _message_chain_to_text(self, message_chain: MessageChain) -> str:
         text = ""
