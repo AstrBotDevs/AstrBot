@@ -1,3 +1,5 @@
+@use '../variables' as *;
+
 .v-field--variant-outlined .v-field__outline__start.v-locale--is-ltr,
 .v-locale--is-ltr .v-field--variant-outlined .v-field__outline__start {
   border-radius: $border-radius-root 0 0 $border-radius-root;
