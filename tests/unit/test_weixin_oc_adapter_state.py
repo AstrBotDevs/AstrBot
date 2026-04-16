@@ -54,6 +54,21 @@ def test_load_account_state_ignores_invalid_context_token_payload():
     assert adapter._context_tokens == {}
 
 
+def test_normalize_context_tokens_filters_invalid_entries():
+    adapter = _build_adapter_for_state_test({})
+
+    normalized = adapter._normalize_context_tokens(
+        {
+            "user_1": "token_1",
+            " user_2 ": " token_2 ",
+            "": "ignored",
+            "user_3": "",
+        }
+    )
+
+    assert normalized == {"user_1": "token_1", "user_2": "token_2"}
+
+
 @pytest.mark.asyncio
 async def test_save_account_state_persists_context_tokens(monkeypatch):
     config = {"id": "wx-test", "type": "weixin_oc"}
@@ -84,11 +99,40 @@ async def test_save_account_state_persists_context_tokens(monkeypatch):
     await adapter._save_account_state()
 
     expected_tokens = {"user_1": "token_1", "user_2": "token_2"}
-    assert adapter._context_tokens == expected_tokens
+    assert adapter._context_tokens == {
+        "user_1": "token_1",
+        " user_2 ": " token_2 ",
+        "": "ignored",
+        "user_3": "",
+    }
     assert adapter.config["weixin_oc_context_tokens"] == expected_tokens
     assert platforms[0]["weixin_oc_context_tokens"] == expected_tokens
     assert adapter._context_tokens_dirty is False
     assert save_called["value"] is True
+
+
+@pytest.mark.asyncio
+async def test_save_account_state_keeps_dirty_when_persistence_fails(monkeypatch):
+    adapter = _build_adapter_for_state_test({"id": "wx-test", "type": "weixin_oc"})
+    adapter._context_tokens = {"user_1": "token_1"}
+    adapter._context_tokens_dirty = True
+
+    def raise_save_error():
+        raise RuntimeError("save failed")
+
+    fake_astrbot_config = SimpleNamespace(
+        get=lambda key, default=None: [],
+        save_config=raise_save_error,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.weixin_oc.weixin_oc_adapter.astrbot_config",
+        fake_astrbot_config,
+    )
+
+    with pytest.raises(RuntimeError, match="save failed"):
+        await adapter._save_account_state()
+
+    assert adapter._context_tokens_dirty is True
 
 
 @pytest.mark.asyncio
