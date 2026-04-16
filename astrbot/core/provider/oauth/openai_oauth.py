@@ -2,7 +2,7 @@ import base64
 import hashlib
 import json
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -152,7 +152,7 @@ async def _request_token(
     expires_in = int(data.get("expires_in") or 0)
     if not access_token or not refresh_token or expires_in <= 0:
         raise ValueError("oauth token response missing required fields")
-    expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -197,7 +197,7 @@ def _normalize_expires_at(value: Any) -> str:
         return ""
     if isinstance(value, (int, float)):
         try:
-            return datetime.fromtimestamp(float(value), UTC).isoformat()
+            return datetime.fromtimestamp(float(value), timezone.utc).isoformat()
         except Exception:
             return ""
     if isinstance(value, str):
