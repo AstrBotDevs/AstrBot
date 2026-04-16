@@ -32,8 +32,12 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
     ) -> None:
         # api_base 写死，Token Plan 用户无需配置此项
         provider_config["api_base"] = "https://api.minimaxi.com/anthropic"
-        # 强制使用 auth header（Token Plan 要求）
-        provider_config["auth_header"] = True
+        # MiniMax Token Plan 要求 Authorization: Bearer <token> header
+        key = provider_config.get("key", "")
+        actual_key = key[0] if isinstance(key, list) else key
+        provider_config.setdefault("custom_headers", {})["Authorization"] = (
+            f"Bearer {actual_key}"
+        )
 
         super().__init__(
             provider_config,
