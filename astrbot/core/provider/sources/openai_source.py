@@ -841,7 +841,7 @@ class ProviderOpenAIOfficial(Provider):
         llm_response.reasoning_content = self._extract_reasoning_content(completion)
 
         # parse tool calls if any
-        if choice.message.tool_calls and tools is not None:
+        if choice.message.tool_calls:
             args_ls = []
             func_name_ls = []
             tool_call_ids = []
@@ -850,28 +850,68 @@ class ProviderOpenAIOfficial(Provider):
                 if isinstance(tool_call, str):
                     # workaround for #1359
                     tool_call = json.loads(tool_call)
-                if tools is None:
-                    # 工具集未提供
-                    # Should be unreachable
-                    raise Exception("工具集未提供")
+
+                # Convert to dict if it's an object to support both dict and object access
+                if not isinstance(tool_call, dict):
+                    tool_call = {
+                        "id": getattr(tool_call, "id", ""),
+                        "type": getattr(tool_call, "type", "function"),
+                        "function": {
+                            "name": getattr(
+                                getattr(tool_call, "function", None), "name", ""
+                            ),
+                            "arguments": getattr(
+                                getattr(tool_call, "function", None), "arguments", {}
+                            ),
+                        },
+                    }
+
+                # 安全获取工具名称
+                tool_name = tool_call.get("function", {}).get("name") or tool_call.get(
+                    "name", ""
+                )
+                if not tool_name:
+                    logger.warning(
+                        f"Could not extract tool name from tool_call: {tool_call}"
+                    )
+                    continue
+
+                if tools is None or not tools.func_list:
+                    logger.warning(
+                        f"LLM requested tool '{tool_name}' but no tools are available"
+                    )
+                    func_name_ls.append(tool_name)
+                    tool_call_ids.append(tool_call.get("id", ""))
+                    args_ls.append({})
+                    continue
                 for tool in tools.func_list:
-                    if (
-                        tool_call.type == "function"
-                        and tool.name == tool_call.function.name
+                    if tool_call.get(
+                        "type"
+                    ) == "function" and tool.name == tool_call.get("function", {}).get(
+                        "name"
                     ):
                         # workaround for #1454
-                        if isinstance(tool_call.function.arguments, str):
-                            args = json.loads(tool_call.function.arguments)
+                        func_args = tool_call.get("function", {}).get("arguments", {})
+                        if isinstance(func_args, str):
+                            args = json.loads(func_args)
                         else:
-                            args = tool_call.function.arguments
+                            args = func_args
                         args_ls.append(args)
-                        func_name_ls.append(tool_call.function.name)
-                        tool_call_ids.append(tool_call.id)
+                        func_name_ls.append(tool_call["function"]["name"])
+                        tool_call_ids.append(tool_call.get("id", ""))
 
                         # gemini-2.5 / gemini-3 series extra_content handling
-                        extra_content = getattr(tool_call, "extra_content", None)
+                        extra_content = tool_call.get("extra_content")
                         if extra_content is not None:
-                            tool_call_extra_content_dict[tool_call.id] = extra_content
+                            tool_call_extra_content_dict[tool_call["id"]] = (
+                                extra_content
+                            )
+                        break
+                else:
+                    logger.warning(f"Tool '{tool_name}' not found in toolset")
+                    func_name_ls.append(tool_name)
+                    tool_call_ids.append(tool_call.get("id", ""))
+                    args_ls.append({})
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
