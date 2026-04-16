@@ -15,7 +15,6 @@ MINIMAX_TOKEN_PLAN_MODELS = [
     "MiniMax Token Plan 提供商适配器",
     default_config_tmpl={
         "key": "",
-        "api_base": "https://api.minimaxi.com/anthropic",
     },
     provider_display_name="MiniMax Token Plan",
 )
@@ -31,7 +30,7 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
         provider_config,
         provider_settings,
     ) -> None:
-        # 使用固定的 api_base，不允许用户自定义
+        # api_base 写死，Token Plan 用户无需配置此项
         provider_config["api_base"] = "https://api.minimaxi.com/anthropic"
         # 强制使用 auth header（Token Plan 要求）
         provider_config["auth_header"] = True
@@ -41,7 +40,14 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
             provider_settings,
         )
 
-        self.set_model(provider_config.get("model", "MiniMax-M2.7"))
+        configured_model = provider_config.get("model", "MiniMax-M2.7")
+        if configured_model not in MINIMAX_TOKEN_PLAN_MODELS:
+            raise ValueError(
+                f"Unsupported model: {configured_model!r}. "
+                f"Supported models: {', '.join(MINIMAX_TOKEN_PLAN_MODELS)}"
+            )
+
+        self.set_model(configured_model)
 
     async def get_models(self) -> list[str]:
         """Token Plan 不支持动态获取模型列表，返回硬编码的已知模型列表。"""
