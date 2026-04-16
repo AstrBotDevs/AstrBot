@@ -335,10 +335,11 @@ class CronJobManager:
             cron_job=cron_job_str
         )
         req.prompt = (
-            "You are now responding to a scheduled task. "
+            "A scheduled task has been triggered. "
             "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "After completing your task, summarize and output your actions and results."
+            "You MUST call the `send_message_to_user` tool to deliver any message to the user. "
+            "Your direct text response is NOT visible to the user — only tool calls take effect. "
+            "Use the same language as the previous conversation."
         )
         if not req.func_tool:
             req.func_tool = ToolSet()
@@ -358,25 +359,59 @@ class CronJobManager:
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+
         cron_meta = extras.get("cron_job", {}) if extras else {}
-        summary_note = (
-            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
-            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
-        )
-        if llm_resp and llm_resp.role == "assistant":
-            summary_note += (
-                f"I finished this job, here is the result: {llm_resp.completion_text}"
+        cron_job_label = cron_meta.get("name") or cron_meta.get("id", "unknown")
+
+        if not llm_resp:
+            logger.warning("Cron job [%s] agent got no response", cron_job_label)
+
+        # 选择工具调用的名字作为日志输出，方便后续分析 cron 任务是否正确触达用户，以及用户收到的内容是什么
+        called_tool_names: list[str] = []
+        for msg in runner.run_context.messages:
+            # 只统计 role="assistant" 的消息中的工具调用
+            if msg.role == "assistant" and msg.tool_calls:
+                # 工具调用应该是dict或者ToolCall对象的列表，兼容两者的情况
+                for tc in msg.tool_calls:
+                    if isinstance(tc, dict):
+                        name = tc.get("function", {}).get("name")
+                    else:
+                        name = tc.function.name
+                    if name:
+                        called_tool_names.append(name)
+
+        if not called_tool_names:
+            logger.warning(
+                "Cron job [%s] agent did not call any tools. "
+                "The message was likely NOT delivered to the user.",
+                cron_job_label,
             )
 
+        tools_str = (
+            f"tools called: [{', '.join(called_tool_names)}]. "
+            if called_tool_names
+            else "no tools called. "
+        )
+        # 根据 llm_resp 判断状态：无响应、正常完成、错误终止
+        if not llm_resp:
+            status = "task ended with no LLM response."
+        elif llm_resp.role == "assistant":
+            status = "task completed successfully."
+        else:
+            status = f"task ended with error: {llm_resp.completion_text}"
+        summary_note = (
+            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: "
+            f"{cron_meta.get('description', '')} "
+            f"triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
+            f"{tools_str}"
+            f"{status}"
+        )
         await persist_agent_history(
             self.ctx.conversation_manager,
             event=cron_event,
             req=req,
             summary_note=summary_note,
         )
-        if not llm_resp:
-            logger.warning("Cron job agent got no response")
-            return
 
 
 __all__ = ["CronJobManager"]

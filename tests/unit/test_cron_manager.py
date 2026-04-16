@@ -152,7 +152,9 @@ class TestAddBasicJob:
         assert sample_cron_job.job_id in cron_manager._basic_handlers
 
     @pytest.mark.asyncio
-    async def test_add_basic_job_with_timezone(self, cron_manager, mock_db, sample_cron_job):
+    async def test_add_basic_job_with_timezone(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
         """Test adding a basic job with timezone."""
         mock_db.create_cron_job.return_value = sample_cron_job
 
@@ -189,7 +191,9 @@ class TestAddActiveJob:
         mock_db.create_cron_job.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_add_active_job_run_once(self, cron_manager, mock_db, sample_cron_job):
+    async def test_add_active_job_run_once(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
         """Test adding a run-once active job."""
         sample_cron_job.job_type = "active_agent"
         sample_cron_job.run_once = True
@@ -291,7 +295,9 @@ class TestSyncFromDb:
         mock_db.list_cron_jobs.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_sync_from_db_skips_disabled(self, cron_manager, mock_db, sample_cron_job):
+    async def test_sync_from_db_skips_disabled(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
         """Test that sync skips disabled jobs."""
         sample_cron_job.enabled = False
         mock_db.list_cron_jobs.return_value = [sample_cron_job]
@@ -303,7 +309,9 @@ class TestSyncFromDb:
         mock_schedule.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sync_from_db_skips_non_persistent(self, cron_manager, mock_db, sample_cron_job):
+    async def test_sync_from_db_skips_non_persistent(
+        self, cron_manager, mock_db, sample_cron_job
+    ):
         """Test that sync skips non-persistent jobs."""
         sample_cron_job.persistent = False
         mock_db.list_cron_jobs.return_value = [sample_cron_job]
@@ -361,7 +369,9 @@ class TestScheduleJob:
     """Tests for _schedule_job method."""
 
     @pytest.mark.asyncio
-    async def test_schedule_job_basic(self, cron_manager, sample_cron_job, mock_context):
+    async def test_schedule_job_basic(
+        self, cron_manager, sample_cron_job, mock_context
+    ):
         """Test scheduling a basic job."""
         mock_db = cron_manager.db
         mock_db.list_cron_jobs = AsyncMock(return_value=[])
@@ -373,7 +383,9 @@ class TestScheduleJob:
         assert cron_manager.scheduler.get_job("test-job-id") is not None
 
     @pytest.mark.asyncio
-    async def test_schedule_job_with_timezone(self, cron_manager, sample_cron_job, mock_context):
+    async def test_schedule_job_with_timezone(
+        self, cron_manager, sample_cron_job, mock_context
+    ):
         """Test scheduling a job with timezone."""
         sample_cron_job.timezone = "America/New_York"
         mock_db = cron_manager.db
@@ -385,7 +397,9 @@ class TestScheduleJob:
         assert cron_manager.scheduler.get_job("test-job-id") is not None
 
     @pytest.mark.asyncio
-    async def test_schedule_job_invalid_timezone(self, cron_manager, sample_cron_job, mock_context):
+    async def test_schedule_job_invalid_timezone(
+        self, cron_manager, sample_cron_job, mock_context
+    ):
         """Test scheduling a job with invalid timezone."""
         sample_cron_job.timezone = "Invalid/Timezone"
         mock_db = cron_manager.db
@@ -485,7 +499,9 @@ class TestGetNextRunTime:
     """Tests for _get_next_run_time method."""
 
     @pytest.mark.asyncio
-    async def test_get_next_run_time_existing_job(self, cron_manager, sample_cron_job, mock_context):
+    async def test_get_next_run_time_existing_job(
+        self, cron_manager, sample_cron_job, mock_context
+    ):
         """Test getting next run time for existing job."""
         mock_db = cron_manager.db
         mock_db.list_cron_jobs = AsyncMock(return_value=[])
@@ -502,3 +518,374 @@ class TestGetNextRunTime:
         next_run = cron_manager._get_next_run_time("non-existent")
 
         assert next_run is None
+
+
+# ============================================================
+# TestWokeMainAgent —— 验证 _woke_main_agent 的核心行为
+# ============================================================
+
+
+def _make_mock_message(role: str):
+    """创建带 role 属性的简单 mock 消息对象。"""
+    m = MagicMock()
+    m.role = role
+    return m
+
+
+def _make_runner_mock(messages: list, final_resp=None):
+    """构造模拟 AgentRunner，包含 run_context.messages 和 get_final_llm_resp。"""
+    runner = MagicMock()
+    run_ctx = MagicMock()
+    run_ctx.messages = messages
+    runner.run_context = run_ctx
+    runner.get_final_llm_resp = MagicMock(return_value=final_resp)
+
+    async def _step_until_done(_max):
+        return
+        yield  # noqa: unreachable — makes this an async generator
+
+    runner.step_until_done = _step_until_done
+    return runner
+
+
+class TestWokeMainAgentPrompt:
+    """验证 _woke_main_agent 构造 req.prompt 与 system_prompt 时的正确性。"""
+
+    @pytest.mark.asyncio
+    async def test_prompt_contains_tool_call_instruction(
+        self, cron_manager, mock_context
+    ):
+        """req.prompt 必须明确要求调用 send_message_to_user，而不是输出文本。"""
+        cron_manager.ctx = mock_context
+
+        captured_req = {}
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            captured_req["req"] = req
+            # 返回一个带有空 runner 的 result mock
+            result = MagicMock()
+            result.agent_runner = _make_runner_mock(
+                messages=[],
+                final_resp=MagicMock(role="assistant", completion_text=""),
+            )
+            return result
+
+        mock_conv = MagicMock()
+        mock_conv.history = "[]"
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent", fake_build_main_agent
+            ),
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=mock_conv),
+            ),
+            patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
+        ):
+            await cron_manager._woke_main_agent(
+                message="发送早安问候",
+                session_str="QQ:FriendMessage:123456",
+                extras={
+                    "cron_job": {"id": "test-id", "name": "morning"},
+                    "cron_payload": {},
+                },
+            )
+
+        req = captured_req.get("req")
+        assert req is not None, "build_main_agent 未被调用"
+        # prompt 必须明确说明文本不可见、必须用工具
+        assert "send_message_to_user" in req.prompt
+        assert "NOT visible" in req.prompt or "not visible" in req.prompt.lower()
+        assert "MUST" in req.prompt or "must" in req.prompt.lower()
+
+    @pytest.mark.asyncio
+    async def test_system_prompt_contains_visibility_warning(
+        self, cron_manager, mock_context
+    ):
+        """system_prompt 中的 PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT 必须包含可见性警告。"""
+        from astrbot.core.astr_main_agent_resources import (
+            PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
+        )
+
+        # 验证 prompt 模板本身的关键内容
+        rendered = PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(cron_job="{}")
+        assert "NOT visible" in rendered
+        assert "send_message_to_user" in rendered
+        assert "MUST" in rendered
+        # CRON JOB CONTEXT 标题要有换行与前文分隔
+        assert "\n# CRON JOB CONTEXT" in rendered
+
+    def test_system_prompt_template_formatting(self):
+        """确保 PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT 中各序号段落不会拼接在一起。"""
+        from astrbot.core.astr_main_agent_resources import (
+            PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
+        )
+
+        rendered = PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(cron_job="{}")
+        # "You are given:" 后应有换行，不能直接跟 "1."
+        assert "You are given:\n1." in rendered, (
+            "'You are given:' 后应紧跟换行再接 '1.'"
+        )
+
+
+class TestWokeMainAgentHistoryPersistence:
+    """验证 _woke_main_agent 仅在工具被调用时才写入历史记录。"""
+
+    @pytest.mark.asyncio
+    async def test_history_persisted_when_tool_called(self, cron_manager, mock_context):
+        """agent 调用了工具时，应写入对话历史。"""
+        cron_manager.ctx = mock_context
+        persist_mock = AsyncMock()
+
+        messages = [
+            _make_mock_message("system"),
+            _make_mock_message("user"),
+            _make_mock_message("assistant"),
+            _make_mock_message("tool"),  # 工具被调用
+        ]
+        final_resp = MagicMock()
+        final_resp.role = "assistant"
+        final_resp.completion_text = "任务完成"
+
+        mock_conv = MagicMock()
+        mock_conv.history = "[]"
+
+        async def fake_build(*_, **__):
+            result = MagicMock()
+            result.agent_runner = _make_runner_mock(
+                messages=messages, final_resp=final_resp
+            )
+            return result
+
+        with (
+            patch("astrbot.core.astr_main_agent.build_main_agent", fake_build),
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=mock_conv),
+            ),
+            patch("astrbot.core.cron.manager.persist_agent_history", persist_mock),
+        ):
+            await cron_manager._woke_main_agent(
+                message="发送消息",
+                session_str="QQ:FriendMessage:123456",
+                extras={"cron_job": {"id": "j1", "name": "test"}, "cron_payload": {}},
+            )
+
+        persist_mock.assert_awaited_once()
+        # summary_note 不应包含 LLM 原始文本（避免误导）
+        call_kwargs = persist_mock.call_args.kwargs
+        assert "task completed successfully" in call_kwargs["summary_note"]
+
+    @pytest.mark.asyncio
+    async def test_history_persisted_when_tool_called_with_error(
+        self, cron_manager, mock_context
+    ):
+        """agent 调用了工具但 llm_resp 为错误角色时，历史仍写入，summary 包含错误信息。"""
+        cron_manager.ctx = mock_context
+        persist_mock = AsyncMock()
+
+        # assistant 消息含工具调用
+        assistant_msg = _make_mock_message("assistant")
+        assistant_msg.tool_calls = [{"function": {"name": "send_message_to_user"}}]
+        tool_msg = _make_mock_message("tool")
+        tool_msg.tool_calls = None
+        messages = [assistant_msg, tool_msg]
+
+        error_text = "provider timeout"
+        final_resp = MagicMock()
+        final_resp.role = "err"
+        final_resp.completion_text = error_text
+
+        mock_conv = MagicMock()
+        mock_conv.history = "[]"
+
+        async def fake_build(*_, **__):
+            result = MagicMock()
+            result.agent_runner = _make_runner_mock(
+                messages=messages, final_resp=final_resp
+            )
+            return result
+
+        with (
+            patch("astrbot.core.astr_main_agent.build_main_agent", fake_build),
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=mock_conv),
+            ),
+            patch("astrbot.core.cron.manager.persist_agent_history", persist_mock),
+        ):
+            await cron_manager._woke_main_agent(
+                message="发送消息",
+                session_str="QQ:FriendMessage:123456",
+                extras={"cron_job": {"id": "j1e", "name": "test"}, "cron_payload": {}},
+            )
+
+        persist_mock.assert_awaited_once()
+        call_kwargs = persist_mock.call_args.kwargs
+        summary = call_kwargs["summary_note"]
+        assert "task ended with error" in summary
+        assert error_text in summary
+
+    @pytest.mark.asyncio
+    async def test_history_persisted_even_when_no_tool_called(
+        self, cron_manager, mock_context
+    ):
+        """agent 未调用任何工具的时候，历史记录应写入，summary 中包含 'no tools called'。"""
+        cron_manager.ctx = mock_context
+        persist_mock = AsyncMock()
+
+        # 只有 system / user / assistant，没有 tool 消息
+        messages = [
+            _make_mock_message("system"),
+            _make_mock_message("user"),
+            _make_mock_message("assistant"),
+        ]
+        final_resp = MagicMock()
+        final_resp.role = "assistant"
+        final_resp.completion_text = "我已经完成了（但其实没发消息）"
+
+        mock_conv = MagicMock()
+        mock_conv.history = "[]"
+
+        async def fake_build(*_, **__):
+            result = MagicMock()
+            result.agent_runner = _make_runner_mock(
+                messages=messages, final_resp=final_resp
+            )
+            return result
+
+        with (
+            patch("astrbot.core.astr_main_agent.build_main_agent", fake_build),
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=mock_conv),
+            ),
+            patch("astrbot.core.cron.manager.persist_agent_history", persist_mock),
+        ):
+            await cron_manager._woke_main_agent(
+                message="发送消息",
+                session_str="QQ:FriendMessage:123456",
+                extras={"cron_job": {"id": "j2", "name": "test"}, "cron_payload": {}},
+            )
+
+        persist_mock.assert_awaited_once()
+        call_kwargs = persist_mock.call_args.kwargs
+        assert "no tools called" in call_kwargs["summary_note"]
+
+    @pytest.mark.asyncio
+    async def test_history_persisted_when_no_llm_resp(self, cron_manager, mock_context):
+        """agent 无 LLM 响应时，仍写入历史（含 tools_str），方便后续追问和诊断。"""
+        cron_manager.ctx = mock_context
+        persist_mock = AsyncMock()
+
+        messages = [_make_mock_message("tool")]  # 有工具消息，但无最终 LLM 响应
+        mock_conv = MagicMock()
+        mock_conv.history = "[]"
+
+        async def fake_build(*_, **__):
+            result = MagicMock()
+            result.agent_runner = _make_runner_mock(messages=messages, final_resp=None)
+            return result
+
+        with (
+            patch("astrbot.core.astr_main_agent.build_main_agent", fake_build),
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=mock_conv),
+            ),
+            patch("astrbot.core.cron.manager.persist_agent_history", persist_mock),
+        ):
+            # 不应抛异常
+            await cron_manager._woke_main_agent(
+                message="发送消息",
+                session_str="QQ:FriendMessage:123456",
+                extras={"cron_job": {"id": "j3", "name": "test"}, "cron_payload": {}},
+            )
+
+        # 无 LLM 响应时也应写入历史
+        persist_mock.assert_awaited_once()
+        assert "no LLM response" in persist_mock.call_args.kwargs.get(
+            "summary_note", ""
+        )
+
+    @pytest.mark.asyncio
+    async def test_warning_logged_when_no_tool_called(self, cron_manager, mock_context):
+        """agent 未调用工具时，应记录 warning 日志提示消息可能未送达。"""
+        cron_manager.ctx = mock_context
+
+        messages = [_make_mock_message("assistant")]
+        final_resp = MagicMock()
+        final_resp.role = "assistant"
+        final_resp.completion_text = "只有文本"
+
+        mock_conv = MagicMock()
+        mock_conv.history = "[]"
+
+        async def fake_build(*_, **__):
+            result = MagicMock()
+            result.agent_runner = _make_runner_mock(
+                messages=messages, final_resp=final_resp
+            )
+            return result
+
+        with (
+            patch("astrbot.core.astr_main_agent.build_main_agent", fake_build),
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=mock_conv),
+            ),
+            patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
+            patch("astrbot.core.cron.manager.logger") as mock_logger,
+        ):
+            await cron_manager._woke_main_agent(
+                message="发送消息",
+                session_str="QQ:FriendMessage:123456",
+                extras={"cron_job": {"id": "j4", "name": "test"}, "cron_payload": {}},
+            )
+
+        # 必须有相关警告
+        warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
+        assert any("tool" in w.lower() or "NOT" in w for w in warning_calls), (
+            "未找到关于工具未被调用的 warning 日志"
+        )
+
+    @pytest.mark.asyncio
+    async def test_send_message_to_user_tool_in_func_tool(
+        self, cron_manager, mock_context
+    ):
+        """req.func_tool 必须包含 send_message_to_user 工具。"""
+        cron_manager.ctx = mock_context
+        captured_req = {}
+
+        mock_conv = MagicMock()
+        mock_conv.history = "[]"
+
+        async def fake_build(*, event, plugin_context, config, req):
+            captured_req["req"] = req
+            result = MagicMock()
+            result.agent_runner = _make_runner_mock(
+                messages=[],
+                final_resp=MagicMock(role="assistant", completion_text=""),
+            )
+            return result
+
+        with (
+            patch("astrbot.core.astr_main_agent.build_main_agent", fake_build),
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=mock_conv),
+            ),
+            patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
+        ):
+            await cron_manager._woke_main_agent(
+                message="发送消息",
+                session_str="QQ:FriendMessage:123456",
+                extras={"cron_job": {"id": "j5", "name": "test"}, "cron_payload": {}},
+            )
+
+        req = captured_req.get("req")
+        assert req is not None
+        assert req.func_tool is not None
+        tool_names = [t.name for t in req.func_tool.tools]
+        assert "send_message_to_user" in tool_names
