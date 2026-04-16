@@ -138,7 +138,7 @@ yay -S astrbot-git
 
 **更多部署方式**
 
-若你需要面板化或更高自訂程度的部署，可參考 [寶塔面板](https://astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 應用商店安裝）、[1Panel](https://astrbot.app/deploy/astrbot/1panel.html)（1Panel 應用商店安裝）、[CasaOS](https://astrbot.app/deploy/astrbot/casaos.html)（NAS / 家用伺服器可視化部署）與 [手動部署](https://astrbot.app/deploy/astrbot/cli.html)（基於原始碼與 `uv` 的完整自訂安裝）。
+若你需要面板化或更高自訂程度的部署，可參考 [寶塔面板](https://docs.astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 應用商店安裝）、[1Panel](https://docs.astrbot.app/deploy/astrbot/1panel.html)（1Panel 應用商店安裝）、[CasaOS](https://docs.astrbot.app/deploy/astrbot/casaos.html)（NAS / 家用伺服器可視化部署）與 [手動部署](https://docs.astrbot.app/deploy/astrbot/cli.html)（基於原始碼與 `uv` 的完整自訂安裝）。
 
 ## 支援的訊息平台
 

@@ -138,7 +138,7 @@ yay -S astrbot-git
 
 **Autres méthodes de déploiement**
 
-Si vous avez besoin d'une gestion par panneau ou d'une personnalisation plus poussée, consultez [Déploiement BT-Panel](https://astrbot.app/deploy/astrbot/btpanel.html) pour une installation via BT Panel, [Déploiement 1Panel](https://astrbot.app/deploy/astrbot/1panel.html) pour le marketplace 1Panel, [Déploiement CasaOS](https://astrbot.app/deploy/astrbot/casaos.html) pour un déploiement visuel sur NAS/serveur domestique, et [Déploiement manuel](https://astrbot.app/deploy/astrbot/cli.html) pour une installation complète depuis les sources avec `uv`.
+Si vous avez besoin d'une gestion par panneau ou d'une personnalisation plus poussée, consultez [Déploiement BT-Panel](https://docs.astrbot.app/deploy/astrbot/btpanel.html) pour une installation via BT Panel, [Déploiement 1Panel](https://docs.astrbot.app/deploy/astrbot/1panel.html) pour le marketplace 1Panel, [Déploiement CasaOS](https://docs.astrbot.app/deploy/astrbot/casaos.html) pour un déploiement visuel sur NAS/serveur domestique, et [Déploiement manuel](https://docs.astrbot.app/deploy/astrbot/cli.html) pour une installation complète depuis les sources avec `uv`.
 
 ## Plateformes de messagerie prises en charge
 
