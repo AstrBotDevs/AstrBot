@@ -9,15 +9,13 @@ do not place styles here
 @use "./variables" as vars;
 @use 'vuetify/lib/styles/tools/functions';
 
-$border-radius-root: 8px;
-
 $rounded: () !default;
 $typography: () !default;
 
 @use "vuetify/settings" with (
   $color-pack: false,
   $font-size-root: 1rem,
-  $border-radius-root: $border-radius-root,
+  $border-radius-root: vars.$border-radius-root,
   $body-font-family: var(--v-font-body, vars.$cjk-sans-fallback, sans-serif),
   $heading-font-family:
     var(--v-font-heading, vars.$cjk-sans-fallback, sans-serif),
@@ -25,14 +23,14 @@ $typography: () !default;
     functions.map-deep-merge(
       (
         0: 0,
-        "sm": $border-radius-root * 0.5,
-        null: $border-radius-root,
-        "md": $border-radius-root * 1,
-        "lg": $border-radius-root * 2,
-        "xl": $border-radius-root * 6,
+        "sm": vars.$border-radius-root * 0.5,
+        null: vars.$border-radius-root,
+        "md": vars.$border-radius-root * 1,
+        "lg": vars.$border-radius-root * 2,
+        "xl": vars.$border-radius-root * 6,
         "pill": 9999px,
         "circle": 50%,
-        "shaped": $border-radius-root * 6 0,
+        "shaped": vars.$border-radius-root * 6 0,
       ),
       $rounded
     ),
