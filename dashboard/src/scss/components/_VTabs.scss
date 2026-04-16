@@ -1,7 +1,12 @@
+
+
+@use '../variables' as vars;
+
+
 .theme-tab {
   &.v-tabs {
     .v-tab {
-      border-radius: $border-radius-root !important;
+      border-radius: vars.$border-radius-root !important;
       min-width: auto !important;
       &.v-slide-group-item--active {
         background: rgb(var(--v-theme-primary));

@@ -30,7 +30,10 @@ export default defineConfig(({ command }) => ({
       }
     }),
     vuetify({
-      autoImport: true
+      autoImport: true,
+      styles: {
+        configFile: './src/scss/_settings.scss',
+      }
     }),
     webfontDl()
   ],

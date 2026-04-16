@@ -1,21 +1,33 @@
-@import './variables';
-@import 'vuetify/styles/main.sass';
-@import './override';
-@import './layout/container';
-@import './layout/sidebar';
+/*
+SCSS main entrypoint
+For @use all modules, and some style
+*/
+@use './settings';
+@use 'vuetify';
+@use './variables' as vars;
+@use './override';
 
-@import './components/VButtons';
-@import './components/VCard';
-@import './components/VField';
-@import './components/VInput';
-@import './components/VNavigationDrawer';
-@import './components/VShadow';
-@import './components/VTextField';
-@import './components/VTabs';
-@import './components/VScrollbar';
-@import './components/CodeBlockDark';
+@use './layout/container';
+@use './layout/sidebar';
 
-@import './pages/dashboards';
+@use './components/VButtons';
+@use './components/VCard';
+@use './components/VField';
+@use './components/VInput';
+@use './components/VNavigationDrawer';
+@use './components/VShadow';
+@use './components/VTextField';
+@use './components/VTabs';
+@use './components/VScrollbar';
+@use './components/CodeBlockDark';
+
+@use './pages/dashboards';
+
+:root {
+  --astrbot-font-cjk-sans: #{vars.$cjk-sans-fallback};
+  --astrbot-font-cjk-mono: #{vars.$cjk-mono-fallback};
+  --astrbot-code-color: #{vars.$code-text-color};
+}
 
 html, body {
   overscroll-behavior-y: none;

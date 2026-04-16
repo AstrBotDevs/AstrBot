@@ -1,3 +1,5 @@
+@use '../variables' as vars;
+
 html {
   overflow-y: auto;
 }
@@ -20,7 +22,7 @@ html {
 .page-wrapper {
   min-height: calc(100vh - 100px);
   padding: 8px;
-  // border-radius: $border-radius-root;
+  // border-radius: vars.$border-radius-root;
   background: rgb(var(--v-theme-containerBg));
 }
 $sizes: (
@@ -80,15 +82,15 @@ $sizes: (
 
 body {
   .Poppins {
-    font-family: 'Poppins', $cjk-sans-fallback, sans-serif !important;
+    font-family: 'Poppins', vars.$cjk-sans-fallback, sans-serif !important;
   }
 
   .Inter {
-    font-family: 'Inter', $cjk-sans-fallback, sans-serif !important;
+    font-family: 'Inter', vars.$cjk-sans-fallback, sans-serif !important;
   }
 
   .Outfit {
-    font-family: 'Outfit', $cjk-sans-fallback, sans-serif !important;
+    font-family: 'Outfit', vars.$cjk-sans-fallback, sans-serif !important;
   }
 }
 

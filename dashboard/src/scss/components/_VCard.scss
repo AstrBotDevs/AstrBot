@@ -1,14 +1,5 @@
 // Outline Card
-.v-card--variant-outlined {
-  border-color: rgba(var(--v-theme-borderLight), 0.36);
-  .v-divider {
-    border-color: rgba(var(--v-theme-borderLight), 0.36);
-  }
-}
-
-.v-card-text {
-  padding: $card-text-spacer;
-}
+@use "../variables" as vars;
 
 .v-card {
   width: 100%;
@@ -22,5 +13,16 @@
 }
 
 .v-card-item {
-  padding: $card-item-spacer-xy;
+  padding: vars.$card-item-spacer-xy;
+}
+
+.v-card-text {
+  padding: vars.$card-text-spacer;
+}
+
+.v-card--variant-outlined {
+  border-color: rgba(var(--v-theme-borderLight), 0.36);
+  .v-divider {
+    border-color: rgba(var(--v-theme-borderLight), 0.36);
+  }
 }
