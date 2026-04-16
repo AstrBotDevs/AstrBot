@@ -174,9 +174,6 @@ async def test_select_parser_supports_epub():
 
 @pytest.mark.asyncio
 async def test_epub_parser_reads_spine_order_as_text():
-    pytest.importorskip("bs4")
-    pytest.importorskip("ebooklib")
-
     result = await EpubParser().parse(_make_epub_bytes(), "book.epub")
 
     assert result.media == []
@@ -189,9 +186,6 @@ async def test_epub_parser_reads_spine_order_as_text():
 
 @pytest.mark.asyncio
 async def test_epub_parser_preserves_generic_container_text():
-    pytest.importorskip("bs4")
-    pytest.importorskip("ebooklib")
-
     result = await EpubParser().parse(
         _make_epub_bytes_with_generic_content(),
         "book.epub",
