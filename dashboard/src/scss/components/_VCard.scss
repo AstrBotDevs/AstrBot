@@ -1,3 +1,5 @@
+@use '../variables' as *;
+
 // Outline Card
 .v-card--variant-outlined {
   border-color: rgba(var(--v-theme-borderLight), 0.36);
