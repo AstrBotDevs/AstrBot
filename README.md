@@ -86,7 +86,7 @@ astrbot run
 > AstrBot requires Python 3.12 or later. The `--python 3.12` option ensures that `uv` creates the tool environment with Python 3.12.
 
 > [!NOTE]
-> For macOS user: due to macOS security checks, the first run of the `astrbot` command may take longer (about 10-20s).
+> For macOS users: due to macOS security checks, the first run of the `astrbot` command may take longer (about 10-20s).
 
 Update `astrbot`:
 
