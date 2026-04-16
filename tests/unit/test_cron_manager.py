@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from astrbot.core.cron.manager import CronJobManager
+from astrbot.core.cron.manager import CronJobManager, CronJobSchedulingError
 from astrbot.core.db.po import CronJob
 
 
@@ -190,24 +190,25 @@ class TestAddActiveJob:
 
     @pytest.mark.asyncio
     async def test_add_active_job_run_once(self, cron_manager, mock_db, sample_cron_job):
-        """Test adding a run-once active job."""
+        """Test adding a run-once active job with an invalid returned job."""
         sample_cron_job.job_type = "active_agent"
         sample_cron_job.run_once = True
         mock_db.create_cron_job.return_value = sample_cron_job
 
         run_at = datetime.now(timezone.utc) + timedelta(days=30)
 
-        result = await cron_manager.add_active_job(
-            name="Test Run Once Job",
-            cron_expression=None,
-            payload={"session": "test:group:123"},
-            run_once=True,
-            run_at=run_at,
-        )
+        with pytest.raises(CronJobSchedulingError, match="Invalid isoformat string"):
+            await cron_manager.add_active_job(
+                name="Test Run Once Job",
+                cron_expression=None,
+                payload={"session": "test:group:123"},
+                run_once=True,
+                run_at=run_at,
+            )
 
-        assert result == sample_cron_job
         call_kwargs = mock_db.create_cron_job.call_args.kwargs
         assert call_kwargs["run_once"] is True
+        assert call_kwargs["payload"]["run_at"] == run_at.isoformat()
 
 
 class TestUpdateJob:
