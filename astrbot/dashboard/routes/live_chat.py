@@ -474,12 +474,24 @@ class LiveChatRoute(Route):
             )
 
             message_parts_for_storage = strip_message_parts_path_fields(message_parts)
-            await self.platform_history_mgr.insert(
+            saved_user_record = await self.platform_history_mgr.insert(
                 platform_id="webchat",
                 user_id=session_id,
                 content={"type": "user", "message": message_parts_for_storage},
                 sender_id=session.username,
                 sender_name=session.username,
+            )
+            await self._send_chat_payload(
+                session,
+                {
+                    "ct": "chat",
+                    "type": "message_saved",
+                    "data": {
+                        "id": saved_user_record.id,
+                        "created_at": to_utc_isoformat(saved_user_record.created_at),
+                        "role": "user",
+                    },
+                },
             )
 
             accumulated_parts = []
@@ -630,6 +642,7 @@ class LiveChatRoute(Route):
                                     "created_at": to_utc_isoformat(
                                         saved_record.created_at
                                     ),
+                                    "role": "bot",
                                 },
                             },
                         )

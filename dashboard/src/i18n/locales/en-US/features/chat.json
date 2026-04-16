@@ -17,7 +17,10 @@
     "assistant": "Assistant",
     "system": "System",
     "error": "Error Message",
-    "loading": "Thinking..."
+    "loading": "Thinking...",
+    "editTitle": "Edit Message",
+    "contentLabel": "Message Content",
+    "reasoningLabel": "Reasoning"
   },
   "voice": {
     "start": "Start Recording",
@@ -48,6 +51,8 @@
     "fullscreen": "Fullscreen Mode",
     "exitFullscreen": "Exit Fullscreen",
     "reply": "Reply",
+    "branchChat": "Add Branch",
+    "regenerate": "Regenerate",
     "providerConfig": "AI Configuration",
     "toolsUsed": "Tool Used",
     "toolCallUsed": "Used {name} tool",
@@ -116,6 +121,13 @@
     "description": "Description (Optional)",
     "noSessions": "No conversations in this project",
     "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
+  },
+  "branch": {
+    "suffix": "- Branch",
+    "regenerateSuffix": "- Regenerate",
+    "created": "Branch",
+    "regenerated": "Regenerated",
+    "fromSession": "{type} from {name}"
   },
   "time": {
     "today": "Today",

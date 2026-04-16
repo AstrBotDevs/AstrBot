@@ -65,6 +65,7 @@ interface SendMessageStreamOptions {
   enableStreaming?: boolean;
   selectedProvider?: string;
   selectedModel?: string;
+  userRecord: ChatRecord;
   botRecord: ChatRecord;
 }
 
@@ -242,6 +243,7 @@ export function useMessages(options: UseMessagesOptions) {
     enableStreaming = true,
     selectedProvider = "",
     selectedModel = "",
+    userRecord,
     botRecord,
   }: SendMessageStreamOptions) {
     if (transport === "websocket") {
@@ -249,6 +251,7 @@ export function useMessages(options: UseMessagesOptions) {
         sessionId,
         messageId,
         parts,
+        userRecord,
         botRecord,
         enableStreaming,
         selectedProvider,
@@ -260,6 +263,7 @@ export function useMessages(options: UseMessagesOptions) {
       sessionId,
       messageId,
       parts,
+      userRecord,
       botRecord,
       enableStreaming,
       selectedProvider,
@@ -270,6 +274,43 @@ export function useMessages(options: UseMessagesOptions) {
   async function stopSession(sessionId: string) {
     if (!sessionId) return;
     await axios.post("/api/chat/stop", { session_id: sessionId });
+  }
+
+  async function updateMessage(
+    sessionId: string,
+    messageId: string | number,
+    content: ChatContent,
+  ) {
+    const response = await axios.post("/api/chat/update_message", {
+      session_id: sessionId,
+      message_id: messageId,
+      content,
+    });
+    const updatedRecord = normalizeHistoryRecord(response.data?.data || {});
+    replaceMessageRecord(sessionId, updatedRecord);
+    return updatedRecord;
+  }
+
+  function removeMessages(sessionId: string, messageIds: Array<string | number>) {
+    if (!sessionId || messageIds.length === 0) return;
+    const sessionMessages = messagesBySession[sessionId];
+    if (!sessionMessages) return;
+    const messageIdSet = new Set(messageIds.map((id) => String(id)));
+    messagesBySession[sessionId] = sessionMessages.filter(
+      (record) => !messageIdSet.has(String(record.id)),
+    );
+  }
+
+  function replaceMessageRecord(sessionId: string, nextRecord: ChatRecord) {
+    if (!sessionId) return;
+    const sessionMessages = messagesBySession[sessionId];
+    if (!sessionMessages) return;
+    const messageIndex = sessionMessages.findIndex(
+      (record) => String(record.id) === String(nextRecord.id),
+    );
+    if (messageIndex >= 0) {
+      sessionMessages[messageIndex] = nextRecord;
+    }
   }
 
   function cleanupConnections() {
@@ -311,6 +352,7 @@ export function useMessages(options: UseMessagesOptions) {
     sessionId: string,
     messageId: string,
     parts: MessagePart[],
+    userRecord: ChatRecord,
     botRecord: ChatRecord,
     enableStreaming: boolean,
     selectedProvider: string,
@@ -344,7 +386,7 @@ export function useMessages(options: UseMessagesOptions) {
           throw new Error(`SSE connection failed: ${response.status}`);
         }
         await readSseStream(response.body, (payload) => {
-          processStreamPayload(botRecord, payload);
+          processStreamPayload(userRecord, botRecord, payload);
           options.onStreamUpdate?.(sessionId);
         });
       })
@@ -363,6 +405,7 @@ export function useMessages(options: UseMessagesOptions) {
     sessionId: string,
     messageId: string,
     parts: MessagePart[],
+    userRecord: ChatRecord,
     botRecord: ChatRecord,
     enableStreaming: boolean,
     selectedProvider: string,
@@ -398,7 +441,7 @@ export function useMessages(options: UseMessagesOptions) {
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        processStreamPayload(botRecord, payload);
+        processStreamPayload(userRecord, botRecord, payload);
         options.onStreamUpdate?.(sessionId);
         if (payload.type === "end" || payload.t === "end") {
           ws.close();
@@ -416,7 +459,11 @@ export function useMessages(options: UseMessagesOptions) {
     };
   }
 
-  function processStreamPayload(botRecord: ChatRecord, payload: any) {
+  function processStreamPayload(
+    userRecord: ChatRecord,
+    botRecord: ChatRecord,
+    payload: any,
+  ) {
     const normalized =
       payload?.ct === "chat"
         ? { ...payload, type: payload.type || payload.t }
@@ -427,11 +474,12 @@ export function useMessages(options: UseMessagesOptions) {
 
     if (msgType === "session_id" || msgType === "session_bound") return;
     if (msgType === "message_saved") {
-      markMessageStarted(botRecord);
-      botRecord.id = data?.id || botRecord.id;
-      botRecord.created_at = data?.created_at || botRecord.created_at;
+      const targetRecord = data?.role === "user" ? userRecord : botRecord;
+      markMessageStarted(targetRecord);
+      targetRecord.id = data?.id || targetRecord.id;
+      targetRecord.created_at = data?.created_at || targetRecord.created_at;
       if (data?.refs) {
-        messageContent(botRecord).refs = data.refs;
+        messageContent(targetRecord).refs = data.refs;
       }
       return;
     }
@@ -510,6 +558,8 @@ export function useMessages(options: UseMessagesOptions) {
     messageContent,
     messageParts,
     loadSessionMessages,
+    updateMessage,
+    removeMessages,
     createLocalExchange,
     sendMessageStream,
     stopSession,

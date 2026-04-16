@@ -11,6 +11,38 @@ export interface Session {
     creator: string;
     is_group: number;
     created_at: string;
+    branch_meta?: {
+        type: "branch" | "regenerate" | string;
+        source_session_id: string;
+        source_display_name: string;
+        source_message_id?: number;
+    } | null;
+}
+
+export interface BranchSessionResponse {
+    session_id: string;
+    display_name: string | null;
+    platform_id: string;
+    created_at: string;
+    updated_at: string;
+    branch_meta?: Session["branch_meta"];
+    project?: {
+        project_id: string;
+        title: string;
+        emoji?: string;
+    };
+}
+
+export interface RegenerateMessageResponse {
+    session_id: string;
+    removed_message_ids: Array<string | number>;
+    replay_message: {
+        content: {
+            type: "user";
+            message: Array<Record<string, unknown>>;
+        };
+        source_message_id: number;
+    };
 }
 
 export function useSessions(chatboxMode: boolean = false) {
@@ -92,6 +124,37 @@ export function useSessions(chatboxMode: boolean = false) {
             selectedSessions.value = [];
         } catch (err) {
             console.error(err);
+        }
+    }
+
+    async function branchSession(sessionId: string, displayName?: string): Promise<BranchSessionResponse> {
+        try {
+            const response = await axios.post('/api/chat/branch_session', {
+                session_id: sessionId,
+                display_name: displayName
+            });
+            await getSessions();
+            return response.data.data;
+        } catch (err) {
+            console.error(err);
+            throw err;
+        }
+    }
+
+    async function regenerateMessage(
+        sessionId: string,
+        messageId: string | number
+    ): Promise<RegenerateMessageResponse> {
+        try {
+            const response = await axios.post('/api/chat/regenerate_message', {
+                session_id: sessionId,
+                message_id: messageId
+            });
+            await getSessions();
+            return response.data.data;
+        } catch (err) {
+            console.error(err);
+            throw err;
         }
     }
 
@@ -220,6 +283,8 @@ export function useSessions(chatboxMode: boolean = false) {
         getSessions,
         newSession,
         deleteSession,
+        branchSession,
+        regenerateMessage,
         batchDeleteSessions,
         showEditTitleDialog,
         saveTitle,

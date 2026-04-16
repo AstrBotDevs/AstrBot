@@ -238,6 +238,23 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def update_platform_message_history(
+        self,
+        message_id: int,
+        content: dict,
+    ) -> None:
+        """Update a platform message history record."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_platform_message_histories(
+        self,
+        message_ids: list[int],
+    ) -> None:
+        """Delete platform message history records by IDs."""
+        ...
+
+    @abc.abstractmethod
     async def insert_attachment(
         self,
         path: str,

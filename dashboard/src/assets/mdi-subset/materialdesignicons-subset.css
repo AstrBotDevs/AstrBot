@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 247 icons */
+/* Auto-generated MDI subset – 248 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -862,6 +862,10 @@
 
 .mdi-source-branch::before {
   content: "\F062C";
+}
+
+.mdi-source-branch-plus::before {
+  content: "\F14CA";
 }
 
 .mdi-square-edit-outline::before {

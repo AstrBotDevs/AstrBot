@@ -73,9 +73,12 @@
           @keydown.enter="selectSession(session.session_id)"
           @keydown.space.prevent="selectSession(session.session_id)"
         >
-          <span v-if="!isSidebarCollapsed" class="session-title">{{
-            sessionTitle(session)
-          }}</span>
+          <div v-if="!isSidebarCollapsed" class="session-text">
+            <span class="session-title">{{ sessionTitle(session) }}</span>
+            <span v-if="session.branch_meta" class="session-branch-text">
+              {{ branchSummary(session) }}
+            </span>
+          </div>
           <div class="session-actions" @click.stop>
             <v-btn
               icon="mdi-pencil-outline"
@@ -84,6 +87,14 @@
               class="session-action-btn"
               :title="tm('conversation.editDisplayName')"
               @click="editSidebarSessionTitle(session)"
+            />
+            <v-btn
+              icon="mdi-source-branch-plus"
+              size="x-small"
+              variant="text"
+              class="session-action-btn"
+              :title="tm('actions.branchChat')"
+              @click="branchSidebarSession(session)"
             />
             <v-btn
               icon="mdi-delete-outline"
@@ -288,6 +299,7 @@
         :sessions="projectSessions"
         @select-session="selectProjectSession"
         @edit-session-title="editProjectSessionTitle"
+        @branch-session="branchProjectSession"
         @delete-session="deleteProjectSession"
       >
         <section class="project-composer-shell">
@@ -336,6 +348,10 @@
             <span>{{ sessionProject.title }}</span>
             <v-icon size="16">mdi-chevron-right</v-icon>
             <span>{{ currentSessionTitle }}</span>
+          </div>
+          <div v-if="currentSession?.branch_meta" class="session-branch-banner">
+            <v-icon size="16">mdi-source-branch</v-icon>
+            <span>{{ branchSummary(currentSession) }}</span>
           </div>
 
           <div v-else-if="!activeMessages.length" class="welcome-state">
@@ -511,11 +527,27 @@
                     formatTime(msg.created_at)
                   }}</span>
                   <v-btn
+                    icon="mdi-pencil-outline"
+                    size="x-small"
+                    variant="text"
+                    :disabled="!canEditMessage(msg)"
+                    @click="openMessageEditDialog(msg)"
+                  />
+                  <v-btn
                     v-if="!isUserMessage(msg)"
                     icon="mdi-content-copy"
                     size="x-small"
                     variant="text"
                     @click="copyMessage(msg)"
+                  />
+                  <v-btn
+                    v-if="!isUserMessage(msg)"
+                    icon="mdi-refresh"
+                    size="x-small"
+                    variant="text"
+                    :title="tm('actions.regenerate')"
+                    :disabled="!canRegenerateMessage(msgIndex)"
+                    @click="regenerateAssistantMessage(msg, msgIndex)"
                   />
                   <v-btn
                     icon="mdi-reply-outline"
@@ -647,6 +679,43 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+    <v-dialog v-model="messageEditDialogOpen" max-width="720">
+      <v-card>
+        <v-card-title class="text-h6">
+          {{ tm("message.editTitle") }}
+        </v-card-title>
+        <v-card-text class="d-flex flex-column ga-4">
+          <v-textarea
+            v-model="editingMessageDraft"
+            :label="tm('message.contentLabel')"
+            variant="outlined"
+            auto-grow
+            rows="6"
+          />
+          <v-textarea
+            v-if="editingMessageIsBot"
+            v-model="editingMessageReasoning"
+            :label="tm('message.reasoningLabel')"
+            variant="outlined"
+            auto-grow
+            rows="4"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="messageEditDialogOpen = false">
+            {{ t("core.common.cancel") }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            :loading="savingMessageEdit"
+            @click="saveMessageEdit"
+          >
+            {{ t("core.common.save") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
 
     <v-overlay
@@ -697,10 +766,16 @@ import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
-import { useSessions, type Session } from "@/composables/useSessions";
+import {
+  useSessions,
+  type BranchSessionResponse,
+  type RegenerateMessageResponse,
+  type Session,
+} from "@/composables/useSessions";
 import {
   useMessages,
   type ChatRecord,
+  type ChatContent,
   type MessagePart,
   type TransportMode,
 } from "@/composables/useMessages";
@@ -739,6 +814,8 @@ const {
   getSessions,
   newSession,
   newChat,
+  branchSession,
+  regenerateMessage,
   deleteSession,
   updateSessionTitle,
 } = useSessions(props.chatboxMode);
@@ -777,6 +854,11 @@ const sessionTitleDraft = ref("");
 const editingSessionTitleId = ref("");
 const refreshProjectSessionsAfterTitleSave = ref(false);
 const savingSessionTitle = ref(false);
+const messageEditDialogOpen = ref(false);
+const editingMessageRecord = ref<ChatRecord | null>(null);
+const editingMessageDraft = ref("");
+const editingMessageReasoning = ref("");
+const savingMessageEdit = ref(false);
 const projectSessions = ref<Session[]>([]);
 const loadingSessions = ref(false);
 const draft = ref("");
@@ -815,6 +897,8 @@ const {
   messageContent,
   messageParts,
   loadSessionMessages,
+  updateMessage,
+  removeMessages,
   createLocalExchange,
   sendMessageStream,
   stopSession,
@@ -869,6 +953,9 @@ const sessionProject = computed(() =>
 );
 const currentSessionTitle = computed(() =>
   currentSession.value ? sessionTitle(currentSession.value) : "",
+);
+const editingMessageIsBot = computed(
+  () => editingMessageRecord.value?.content?.type === "bot",
 );
 const selectedProject = computed(
   () =>
@@ -940,6 +1027,19 @@ function closeMobileSidebar() {
 
 function sessionTitle(session: Session) {
   return session.display_name?.trim() || tm("conversation.newConversation");
+}
+
+function branchSummary(session: Session) {
+  if (!session.branch_meta) return "";
+  const branchType =
+    session.branch_meta.type === "regenerate"
+      ? tm("branch.regenerated")
+      : tm("branch.created");
+  return tm("branch.fromSession", {
+    type: branchType,
+    name:
+      session.branch_meta.source_display_name || tm("conversation.newConversation"),
+  });
 }
 
 async function startNewChat() {
@@ -1039,9 +1139,108 @@ async function deleteSidebarSession(session: Session) {
   }
 }
 
+async function branchSidebarSession(session: Session) {
+  await createSessionBranch(session, false);
+}
+
 async function selectProjectSession(sessionId: string) {
   selectedProjectId.value = null;
   await selectSession(sessionId);
+}
+
+async function branchProjectSession(sessionId: string) {
+  const session = projectSessions.value.find(
+    (item) => item.session_id === sessionId,
+  );
+  if (!session) return;
+  await createSessionBranch(session, true);
+}
+
+function buildBranchDisplayName(session: Session) {
+  return `${sessionTitle(session)} ${tm("branch.suffix")}`;
+}
+
+async function createSessionBranch(
+  session: Session,
+  refreshProjectSessions: boolean,
+) {
+  const created = (await branchSession(
+    session.session_id,
+    buildBranchDisplayName(session),
+  )) as BranchSessionResponse;
+  if (refreshProjectSessions || created.project?.project_id) {
+    await loadProjectSessions(created.project?.project_id || selectedProjectId.value);
+  }
+  await selectSession(created.session_id);
+}
+
+function canRegenerateMessage(messageIndex: number) {
+  if (!currSessionId.value) return false;
+  const message = activeMessages.value[messageIndex];
+  return Boolean(
+    message &&
+      !isUserMessage(message) &&
+      message.id != null &&
+      messageIndex === activeMessages.value.length - 1 &&
+      findPreviousUserMessage(messageIndex),
+  );
+}
+
+function findPreviousUserMessage(messageIndex: number) {
+  for (let index = messageIndex - 1; index >= 0; index -= 1) {
+    const message = activeMessages.value[index];
+    if (message && isUserMessage(message)) {
+      return message;
+    }
+  }
+  return null;
+}
+
+function cloneMessageParts(parts: MessagePart[]) {
+  return parts.map((part) => JSON.parse(JSON.stringify(part)));
+}
+
+async function regenerateAssistantMessage(
+  message: ChatRecord,
+  messageIndex: number,
+) {
+  if (!currSessionId.value || message.id == null) return;
+
+  const previousUser = findPreviousUserMessage(messageIndex);
+  if (!previousUser) return;
+
+  const result = (await regenerateMessage(
+    currSessionId.value,
+    message.id,
+  )) as RegenerateMessageResponse;
+  removeMessages(currSessionId.value, result.removed_message_ids || []);
+
+  const replayParts = cloneMessageParts(
+    ((result.replay_message?.content?.message as MessagePart[] | undefined) ||
+      previousUser.content.message ||
+      []) as MessagePart[],
+  );
+  const replayText = extractPlainTextFromParts(replayParts);
+  const selection = inputRef.value?.getCurrentSelection();
+  const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  const { userRecord, botRecord } = createLocalExchange({
+    sessionId: currSessionId.value,
+    messageId,
+    parts: replayParts,
+  });
+
+  updateTitleFromText(currSessionId.value, replayText);
+  sendMessageStream({
+    sessionId: currSessionId.value,
+    messageId,
+    parts: replayParts,
+    transport: transportMode.value,
+    enableStreaming: enableStreaming.value,
+    selectedProvider: selection?.providerId || "",
+    selectedModel: selection?.modelName || "",
+    userRecord,
+    botRecord,
+  });
 }
 
 async function editProjectSessionTitle(sessionId: string, title: string) {
@@ -1109,7 +1308,7 @@ async function sendCurrentMessage() {
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     const outgoingParts = buildOutgoingParts(text);
     const selection = inputRef.value?.getCurrentSelection();
-    const { botRecord } = createLocalExchange({
+    const { userRecord, botRecord } = createLocalExchange({
       sessionId,
       messageId,
       parts: outgoingParts,
@@ -1129,6 +1328,7 @@ async function sendCurrentMessage() {
       enableStreaming: enableStreaming.value,
       selectedProvider: selection?.providerId || "",
       selectedModel: selection?.modelName || "",
+      userRecord,
       botRecord,
     });
   } catch (error) {
@@ -1216,6 +1416,13 @@ function plainTextFromMessage(message: ChatRecord) {
     .join("\n");
 }
 
+function extractPlainTextFromParts(parts: MessagePart[]) {
+  return parts
+    .filter((part) => part.type === "plain" && part.text)
+    .map((part) => String(part.text))
+    .join("\n");
+}
+
 function truncate(value: string, max: number) {
   return value.length > max ? `${value.slice(0, max)}...` : value;
 }
@@ -1235,10 +1442,84 @@ function setReplyTarget(message: ChatRecord) {
   nextTick(() => inputRef.value?.focusInput?.());
 }
 
+function canEditMessage(message: ChatRecord) {
+  return !messageContent(message).isLoading && message.id != null;
+}
+
+function openMessageEditDialog(message: ChatRecord) {
+  if (!canEditMessage(message)) return;
+  editingMessageRecord.value = message;
+  editingMessageDraft.value = plainTextFromMessage(message);
+  editingMessageReasoning.value = messageContent(message).reasoning || "";
+  messageEditDialogOpen.value = true;
+}
+
+async function saveMessageEdit() {
+  if (!currSessionId.value || !editingMessageRecord.value?.id) return;
+
+  savingMessageEdit.value = true;
+  try {
+    const nextContent = buildEditedMessageContent(
+      editingMessageRecord.value,
+      editingMessageDraft.value,
+      editingMessageReasoning.value,
+    );
+    const updatedRecord = await updateMessage(
+      currSessionId.value,
+      editingMessageRecord.value.id,
+      nextContent,
+    );
+    editingMessageRecord.value = updatedRecord;
+    messageEditDialogOpen.value = false;
+  } finally {
+    savingMessageEdit.value = false;
+  }
+}
+
 function showMessageMeta(message: ChatRecord, msgIndex: number) {
   return (
     !messageContent(message).isLoading && !isMessageStreaming(message, msgIndex)
   );
+}
+
+function buildEditedMessageContent(
+  message: ChatRecord,
+  plainText: string,
+  reasoning: string,
+): ChatContent {
+  const content = messageContent(message);
+  return {
+    ...content,
+    message: replacePlainTextParts(messageParts(message), plainText),
+    reasoning: content.type === "bot" ? reasoning : content.reasoning,
+  };
+}
+
+function replacePlainTextParts(parts: MessagePart[], plainText: string) {
+  const nextPlain = plainText ? { type: "plain", text: plainText } : null;
+  const result: MessagePart[] = [];
+  let inserted = false;
+
+  parts.forEach((part) => {
+    if (part.type === "plain") {
+      if (!inserted && nextPlain) {
+        result.push(nextPlain);
+        inserted = true;
+      }
+      return;
+    }
+    result.push({ ...part });
+  });
+
+  if (!inserted && nextPlain) {
+    const lastReplyIndex = result.reduce(
+      (lastIndex, part, index) => (part.type === "reply" ? index : lastIndex),
+      -1,
+    );
+    result.splice(lastReplyIndex + 1, 0, nextPlain);
+  }
+
+  return result;
 }
 
 function messageRefs(message: ChatRecord) {
@@ -1610,6 +1891,23 @@ function formatDuration(seconds: number) {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
+
+.session-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-branch-text {
+  font-size: 11px;
+  color: var(--chat-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+  font-size: 14px;
   font-weight: 500;
 }
 
@@ -1737,6 +2035,15 @@ function formatDuration(seconds: number) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.session-branch-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--chat-muted);
 }
 
 .messages-list {

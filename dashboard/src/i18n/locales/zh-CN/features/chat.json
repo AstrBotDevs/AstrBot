@@ -17,7 +17,10 @@
     "assistant": "助手",
     "system": "系统",
     "error": "错误消息",
-    "loading": "思考中..."
+    "loading": "思考中...",
+    "editTitle": "编辑消息",
+    "contentLabel": "消息内容",
+    "reasoningLabel": "思考过程"
   },
   "voice": {
     "start": "开始录音",
@@ -48,6 +51,8 @@
     "fullscreen": "全屏模式",
     "exitFullscreen": "退出全屏",
     "reply": "引用回复",
+    "branchChat": "添加分支",
+    "regenerate": "重新生成",
     "providerConfig": "AI 配置",
     "toolsUsed": "已使用工具",
     "toolCallUsed": "已使用 {name} 工具",
@@ -116,6 +121,13 @@
     "description": "项目描述（可选）",
     "noSessions": "该项目暂无对话",
     "confirmDelete": "确定要删除项目 \"{title}\" 吗？项目中的对话不会被删除。"
+  },
+  "branch": {
+    "suffix": "· 分支",
+    "regenerateSuffix": "· 重新生成",
+    "created": "分支",
+    "regenerated": "重新生成",
+    "fromSession": "{type}自 {name}"
   },
   "time": {
     "today": "今天",

@@ -24,6 +24,8 @@ class ChatUIProjectRoute(Route):
         }
         self.db = db
         self.register_routes()
+        self.branch_meta_scope = "webchat_session"
+        self.branch_meta_key = "branch_meta"
 
     async def create_project(self):
         """Create a new ChatUI project."""
@@ -229,6 +231,16 @@ class ChatUIProjectRoute(Route):
             return Response().error("Permission denied").__dict__
 
         sessions = await self.db.get_project_sessions(project_id)
+        session_ids = [session.session_id for session in sessions]
+        branch_preferences = await self.db.get_preferences(
+            self.branch_meta_scope,
+            key=self.branch_meta_key,
+        )
+        branch_meta_map = {
+            preference.scope_id: preference.value
+            for preference in branch_preferences
+            if preference.scope_id in session_ids and isinstance(preference.value, dict)
+        }
 
         sessions_data = [
             {
@@ -239,6 +251,7 @@ class ChatUIProjectRoute(Route):
                 "is_group": session.is_group,
                 "created_at": to_utc_isoformat(session.created_at),
                 "updated_at": to_utc_isoformat(session.updated_at),
+                "branch_meta": branch_meta_map.get(session.session_id),
             }
             for session in sessions
         ]

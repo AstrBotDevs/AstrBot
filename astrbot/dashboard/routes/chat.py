@@ -4,6 +4,7 @@ import os
 import re
 import uuid
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from typing import cast
 
 from quart import Response as QuartResponse
@@ -76,6 +77,9 @@ class ChatRoute(Route):
                 "POST",
                 self.update_session_display_name,
             ),
+            "/chat/update_message": ("POST", self.update_message),
+            "/chat/branch_session": ("POST", self.branch_session),
+            "/chat/regenerate_message": ("POST", self.regenerate_message),
             "/chat/get_file": ("GET", self.get_file),
             "/chat/get_attachment": ("GET", self.get_attachment),
             "/chat/post_file": ("POST", self.post_file),
@@ -91,6 +95,8 @@ class ChatRoute(Route):
         self.platform_history_mgr = core_lifecycle.platform_message_history_manager
         self.db = db
         self.umop_config_router = core_lifecycle.umop_config_router
+        self.branch_meta_scope = "webchat_session"
+        self.branch_meta_key = "branch_meta"
 
         self.running_convs: dict[str, bool] = {}
 
@@ -308,6 +314,513 @@ class ChatRoute(Route):
         )
         return record
 
+    def _sanitize_message_content(self, content: dict) -> dict:
+        """Normalize message content before persisting it."""
+        if not isinstance(content, dict):
+            raise ValueError("Missing key: content")
+
+        normalized = deepcopy(content)
+        message_type = normalized.get("type")
+        if not isinstance(message_type, str) or not message_type:
+            raise ValueError("Missing key: content.type")
+
+        message_parts = normalized.get("message")
+        if not isinstance(message_parts, list):
+            raise ValueError("Missing key: content.message")
+        normalized["message"] = strip_message_parts_path_fields(message_parts)
+        return normalized
+
+    def _remap_reply_message_ids(
+        self, message_parts: list[dict], message_id_map: dict[str, int]
+    ) -> None:
+        for part in message_parts:
+            if not isinstance(part, dict) or part.get("type") != "reply":
+                continue
+            message_id = part.get("message_id")
+            if message_id is None:
+                continue
+            mapped_id = message_id_map.get(str(message_id))
+            if mapped_id is not None:
+                part["message_id"] = mapped_id
+
+    def _build_webchat_unified_msg_origin(self, session) -> str:
+        message_type = (
+            MessageType.GROUP_MESSAGE
+            if session.is_group
+            else MessageType.FRIEND_MESSAGE
+        )
+        return f"{session.platform_id}:{message_type.value}:{session.platform_id}!{session.creator}!{session.session_id}"
+
+    def _serialize_session(self, session, branch_meta: dict | None = None) -> dict:
+        return {
+            "session_id": session.session_id,
+            "platform_id": session.platform_id,
+            "creator": session.creator,
+            "display_name": session.display_name,
+            "is_group": session.is_group,
+            "created_at": to_utc_isoformat(session.created_at),
+            "updated_at": to_utc_isoformat(session.updated_at),
+            "branch_meta": branch_meta,
+        }
+
+    def _extract_platform_message_text(self, content: dict | None) -> str:
+        if not isinstance(content, dict):
+            return ""
+        message_parts = content.get("message")
+        if not isinstance(message_parts, list):
+            return ""
+        texts: list[str] = []
+        for part in message_parts:
+            if isinstance(part, dict) and part.get("type") == "plain":
+                text = part.get("text")
+                if isinstance(text, str):
+                    texts.append(text)
+        return "".join(texts)
+
+    def _extract_conversation_text(self, message: dict) -> str:
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if not isinstance(content, list):
+            return ""
+
+        texts: list[str] = []
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") != "text":
+                continue
+            text = part.get("text")
+            if not isinstance(text, str) or text.startswith("<system_reminder>"):
+                continue
+            texts.append(text)
+        return "".join(texts)
+
+    def _extract_conversation_think(self, message: dict) -> str:
+        content = message.get("content")
+        if not isinstance(content, list):
+            return ""
+
+        thinks: list[str] = []
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") != "think":
+                continue
+            think = part.get("think")
+            if isinstance(think, str):
+                thinks.append(think)
+        return "".join(thinks)
+
+    def _is_displayable_conversation_message(self, message: dict, role: str) -> bool:
+        if message.get("role") != role:
+            return False
+        if role == "user":
+            return True
+        content = message.get("content")
+        if isinstance(content, str):
+            return bool(content)
+        if not isinstance(content, list):
+            return False
+        return any(
+            isinstance(part, dict)
+            and part.get("type") in {"text", "think", "image_url", "audio_url"}
+            for part in content
+        )
+
+    def _replace_user_conversation_content(
+        self, original_content, edited_text: str
+    ) -> str | list[dict]:
+        if isinstance(original_content, str):
+            return edited_text
+        if not isinstance(original_content, list):
+            return edited_text
+
+        result: list[dict] = []
+        inserted_text = False
+        pending_insert_at_end = edited_text
+
+        for part in original_content:
+            if not isinstance(part, dict):
+                result.append(part)
+                continue
+            if part.get("type") == "text":
+                text = part.get("text")
+                if isinstance(text, str) and text.startswith("<system_reminder>"):
+                    if not inserted_text and pending_insert_at_end:
+                        result.append({"type": "text", "text": pending_insert_at_end})
+                        inserted_text = True
+                        pending_insert_at_end = ""
+                    result.append(part)
+                    continue
+                if not inserted_text and edited_text:
+                    result.append({"type": "text", "text": edited_text})
+                    inserted_text = True
+                    pending_insert_at_end = ""
+                continue
+            result.append(part)
+
+        if not inserted_text and pending_insert_at_end:
+            result.append({"type": "text", "text": pending_insert_at_end})
+        return result
+
+    def _replace_assistant_conversation_content(
+        self, original_content, edited_text: str, reasoning: str
+    ) -> str | list[dict]:
+        if isinstance(original_content, str):
+            return edited_text
+        if not isinstance(original_content, list):
+            return [{"type": "text", "text": edited_text}] if edited_text else []
+
+        result: list[dict] = []
+        inserted_text = False
+        inserted_think = False
+
+        for part in original_content:
+            if not isinstance(part, dict):
+                result.append(part)
+                continue
+            part_type = part.get("type")
+            if part_type == "text":
+                if not inserted_text and edited_text:
+                    result.append({"type": "text", "text": edited_text})
+                    inserted_text = True
+                continue
+            if part_type == "think":
+                if not inserted_think and reasoning:
+                    result.append({"type": "think", "think": reasoning})
+                    inserted_think = True
+                continue
+            result.append(part)
+
+        if reasoning and not inserted_think:
+            result.insert(0, {"type": "think", "think": reasoning})
+        if edited_text and not inserted_text:
+            result.append({"type": "text", "text": edited_text})
+        return result
+
+    def _find_conversation_history_index(
+        self,
+        history: list[dict],
+        role: str,
+        ordinal: int,
+        old_text: str,
+        old_reasoning: str,
+    ) -> int | None:
+        candidate_indexes = [
+            index
+            for index, message in enumerate(history)
+            if isinstance(message, dict)
+            and self._is_displayable_conversation_message(message, role)
+        ]
+        if not candidate_indexes:
+            return None
+        if 0 <= ordinal < len(candidate_indexes):
+            return candidate_indexes[ordinal]
+
+        for index in reversed(candidate_indexes):
+            message = history[index]
+            if old_text and self._extract_conversation_text(message) == old_text:
+                return index
+            if (
+                old_reasoning
+                and self._extract_conversation_think(message) == old_reasoning
+            ):
+                return index
+        return candidate_indexes[-1]
+
+    async def _sync_conversation_history_message(
+        self,
+        session,
+        existing_record,
+        updated_content: dict,
+    ) -> None:
+        unified_msg_origin = self._build_webchat_unified_msg_origin(session)
+        conversation_id = await self.conv_mgr.get_curr_conversation_id(
+            unified_msg_origin
+        )
+        if not conversation_id:
+            return
+
+        conversation = await self.conv_mgr.get_conversation(
+            unified_msg_origin=unified_msg_origin,
+            conversation_id=conversation_id,
+        )
+        if not conversation:
+            return
+
+        history = json.loads(conversation.history)
+        if not isinstance(history, list):
+            return
+
+        platform_history = await self.platform_history_mgr.get(
+            platform_id=session.platform_id,
+            user_id=session.session_id,
+            page=1,
+            page_size=100000,
+        )
+        platform_history.sort(key=lambda item: (item.created_at, item.id))
+
+        role_type = existing_record.content.get("type")
+        platform_role_records = [
+            item
+            for item in platform_history
+            if isinstance(item.content, dict) and item.content.get("type") == role_type
+        ]
+        ordinal = next(
+            (
+                index
+                for index, item in enumerate(platform_role_records)
+                if item.id == existing_record.id
+            ),
+            -1,
+        )
+        if ordinal < 0:
+            return
+
+        conversation_role = "user" if role_type == "user" else "assistant"
+        target_index = self._find_conversation_history_index(
+            history=history,
+            role=conversation_role,
+            ordinal=ordinal,
+            old_text=self._extract_platform_message_text(existing_record.content),
+            old_reasoning=existing_record.content.get("reasoning", ""),
+        )
+        if target_index is None:
+            return
+
+        target_message = history[target_index]
+        original_content = target_message.get("content")
+        edited_text = self._extract_platform_message_text(updated_content)
+
+        if conversation_role == "user":
+            target_message["content"] = self._replace_user_conversation_content(
+                original_content, edited_text
+            )
+        else:
+            target_message["content"] = self._replace_assistant_conversation_content(
+                original_content,
+                edited_text,
+                updated_content.get("reasoning", ""),
+            )
+
+        await self.conv_mgr.update_conversation(
+            unified_msg_origin=unified_msg_origin,
+            conversation_id=conversation_id,
+            history=history,
+        )
+
+    def _trim_conversation_history(
+        self,
+        history: list[dict],
+        *,
+        max_user_messages: int | None = None,
+        max_assistant_messages: int | None = None,
+    ) -> list[dict]:
+        user_count = 0
+        assistant_count = 0
+        trimmed_history: list[dict] = []
+
+        for message in history:
+            if not isinstance(message, dict):
+                trimmed_history.append(deepcopy(message))
+                continue
+
+            if self._is_displayable_conversation_message(message, "user"):
+                if max_user_messages is None or user_count < max_user_messages:
+                    trimmed_history.append(deepcopy(message))
+                    user_count += 1
+                continue
+
+            if self._is_displayable_conversation_message(message, "assistant"):
+                if (
+                    max_assistant_messages is None
+                    or assistant_count < max_assistant_messages
+                ):
+                    trimmed_history.append(deepcopy(message))
+                    assistant_count += 1
+                continue
+
+            trimmed_history.append(deepcopy(message))
+
+        return trimmed_history
+
+    async def _clone_current_conversation(
+        self,
+        source_session,
+        target_session,
+        *,
+        max_user_messages: int | None = None,
+        max_assistant_messages: int | None = None,
+    ) -> None:
+        source_umo = self._build_webchat_unified_msg_origin(source_session)
+        source_cid = await self.conv_mgr.get_curr_conversation_id(source_umo)
+        if not source_cid:
+            return
+
+        source_conversation = await self.conv_mgr.get_conversation(
+            unified_msg_origin=source_umo,
+            conversation_id=source_cid,
+        )
+        if not source_conversation:
+            return
+
+        history = json.loads(source_conversation.history)
+        if not isinstance(history, list):
+            history = []
+        trimmed_history = self._trim_conversation_history(
+            history,
+            max_user_messages=max_user_messages,
+            max_assistant_messages=max_assistant_messages,
+        )
+
+        target_umo = self._build_webchat_unified_msg_origin(target_session)
+        await self.conv_mgr.new_conversation(
+            unified_msg_origin=target_umo,
+            platform_id=target_session.platform_id,
+            content=trimmed_history,
+            title=source_conversation.title,
+            persona_id=source_conversation.persona_id,
+        )
+
+    async def _rewrite_current_conversation(
+        self,
+        session,
+        *,
+        max_user_messages: int | None = None,
+        max_assistant_messages: int | None = None,
+    ) -> None:
+        unified_msg_origin = self._build_webchat_unified_msg_origin(session)
+        conversation_id = await self.conv_mgr.get_curr_conversation_id(
+            unified_msg_origin
+        )
+        if not conversation_id:
+            return
+
+        conversation = await self.conv_mgr.get_conversation(
+            unified_msg_origin=unified_msg_origin,
+            conversation_id=conversation_id,
+        )
+        if not conversation:
+            return
+
+        history = json.loads(conversation.history)
+        if not isinstance(history, list):
+            history = []
+        trimmed_history = self._trim_conversation_history(
+            history,
+            max_user_messages=max_user_messages,
+            max_assistant_messages=max_assistant_messages,
+        )
+        await self.conv_mgr.update_conversation(
+            unified_msg_origin=unified_msg_origin,
+            conversation_id=conversation_id,
+            history=trimmed_history,
+        )
+
+    async def _get_branch_meta(self, session_id: str) -> dict | None:
+        preference = await self.db.get_preference(
+            self.branch_meta_scope,
+            session_id,
+            self.branch_meta_key,
+        )
+        if not preference or not isinstance(preference.value, dict):
+            return None
+        return preference.value
+
+    async def _set_branch_meta(
+        self,
+        session_id: str,
+        *,
+        source_session,
+        branch_type: str,
+        source_message_id: int | None = None,
+    ) -> dict:
+        source_title = source_session.display_name or "New Conversation"
+        branch_meta = {
+            "type": branch_type,
+            "source_session_id": source_session.session_id,
+            "source_display_name": source_title,
+        }
+        if source_message_id is not None:
+            branch_meta["source_message_id"] = source_message_id
+        await self.db.insert_preference_or_update(
+            self.branch_meta_scope,
+            session_id,
+            self.branch_meta_key,
+            branch_meta,
+        )
+        return branch_meta
+
+    async def _clone_session_route(self, source_session, target_session) -> None:
+        source_umo = self._build_webchat_unified_msg_origin(source_session)
+        target_umo = self._build_webchat_unified_msg_origin(target_session)
+        source_conf_id = self.umop_config_router.get_conf_id_for_umop(source_umo)
+        if source_conf_id:
+            await self.umop_config_router.update_route(target_umo, source_conf_id)
+
+    async def _get_sorted_platform_history(self, session) -> list:
+        history_list = await self.platform_history_mgr.get(
+            platform_id=session.platform_id,
+            user_id=session.session_id,
+            page=1,
+            page_size=100000,
+        )
+        history_list.sort(key=lambda history: (history.created_at, history.id))
+        return history_list
+
+    def _find_message_index(self, history_list: list, message_id: int) -> int | None:
+        for index, history in enumerate(history_list):
+            if history.id == message_id:
+                return index
+        return None
+
+    def _build_branch_display_name(self, source_session, branch_type: str) -> str:
+        base_name = (source_session.display_name or "New Conversation").strip()
+        suffix = " - Regenerated" if branch_type == "regenerate" else " - Branch"
+        return f"{base_name}{suffix}"
+
+    async def _create_branch_session(
+        self,
+        source_session,
+        username: str,
+        *,
+        display_name: str | None = None,
+        branch_type: str = "branch",
+        source_message_id: int | None = None,
+        max_user_messages: int | None = None,
+        max_assistant_messages: int | None = None,
+    ) -> tuple[object, dict | None, dict]:
+        project_info = await self.db.get_project_by_session(
+            session_id=source_session.session_id,
+            creator=username,
+        )
+        cloned_session = await self.db.create_platform_session(
+            creator=username,
+            platform_id=source_session.platform_id,
+            display_name=display_name
+            if display_name is not None
+            else self._build_branch_display_name(source_session, branch_type),
+            is_group=source_session.is_group,
+        )
+
+        if project_info:
+            await self.db.add_session_to_project(
+                session_id=cloned_session.session_id,
+                project_id=project_info.project_id,
+            )
+        await self._clone_session_route(source_session, cloned_session)
+        await self._clone_current_conversation(
+            source_session,
+            cloned_session,
+            max_user_messages=max_user_messages,
+            max_assistant_messages=max_assistant_messages,
+        )
+
+        branch_meta = await self._set_branch_meta(
+            cloned_session.session_id,
+            source_session=source_session,
+            branch_type=branch_type,
+            source_message_id=source_message_id,
+        )
+        return cloned_session, project_info, branch_meta
+
     async def chat(self, post_data: dict | None = None):
         username = g.get("username", "guest")
 
@@ -365,6 +878,18 @@ class ChatRoute(Route):
                     "session_id": webchat_conv_id,
                 }
                 yield f"data: {json.dumps(session_info, ensure_ascii=False)}\n\n"
+                if saved_user_record:
+                    user_saved_info = {
+                        "type": "message_saved",
+                        "data": {
+                            "id": saved_user_record.id,
+                            "created_at": to_utc_isoformat(
+                                saved_user_record.created_at
+                            ),
+                            "role": "user",
+                        },
+                    }
+                    yield f"data: {json.dumps(user_saved_info, ensure_ascii=False)}\n\n"
 
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
@@ -517,6 +1042,7 @@ class ChatRoute(Route):
                                         "created_at": to_utc_isoformat(
                                             saved_record.created_at
                                         ),
+                                        "role": "bot",
                                     },
                                 }
                                 try:
@@ -552,7 +1078,7 @@ class ChatRoute(Route):
 
         message_parts_for_storage = strip_message_parts_path_fields(message_parts)
 
-        await self.platform_history_mgr.insert(
+        saved_user_record = await self.platform_history_mgr.insert(
             platform_id="webchat",
             user_id=webchat_conv_id,
             content={"type": "user", "message": message_parts_for_storage},
@@ -645,6 +1171,12 @@ class ChatRoute(Route):
         # 清理队列（仅对 webchat）
         if session.platform_id == "webchat":
             webchat_queue_mgr.remove_queues(session_id)
+
+        await self.db.remove_preference(
+            self.branch_meta_scope,
+            session_id,
+            self.branch_meta_key,
+        )
 
         # 删除会话
         await self.db.delete_platform_session(session_id)
@@ -788,21 +1320,26 @@ class ChatRoute(Route):
             exclude_project_sessions=True,
         )
 
+        session_ids = [item["session"].session_id for item in sessions]
+        branch_preferences = await self.db.get_preferences(
+            self.branch_meta_scope,
+            key=self.branch_meta_key,
+        )
+        branch_meta_map = {
+            preference.scope_id: preference.value
+            for preference in branch_preferences
+            if preference.scope_id in session_ids and isinstance(preference.value, dict)
+        }
+
         # 转换为字典格式
         sessions_data = []
         for item in sessions:
             session = item["session"]
-
             sessions_data.append(
-                {
-                    "session_id": session.session_id,
-                    "platform_id": session.platform_id,
-                    "creator": session.creator,
-                    "display_name": session.display_name,
-                    "is_group": session.is_group,
-                    "created_at": to_utc_isoformat(session.created_at),
-                    "updated_at": to_utc_isoformat(session.updated_at),
-                }
+                self._serialize_session(
+                    session,
+                    branch_meta_map.get(session.session_id),
+                )
             )
 
         return Response().ok(data=sessions_data).__dict__
@@ -816,6 +1353,7 @@ class ChatRoute(Route):
         # 获取会话信息以确定 platform_id
         session = await self.db.get_platform_session_by_id(session_id)
         platform_id = session.platform_id if session else "webchat"
+        branch_meta = await self._get_branch_meta(session_id)
 
         # 获取项目信息（如果会话属于某个项目）
         username = g.get("username", "guest")
@@ -836,6 +1374,7 @@ class ChatRoute(Route):
         response_data = {
             "history": history_res,
             "is_running": self.running_convs.get(session_id, False),
+            "branch_meta": branch_meta,
         }
 
         # 如果会话属于项目，添加项目信息
@@ -876,3 +1415,202 @@ class ChatRoute(Route):
         )
 
         return Response().ok().__dict__
+
+    async def update_message(self):
+        """Update a persisted WebChat message."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = post_data.get("session_id")
+        message_id = post_data.get("message_id")
+        content = post_data.get("content")
+
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if message_id is None:
+            return Response().error("Missing key: message_id").__dict__
+
+        try:
+            message_id = int(message_id)
+            content = self._sanitize_message_content(content)
+        except (TypeError, ValueError) as exc:
+            return Response().error(str(exc)).__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        record = await self.db.get_platform_message_history_by_id(message_id)
+        if not record:
+            return Response().error(f"Message {message_id} not found").__dict__
+        if record.platform_id != session.platform_id or record.user_id != session_id:
+            return Response().error("Message does not belong to the session").__dict__
+
+        await self.db.update_platform_message_history(
+            message_id=message_id, content=content
+        )
+        await self._sync_conversation_history_message(
+            session=session,
+            existing_record=record,
+            updated_content=content,
+        )
+        await self.db.update_platform_session(session_id=session_id)
+        updated_record = await self.db.get_platform_message_history_by_id(message_id)
+        if not updated_record:
+            return Response().error(f"Message {message_id} not found").__dict__
+        return Response().ok(data=updated_record.model_dump()).__dict__
+
+    async def branch_session(self):
+        """Duplicate a WebChat session and its persisted message history."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = post_data.get("session_id")
+        display_name = post_data.get("display_name")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if display_name is not None and not isinstance(display_name, str):
+            return Response().error("Invalid key: display_name").__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+        history_list = await self._get_sorted_platform_history(session)
+        cloned_session, project_info, branch_meta = await self._create_branch_session(
+            session,
+            username,
+            display_name=display_name,
+            branch_type="branch",
+        )
+
+        old_to_new_message_ids: dict[str, int] = {}
+        for history in history_list:
+            cloned_content = deepcopy(history.content or {})
+            message_parts = cloned_content.get("message")
+            if isinstance(message_parts, list):
+                self._remap_reply_message_ids(message_parts, old_to_new_message_ids)
+                cloned_content["message"] = strip_message_parts_path_fields(
+                    message_parts
+                )
+
+            new_record = await self.platform_history_mgr.insert(
+                platform_id=cloned_session.platform_id,
+                user_id=cloned_session.session_id,
+                content=cloned_content,
+                sender_id=history.sender_id,
+                sender_name=history.sender_name,
+            )
+            old_to_new_message_ids[str(history.id)] = new_record.id
+
+        response_data = self._serialize_session(cloned_session, branch_meta)
+        if project_info:
+            response_data["project"] = {
+                "project_id": project_info.project_id,
+                "title": project_info.title,
+                "emoji": project_info.emoji,
+            }
+        return Response().ok(data=response_data).__dict__
+
+    async def regenerate_message(self):
+        """Regenerate the latest bot message in the current session."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = post_data.get("session_id")
+        message_id = post_data.get("message_id")
+
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if message_id is None:
+            return Response().error("Missing key: message_id").__dict__
+
+        try:
+            message_id = int(message_id)
+        except (TypeError, ValueError):
+            return Response().error("Invalid key: message_id").__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        history_list = await self._get_sorted_platform_history(session)
+        target_index = self._find_message_index(history_list, message_id)
+        if target_index is None:
+            return Response().error(f"Message {message_id} not found").__dict__
+
+        target_record = history_list[target_index]
+        if target_record.content.get("type") != "bot":
+            return Response().error("Only bot messages can be regenerated").__dict__
+        if target_index != len(history_list) - 1:
+            return (
+                Response()
+                .error("Only the latest bot message can be regenerated in place")
+                .__dict__
+            )
+
+        user_index = None
+        for index in range(target_index - 1, -1, -1):
+            content = history_list[index].content
+            if isinstance(content, dict) and content.get("type") == "user":
+                user_index = index
+                break
+        if user_index is None:
+            return Response().error("No user message found for regeneration").__dict__
+
+        source_user_record = history_list[user_index]
+        if user_index != len(history_list) - 2:
+            return (
+                Response()
+                .error("Only the latest user/bot turn can be regenerated in place")
+                .__dict__
+            )
+
+        preserved_history = history_list[:user_index]
+        preserved_user_count = sum(
+            1
+            for history in preserved_history
+            if isinstance(history.content, dict)
+            and history.content.get("type") == "user"
+        )
+        preserved_bot_count = sum(
+            1
+            for history in preserved_history
+            if isinstance(history.content, dict)
+            and history.content.get("type") == "bot"
+        )
+
+        await self.db.delete_platform_message_histories(
+            [source_user_record.id, target_record.id]
+        )
+        await self._rewrite_current_conversation(
+            session,
+            max_user_messages=preserved_user_count,
+            max_assistant_messages=preserved_bot_count,
+        )
+        regenerated_parts = deepcopy(source_user_record.content.get("message", []))
+        response_data = {
+            "session_id": session.session_id,
+            "removed_message_ids": [source_user_record.id, target_record.id],
+            "replay_message": {
+                "content": {
+                    "type": "user",
+                    "message": strip_message_parts_path_fields(regenerated_parts)
+                    if isinstance(regenerated_parts, list)
+                    else [],
+                },
+                "source_message_id": source_user_record.id,
+            },
+        }
+        return Response().ok(data=response_data).__dict__

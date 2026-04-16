@@ -568,6 +568,32 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
+    async def update_platform_message_history(
+        self, message_id: int, content: dict
+    ) -> None:
+        """Update a platform message history record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    update(PlatformMessageHistory)
+                    .where(col(PlatformMessageHistory.id) == message_id)
+                    .values(content=content, updated_at=datetime.now(timezone.utc))
+                )
+
+    async def delete_platform_message_histories(self, message_ids: list[int]) -> None:
+        """Delete platform message history records by IDs."""
+        if not message_ids:
+            return
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        col(PlatformMessageHistory.id).in_(message_ids)
+                    )
+                )
+
     async def insert_attachment(self, path, type, mime_type):
         """Insert a new attachment record."""
         async with self.get_db() as session:

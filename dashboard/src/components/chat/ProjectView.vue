@@ -27,7 +27,10 @@
             {{ session.display_name || tm("conversation.newConversation") }}
           </v-list-item-title>
           <v-list-item-subtitle>
-            {{ formatDate(session.updated_at) }}
+            <span>{{ formatDate(session.updated_at) }}</span>
+            <span v-if="session.branch_meta" class="session-branch-label">
+              · {{ branchLabel(session) }}
+            </span>
           </v-list-item-subtitle>
           <template v-slot:append>
             <div class="session-actions">
@@ -43,6 +46,13 @@
                     session.display_name ?? '',
                   )
                 "
+              />
+              <v-btn
+                icon="mdi-source-branch-plus"
+                size="x-small"
+                variant="text"
+                class="branch-session-btn"
+                @click.stop="$emit('branchSession', session.session_id)"
               />
               <v-btn
                 icon="mdi-delete"
@@ -71,13 +81,8 @@
 <script setup lang="ts">
 import { useModuleI18n } from "@/i18n/composables";
 import type { Project } from "@/components/chat/ProjectList.vue";
+import type { Session } from "@/composables/useSessions";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
-
-interface Session {
-  session_id: string;
-  display_name?: string | null;
-  updated_at: string;
-}
 
 interface Props {
   project?: Project | null;
@@ -90,6 +95,7 @@ const emit = defineEmits<{
   selectSession: [sessionId: string];
   editSessionTitle: [sessionId: string, title: string];
   deleteSession: [sessionId: string];
+  branchSession: [sessionId: string];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -98,6 +104,18 @@ const confirmDialog = useConfirmDialog();
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleString();
+}
+
+function branchLabel(session: Session): string {
+  const branchType =
+    session.branch_meta?.type === "regenerate"
+      ? tm("branch.regenerated")
+      : tm("branch.created");
+  return tm("branch.fromSession", {
+    type: branchType,
+    name:
+      session.branch_meta?.source_display_name || tm("conversation.newConversation"),
+  });
 }
 
 async function handleDeleteSession(session: Session) {
@@ -176,9 +194,23 @@ async function handleDeleteSession(session: Session) {
   visibility: visible;
 }
 
+.session-branch-label {
+  margin-left: 4px;
+  opacity: 0.8;
+}
+
 .session-actions {
   display: flex;
   gap: 2px;
+  opacity: 1;
+}
+
+.branch-session-btn {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.branch-session-btn:hover {
   opacity: 1;
 }
 
