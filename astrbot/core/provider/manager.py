@@ -363,6 +363,10 @@ class ProviderManager:
                 )
             case "longcat_chat_completion":
                 from .sources.longcat_source import ProviderLongCat as ProviderLongCat
+            case "minimax_token_plan":
+                from .sources.minimax_token_plan_source import (
+                    ProviderMiniMaxTokenPlan as ProviderMiniMaxTokenPlan,
+                )
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
             case "groq_chat_completion":
