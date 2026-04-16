@@ -75,11 +75,13 @@ class Main(star.Star):
                         logger.error("未找到对话，无法主动回复")
                         return
 
-                    yield event.request_llm(
+                    req = event.request_llm(
                         prompt=prompt,
                         session_id=event.session_id,
                         conversation=conv,
                     )
+                    setattr(req, "_ltm_active_reply_trigger", True)
+                    yield req
                 except BaseException as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
