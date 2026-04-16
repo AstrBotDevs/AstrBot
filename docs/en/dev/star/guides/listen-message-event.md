@@ -289,6 +289,94 @@ async def on_llm_resp(self, event: AstrMessageEvent, resp: LLMResponse): # Note 
 
 > You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
 
+#### On Agent Begin
+
+> Requires AstrBot version > v4.23.1
+
+When the Agent starts running, the `on_agent_begin` hook is triggered.
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.astr_agent_context import AstrAgentContext
+
+@filter.on_agent_begin()
+async def on_agent_begin(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext]): # Note there are three parameters
+    print("Agent started")
+```
+
+> You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
+
+#### Before LLM Tool Call
+
+> Requires AstrBot version > v4.23.1
+
+When the Agent is about to call an LLM tool, the `on_using_llm_tool` hook is triggered.
+
+You can obtain the `FunctionTool` object and tool call arguments.
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.core.agent.tool import FunctionTool
+
+@filter.on_using_llm_tool()
+async def on_using_llm_tool(
+    self,
+    event: AstrMessageEvent,
+    tool: FunctionTool,
+    tool_args: dict | None,
+):
+    print(tool.name, tool_args)
+```
+
+> You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
+
+#### After LLM Tool Call
+
+> Requires AstrBot version > v4.23.1
+
+After the LLM tool call completes, the `on_llm_tool_respond` hook is triggered.
+
+You can obtain the `FunctionTool` object, tool call arguments, and tool call result.
+
+```python
+from mcp.types import CallToolResult
+
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.core.agent.tool import FunctionTool
+
+@filter.on_llm_tool_respond()
+async def on_llm_tool_respond(
+    self,
+    event: AstrMessageEvent,
+    tool: FunctionTool,
+    tool_args: dict | None,
+    tool_result: CallToolResult | None,
+):
+    print(tool.name, tool_args, tool_result)
+```
+
+> You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
+
+#### On Agent Done
+
+> Requires AstrBot version > v4.23.1
+
+After the Agent finishes running, the `on_agent_done` hook is triggered. This hook is triggered after `on_llm_response`.
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.provider import LLMResponse
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.astr_agent_context import AstrAgentContext
+
+@filter.on_agent_done()
+async def on_agent_done(self, event: AstrMessageEvent, run_context: ContextWrapper[AstrAgentContext], resp: LLMResponse): # Note there are four parameters
+    print(resp)
+```
+
+> You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
+
 #### Before Sending Message
 
 Before sending a message, the `on_decorating_result` hook is triggered.

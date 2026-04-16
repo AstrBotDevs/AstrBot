@@ -1,3 +1,9 @@
+@use '../variables' as *;
+
+//
+// Light Buttons
+//
+
 .v-btn {
   text-transform: none;
   letter-spacing: $btn-letter-spacing;
