@@ -59,11 +59,17 @@ class KookClient:
 
     @property
     def bot_nickname(self):
+        """机器人昵称"""
         return self._bot_nickname
 
     @property
     def bot_username(self):
+        """机器人名称"""
         return self._bot_username
+
+    @property
+    def http_client(self):
+        return self._http_client
 
     async def get_bot_info(self) -> None:
         """获取机器人账号信息"""
@@ -151,7 +157,6 @@ class KookClient:
             gateway_url = await self.get_gateway_url(
                 resume=resume, sn=self.last_sn, session_id=self.session_id
             )
-            await self.get_bot_info()
 
             if not gateway_url:
                 return False

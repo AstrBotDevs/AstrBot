@@ -13,6 +13,7 @@ class KookApiPaths:
 
     # 初始化相关
     USER_ME = f"{BASE_URL}{API_VERSION_PATH}/user/me"
+    USER_VIEW = f"{BASE_URL}{API_VERSION_PATH}/user/view"
     GATEWAY_INDEX = f"{BASE_URL}{API_VERSION_PATH}/gateway/index"
 
     # 消息相关
@@ -21,6 +22,14 @@ class KookApiPaths:
     CHANNEL_MESSAGE_CREATE = f"{BASE_URL}{API_VERSION_PATH}/message/create"
     ## 私聊消息
     DIRECT_MESSAGE_CREATE = f"{BASE_URL}{API_VERSION_PATH}/direct-message/create"
+
+
+class KookMentionTagName(str, Enum):
+    """用来匹配 `(tagName)value(tagName)` 格式里的tagName , 例如: `(met)all(met)`
+    定义参见KMarkdown语法文档: https://developer.kookapp.cn/doc/kmarkdown"""
+
+    MENTION = "met"
+    ROLE = "rol"
 
 
 class KookMessageType(IntEnum):
@@ -54,6 +63,14 @@ class KookModuleType(str, Enum):
     COUNTDOWN = "countdown"
     INVITE = "invite"
     CARD = "card"
+
+
+class KookRoleExtraType(str, Enum):
+    """定义参见kook事件结构文档: https://developer.kookapp.cn/doc/event/event-introduction"""
+
+    ADDED_ROLE = "added_role"
+    DELETED_ROLE = "deleted_role"
+    UPDATED_ROLE = "updated_role"
 
 
 ThemeType = Literal[
@@ -330,22 +347,97 @@ class KookAuthor(KookBaseDataClass):
     roles: list[int] = Field(default_factory=list)
 
 
+class KookMarkdownMentionPart(KookBaseDataClass):
+    """
+    文档参考: https://developer.kookapp.cn/doc/event/message
+    """
+
+    id: str
+    username: str
+    full_name: str
+    avatar: str
+
+
+class KookMarkdownMentionRolePart(KookBaseDataClass):
+    """
+    文档参考: https://developer.kookapp.cn/doc/event/message
+    """
+
+    role_id: int
+    name: str
+    color: int
+    color_type: int
+    color_map: list[Any]
+    position: int | None = None
+    hoist: int | None = None
+    mentionable: int | None = None
+    permissions: int | None = None
+
+
 class KookKMarkdown(KookBaseDataClass):
     raw_content: str
-    mention_part: list[Any] = Field(default_factory=list)
-    mention_role_part: list[Any] = Field(default_factory=list)
+    mention_part: list[KookMarkdownMentionPart] = Field(default_factory=list)
+    mention_role_part: list[KookMarkdownMentionRolePart] = Field(default_factory=list)
+
+
+class KookRole(KookBaseDataClass):
+    """服务器角色对象数据结构"""
+
+    role_id: int = Field(alias="role_id")
+    name: str | None = None
+    color: int | None = None
+    position: int | None = None
+    hoist: int | None = 0  # 是否在成员列表中单独展示
+    mentionable: int | None = 0  # 是否允许所有人提到该角色
+    permissions: int | None = None
+
+
+class KookRoleEventBody(KookBaseDataClass):
+    """
+    服务器角色相关事件 (added_role, updated_role, deleted_role) 的 Body 部分
+    文档参考: https://developer.kookapp.cn/doc/event/guild-role
+    """
+
+    role_id: int | None = None  # 在 deleted_role 中通常只给 ID
+    name: str | None = None
+    color: int | None = None
+    position: int | None = None
+    hoist: int | None = None
+    mentionable: int | None = None
+    permissions: int | None = None
+    # 有些事件会将完整的 role 对象包裹在 body 里
+    # 如果是 added_role 且需要处理更完整的结构，可以扩展
 
 
 class KookExtra(KookBaseDataClass):
-    type: int | str
+    """事件结构定义
+    文档参考 : https://developer.kookapp.cn/doc/event/event-introduction"""
+
+    type: str | int | KookRoleExtraType
+    """当 type 非系统消息(255)时, type为int
+
+    当 type 为系统消息(255)时, type为str
+    """
+
     code: str | None = None
-    body: dict[str, Any] | None = None
+    body: KookRole | dict[str, Any] | None = None
     author: KookAuthor | None = None
     kmarkdown: KookKMarkdown | None = None
     last_msg_content: str | None = None
     mention: list[str] = Field(default_factory=list)
     mention_all: bool = False
     mention_here: bool = False
+    guild_id: str | None = None
+    guild_type: int | None = None
+    channel_name: str | None = None
+    visible_only: str | None = None
+    mention_no_at: list | None = None
+    mention_roles: list[int] | None = None
+    nav_channels: list | None = None
+    emoji: list | None = None
+    preview_content: str | None = None
+    channel_type: int | None = None
+    send_msg_device: int | None = None
 
 
 class KookMessageEventData(KookBaseDataClass):
@@ -358,7 +450,7 @@ class KookMessageEventData(KookBaseDataClass):
     type: KookMessageType
     target_id: str
     author_id: str
-    content: str | dict[str, Any]
+    content: str
     msg_id: str
     msg_timestamp: int
     nonce: str
@@ -493,6 +585,46 @@ class KookUserMeResponse(KookApiResponseBase):
     """USER_ME 完整响应结构"""
 
     data: KookUserMeData
+
+
+class KookUserMeViewData(KookBaseDataClass):
+    """USER_ME 接口返回的 'data' 字段主体"""
+
+    class KookTagInfo(KookBaseDataClass):
+        color: str
+        bg_color: str
+        text: str
+
+    id: str
+    username: str
+    identify_num: str
+    online: bool
+    os: str
+    status: int
+    avatar: str
+    vip_avatar: str
+    banner: str
+    nickname: str
+    roles: list[int]
+    is_vip: bool
+    vip_amp: bool
+    bot: bool
+    kpm_vip: str | None = None
+    wealth_level: int
+    bot_status: int
+    tag_info: KookTagInfo
+    mobile_verified: bool
+    is_sys: bool
+    client_id: str
+    verified: bool
+    joined_at: int
+    active_time: int
+
+
+class KookUserViewResponse(KookApiResponseBase):
+    """USER_VIEW 完整响应结构"""
+
+    data: KookUserMeViewData
 
 
 class KookGatewayIndexData(KookBaseDataClass):
