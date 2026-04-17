@@ -32,7 +32,7 @@
 <a href="https://astrbot.app/">文件</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">路線圖</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">問題回報</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">問題回報</a> ｜
 <a href="mailto:community@astrbot.app">Email</a>
 </div>
 
@@ -160,7 +160,7 @@ yay -S astrbot-git
 | KOOK | 官方維護 |
 | Misskey | 官方維護 |
 | Mattermost | 官方維護 |
-| Whatsapp（即將支援） | 官方維護 |
+| WhatsApp（即將支援） | 官方維護 |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | 社群維護 |
 | [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | 社群維護 |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | 社群維護 |
