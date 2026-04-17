@@ -87,6 +87,31 @@ def _build_tool_result_status_message(
     return status_msg
 
 
+def _should_buffer_llm_result(
+    buffer_intermediate_messages: bool,
+    stream_to_general: bool,
+    agent_runner: AgentRunner,
+) -> bool:
+    return (
+        buffer_intermediate_messages
+        and not stream_to_general
+        and not agent_runner.streaming
+    )
+
+
+def _merge_buffered_llm_chains(
+    buffered_llm_chains: list[MessageChain],
+) -> MessageChain | None:
+    if not buffered_llm_chains:
+        return None
+
+    merged_chain = MessageChain()
+    for chain in buffered_llm_chains:
+        merged_chain.chain.extend(chain.chain)
+    buffered_llm_chains.clear()
+    return merged_chain
+
+
 async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 30,
@@ -100,6 +125,11 @@ async def run_agent(
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
     buffered_llm_chains: list[MessageChain] = []
+    can_buffer_llm_result = _should_buffer_llm_result(
+        buffer_intermediate_messages,
+        stream_to_general,
+        agent_runner,
+    )
     while step_idx < max_step + 1:
         step_idx += 1
 
@@ -128,6 +158,17 @@ async def run_agent(
                     agent_runner.request_stop()
 
                 if resp.type == "aborted":
+                    if can_buffer_llm_result:
+                        merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
+                        if merged_chain:
+                            astr_event.set_result(
+                                MessageEventResult(
+                                    chain=merged_chain.chain,
+                                    result_content_type=ResultContentType.LLM_RESULT,
+                                ),
+                            )
+                            yield merged_chain
+                            astr_event.clear_result()
                     if not stop_watcher.done():
                         stop_watcher.cancel()
                         try:
@@ -199,29 +240,8 @@ async def run_agent(
                     continue
 
                 if stream_to_general or not agent_runner.streaming:
-                    if (
-                        buffer_intermediate_messages
-                        and not stream_to_general
-                        and not agent_runner.streaming
-                        and resp.type == "llm_result"
-                    ):
+                    if can_buffer_llm_result and resp.type == "llm_result":
                         buffered_llm_chains.append(resp.data["chain"])
-                        if not agent_runner.done():
-                            continue
-
-                        merged_chain = MessageChain()
-                        for chain in buffered_llm_chains:
-                            merged_chain.chain.extend(chain.chain)
-                        buffered_llm_chains.clear()
-
-                        astr_event.set_result(
-                            MessageEventResult(
-                                chain=merged_chain.chain,
-                                result_content_type=ResultContentType.LLM_RESULT,
-                            ),
-                        )
-                        yield
-                        astr_event.clear_result()
                         continue
 
                     content_typ = (
@@ -235,7 +255,7 @@ async def run_agent(
                             result_content_type=content_typ,
                         ),
                     )
-                    yield
+                    yield resp.data["chain"]
                     astr_event.clear_result()
                 elif resp.type == "streaming_delta":
                     chain = resp.data["chain"]
@@ -243,6 +263,19 @@ async def run_agent(
                         # display the reasoning content only when configured
                         continue
                     yield resp.data["chain"]  # MessageChain
+
+            if can_buffer_llm_result and agent_runner.done():
+                merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
+                if merged_chain:
+                    astr_event.set_result(
+                        MessageEventResult(
+                            chain=merged_chain.chain,
+                            result_content_type=ResultContentType.LLM_RESULT,
+                        ),
+                    )
+                    yield merged_chain
+                    astr_event.clear_result()
+
             if not stop_watcher.done():
                 stop_watcher.cancel()
                 try:
