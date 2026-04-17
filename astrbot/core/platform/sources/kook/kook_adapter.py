@@ -325,7 +325,9 @@ class KookPlatformAdapter(Platform):
     ) -> tuple[list, str]:
         kmarkdown = data.extra.kmarkdown
         channel_id = data.extra.guild_id
-        mention_role_part = kmarkdown.mention_role_part  # type: ignore
+        mention_role_part = None
+        if kmarkdown:
+            mention_role_part = kmarkdown.mention_role_part
         content = data.content or ""
         if kmarkdown is None:
             logger.error(
