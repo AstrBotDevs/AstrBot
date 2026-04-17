@@ -232,14 +232,15 @@ class ChatUIProjectRoute(Route):
 
         sessions = await self.db.get_project_sessions(project_id)
         session_ids = [session.session_id for session in sessions]
-        branch_preferences = await self.db.get_preferences(
+        branch_preferences = await self.db.get_preferences_by_scope_ids(
             self.branch_meta_scope,
+            session_ids,
             key=self.branch_meta_key,
         )
         branch_meta_map = {
             preference.scope_id: preference.value
             for preference in branch_preferences
-            if preference.scope_id in session_ids and isinstance(preference.value, dict)
+            if isinstance(preference.value, dict)
         }
 
         sessions_data = [

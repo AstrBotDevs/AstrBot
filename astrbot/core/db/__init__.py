@@ -498,6 +498,16 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def get_preferences_by_scope_ids(
+        self,
+        scope: str,
+        scope_ids: list[str],
+        key: str | None = None,
+    ) -> list[Preference]:
+        """Get preferences for a specific scope, limited to the provided scope IDs."""
+        ...
+
+    @abc.abstractmethod
     async def remove_preference(self, scope: str, scope_id: str, key: str) -> None:
         """Remove a preference by scope ID and key."""
         ...

@@ -25,6 +25,7 @@ from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
+from .chat_stream_events import build_message_saved_event
 from .route import Response, Route, RouteContext
 
 # SSE heartbeat message to keep the connection alive during long-running operations
@@ -879,16 +880,10 @@ class ChatRoute(Route):
                 }
                 yield f"data: {json.dumps(session_info, ensure_ascii=False)}\n\n"
                 if saved_user_record:
-                    user_saved_info = {
-                        "type": "message_saved",
-                        "data": {
-                            "id": saved_user_record.id,
-                            "created_at": to_utc_isoformat(
-                                saved_user_record.created_at
-                            ),
-                            "role": "user",
-                        },
-                    }
+                    user_saved_info = build_message_saved_event(
+                        saved_user_record,
+                        "user",
+                    )
                     yield f"data: {json.dumps(user_saved_info, ensure_ascii=False)}\n\n"
 
                 async with track_conversation(self.running_convs, webchat_conv_id):
@@ -1035,16 +1030,10 @@ class ChatRoute(Route):
                             )
                             # 发送保存的消息信息给前端
                             if saved_record and not client_disconnected:
-                                saved_info = {
-                                    "type": "message_saved",
-                                    "data": {
-                                        "id": saved_record.id,
-                                        "created_at": to_utc_isoformat(
-                                            saved_record.created_at
-                                        ),
-                                        "role": "bot",
-                                    },
-                                }
+                                saved_info = build_message_saved_event(
+                                    saved_record,
+                                    "bot",
+                                )
                                 try:
                                     yield f"data: {json.dumps(saved_info, ensure_ascii=False)}\n\n"
                                 except Exception:
@@ -1321,14 +1310,15 @@ class ChatRoute(Route):
         )
 
         session_ids = [item["session"].session_id for item in sessions]
-        branch_preferences = await self.db.get_preferences(
+        branch_preferences = await self.db.get_preferences_by_scope_ids(
             self.branch_meta_scope,
+            session_ids,
             key=self.branch_meta_key,
         )
         branch_meta_map = {
             preference.scope_id: preference.value
             for preference in branch_preferences
-            if preference.scope_id in session_ids and isinstance(preference.value, dict)
+            if isinstance(preference.value, dict)
         }
 
         # 转换为字典格式

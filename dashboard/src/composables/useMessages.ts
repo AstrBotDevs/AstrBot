@@ -474,13 +474,7 @@ export function useMessages(options: UseMessagesOptions) {
 
     if (msgType === "session_id" || msgType === "session_bound") return;
     if (msgType === "message_saved") {
-      const targetRecord = data?.role === "user" ? userRecord : botRecord;
-      markMessageStarted(targetRecord);
-      targetRecord.id = data?.id || targetRecord.id;
-      targetRecord.created_at = data?.created_at || targetRecord.created_at;
-      if (data?.refs) {
-        messageContent(targetRecord).refs = data.refs;
-      }
+      applyMessageSavedPayload(userRecord, botRecord, data);
       return;
     }
     if (msgType === "agent_stats" || chainType === "agent_stats") {
@@ -542,6 +536,20 @@ export function useMessages(options: UseMessagesOptions) {
       } else {
         messageContent(botRecord).message.push(mediaPart);
       }
+    }
+  }
+
+  function applyMessageSavedPayload(
+    userRecord: ChatRecord,
+    botRecord: ChatRecord,
+    payload: any,
+  ) {
+    const targetRecord = payload?.role === "user" ? userRecord : botRecord;
+    markMessageStarted(targetRecord);
+    targetRecord.id = payload?.id || targetRecord.id;
+    targetRecord.created_at = payload?.created_at || targetRecord.created_at;
+    if (payload?.refs) {
+      messageContent(targetRecord).refs = payload.refs;
     }
   }
 

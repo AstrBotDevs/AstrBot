@@ -21,8 +21,8 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
-from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
+from .chat_stream_events import build_message_saved_event
 from .route import Route, RouteContext
 
 
@@ -483,15 +483,7 @@ class LiveChatRoute(Route):
             )
             await self._send_chat_payload(
                 session,
-                {
-                    "ct": "chat",
-                    "type": "message_saved",
-                    "data": {
-                        "id": saved_user_record.id,
-                        "created_at": to_utc_isoformat(saved_user_record.created_at),
-                        "role": "user",
-                    },
-                },
+                build_message_saved_event(saved_user_record, "user", chat_ct=True),
             )
 
             accumulated_parts = []
@@ -634,17 +626,11 @@ class LiveChatRoute(Route):
                     if saved_record:
                         await self._send_chat_payload(
                             session,
-                            {
-                                "ct": "chat",
-                                "type": "message_saved",
-                                "data": {
-                                    "id": saved_record.id,
-                                    "created_at": to_utc_isoformat(
-                                        saved_record.created_at
-                                    ),
-                                    "role": "bot",
-                                },
-                            },
+                            build_message_saved_event(
+                                saved_record,
+                                "bot",
+                                chat_ct=True,
+                            ),
                         )
 
                     accumulated_parts = []

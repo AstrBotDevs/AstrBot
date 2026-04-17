@@ -1086,6 +1086,22 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalars().all()
 
+    async def get_preferences_by_scope_ids(self, scope, scope_ids, key=None):
+        """Get preferences for a scope, limited to the provided scope IDs."""
+        if not scope_ids:
+            return []
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(Preference).where(
+                Preference.scope == scope,
+                col(Preference.scope_id).in_(scope_ids),
+            )
+            if key is not None:
+                query = query.where(Preference.key == key)
+            result = await session.execute(query)
+            return result.scalars().all()
+
     async def remove_preference(self, scope, scope_id, key) -> None:
         """Remove a preference by scope ID and key."""
         async with self.get_db() as session:
