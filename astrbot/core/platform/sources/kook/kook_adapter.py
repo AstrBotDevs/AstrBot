@@ -244,7 +244,7 @@ class KookPlatformAdapter(Platform):
             if tag_name == KookMentionTagName.MENTION and mention_target == "all":
                 components.append(AtAll())
             elif tag_name == KookMentionTagName.ROLE:
-                role_id = -1
+                role_id = 0
                 if mention_role_part is not None:
                     if len(mention_role_part) > role_mention_counter:
                         role_mention_name = mention_role_part[role_mention_counter].name
@@ -261,7 +261,7 @@ class KookPlatformAdapter(Platform):
                             )
                             role_mention_counter += 1
                             continue
-                if not mention_target.isdigit() and role_id == -1:
+                if not mention_target.isdigit() and role_id == 0:
                     continue
 
                 role_id = role_id or int(mention_target)
