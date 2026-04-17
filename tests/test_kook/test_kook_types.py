@@ -15,16 +15,19 @@ from astrbot.core.platform.sources.kook.kook_types import (
     ImageGroupModule,
     InviteModule,
     KmarkdownElement,
+    KookApiResponseBase,
     KookCardMessage,
     KookMessageSignal,
     KookModuleType,
+    KookUserMeResponse,
+    KookUserViewResponse,
     KookWebsocketEvent,
     ParagraphStructure,
     PlainTextElement,
     SectionModule,
     KookCardMessageContainer,
 )
-from tests.test_kook.shared import TEST_DATA_DIR, KookEventDataPath
+from tests.test_kook.shared import TEST_DATA_DIR, KookApiDataPath, KookEventDataPath
 
 
 def test_kook_card_message_container_append():
@@ -146,3 +149,23 @@ def test_websocket_event_create():
         "s": KookMessageSignal.PING.value,
         "sn": 0,
     }
+
+
+@pytest.mark.parametrize(
+    "expected_json_data_path, expected_dataclass",
+    [
+        (KookApiDataPath.USER_ME, KookUserMeResponse),
+        (KookApiDataPath.USER_VIEW, KookUserViewResponse),
+    ],
+)
+def test_api_response_type_parse(
+    expected_json_data_path: Path, expected_dataclass: type[KookApiResponseBase]
+):
+    expected_json_data_str = (expected_json_data_path).read_text(encoding="utf-8")
+
+    response_body = expected_dataclass.from_json(
+        expected_json_data_str,
+    )
+
+    body_dict = response_body.to_dict()
+    assert body_dict == json.loads(expected_json_data_str)

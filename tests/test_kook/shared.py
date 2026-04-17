@@ -34,6 +34,11 @@ class KookEventDataPath:
     RESUME = TEST_DATA_DIR / "kook_ws_event_resume.json"
 
 
+class KookApiDataPath:
+    USER_ME = TEST_DATA_DIR / "kook_api_response_user_me.json"
+    USER_VIEW = TEST_DATA_DIR / "kook_api_response_user_view.json"
+
+
 def mock_kook_client(upload_asset_return: str, send_text_return: str):
     client = MagicMock()
 
