@@ -7,7 +7,6 @@ import psutil
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_path
-from astrbot.core.utils.io import download_file
 
 from .zip_updator import ReleaseInfo, RepoZipUpdator
 
@@ -176,7 +175,7 @@ class AstrBotUpdator(RepoZipUpdator):
             file_url = f"{proxy}/{file_url}"
 
         try:
-            await download_file(file_url, "temp.zip")
+            await self._download_file(file_url, "temp.zip")
             logger.info("下载 AstrBot Core 更新文件完成，正在执行解压...")
             self.unzip_file("temp.zip", self.MAIN_PATH)
         except BaseException as e:
