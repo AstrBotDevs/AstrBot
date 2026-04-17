@@ -236,7 +236,7 @@ class KookPlatformAdapter(Platform):
 
         for match in KOOK_AT_SELECTOR_REGEX.finditer(content):
             if match.start() > cursor:
-                plain_text = content[cursor : match.start()].strip()
+                plain_text = content[cursor : match.start()].strip(" ")
                 if plain_text:
                     components.append(Plain(text=plain_text))
 
@@ -295,7 +295,7 @@ class KookPlatformAdapter(Platform):
             cursor = match.end()
 
         if cursor < len(content):
-            tail_text = content[cursor:].strip()
+            tail_text = content[cursor:].strip(" ")
             if tail_text:
                 components.append(Plain(text=tail_text))
 

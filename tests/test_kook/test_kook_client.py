@@ -150,8 +150,7 @@ async def test_kook_event_warp_message(
     assert astrbotMessage.raw_message == raw_event["d"]
     assert astrbotMessage.message_id == raw_event["d"]["msg_id"]
     assert astrbotMessage.message == expected_message_components
-    assert (
-        astrbotMessage.message_str == expected_message_str
-        if isinstance(expected_message_str, str)
-        else get_json_field(raw_event, expected_message_str)
-    )
+    if isinstance(expected_message_str, str):
+        assert astrbotMessage.message_str == expected_message_str
+    else:
+        assert get_json_field(raw_event, expected_message_str)
