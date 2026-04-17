@@ -13,10 +13,6 @@ MINIMAX_TOKEN_PLAN_MODELS = [
 @register_provider_adapter(
     "minimax_token_plan",
     "MiniMax Token Plan Provider Adapter",
-    default_config_tmpl={
-        "key": "",
-    },
-    provider_display_name="MiniMax Token Plan",
 )
 class ProviderMiniMaxTokenPlan(ProviderAnthropic):
     """MiniMax Token Plan provider.
