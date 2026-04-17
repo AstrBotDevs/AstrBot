@@ -79,7 +79,7 @@ class Main(star.Star):
                     req = event.request_llm(
                         prompt=prompt,
                         session_id=event.session_id,
-                        conversation=none,
+                        conversation=None,
                     )
                     event.set_extra(LTM_ACTIVE_REPLY_KEY, id(req))  # 存 req 的 id，避免影响其他插件触发的 LLM 请求
                     yield req
