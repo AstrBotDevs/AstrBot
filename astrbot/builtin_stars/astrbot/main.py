@@ -78,7 +78,7 @@ class Main(star.Star):
                     req = event.request_llm(
                         prompt=prompt,
                         session_id=event.session_id,
-                        conversation=conv,
+                        conversation=None,  # Proactive replies should not overwrite conversation history with chatroom context.
                     )
                     setattr(req, "_ltm_active_reply_trigger", True)
                     yield req
