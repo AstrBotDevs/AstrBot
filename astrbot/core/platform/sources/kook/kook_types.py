@@ -684,7 +684,7 @@ class KookUserTag(KookBaseReceiveDataClass):
 class KookApiResponseBase(KookBaseReceiveDataClass):
     code: int
     message: str
-    data: dict
+    data: dict  # 就算请求失败了也是空dict
 
     def success(self) -> bool:
         return self.code == 0
