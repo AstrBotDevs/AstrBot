@@ -101,8 +101,7 @@ class KookPlatformAdapter(Platform):
             logger.debug(f'[KOOK] 消息为系统通知, 通知类型为: "{event.extra.type}"')
             logger.debug(f"[KOOK] 原始消息数据: {event.to_json()}")
 
-            if event.extra.type in {e.value for e in KookRoleExtraType}:
-                assert isinstance(event.extra.type, KookRoleExtraType)
+            if isinstance(event.extra.type, KookRoleExtraType):
                 logger.info(
                     f'[KOOK] 收到频道角色更新通知, 类型为"{event.extra.type.value}", 刷新角色缓存'
                 )

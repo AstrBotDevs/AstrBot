@@ -2,7 +2,7 @@ import json
 from enum import Enum, IntEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class KookApiPaths:
@@ -415,7 +415,7 @@ class KookExtra(KookBaseDataClass):
     """事件结构定义
     文档参考 : https://developer.kookapp.cn/doc/event/event-introduction"""
 
-    type: str | int | KookRoleExtraType
+    type: KookRoleExtraType | str | int
     """当 type 非系统消息(255)时, type为int
 
     当 type 为系统消息(255)时, type为str
@@ -440,6 +440,16 @@ class KookExtra(KookBaseDataClass):
     preview_content: str | None = None
     channel_type: int | None = None
     send_msg_device: int | None = None
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def parse_type(cls, value):
+        """优先尝试匹配枚举，失败则保留原值"""
+        if isinstance(value, str):
+            if value in {e.value for e in KookRoleExtraType}:
+                return KookRoleExtraType(value)
+
+        return value
 
 
 class KookMessageEventData(KookBaseDataClass):

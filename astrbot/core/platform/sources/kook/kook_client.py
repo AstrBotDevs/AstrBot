@@ -3,6 +3,7 @@ import base64
 import os
 import random
 import time
+import traceback
 import zlib
 from pathlib import Path
 
@@ -220,8 +221,8 @@ class KookClient:
                 except websockets.exceptions.ConnectionClosed:
                     logger.warning("[KOOK] WebSocket连接已关闭")
                     break
-                except Exception as e:
-                    logger.error(f"[KOOK] 消息处理异常: {e}")
+                except Exception:
+                    logger.error(f"[KOOK] 消息处理异常: {traceback.format_exc()}")
                     break
 
         except Exception as e:
