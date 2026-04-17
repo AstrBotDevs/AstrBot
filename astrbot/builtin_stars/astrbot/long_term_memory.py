@@ -11,6 +11,8 @@ from astrbot.api.platform import MessageType
 from astrbot.api.provider import LLMResponse, Provider, ProviderRequest
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
+from .constants import LTM_ACTIVE_REPLY_KEY
+
 """
 聊天记忆增强
 """
@@ -156,7 +158,8 @@ class LongTermMemory:
         chats_str = "\n---\n".join(self.session_chats[event.unified_msg_origin])
 
         cfg = self.cfg(event)
-        is_active_reply = event.get_extra("_ltm_active_reply", False)
+        active_reply_req_id = event.get_extra(LTM_ACTIVE_REPLY_KEY, None)
+        is_active_reply = active_reply_req_id is not None and id(req) == active_reply_req_id
 
         if cfg["enable_active_reply"] and is_active_reply:
             # 仅在本次请求确实由主动回复触发时，才执行 chatroom 改写
