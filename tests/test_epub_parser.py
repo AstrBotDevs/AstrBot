@@ -131,6 +131,8 @@ def _make_epub_bytes_with_generic_content() -> bytes:
   <body>
     <h1>First</h1>
     Lead text
+    <p>Piura<a href="text00000.html#filepos0000045863">*5</a>, continued.</p>
+    <img src="Image00000.jpg" alt="" />
     <div>Inside div</div>
     <section>Inside section</section>
     <table>
@@ -177,11 +179,13 @@ async def test_epub_parser_reads_spine_order_as_text():
     result = await EpubParser().parse(_make_epub_bytes(), "book.epub")
 
     assert result.media == []
-    assert result.text.startswith("Second")
+    assert "**Title:**" not in result.text
+    assert "[Chapter 2](chapter2.xhtml)" not in result.text
+    assert result.text.startswith("## Second")
     assert "Beta paragraph." in result.text
-    assert "First" in result.text
-    assert "Point A" in result.text
-    assert result.text.index("Second") < result.text.index("First")
+    assert "# First" in result.text
+    assert "* Point A" in result.text
+    assert result.text.index("## Second") < result.text.index("# First")
 
 
 @pytest.mark.asyncio
@@ -191,9 +195,15 @@ async def test_epub_parser_preserves_generic_container_text():
         "book.epub",
     )
 
-    assert "First" in result.text
+    assert "**Title:**" not in result.text
+    assert "# First" in result.text
     assert "Lead text" in result.text
+    assert "Piura, continued." in result.text
+    assert "filepos" not in result.text
+    assert r"[\*5]" not in result.text
+    assert "Image00000.jpg" not in result.text
+    assert "![](" not in result.text
+    assert "\n\n\n" not in result.text
     assert "Inside div" in result.text
     assert "Inside section" in result.text
-    assert "Cell A" in result.text
-    assert "Cell B" in result.text
+    assert "| Cell A | Cell B |" in result.text
