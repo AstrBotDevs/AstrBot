@@ -46,6 +46,12 @@ class RepoZipUpdator:
             verify=certifi.where(),
         )
 
+    @staticmethod
+    def _truncate_response_body(body: str, max_len: int = 1000) -> str:
+        if len(body) <= max_len:
+            return body
+        return body[:max_len] + "...[truncated]"
+
     async def _download_file(
         self, url: str, path: str, timeout: float = 1800.0
     ) -> None:
@@ -85,9 +91,17 @@ class RepoZipUpdator:
                         "zipball_url": release["zipball_url"],
                     },
                 )
+        except httpx.HTTPStatusError as e:
+            response_body = ""
+            if e.response is not None:
+                response_body = self._truncate_response_body(e.response.text)
+                logger.error(
+                    f"请求 {url} 失败，状态码: {e.response.status_code}, 内容: {response_body}",
+                )
+            raise Exception("解析版本信息失败") from e
         except Exception as e:
             logger.error(f"解析版本信息时发生异常: {e}")
-            raise Exception("解析版本信息失败")
+            raise Exception("解析版本信息失败") from e
         return ret
 
     def github_api_release_parser(self, releases: list) -> list:

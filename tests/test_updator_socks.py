@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import certifi
+import httpx
 import pytest
 
 from astrbot.core.zip_updator import RepoZipUpdator
@@ -36,6 +37,26 @@ class _FakeStreamResponse:
             yield self._payload[start : start + chunk_size]
 
 
+class _FakeStatusErrorResponse:
+    def __init__(self, status_code: int, body: str, url: str):
+        self._status_code = status_code
+        self._body = body
+        self._url = url
+
+    def raise_for_status(self) -> None:
+        request = httpx.Request("GET", self._url)
+        response = httpx.Response(
+            self._status_code,
+            text=self._body,
+            request=request,
+        )
+        raise httpx.HTTPStatusError(
+            "status error",
+            request=request,
+            response=response,
+        )
+
+
 class _FakeAsyncClient:
     init_kwargs: dict | None = None
     requested_urls: list[str] = []
@@ -60,6 +81,20 @@ class _FakeAsyncClient:
         assert method == "GET"
         type(self).stream_urls.append(url)
         return _FakeStreamResponse(type(self).stream_payload)
+
+
+class _FakeStatusErrorAsyncClient:
+    def __init__(self, response: _FakeStatusErrorResponse):
+        self._response = response
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def get(self, url: str):
+        return self._response
 
 
 def _reset_fake_client() -> None:
@@ -173,3 +208,36 @@ async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
     assert _FakeAsyncClient.init_kwargs is not None
     assert _FakeAsyncClient.init_kwargs["trust_env"] is True
     assert _FakeAsyncClient.init_kwargs["verify"] == certifi.where()
+
+
+@pytest.mark.asyncio
+async def test_fetch_release_info_logs_status_code_and_truncated_body_on_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import astrbot.core.zip_updator as zip_updator_module
+
+    url = "https://api.soulter.top/releases"
+    body = "x" * 1005
+    log_messages: list[str] = []
+
+    monkeypatch.setattr(
+        RepoZipUpdator,
+        "_create_httpx_client",
+        staticmethod(
+            lambda timeout=30.0: _FakeStatusErrorAsyncClient(  # noqa: ARG005
+                _FakeStatusErrorResponse(502, body, url)
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        zip_updator_module.logger,
+        "error",
+        lambda message: log_messages.append(message),
+    )
+
+    with pytest.raises(Exception, match="解析版本信息失败"):
+        await RepoZipUpdator().fetch_release_info(url)
+
+    assert any("状态码: 502" in message for message in log_messages)
+    assert any("内容: " in message for message in log_messages)
+    assert any("...[truncated]" in message for message in log_messages)
