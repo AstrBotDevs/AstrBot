@@ -48,6 +48,7 @@ def _discover_bay_credentials(endpoint: str) -> str:
 
     Returns:
         API key string, or empty string if not found.
+
     """
     candidates: list[Path] = []
 
@@ -357,7 +358,8 @@ async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
     if not _shell_exec_succeeded(apply_result):
         detail = _format_exec_error_detail(apply_result)
         logger.error(
-            "[Computer] sandbox_sync phase=apply status=failed detail=%s", detail
+            "[Computer] sandbox_sync phase=apply status=failed detail=%s",
+            detail,
         )
         raise RuntimeError(f"Failed to apply sandbox skill sync strategy: {detail}")
     logger.info("[Computer] sandbox_sync phase=apply status=done")
@@ -370,7 +372,8 @@ async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
     if not _shell_exec_succeeded(scan_result):
         detail = _format_exec_error_detail(scan_result)
         logger.error(
-            "[Computer] sandbox_sync phase=scan status=failed detail=%s", detail
+            "[Computer] sandbox_sync phase=scan status=failed detail=%s",
+            detail,
         )
         raise RuntimeError(f"Failed to scan sandbox skills after sync: {detail}")
 
@@ -415,7 +418,7 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             logger.info("[Computer] sandbox_sync phase=upload status=done")
         else:
             logger.info(
-                "[Computer] sandbox_sync phase=upload status=skipped reason=no_local_skills"
+                "[Computer] sandbox_sync phase=upload status=skipped reason=no_local_skills",
             )
             await booter.shell.exec(f"rm -f {SANDBOX_SKILLS_ROOT}/skills.zip")
 
@@ -449,7 +452,7 @@ async def get_booter(
     runtime = config.get("provider_settings", {}).get("computer_use_runtime", "local")
     if runtime == "local":
         return get_local_booter()
-    elif runtime == "none":
+    if runtime == "none":
         raise RuntimeError("Sandbox runtime is disabled by configuration.")
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
@@ -476,7 +479,10 @@ async def get_booter(
             max_sessions = sandbox_cfg.get("shipyard_max_sessions", 10)
 
             client = ShipyardBooter(
-                endpoint_url=ep, access_token=token, ttl=ttl, session_num=max_sessions
+                endpoint_url=ep,
+                access_token=token,
+                ttl=ttl,
+                session_num=max_sessions,
             )
         elif booter_type == "shipyard_neo":
             from .booters.shipyard_neo import ShipyardNeoBooter
@@ -491,7 +497,7 @@ async def get_booter(
                 token = _discover_bay_credentials(ep)
 
             logger.info(
-                f"[Computer] Shipyard Neo config: endpoint={ep}, profile={profile}, ttl={ttl}"
+                f"[Computer] Shipyard Neo config: endpoint={ep}, profile={profile}, ttl={ttl}",
             )
             client = ShipyardNeoBooter(
                 endpoint_url=ep,
@@ -563,11 +569,11 @@ def _get_booter_class(booter_type: str) -> type[ComputerBooter] | None:
         from .booters.shipyard import ShipyardBooter
 
         return ShipyardBooter
-    elif booter_type == BOOTER_SHIPYARD_NEO:
+    if booter_type == BOOTER_SHIPYARD_NEO:
         from .booters.shipyard_neo import ShipyardNeoBooter
 
         return ShipyardNeoBooter
-    elif booter_type == BOOTER_BOXLITE:
+    if booter_type == BOOTER_BOXLITE:
         from .booters.boxlite import BoxliteBooter
 
         return BoxliteBooter

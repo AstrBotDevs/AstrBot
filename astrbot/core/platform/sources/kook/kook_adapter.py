@@ -43,7 +43,10 @@ KOOK_AT_SELECTOR_REGEX = re.compile(r"\(met\)([^()]+)\(met\)")
 )
 class KookPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.kook_config = KookConfig.from_dict(platform_config)
@@ -55,7 +58,9 @@ class KookPlatformAdapter(Platform):
         self._main_task = None
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         inner_message = AstrBotMessage()
         inner_message.session_id = session.session_id
@@ -71,7 +76,9 @@ class KookPlatformAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            name="kook", description="KOOK 适配器", id=self.kook_config.id
+            name="kook",
+            description="KOOK 适配器",
+            id=self.kook_config.id,
         )
 
     def _should_ignore_event_by_bot_nickname(self, author_id: str) -> bool:
@@ -79,7 +86,7 @@ class KookPlatformAdapter(Platform):
 
     async def _on_received(self, event: KookMessageEventData):
         logger.debug(
-            f'[KOOK] 收到来自"{event.channel_type.name}"渠道的消息, 消息类型为: {event.type.name}({event.type.value})'
+            f'[KOOK] 收到来自"{event.channel_type.name}"渠道的消息, 消息类型为: {event.type.name}({event.type.value})',
         )
         event_type = event.type
         if event_type in (KookMessageType.KMARKDOWN, KookMessageType.CARD):
@@ -136,7 +143,8 @@ class KookPlatformAdapter(Platform):
                             # 等待 client 内部触发 _stop_event,或者超时 1 秒后重试
                             # 使用 wait_for 配合 timeout 是为了防止极端情况下 self.running 变化没被察觉
                             await asyncio.wait_for(
-                                self.client.wait_until_closed(), timeout=1.0
+                                self.client.wait_until_closed(),
+                                timeout=1.0,
                             )
                         except asyncio.TimeoutError:
                             # 正常超时,继续下一轮 while 检查
@@ -148,7 +156,7 @@ class KookPlatformAdapter(Platform):
                 else:
                     consecutive_failures += 1
                     logger.error(
-                        f"[KOOK] 连接失败,连续失败次数: {consecutive_failures}"
+                        f"[KOOK] 连接失败,连续失败次数: {consecutive_failures}",
                     )
 
                     if consecutive_failures >= max_consecutive_failures:
@@ -157,7 +165,8 @@ class KookPlatformAdapter(Platform):
 
                     # 等待一段时间后重试
                     wait_time = min(
-                        2**consecutive_failures, max_retry_delay
+                        2**consecutive_failures,
+                        max_retry_delay,
                     )  # 指数退避
                     logger.info(f"[KOOK] 等待 {wait_time} 秒后重试...")
                     await asyncio.sleep(wait_time)
@@ -192,13 +201,15 @@ class KookPlatformAdapter(Platform):
         logger.info("[KOOK] 资源清理完成")
 
     def _parse_kmarkdown_text_message(
-        self, data: KookMessageEventData, self_id: str
+        self,
+        data: KookMessageEventData,
+        self_id: str,
     ) -> tuple[list, str]:
         kmarkdown = data.extra.kmarkdown
         content = data.content or ""
         if kmarkdown is None:
             logger.error(
-                f'[KOOK] 无法转换"{KookMessageType.KMARKDOWN.name}"消息, 消息中找不到kmarkdown字段'
+                f'[KOOK] 无法转换"{KookMessageType.KMARKDOWN.name}"消息, 消息中找不到kmarkdown字段',
             )
             logger.error(f"[KOOK] 原始消息内容: {data.to_json()}")
             return [], ""
@@ -237,7 +248,7 @@ class KookPlatformAdapter(Platform):
                     At(
                         qq=mention_target,
                         name=mention_name_map.get(mention_target, ""),
-                    )
+                    ),
                 )
             cursor = match.end()
 
@@ -341,7 +352,8 @@ class KookPlatformAdapter(Platform):
         return ""
 
     def _handle_image_group(
-        self, module: ContainerModule | ImageGroupModule
+        self,
+        module: ContainerModule | ImageGroupModule,
     ) -> list[str]:
         """专门处理图片组/容器里的合法 URL 提取"""
         valid_urls = []

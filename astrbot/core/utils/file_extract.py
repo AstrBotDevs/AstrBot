@@ -34,7 +34,7 @@ async def extract_file_moonshotai(file_path: str, api_key: str) -> str:
                     source_path.name,
                     source_bytes,
                     "application/octet-stream",
-                )
+                ),
             },
         )
         upload_response.raise_for_status()

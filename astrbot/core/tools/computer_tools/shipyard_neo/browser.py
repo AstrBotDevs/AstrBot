@@ -7,8 +7,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
-
-from .permissions import check_admin_permission
+from astrbot.core.tools.computer_tools.util import check_admin_permission
 
 
 def _to_json(data: Any) -> str:
@@ -24,7 +23,7 @@ async def _get_browser_component(context: ContextWrapper[AstrAgentContext]) -> A
     if browser is None:
         raise RuntimeError(
             "Current sandbox booter does not support browser capability. "
-            "Please switch to shipyard_neo."
+            "Please switch to shipyard_neo.",
         )
     return browser
 
@@ -56,7 +55,7 @@ class BrowserExecTool(FunctionTool):
                 },
             },
             "required": ["cmd"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -119,7 +118,7 @@ class BrowserBatchExecTool(FunctionTool):
                 },
             },
             "required": ["commands"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -168,7 +167,7 @@ class RunBrowserSkillTool(FunctionTool):
                 "tags": {"type": "string"},
             },
             "required": ["skill_key"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]

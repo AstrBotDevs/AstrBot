@@ -1,5 +1,4 @@
-"""
-ACP (AstrBot Communication Protocol) client implementation.
+"""ACP (AstrBot Communication Protocol) client implementation.
 
 ACP is a client-server protocol for inter-service communication,
 similar to MCP but designed specifically for AstrBot's architecture.
@@ -18,8 +17,7 @@ log = logger
 
 
 class AstrbotAcpClient(BaseAstrbotAcpClient):
-    """
-    ACP client for communicating with ACP servers.
+    """ACP client for communicating with ACP servers.
 
     The orchestrator acts as an ACP client, connecting to external
     ACP-compatible services.
@@ -40,8 +38,7 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
         return self._connected
 
     async def connect(self) -> None:
-        """
-        Connect to configured ACP servers.
+        """Connect to configured ACP servers.
 
         ACP servers can be accessed via TCP (host:port) or Unix socket.
         """
@@ -51,12 +48,12 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
         log.info("ACP client initialized.")
 
     async def connect_to_server(self, host: str, port: int) -> None:
-        """
-        Connect to an ACP server via TCP.
+        """Connect to an ACP server via TCP.
 
         Args:
             host: Server hostname or IP
             port: Server port
+
         """
         self._server_url = f"{host}:{port}"
         self._reader, self._writer = await asyncio.open_connection(host, port)
@@ -68,11 +65,11 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
         log.info(f"ACP client connected to {self._server_url}")
 
     async def connect_to_unix_socket(self, socket_path: str) -> None:
-        """
-        Connect to an ACP server via Unix socket.
+        """Connect to an ACP server via Unix socket.
 
         Args:
             socket_path: Path to the Unix socket
+
         """
         self._server_url = f"unix://{socket_path}"
         self._reader, self._writer = await asyncio.open_unix_connection(socket_path)
@@ -140,10 +137,12 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
         log.debug(f"ACP notification: {method}")
 
     async def call_tool(
-        self, server_name: str, tool_name: str, arguments: dict[str, Any]
+        self,
+        server_name: str,
+        tool_name: str,
+        arguments: dict[str, Any],
     ) -> Any:
-        """
-        Call a tool on an ACP server.
+        """Call a tool on an ACP server.
 
         Args:
             server_name: Name of the ACP server
@@ -152,6 +151,7 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
 
         Returns:
             Tool call result
+
         """
         if not self._connected:
             raise RuntimeError("ACP client is not connected")
@@ -184,7 +184,9 @@ class AstrbotAcpClient(BaseAstrbotAcpClient):
         await self._writer.drain()
 
     async def send_notification(
-        self, method: str, params: dict[str, Any] | None = None
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
     ) -> None:
         """Send a one-way notification to the server."""
         message = {

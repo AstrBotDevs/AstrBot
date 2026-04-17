@@ -99,6 +99,11 @@ class _SSLDebugFilter(logging.Filter):
     _SSL_IGNORE_PATTERNS = (
         "APPLICATION_DATA_AFTER_CLOSE_NOTIFY",
         "SSL: APPLICATION_DATA_AFTER_CLOSE_NOTIFY",
+        "SSL: UNEXPECTED_RECORD",
+        "SSLWantRead",
+        "SSLWantWrite",
+        "SSL_ERROR_CODE",
+        "sslPP: error",
     )
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -108,6 +113,14 @@ class _SSLDebugFilter(logging.Filter):
                 record.levelno = logging.DEBUG
                 record.levelname = "DEBUG"
                 return True
+        # Also check exc_info for the error message
+        if record.exc_info and record.exc_info[1]:
+            exc_msg = str(record.exc_info[1])
+            for pattern in self._SSL_IGNORE_PATTERNS:
+                if pattern in exc_msg:
+                    record.levelno = logging.DEBUG
+                    record.levelname = "DEBUG"
+                    return True
         return True
 
 
@@ -137,7 +150,9 @@ class _LoguruInterceptHandler(logging.Handler):
             ),
             "astrbot_version_tag": getattr(record, "astrbot_version_tag", ""),
             "source_file": getattr(
-                record, "source_file", _build_source_file(record.pathname)
+                record,
+                "source_file",
+                _build_source_file(record.pathname),
             ),
             "source_line": getattr(record, "source_line", record.lineno),
             "is_trace": getattr(record, "is_trace", record.name == "astrbot.trace"),
@@ -207,6 +222,8 @@ class LogManager:
         "apscheduler": logging.WARNING,
         "quart": logging.WARNING,
         "hypercorn": logging.WARNING,
+        "httpcore": logging.WARNING,
+        "httpx": logging.WARNING,
     }
 
     @classmethod
@@ -301,6 +318,7 @@ class LogManager:
         handler = LogQueueHandler(log_broker)
         handler.setLevel(logging.DEBUG)
         handler.addFilter(_QueueAnsiColorFilter())
+        handler.addFilter(_SSLDebugFilter())
         handler.setFormatter(
             logging.Formatter(
                 "%(ansi_prefix)s[%(asctime)s.%(msecs)03d] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s "
@@ -415,7 +433,7 @@ class LogManager:
 
         enable = bool(
             config.get("trace_log_enable")
-            or (config.get("log_file", {}) or {}).get("trace_enable", False)
+            or (config.get("log_file", {}) or {}).get("trace_enable", False),
         )
         path = config.get("trace_log_path")
         max_mb = config.get("trace_log_max_mb")

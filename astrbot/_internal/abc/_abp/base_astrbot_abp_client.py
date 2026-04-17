@@ -1,6 +1,4 @@
-"""
-ABP (AstrBot Protocol) client - in-process star communication.
-"""
+"""ABP (AstrBot Protocol) client - in-process star communication."""
 
 from __future__ import annotations
 
@@ -9,8 +7,7 @@ from typing import Any
 
 
 class BaseAstrbotAbpClient(ABC):
-    """
-    ABP client: in-process star (plugin) communication.
+    """ABP client: in-process star (plugin) communication.
 
     Stars register themselves; client delegates calls to registered instances.
 

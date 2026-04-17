@@ -10,7 +10,6 @@ from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
-from .sources.tui.tui_adapter import TUIAdapter
 from .sources.webchat.webchat_adapter import WebChatAdapter
 
 PLATFORM_ADAPTER_MODULES: dict[str, str] = {
@@ -118,11 +117,6 @@ class PlatformManager:
         self.platform_insts.append(webchat_inst)
         self._start_platform_task("webchat", webchat_inst)
 
-        # TUI
-        tui_inst = TUIAdapter({}, self.settings, self.event_queue)
-        self.platform_insts.append(tui_inst)
-        self._start_platform_task("tui", tui_inst)
-
     async def load_platform(self, platform_config: dict) -> None:
         """实例化一个平台"""
         # 动态导入
@@ -212,6 +206,10 @@ class PlatformManager:
                     from .sources.kook.kook_adapter import (  # noqa: F401
                         KookPlatformAdapter,
                     )
+                case "mattermost":
+                    from .sources.mattermost.mattermost_adapter import (
+                        MattermostPlatformAdapter,  # noqa: F401
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 f"加载平台适配器 {platform_config['type']} 失败,原因:{e}｡请检查依赖库是否安装｡提示:可以在 管理面板->平台日志->安装Pip库 中安装依赖库｡",
@@ -248,7 +246,9 @@ class PlatformManager:
                 logger.error(traceback.format_exc())
 
     async def _task_wrapper(
-        self, task: asyncio.Task, platform: Platform | None = None
+        self,
+        task: asyncio.Task,
+        platform: Platform | None = None,
     ) -> None:
         # 设置平台状态为运行中
         if platform:
@@ -329,6 +329,7 @@ class PlatformManager:
 
         Returns:
             包含所有平台统计信息的字典
+
         """
         stats_list = []
         total_errors = 0
@@ -354,7 +355,7 @@ class PlatformManager:
                         "status": "unknown",
                         "error_count": 0,
                         "last_error": None,
-                    }
+                    },
                 )
 
         return {

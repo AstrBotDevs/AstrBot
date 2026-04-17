@@ -16,7 +16,9 @@ RUNTIME_FAILED_MESSAGE = "Runtime bootstrap failed. Please check logs and retry.
 
 def is_runtime_request_ready(core_lifecycle: "AstrBotCoreLifecycle") -> bool:
     return getattr(
-        core_lifecycle, "runtime_request_ready", core_lifecycle.runtime_ready
+        core_lifecycle,
+        "runtime_request_ready",
+        core_lifecycle.runtime_ready,
     )
 
 
@@ -59,7 +61,7 @@ def runtime_status_response(
                 core_lifecycle,
                 include_failure_details=include_failure_details,
             ),
-        ).to_json()
+        ).to_json(),
     )
     response.status_code = status_code
     return response
@@ -107,7 +109,10 @@ class Route:
             full_path = f"/api{path}"
             endpoint = f"{self.__class__.__name__.lower()}_{func.__name__}"
             self.app.add_url_rule(
-                full_path, view_func=func, methods=[method], endpoint=endpoint
+                full_path,
+                view_func=func,
+                methods=[method],
+                endpoint=endpoint,
             )
 
         # 兼容字典和列表两种格式

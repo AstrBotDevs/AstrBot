@@ -80,7 +80,7 @@ class LiveChatSession:
         start_time = time.time()
         if not self.is_speaking or stamp != self.current_stamp:
             logger.warning(
-                f"[Live Chat] stamp 不匹配或未在说话状态: {stamp} vs {self.current_stamp}"
+                f"[Live Chat] stamp 不匹配或未在说话状态: {stamp} vs {self.current_stamp}",
             )
             return None, 0.0
 
@@ -106,7 +106,7 @@ class LiveChatSession:
 
             self.temp_audio_path = audio_path
             logger.info(
-                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {(await anyio.Path(audio_path).stat()).st_size} bytes"
+                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {(await anyio.Path(audio_path).stat()).st_size} bytes",
             )
             return audio_path, time.time() - start_time
 
@@ -254,7 +254,9 @@ class LiveChatRoute(Route):
             logger.info(f"[Live Chat] WebSocket 连接关闭: {username}")
 
     async def _create_attachment_from_file(
-        self, filename: str, attach_type: str
+        self,
+        filename: str,
+        attach_type: str,
     ) -> dict | None:
         """从本地文件创建 attachment 并返回消息部分｡"""
         return await create_attachment_part_from_existing_file(
@@ -266,7 +268,9 @@ class LiveChatRoute(Route):
         )
 
     def _extract_web_search_refs(
-        self, accumulated_text: str, accumulated_parts: list
+        self,
+        accumulated_text: str,
+        accumulated_parts: list,
     ) -> dict:
         """从消息中提取 web_search 引用｡"""
         supported = ["web_search_tavily", "web_search_bocha"]
@@ -280,7 +284,7 @@ class LiveChatRoute(Route):
         for part in tool_call_parts:
             for tool_call in part["tool_calls"]:
                 if tool_call.get("name") not in supported or not tool_call.get(
-                    "result"
+                    "result",
                 ):
                     continue
                 try:
@@ -357,7 +361,8 @@ class LiveChatRoute(Route):
         request_id: str,
     ) -> None:
         back_queue = webchat_queue_mgr.get_or_create_back_queue(
-            request_id, chat_session_id
+            request_id,
+            chat_session_id,
         )
         try:
             while True:
@@ -414,7 +419,9 @@ class LiveChatRoute(Route):
         session.chat_subscription_tasks.clear()
 
     async def _handle_chat_message(
-        self, session: LiveChatSession, message: dict
+        self,
+        session: LiveChatSession,
+        message: dict,
     ) -> None:
         """处理 Chat Mode 消息(ct=chat)"""
         msg_type = message.get("t")
@@ -611,7 +618,7 @@ class LiveChatRoute(Route):
                             tool_calls[tool_call.get("id")] = tool_call
                             if accumulated_text:
                                 accumulated_parts.append(
-                                    {"type": "plain", "text": accumulated_text}
+                                    {"type": "plain", "text": accumulated_text},
                                 )
                                 accumulated_text = ""
                         except Exception:
@@ -627,7 +634,7 @@ class LiveChatRoute(Route):
                                     {
                                         "type": "tool_call",
                                         "tool_calls": [tool_calls[tc_id]],
-                                    }
+                                    },
                                 )
                                 tool_calls.pop(tc_id, None)
                         except Exception:
@@ -666,7 +673,7 @@ class LiveChatRoute(Route):
                         or accumulated_text
                         or accumulated_reasoning
                         or refs
-                        or agent_stats
+                        or agent_stats,
                     )
                 elif (streaming and msg_type == "complete") or not streaming:
                     if chain_type not in (
@@ -705,7 +712,7 @@ class LiveChatRoute(Route):
                                 "data": {
                                     "id": saved_record.id,
                                     "created_at": to_utc_isoformat(
-                                        saved_record.created_at
+                                        saved_record.created_at,
                                     ),
                                 },
                             },
@@ -791,13 +798,16 @@ class LiveChatRoute(Route):
             logger.info(f"[Live Chat] 用户打断: {session.username}")
 
     async def _process_audio(
-        self, session: LiveChatSession, audio_path: str, assemble_duration: float
+        self,
+        session: LiveChatSession,
+        audio_path: str,
+        assemble_duration: float,
     ) -> None:
         """处理音频:STT -> LLM -> 流式 TTS"""
         try:
             # 发送 WAV 组装耗时
             await websocket.send_json(
-                {"t": "metrics", "data": {"wav_assemble_time": assemble_duration}}
+                {"t": "metrics", "data": {"wav_assemble_time": assemble_duration}},
             )
             wav_assembly_finish_time = time.time()
 
@@ -809,7 +819,7 @@ class LiveChatRoute(Route):
             if pm is None or pm.context is None:
                 logger.error("[Live Chat] Plugin manager not available")
                 await websocket.send_json(
-                    {"t": "error", "data": "Plugin manager not available"}
+                    {"t": "error", "data": "Plugin manager not available"},
                 )
                 return
             ctx = pm.context
@@ -821,7 +831,7 @@ class LiveChatRoute(Route):
                 return
 
             await websocket.send_json(
-                {"t": "metrics", "data": {"stt": stt_provider.meta().type}}
+                {"t": "metrics", "data": {"stt": stt_provider.meta().type}},
             )
 
             user_text = await stt_provider.get_text(audio_path)
@@ -835,7 +845,7 @@ class LiveChatRoute(Route):
                 {
                     "t": "user_msg",
                     "data": {"text": user_text, "ts": int(time.time() * 1000)},
-                }
+                },
             )
 
             # 2. 构造消息事件并发送到 pipeline
@@ -869,7 +879,9 @@ class LiveChatRoute(Route):
                         await websocket.send_json({"t": "stop_play"})
                         # 保存消息并标记为被打断
                         await self._save_interrupted_message(
-                            session, user_text, bot_text
+                            session,
+                            user_text,
+                            bot_text,
                         )
                         # 清空队列中未处理的消息
                         while not back_queue.empty():
@@ -894,7 +906,7 @@ class LiveChatRoute(Route):
                     result_message_id = result.get("message_id")
                     if result_message_id != message_id:
                         logger.warning(
-                            f"[Live Chat] 消息 ID 不匹配: {result_message_id} != {message_id}"
+                            f"[Live Chat] 消息 ID 不匹配: {result_message_id} != {message_id}",
                         )
                         continue
 
@@ -913,7 +925,7 @@ class LiveChatRoute(Route):
                                         "llm_total_time": stats.get("end_time", 0)
                                         - stats.get("start_time", 0),
                                     },
-                                }
+                                },
                             )
                         except Exception as e:
                             logger.error(f"[Live Chat] 解析 AgentStats 失败: {e}")
@@ -926,7 +938,7 @@ class LiveChatRoute(Route):
                                 {
                                     "t": "metrics",
                                     "data": stats,
-                                }
+                                },
                             )
                         except Exception as e:
                             logger.error(f"[Live Chat] 解析 TTSStats 失败: {e}")
@@ -950,9 +962,9 @@ class LiveChatRoute(Route):
                                 {
                                     "t": "metrics",
                                     "data": {
-                                        "speak_to_first_frame": speak_to_first_frame_latency
+                                        "speak_to_first_frame": speak_to_first_frame_latency,
                                     },
-                                }
+                                },
                             )
 
                         text = result.get("text")
@@ -961,7 +973,7 @@ class LiveChatRoute(Route):
                                 {
                                     "t": "bot_text_chunk",
                                     "data": {"text": text},
-                                }
+                                },
                             )
 
                         # 发送音频数据给前端
@@ -969,7 +981,7 @@ class LiveChatRoute(Route):
                             {
                                 "t": "response",
                                 "data": data,  # base64 编码的音频数据
-                            }
+                            },
                         )
 
                     elif result_type in ["complete", "end"]:
@@ -985,7 +997,7 @@ class LiveChatRoute(Route):
                                         "text": bot_text,
                                         "ts": int(time.time() * 1000),
                                     },
-                                }
+                                },
                             )
 
                         # 发送结束标记
@@ -997,7 +1009,7 @@ class LiveChatRoute(Route):
                             {
                                 "t": "metrics",
                                 "data": {"wav_to_tts_total_time": wav_to_tts_duration},
-                            }
+                            },
                         )
                         break
             finally:
@@ -1012,7 +1024,10 @@ class LiveChatRoute(Route):
             session.should_interrupt = False
 
     async def _save_interrupted_message(
-        self, session: LiveChatSession, user_text: str, bot_text: str
+        self,
+        session: LiveChatSession,
+        user_text: str,
+        bot_text: str,
     ) -> None:
         """保存被打断的消息"""
         interrupted_text = bot_text + " [用户打断]"
@@ -1022,11 +1037,11 @@ class LiveChatRoute(Route):
         try:
             timestamp = int(time.time() * 1000)
             logger.info(
-                f"[Live Chat] 用户消息: {user_text} (session: {session.session_id}, ts: {timestamp})"
+                f"[Live Chat] 用户消息: {user_text} (session: {session.session_id}, ts: {timestamp})",
             )
             if bot_text:
                 logger.info(
-                    f"[Live Chat] Bot 消息(打断): {interrupted_text} (session: {session.session_id}, ts: {timestamp})"
+                    f"[Live Chat] Bot 消息(打断): {interrupted_text} (session: {session.session_id}, ts: {timestamp})",
                 )
         except Exception as e:
             logger.error(f"[Live Chat] 记录消息失败: {e}", exc_info=True)

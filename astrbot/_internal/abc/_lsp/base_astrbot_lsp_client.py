@@ -1,5 +1,4 @@
-"""
-LSP (Language Server Protocol) client.
+"""LSP (Language Server Protocol) client.
 
 Transport: stdio subprocess
 Messages:  JSON-RPC 2.0 with Content-Length header
@@ -8,10 +7,7 @@ Messages:  JSON-RPC 2.0 with Content-Length header
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 
 class LspMessage:
@@ -43,8 +39,7 @@ class LspNotification(LspMessage):
 
 
 class BaseAstrbotLspClient(ABC):
-    """
-    LSP client: connects to LSP servers via stdio subprocess.
+    """LSP client: connects to LSP servers via stdio subprocess.
 
     Subclass must implement:
     - connect() -> None
@@ -71,8 +66,7 @@ class BaseAstrbotLspClient(ABC):
         command: list[str],
         workspace_uri: str,
     ) -> None:
-        """
-        Start LSP server subprocess and complete handshake.
+        """Start LSP server subprocess and complete handshake.
 
         Steps:
         1. Spawn subprocess with stdin/stdout pipes
@@ -88,12 +82,12 @@ class BaseAstrbotLspClient(ABC):
         method: str,
         params: dict[str, Any] | None = None,
     ) -> Any:
-        """
-        Send JSON-RPC request and return result.
+        """Send JSON-RPC request and return result.
 
         Raises:
             RuntimeError: not connected
             Exception: server returned error
+
         """
         ...
 
@@ -103,9 +97,7 @@ class BaseAstrbotLspClient(ABC):
         method: str,
         params: dict[str, Any] | None = None,
     ) -> None:
-        """
-        Send JSON-RPC notification (no response expected).
-        """
+        """Send JSON-RPC notification (no response expected)."""
         ...
 
     @abstractmethod

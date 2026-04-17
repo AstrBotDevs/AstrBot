@@ -1,6 +1,6 @@
 <script setup>
 import { useCommonStore } from "@/stores/common";
-import axios from "@/utils/request";
+import axios, { resolveApiUrl } from "@/utils/request";
 import { EventSourcePolyfill } from "event-source-polyfill";
 </script>
 
@@ -135,7 +135,7 @@ export default {
 
       const token = localStorage.getItem("token");
 
-      this.eventSource = new EventSourcePolyfill("/api/live-log", {
+      this.eventSource = new EventSourcePolyfill(resolveApiUrl("/api/live-log"), {
         headers: {
           Authorization: token ? `Bearer ${token}` : "",
         },

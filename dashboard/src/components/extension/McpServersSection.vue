@@ -438,8 +438,9 @@ export default {
   mounted() {
     this.getServers();
     this.refreshInterval = setInterval(() => {
+      // 轮询时间延长到30秒，减少服务器压力，同时保持数据相对新鲜
       this.getServers();
-    }, 5000);
+    }, 30000);
   },
   unmounted() {
     if (this.refreshInterval) {

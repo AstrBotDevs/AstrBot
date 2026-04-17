@@ -1,5 +1,4 @@
-"""
-ACP (AstrBot Communication Protocol) server implementation.
+"""ACP (AstrBot Communication Protocol) server implementation.
 
 ACP servers listen for connections from ACP clients and provide
 services/tools to the orchestrator.
@@ -19,8 +18,7 @@ log = logger
 
 
 class AstrbotAcpServer(BaseAstrbotAcpServer):
-    """
-    ACP server for accepting connections from ACP clients.
+    """ACP server for accepting connections from ACP clients.
 
     ACP servers expose tools/notifications that can be called by clients.
     """
@@ -35,36 +33,38 @@ class AstrbotAcpServer(BaseAstrbotAcpServer):
         self._notification_handlers: dict[str, Callable[..., Any]] = {}
 
     def register_tool(self, name: str, handler: Callable[..., Any]) -> None:
-        """
-        Register a tool handler.
+        """Register a tool handler.
 
         Args:
             name: Tool name
             handler: Async callable that handles tool calls
+
         """
         self._tool_handlers[name] = handler
         log.debug(f"ACP server registered tool: {name}")
 
     def register_notification_handler(
-        self, name: str, handler: Callable[..., Any]
+        self,
+        name: str,
+        handler: Callable[..., Any],
     ) -> None:
-        """
-        Register a notification handler.
+        """Register a notification handler.
 
         Args:
             name: Notification method name
             handler: Async callable that handles notifications
+
         """
         self._notification_handlers[name] = handler
         log.debug(f"ACP server registered notification handler: {name}")
 
     async def start(self, host: str = "127.0.0.1", port: int = 8765) -> None:
-        """
-        Start the ACP server.
+        """Start the ACP server.
 
         Args:
             host: Host to bind to
             port: Port to listen on
+
         """
         self._host = host
         self._port = port
@@ -77,7 +77,9 @@ class AstrbotAcpServer(BaseAstrbotAcpServer):
         log.info(f"ACP server listening on {host}:{port}")
 
     async def _handle_client(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
     ) -> None:
         """Handle an incoming ACP client connection."""
         addr = writer.get_extra_info("peername")
@@ -180,12 +182,12 @@ class AstrbotAcpServer(BaseAstrbotAcpServer):
         return response
 
     async def broadcast_notification(self, method: str, params: dict[str, Any]) -> None:
-        """
-        Broadcast a notification to all connected clients.
+        """Broadcast a notification to all connected clients.
 
         Args:
             method: Notification method name
             params: Notification parameters
+
         """
         message = {
             "jsonrpc": "2.0",

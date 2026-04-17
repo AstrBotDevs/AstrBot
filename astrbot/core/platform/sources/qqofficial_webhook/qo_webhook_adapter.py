@@ -28,10 +28,12 @@ class botClient(Client):
         self.platform = platform
 
     async def on_group_at_message_create(
-        self, message: botpy.message.GroupMessage
+        self,
+        message: botpy.message.GroupMessage,
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.GROUP_MESSAGE
+            message,
+            MessageType.GROUP_MESSAGE,
         )
         abm.group_id = message.group_openid
         abm.session_id = abm.group_id
@@ -40,7 +42,8 @@ class botClient(Client):
 
     async def on_at_message_create(self, message: botpy.message.Message) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.GROUP_MESSAGE
+            message,
+            MessageType.GROUP_MESSAGE,
         )
         abm.group_id = message.channel_id
         abm.session_id = abm.group_id
@@ -48,10 +51,12 @@ class botClient(Client):
         self._commit(abm)
 
     async def on_direct_message_create(
-        self, message: botpy.message.DirectMessage
+        self,
+        message: botpy.message.DirectMessage,
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.FRIEND_MESSAGE
+            message,
+            MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
         self.platform.remember_session_scene(abm.session_id, "friend")
@@ -59,7 +64,8 @@ class botClient(Client):
 
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.FRIEND_MESSAGE
+            message,
+            MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
         self.platform.remember_session_scene(abm.session_id, "friend")
@@ -69,22 +75,31 @@ class botClient(Client):
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
         self.platform.commit_event(
             QQOfficialWebhookMessageEvent(
-                abm.message_str, abm, self.platform.meta(), abm.session_id, self
-            )
+                abm.message_str,
+                abm,
+                self.platform.meta(),
+                abm.session_id,
+                self,
+            ),
         )
 
 
 @register_platform_adapter("qq_official_webhook", "QQ 机器人官方 API 适配器(Webhook)")
 class QQOfficialWebhookPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.appid = platform_config["appid"]
         self.secret = platform_config["secret"]
         self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
         intents = botpy.Intents(
-            public_messages=True, public_guild_messages=True, direct_message=True
+            public_messages=True,
+            public_guild_messages=True,
+            direct_message=True,
         )
         self.client = botClient(intents=intents, bot_log=False, timeout=20)
         self.client.set_platform(self)
@@ -93,10 +108,14 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self._session_scene: dict[str, str] = {}
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ) -> None:
         await QQOfficialPlatformAdapter._send_by_session_common(
-            self, session, message_chain
+            self,
+            session,
+            message_chain,
         )
 
     def remember_session_message_id(self, session_id: str, message_id: str) -> None:
@@ -128,7 +147,9 @@ class QQOfficialWebhookPlatformAdapter(Platform):
 
     async def run(self) -> None:
         self.webhook_helper = QQOfficialWebhook(
-            self.config, self._event_queue, self.client
+            self.config,
+            self._event_queue,
+            self.client,
         )
         await self.webhook_helper.initialize()
         webhook_uuid = self.config.get("webhook_uuid")
@@ -159,4 +180,4 @@ class QQOfficialWebhookPlatformAdapter(Platform):
                     f"Exception occurred during QQOfficialWebhook server shutdown: {exc}",
                     exc_info=True,
                 )
-        logger.info("QQ 机器人官方 API 适配器已经被优雅地关闭")
+        logger.info("QQ 机器人官方 API 适配器已经被关闭")

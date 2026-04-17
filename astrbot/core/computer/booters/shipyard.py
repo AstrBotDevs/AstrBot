@@ -49,7 +49,8 @@ class ShipyardBooter(ComputerBooter):
         session_num: int = 10,
     ) -> None:
         self._sandbox_client = ShipyardClient(
-            endpoint_url=endpoint_url, access_token=access_token
+            endpoint_url=endpoint_url,
+            access_token=access_token,
         )
         self._ttl = ttl
         self._session_num = session_num

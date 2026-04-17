@@ -83,7 +83,7 @@ class ProviderMiMoSTTAPI(STTProvider):
             except Exception as exc:
                 error_text = response.text[:1024]
                 raise MiMoAPIError(
-                    f"MiMo STT API request failed: HTTP {response.status_code}, response: {error_text}"
+                    f"MiMo STT API request failed: HTTP {response.status_code}, response: {error_text}",
                 ) from exc
 
             data = response.json()

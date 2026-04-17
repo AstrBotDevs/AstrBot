@@ -53,7 +53,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "message_id": message_id,
                 },  # end means this request is finished
             )
-            return
+            return None
 
         data = ""
         for comp in message.chain:

@@ -86,9 +86,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step(self):
-        """
-        执行 Coze Agent 的一个步骤
-        """
+        """执行 Coze Agent 的一个步骤"""
         if not self.req:
             raise ValueError("Request is not set. Please call reset() first.")
 
@@ -109,12 +107,13 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             logger.error(f"Coze 请求失败:{e!s}")
             self._transition_state(AgentState.ERROR)
             self.final_llm_resp = LLMResponse(
-                role="err", completion_text=f"Coze 请求失败:{e!s}"
+                role="err",
+                completion_text=f"Coze 请求失败:{e!s}",
             )
             yield AgentResponse(
                 type="err",
                 data=AgentResponseData(
-                    chain=MessageChain().message(f"Coze 请求失败:{e!s}")
+                    chain=MessageChain().message(f"Coze 请求失败:{e!s}"),
                 ),
             )
         finally:
@@ -179,7 +178,8 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                         if url:
                                             file_id = (
                                                 await self._download_and_upload_image(
-                                                    url, session_id
+                                                    url,
+                                                    session_id,
                                                 )
                                             )
                                             processed_content.append(
@@ -187,7 +187,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                                     "type": "file",
                                                     "file_id": file_id,
                                                     "file_url": url,
-                                                }
+                                                },
                                             )
                                     except Exception as e:
                                         logger.warning(f"处理上下文图片失败: {e}")
@@ -199,7 +199,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                     "role": ctx["role"],
                                     "content": processed_content,
                                     "content_type": "object_string",
-                                }
+                                },
                             )
                     else:
                         # 纯文本内容
@@ -208,7 +208,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                 "role": ctx["role"],
                                 "content": content,
                                 "content_type": "text",
-                            }
+                            },
                         )
 
         # 构建当前消息
@@ -228,7 +228,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                             {
                                 "type": "image",
                                 "file_id": file_id,
-                            }
+                            },
                         )
                     except Exception as e:
                         logger.warning(f"处理图片失败 {url}: {e}")
@@ -241,7 +241,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                             "role": "user",
                             "content": content,
                             "content_type": "object_string",
-                        }
+                        },
                     )
             elif prompt:
                 # 纯文本
@@ -295,7 +295,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                         yield AgentResponse(
                             type="streaming_delta",
                             data=AgentResponseData(
-                                chain=MessageChain().message(content)
+                                chain=MessageChain().message(content),
                             ),
                         )
 

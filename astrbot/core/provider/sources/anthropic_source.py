@@ -55,7 +55,7 @@ class ProviderAnthropic(Provider):
             return
         raise EmptyModelOutputError(
             "Anthropic completion has no usable output. "
-            f"completion_id={completion_id}, stop_reason={stop_reason}"
+            f"completion_id={completion_id}, stop_reason={stop_reason}",
         )
 
     @staticmethod
@@ -233,7 +233,7 @@ class ProviderAnthropic(Provider):
                                     # Detect actual image format from binary data
                                     image_bytes = base64.b64decode(base64_data)
                                     media_type = self._detect_image_mime_type(
-                                        image_bytes
+                                        image_bytes,
                                     )
                                     converted_content.append(
                                         {
@@ -243,22 +243,22 @@ class ProviderAnthropic(Provider):
                                                 "media_type": media_type,
                                                 "data": base64_data,
                                             },
-                                        }
+                                        },
                                     )
                                 except ValueError:
                                     logger.warning(
-                                        f"Failed to parse image data URI: {url[:50]}..."
+                                        f"Failed to parse image data URI: {url[:50]}...",
                                     )
                             else:
                                 logger.warning(
-                                    f"Unsupported image URL format for Anthropic: {url[:50]}..."
+                                    f"Unsupported image URL format for Anthropic: {url[:50]}...",
                                 )
                         elif part.get("type") == "audio_url":
                             converted_content.append(
                                 {
                                     "type": "text",
                                     "text": "[Audio Attachment]",
-                                }
+                                },
                             )
                         else:
                             converted_content.append(part)
@@ -266,7 +266,7 @@ class ProviderAnthropic(Provider):
                         {
                             "role": "user",
                             "content": converted_content,
-                        }
+                        },
                     )
                 else:
                     new_messages.append(message)
@@ -298,7 +298,7 @@ class ProviderAnthropic(Provider):
                 payloads["tool_choice"] = {
                     "type": "any"
                     if payloads.get("tool_choice") == "required"
-                    else "auto"
+                    else "auto",
                 }
 
         extra_body = self.provider_config.get("custom_extra_body", {})
@@ -309,7 +309,9 @@ class ProviderAnthropic(Provider):
 
         try:
             completion = await self.client.messages.create(
-                **payloads, stream=False, extra_body=extra_body
+                **payloads,
+                stream=False,
+                extra_body=extra_body,
             )
         except httpx.RequestError as e:
             proxy = self.provider_config.get("proxy", "")
@@ -326,7 +328,7 @@ class ProviderAnthropic(Provider):
 
         if len(completion.content) == 0:
             raise EmptyModelOutputError(
-                f"Anthropic completion is empty. completion_id={completion.id}"
+                f"Anthropic completion is empty. completion_id={completion.id}",
             )
 
         llm_response = LLMResponse(role="assistant")
@@ -357,13 +359,13 @@ class ProviderAnthropic(Provider):
             if not llm_response.reasoning_content:
                 raise EmptyModelOutputError(
                     "Anthropic completion has no usable output. "
-                    f"completion_id={completion.id}, stop_reason={completion.stop_reason}"
+                    f"completion_id={completion.id}, stop_reason={completion.stop_reason}",
                 )
 
             # We have reasoning content (ThinkingBlock) - this is valid
             stop_reason = getattr(completion, "stop_reason", "unknown")
             logger.debug(
-                f"Completion contains only ThinkingBlock (stop_reason={stop_reason})"
+                f"Completion contains only ThinkingBlock (stop_reason={stop_reason})",
             )
             llm_response.completion_text = ""  # Ensure empty string, not None
 
@@ -385,7 +387,7 @@ class ProviderAnthropic(Provider):
                 payloads["tool_choice"] = {
                     "type": "any"
                     if payloads.get("tool_choice") == "required"
-                    else "auto"
+                    else "auto",
                 }
 
         # 用于累积工具调用信息
@@ -404,7 +406,8 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
 
         async with self.client.messages.stream(
-            **payloads, extra_body=extra_body
+            **payloads,
+            extra_body=extra_body,
         ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:

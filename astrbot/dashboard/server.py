@@ -58,7 +58,6 @@ from .routes import (
     SubAgentRoute,
     T2iRoute,
     ToolsRoute,
-    TUIChatRoute,
     UpdateRoute,
 )
 from .routes.api_key import ALL_OPEN_API_SCOPES
@@ -100,7 +99,7 @@ _RUNTIME_FAILED_RECOVERY_ENDPOINT_PREFIXES = (
 
 APP: Quart
 _ENV_PLACEHOLDER_RE = re.compile(
-    r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*))?\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))"
+    r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*))?\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))",
 )
 
 
@@ -128,7 +127,7 @@ def _expand_env_placeholders(value: str, field_name: str) -> str:
     if missing_vars:
         missing = ", ".join(sorted(set(missing_vars)))
         raise ValueError(
-            f"Unresolved environment variable(s) in dashboard {field_name}: {missing}"
+            f"Unresolved environment variable(s) in dashboard {field_name}: {missing}",
         )
     return expanded
 
@@ -212,7 +211,7 @@ class AstrBotDashboard:
         if self.enable_webui and not (Path(self.data_path) / "index.html").exists():
             logger.warning(
                 f"前端未内置或未初始化 (index.html missing in {self.data_path}), "
-                "回退到仅启动后端. 请访问在线面板: dash.astrbot.men"
+                "回退到仅启动后端. 请访问在线面板: dash.astrbot.men",
             )
             self.enable_webui = False
             self._webui_fallback = True
@@ -319,7 +318,9 @@ class AstrBotDashboard:
         self.subagent_route = SubAgentRoute(self.context, self.core_lifecycle)
         self.skills_route = SkillsRoute(self.context, self.core_lifecycle)
         self.conversation_route = ConversationRoute(
-            self.context, db, self.core_lifecycle
+            self.context,
+            db,
+            self.core_lifecycle,
         )
         self.file_route = FileRoute(self.context)
         self.session_management_route = SessionManagementRoute(
@@ -334,7 +335,6 @@ class AstrBotDashboard:
         self.platform_route = PlatformRoute(self.context, self.core_lifecycle)
         self.backup_route = BackupRoute(self.context, db, self.core_lifecycle)
         self.live_chat_route = LiveChatRoute(self.context, db, self.core_lifecycle)
-        self.tui_chat_route = TUIChatRoute(self.context, db, self.core_lifecycle)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -368,7 +368,10 @@ class AstrBotDashboard:
         self._jwt_secret = dashboard_cfg["jwt_secret"]
 
     async def guarded_srv_plug_route(
-        self, subpath: str, *args, **kwargs
+        self,
+        subpath: str,
+        *args,
+        **kwargs,
     ) -> ResponseReturnValue:
         guard_resp = self._maybe_runtime_guard(request.path)
         if guard_resp is not None:
@@ -635,7 +638,7 @@ class AstrBotDashboard:
     async def run(self) -> None:
         if self._webui_fallback:
             logger.warning(
-                "前端未内置或未初始化, 回退到仅启动后端. 请访问在线面板: dash.astrbot.men"
+                "前端未内置或未初始化, 回退到仅启动后端. 请访问在线面板: dash.astrbot.men",
             )
         elif not self.enable_webui:
             logger.warning("前端已禁用, 请访问在线面板: dash.astrbot.men")
@@ -783,11 +786,10 @@ class AstrBotDashboard:
                     display_url = f"{scheme}://{ip}:{port}"
 
                 parts.append(f"   ➜  网络: {display_url}\n")
+        elif ":" in host:
+            parts.append(f"   ➜  指定监听: {scheme}://[{host}]:{port}\n")
         else:
-            if ":" in host:
-                parts.append(f"   ➜  指定监听: {scheme}://[{host}]:{port}\n")
-            else:
-                parts.append(f"   ➜  指定监听: {scheme}://{host}:{port}\n")
+            parts.append(f"   ➜  指定监听: {scheme}://{host}:{port}\n")
 
         if enable_webui:
             parts.append("   ➜  默认用户名和密码: astrbot\n")
@@ -795,7 +797,7 @@ class AstrBotDashboard:
 
         if not local_ips:
             parts.append(
-                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问｡\n"
+                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问｡\n",
             )
 
         logger.info("".join(parts))

@@ -84,7 +84,7 @@ class Platform(abc.ABC):
         """是否正在使用统一 Webhook 模式"""
         return bool(
             self.config.get("unified_webhook_mode", False)
-            and self.config.get("webhook_uuid")
+            and self.config.get("webhook_uuid"),
         )
 
     def get_stats(self) -> dict:
@@ -123,6 +123,7 @@ class Platform(abc.ABC):
 
     async def terminate(self) -> None:
         """终止一个平台的运行实例｡"""
+        self._status = PlatformStatus.STOPPED
 
     @abc.abstractmethod
     def meta(self) -> PlatformMetadata:
@@ -144,8 +145,9 @@ class Platform(abc.ABC):
         """提交一个事件到事件队列｡"""
         self._event_queue.put_nowait(event)
 
-    def get_client(self) -> object:
+    def get_client(self) -> object | None:
         """获取平台的客户端对象｡"""
+        return None
 
     async def webhook_callback(self, request: Any) -> Any:
         """统一 Webhook 回调入口｡
@@ -161,5 +163,6 @@ class Platform(abc.ABC):
 
         Raises:
             NotImplementedError: 平台未实现统一 Webhook 模式
+
         """
         raise NotImplementedError(f"平台 {self.meta().name} 未实现统一 Webhook 模式")

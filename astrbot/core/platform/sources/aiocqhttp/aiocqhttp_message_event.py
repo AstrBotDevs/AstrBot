@@ -68,8 +68,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         is_group: bool,
         session_id: str | None,
     ) -> bool:
-        """
-        尝试普通发送,若失败且消息中包含本地文件,则尝试通过流式上传重发｡
+        """尝试普通发送,若失败且消息中包含本地文件,则尝试通过流式上传重发｡
         返回 True 表示发送成功(含重试成功),False 表示失败且无需继续｡
         抛出异常表示需要上层处理(如取消任务等)｡
         """
@@ -88,7 +87,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         modified = True
                     except Exception as upload_err:
                         raise RuntimeError(
-                            f"NapCat 文件流式上传失败: {upload_err}"
+                            f"NapCat 文件流式上传失败: {upload_err}",
                         ) from upload_err
             new_chain.chain.append(new_seg)
         if not modified:
@@ -160,7 +159,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             }
             resp = await bot.call_action("upload_file_stream", **params)
             if not cls._is_upload_success_response(
-                resp, expected_statuses=("chunk_received", "file_complete")
+                resp,
+                expected_statuses=("chunk_received", "file_complete"),
             ):
                 raise OSError(f"上传分片 {i} 失败: {resp}")
 
@@ -168,7 +168,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         complete_params = {"stream_id": stream_id, "is_complete": True}
         resp = await bot.call_action("upload_file_stream", **complete_params)
         if not cls._is_upload_success_response(
-            resp, expected_statuses=("file_complete",)
+            resp,
+            expected_statuses=("file_complete",),
         ):
             raise OSError(f"文件合并失败: {resp}")
 
@@ -314,7 +315,11 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 # 其他异常:尝试流式重试
                 try:
                     success = await cls._send_with_stream_retry(
-                        bot, message_chain, event, is_group, session_id
+                        bot,
+                        message_chain,
+                        event,
+                        is_group,
+                        session_id,
                     )
                     if success:
                         return
@@ -358,11 +363,15 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
                 if is_group:
                     await bot.send_group_file(
-                        group_id=session_id_int, file=file_path, name=file_name
+                        group_id=session_id_int,
+                        file=file_path,
+                        name=file_name,
                     )
                 else:
                     await bot.send_private_file(
-                        user_id=session_id_int, file=file_path, name=file_name
+                        user_id=session_id_int,
+                        file=file_path,
+                        name=file_name,
                     )
             else:
                 messages = await cls._parse_onebot_json(MessageChain([seg]))

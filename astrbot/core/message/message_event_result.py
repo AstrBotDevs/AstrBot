@@ -123,21 +123,21 @@ class MessageChain:
 
         Args:
             with_other_comps_mark (bool): 是否在纯文本中标记其他组件的位置
+
         """
         if not with_other_comps_mark:
             return " ".join(
-                [comp.text for comp in self.chain if isinstance(comp, Plain)]
+                [comp.text for comp in self.chain if isinstance(comp, Plain)],
             )
-        else:
-            texts = []
-            for comp in self.chain:
-                if isinstance(comp, Plain):
-                    texts.append(comp.text)
-                elif isinstance(comp, Json):
-                    texts.append(f"{comp.data}")
-                else:
-                    texts.append(f"[{comp.__class__.__name__}]")
-            return " ".join(texts)
+        texts = []
+        for comp in self.chain:
+            if isinstance(comp, Plain):
+                texts.append(comp.text)
+            elif isinstance(comp, Json):
+                texts.append(f"{comp.data}")
+            else:
+                texts.append(f"[{comp.__class__.__name__}]")
+        return " ".join(texts)
 
     def squash_plain(self):
         """将消息链中的所有 Plain 消息段聚合到第一个 Plain 消息段中｡"""

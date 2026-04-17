@@ -29,7 +29,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
     @staticmethod
     async def send_with_client(
-        client: WeChatClient, message: MessageChain, user_name: str
+        client: WeChatClient,
+        message: MessageChain,
+        user_name: str,
     ) -> None:
         pass
 
@@ -83,7 +85,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         self.client.message.send_text(message_obj.sender.user_id, chunk)
                 else:
                     logger.debug(
-                        f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent."
+                        f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent.",
                     )
                     self.message_out["cached_xml"] = plain_chunks
             elif isinstance(comp, Image):
@@ -94,13 +96,14 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     except Exception as e:
                         logger.error(f"微信公众平台上传图片失败: {e}")
                         await self.send(
-                            MessageChain().message(f"微信公众平台上传图片失败: {e}")
+                            MessageChain().message(f"微信公众平台上传图片失败: {e}"),
                         )
                         return
                     logger.debug(f"微信公众平台上传图片返回: {response}")
                     if active_send_mode:
                         self.client.message.send_image(
-                            message_obj.sender.user_id, response["media_id"]
+                            message_obj.sender.user_id,
+                            response["media_id"],
                         )
                     else:
                         reply = ImageReply(
@@ -121,13 +124,16 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         except Exception as e:
                             logger.error(f"微信公众平台上传语音失败: {e}")
                             await self.send(
-                                MessageChain().message(f"微信公众平台上传语音失败: {e}")
+                                MessageChain().message(
+                                    f"微信公众平台上传语音失败: {e}",
+                                ),
                             )
                             return
                         logger.info(f"微信公众平台上传语音返回: {response}")
                         if active_send_mode:
                             self.client.message.send_voice(
-                                message_obj.sender.user_id, response["media_id"]
+                                message_obj.sender.user_id,
+                                response["media_id"],
                             )
                         else:
                             reply = VoiceReply(

@@ -1,5 +1,4 @@
-"""
-ACP (AstrBot Communication Protocol) client.
+"""ACP (AstrBot Communication Protocol) client.
 
 Transport: TCP | Unix Socket
 Messages:  JSON with Content-Length header
@@ -12,8 +11,7 @@ from typing import Any
 
 
 class BaseAstrbotAcpClient(ABC):
-    """
-    ACP client: connects to ACP servers via TCP or Unix socket.
+    """ACP client: connects to ACP servers via TCP or Unix socket.
 
     Subclass must implement:
     - connect() -> None

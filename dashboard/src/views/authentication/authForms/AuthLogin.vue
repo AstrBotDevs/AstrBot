@@ -3,8 +3,14 @@ import { ref, onMounted, onUnmounted } from "vue";
 import { useAuthStore } from "@/stores/auth";
 import { Form } from "vee-validate";
 import { useModuleI18n } from "@/i18n/composables";
+import { useApiStore } from "@/stores/api";
 
 const { tm: t } = useModuleI18n("features/auth");
+const apiStore = useApiStore();
+
+const emit = defineEmits<{
+  (e: "openServerConfig"): void;
+}>();
 
 const show1 = ref(false);
 const password = ref("");
@@ -33,6 +39,13 @@ onUnmounted(() => {
 });
 
 async function validate(_values: any, { setErrors }: any) {
+  // Guard: if no backend URL configured, open server config dialog first
+  if (!apiStore.apiBaseUrl) {
+    loading.value = false;
+    emit("openServerConfig");
+    return;
+  }
+
   loading.value = true;
 
   const authStore = useAuthStore();

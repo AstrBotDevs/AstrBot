@@ -60,7 +60,9 @@ class StarRequestSubStage(Stage):
                     traceback_text,
                 )
                 sdk_plugin_bridge = getattr(
-                    self.ctx.plugin_manager.context, "sdk_plugin_bridge", None
+                    self.ctx.plugin_manager.context,
+                    "sdk_plugin_bridge",
+                    None,
                 )
                 if sdk_plugin_bridge is not None:
                     try:

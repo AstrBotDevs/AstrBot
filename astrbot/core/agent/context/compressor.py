@@ -20,13 +20,15 @@ from astrbot.core.agent.context.truncator import ContextTruncator
 
 @runtime_checkable
 class ContextCompressor(Protocol):
-    """
-    Protocol for context compressors.
+    """Protocol for context compressors.
     Provides an interface for compressing message lists.
     """
 
     def should_compress(
-        self, messages: list[Message], current_tokens: int, max_tokens: int
+        self,
+        messages: list[Message],
+        current_tokens: int,
+        max_tokens: int,
     ) -> bool:
         """Check if compression is needed.
 
@@ -37,6 +39,7 @@ class ContextCompressor(Protocol):
 
         Returns:
             True if compression is needed, False otherwise.
+
         """
         ...
 
@@ -48,6 +51,7 @@ class ContextCompressor(Protocol):
 
         Returns:
             The compressed message list.
+
         """
         ...
 
@@ -58,19 +62,25 @@ class TruncateByTurnsCompressor:
     """
 
     def __init__(
-        self, truncate_turns: int = 1, compression_threshold: float = 0.82
+        self,
+        truncate_turns: int = 1,
+        compression_threshold: float = 0.82,
     ) -> None:
         """Initialize the truncate by turns compressor.
 
         Args:
             truncate_turns: The number of turns to remove when truncating (default: 1).
             compression_threshold: The compression trigger threshold (default: 0.82).
+
         """
         self.truncate_turns = truncate_turns
         self.compression_threshold = compression_threshold
 
     def should_compress(
-        self, messages: list[Message], current_tokens: int, max_tokens: int
+        self,
+        messages: list[Message],
+        current_tokens: int,
+        max_tokens: int,
     ) -> bool:
         """Check if compression is needed.
 
@@ -81,6 +91,7 @@ class TruncateByTurnsCompressor:
 
         Returns:
             True if compression is needed, False otherwise.
+
         """
         if max_tokens <= 0 or current_tokens <= 0:
             return False
@@ -97,7 +108,8 @@ class TruncateByTurnsCompressor:
 
 
 def split_history(
-    messages: list[Message], keep_recent: int
+    messages: list[Message],
+    keep_recent: int,
 ) -> tuple[list[Message], list[Message], list[Message]]:
     """Split the message list into system messages, messages to summarize, and recent messages.
 
@@ -109,6 +121,7 @@ def split_history(
 
     Returns:
         tuple: (system_messages, messages_to_summarize, recent_messages)
+
     """
     # keep the system messages
     first_non_system = 0
@@ -161,6 +174,7 @@ class LLMSummaryCompressor:
             keep_recent: The number of latest messages to keep (default: 4).
             instruction_text: Custom instruction for summary generation.
             compression_threshold: The compression trigger threshold (default: 0.82).
+
         """
         self.provider = provider
         self.keep_recent = keep_recent
@@ -175,7 +189,10 @@ class LLMSummaryCompressor:
         )
 
     def should_compress(
-        self, messages: list[Message], current_tokens: int, max_tokens: int
+        self,
+        messages: list[Message],
+        current_tokens: int,
+        max_tokens: int,
     ) -> bool:
         """Check if compression is needed.
 
@@ -186,6 +203,7 @@ class LLMSummaryCompressor:
 
         Returns:
             True if compression is needed, False otherwise.
+
         """
         if max_tokens <= 0 or current_tokens <= 0:
             return False
@@ -204,7 +222,8 @@ class LLMSummaryCompressor:
             return messages
 
         system_messages, messages_to_summarize, recent_messages = split_history(
-            messages, self.keep_recent
+            messages,
+            self.keep_recent,
         )
 
         if not messages_to_summarize:
@@ -230,13 +249,13 @@ class LLMSummaryCompressor:
             Message(
                 role="user",
                 content=f"Our previous history conversation summary: {summary_content}",
-            )
+            ),
         )
         result.append(
             Message(
                 role="assistant",
                 content="Acknowledged the summary of our previous conversation history.",
-            )
+            ),
         )
 
         result.extend(recent_messages)

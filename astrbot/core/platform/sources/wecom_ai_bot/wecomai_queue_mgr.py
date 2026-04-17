@@ -60,7 +60,7 @@ class WecomAIQueueMgr:
         """
         if session_id not in self.back_queues:
             self.back_queues[session_id] = asyncio.Queue(
-                maxsize=self.back_queue_maxsize
+                maxsize=self.back_queue_maxsize,
             )
             logger.debug(f"[WecomAI] 创建输出队列: {session_id}")
         return self.back_queues[session_id]
@@ -125,7 +125,9 @@ class WecomAIQueueMgr:
         return session_id in self.back_queues
 
     def set_pending_response(
-        self, session_id: str, callback_params: dict[str, str]
+        self,
+        session_id: str,
+        callback_params: dict[str, str],
     ) -> None:
         """设置待处理的响应参数
 

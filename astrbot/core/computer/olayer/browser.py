@@ -1,6 +1,4 @@
-"""
-Browser automation component
-"""
+"""Browser automation component"""
 
 from typing import Any, Protocol
 

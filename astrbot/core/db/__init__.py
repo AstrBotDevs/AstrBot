@@ -398,6 +398,7 @@ class BaseDatabase(abc.ABC):
             custom_error_message: Optional persona-level fallback error message
             folder_id: Optional folder ID to place the persona in (None means root)
             sort_order: Sort order within the folder (default 0)
+
         """
         ...
 
@@ -451,7 +452,8 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def get_persona_folders(
-        self, parent_id: str | None = None
+        self,
+        parent_id: str | None = None,
     ) -> list[PersonaFolder]:
         """Get all persona folders, optionally filtered by parent_id."""
         ...
@@ -480,14 +482,17 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def move_persona_to_folder(
-        self, persona_id: str, folder_id: str | None
+        self,
+        persona_id: str,
+        folder_id: str | None,
     ) -> Persona | None:
         """Move a persona to a folder (or root if folder_id is None)."""
         ...
 
     @abc.abstractmethod
     async def get_personas_by_folder(
-        self, folder_id: str | None = None
+        self,
+        folder_id: str | None = None,
     ) -> list[Persona]:
         """Get all personas in a specific folder."""
         ...
@@ -504,6 +509,7 @@ class BaseDatabase(abc.ABC):
                 - id: The persona_id or folder_id
                 - type: Either "persona" or "folder"
                 - sort_order: The new sort_order value
+
         """
         ...
 
@@ -719,14 +725,16 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def get_platform_session_by_id(
-        self, session_id: str
+        self,
+        session_id: str,
     ) -> PlatformSession | None:
         """Get a Platform session by its ID."""
         ...
 
     @abc.abstractmethod
     async def get_platform_sessions_by_ids(
-        self, session_ids: list[str]
+        self,
+        session_ids: list[str],
     ) -> list[PlatformSession]:
         """Get platform sessions by IDs."""
         ...
@@ -758,6 +766,7 @@ class BaseDatabase(abc.ABC):
 
         Returns:
             tuple[list[dict], int]: (sessions_with_project_info, total_count)
+
         """
         ...
 
@@ -847,7 +856,9 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def get_project_by_session(
-        self, session_id: str, creator: str
+        self,
+        session_id: str,
+        creator: str,
     ) -> ChatUIProject | None:
         """Get the project that a session belongs to."""
         ...

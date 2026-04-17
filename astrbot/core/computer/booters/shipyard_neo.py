@@ -89,7 +89,7 @@ class NeoShellComponent(ShellComponent):
         run_command = command
         if env:
             env_prefix = " ".join(
-                (f"{k}={shlex.quote(str(v))}" for k, v in sorted(env.items()))
+                (f"{k}={shlex.quote(str(v))}" for k, v in sorted(env.items())),
             )
             run_command = f"{env_prefix} {run_command}"
         if background:
@@ -132,7 +132,10 @@ class NeoFileSystemComponent(FileSystemComponent):
         self._sandbox = sandbox
 
     async def create_file(
-        self, path: str, content: str = "", mode: int = 420
+        self,
+        path: str,
+        content: str = "",
+        mode: int = 420,
     ) -> dict[str, Any]:
         _ = mode
         await self._sandbox.filesystem.write_file(path, content)
@@ -144,7 +147,11 @@ class NeoFileSystemComponent(FileSystemComponent):
         return {"success": True, "path": path, "content": content}
 
     async def write_file(
-        self, path: str, content: str, mode: str = "w", encoding: str = "utf-8"
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
     ) -> dict[str, Any]:
         _ = mode
         _ = encoding
@@ -156,7 +163,9 @@ class NeoFileSystemComponent(FileSystemComponent):
         return {"success": True, "path": path}
 
     async def list_dir(
-        self, path: str = ".", show_hidden: bool = False
+        self,
+        path: str = ".",
+        show_hidden: bool = False,
     ) -> dict[str, Any]:
         entries = await self._sandbox.filesystem.list_dir(path)
         data = []
@@ -301,25 +310,28 @@ class ShipyardNeoBooter(ComputerBooter):
             if not self._access_token:
                 self._access_token = await self._bay_manager.read_credentials()
             logger.info(
-                "[Computer] bay_autostart status=ready endpoint=%s", self._endpoint_url
+                "[Computer] bay_autostart status=ready endpoint=%s",
+                self._endpoint_url,
             )
         if not self._endpoint_url or not self._access_token:
             if self._bay_manager is not None:
                 raise ValueError(
-                    "Bay container started but credentials could not be read. Ensure Bay generated credentials.json, or set access_token manually."
+                    "Bay container started but credentials could not be read. Ensure Bay generated credentials.json, or set access_token manually.",
                 )
             raise ValueError(
-                "Shipyard Neo sandbox configuration is incomplete. Set endpoint (default http://127.0.0.1:8114) and access token, or ensure Bay's credentials.json is accessible for auto-discovery."
+                "Shipyard Neo sandbox configuration is incomplete. Set endpoint (default http://127.0.0.1:8114) and access token, or ensure Bay's credentials.json is accessible for auto-discovery.",
             )
         from shipyard_neo import BayClient
 
         self._client = BayClient(
-            endpoint_url=self._endpoint_url, access_token=self._access_token
+            endpoint_url=self._endpoint_url,
+            access_token=self._access_token,
         )
         await self._client.__aenter__()
         resolved_profile = await self._resolve_profile(self._client)
         self._sandbox = await self._client.create_sandbox(
-            profile=resolved_profile, ttl=self._ttl
+            profile=resolved_profile,
+            ttl=self._ttl,
         )
         self._fs = NeoFileSystemComponent(self._sandbox)
         self._python = NeoPythonComponent(self._sandbox)
@@ -351,7 +363,8 @@ class ShipyardNeoBooter(ComputerBooter):
         """
         if self._profile and self._profile != self.DEFAULT_PROFILE:
             logger.info(
-                "[Computer] profile_selected mode=user profile=%s", self._profile
+                "[Computer] profile_selected mode=user profile=%s",
+                self._profile,
             )
             return self._profile
         from shipyard_neo.errors import ForbiddenError, UnauthorizedError
@@ -434,7 +447,8 @@ class ShipyardNeoBooter(ComputerBooter):
         remote_path = file_name.lstrip("/")
         await self._sandbox.filesystem.upload(remote_path, content)
         logger.info(
-            "[Computer] file_upload booter=shipyard_neo remote_path=%s", remote_path
+            "[Computer] file_upload booter=shipyard_neo remote_path=%s",
+            remote_path,
         )
         return {
             "success": True,

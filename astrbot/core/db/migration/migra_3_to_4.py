@@ -17,7 +17,8 @@ from .sqlite_v3 import SQLiteDatabase as SQLiteV3DatabaseV3
 
 
 def get_platform_id(
-    platform_id_map: dict[str, dict[str, str]], old_platform_name: str
+    platform_id_map: dict[str, dict[str, str]],
+    old_platform_name: str,
 ) -> str:
     return platform_id_map.get(
         old_platform_name,
@@ -26,7 +27,8 @@ def get_platform_id(
 
 
 def get_platform_type(
-    platform_id_map: dict[str, dict[str, str]], old_platform_name: str
+    platform_id_map: dict[str, dict[str, str]],
+    old_platform_name: str,
 ) -> str:
     return platform_id_map.get(
         old_platform_name,
@@ -35,63 +37,66 @@ def get_platform_type(
 
 
 async def migration_conversation_table(
-    db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]]
+    db_helper: BaseDatabase,
+    platform_id_map: dict[str, dict[str, str]],
 ) -> None:
     db_helper_v3 = SQLiteV3DatabaseV3(
-        db_path=DB_PATH.replace("data_v4.db", "data_v3.db")
+        db_path=DB_PATH.replace("data_v4.db", "data_v3.db"),
     )
     conversations, total_cnt = db_helper_v3.get_all_conversations(
-        page=1, page_size=10000000
+        page=1,
+        page_size=10000000,
     )
     logger.info(f"迁移 {total_cnt} 条旧的会话数据到新的表中...")
-    async with db_helper.get_db() as dbsession:
-        async with dbsession.begin():
-            for idx, conversation in enumerate(conversations):
-                if total_cnt > 0 and (idx + 1) % max(1, total_cnt // 10) == 0:
-                    progress = int((idx + 1) / total_cnt * 100)
-                    if progress % 10 == 0:
-                        logger.info(f"进度: {progress}% ({idx + 1}/{total_cnt})")
-                try:
-                    conv = db_helper_v3.get_conversation_by_user_id(
-                        user_id=conversation.get("user_id", "unknown"),
-                        cid=conversation.get("cid", "unknown"),
+    async with db_helper.get_db() as dbsession, dbsession.begin():
+        for idx, conversation in enumerate(conversations):
+            if total_cnt > 0 and (idx + 1) % max(1, total_cnt // 10) == 0:
+                progress = int((idx + 1) / total_cnt * 100)
+                if progress % 10 == 0:
+                    logger.info(f"进度: {progress}% ({idx + 1}/{total_cnt})")
+            try:
+                conv = db_helper_v3.get_conversation_by_user_id(
+                    user_id=conversation.get("user_id", "unknown"),
+                    cid=conversation.get("cid", "unknown"),
+                )
+                if not conv:
+                    logger.info(
+                        f"未找到该条旧会话对应的具体数据: {conversation}, 跳过｡",
                     )
-                    if not conv:
-                        logger.info(
-                            f"未找到该条旧会话对应的具体数据: {conversation}, 跳过｡"
-                        )
-                        continue
-                    if ":" not in conv.user_id:
-                        continue
-                    session = MessageSesion.from_str(session_str=conv.user_id)
-                    platform_id = get_platform_id(
-                        platform_id_map, session.platform_name
-                    )
-                    session.platform_id = platform_id
-                    conv_v2 = ConversationV2(
-                        user_id=str(session),
-                        content=json.loads(conv.history) if conv.history else [],
-                        platform_id=platform_id,
-                        title=conv.title,
-                        persona_id=conv.persona_id,
-                        conversation_id=conv.cid,
-                        created_at=datetime.datetime.fromtimestamp(conv.created_at),
-                        updated_at=datetime.datetime.fromtimestamp(conv.updated_at),
-                    )
-                    dbsession.add(conv_v2)
-                except Exception as e:
-                    logger.error(
-                        f"迁移旧会话 {conversation.get('cid', 'unknown')} 失败: {e}",
-                        exc_info=True,
-                    )
+                    continue
+                if ":" not in conv.user_id:
+                    continue
+                session = MessageSesion.from_str(session_str=conv.user_id)
+                platform_id = get_platform_id(
+                    platform_id_map,
+                    session.platform_name,
+                )
+                session.platform_id = platform_id
+                conv_v2 = ConversationV2(
+                    user_id=str(session),
+                    content=json.loads(conv.history) if conv.history else [],
+                    platform_id=platform_id,
+                    title=conv.title,
+                    persona_id=conv.persona_id,
+                    conversation_id=conv.cid,
+                    created_at=datetime.datetime.fromtimestamp(conv.created_at),
+                    updated_at=datetime.datetime.fromtimestamp(conv.updated_at),
+                )
+                dbsession.add(conv_v2)
+            except Exception as e:
+                logger.error(
+                    f"迁移旧会话 {conversation.get('cid', 'unknown')} 失败: {e}",
+                    exc_info=True,
+                )
     logger.info(f"成功迁移 {total_cnt} 条旧的会话数据到新表｡")
 
 
 async def migration_platform_table(
-    db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]]
+    db_helper: BaseDatabase,
+    platform_id_map: dict[str, dict[str, str]],
 ) -> None:
     db_helper_v3 = SQLiteV3DatabaseV3(
-        db_path=DB_PATH.replace("data_v4.db", "data_v3.db")
+        db_path=DB_PATH.replace("data_v4.db", "data_v3.db"),
     )
     secs_from_2023_4_10_to_now = (
         datetime.datetime.now(datetime.timezone.utc)
@@ -127,19 +132,22 @@ async def migration_platform_table(
                 if cnt == 0:
                     continue
                 platform_id = get_platform_id(
-                    platform_id_map, platform_stats_v3[idx].name
+                    platform_id_map,
+                    platform_stats_v3[idx].name,
                 )
                 platform_type = get_platform_type(
-                    platform_id_map, platform_stats_v3[idx].name
+                    platform_id_map,
+                    platform_stats_v3[idx].name,
                 )
                 try:
                     await dbsession.execute(
                         text(
-                            "\n                        INSERT INTO platform_stats (timestamp, platform_id, platform_type, count)\n                        VALUES (:timestamp, :platform_id, :platform_type, :count)\n                        ON CONFLICT(timestamp, platform_id, platform_type) DO UPDATE SET\n                            count = platform_stats.count + EXCLUDED.count\n                        "
+                            "\n                        INSERT INTO platform_stats (timestamp, platform_id, platform_type, count)\n                        VALUES (:timestamp, :platform_id, :platform_type, :count)\n                        ON CONFLICT(timestamp, platform_id, platform_type) DO UPDATE SET\n                            count = platform_stats.count + EXCLUDED.count\n                        ",
                         ),
                         {
                             "timestamp": datetime.datetime.fromtimestamp(
-                                bucket_end, tz=datetime.timezone.utc
+                                bucket_end,
+                                tz=datetime.timezone.utc,
                             ),
                             "platform_id": platform_id,
                             "platform_type": platform_type,
@@ -155,57 +163,59 @@ async def migration_platform_table(
 
 
 async def migration_webchat_data(
-    db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]]
+    db_helper: BaseDatabase,
+    platform_id_map: dict[str, dict[str, str]],
 ) -> None:
     """迁移 WebChat 的历史记录到新的 PlatformMessageHistory 表中"""
     db_helper_v3 = SQLiteV3DatabaseV3(
-        db_path=DB_PATH.replace("data_v4.db", "data_v3.db")
+        db_path=DB_PATH.replace("data_v4.db", "data_v3.db"),
     )
     conversations, total_cnt = db_helper_v3.get_all_conversations(
-        page=1, page_size=10000000
+        page=1,
+        page_size=10000000,
     )
     logger.info(f"迁移 {total_cnt} 条旧的 WebChat 会话数据到新的表中...")
-    async with db_helper.get_db() as dbsession:
-        async with dbsession.begin():
-            for idx, conversation in enumerate(conversations):
-                if total_cnt > 0 and (idx + 1) % max(1, total_cnt // 10) == 0:
-                    progress = int((idx + 1) / total_cnt * 100)
-                    if progress % 10 == 0:
-                        logger.info(f"进度: {progress}% ({idx + 1}/{total_cnt})")
-                try:
-                    conv = db_helper_v3.get_conversation_by_user_id(
-                        user_id=conversation.get("user_id", "unknown"),
-                        cid=conversation.get("cid", "unknown"),
+    async with db_helper.get_db() as dbsession, dbsession.begin():
+        for idx, conversation in enumerate(conversations):
+            if total_cnt > 0 and (idx + 1) % max(1, total_cnt // 10) == 0:
+                progress = int((idx + 1) / total_cnt * 100)
+                if progress % 10 == 0:
+                    logger.info(f"进度: {progress}% ({idx + 1}/{total_cnt})")
+            try:
+                conv = db_helper_v3.get_conversation_by_user_id(
+                    user_id=conversation.get("user_id", "unknown"),
+                    cid=conversation.get("cid", "unknown"),
+                )
+                if not conv:
+                    logger.info(
+                        f"未找到该条旧会话对应的具体数据: {conversation}, 跳过｡",
                     )
-                    if not conv:
-                        logger.info(
-                            f"未找到该条旧会话对应的具体数据: {conversation}, 跳过｡"
-                        )
-                        continue
-                    if ":" in conv.user_id:
-                        continue
-                    platform_id = "webchat"
-                    history = json.loads(conv.history) if conv.history else []
-                    for msg in history:
-                        type_ = msg.get("type")
-                        new_history = PlatformMessageHistory(
-                            platform_id=platform_id,
-                            user_id=conv.cid,
-                            content=msg,
-                            sender_id=type_,
-                            sender_name=type_,
-                        )
-                        dbsession.add(new_history)
-                except Exception:
-                    logger.error(
-                        f"迁移旧 WebChat 会话 {conversation.get('cid', 'unknown')} 失败",
-                        exc_info=True,
+                    continue
+                if ":" in conv.user_id:
+                    continue
+                platform_id = "webchat"
+                history = json.loads(conv.history) if conv.history else []
+                for msg in history:
+                    type_ = msg.get("type")
+                    new_history = PlatformMessageHistory(
+                        platform_id=platform_id,
+                        user_id=conv.cid,
+                        content=msg,
+                        sender_id=type_,
+                        sender_name=type_,
                     )
+                    dbsession.add(new_history)
+            except Exception:
+                logger.error(
+                    f"迁移旧 WebChat 会话 {conversation.get('cid', 'unknown')} 失败",
+                    exc_info=True,
+                )
     logger.info(f"成功迁移 {total_cnt} 条旧的 WebChat 会话数据到新表｡")
 
 
 async def migration_persona_data(
-    db_helper: BaseDatabase, astrbot_config: AstrBotConfig
+    db_helper: BaseDatabase,
+    astrbot_config: AstrBotConfig,
 ) -> None:
     """迁移 Persona 数据到新的表中｡
     旧的 Persona 数据存储在 preference 中,新的 Persona 数据存储在 persona 表中｡
@@ -239,14 +249,15 @@ async def migration_persona_data(
                 begin_dialogs=begin_dialogs,
             )
             logger.info(
-                f"迁移 Persona {persona['name']}({persona_new.system_prompt[:30]}...) 到新表成功｡"
+                f"迁移 Persona {persona['name']}({persona_new.system_prompt[:30]}...) 到新表成功｡",
             )
         except Exception as e:
             logger.error(f"解析 Persona 配置失败:{e}")
 
 
 async def migration_preferences(
-    db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]]
+    db_helper: BaseDatabase,
+    platform_id_map: dict[str, dict[str, str]],
 ) -> None:
     keys = [
         "inactivated_llm_tools",
@@ -307,7 +318,10 @@ async def migration_preferences(
             perf_dict = perf
             for provider_type, provider_id in perf_dict.items():
                 await sp.put_async(
-                    "umo", str(session), f"provider_perf_{provider_type}", provider_id
+                    "umo",
+                    str(session),
+                    f"provider_perf_{provider_type}",
+                    provider_id,
                 )
             logger.info(f"迁移会话 {umo} 的提供商偏好到新表成功,平台 ID: {platform_id}")
         except Exception as e:

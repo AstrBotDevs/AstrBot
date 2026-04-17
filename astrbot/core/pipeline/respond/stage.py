@@ -38,7 +38,7 @@ class RespondStage(Stage):
         ),  # 音乐分享
         Comp.Forward: lambda comp: bool(comp.id),  # 合并转发
         Comp.Location: lambda comp: bool(
-            comp.lat is not None and comp.lon is not None
+            comp.lat is not None and comp.lon is not None,
         ),  # 位置
         Comp.Contact: lambda comp: bool(comp._type and comp.id),  # 推荐好友 or 群
         Comp.Shake: lambda _: True,  # 窗口抖动（戳一戳）
@@ -103,6 +103,44 @@ class RespondStage(Stage):
             return random.uniform(1, 1.75)
         # random
         return random.uniform(self.interval[0], self.interval[1])
+
+    def _has_meaningful_content(self, comp: BaseMessageComponent) -> bool:
+        """Check if a component has meaningful content."""
+        from astrbot.core.message.components import (
+            At,
+            Face,
+            File,
+            Forward,
+            Image,
+            Plain,
+            Poke,
+            Record,
+            Reply,
+            Video,
+        )
+
+        if isinstance(comp, Plain):
+            return bool(comp.text and comp.text.strip())
+        if isinstance(comp, Image):
+            return bool(comp.url or comp.file_id)
+        if isinstance(comp, Face):
+            return comp.id is not None
+        if isinstance(comp, Record):
+            return bool(comp.url or comp.file_id)
+        if isinstance(comp, Video):
+            return bool(comp.url or comp.file_id)
+        if isinstance(comp, At):
+            return comp.qq is not None
+        if isinstance(comp, Reply):
+            return comp.id is not None
+        if isinstance(comp, Poke):
+            return comp.target_id() is not None
+        if isinstance(comp, Forward):
+            return bool(comp.id)
+        if isinstance(comp, File):
+            return bool(comp.name)
+        # Default: treat as meaningful if it's not an empty container
+        return True
 
     async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]) -> bool:
         """检查消息链是否为空

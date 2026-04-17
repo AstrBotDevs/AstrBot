@@ -2,20 +2,15 @@
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Astrbot PowerShell {{ version }} </title>
+  <title>Astrbot PowerShell {{ version }}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js"></script>
-  <script>hljs.highlightAll();</script>
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"
-      onload="renderMathInElement(document.getElementById('content'),{delimiters: [{left: '$$', right: '$$', display: true},{left: '$', right: '$', display: false}]});"></script>
   <style>
     :root {
         --bg-color: #010409;
         --text-color: #e6edf3;
         --title-bar-color: #161b22;
         --title-text-color: #e6edf3;
-        --font-family: 'Consolas', 'Microsoft YaHei Mono', 'Dengxian Mono', 'Courier New', monospace;
+        --font-family: "Consolas", "Microsoft YaHei Mono", "Dengxian Mono", "Courier New", monospace;
         --glow-color: rgba(200, 220, 255, 0.7);
     }
 
@@ -36,7 +31,6 @@
         padding: 0;
         line-height: 1.6;
         font-size: 18px;
-        /* The CRT glow effect from the image */
         text-shadow: 0 0 15px var(--glow-color), 0 0 7px rgba(255, 255, 255, 1);
         position: relative;
         overflow: hidden;
@@ -63,9 +57,9 @@
         color: var(--title-text-color);
         font-size: 16px;
         border-bottom: 1px solid #30363d;
-        text-shadow: none; /* No glow for title bar */
+        text-shadow: none;
     }
-    
+
     .header .title {
         font-weight: bold;
         font-size: 28px;
@@ -78,13 +72,10 @@
 
     main {
         padding: 1rem 1.5rem;
+        position: relative;
+        z-index: 1;
     }
 
-    #content {
-        /* min-width and max-width removed as per request */
-    }
-
-    /* --- Markdown Styles adjusted for terminal look --- */
     h1, h2, h3, h4, h5, h6 {
         line-height: 1.4;
         margin-top: 20px;
@@ -144,7 +135,16 @@
         font-size: 100%;
         background-color: transparent;
         border-radius: 0;
-        text-shadow: none; /* Disable glow inside code blocks for clarity */
+        text-shadow: none;
+    }
+
+    pre.shiki {
+        padding: 1rem;
+    }
+
+    pre.shiki > code,
+    pre.shiki span {
+        text-shadow: none;
     }
 
     a {
@@ -165,9 +165,8 @@
   </style>
 </head>
 <body>
-
   <div class="header">
-    <span class="title">> Astrbot PowerShell</span>
+    <span class="title">&gt; Astrbot PowerShell</span>
     <span class="version">{{ version }}</span>
   </div>
 
@@ -175,10 +174,45 @@
     <div id="content"></div>
   </main>
 
+  <script>{{ shiki_runtime | safe }}</script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
   <script>
-    document.getElementById('content').innerHTML = marked.parse(`{{ text | safe }}`);
-  </script>
+    (function () {
+      const contentElement = document.getElementById("content");
+      const source = decodeBase64Utf8("{{ text_base64 }}");
 
+      contentElement.innerHTML = marked.parse(source);
+
+      if (window.AstrBotT2IShiki) {
+        window.AstrBotT2IShiki.highlightAllCodeBlocks(contentElement, "github-dark");
+      }
+
+      if (window.renderMathInElement) {
+        window.renderMathInElement(contentElement, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false }
+          ]
+        });
+      }
+
+      function decodeBase64Utf8(base64Text) {
+        const binary = window.atob(base64Text || "");
+        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+
+        if (window.TextDecoder) {
+          return new TextDecoder().decode(bytes);
+        }
+
+        let fallback = "";
+        bytes.forEach((byte) => {
+          fallback += String.fromCharCode(byte);
+        });
+        return decodeURIComponent(escape(fallback));
+      }
+    })();
+  </script>
 </body>
 </html>

@@ -59,6 +59,7 @@ async def parse_webchat_message_parts(
     Returns:
         tuple[list, list[str], bool]:
             (components, plain_text_parts, has_non_reply_content)
+
     """
     components: list[BaseMessageComponent] = []
     text_parts: list[str] = []
@@ -126,7 +127,7 @@ async def parse_webchat_message_parts(
                     chain=reply_chain,
                     sender_id=sender_id,
                     sender_nickname=sender_name,
-                )
+                ),
             )
             continue
 
@@ -205,7 +206,7 @@ async def build_webchat_message_parts(
                     "type": "reply",
                     "message_id": message_id,
                     "selected_text": str(part.get("selected_text", "")),
-                }
+                },
             )
             continue
 
@@ -233,7 +234,7 @@ async def build_webchat_message_parts(
                 "attachment_id": attachment.attachment_id,
                 "filename": attachment_path.name,
                 "path": str(attachment_path),
-            }
+            },
         )
 
     return message_parts
@@ -272,7 +273,7 @@ def webchat_message_parts_to_message_chain(
                     id=str(message_id),
                     message_str=str(part.get("selected_text", "")),
                     chain=[],
-                )
+                ),
             )
             continue
 
@@ -385,7 +386,7 @@ async def message_chain_to_storage_message_parts(
 
         if isinstance(comp, Json):
             parts.append(
-                {"type": "plain", "text": json.dumps(comp.data, ensure_ascii=False)}
+                {"type": "plain", "text": json.dumps(comp.data, ensure_ascii=False)},
             )
             continue
 

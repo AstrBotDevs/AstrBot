@@ -1,5 +1,4 @@
-"""
-ToolSessionManager - Session-level state management for stateful tools.
+"""ToolSessionManager - Session-level state management for stateful tools.
 
 Provides per-(UMO, tool_name) session state that persists across conversation
 turns within the same session, with optional persistence via SharedPreferences.
@@ -14,8 +13,7 @@ from astrbot.core.utils.shared_preferences import SharedPreferences
 
 @dataclass
 class ToolSessionState(MutableMapping[str, Any]):
-    """
-    Represents the session state for a single tool within a session.
+    """Represents the session state for a single tool within a session.
     Acts like a dict but supports persistence markers.
 
     Use `set_persistent(key)` to mark keys that survive session clear.
@@ -51,8 +49,7 @@ class ToolSessionState(MutableMapping[str, Any]):
 
 
 class ToolSessionManager:
-    """
-    Central manager for all tool session states.
+    """Central manager for all tool session states.
 
     Maintains in-memory state per (umo, tool_name) combination.
     Optional SharedPreferences integration for persistence across sessions.
@@ -62,6 +59,7 @@ class ToolSessionManager:
         state = mgr.get_state(umo, "shell")
         state["cwd"] = "/tmp"
         state.set_persistent("env")  # env survives session clear
+
     """
 
     def __init__(self, sp: SharedPreferences | None = None) -> None:
@@ -104,8 +102,7 @@ class ToolSessionManager:
                 state.set_persistent(actual_key)
 
     def clear_session(self, umo: str) -> None:
-        """
-        Clear non-persistent state for all tools in a session.
+        """Clear non-persistent state for all tools in a session.
 
         Persistent keys (marked via `set_persistent`) are preserved.
         """

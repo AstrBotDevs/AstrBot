@@ -69,7 +69,10 @@ LINE_I18N_RESOURCES = {
 )
 class LinePlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.config["unified_webhook_mode"] = True
@@ -82,11 +85,14 @@ class LinePlatformAdapter(Platform):
         if not channel_access_token or not channel_secret:
             raise ValueError("LINE 适配器需要 channel_access_token 和 channel_secret｡")
         self.line_api = LineAPIClient(
-            channel_access_token=channel_access_token, channel_secret=channel_secret
+            channel_access_token=channel_access_token,
+            channel_secret=channel_secret,
         )
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ) -> None:
         messages = await LineMessageEvent.build_line_messages(message_chain)
         if messages:
@@ -171,7 +177,7 @@ class LinePlatformAdapter(Platform):
             message.get("id")
             or event.get("webhookEventId")
             or event.get("deliveryContext", {}).get("deliveryId", "")
-            or uuid.uuid4().hex
+            or uuid.uuid4().hex,
         )
         event_timestamp = event.get("timestamp")
         if isinstance(event_timestamp, int):
@@ -265,7 +271,9 @@ class LinePlatformAdapter(Platform):
         return ret
 
     async def _build_image_component(
-        self, message_id: str, message: dict[str, Any]
+        self,
+        message_id: str,
+        message: dict[str, Any],
     ) -> Image | None:
         external_url = self._get_external_content_url(message)
         if external_url:
@@ -277,7 +285,9 @@ class LinePlatformAdapter(Platform):
         return Image.fromBytes(content_bytes)
 
     async def _build_video_component(
-        self, message_id: str, message: dict[str, Any]
+        self,
+        message_id: str,
+        message: dict[str, Any],
     ) -> Video | None:
         external_url = self._get_external_content_url(message)
         if external_url:
@@ -291,7 +301,9 @@ class LinePlatformAdapter(Platform):
         return Video(file=file_path, path=file_path)
 
     async def _build_audio_component(
-        self, message_id: str, message: dict[str, Any]
+        self,
+        message_id: str,
+        message: dict[str, Any],
     ) -> Record | None:
         external_url = self._get_external_content_url(message)
         if external_url:
@@ -305,7 +317,9 @@ class LinePlatformAdapter(Platform):
         return Record(file=file_path, url=file_path)
 
     async def _build_file_component(
-        self, message_id: str, message: dict[str, Any]
+        self,
+        message_id: str,
+        message: dict[str, Any],
     ) -> File | None:
         content = await self.line_api.get_message_content(message_id)
         if not content:
@@ -315,7 +329,11 @@ class LinePlatformAdapter(Platform):
         suffix = Path(default_name).suffix or self._guess_suffix(content_type, ".bin")
         final_name = filename or default_name
         file_path = self._store_temp_content(
-            "file", message_id, content_bytes, suffix, original_name=final_name
+            "file",
+            message_id,
+            content_bytes,
+            suffix,
+            original_name=final_name,
         )
         return File(name=final_name, file=file_path, url=file_path)
 

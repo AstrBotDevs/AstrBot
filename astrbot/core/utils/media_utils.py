@@ -32,6 +32,7 @@ async def get_media_duration(file_path: str) -> int | None:
 
     Returns:
         时长(毫秒),如果获取失败返回None
+
     """
     try:
         # 使用ffprobe获取时长
@@ -55,13 +56,12 @@ async def get_media_duration(file_path: str) -> int | None:
             duration_ms = int(duration_seconds * 1000)
             logger.debug(f"[Media Utils] 获取媒体时长: {duration_ms}ms")
             return duration_ms
-        else:
-            logger.warning(f"[Media Utils] 无法获取媒体文件时长: {file_path}")
-            return None
+        logger.warning(f"[Media Utils] 无法获取媒体文件时长: {file_path}")
+        return None
 
     except FileNotFoundError:
         logger.warning(
-            "[Media Utils] ffprobe未安装或不在PATH中,无法获取媒体时长｡请安装ffmpeg: https://ffmpeg.org/"
+            "[Media Utils] ffprobe未安装或不在PATH中,无法获取媒体时长｡请安装ffmpeg: https://ffmpeg.org/",
         )
         return None
     except Exception as e:
@@ -81,6 +81,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 
     Raises:
         Exception: 转换失败时抛出异常
+
     """
     # 如果已经是opus格式,直接返回
     if audio_path.lower().endswith(".opus"):
@@ -123,7 +124,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
                 try:
                     await anyio.Path(output_path).unlink()
                     logger.debug(
-                        f"[Media Utils] 已清理失败的opus输出文件: {output_path}"
+                        f"[Media Utils] 已清理失败的opus输出文件: {output_path}",
                     )
                 except OSError as e:
                     logger.warning(f"[Media Utils] 清理失败的opus输出文件时出错: {e}")
@@ -137,7 +138,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 
     except FileNotFoundError:
         logger.error(
-            "[Media Utils] ffmpeg未安装或不在PATH中,无法转换音频格式｡请安装ffmpeg: https://ffmpeg.org/"
+            "[Media Utils] ffmpeg未安装或不在PATH中,无法转换音频格式｡请安装ffmpeg: https://ffmpeg.org/",
         )
         raise Exception("ffmpeg not found")
     except Exception as e:
@@ -146,7 +147,9 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 
 
 async def convert_video_format(
-    video_path: str, output_format: str = "mp4", output_path: str | None = None
+    video_path: str,
+    output_format: str = "mp4",
+    output_path: str | None = None,
 ) -> str:
     """使用ffmpeg转换视频格式
 
@@ -160,6 +163,7 @@ async def convert_video_format(
 
     Raises:
         Exception: 转换失败时抛出异常
+
     """
     # 如果已经是目标格式,直接返回
     if video_path.lower().endswith(f".{output_format}"):
@@ -198,11 +202,11 @@ async def convert_video_format(
                 try:
                     await anyio.Path(output_path).unlink()
                     logger.debug(
-                        f"[Media Utils] 已清理失败的{output_format}输出文件: {output_path}"
+                        f"[Media Utils] 已清理失败的{output_format}输出文件: {output_path}",
                     )
                 except OSError as e:
                     logger.warning(
-                        f"[Media Utils] 清理失败的{output_format}输出文件时出错: {e}"
+                        f"[Media Utils] 清理失败的{output_format}输出文件时出错: {e}",
                     )
 
             error_msg = stderr.decode() if stderr else "未知错误"
@@ -214,7 +218,7 @@ async def convert_video_format(
 
     except FileNotFoundError:
         logger.error(
-            "[Media Utils] ffmpeg未安装或不在PATH中,无法转换视频格式｡请安装ffmpeg: https://ffmpeg.org/"
+            "[Media Utils] ffmpeg未安装或不在PATH中,无法转换视频格式｡请安装ffmpeg: https://ffmpeg.org/",
         )
         raise Exception("ffmpeg not found")
     except Exception as e:
@@ -236,6 +240,7 @@ async def convert_audio_format(
 
     Returns:
         转换后的音频文件路径
+
     """
     if audio_path.lower().endswith(f".{output_format}"):
         return audio_path
@@ -248,9 +253,7 @@ async def convert_audio_format(
     args = ["ffmpeg", "-y", "-i", audio_path]
     if output_format == "amr":
         args.extend(["-ac", "1", "-ar", "8000", "-ab", "12.2k"])
-    elif output_format == "ogg":
-        args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
-    elif output_format == "opus":
+    elif output_format == "ogg" or output_format == "opus":
         args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
     args.append(output_path)
 
@@ -298,7 +301,6 @@ async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
 
     If the file appears to already be wav, return it directly to avoid extra conversion.
     """
-
     if not audio_path:
         return audio_path
 
@@ -432,6 +434,7 @@ async def compress_image(
     Returns:
         The compressed image path. Returns the original path if compression
         fails or the source does not need compression.
+
     """
     max_size = max(int(max_size), 1)
     quality = min(max(int(quality), 1), 100)
@@ -441,7 +444,7 @@ async def compress_image(
     # Skip compression for remote images and return the original value.
     if url_or_path.startswith("http"):
         return url_or_path
-    elif url_or_path.startswith("data:image"):
+    if url_or_path.startswith("data:image"):
         _header, encoded = url_or_path.split(",", 1)
         data = base64.b64decode(encoded)
         if len(data) < min_file_size_bytes:

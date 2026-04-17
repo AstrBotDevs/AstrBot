@@ -123,8 +123,10 @@ class DifyAPIClient:
             file_path: The path to the file to upload.
             file_data: The file data in bytes.
             file_name: Optional file name when using file_data.
+
         Returns:
             A dictionary containing the uploaded file information.
+
         """
         url = f"{self.api_base}/files/upload"
 

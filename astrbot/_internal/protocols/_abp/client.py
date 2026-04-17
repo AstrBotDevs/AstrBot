@@ -1,5 +1,4 @@
-"""
-ABP (AstrBot Protocol) client implementation.
+"""ABP (AstrBot Protocol) client implementation.
 
 ABP is the built-in plugin protocol where the orchestrator acts as client
 connecting to internal stars (plugins) embedded in the runtime.
@@ -16,8 +15,7 @@ log = logger
 
 
 class AstrbotAbpClient(BaseAstrbotAbpClient):
-    """
-    ABP client for communicating with internal stars (built-in plugins).
+    """ABP client for communicating with internal stars (built-in plugins).
 
     The orchestrator acts as the client, sending requests to and receiving
     notifications from stars running within the same process.
@@ -42,10 +40,12 @@ class AstrbotAbpClient(BaseAstrbotAbpClient):
         log.info("ABP client connected to internal stars registry.")
 
     async def call_star_tool(
-        self, star_name: str, tool_name: str, arguments: dict[str, Any]
+        self,
+        star_name: str,
+        tool_name: str,
+        arguments: dict[str, Any],
     ) -> Any:
-        """
-        Call a tool on a registered star.
+        """Call a tool on a registered star.
 
         Args:
             star_name: Name of the star (plugin)
@@ -54,6 +54,7 @@ class AstrbotAbpClient(BaseAstrbotAbpClient):
 
         Returns:
             Tool call result
+
         """
         if not self._connected:
             raise RuntimeError("ABP client is not connected")

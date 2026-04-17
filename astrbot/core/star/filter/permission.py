@@ -15,7 +15,9 @@ class PermissionType(enum.Flag):
 
 class PermissionTypeFilter(HandlerFilter):
     def __init__(
-        self, permission_type: PermissionType, raise_error: bool = True
+        self,
+        permission_type: PermissionType,
+        raise_error: bool = True,
     ) -> None:
         self.permission_type = permission_type
         self.raise_error = raise_error

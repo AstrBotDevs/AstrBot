@@ -1,5 +1,6 @@
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from astrbot.core.message.components import BaseMessageComponent
 
@@ -13,10 +14,7 @@ class MessageMember:
 
     def __str__(self) -> str:
         # 使用 f-string 来构建返回的字符串表示形式
-        return (
-            f"User ID: {self.user_id},"
-            f"Nickname: {self.nickname if self.nickname else 'N/A'}"
-        )
+        return f"User ID: {self.user_id},Nickname: {self.nickname or 'N/A'}"
 
 
 @dataclass
@@ -38,10 +36,10 @@ class Group:
         # 使用 f-string 来构建返回的字符串表示形式
         return (
             f"Group ID: {self.group_id}\n"
-            f"Name: {self.group_name if self.group_name else 'N/A'}\n"
-            f"Avatar: {self.group_avatar if self.group_avatar else 'N/A'}\n"
-            f"Owner ID: {self.group_owner if self.group_owner else 'N/A'}\n"
-            f"Admin IDs: {self.group_admins if self.group_admins else 'N/A'}\n"
+            f"Name: {self.group_name or 'N/A'}\n"
+            f"Avatar: {self.group_avatar or 'N/A'}\n"
+            f"Owner ID: {self.group_owner or 'N/A'}\n"
+            f"Admin IDs: {self.group_admins or 'N/A'}\n"
             f"Members Len: {len(self.members) if self.members else 0}\n"
             f"First Member: {self.members[0] if self.members else 'N/A'}\n"
         )
@@ -58,7 +56,7 @@ class AstrBotMessage:
     sender: MessageMember  # 发送者
     message: list[BaseMessageComponent]  # 消息链使用 Nakuru 的消息链格式
     message_str: str  # 最直观的纯文本消息字符串
-    raw_message: object
+    raw_message: Any
     timestamp: int  # 消息时间戳
 
     def __init__(self) -> None:

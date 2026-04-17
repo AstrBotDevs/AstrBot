@@ -35,13 +35,13 @@ class AgentRequestSubStage(Stage):
     async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
             logger.debug(
-                "This pipeline does not enable AI capability, skip processing."
+                "This pipeline does not enable AI capability, skip processing.",
             )
             return
 
         if not await SessionServiceManager.should_process_llm_request(event):
             logger.debug(
-                f"The session {event.unified_msg_origin} has disabled AI capability, skipping processing."
+                f"The session {event.unified_msg_origin} has disabled AI capability, skipping processing.",
             )
             return
 

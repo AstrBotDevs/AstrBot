@@ -76,7 +76,7 @@ class FaissVecDB(BaseVecDB):
 
         if not contents:
             logger.debug(
-                "No contents provided for batch insert; skipping embedding generation."
+                "No contents provided for batch insert; skipping embedding generation.",
             )
             return []
 

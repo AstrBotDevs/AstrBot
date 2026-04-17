@@ -14,7 +14,10 @@ for handler in logging.root.handlers[:]:
 
 class QQOfficialWebhook:
     def __init__(
-        self, config: dict, event_queue: asyncio.Queue, botpy_client: Client
+        self,
+        config: dict,
+        event_queue: asyncio.Queue,
+        botpy_client: Client,
     ) -> None:
         self.appid = config["appid"]
         self.secret = config["secret"]
@@ -28,7 +31,9 @@ class QQOfficialWebhook:
         self.token = Token(self.appid, self.secret)
         self.server = quart.Quart(__name__)
         self.server.add_url_rule(
-            "/astrbot-qo-webhook/callback", view_func=self.callback, methods=["POST"]
+            "/astrbot-qo-webhook/callback",
+            view_func=self.callback,
+            methods=["POST"],
         )
         self.client = botpy_client
         self.event_queue = event_queue
@@ -64,7 +69,8 @@ class QQOfficialWebhook:
         seed = await self.repeat_seed(self.secret)
         private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
         msg = validation_payload.get("event_ts", "") + validation_payload.get(
-            "plain_token", ""
+            "plain_token",
+            "",
         )
         signature = private_key.sign(msg.encode()).hex()
         response = {
@@ -85,6 +91,7 @@ class QQOfficialWebhook:
 
         Returns:
             响应数据
+
         """
         msg: dict = await request.json
         logger.debug(f"收到 qq_official_webhook 回调: {msg}")
@@ -120,7 +127,7 @@ class QQOfficialWebhook:
 
     async def start_polling(self) -> None:
         logger.info(
-            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器｡"
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器｡",
         )
         await self.server.run_task(
             host=self.callback_server_host,

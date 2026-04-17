@@ -82,7 +82,7 @@ class OpenApiRoute(Route):
                     "name": str(conf_info.get("name", "")).strip(),
                     "path": str(conf_info.get("path", "")).strip(),
                     "is_default": conf_id == "default",
-                }
+                },
             )
         return result
 
@@ -150,7 +150,7 @@ class OpenApiRoute(Route):
     async def chat_send(self):
         post_data = await request.get_json(silent=True) or {}
         effective_username, username_err = self._resolve_open_username(
-            post_data.get("username")
+            post_data.get("username"),
         )
         if username_err:
             return Response().error(username_err).to_json()
@@ -253,7 +253,7 @@ class OpenApiRoute(Route):
                 "type": "error",
                 "code": code,
                 "data": message,
-            }
+            },
         )
 
     async def _ensure_runtime_ready(self) -> bool:
@@ -296,11 +296,12 @@ class OpenApiRoute(Route):
 
     async def _handle_chat_ws_send(self, post_data: dict) -> None:
         effective_username, username_err = self._resolve_open_username(
-            post_data.get("username")
+            post_data.get("username"),
         )
         if username_err or not effective_username:
             await self._send_chat_ws_error(
-                username_err or "Invalid username", "BAD_USER"
+                username_err or "Invalid username",
+                "BAD_USER",
             )
             return
 
@@ -363,7 +364,7 @@ class OpenApiRoute(Route):
                         "enable_streaming": enable_streaming,
                         "message_id": message_id,
                     },
-                )
+                ),
             )
 
             message_parts_for_storage = strip_message_parts_path_fields(message_parts)
@@ -381,7 +382,7 @@ class OpenApiRoute(Route):
                     "data": None,
                     "session_id": session_id,
                     "message_id": message_id,
-                }
+                },
             )
 
             accumulated_parts = []
@@ -433,7 +434,7 @@ class OpenApiRoute(Route):
                         tool_calls[tool_call.get("id")] = tool_call
                         if accumulated_text:
                             accumulated_parts.append(
-                                {"type": "plain", "text": accumulated_text}
+                                {"type": "plain", "text": accumulated_text},
                             )
                             accumulated_text = ""
                     elif chain_type == "tool_call_result":
@@ -443,7 +444,10 @@ class OpenApiRoute(Route):
                             tool_calls[tc_id]["result"] = tcr.get("result")
                             tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
                             accumulated_parts.append(
-                                {"type": "tool_call", "tool_calls": [tool_calls[tc_id]]}
+                                {
+                                    "type": "tool_call",
+                                    "tool_calls": [tool_calls[tc_id]],
+                                },
                             )
                             tool_calls.pop(tc_id, None)
                     elif chain_type == "reasoning":
@@ -455,28 +459,32 @@ class OpenApiRoute(Route):
                 elif msg_type == "image":
                     filename = str(result_text).replace("[IMAGE]", "")
                     part = await self.chat_route._create_attachment_from_file(
-                        filename, "image"
+                        filename,
+                        "image",
                     )
                     if part:
                         accumulated_parts.append(part)
                 elif msg_type == "record":
                     filename = str(result_text).replace("[RECORD]", "")
                     part = await self.chat_route._create_attachment_from_file(
-                        filename, "record"
+                        filename,
+                        "record",
                     )
                     if part:
                         accumulated_parts.append(part)
                 elif msg_type == "file":
                     filename = str(result_text).replace("[FILE]", "")
                     part = await self.chat_route._create_attachment_from_file(
-                        filename, "file"
+                        filename,
+                        "file",
                     )
                     if part:
                         accumulated_parts.append(part)
                 elif msg_type == "video":
                     filename = str(result_text).replace("[VIDEO]", "")
                     part = await self.chat_route._create_attachment_from_file(
-                        filename, "video"
+                        filename,
+                        "video",
                     )
                     if part:
                         accumulated_parts.append(part)
@@ -512,11 +520,11 @@ class OpenApiRoute(Route):
                                 "data": {
                                     "id": saved_record.id,
                                     "created_at": to_utc_isoformat(
-                                        saved_record.created_at
+                                        saved_record.created_at,
                                     ),
                                 },
                                 "session_id": session_id,
-                            }
+                            },
                         )
                     accumulated_parts = []
                     accumulated_text = ""
@@ -526,7 +534,8 @@ class OpenApiRoute(Route):
         except Exception as e:
             logger.exception(f"Open API WS chat failed: {e}", exc_info=True)
             await self._send_chat_ws_error(
-                f"Failed to process message: {e}", "PROCESSING_ERROR"
+                f"Failed to process message: {e}",
+                "PROCESSING_ERROR",
             )
         finally:
             webchat_queue_mgr.remove_back_queue(message_id)
@@ -578,7 +587,7 @@ class OpenApiRoute(Route):
 
     async def get_chat_sessions(self):
         username, username_err = self._resolve_open_username(
-            request.args.get("username")
+            request.args.get("username"),
         )
         if username_err:
             return Response().error(username_err).to_json()
@@ -591,12 +600,9 @@ class OpenApiRoute(Route):
         except ValueError:
             return Response().error("page and page_size must be integers").to_json()
 
-        if page < 1:
-            page = 1
-        if page_size < 1:
-            page_size = 1
-        if page_size > 100:
-            page_size = 100
+        page = max(page, 1)
+        page_size = max(page_size, 1)
+        page_size = min(page_size, 100)
 
         platform_id = request.args.get("platform_id")
 
@@ -623,7 +629,7 @@ class OpenApiRoute(Route):
                     "is_group": session.is_group,
                     "created_at": to_utc_isoformat(session.created_at),
                     "updated_at": to_utc_isoformat(session.updated_at),
-                }
+                },
             )
 
         return (
@@ -634,7 +640,7 @@ class OpenApiRoute(Route):
                     "page": page,
                     "page_size": page_size,
                     "total": total,
-                }
+                },
             )
             .to_json()
         )
@@ -689,7 +695,7 @@ class OpenApiRoute(Route):
 
         try:
             message_chain = await self._build_message_chain_from_payload(
-                message_payload
+                message_payload,
             )
             await platform_inst.send_by_session(session, message_chain)
             return Response().ok().to_json()

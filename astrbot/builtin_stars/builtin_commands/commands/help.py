@@ -23,16 +23,13 @@ class HelpCommand:
             return ""
 
     async def _build_reserved_command_lines(self) -> list[str]:
-        """
-        使用实时指令配置生成内置指令清单,确保重命名/禁用后与实际生效状态保持一致｡
-        """
+        """使用实时指令配置生成内置指令清单,确保重命名/禁用后与实际生效状态保持一致｡"""
         try:
             commands = await command_management.list_commands()
         except BaseException:
             return []
 
         lines: list[str] = []
-        hidden_commands = {"set", "unset", "websearch"}
 
         def walk(items: list[dict], indent: int = 0) -> None:
             for item in items:
@@ -49,9 +46,12 @@ class HelpCommand:
                     or item.get("original_command")
                     or item.get("handler_name")
                 )
-                if not effective:
-                    continue
-                if effective in hidden_commands:
+                if not effective or effective in [
+                    "set",
+                    "unset",
+                    "help",
+                    "dashboard_update",
+                ]:
                     continue
 
                 description = item.get("description") or ""
@@ -73,12 +73,13 @@ class HelpCommand:
         dashboard_version = await get_dashboard_version()
         command_lines = await self._build_reserved_command_lines()
         commands_section = (
-            "\n".join(command_lines) if command_lines else "暂无启用的内置指令"
+            "\n".join(command_lines)
+            if command_lines
+            else "No enabled built-in commands."
         )
 
         msg_parts = [
             f"AstrBot v{VERSION}(WebUI: {dashboard_version})",
-            "内置指令:",
             commands_section,
         ]
         if notice:

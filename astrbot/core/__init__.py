@@ -53,7 +53,9 @@ t2i_base_url = astrbot_config.get("t2i_endpoint", "https://t2i.soulter.top/text2
 html_renderer = HtmlRenderer(t2i_base_url)
 logger = LogManager.GetLogger(log_name="astrbot")
 LogManager.configure_logger(
-    logger, astrbot_config, override_level=os.getenv("ASTRBOT_LOG_LEVEL")
+    logger,
+    astrbot_config,
+    override_level=os.getenv("ASTRBOT_LOG_LEVEL"),
 )
 LogManager.configure_trace_logger(astrbot_config)
 db_helper = SQLiteDatabase(DB_PATH)

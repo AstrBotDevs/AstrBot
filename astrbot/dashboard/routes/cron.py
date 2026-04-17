@@ -11,7 +11,9 @@ from .route import Response, Route, RouteContext
 
 class CronRoute(Route):
     def __init__(
-        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle
+        self,
+        context: RouteContext,
+        core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
@@ -42,7 +44,7 @@ class CronRoute(Route):
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").to_json()
+                    Response().error("Cron manager not initialized").to_json(),
                 )
             job_type = request.args.get("type")
             jobs = await cron_mgr.list_jobs(job_type)
@@ -57,7 +59,7 @@ class CronRoute(Route):
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").to_json()
+                    Response().error("Cron manager not initialized").to_json(),
                 )
 
             payload = await request.json
@@ -79,13 +81,13 @@ class CronRoute(Route):
                 return jsonify(Response().error("session is required").to_json())
             if run_once and not run_at:
                 return jsonify(
-                    Response().error("run_at is required when run_once=true").to_json()
+                    Response().error("run_at is required when run_once=true").to_json(),
                 )
             if (not run_once) and not cron_expression:
                 return jsonify(
                     Response()
                     .error("cron_expression is required when run_once=false")
-                    .to_json()
+                    .to_json(),
                 )
             if run_once and cron_expression:
                 cron_expression = None  # ignore cron when run_once specified
@@ -95,7 +97,7 @@ class CronRoute(Route):
                     run_at_dt = datetime.fromisoformat(str(run_at))
                 except Exception:
                     return jsonify(
-                        Response().error("run_at must be ISO datetime").to_json()
+                        Response().error("run_at must be ISO datetime").to_json(),
                     )
 
             job_payload = {
@@ -128,7 +130,7 @@ class CronRoute(Route):
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").to_json()
+                    Response().error("Cron manager not initialized").to_json(),
                 )
 
             payload = await request.json
@@ -165,7 +167,7 @@ class CronRoute(Route):
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").to_json()
+                    Response().error("Cron manager not initialized").to_json(),
                 )
             await cron_mgr.delete_job(job_id)
             return jsonify(Response().ok(message="deleted").to_json())

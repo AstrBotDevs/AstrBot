@@ -126,14 +126,20 @@ class TelegramPlatformEvent(AstrMessageEvent):
         """发送媒体时显示 upload action,发送完成后恢复 typing"""
         effective_thread_id = message_thread_id or payload.get("message_thread_id")
         await cls._send_chat_action(
-            client, user_name, upload_action, effective_thread_id
+            client,
+            user_name,
+            upload_action,
+            effective_thread_id,
         )
         send_payload = dict(payload)
         if effective_thread_id and "message_thread_id" not in send_payload:
             send_payload["message_thread_id"] = effective_thread_id
         await send_coro(**send_payload)
         await cls._send_chat_action(
-            client, user_name, ChatAction.TYPING, effective_thread_id
+            client,
+            user_name,
+            ChatAction.TYPING,
+            effective_thread_id,
         )
 
     @classmethod
@@ -174,7 +180,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if "Voice_messages_forbidden" not in e.message:
                 raise
             logger.warning(
-                "User privacy settings prevent receiving voice messages, falling back to sending an audio file. To enable voice messages, go to Telegram Settings ￫ Privacy and Security ￫ Voice Messages ￫ set to 'Everyone'."
+                "User privacy settings prevent receiving voice messages, falling back to sending an audio file. To enable voice messages, go to Telegram Settings ￫ Privacy and Security ￫ Voice Messages ￫ set to 'Everyone'.",
             )
             if use_media_action:
                 media_payload = dict(payload)
@@ -193,11 +199,16 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await client.send_document(document=path, caption=caption, **payload)
 
     async def _ensure_typing(
-        self, user_name: str, message_thread_id: str | None = None
+        self,
+        user_name: str,
+        message_thread_id: str | None = None,
     ) -> None:
         """确保显示 typing 状态"""
         await self._send_chat_action(
-            self.client, user_name, ChatAction.TYPING, message_thread_id
+            self.client,
+            user_name,
+            ChatAction.TYPING,
+            message_thread_id,
         )
 
     async def send_typing(self) -> None:
@@ -212,7 +223,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     @classmethod
     async def send_with_client(
-        cls, client: ExtBot, message: MessageChain, user_name: str
+        cls,
+        client: ExtBot,
+        message: MessageChain,
+        user_name: str,
     ) -> None:
         image_path = None
         has_reply = False
@@ -245,11 +259,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     try:
                         md_text = telegramify_markdown.markdownify(chunk)
                         await client.send_message(
-                            text=md_text, parse_mode="MarkdownV2", **payload
+                            text=md_text,
+                            parse_mode="MarkdownV2",
+                            **payload,
                         )
                     except Exception as e:
                         logger.warning(
-                            f"MarkdownV2 send failed: {e}. Using plain text instead."
+                            f"MarkdownV2 send failed: {e}. Using plain text instead.",
                         )
                         await client.send_message(text=chunk, **payload)
             elif isinstance(i, Image):
@@ -277,7 +293,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             elif isinstance(i, Video):
                 path = await i.convert_to_file_path()
                 await client.send_video(
-                    video=path, caption=getattr(i, "text", None) or None, **payload
+                    video=path,
+                    caption=getattr(i, "text", None) or None,
+                    **payload,
                 )
 
     async def send(self, message: MessageChain) -> None:
@@ -332,7 +350,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
             text: 消息文本,1-4096 字符
             message_thread_id: 可选,目标消息线程 ID
             parse_mode: 可选,消息文本的解析模式
+
         """
+        if not text or not text.strip():
+            return
+
         kwargs: dict[str, Any] = {}
         if message_thread_id:
             kwargs["message_thread_id"] = int(message_thread_id)
@@ -340,10 +362,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
             kwargs["parse_mode"] = parse_mode
         try:
             logger.debug(
-                f"[Telegram] sendMessageDraft: chat_id={chat_id}, draft_id={draft_id}, text_len={len(text)}"
+                f"[Telegram] sendMessageDraft: chat_id={chat_id}, draft_id={draft_id}, text_len={len(text)}",
             )
             await self.client.send_message_draft(
-                chat_id=int(chat_id), draft_id=draft_id, text=text, **kwargs
+                chat_id=int(chat_id),
+                draft_id=draft_id,
+                text=text,
+                **kwargs,
             )
         except Exception as e:
             logger.warning(f"[Telegram] sendMessageDraft 失败: {e!s}")
@@ -419,7 +444,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
         try:
             markdown_text = telegramify_markdown.markdownify(delta)
             await self.client.send_message(
-                text=markdown_text, parse_mode="MarkdownV2", **payload
+                text=markdown_text,
+                parse_mode="MarkdownV2",
+                **payload,
             )
         except Exception as e:
             logger.warning(f"Markdown转换失败,使用普通文本: {e!s}")
@@ -440,15 +467,21 @@ class TelegramPlatformEvent(AstrMessageEvent):
         if is_private:
             logger.info("[Telegram] 流式输出: 使用 sendMessageDraft (私聊)")
             await self._send_streaming_draft(
-                user_name, message_thread_id, payload, generator
+                user_name,
+                message_thread_id,
+                payload,
+                generator,
             )
         else:
             logger.info("[Telegram] 流式输出: 使用 edit_message_text fallback (群聊)")
             await self._send_streaming_edit(
-                user_name, message_thread_id, payload, generator
+                user_name,
+                message_thread_id,
+                payload,
+                generator,
             )
         asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
         self._has_send_oper = True
 
@@ -494,12 +527,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         except Exception:
                             try:
                                 await self._send_message_draft(
-                                    user_name, draft_id, draft_text, message_thread_id
+                                    user_name,
+                                    draft_id,
+                                    draft_text,
+                                    message_thread_id,
                                 )
                                 last_sent_text = draft_text
                             except Exception as e2:
                                 logger.debug(
-                                    f"[Telegram] sendMessageDraft failed (ignored): {e2!s}"
+                                    f"[Telegram] sendMessageDraft failed (ignored): {e2!s}",
                                 )
 
         sender_task = asyncio.create_task(_draft_sender_loop())
@@ -516,7 +552,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 if chain.type == "break":
                     if delta:
                         await self._send_message_draft(
-                            user_name, draft_id, "⏳", message_thread_id
+                            user_name,
+                            draft_id,
+                            "⏳",
+                            message_thread_id,
                         )
                         await self._send_final_segment(delta, payload)
                     delta = ""
@@ -524,7 +563,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     draft_id = self._allocate_draft_id()
                     continue
                 await self._process_chain_items(
-                    chain, payload, user_name, message_thread_id, _append_text
+                    chain,
+                    payload,
+                    user_name,
+                    message_thread_id,
+                    _append_text,
                 )
         finally:
             done = True
@@ -573,7 +616,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 delta = ""
                 continue
             await self._process_chain_items(
-                chain, payload, user_name, message_thread_id, _append_text
+                chain,
+                payload,
+                user_name,
+                message_thread_id,
+                _append_text,
             )
             if message_id and len(delta) <= self.MAX_MESSAGE_LENGTH:
                 current_time = asyncio.get_running_loop().time()
@@ -618,7 +665,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 except Exception as e:
                     logger.warning(f"Markdown转换失败,使用普通文本: {e!s}")
                     await self.client.edit_message_text(
-                        text=delta, chat_id=payload["chat_id"], message_id=message_id
+                        text=delta,
+                        chat_id=payload["chat_id"],
+                        message_id=message_id,
                     )
         except Exception as e:
             logger.warning(f"编辑消息失败(streaming): {e!s}")

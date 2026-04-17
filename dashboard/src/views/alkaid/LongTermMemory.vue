@@ -1284,4 +1284,19 @@ export default {
   overflow: auto;
   font-size: 12px;
 }
+
+</style>
+
+<style>
+.v-theme--PurpleThemeDark #long-term-memory #graph-container {
+  background-color: rgb(var(--v-theme-background));
+}
+
+.v-theme--PurpleThemeDark #long-term-memory .d3-graph {
+  background-color: rgb(var(--v-theme-background));
+}
+
+.v-theme--PurpleThemeDark .fact-detail-card pre {
+  background-color: rgb(var(--v-theme-codeBg));
+}
 </style>

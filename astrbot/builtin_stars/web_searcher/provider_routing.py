@@ -54,7 +54,7 @@ _WEB_SEARCH_PROVIDER_ALIASES.update(
         "bochaai": "bocha",
         # ZeroClaw compatibility: AstrBot has no Brave provider yet, so downgrade to default.
         "brave": DEFAULT_WEB_SEARCH_PROVIDER,
-    }
+    },
 )
 
 

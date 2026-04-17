@@ -415,7 +415,9 @@ def register_on_waiting_llm_request(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(
-            awaitable, EventType.OnWaitingLLMRequestEvent, **kwargs
+            awaitable,
+            EventType.OnWaitingLLMRequestEvent,
+            **kwargs,
         )
         return awaitable
 
@@ -463,6 +465,64 @@ def register_on_llm_response(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(awaitable, EventType.OnLLMResponseEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_agent_begin(**kwargs):
+    """当 Agent 开始运行时的事件
+
+    Examples:
+    ```py
+    from astrbot.core.agent.run_context import ContextWrapper
+    from astrbot.core.astr_agent_context import AstrAgentContext
+
+    @on_agent_begin()
+    async def test(
+        self,
+        event: AstrMessageEvent,
+        run_context: ContextWrapper[AstrAgentContext],
+    ) -> None:
+        ...
+    ```
+
+    请务必接收两个参数：event, run_context
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnAgentBeginEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_agent_done(**kwargs):
+    """当 Agent 运行完成后的事件
+
+    Examples:
+    ```py
+    from astrbot.core.agent.run_context import ContextWrapper
+    from astrbot.core.astr_agent_context import AstrAgentContext
+    from astrbot.api.provider import LLMResponse
+
+    @on_agent_done()
+    async def test(
+        self,
+        event: AstrMessageEvent,
+        run_context: ContextWrapper[AstrAgentContext],
+        response: LLMResponse,
+    ) -> None:
+        ...
+    ```
+
+    请务必接收三个参数：event, run_context, response
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnAgentDoneEvent, **kwargs)
         return awaitable
 
     return decorator
@@ -562,7 +622,7 @@ def register_llm_tool(name: str | None = None, **kwargs):
             | Awaitable[MessageEventResult | str | None],
         ],
     ):
-        llm_tool_name = name_ if name_ else getattr(awaitable, "__name__", "")
+        llm_tool_name = name_ or getattr(awaitable, "__name__", "")
         func_doc = awaitable.__doc__ or ""
         docstring = docstring_parser.parse(func_doc)
         args = []

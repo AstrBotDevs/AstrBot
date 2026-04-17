@@ -208,7 +208,7 @@ class LineMessageEvent(AstrMessageEvent):
             return []
         if len(messages) > 5:
             logger.warning(
-                "[LINE] message count exceeds 5, extra segments will be dropped."
+                "[LINE] message count exceeds 5, extra segments will be dropped.",
             )
             messages = messages[:5]
         return messages
@@ -232,7 +232,9 @@ class LineMessageEvent(AstrMessageEvent):
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator, use_fallback: bool = False
+        self,
+        generator: AsyncGenerator,
+        use_fallback: bool = False,
     ):
         if not use_fallback:
             buffer = None

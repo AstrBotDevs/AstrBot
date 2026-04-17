@@ -4,7 +4,8 @@ from .openai_source import ProviderOpenAIOfficial
 
 
 @register_provider_adapter(
-    "groq_chat_completion", "Groq Chat Completion Provider Adapter"
+    "groq_chat_completion",
+    "Groq Chat Completion Provider Adapter",
 )
 class ProviderGroq(ProviderOpenAIOfficial):
     def __init__(

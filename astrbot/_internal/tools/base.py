@@ -36,7 +36,8 @@ class ToolSchema:
         import jsonschema
 
         jsonschema.validate(
-            self.parameters, jsonschema.Draft202012Validator.META_SCHEMA
+            self.parameters,
+            jsonschema.Draft202012Validator.META_SCHEMA,
         )
         return self
 
@@ -75,13 +76,12 @@ class FunctionTool(ToolSchema):
     async def call(self, **kwargs: Any) -> Any:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
-            "FunctionTool.call() must be implemented by subclasses or set a handler."
+            "FunctionTool.call() must be implemented by subclasses or set a handler.",
         )
 
 
 class ToolSet:
-    """
-    A collection of FunctionTools grouped under a namespace.
+    """A collection of FunctionTools grouped under a namespace.
 
     ToolSets allow organizing related tools together. The LLM sees tools
     as "namespace/tool_name" when calling.
@@ -96,6 +96,9 @@ class ToolSet:
 
     def add(self, tool: ToolSchema) -> None:
         """Add a tool to the set."""
+        existing = self._tools.get(tool.name)
+        if existing is not None and not getattr(tool, "active", True) and getattr(existing, "active", True):
+            return  # Don't overwrite active with inactive
         self._tools[tool.name] = tool
 
     def add_tool(self, tool: ToolSchema) -> None:
@@ -166,7 +169,7 @@ class ToolSet:
                     description=tool.description,
                     parameters={"type": "object", "properties": {}},
                     handler=None,
-                )
+                ),
             )
         return ToolSet("default", light_tools)
 
@@ -187,7 +190,7 @@ class ToolSet:
                     description="",
                     parameters=params,
                     handler=None,
-                )
+                ),
             )
         return ToolSet("default", param_tools)
 
@@ -197,7 +200,8 @@ class ToolSet:
         return list(self._tools.values())
 
     def openai_schema(
-        self, omit_empty_parameter_field: bool = False
+        self,
+        omit_empty_parameter_field: bool = False,
     ) -> list[dict[str, Any]]:
         """Convert tools to OpenAI API function calling schema format."""
         result: list[dict[str, Any]] = []
@@ -266,7 +270,8 @@ class ToolSet:
             if target_type in supported_types:
                 result["type"] = target_type
                 if "format" in schema and schema["format"] in supported_formats.get(
-                    result["type"], set()
+                    result["type"],
+                    set(),
                 ):
                     result["format"] = schema["format"]
             else:

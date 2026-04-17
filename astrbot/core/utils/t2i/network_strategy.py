@@ -34,7 +34,7 @@ class NetworkRenderStrategy(RenderStrategy):
     async def initialize(self) -> None:
         if self.BASE_RENDER_URL == ASTRBOT_T2I_DEFAULT_ENDPOINT:
             _get_official_endpoints_task = asyncio.create_task(
-                self.get_official_endpoints()
+                self.get_official_endpoints(),
             )
             self.tasks.add(_get_official_endpoints_task)
             _get_official_endpoints_task.add_done_callback(self.tasks.discard)

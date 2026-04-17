@@ -36,7 +36,7 @@ def _build_image_resolve_actions(
                 ("get_image", {"image": candidate}),
                 ("get_file", {"file_id": candidate}),
                 ("get_file", {"file": candidate}),
-            ]
+            ],
         )
 
     try:
@@ -53,7 +53,7 @@ def _build_image_resolve_actions(
                 (
                     "get_group_file_url",
                     {"group_id": group_id_value, "file_id": candidate},
-                )
+                ),
             )
     for candidate in candidates:
         actions.append(("get_private_file_url", {"file_id": candidate}))

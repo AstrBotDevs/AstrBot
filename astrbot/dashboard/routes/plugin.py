@@ -92,6 +92,8 @@ class PluginRoute(Route):
             EventType.AdapterMessageEvent: "平台消息下发时",
             EventType.OnLLMRequestEvent: "LLM 请求时",
             EventType.OnLLMResponseEvent: "LLM 响应后",
+            EventType.OnAgentBeginEvent: "Agent 开始运行时",
+            EventType.OnAgentDoneEvent: "Agent 运行完成后",
             EventType.OnDecoratingResultEvent: "回复消息前",
             EventType.OnCallingFuncToolEvent: "函数工具",
             EventType.OnAfterMessageSentEvent: "发送消息后",
@@ -105,7 +107,7 @@ class PluginRoute(Route):
             data = await request.get_json()
             version_spec = data.get("astrbot_version", "")
             is_valid, message = self.plugin_manager._validate_astrbot_version_specifier(
-                version_spec
+                version_spec,
             )
             return (
                 Response()
@@ -114,7 +116,7 @@ class PluginRoute(Route):
                         "compatible": is_valid,
                         "message": message,
                         "astrbot_version": version_spec,
-                    }
+                    },
                 )
                 .to_json()
             )
@@ -141,8 +143,7 @@ class PluginRoute(Route):
 
             if success:
                 return Response().ok(None, f"插件 {dir_name} 重载成功｡").to_json()
-            else:
-                return Response().error(f"重载失败: {err}").to_json()
+            return Response().error(f"重载失败: {err}").to_json()
 
         except Exception as e:
             logger.error(f"/api/plugin/reload-failed: {traceback.format_exc()}")
@@ -213,7 +214,7 @@ class PluginRoute(Route):
                             continue  # 继续尝试其他URL或使用缓存
 
                         logger.info(
-                            f"成功获取远程插件市场数据,包含 {len(remote_data)} 个插件"
+                            f"成功获取远程插件市场数据,包含 {len(remote_data)} 个插件",
                         )
                         # 获取最新的MD5并保存到缓存
                         current_md5 = await self._fetch_remote_md5(source.md5_url)
@@ -337,7 +338,10 @@ class PluginRoute(Route):
         return None
 
     async def _save_plugin_cache(
-        self, cache_file: str, data, md5: str | None = None
+        self,
+        cache_file: str,
+        data,
+        md5: str | None = None,
     ) -> None:
         """保存插件市场数据到本地缓存"""
         try:
@@ -364,7 +368,8 @@ class PluginRoute(Route):
                 if not await file_token_service.check_token_expired(token):
                     return self._logo_cache[logo_path]
             token = await file_token_service.register_file(
-                logo_path, expire_seconds=300
+                logo_path,
+                expire_seconds=300,
             )
             self._logo_cache[logo_path] = token
             return token
@@ -379,7 +384,7 @@ class PluginRoute(Route):
         base_dir = Path(
             self.plugin_manager.reserved_plugin_path
             if plugin.reserved
-            else self.plugin_manager.plugin_store_path
+            else self.plugin_manager.plugin_store_path,
         )
         plugin_dir = base_dir / plugin.root_dir_name
         if not plugin_dir.is_dir():
@@ -435,7 +440,7 @@ class PluginRoute(Route):
                     plugin.desc,
                     plugin.version,
                     plugin.display_name,
-                ]
+                ],
             ):
                 continue
             _plugin_resp.append(_t)
@@ -704,7 +709,7 @@ class PluginRoute(Route):
                 raise result
             if isinstance(result, BaseException):
                 results.append(
-                    {"name": name, "status": "error", "message": str(result)}
+                    {"name": name, "status": "error", "message": str(result)},
                 )
             else:
                 results.append(result)
@@ -859,7 +864,8 @@ class PluginRoute(Route):
             if await anyio.Path(changelog_path).is_file():
                 try:
                     async with await anyio.open_file(
-                        changelog_path, encoding="utf-8"
+                        changelog_path,
+                        encoding="utf-8",
                     ) as f:
                         changelog_content = await f.read()
                     return (

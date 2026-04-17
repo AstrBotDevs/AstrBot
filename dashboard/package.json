@@ -34,7 +34,7 @@
     "markstream-vue": "^0.0.9",
     "mermaid": "^11.14.0",
     "monaco-editor": "^0.55.1",
-    "pinia": "3.0.0",
+    "pinia": "^3.0.4",
     "pinyin-pro": "^3.28.0",
     "qrcode": "^1.5.4",
     "shiki": "^3.23.0",
@@ -66,7 +66,7 @@
     "sass-loader": "16.0.7",
     "subset-font": "^2.5.0",
     "typescript": "~6.0.2",
-    "vite": "8.0.3",
+    "vite": "8.0.5",
     "vite-plugin-webfont-dl": "^3.12.0",
     "vue-tsc": "^3.2.6"
   },

@@ -66,7 +66,9 @@ _PARAM_EXPAND_RE = re.compile(r"\$\{([^}:]+?)(:-([^}]*))?\}")
 
 
 def _expand_parameter(
-    match: re.Match, env: dict[str, str], local: dict[str, str]
+    match: re.Match,
+    env: dict[str, str],
+    local: dict[str, str],
 ) -> str:
     """Helper to expand a single ${VAR:-default} or ${VAR} occurrence.
 
@@ -302,7 +304,7 @@ def run(
                     click.echo(f"  {click.style(key, fg='cyan')}: {val}")
             if svc_path:
                 click.echo(
-                    f"  {click.style('SERVICE_CONFIG', fg='cyan')}: {svc_path!s}"
+                    f"  {click.style('SERVICE_CONFIG', fg='cyan')}: {svc_path!s}",
                 )
             click.echo("")
 
@@ -338,7 +340,8 @@ def run(
                     while True:
                         try:
                             log_entry = await asyncio.wait_for(
-                                log_queue.get(), timeout=0.5
+                                log_queue.get(),
+                                timeout=0.5,
                             )
                             # Format: [LEVEL] message
                             level = log_entry.get("level_name", "INFO")
@@ -375,20 +378,48 @@ def run(
                     except asyncio.CancelledError:
                         pass
 
-            click.echo("AstrBot is running... (streaming logs)")
+            click.echo()
+            click.echo("=" * 60)
+            click.echo("AstrBot 启动中...")
+            click.echo("=" * 60)
+
+            from astrbot.cli.banner import print_logo
+
+            print_logo()
+            click.echo()
+
             if backend_only:
-                click.echo("Dashboard: https://dash.astrbot.men/")
-                click.echo("Backend: localhost or based on https")
+                click.echo("[模式] 仅后端模式（无本地 Dashboard）")
+                click.echo()
+                click.echo("[提示] 可以通过以下方式访问 WebUI：")
+                click.echo("  - 使用远程服务器的在线 Dashboard")
+                click.echo("  - 地址: http://服务器IP:6185")
+                click.echo()
+            else:
+                dashboard_url = f"http://{host or 'localhost'}:{port or '6185'}"
+                click.echo("[模式] 完整模式（含本地 Dashboard）")
+                click.echo()
+                click.echo(f"[Dashboard] 请访问: {dashboard_url}")
+                click.echo()
+                click.echo("!" * 60)
+                click.echo("安全提示：")
+                click.echo("  HTTPS 前端只能安全连接 localhost 的 HTTP 后端")
+                click.echo("  不支持远程 + HTTP 后端（不安全）")
+                click.echo("!" * 60)
+                click.echo()
+
+            click.echo("正在启动服务...（日志输出中）")
+            click.echo()
 
             asyncio.run(run_with_logging())
     except KeyboardInterrupt:
         click.echo("AstrBot has been shut down.")
     except Timeout:
         raise click.ClickException(
-            "Cannot acquire lock file. Please check if another instance is running"
+            "Cannot acquire lock file. Please check if another instance is running",
         ) from None
     except Exception as e:
         # Keep original traceback visible for diagnostics
         raise click.ClickException(
-            f"Runtime error: {e}\n{traceback.format_exc()}"
+            f"Runtime error: {e}\n{traceback.format_exc()}",
         ) from e

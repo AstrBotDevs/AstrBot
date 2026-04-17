@@ -4,7 +4,8 @@ from .openai_source import ProviderOpenAIOfficial
 
 
 @register_provider_adapter(
-    "openrouter_chat_completion", "OpenRouter Chat Completion Provider Adapter"
+    "openrouter_chat_completion",
+    "OpenRouter Chat Completion Provider Adapter",
 )
 class ProviderOpenRouter(ProviderOpenAIOfficial):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:

@@ -47,7 +47,7 @@ class WeixinOCClient:
             "Content-Type": "application/json",
             "AuthorizationType": "ilink_bot_token",
             "X-WECHAT-UIN": base64.b64encode(
-                str(random.getrandbits(32)).encode("utf-8")
+                str(random.getrandbits(32)).encode("utf-8"),
             ).decode("utf-8"),
         }
         if token_required and self.token:
@@ -129,7 +129,7 @@ class WeixinOCClient:
             cdn_url = self._build_cdn_upload_url(upload_param, file_key)
         else:
             raise ValueError(
-                "CDN upload URL missing (need upload_full_url or upload_param)"
+                "CDN upload URL missing (need upload_full_url or upload_param)",
             )
         raw_data = await asyncio.to_thread(media_path.read_bytes)
         logger.debug(
@@ -170,16 +170,16 @@ class WeixinOCClient:
             )
             if resp.status >= 400 and resp.status < 500:
                 raise RuntimeError(
-                    f"upload media to cdn failed: {resp.status} {detail}"
+                    f"upload media to cdn failed: {resp.status} {detail}",
                 )
             if resp.status != 200:
                 raise RuntimeError(
-                    f"upload media to cdn failed: {resp.status} {detail}"
+                    f"upload media to cdn failed: {resp.status} {detail}",
                 )
             download_param = resp.headers.get("x-encrypted-param")
             if not download_param:
                 raise RuntimeError(
-                    "upload media to cdn failed: missing x-encrypted-param"
+                    "upload media to cdn failed: missing x-encrypted-param",
                 )
             return download_param
 
@@ -188,17 +188,20 @@ class WeixinOCClient:
         assert self._http_session is not None
         timeout = aiohttp.ClientTimeout(total=self.api_timeout_ms / 1000)
         async with self._http_session.get(
-            self._build_cdn_download_url(encrypted_query_param), timeout=timeout
+            self._build_cdn_download_url(encrypted_query_param),
+            timeout=timeout,
         ) as resp:
             if resp.status >= 400:
                 detail = await resp.text()
                 raise RuntimeError(
-                    f"download media from cdn failed: {resp.status} {detail}"
+                    f"download media from cdn failed: {resp.status} {detail}",
                 )
             return await resp.read()
 
     async def download_and_decrypt_media(
-        self, encrypted_query_param: str, aes_key_value: str
+        self,
+        encrypted_query_param: str,
+        aes_key_value: str,
     ) -> bytes:
         encrypted = await self.download_cdn_bytes(encrypted_query_param)
         key = self.parse_media_aes_key(aes_key_value)
@@ -238,7 +241,9 @@ class WeixinOCClient:
             return json.loads(text)
 
     async def get_typing_config(
-        self, user_id: str, context_token: str
+        self,
+        user_id: str,
+        context_token: str,
     ) -> dict[str, Any]:
         return await self.request_json(
             "POST",
@@ -253,7 +258,11 @@ class WeixinOCClient:
         )
 
     async def send_typing_state(
-        self, user_id: str, typing_ticket: str, *, cancel: bool
+        self,
+        user_id: str,
+        typing_ticket: str,
+        *,
+        cancel: bool,
     ) -> dict[str, Any]:
         return await self.request_json(
             "POST",

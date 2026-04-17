@@ -54,7 +54,7 @@ class ChatUIProjectRoute(Route):
                     "description": project.description,
                     "created_at": to_utc_isoformat(project.created_at),
                     "updated_at": to_utc_isoformat(project.updated_at),
-                }
+                },
             )
             .to_json()
         )
@@ -105,7 +105,7 @@ class ChatUIProjectRoute(Route):
                     "description": project.description,
                     "created_at": to_utc_isoformat(project.created_at),
                     "updated_at": to_utc_isoformat(project.updated_at),
-                }
+                },
             )
             .to_json()
         )

@@ -17,7 +17,9 @@ class ProcessStage(Stage):
         self.config = ctx.astrbot_config
         self.plugin_manager = ctx.plugin_manager
         self.sdk_plugin_bridge = getattr(
-            ctx.plugin_manager.context, "sdk_plugin_bridge", None
+            ctx.plugin_manager.context,
+            "sdk_plugin_bridge",
+            None,
         )
 
         # initialize agent sub stage

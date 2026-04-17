@@ -47,6 +47,7 @@ def _get_major_version(version_str: str) -> str:
 
     Returns:
         主版本字符串,如 "4.9", "4.10"
+
     """
     if not version_str:
         return "0.0"
@@ -55,7 +56,7 @@ def _get_major_version(version_str: str) -> str:
     parts = [p for p in version.split(".") if p]  # 过滤空字符串
     if len(parts) >= 2:
         return f"{parts[0]}.{parts[1]}"
-    elif len(parts) == 1 and parts[0]:
+    if len(parts) == 1 and parts[0]:
         return f"{parts[0]}.0"
     return "0.0"
 
@@ -246,6 +247,7 @@ class AstrBotImporter:
 
         Returns:
             ImportPreCheckResult: 预检查结果
+
         """
         result = ImportPreCheckResult()
         result.current_version = VERSION
@@ -307,6 +309,7 @@ class AstrBotImporter:
 
         Returns:
             dict: {status, can_import, message}
+
         """
         if not backup_version:
             return {
@@ -362,6 +365,7 @@ class AstrBotImporter:
 
         Returns:
             ImportResult: 导入结果
+
         """
         result = ImportResult()
 
@@ -465,7 +469,8 @@ class AstrBotImporter:
                     await progress_callback("attachments", 0, 100, "正在导入附件...")
 
                 attachment_count = await self._import_attachments(
-                    zf, main_data.get("attachments", [])
+                    zf,
+                    main_data.get("attachments", []),
                 )
                 result.imported_files["attachments"] = attachment_count
 
@@ -475,7 +480,10 @@ class AstrBotImporter:
                 # 6. 导入插件和其他目录
                 if progress_callback:
                     await progress_callback(
-                        "directories", 0, 100, "正在导入插件和数据目录..."
+                        "directories",
+                        0,
+                        100,
+                        "正在导入插件和数据目录...",
                     )
 
                 dir_stats = await self._import_directories(zf, manifest, result)
@@ -516,16 +524,15 @@ class AstrBotImporter:
 
     async def _clear_main_db(self) -> None:
         """清空主数据库所有表"""
-        async with self.main_db.get_db() as session:
-            async with session.begin():
-                for table_name, model_class in MAIN_DB_MODELS.items():
-                    try:
-                        await session.execute(delete(model_class))
-                        logger.debug(f"已清空表 {table_name}")
-                    except Exception as e:
-                        raise DatabaseClearError(
-                            f"清空表 {table_name} 失败: {e}"
-                        ) from e
+        async with self.main_db.get_db() as session, session.begin():
+            for table_name, model_class in MAIN_DB_MODELS.items():
+                try:
+                    await session.execute(delete(model_class))
+                    logger.debug(f"已清空表 {table_name}")
+                except Exception as e:
+                    raise DatabaseClearError(
+                        f"清空表 {table_name} 失败: {e}",
+                    ) from e
 
     async def _clear_kb_data(self) -> None:
         """清空知识库数据"""
@@ -533,14 +540,13 @@ class AstrBotImporter:
             return
 
         # 清空知识库元数据表
-        async with self.kb_manager.kb_db.get_db() as session:
-            async with session.begin():
-                for table_name, model_class in KB_METADATA_MODELS.items():
-                    try:
-                        await session.execute(delete(model_class))
-                        logger.debug(f"已清空知识库表 {table_name}")
-                    except Exception as e:
-                        logger.warning(f"清空知识库表 {table_name} 失败: {e}")
+        async with self.kb_manager.kb_db.get_db() as session, session.begin():
+            for table_name, model_class in KB_METADATA_MODELS.items():
+                try:
+                    await session.execute(delete(model_class))
+                    logger.debug(f"已清空知识库表 {table_name}")
+                except Exception as e:
+                    logger.warning(f"清空知识库表 {table_name} 失败: {e}")
 
         # 删除知识库文件目录
         for kb_id in list(self.kb_manager.kb_insts.keys()):
@@ -555,38 +561,40 @@ class AstrBotImporter:
         self.kb_manager.kb_insts.clear()
 
     async def _import_main_database(
-        self, data: dict[str, list[dict]]
+        self,
+        data: dict[str, list[dict]],
     ) -> dict[str, int]:
         """导入主数据库数据"""
         imported: dict[str, int] = {}
 
-        async with self.main_db.get_db() as session:
-            async with session.begin():
-                for table_name, rows in data.items():
-                    model_class = MAIN_DB_MODELS.get(table_name)
-                    if not model_class:
-                        logger.warning(f"未知的表: {table_name}")
-                        continue
-                    normalized_rows = self._preprocess_main_table_rows(table_name, rows)
+        async with self.main_db.get_db() as session, session.begin():
+            for table_name, rows in data.items():
+                model_class = MAIN_DB_MODELS.get(table_name)
+                if not model_class:
+                    logger.warning(f"未知的表: {table_name}")
+                    continue
+                normalized_rows = self._preprocess_main_table_rows(table_name, rows)
 
-                    count = 0
-                    for row in normalized_rows:
-                        try:
-                            # 转换 datetime 字符串为 datetime 对象
-                            row = self._convert_datetime_fields(row, model_class)
-                            obj = model_class(**row)
-                            session.add(obj)
-                            count += 1
-                        except Exception as e:
-                            logger.warning(f"导入记录到 {table_name} 失败: {e}")
+                count = 0
+                for row in normalized_rows:
+                    try:
+                        # 转换 datetime 字符串为 datetime 对象
+                        row = self._convert_datetime_fields(row, model_class)
+                        obj = model_class(**row)
+                        session.add(obj)
+                        count += 1
+                    except Exception as e:
+                        logger.warning(f"导入记录到 {table_name} 失败: {e}")
 
-                    imported[table_name] = count
-                    logger.debug(f"导入表 {table_name}: {count} 条记录")
+                imported[table_name] = count
+                logger.debug(f"导入表 {table_name}: {count} 条记录")
 
         return imported
 
     def _preprocess_main_table_rows(
-        self, table_name: str, rows: list[dict[str, Any]]
+        self,
+        table_name: str,
+        rows: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         if table_name == "platform_stats":
             normalized_rows = self._merge_platform_stats_rows(rows)
@@ -601,7 +609,8 @@ class AstrBotImporter:
         return rows
 
     def _merge_platform_stats_rows(
-        self, rows: list[dict[str, Any]]
+        self,
+        rows: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """Merge duplicate platform_stats rows by normalized timestamp/platform key.
 
@@ -609,6 +618,7 @@ class AstrBotImporter:
         - Invalid/empty timestamps are kept as distinct rows to avoid accidental merging.
         - Non-string platform_id/platform_type are kept as distinct rows.
         - Invalid count warnings are rate-limited per function invocation.
+
         """
         merged: dict[tuple[str, str, str], dict[str, Any]] = {}
         result: list[dict[str, Any]] = []
@@ -708,24 +718,23 @@ class AstrBotImporter:
             return
 
         # 1. 导入知识库元数据
-        async with self.kb_manager.kb_db.get_db() as session:
-            async with session.begin():
-                for table_name, rows in kb_meta_data.items():
-                    model_class = KB_METADATA_MODELS.get(table_name)
-                    if not model_class:
-                        continue
+        async with self.kb_manager.kb_db.get_db() as session, session.begin():
+            for table_name, rows in kb_meta_data.items():
+                model_class = KB_METADATA_MODELS.get(table_name)
+                if not model_class:
+                    continue
 
-                    count = 0
-                    for row in rows:
-                        try:
-                            row = self._convert_datetime_fields(row, model_class)
-                            obj = model_class(**row)
-                            session.add(obj)
-                            count += 1
-                        except Exception as e:
-                            logger.warning(f"导入知识库记录到 {table_name} 失败: {e}")
+                count = 0
+                for row in rows:
+                    try:
+                        row = self._convert_datetime_fields(row, model_class)
+                        obj = model_class(**row)
+                        session.add(obj)
+                        count += 1
+                    except Exception as e:
+                        logger.warning(f"导入知识库记录到 {table_name} 失败: {e}")
 
-                    result.imported_tables[f"kb_{table_name}"] = count
+                result.imported_tables[f"kb_{table_name}"] = count
 
         # 2. 导入每个知识库的文档和文件
         for kb_data in kb_meta_data.get("knowledge_bases", []):
@@ -769,7 +778,8 @@ class AstrBotImporter:
                         rel_path = name[len(media_prefix) :]
                         target_path = kb_dir / rel_path
                         await anyio.Path(target_path.parent).mkdir(
-                            parents=True, exist_ok=True
+                            parents=True,
+                            exist_ok=True,
                         )
                         with zf.open(name) as src:
                             content = src.read()
@@ -835,7 +845,8 @@ class AstrBotImporter:
                         target_path = attachments_dir / os.path.basename(name)
 
                     await anyio.Path(target_path.parent).mkdir(
-                        parents=True, exist_ok=True
+                        parents=True,
+                        exist_ok=True,
                     )
                     with zf.open(name) as src:
                         content = src.read()
@@ -862,6 +873,7 @@ class AstrBotImporter:
 
         Returns:
             dict: 每个目录导入的文件数量
+
         """
         dir_stats: dict[str, int] = {}
 
@@ -916,7 +928,8 @@ class AstrBotImporter:
 
                         target_path = target_dir / rel_path
                         await anyio.Path(target_path.parent).mkdir(
-                            parents=True, exist_ok=True
+                            parents=True,
+                            exist_ok=True,
                         )
 
                         with zf.open(name) as src:

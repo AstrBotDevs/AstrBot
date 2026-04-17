@@ -61,7 +61,9 @@ class WecomAIBotLongConnectionClient:
             self._session = session
             logger.info("[WecomAI][LongConn] 正在连接: %s", self.ws_url)
             async with session.ws_connect(
-                self.ws_url, heartbeat=None, autoping=True
+                self.ws_url,
+                heartbeat=None,
+                autoping=True,
             ) as ws:
                 self._ws = ws
                 await self._subscribe()
@@ -107,7 +109,7 @@ class WecomAIBotLongConnectionClient:
         data = json.loads(reply.data)
         if data.get("errcode") != 0:
             raise RuntimeError(
-                f"订阅失败 errcode={data.get('errcode')} errmsg={data.get('errmsg')}"
+                f"订阅失败 errcode={data.get('errcode')} errmsg={data.get('errmsg')}",
             )
 
     async def _heartbeat_loop(self) -> None:

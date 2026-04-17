@@ -32,10 +32,10 @@ class LongTermMemory:
             max_cnt = 300
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
         image_caption_provider_id = cfg["provider_ltm_settings"].get(
-            "image_caption_provider_id"
+            "image_caption_provider_id",
         )
         image_caption = cfg["provider_ltm_settings"]["image_caption"] and bool(
-            image_caption_provider_id
+            image_caption_provider_id,
         )
         active_reply = cfg["provider_ltm_settings"]["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
@@ -126,7 +126,7 @@ class LongTermMemory:
                 elif isinstance(comp, Image):
                     if cfg["image_caption"]:
                         try:
-                            url = comp.url if comp.url else comp.file
+                            url = comp.url or comp.file
                             if not url:
                                 raise Exception("图片 URL 为空")
                             caption = await self.get_image_caption(
@@ -172,7 +172,9 @@ class LongTermMemory:
             req.system_prompt += chats_str
 
     async def after_req_llm(
-        self, event: AstrMessageEvent, llm_resp: LLMResponse
+        self,
+        event: AstrMessageEvent,
+        llm_resp: LLMResponse,
     ) -> None:
         if event.unified_msg_origin not in self.session_chats:
             return
@@ -180,7 +182,7 @@ class LongTermMemory:
         if llm_resp.completion_text:
             final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {llm_resp.completion_text}"
             logger.debug(
-                f"Recorded AI response: {event.unified_msg_origin} | {final_message}"
+                f"Recorded AI response: {event.unified_msg_origin} | {final_message}",
             )
             self.session_chats[event.unified_msg_origin].append(final_message)
             cfg = self.cfg(event)

@@ -10,7 +10,9 @@ from astrbot.core.provider.register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "xinference_rerank", "Xinference Rerank 适配器", provider_type=ProviderType.RERANK
+    "xinference_rerank",
+    "Xinference Rerank 适配器",
+    provider_type=ProviderType.RERANK,
 )
 class XinferenceRerankProvider(RerankProvider):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
@@ -23,7 +25,8 @@ class XinferenceRerankProvider(RerankProvider):
         self.model_name = provider_config.get("rerank_model", "BAAI/bge-reranker-base")
         self.api_key = provider_config.get("rerank_api_key")
         self.launch_model_if_not_running = provider_config.get(
-            "launch_model_if_not_running", False
+            "launch_model_if_not_running",
+            False,
         )
         self.client: Client | None = None
         self.model: AsyncRESTfulRerankModelHandle | None = None
@@ -42,7 +45,7 @@ class XinferenceRerankProvider(RerankProvider):
             for uid, model_spec in running_models.items():
                 if model_spec.get("model_name") == self.model_name:
                     logger.info(
-                        f"Model '{self.model_name}' is already running with UID: {uid}"
+                        f"Model '{self.model_name}' is already running with UID: {uid}",
                     )
                     self.model_uid = uid
                     break
@@ -50,12 +53,13 @@ class XinferenceRerankProvider(RerankProvider):
                 if self.launch_model_if_not_running:
                     logger.info(f"Launching {self.model_name} model...")
                     self.model_uid = await client.launch_model(
-                        model_name=self.model_name, model_type="rerank"
+                        model_name=self.model_name,
+                        model_type="rerank",
                     )
                     logger.info("Model launched.")
                 else:
                     logger.warning(
-                        f"Model '{self.model_name}' is not running and auto-launch is disabled. Provider will not be available."
+                        f"Model '{self.model_name}' is not running and auto-launch is disabled. Provider will not be available.",
                     )
                     return
             if self.model_uid:
@@ -63,12 +67,16 @@ class XinferenceRerankProvider(RerankProvider):
         except Exception as e:
             logger.error(f"Failed to initialize Xinference model: {e}")
             logger.debug(
-                f"Xinference initialization failed with exception: {e}", exc_info=True
+                f"Xinference initialization failed with exception: {e}",
+                exc_info=True,
             )
             self.model = None
 
     async def rerank(
-        self, query: str, documents: list[str], top_n: int | None = None
+        self,
+        query: str,
+        documents: list[str],
+        top_n: int | None = None,
     ) -> list[RerankResult]:
         if not self.model:
             logger.error("Xinference rerank model is not initialized.")
@@ -79,11 +87,12 @@ class XinferenceRerankProvider(RerankProvider):
             logger.debug(f"Rerank API response: {response}")
             if not results:
                 logger.warning(
-                    f"Rerank API returned an empty list. Original response: {response}"
+                    f"Rerank API returned an empty list. Original response: {response}",
                 )
             return [
                 RerankResult(
-                    index=result["index"], relevance_score=result["relevance_score"]
+                    index=result["index"],
+                    relevance_score=result["relevance_score"],
                 )
                 for result in results
             ]

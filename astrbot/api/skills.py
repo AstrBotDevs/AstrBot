@@ -1,5 +1,4 @@
-"""
-Skills Public API for AstrBot.
+"""Skills Public API for AstrBot.
 
 This module provides a simple, stable interface for skill management,
 delegating to the _internal package.
@@ -19,6 +18,7 @@ Example:
     tool_skills = [s for s in skills if s.input_schema]
     if tool_skills:
         func_tool = skill_to_tool(tool_skills[0])
+
 """
 
 from __future__ import annotations
@@ -45,6 +45,7 @@ def skill_to_tool(skill: SkillInfo) -> FunctionTool | None:
 
     Returns:
         A FunctionTool, or None if the skill has no input_schema
+
     """
     if not skill.input_schema:
         return None

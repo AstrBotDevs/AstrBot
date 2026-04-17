@@ -1,6 +1,4 @@
-"""
-WebSocket connection manager for the AstrBot gateway.
-"""
+"""WebSocket connection manager for the AstrBot gateway."""
 
 from __future__ import annotations
 
@@ -22,8 +20,7 @@ log = logger
 
 
 class WebSocketManager:
-    """
-    Manages all active WebSocket connections.
+    """Manages all active WebSocket connections.
 
     Provides connection/disconnection handling and broadcast capabilities.
     """
@@ -46,12 +43,12 @@ class WebSocketManager:
         log.debug(f"WebSocket disconnected. Total: {len(self._connections)}")
 
     async def send_json(self, websocket: WebSocket, data: dict[str, Any]) -> None:
-        """
-        Send JSON data to a specific WebSocket.
+        """Send JSON data to a specific WebSocket.
 
         Args:
             websocket: Target WebSocket connection
             data: Data to send (must be JSON-serializable)
+
         """
         try:
             await websocket.send_json(data)
@@ -60,11 +57,11 @@ class WebSocketManager:
             await self.disconnect(websocket)
 
     async def broadcast(self, data: dict[str, Any]) -> None:
-        """
-        Broadcast JSON data to all connected WebSockets.
+        """Broadcast JSON data to all connected WebSockets.
 
         Args:
             data: Data to broadcast (must be JSON-serializable)
+
         """
         async with self._lock:
             connections = list(self._connections)
@@ -77,14 +74,16 @@ class WebSocketManager:
                     self._connections.discard(conn)
 
     async def send_to(
-        self, websocket: WebSocket, message: str | dict[str, Any]
+        self,
+        websocket: WebSocket,
+        message: str | dict[str, Any],
     ) -> None:
-        """
-        Send a message to a specific WebSocket.
+        """Send a message to a specific WebSocket.
 
         Args:
             websocket: Target WebSocket connection
             message: Message to send (string or dict)
+
         """
         try:
             if isinstance(message, str):

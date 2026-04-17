@@ -23,15 +23,23 @@ async def initialize_astrbot(
     admin_password: str | None,
 ) -> None:
     """Execute AstrBot initialization logic"""
+    from astrbot.cli.banner import print_logo
+
+    click.echo("=" * 60)
+    click.echo("AstrBot 初始化向导")
+    click.echo("=" * 60)
+    print_logo()
+    click.echo()
+
     dot_astrbot = astrbot_root / ".astrbot"
     if not dot_astrbot.exists():
         if yes or click.confirm(
-            f"Install AstrBot to this directory? {astrbot_root}",
+            f"确定要将 AstrBot 安装到以下目录吗？\n  {astrbot_root}",
             default=True,
             abort=True,
         ):
             dot_astrbot.touch()
-            click.echo(f"Created {dot_astrbot}")
+            click.echo(f"[OK] 已创建: {dot_astrbot}")
     paths = {
         "data": astrbot_root / "data",
         "config": astrbot_root / "data" / "config",
@@ -41,16 +49,15 @@ async def initialize_astrbot(
     }
     for name, path in paths.items():
         path.mkdir(parents=True, exist_ok=True)
-        click.echo(
-            f"{('Created' if not path.exists() else f'{name} Directory exists')}: {path}"
-        )
+        status = "Created" if not path.exists() else "Exists"
+        click.echo(f"  [{status}] {name.title()}: {path}")
     config_path = astrbot_root / "data" / "cmd_config.json"
     if not config_path.exists():
         config_path.write_text(
             json.dumps(DEFAULT_CONFIG, ensure_ascii=False, indent=2),
             encoding="utf-8-sig",
         )
-        click.echo(f"Created config file: {config_path}")
+        click.echo(f"[OK] 配置文件已创建: {config_path}")
     ASTRBOT_ROOT = astrbot_root
     env_file = ASTRBOT_ROOT / ".env"
     if not env_file.exists():
@@ -80,14 +87,14 @@ async def initialize_astrbot(
                 header = f"# Generated from config.template by astrbot init for instance: {instance_name}\n# This file will be auto-loaded by 'astrbot run'\n\n"
                 env_file.write_text(header + txt, encoding="utf-8")
                 env_file.chmod(420)
-                click.echo(f"Created environment file from template: {env_file}")
+                click.echo(f"[OK] 环境变量文件已创建: {env_file}")
             except Exception as e:
-                click.echo(f"Warning: failed to generate .env from template: {e!s}")
+                click.echo(f"[警告] 无法从模板生成 .env 文件: {e!s}")
         else:
-            click.echo("No config.template found; skipping .env generation")
+            click.echo("[提示] 未找到 config.template 文件，跳过 .env 生成")
     if admin_password is not None:
         raise click.ClickException(
-            "--admin-password is no longer supported during init. Run 'astrbot conf admin' after initialization."
+            "--admin-password is no longer supported during init. Run 'astrbot conf admin' after initialization.",
         )
     effective_admin_username = (
         admin_username.strip()
@@ -97,24 +104,44 @@ async def initialize_astrbot(
     if admin_username:
         config = ensure_config_file()
         set_dashboard_credentials(
-            config, username=effective_admin_username, password_hash=None
+            config,
+            username=effective_admin_username,
+            password_hash=None,
         )
         config_path.write_text(
-            json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8-sig"
+            json.dumps(config, ensure_ascii=False, indent=2),
+            encoding="utf-8-sig",
         )
-    click.echo(f"Configured dashboard admin username: {effective_admin_username}")
-    click.echo(
-        "Dashboard password is not initialized for interactive use. Run 'astrbot conf admin' before the first login."
-    )
+    click.echo(f"[OK] Dashboard admin 用户名已设置为: {effective_admin_username}")
+    click.echo()
+    click.echo("!" * 60)
+    click.echo("重要提示：")
+    click.echo("  1. Dashboard 密码尚未设置！首次登录前必须先设置密码")
+    click.echo("  2. 设置命令: astrbot conf admin")
+    click.echo("  3. 登录地址: http://localhost:6185 或 http://服务器IP:6185")
+    click.echo("!" * 60)
+    click.echo()
     if not backend_only and (
         yes
         or click.confirm(
-            "是否需要集成式 WebUI?(个人电脑推荐,服务器不推荐)", default=True
+            "是否需要集成式 WebUI？（个人电脑推荐，服务器推荐使用后端模式）",
+            default=True,
         )
     ):
         await DashboardManager().ensure_installed(astrbot_root)
     else:
-        click.echo("你可以使用在线面版(需支持配置后端)来控制｡")
+        click.echo()
+        click.echo("[提示] 你选择了后端模式，可以使用以下方式管理 AstrBot：")
+        click.echo("  - 使用在线 Dashboard: 在浏览器中访问远程服务器的 WebUI")
+        click.echo("  - 使用 CLI 命令: astrbot conf / astrbot plug 等")
+        click.echo()
+        click.echo("!" * 60)
+        click.echo("安全提示：")
+        click.echo("  HTTPS 前端只能安全连接 localhost 的 HTTP 后端")
+        click.echo("  不支持远程 + HTTP 后端（不安全）")
+        click.echo("  如需远程访问，请使用 HTTPS 后端或通过反向代理")
+        click.echo("!" * 60)
+        click.echo()
 
 
 @click.command()
@@ -164,19 +191,32 @@ def init(
                     backend_only=backend_only,
                     admin_username=admin_username,
                     admin_password=admin_password,
-                )
+                ),
             )
             if backup:
                 from .cmd_bk import import_data_command
 
                 click.echo(f"Restoring from backup: {backup}")
                 click.get_current_context().invoke(
-                    import_data_command, backup_file=backup, yes=True
+                    import_data_command,
+                    backup_file=backup,
+                    yes=True,
                 )
-            click.echo("Done! You can now run 'astrbot run' to start AstrBot")
+            click.echo()
+            click.echo("=" * 60)
+            click.echo("初始化完成！")
+            click.echo("=" * 60)
+            click.echo()
+            click.echo("启动 AstrBot：")
+            click.echo("  完整模式（含 Dashboard）: astrbot run")
+            click.echo("  仅后端模式:           astrbot run --backend-only")
+            click.echo()
+            click.echo("首次使用前请先设置管理员密码：")
+            click.echo("  astrbot conf admin")
+            click.echo()
     except Timeout:
         raise click.ClickException(
-            "Cannot acquire lock file. Please check if another instance is running"
+            "Cannot acquire lock file. Please check if another instance is running",
         )
     except Exception as e:
         raise click.ClickException(f"Initialization failed: {e!s}")

@@ -44,7 +44,8 @@ class ToolSchema:
     def validate_parameters(self) -> "ToolSchema":
         if self.parameters is not None:
             jsonschema.validate(
-                self.parameters, jsonschema.Draft202012Validator.META_SCHEMA
+                self.parameters,
+                jsonschema.Draft202012Validator.META_SCHEMA,
             )
         return self
 
@@ -106,11 +107,13 @@ class FunctionTool(ToolSchema, Generic[TContext]):
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
     async def call(
-        self, context: ContextWrapper[TContext], **kwargs: Any
+        self,
+        context: ContextWrapper[TContext],
+        **kwargs: Any,
     ) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
-            "FunctionTool.call() must be implemented by subclasses or set a handler."
+            "FunctionTool.call() must be implemented by subclasses or set a handler.",
         )
 
 
@@ -184,7 +187,7 @@ class ToolSet:
                     description=tool.description,
                     parameters=light_params,
                     handler=None,
-                )
+                ),
             )
         return ToolSet(light_tools)
 
@@ -205,7 +208,7 @@ class ToolSet:
                     description="",
                     parameters=params,
                     handler=None,
-                )
+                ),
             )
         return ToolSet(param_tools)
 

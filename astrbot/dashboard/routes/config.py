@@ -53,8 +53,7 @@ def try_cast(value: Any, type_: str):
         type_ == "float"
         and isinstance(value, str)
         and value.replace(".", "", 1).isdigit()
-        or (type_ == "float" and isinstance(value, int))
-    ):
+    ) or (type_ == "float" and isinstance(value, int)):
         return float(value)
     elif type_ == "float":
         try:
@@ -66,7 +65,7 @@ def try_cast(value: Any, type_: str):
 def _expect_type(value, expected_type, path_key, errors, expected_name=None) -> bool:
     if not isinstance(value, expected_type):
         errors.append(
-            f"错误的类型 {path_key}: 期望是 {expected_name or expected_type.__name__}, 得到了 {type(value).__name__}"
+            f"错误的类型 {path_key}: 期望是 {expected_name or expected_type.__name__}, 得到了 {type(value).__name__}",
         )
         return False
     return True
@@ -116,7 +115,7 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 for idx, item in enumerate(value):
                     if not isinstance(item, str):
                         errors.append(
-                            f"Invalid type {path}{key}[{idx}]: expected string, got {type(item).__name__}"
+                            f"Invalid type {path}{key}[{idx}]: expected string, got {type(item).__name__}",
                         )
                         continue
                     normalized = normalize_rel_path(item)
@@ -133,7 +132,7 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 continue
             if meta["type"] == "list" and (not isinstance(value, list)):
                 errors.append(
-                    f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}"
+                    f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}",
                 )
             elif (
                 meta["type"] == "list"
@@ -150,31 +149,31 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 casted = try_cast(value, "int")
                 if casted is None:
                     errors.append(
-                        f"错误的类型 {path}{key}: 期望是 int, 得到了 {type(value).__name__}"
+                        f"错误的类型 {path}{key}: 期望是 int, 得到了 {type(value).__name__}",
                     )
                 data[key] = casted
             elif meta["type"] == "float" and (not isinstance(value, float)):
                 casted = try_cast(value, "float")
                 if casted is None:
                     errors.append(
-                        f"错误的类型 {path}{key}: 期望是 float, 得到了 {type(value).__name__}"
+                        f"错误的类型 {path}{key}: 期望是 float, 得到了 {type(value).__name__}",
                     )
                 data[key] = casted
             elif meta["type"] == "bool" and (not isinstance(value, bool)):
                 errors.append(
-                    f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}"
+                    f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}",
                 )
             elif meta["type"] in ["string", "text"] and (not isinstance(value, str)):
                 errors.append(
-                    f"错误的类型 {path}{key}: 期望是 string, 得到了 {type(value).__name__}"
+                    f"错误的类型 {path}{key}: 期望是 string, 得到了 {type(value).__name__}",
                 )
             elif meta["type"] == "list" and (not isinstance(value, list)):
                 errors.append(
-                    f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}"
+                    f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}",
                 )
             elif meta["type"] == "object" and (not isinstance(value, dict)):
                 errors.append(
-                    f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}"
+                    f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}",
                 )
 
     if is_core:
@@ -250,7 +249,8 @@ async def _validate_neo_connectivity(post_config: dict) -> str | None:
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                health_url, timeout=aiohttp.ClientTimeout(total=5)
+                health_url,
+                timeout=aiohttp.ClientTimeout(total=5),
             ) as resp:
                 if resp.status != 200:
                     return f"⚠️ Bay 健康检查失败 (HTTP {resp.status}),请确认 Bay 正在运行: {endpoint}"
@@ -260,7 +260,9 @@ async def _validate_neo_connectivity(post_config: dict) -> str | None:
 
 
 def save_config(
-    post_config: dict, config: AstrBotConfig, is_core: bool = False
+    post_config: dict,
+    config: AstrBotConfig,
+    is_core: bool = False,
 ) -> None:
     """验证并保存配置"""
     errors = None
@@ -270,11 +272,15 @@ def save_config(
     try:
         if is_core:
             errors, post_config = validate_config(
-                post_config, CONFIG_METADATA_2, is_core
+                post_config,
+                CONFIG_METADATA_2,
+                is_core,
             )
         else:
             errors, post_config = validate_config(
-                post_config, getattr(config, "schema", {}), is_core
+                post_config,
+                getattr(config, "schema", {}),
+                is_core,
             )
     except BaseException as e:
         logger.error(traceback.format_exc())
@@ -287,7 +293,9 @@ def save_config(
 
 class ConfigRoute(Route):
     def __init__(
-        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle
+        self,
+        context: RouteContext,
+        core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
@@ -381,7 +389,7 @@ class ConfigRoute(Route):
                 return (
                     Response()
                     .error(
-                        f"Provider source ID '{new_source_config['id']}' exists already, please try another ID."
+                        f"Provider source ID '{new_source_config['id']}' exists already, please try another ID.",
                     )
                     .to_json()
                 )
@@ -428,10 +436,10 @@ class ConfigRoute(Route):
         _provider_group: Any = _cfg["provider_group"]
         _provider_meta: Any = _provider_group["metadata"]["provider"]
         converted: dict[str, Any] = ConfigMetadataI18n.convert_to_i18n_keys(
-            {"provider_group": {"metadata": {"provider": _provider_meta}}}
+            {"provider_group": {"metadata": {"provider": _provider_meta}}},
         )
         config_schema = {
-            "provider": converted["provider_group"]["metadata"]["provider"]
+            "provider": converted["provider_group"]["metadata"]["provider"],
         }
         data = {
             "config_schema": config_schema,
@@ -554,7 +562,7 @@ class ConfigRoute(Route):
                         schema=abconf.schema,
                     )
                 metadata = ConfigMetadataI18n.convert_to_i18n_keys(
-                    CONFIG_METADATA_3_SYSTEM
+                    CONFIG_METADATA_3_SYSTEM,
                 )
                 return Response().ok({"config": abconf, "metadata": metadata}).to_json()
             if abconf_id is None:
@@ -630,27 +638,30 @@ class ConfigRoute(Route):
             "error": None,
         }
         logger.debug(
-            f"Attempting to check provider: {status_info['name']} (ID: {status_info['id']}, Type: {status_info['type']}, Model: {status_info['model']})"
+            f"Attempting to check provider: {status_info['name']} (ID: {status_info['id']}, Type: {status_info['type']}, Model: {status_info['model']})",
         )
         try:
             await provider.test()
             status_info["status"] = "available"
             logger.info(
-                f"Provider {status_info['name']} (ID: {status_info['id']}) is available."
+                f"Provider {status_info['name']} (ID: {status_info['id']}) is available.",
             )
         except Exception as e:
             error_message = str(e)
             status_info["error"] = error_message
             logger.warning(
-                f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}"
+                f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}",
             )
             logger.debug(
-                f"Traceback for {status_info['name']}:\n{traceback.format_exc()}"
+                f"Traceback for {status_info['name']}:\n{traceback.format_exc()}",
             )
         return status_info
 
     def _error_response(
-        self, message: str, status_code: int = 500, log_fn=logger.error
+        self,
+        message: str,
+        status_code: int = 500,
+        log_fn=logger.error,
     ):
         log_fn(message)
         if status_code == 500:
@@ -662,7 +673,9 @@ class ConfigRoute(Route):
         provider_id = request.args.get("id")
         if not provider_id:
             return self._error_response(
-                "Missing provider_id parameter", 400, logger.warning
+                "Missing provider_id parameter",
+                400,
+                logger.warning,
             )
         logger.info(f"API call: /config/provider/check_one id={provider_id}")
         try:
@@ -672,7 +685,7 @@ class ConfigRoute(Route):
             target = prov_mgr.inst_map.get(provider_id)
             if not target:
                 logger.warning(
-                    f"Provider with id '{provider_id}' not found in provider_manager."
+                    f"Provider with id '{provider_id}' not found in provider_manager.",
                 )
                 return (
                     Response()
@@ -683,7 +696,8 @@ class ConfigRoute(Route):
             return Response().ok(result).to_json()
         except Exception as e:
             return self._error_response(
-                f"Critical error checking provider {provider_id}: {e}", 500
+                f"Critical error checking provider {provider_id}: {e}",
+                500,
             )
 
     async def get_configs(self):
@@ -780,7 +794,7 @@ class ConfigRoute(Route):
                     return (
                         Response()
                         .error(
-                            "提供商适配器加载失败,请检查提供商类型配置或查看服务端日志"
+                            "提供商适配器加载失败,请检查提供商类型配置或查看服务端日志",
                         )
                         .to_json()
                     )
@@ -803,7 +817,7 @@ class ConfigRoute(Route):
             vec = await inst.get_embedding("echo")
             dim = len(vec)
             logger.info(
-                f"检测到 {provider_config.get('id', 'unknown')} 的嵌入向量维度为 {dim}"
+                f"检测到 {provider_config.get('id', 'unknown')} 的嵌入向量维度为 {dim}",
             )
             return Response().ok({"embedding_dimensions": dim}).to_json()
         except Exception as e:
@@ -875,7 +889,7 @@ class ConfigRoute(Route):
             if inspect.iscoroutinefunction(terminate_fn):
                 await terminate_fn()
             logger.info(
-                f"获取到 provider_source {provider_source_id} 的模型列表: {models}"
+                f"获取到 provider_source {provider_source_id} 的模型列表: {models}",
             )
             return (
                 Response()
@@ -1017,7 +1031,9 @@ class ConfigRoute(Route):
             return (
                 Response()
                 .error(
-                    "Upload failed: " + ", ".join(errors) if errors else "Upload failed"
+                    "Upload failed: " + ", ".join(errors)
+                    if errors
+                    else "Upload failed",
                 )
                 .to_json()
             )
@@ -1205,7 +1221,8 @@ class ConfigRoute(Route):
             if cache_key in self._logo_token_cache:
                 cached_token = self._logo_token_cache[cache_key]
                 if platform.name not in platform_default_tmpl or not isinstance(
-                    platform_default_tmpl[platform.name], dict
+                    platform_default_tmpl[platform.name],
+                    dict,
                 ):
                     platform_default_tmpl[platform.name] = {}
                 platform_default_tmpl[platform.name]["logo_token"] = cached_token
@@ -1220,10 +1237,12 @@ class ConfigRoute(Route):
             logo_file_path = os.path.join(plugin_dir, platform.logo_path)
             if await anyio.Path(logo_file_path).exists():
                 logo_token = await file_token_service.register_file(
-                    logo_file_path, expire_seconds=3600
+                    logo_file_path,
+                    expire_seconds=3600,
                 )
                 if platform.name not in platform_default_tmpl or not isinstance(
-                    platform_default_tmpl[platform.name], dict
+                    platform_default_tmpl[platform.name],
+                    dict,
                 ):
                     platform_default_tmpl[platform.name] = {}
                 platform_default_tmpl[platform.name]["logo_token"] = logo_token
@@ -1231,21 +1250,24 @@ class ConfigRoute(Route):
                 logger.debug(f"Logo token registered for platform {platform.name}")
             else:
                 logger.warning(
-                    f"Platform {platform.name} logo file not found: {logo_file_path}"
+                    f"Platform {platform.name} logo file not found: {logo_file_path}",
                 )
         except (ImportError, AttributeError) as e:
             logger.warning(
-                f"Failed to import required modules for platform {platform.name}: {e}"
+                f"Failed to import required modules for platform {platform.name}: {e}",
             )
         except OSError as e:
             logger.warning(f"File system error for platform {platform.name} logo: {e}")
         except Exception as e:
             logger.warning(
-                f"Unexpected error registering logo for platform {platform.name}: {e}"
+                f"Unexpected error registering logo for platform {platform.name}: {e}",
             )
 
     def _inject_platform_metadata_with_i18n(
-        self, platform, metadata, platform_i18n_translations: dict
+        self,
+        platform,
+        metadata,
+        platform_i18n_translations: dict,
     ):
         """将配置元数据注入到 metadata 中并处理国际化键转换｡"""
         metadata["platform_group"]["metadata"]["platform"].setdefault("items", {})
@@ -1254,24 +1276,25 @@ class ConfigRoute(Route):
             i18n_prefix = f"platform_group.platform.{platform.name}"
             for lang, lang_data in platform.i18n_resources.items():
                 platform_i18n_translations.setdefault(lang, {}).setdefault(
-                    "platform_group", {}
+                    "platform_group",
+                    {},
                 ).setdefault("platform", {})[platform.name] = lang_data
             for field_key, field_value in platform_items_to_inject.items():
                 for key in ("description", "hint", "labels"):
                     if key in field_value:
                         field_value[key] = f"{i18n_prefix}.{field_key}.{key}"
         metadata["platform_group"]["metadata"]["platform"]["items"].update(
-            platform_items_to_inject
+            platform_items_to_inject,
         )
 
     async def _get_astrbot_config(self):
         config = self.config
-        metadata = copy.deepcopy(CONFIG_METADATA_2)
+        metadata: Any = copy.deepcopy(CONFIG_METADATA_2)
         _pg: Any = metadata["platform_group"]
         _pg_meta: Any = _pg["metadata"]
         _platform_meta: Any = _pg_meta["platform"]
         platform_i18n = ConfigMetadataI18n.convert_to_i18n_keys(
-            {"platform_group": {"metadata": {"platform": _platform_meta}}}
+            {"platform_group": {"metadata": {"platform": _platform_meta}}},
         )
         _target: Any = _pg_meta
         _platform_i18n_dict: Any = platform_i18n
@@ -1281,27 +1304,29 @@ class ConfigRoute(Route):
         _pg2: Any = metadata["platform_group"]
         _pg_meta2: Any = _pg2["metadata"]
         _platform_tmpl: Any = _pg_meta2["platform"]
-        platform_default_tmpl = _platform_tmpl["config_template"]
-        platform_i18n_translations = {}
+        platform_default_tmpl: Any = _platform_tmpl["config_template"]
+        platform_i18n_translations: dict[str, Any] = {}
         logo_registration_tasks = []
         for platform in platform_registry:
             if platform.default_config_tmpl:
                 platform_default_tmpl[platform.name] = copy.deepcopy(
-                    platform.default_config_tmpl
+                    platform.default_config_tmpl,
                 )
                 if platform.config_metadata:
                     self._inject_platform_metadata_with_i18n(
-                        platform, metadata, platform_i18n_translations
+                        platform,
+                        metadata,
+                        platform_i18n_translations,
                     )
                 if platform.logo_path:
                     logo_registration_tasks.append(
-                        self._register_platform_logo(platform, platform_default_tmpl)
+                        self._register_platform_logo(platform, platform_default_tmpl),
                     )
         if logo_registration_tasks:
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
         _provider_tmpl: Any = metadata["provider_group"]
         _provider_tmpl2: Any = _provider_tmpl["metadata"]["provider"]
-        provider_default_tmpl = _provider_tmpl2["config_template"]
+        provider_default_tmpl: Any = _provider_tmpl2["config_template"]
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
@@ -1323,13 +1348,15 @@ class ConfigRoute(Route):
                         "description": f"{plugin_name} 配置",
                         "type": "object",
                         "items": plugin_md.config.schema,
-                    }
+                    },
                 }
                 break
         return ret
 
     async def _save_astrbot_configs(
-        self, post_configs: dict, conf_id: str | None = None
+        self,
+        post_configs: dict,
+        conf_id: str | None = None,
     ) -> None:
         try:
             if not self.acm or conf_id not in self.acm.confs:
@@ -1355,7 +1382,9 @@ class ConfigRoute(Route):
         assert md.config is not None
         try:
             errors, post_configs = validate_config(
-                post_configs, getattr(md.config, "schema", {}), is_core=False
+                post_configs,
+                getattr(md.config, "schema", {}),
+                is_core=False,
             )
             if errors:
                 raise ValueError(f"格式校验未通过: {errors}")

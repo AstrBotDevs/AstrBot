@@ -11,6 +11,7 @@ class Comet(SearchEngine):
     Note:
     - This endpoint is often protected by anti-bot challenges.
     - We intentionally treat failures as non-fatal and rely on fallback engines.
+
     """
 
     NAME = "comet"

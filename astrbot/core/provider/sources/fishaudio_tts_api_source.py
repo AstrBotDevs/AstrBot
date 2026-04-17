@@ -85,7 +85,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         sort_options = ["score", "task_count", "created_at"]
         async with AsyncClient(
             base_url=self.api_base.replace("/v1", ""),
-            proxy=self.proxy if self.proxy else None,
+            proxy=self.proxy or None,
         ) as client:
             for sort_by in sort_options:
                 params = {"title": character, "sort_by": sort_by}
@@ -134,11 +134,11 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         else:
             # 回退到原来的角色名称查询逻辑
             fetched_reference_id = await self._get_reference_id_by_character(
-                self.character
+                self.character,
             )
             if fetched_reference_id is None:
                 raise ValueError(
-                    f"未找到 FishAudio 角色 '{self.character}' 对应的参考模型ID｡"
+                    f"未找到 FishAudio 角色 '{self.character}' 对应的参考模型ID｡",
                 )
             resolved_reference_id = fetched_reference_id
 
@@ -156,7 +156,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         async with AsyncClient(
             base_url=self.api_base,
             timeout=self.timeout,
-            proxy=self.proxy if self.proxy else None,
+            proxy=self.proxy or None,
         ).stream(
             "POST",
             "/tts",
@@ -164,7 +164,8 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
         ) as response:
             if response.status_code == 200 and response.headers.get(
-                "content-type", ""
+                "content-type",
+                "",
             ).startswith("audio/"):
                 async with aiofiles.open(path, "wb") as f:
                     async for chunk in response.aiter_bytes():
@@ -173,5 +174,5 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             error_bytes = await response.aread()
             error_text = error_bytes.decode("utf-8", errors="replace")[:1024]
             raise Exception(
-                f"Fish Audio API请求失败: 状态码 {response.status_code}, 响应内容: {error_text}"
+                f"Fish Audio API请求失败: 状态码 {response.status_code}, 响应内容: {error_text}",
             )

@@ -1,6 +1,4 @@
-"""
-Python/IPython component
-"""
+"""Python/IPython component"""
 
 from typing import Any, Protocol
 

@@ -8,7 +8,9 @@ from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
 
 async def generate_tsne_visualization(
-    query: str, kb_names: list[str], kb_manager: KnowledgeBaseManager
+    query: str,
+    kb_names: list[str],
+    kb_manager: KnowledgeBaseManager,
 ) -> str | None:
     """生成 t-SNE 可视化图片
 
@@ -31,7 +33,7 @@ async def generate_tsne_visualization(
         from sklearn.manifold import TSNE
     except ImportError as e:
         raise Exception(
-            "缺少必要的库以生成 t-SNE 可视化｡请安装 matplotlib 和 scikit-learn: {e}"
+            "缺少必要的库以生成 t-SNE 可视化｡请安装 matplotlib 和 scikit-learn: {e}",
         ) from e
     try:
         kb_helper: KBHelper | None = None

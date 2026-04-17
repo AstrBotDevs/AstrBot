@@ -95,17 +95,23 @@ class SkillsRoute(Route):
         if not endpoint or not access_token:
             raise ValueError(
                 "Shipyard Neo endpoint or access token not configured. "
-                "Set them in Dashboard or ensure Bay's credentials.json is accessible."
+                "Set them in Dashboard or ensure Bay's credentials.json is accessible.",
             )
         return endpoint, access_token
 
     async def _delete_neo_release(
-        self, client: Any, release_id: str, reason: str | None
+        self,
+        client: Any,
+        release_id: str,
+        reason: str | None,
     ):
         return await client.skills.delete_release(release_id, reason=reason)
 
     async def _delete_neo_candidate(
-        self, client: Any, candidate_id: str, reason: str | None
+        self,
+        client: Any,
+        candidate_id: str,
+        reason: str | None,
     ):
         return await client.skills.delete_candidate(candidate_id, reason=reason)
 
@@ -134,12 +140,15 @@ class SkillsRoute(Route):
     async def get_skills(self):
         try:
             provider_settings = self.core_lifecycle.astrbot_config.get(
-                "provider_settings", {}
+                "provider_settings",
+                {},
             )
             runtime = provider_settings.get("computer_use_runtime", "local")
             skill_mgr = SkillManager()
             skills = skill_mgr.list_skills(
-                active_only=False, runtime=runtime, show_sandbox_path=False
+                active_only=False,
+                runtime=runtime,
+                show_sandbox_path=False,
             )
             return (
                 Response()
@@ -148,7 +157,7 @@ class SkillsRoute(Route):
                         "skills": [asdict(skill) for skill in skills],
                         "runtime": runtime,
                         "sandbox_cache": skill_mgr.get_sandbox_skills_cache_status(),
-                    }
+                    },
                 )
                 .to_json()
             )
@@ -183,12 +192,15 @@ class SkillsRoute(Route):
             try:
                 try:
                     skill_name = skill_mgr.install_skill_from_zip(
-                        temp_path, overwrite=False, skill_name_hint=Path(filename).stem
+                        temp_path,
+                        overwrite=False,
+                        skill_name_hint=Path(filename).stem,
                     )
                 except TypeError:
                     # Backward compatibility for callers that do not accept skill_name_hint
                     skill_name = skill_mgr.install_skill_from_zip(
-                        temp_path, overwrite=False
+                        temp_path,
+                        overwrite=False,
                     )
             except Exception:
                 # Keep behavior consistent with previous implementation
@@ -248,7 +260,7 @@ class SkillsRoute(Route):
                             {
                                 "filename": filename,
                                 "error": "Only .zip files are supported",
-                            }
+                            },
                         )
                         continue
 
@@ -265,7 +277,8 @@ class SkillsRoute(Route):
                         # Backward compatibility for monkeypatched implementations in tests
                         try:
                             skill_name = skill_mgr.install_skill_from_zip(
-                                temp_path, overwrite=False
+                                temp_path,
+                                overwrite=False,
                             )
                         except FileExistsError:
                             skipped.append(
@@ -273,7 +286,7 @@ class SkillsRoute(Route):
                                     "filename": filename,
                                     "name": Path(filename).stem,
                                     "error": "Skill already exists.",
-                                }
+                                },
                             )
                             skill_name = None
                     except FileExistsError:
@@ -282,7 +295,7 @@ class SkillsRoute(Route):
                                 "filename": filename,
                                 "name": Path(filename).stem,
                                 "error": "Skill already exists.",
-                            }
+                            },
                         )
                         skill_name = None
 
@@ -304,7 +317,7 @@ class SkillsRoute(Route):
                     await sync_skills_to_active_sandboxes()
                 except Exception:
                     logger.warning(
-                        "Failed to sync uploaded skills to active sandboxes."
+                        "Failed to sync uploaded skills to active sandboxes.",
                     )
 
             total = len(file_list)
@@ -385,7 +398,7 @@ class SkillsRoute(Route):
                 return (
                     Response()
                     .error(
-                        "Sandbox preset skill cannot be downloaded from local skill files."
+                        "Sandbox preset skill cannot be downloaded from local skill files.",
                     )
                     .to_json()
                 )
@@ -541,7 +554,7 @@ class SkillsRoute(Route):
                 report=data.get("report"),
             )
             logger.info(
-                f"[Neo] Candidate evaluated: id={candidate_id}, passed={passed}"
+                f"[Neo] Candidate evaluated: id={candidate_id}, passed={passed}",
             )
             return Response().ok(_to_jsonable(result)).to_json()
 
@@ -579,13 +592,13 @@ class SkillsRoute(Route):
             did_sync_to_local = bool(sync_json)
             if did_sync_to_local:
                 logger.info(
-                    f"[Neo] Stable release synced to local: skill={sync_json.get('local_skill_name', '')}"
+                    f"[Neo] Stable release synced to local: skill={sync_json.get('local_skill_name', '')}",
                 )
 
             if result.get("sync_error"):
                 resp = Response().error(
                     "Stable promote synced failed and has been rolled back. "
-                    f"sync_error={result['sync_error']}"
+                    f"sync_error={result['sync_error']}",
                 )
                 resp.data = {
                     "release": release_json,
@@ -649,7 +662,7 @@ class SkillsRoute(Route):
             )
             logger.info(
                 f"[Neo] Release synced to local: skill={result.local_skill_name}, "
-                f"release_id={result.release_id}"
+                f"release_id={result.release_id}",
             )
             return (
                 Response()
@@ -662,7 +675,7 @@ class SkillsRoute(Route):
                         "payload_ref": result.payload_ref,
                         "map_path": result.map_path,
                         "synced_at": result.synced_at,
-                    }
+                    },
                 )
                 .to_json()
             )

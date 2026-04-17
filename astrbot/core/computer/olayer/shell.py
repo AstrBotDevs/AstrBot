@@ -1,6 +1,4 @@
-"""
-Shell component
-"""
+"""Shell component"""
 
 from typing import Any, Protocol
 

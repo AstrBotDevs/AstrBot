@@ -32,11 +32,16 @@ from .server import LarkWebhookServer
 
 
 @register_platform_adapter(
-    "lark", "飞书机器人官方 API 适配器", support_streaming_message=True
+    "lark",
+    "飞书机器人官方 API 适配器",
+    support_streaming_message=True,
 )
 class LarkPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.appid = platform_config["app_id"]
@@ -81,7 +86,11 @@ class LarkPlatformAdapter(Platform):
         self.event_id_timestamps: dict[str, float] = {}
 
     async def _download_message_resource(
-        self, *, message_id: str, file_key: str, resource_type: str
+        self,
+        *,
+        message_id: str,
+        file_key: str,
+        resource_type: str,
     ) -> bytes | None:
         if self.lark_api.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
@@ -96,7 +105,7 @@ class LarkPlatformAdapter(Platform):
         response = await self.lark_api.im.v1.message_resource.aget(request)
         if not response.success():
             logger.error(
-                f"[Lark] 下载消息资源失败 type={resource_type}, key={file_key}, code={response.code}, msg={response.msg}"
+                f"[Lark] 下载消息资源失败 type={resource_type}, key={file_key}, code={response.code}, msg={response.msg}",
             )
             return None
         if response.file is None:
@@ -212,7 +221,9 @@ class LarkPlatformAdapter(Platform):
                         logger.error("[Lark] 图片消息缺少 message_id")
                         continue
                     image_bytes = await self._download_message_resource(
-                        message_id=message_id, file_key=image_key, resource_type="image"
+                        message_id=message_id,
+                        file_key=image_key,
+                        resource_type="image",
                     )
                     if image_bytes is None:
                         continue
@@ -295,7 +306,8 @@ class LarkPlatformAdapter(Platform):
         return components
 
     async def _build_reply_from_parent_id(
-        self, parent_message_id: str
+        self,
+        parent_message_id: str,
     ) -> Comp.Reply | None:
         if self.lark_api.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
@@ -304,7 +316,7 @@ class LarkPlatformAdapter(Platform):
         response = await self.lark_api.im.v1.message.aget(request)
         if not response.success():
             logger.error(
-                f"[Lark] 获取引用消息失败 id={parent_message_id}, code={response.code}, msg={response.msg}"
+                f"[Lark] 获取引用消息失败 id={parent_message_id}, code={response.code}, msg={response.msg}",
             )
             return None
         if response.data is None or not response.data.items:
@@ -366,7 +378,9 @@ class LarkPlatformAdapter(Platform):
         default_suffix: str = ".bin",
     ) -> str | None:
         file_bytes = await self._download_message_resource(
-            message_id=message_id, file_key=file_key, resource_type="file"
+            message_id=message_id,
+            file_key=file_key,
+            resource_type="file",
         )
         if file_bytes is None:
             return None
@@ -398,6 +412,7 @@ class LarkPlatformAdapter(Platform):
 
         Returns:
             True 表示重复事件,False 表示新事件
+
         """
         self._clean_expired_events()
         if event_id in self.event_id_timestamps:
@@ -406,7 +421,9 @@ class LarkPlatformAdapter(Platform):
         return False
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ) -> None:
         if session.message_type == MessageType.GROUP_MESSAGE:
             id_type = "chat_id"
@@ -417,7 +434,10 @@ class LarkPlatformAdapter(Platform):
             id_type = "open_id"
             receive_id = session.session_id
         await LarkMessageEvent.send_message_chain(
-            message_chain, self.lark_api, receive_id=receive_id, receive_id_type=id_type
+            message_chain,
+            self.lark_api,
+            receive_id=receive_id,
+            receive_id_type=id_type,
         )
         await super().send_by_session(session, message_chain)
 
@@ -461,7 +481,7 @@ class LarkPlatformAdapter(Platform):
             for m in message.mentions:
                 if m.id is None:
                     continue
-                open_id = m.id.open_id if m.id.open_id else ""
+                open_id = m.id.open_id or ""
                 at_list[m.key] = Comp.At(qq=open_id, name=m.name)
                 if m.name == self.bot_name:
                     if m.id.open_id is not None:
@@ -523,6 +543,7 @@ class LarkPlatformAdapter(Platform):
 
         Args:
             event_data: Webhook 事件数据
+
         """
         try:
             header = event_data.get("header", {})
@@ -570,5 +591,5 @@ class LarkPlatformAdapter(Platform):
     def unified_webhook(self) -> bool:
         return bool(
             self.config.get("lark_connection_mode", "") == "webhook"
-            and self.config.get("webhook_uuid")
+            and self.config.get("webhook_uuid"),
         )

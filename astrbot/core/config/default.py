@@ -317,7 +317,7 @@ WebUI 的配置文件在 `CONFIG_METADATA_3` 中。
 
 未来将会逐步淘汰此配置元数据。
 """
-CONFIG_METADATA_2 = {
+CONFIG_METADATA_2: Any = {
     "platform_group": {
         "metadata": {
             "platform": {
@@ -1328,6 +1328,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": ["lmstudio"],
                         "api_base": "http://127.0.0.1:1234/v1",
+                        "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
                     },

@@ -245,6 +245,7 @@ def t(translation_key: str, **kwargs: str) -> str:
 
     Returns:
         Translated string, or the key itself if not found
+
     """
     result = _t_cached(translation_key, get_current_language())
     if kwargs:

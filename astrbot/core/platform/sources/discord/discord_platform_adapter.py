@@ -1,7 +1,7 @@
 import asyncio
 import re
 import sys
-from typing import Any
+from typing import Any, cast
 
 import discord
 from discord.abc import GuildChannel, Messageable, PrivateChannel
@@ -39,7 +39,9 @@ else:
 
 # 注册平台适配器
 @register_platform_adapter(
-    "discord", "Discord 适配器 (基于 Pycord)", support_streaming_message=False
+    "discord",
+    "Discord 适配器 (基于 Pycord)",
+    support_streaming_message=False,
 )
 class DiscordPlatformAdapter(Platform):
     def __init__(
@@ -68,7 +70,7 @@ class DiscordPlatformAdapter(Platform):
         """通过会话发送消息"""
         if self.client.user is None:
             logger.error(
-                "[Discord] Client is not ready (self.client.user is None); message send skipped"
+                "[Discord] Client is not ready (self.client.user is None); message send skipped",
             )
             return
 
@@ -99,7 +101,7 @@ class DiscordPlatformAdapter(Platform):
             user_id=str(self.bot_self_id),
             nickname=self.client.user.display_name,
         )
-        message_obj.self_id = cast(str, self.bot_self_id)
+        message_obj.self_id = cast("str", self.bot_self_id)
         message_obj.session_id = session.session_id
         message_obj.message = message_chain.chain
 
@@ -141,7 +143,7 @@ class DiscordPlatformAdapter(Platform):
         token = str(self.config.get("discord_token"))
         if not token:
             logger.error(
-                "[Discord] Bot token is not configured. Please set a valid token in the config file."
+                "[Discord] Bot token is not configured. Please set a valid token in the config file.",
             )
             return
 
@@ -160,7 +162,8 @@ class DiscordPlatformAdapter(Platform):
                     )
             except Exception as e:
                 logger.error(
-                    f"[Discord] on_ready_once_callback err: {e}", exc_info=True
+                    f"[Discord] on_ready_once_callback err: {e}",
+                    exc_info=True,
                 )
 
         self.client.on_ready_once_callback = callback
@@ -170,7 +173,7 @@ class DiscordPlatformAdapter(Platform):
             await self.shutdown_event.wait()
         except discord.errors.LoginFailure:
             logger.error(
-                "[Discord] Login failed. Please check whether the bot token is correct."
+                "[Discord] Login failed. Please check whether the bot token is correct.",
             )
         except discord.errors.ConnectionClosed:
             logger.warning("[Discord] Connection with Discord has been closed.")
@@ -193,14 +196,14 @@ class DiscordPlatformAdapter(Platform):
         return MessageType.GROUP_MESSAGE
 
     def _get_channel_id(
-        self, channel: Messageable | GuildChannel | PrivateChannel
+        self,
+        channel: Messageable | GuildChannel | PrivateChannel,
     ) -> str:
         """根据 channel 对象获取ID"""
         return str(getattr(channel, "id", None))
 
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
-
         message = data["message"]
         content = message.content
         # 如果机器人被@,移除@部分
@@ -246,7 +249,8 @@ class DiscordPlatformAdapter(Platform):
         # 如果机器人被 @,在 message_chain 开头添加 At 组件
         if self.client and self.client.user and bot_was_mentioned:
             message_chain.insert(
-                0, At(qq=str(self.client.user.id), name=self.client.user.name)
+                0,
+                At(qq=str(self.client.user.id), name=self.client.user.name),
             )
         if abm.message_str:
             message_chain.append(Plain(text=abm.message_str))
@@ -264,7 +268,7 @@ class DiscordPlatformAdapter(Platform):
                     )
         abm.message = message_chain
         abm.raw_message = message
-        abm.self_id = cast(str, self.bot_self_id)
+        abm.self_id = cast("str", self.bot_self_id)
         abm.session_id = str(message.channel.id)
         abm.message_id = str(message.id)
         return abm
@@ -287,7 +291,7 @@ class DiscordPlatformAdapter(Platform):
 
         if self.client.user is None:
             logger.error(
-                "[Discord] Client is not ready (self.client.user is None); message handling skipped"
+                "[Discord] Client is not ready (self.client.user is None); message handling skipped",
             )
             return
 
@@ -306,7 +310,7 @@ class DiscordPlatformAdapter(Platform):
         raw_message = message.raw_message
         if not isinstance(raw_message, discord.Message):
             logger.warning(
-                f"[Discord] Non-Message type received and ignored: {type(raw_message)}"
+                f"[Discord] Non-Message type received and ignored: {type(raw_message)}",
             )
             return
 
@@ -362,7 +366,7 @@ class DiscordPlatformAdapter(Platform):
                 logger.info("[Discord] Commands cleaned up successfully.")
             except Exception as e:
                 logger.warning(
-                    f"[Discord] Error occurred while cleaning up commands: {e}"
+                    f"[Discord] Error occurred while cleaning up commands: {e}",
                 )
 
         if self._polling_task:
@@ -373,7 +377,7 @@ class DiscordPlatformAdapter(Platform):
                 logger.info("[Discord] Polling task cancelled successfully.")
             except Exception as e:
                 logger.warning(
-                    f"[Discord] Error occurred while cancelling polling task: {e}"
+                    f"[Discord] Error occurred while cancelling polling task: {e}",
                 )
         logger.info("[Discord] Closing client connection...")
         if self.client and hasattr(self.client, "close"):
@@ -390,7 +394,9 @@ class DiscordPlatformAdapter(Platform):
     async def _collect_and_register_commands(self) -> None:
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] Collecting and registering slash commands...")
-        registered_commands = []
+        registered_commands: list[str] = []
+
+        # Register legacy commands
         for cmd_name, description in self.collect_commands():
             callback = self._create_dynamic_callback(cmd_name)
             options = [
@@ -411,6 +417,9 @@ class DiscordPlatformAdapter(Platform):
             self.client.add_application_command(slash_command)
             registered_commands.append(cmd_name)
 
+        # Register SDK bridge commands
+        await self._register_sdk_commands(registered_commands)
+
         if registered_commands:
             logger.info(
                 f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}",
@@ -426,7 +435,7 @@ class DiscordPlatformAdapter(Platform):
         except HTTPException as exc:
             if getattr(exc, "code", None) == 30034:
                 logger.warning(
-                    "[Discord] 跳过指令同步:已达到 Discord 每日 application command create 限额｡"
+                    "[Discord] 跳过指令同步:已达到 Discord 每日 application command create 限额｡",
                 )
                 return
             raise
@@ -448,75 +457,64 @@ class DiscordPlatformAdapter(Platform):
                 if cmd_name in command_dict:
                     logger.warning(
                         f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
-                        f"'{command_dict[cmd_name]}'"
+                        f"'{command_dict[cmd_name]}'",
                     )
                 command_dict.setdefault(cmd_name, description)
 
+        # SDK bridge commands are registered in _register_sdk_commands()
+        return list(command_dict.items())
+
+    async def _register_sdk_commands(self, registered_commands: list[str]) -> None:
+        """注册 SDK bridge 的原生命令到 Discord。"""
         sdk_bridge = getattr(self, "sdk_plugin_bridge", None)
-        if sdk_bridge is not None:
-            for item in sdk_bridge.list_native_command_candidates("discord"):
-                cmd_name = str(item.get("name", "")).strip()
-                if not cmd_name:
-                    continue
-                if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
-                    logger.debug(f"[Discord] 跳过不符合规范的 SDK 指令: {cmd_name}")
-                    continue
-                description = str(item.get("description") or "").strip()
-                if not description:
-                    if item.get("is_group"):
-                        description = f"Command group: {cmd_name}"
-                    else:
-                        description = f"Command: {cmd_name}"
-                if len(description) > 100:
-                    description = f"{description[:97]}..."
-                if cmd_name in command_dict:
-                    logger.warning(
-                        f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
-                        f"'{command_dict[cmd_name]}'"
-                    )
-                command_dict.setdefault(cmd_name, description)
+        if sdk_bridge is None:
+            return
 
-                # 创建动态回调
-                callback = self._create_dynamic_callback(cmd_name)
-
-                # 创建一个通用的参数选项来接收所有文本输入
-                options = [
-                    discord.Option(
-                        name="params",
-                        description="指令的所有参数",
-                        type=discord.SlashCommandOptionType.string,
-                        required=False,
-                    ),
-                ]
-
-                # 创建SlashCommand
-                slash_command = discord.SlashCommand(
-                    name=cmd_name,
-                    description=description,
-                    func=callback,
-                    options=options,
-                    guild_ids=[self.guild_id] if self.guild_id else None,
-                )
-                self.client.add_application_command(slash_command)
-                registered_commands.append(cmd_name)
-
-        if registered_commands:
-            logger.info(
-                f"[Discord] Ready to sync {len(registered_commands)} commands: {', '.join(registered_commands)}",
+        sdk_cmd_count = 0
+        for item in sdk_bridge.list_native_command_candidates("discord"):
+            cmd_name = str(item.get("name", "")).strip()
+            if not cmd_name:
+                continue
+            if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
+                logger.debug(f"[Discord] 跳过不符合规范的 SDK 指令: {cmd_name}")
+                continue
+            description = str(item.get("description") or "").strip()
+            if not description:
+                if item.get("is_group"):
+                    description = f"Command group: {cmd_name}"
+                else:
+                    description = f"Command: {cmd_name}"
+            if len(description) > 100:
+                description = f"{description[:97]}..."
+            callback = self._create_dynamic_callback(cmd_name)
+            options = [
+                discord.Option(
+                    name="params",
+                    description="指令的所有参数",
+                    type=discord.SlashCommandOptionType.string,
+                    required=False,
+                ),
+            ]
+            slash_command = discord.SlashCommand(
+                name=cmd_name,
+                description=description,
+                func=callback,
+                options=options,
+                guild_ids=[self.guild_id] if self.guild_id else None,
             )
-        else:
-            logger.info("[Discord] No commands found for registration.")
+            self.client.add_application_command(slash_command)
+            registered_commands.append(cmd_name)
+            sdk_cmd_count += 1
 
-        # 使用 Pycord 的方法同步指令
-        # 注意：这可能需要一些时间，并且有频率限制
-        await self.client.sync_commands()
-        logger.info("[Discord] Command synchronization completed.")
+        if sdk_cmd_count > 0:
+            logger.info(f"[Discord] Registered {sdk_cmd_count} SDK bridge commands.")
 
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
 
         async def dynamic_callback(
-            ctx: discord.ApplicationContext, params: str | None = None
+            ctx: discord.ApplicationContext,
+            params: str | None = None,
         ) -> None:
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] Callback triggered: {cmd_name}")
@@ -573,7 +571,7 @@ class DiscordPlatformAdapter(Platform):
             )
             abm.message = [Plain(text=message_str_for_filter)]
             abm.raw_message = ctx.interaction
-            abm.self_id = cast(str, self.bot_self_id)
+            abm.self_id = cast("str", self.bot_self_id)
             abm.session_id = str(ctx.channel_id)
             abm.message_id = (
                 str(getattr(ctx.interaction, "id", ctx.interaction))

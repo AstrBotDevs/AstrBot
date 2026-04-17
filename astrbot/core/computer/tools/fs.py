@@ -102,7 +102,7 @@ class FileUploadTool(FunctionTool):
                 # },
             },
             "required": ["local_path"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -167,7 +167,7 @@ class FileDownloadTool(FunctionTool):
                 },
             },
             "required": ["remote_path"],
-        }
+        },
     )
 
     async def call(  # type: ignore[override]
@@ -186,7 +186,8 @@ class FileDownloadTool(FunctionTool):
             name = os.path.basename(remote_path)
 
             local_path = os.path.join(
-                get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
+                get_astrbot_temp_path(),
+                f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
             )
 
             # Download file from sandbox
@@ -197,7 +198,7 @@ class FileDownloadTool(FunctionTool):
                 try:
                     name = os.path.basename(local_path)
                     await context.context.event.send(
-                        MessageChain(chain=[File(name=name, file=local_path)])
+                        MessageChain(chain=[File(name=name, file=local_path)]),
                     )
                 except Exception as e:
                     logger.error(f"Error sending file message: {e}")

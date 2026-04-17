@@ -48,7 +48,6 @@ class LogPipe(threading.Thread, io.TextIOBase):
 
     def flush(self) -> None:
         """No-op for compatibility - log writes are immediate."""
-        pass
 
     def close(self) -> None:
         """Close the write end of the pipe."""

@@ -109,7 +109,7 @@ async def download_image_by_url(
             f"SSL certificate verification failed for {url}. "
             "Disabling SSL verification (CERT_NONE) as a fallback. "
             "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate and resolve certificate issues."
+            "Please investigate and resolve certificate issues.",
         )
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
@@ -146,7 +146,8 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
             connector=connector,
         ) as session:
             async with session.get(
-                url, timeout=aiohttp.ClientTimeout(total=1800)
+                url,
+                timeout=aiohttp.ClientTimeout(total=1800),
             ) as resp:
                 if resp.status != 200:
                     raise Exception(f"下载文件失败: {resp.status}")
@@ -155,7 +156,7 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 start_time = time.time()
                 if show_progress:
                     logger.info(
-                        f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}"
+                        f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}",
                     )
                 async with await anyio.open_file(path, "wb") as f:
                     while True:
@@ -172,18 +173,18 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                             )
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             logger.info(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s"
+                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
                             )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证(仅在证书验证失败时作为fallback)
         logger.warning(
-            "SSL 证书验证失败,已关闭 SSL 验证(不安全,仅用于临时下载)｡请检查目标服务器的证书配置｡"
+            "SSL 证书验证失败,已关闭 SSL 验证(不安全,仅用于临时下载)｡请检查目标服务器的证书配置｡",
         )
         logger.warning(
             f"SSL certificate verification failed for {url}. "
             "Falling back to unverified connection (CERT_NONE). "
             "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate certificate issues with the remote server."
+            "Please investigate certificate issues with the remote server.",
         )
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
@@ -199,7 +200,7 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 start_time = time.time()
                 if show_progress:
                     logger.info(
-                        f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}"
+                        f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}",
                     )
                 async with await anyio.open_file(path, "wb") as f:
                     while True:
@@ -212,7 +213,7 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                             elapsed_time = time.time() - start_time
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             logger.info(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s"
+                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
                             )
     if show_progress:
         logger.info("下载完成")
@@ -358,7 +359,7 @@ async def download_dashboard(
                     except Exception as e:
                         if not latest:
                             logger.warning(
-                                f"下载指定版本({version})失败: {e},尝试下载最新版本｡"
+                                f"下载指定版本({version})失败: {e},尝试下载最新版本｡",
                             )
                             await download_dashboard(
                                 path=path,
