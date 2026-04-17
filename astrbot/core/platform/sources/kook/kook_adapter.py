@@ -217,11 +217,10 @@ class KookPlatformAdapter(Platform):
         # kook平台有一个角色(role)的概念,他表示拥有某一类权限的许多用户
         # 且角色本身也有一个自己的id,与正常用户id不同
         # 而在频道中是可以`@`角色的,而想要知道bot是否属于某个角色
-        # 方法是通过 `/user/view`` 接口获取当前bot账号的某个频道下所属角色的id
-        # 还有一个特殊情况的判断方法,角色的名称(name)本身就机器人的昵称(nickname)
+        # 需要通过 `/user/view`` 接口获取当前bot账号的某个频道下所属角色的id
         # 为了解决 https://github.com/AstrBotDevs/AstrBot/issues/7539
         # 在确定机器人需要响应某个`@角色`时,将角色id替换装当前的bot id
-        # 包装成`At`机器人自己,而`At`的name就原样填写
+        # 包装成`At`机器人自己,而`At`的name就
 
         message_str = raw_content
         bot_id = self.client.bot_id
@@ -257,7 +256,7 @@ class KookPlatformAdapter(Platform):
                             components.append(
                                 At(
                                     qq=bot_id,
-                                    name=mention_target,  # 保留角色id
+                                    name=role_mention_name,  # 保留角色名称
                                 )
                             )
                             role_mention_counter += 1
