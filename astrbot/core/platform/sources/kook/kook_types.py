@@ -101,10 +101,10 @@ class KookBaseDataClass(BaseModel):
 
     def to_dict(
         self,
-        mode: Literal["json", "python"] | str = "python",
+        mode: Literal["json", "python"] | str = "json",
         by_alias=True,
-        exclude_none=True,
-        exclude_unset=False,
+        exclude_none=False,
+        exclude_unset=True,
     ) -> dict:
         return self.model_dump(
             by_alias=by_alias,
@@ -293,7 +293,9 @@ class KookCardMessageContainer(list[KookCardMessage]):
 
     def to_json(self, indent: int | None = None, ensure_ascii: bool = True) -> str:
         return json.dumps(
-            [i.to_dict() for i in self], indent=indent, ensure_ascii=ensure_ascii
+            [i.to_dict(exclude_none=True, exclude_unset=False) for i in self],
+            indent=indent,
+            ensure_ascii=ensure_ascii,
         )
 
     @classmethod
