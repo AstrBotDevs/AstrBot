@@ -36,37 +36,37 @@ class KookRolesRecord:
             # 所以,这里特意调低了timeout时间,避免阻塞太久
 
             # TODO 这个超时时间后续加到适配器配置项里
-            resp = await self._http_client.get(
+            async with self._http_client.get(
                 url,
                 params={
                     "guild_id": channel_id,
                     "user_id": self._bot_id,
                 },
                 timeout=USER_VIEW_REQUEST_TIMEOUT,
-            )
-            if resp.status != 200:
-                logger.error(
-                    f'[KOOK] 获取机器人在频道"{channel_id}"的角色id信息失败，状态码: {resp.status} , {await resp.text()}'
-                )
-                return
-            try:
-                resp_content = KookUserViewResponse.from_dict(await resp.json())
-            except pydantic.ValidationError as e:
-                logger.error(
-                    f'[KOOK] 获取机器人在频道"{channel_id}"的角色id信息失败, 响应数据格式错误: \n{e}'
-                )
-                logger.error(f"[KOOK] 响应内容: {await resp.text()}")
-                return
+            ) as resp:
+                if resp.status != 200:
+                    logger.error(
+                        f'[KOOK] 获取机器人在频道"{channel_id}"的角色id信息失败，状态码: {resp.status} , {await resp.text()}'
+                    )
+                    return
+                try:
+                    resp_content = KookUserViewResponse.from_dict(await resp.json())
+                except pydantic.ValidationError as e:
+                    logger.error(
+                        f'[KOOK] 获取机器人在频道"{channel_id}"的角色id信息失败, 响应数据格式错误: \n{e}'
+                    )
+                    logger.error(f"[KOOK] 响应内容: {await resp.text()}")
+                    return
 
-            if not resp_content.success():
-                logger.error(
-                    f'[KOOK] 获取机器人在频道"{channel_id}"的角色id信息失败: {resp_content.model_dump_json()}'
-                )
-                return
+                if not resp_content.success():
+                    logger.error(
+                        f'[KOOK] 获取机器人在频道"{channel_id}"的角色id信息失败: {resp_content.model_dump_json()}'
+                    )
+                    return
 
-            self._roles_dict[channel_id] = set(resp_content.data.roles)
+                self._roles_dict[channel_id] = set(resp_content.data.roles)
 
-            logger.info(f'[KOOK] 获取机器人在频道"{channel_id}"的角色id成功')
+                logger.info(f'[KOOK] 获取机器人在频道"{channel_id}"的角色id成功')
 
         except Exception as e:
             logger.error(
