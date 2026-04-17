@@ -1340,13 +1340,19 @@ class ChatRoute(Route):
         if not session_id:
             return Response().error("Missing key: session_id").__dict__
 
+        username = g.get("username", "guest")
+
         # 获取会话信息以确定 platform_id
         session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
         platform_id = session.platform_id if session else "webchat"
         branch_meta = await self._get_branch_meta(session_id)
 
         # 获取项目信息（如果会话属于某个项目）
-        username = g.get("username", "guest")
         project_info = await self.db.get_project_by_session(
             session_id=session_id, creator=username
         )
@@ -1439,7 +1445,9 @@ class ChatRoute(Route):
             return Response().error(f"Message {message_id} not found").__dict__
         if record.platform_id != session.platform_id or record.user_id != session_id:
             return Response().error("Message does not belong to the session").__dict__
-        original_type = record.content.get("type") if isinstance(record.content, dict) else None
+        original_type = (
+            record.content.get("type") if isinstance(record.content, dict) else None
+        )
         if original_type not in {"user", "bot"}:
             return Response().error("Unsupported message type").__dict__
         if content.get("type") != original_type:
