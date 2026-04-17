@@ -462,7 +462,7 @@ class KookMessageEventData(KookBaseDataClass):
     type: KookMessageType
     target_id: str
     author_id: str
-    content: str
+    content: str | dict[str, Any]  # 道具消息时这里是dict
     msg_id: str
     msg_timestamp: int
     nonce: str

@@ -330,7 +330,8 @@ class KookPlatformAdapter(Platform):
         mention_role_part = None
         if kmarkdown:
             mention_role_part = kmarkdown.mention_role_part
-        content = data.content or ""
+        # 无法处理可能会收到的道具消息content,只能保留原样
+        content = str(data.content) or ""
         if kmarkdown is None:
             logger.error(
                 f'[KOOK] 无法转换"{KookMessageType.KMARKDOWN.name}"消息, 消息中找不到kmarkdown字段'
