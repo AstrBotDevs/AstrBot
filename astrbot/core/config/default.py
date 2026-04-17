@@ -134,6 +134,7 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
+        "buffer_intermediate_messages": False,
         "sanitize_context_by_modalities": False,
         "max_quoted_fallback_images": 20,
         "quoted_message_parser": {
@@ -2777,6 +2778,9 @@ CONFIG_METADATA_2 = {
                     "show_tool_call_result": {
                         "type": "bool",
                     },
+                    "buffer_intermediate_messages": {
+                        "type": "bool",
+                    },
                     "unsupported_streaming_strategy": {
                         "type": "string",
                     },
@@ -3541,6 +3545,15 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                             "provider_settings.show_tool_use_status": True,
+                        },
+                    },
+                    "provider_settings.buffer_intermediate_messages": {
+                        "description": "合并 Agent 中间消息（非流式）",
+                        "type": "bool",
+                        "hint": "开启后，非流式模式下多步工具调用过程中产生的中间文本将缓冲，待 Agent 完成后合并为一条回复发送。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.streaming_response": False,
                         },
                     },
                     "provider_settings.sanitize_context_by_modalities": {
