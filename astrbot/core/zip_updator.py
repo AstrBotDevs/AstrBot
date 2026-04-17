@@ -1,15 +1,15 @@
 import os
 import re
 import shutil
-import ssl
 import zipfile
+from pathlib import Path
 from typing import NoReturn
 
-import aiohttp
 import certifi
+import httpx
 
 from astrbot.core import logger
-from astrbot.core.utils.io import download_file, on_error
+from astrbot.core.utils.io import on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
 
@@ -33,36 +33,53 @@ class ReleaseInfo:
 
 
 class RepoZipUpdator:
-    def __init__(self, repo_mirror: str = "") -> None:
+    def __init__(self, repo_mirror: str = "", verify: str | bool | None = None) -> None:
         self.repo_mirror = repo_mirror
         self.rm_on_error = on_error
+        self.httpx_verify = certifi.where() if verify is None else verify
+
+    def _create_httpx_client(self, timeout: float = 30.0) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=timeout,
+            trust_env=True,
+            verify=self.httpx_verify,
+        )
+
+    @staticmethod
+    def _truncate_response_body(body: str, max_len: int = 1000) -> str:
+        if len(body) <= max_len:
+            return body
+        return body[:max_len] + "...[truncated]"
+
+    async def _download_file(
+        self, url: str, path: str, timeout: float = 1800.0
+    ) -> None:
+        target_path = Path(path)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            async with self._create_httpx_client(timeout=timeout) as client:
+                async with client.stream("GET", url) as response:
+                    response.raise_for_status()
+                    with target_path.open("wb") as file:
+                        async for chunk in response.aiter_bytes(8192):
+                            file.write(chunk)
+        except Exception as e:
+            logger.error(f"下载文件失败: {url} -> {target_path}, 错误: {e}")
+            if self.rm_on_error and target_path.exists():
+                target_path.unlink()
+            raise
 
     async def fetch_release_info(self, url: str, latest: bool = True) -> list:
         """请求版本信息。
         返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
         """
         try:
-            ssl_context = ssl.create_default_context(
-                cafile=certifi.where(),
-            )  # 新增：创建基于 certifi 的 SSL 上下文
-            connector = aiohttp.TCPConnector(
-                ssl=ssl_context,
-            )  # 新增：使用 TCPConnector 指定 SSL 上下文
-            async with (
-                aiohttp.ClientSession(
-                    trust_env=True,
-                    connector=connector,
-                ) as session,
-                session.get(url) as response,
-            ):
-                # 检查 HTTP 状态码
-                if response.status != 200:
-                    text = await response.text()
-                    logger.error(
-                        f"请求 {url} 失败，状态码: {response.status}, 内容: {text}",
-                    )
-                    raise Exception(f"请求失败，状态码: {response.status}")
-                result = await response.json()
+            async with self._create_httpx_client() as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                result = response.json()
             if not result:
                 return []
             # if latest:
@@ -80,9 +97,17 @@ class RepoZipUpdator:
                         "zipball_url": release["zipball_url"],
                     },
                 )
+        except httpx.HTTPStatusError as e:
+            response_body = ""
+            if e.response is not None:
+                response_body = self._truncate_response_body(e.response.text)
+                logger.error(
+                    f"请求 {url} 失败，状态码: {e.response.status_code}, 内容: {response_body}",
+                )
+            raise Exception("解析版本信息失败") from e
         except Exception as e:
             logger.error(f"解析版本信息时发生异常: {e}")
-            raise Exception("解析版本信息失败")
+            raise Exception("解析版本信息失败") from e
         return ret
 
     def github_api_release_parser(self, releases: list) -> list:
@@ -186,7 +211,7 @@ class RepoZipUpdator:
                 f"检查到设置了镜像站，将使用镜像站下载 {author}/{repo} 仓库源码: {release_url}",
             )
 
-        await download_file(release_url, target_path + ".zip")
+        await self._download_file(release_url, target_path + ".zip")
 
     def parse_github_url(self, url: str):
         """使用正则表达式解析 GitHub 仓库 URL，支持 `.git` 后缀和 `tree/branch` 结构
