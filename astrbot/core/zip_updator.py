@@ -58,12 +58,17 @@ class RepoZipUpdator:
         target_path = Path(path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
-        async with self._create_httpx_client(timeout=timeout) as client:
-            async with client.stream("GET", url) as response:
-                response.raise_for_status()
-                with target_path.open("wb") as file:
-                    async for chunk in response.aiter_bytes(8192):
-                        file.write(chunk)
+        try:
+            async with self._create_httpx_client(timeout=timeout) as client:
+                async with client.stream("GET", url) as response:
+                    response.raise_for_status()
+                    with target_path.open("wb") as file:
+                        async for chunk in response.aiter_bytes(8192):
+                            file.write(chunk)
+        except Exception:
+            if self.rm_on_error and target_path.exists():
+                target_path.unlink()
+            raise
 
     async def fetch_release_info(self, url: str, latest: bool = True) -> list:
         """请求版本信息。

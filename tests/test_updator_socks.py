@@ -37,6 +37,21 @@ class _FakeStreamResponse:
             yield self._payload[start : start + chunk_size]
 
 
+class _FakeFailingStreamResponse:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def raise_for_status(self) -> None:
+        return None
+
+    async def aiter_bytes(self, chunk_size: int = 8192):  # noqa: ARG002
+        yield b"partial"
+        raise RuntimeError("stream interrupted")
+
+
 class _FakeStatusErrorResponse:
     def __init__(self, status_code: int, body: str, url: str):
         self._status_code = status_code
@@ -95,6 +110,17 @@ class _FakeStatusErrorAsyncClient:
 
     async def get(self, url: str):
         return self._response
+
+
+class _FakeFailingStreamAsyncClient:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def stream(self, method: str, url: str):  # noqa: ARG002
+        return _FakeFailingStreamResponse()
 
 
 def _reset_fake_client() -> None:
@@ -241,3 +267,27 @@ async def test_fetch_release_info_logs_status_code_and_truncated_body_on_http_er
     assert any("状态码: 502" in message for message in log_messages)
     assert any("内容: " in message for message in log_messages)
     assert any("...[truncated]" in message for message in log_messages)
+
+
+@pytest.mark.asyncio
+async def test_download_file_removes_partial_file_when_stream_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        RepoZipUpdator,
+        "_create_httpx_client",
+        staticmethod(
+            lambda timeout=30.0: _FakeFailingStreamAsyncClient()  # noqa: ARG005
+        ),
+    )
+
+    target_path = tmp_path / "partial.zip"
+
+    with pytest.raises(RuntimeError, match="stream interrupted"):
+        await RepoZipUpdator()._download_file(
+            "https://example.com/archive.zip",
+            str(target_path),
+        )
+
+    assert not target_path.exists()
