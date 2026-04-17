@@ -196,7 +196,9 @@ class CronJobManager:
 
     def _get_next_run_time(self, job_id: str):
         aps_job = self.scheduler.get_job(job_id)
-        return aps_job.next_run_time if aps_job else None
+        if not aps_job or aps_job.next_run_time is None:
+            return None
+        return aps_job.next_run_time.astimezone(timezone.utc)
 
     async def _run_job(self, job_id: str) -> None:
         job = await self.db.get_cron_job(job_id)
