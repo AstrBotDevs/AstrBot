@@ -30,6 +30,7 @@ from .route import Response, Route, RouteContext
 
 # SSE heartbeat message to keep the connection alive during long-running operations
 SSE_HEARTBEAT = ": heartbeat\n\n"
+PLATFORM_HISTORY_SCAN_PAGE_SIZE = 100000
 
 
 @asynccontextmanager
@@ -554,7 +555,7 @@ class ChatRoute(Route):
             platform_id=session.platform_id,
             user_id=session.session_id,
             page=1,
-            page_size=100000,
+            page_size=PLATFORM_HISTORY_SCAN_PAGE_SIZE,
         )
         platform_history.sort(key=lambda item: (item.created_at, item.id))
 
@@ -761,7 +762,7 @@ class ChatRoute(Route):
             platform_id=session.platform_id,
             user_id=session.session_id,
             page=1,
-            page_size=100000,
+            page_size=PLATFORM_HISTORY_SCAN_PAGE_SIZE,
         )
         history_list.sort(key=lambda history: (history.created_at, history.id))
         return history_list
@@ -771,6 +772,53 @@ class ChatRoute(Route):
             if history.id == message_id:
                 return index
         return None
+
+    def _resolve_latest_regeneration_turn(
+        self, history_list: list, message_id: int
+    ) -> tuple[object, object, int, int]:
+        target_index = self._find_message_index(history_list, message_id)
+        if target_index is None:
+            raise ValueError(f"Message {message_id} not found")
+
+        target_record = history_list[target_index]
+        if target_record.content.get("type") != "bot":
+            raise ValueError("Only bot messages can be regenerated")
+        if target_index != len(history_list) - 1:
+            raise ValueError("Only the latest bot message can be regenerated in place")
+
+        user_index = None
+        for index in range(target_index - 1, -1, -1):
+            content = history_list[index].content
+            if isinstance(content, dict) and content.get("type") == "user":
+                user_index = index
+                break
+        if user_index is None:
+            raise ValueError("No user message found for regeneration")
+        if user_index != len(history_list) - 2:
+            raise ValueError(
+                "Only the latest user/bot turn can be regenerated in place"
+            )
+
+        # In-place regeneration assumes the latest visible turn is user -> bot.
+        preserved_history = history_list[:user_index]
+        preserved_user_count = sum(
+            1
+            for history in preserved_history
+            if isinstance(history.content, dict)
+            and history.content.get("type") == "user"
+        )
+        preserved_bot_count = sum(
+            1
+            for history in preserved_history
+            if isinstance(history.content, dict)
+            and history.content.get("type") == "bot"
+        )
+        return (
+            history_list[user_index],
+            target_record,
+            preserved_user_count,
+            preserved_bot_count,
+        )
 
     def _build_branch_display_name(self, source_session, branch_type: str) -> str:
         base_name = (source_session.display_name or "New Conversation").strip()
@@ -1134,7 +1182,7 @@ class ChatRoute(Route):
             platform_id=session.platform_id,
             user_id=session_id,
             page=1,
-            page_size=100000,  # 获取足够多的记录
+            page_size=PLATFORM_HISTORY_SCAN_PAGE_SIZE,  # 获取足够多的记录
         )
         attachment_ids = self._extract_attachment_ids(history_list)
         if attachment_ids:
@@ -1549,50 +1597,15 @@ class ChatRoute(Route):
             return Response().error("Permission denied").__dict__
 
         history_list = await self._get_sorted_platform_history(session)
-        target_index = self._find_message_index(history_list, message_id)
-        if target_index is None:
-            return Response().error(f"Message {message_id} not found").__dict__
-
-        target_record = history_list[target_index]
-        if target_record.content.get("type") != "bot":
-            return Response().error("Only bot messages can be regenerated").__dict__
-        if target_index != len(history_list) - 1:
-            return (
-                Response()
-                .error("Only the latest bot message can be regenerated in place")
-                .__dict__
-            )
-
-        user_index = None
-        for index in range(target_index - 1, -1, -1):
-            content = history_list[index].content
-            if isinstance(content, dict) and content.get("type") == "user":
-                user_index = index
-                break
-        if user_index is None:
-            return Response().error("No user message found for regeneration").__dict__
-
-        source_user_record = history_list[user_index]
-        if user_index != len(history_list) - 2:
-            return (
-                Response()
-                .error("Only the latest user/bot turn can be regenerated in place")
-                .__dict__
-            )
-
-        preserved_history = history_list[:user_index]
-        preserved_user_count = sum(
-            1
-            for history in preserved_history
-            if isinstance(history.content, dict)
-            and history.content.get("type") == "user"
-        )
-        preserved_bot_count = sum(
-            1
-            for history in preserved_history
-            if isinstance(history.content, dict)
-            and history.content.get("type") == "bot"
-        )
+        try:
+            (
+                source_user_record,
+                target_record,
+                preserved_user_count,
+                preserved_bot_count,
+            ) = self._resolve_latest_regeneration_turn(history_list, message_id)
+        except ValueError as exc:
+            return Response().error(str(exc)).__dict__
 
         await self.db.delete_platform_message_histories(
             [source_user_record.id, target_record.id]
