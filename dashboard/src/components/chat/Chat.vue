@@ -1891,6 +1891,8 @@ function formatDuration(seconds: number) {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
+  font-weight: 500;
+}
 
 .session-text {
   min-width: 0;
@@ -1906,9 +1908,6 @@ function formatDuration(seconds: number) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-  font-size: 14px;
-  font-weight: 500;
 }
 
 .session-progress {

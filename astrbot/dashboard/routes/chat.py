@@ -1439,6 +1439,11 @@ class ChatRoute(Route):
             return Response().error(f"Message {message_id} not found").__dict__
         if record.platform_id != session.platform_id or record.user_id != session_id:
             return Response().error("Message does not belong to the session").__dict__
+        original_type = record.content.get("type") if isinstance(record.content, dict) else None
+        if original_type not in {"user", "bot"}:
+            return Response().error("Unsupported message type").__dict__
+        if content.get("type") != original_type:
+            return Response().error("Message type cannot be changed").__dict__
 
         await self.db.update_platform_message_history(
             message_id=message_id, content=content
