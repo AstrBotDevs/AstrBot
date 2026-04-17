@@ -75,6 +75,7 @@ class Main(star.Star):
                         logger.error("未找到对话，无法主动回复")
                         return
 
+                    event.set_extra("_ltm_active_reply", True)  # 在 yield 前打标记，确保后续 filter 阶段能读到
                     yield event.request_llm(
                         prompt=prompt,
                         session_id=event.session_id,
@@ -101,6 +102,10 @@ class Main(star.Star):
     ) -> None:
         """在 LLM 响应后记录对话"""
         if self.ltm and self.ltm_enabled(event):
+            # 主动回复的响应不记入 session_chats
+            # 避免 chatroom 风格的回复污染后续主动回复所使用的群聊上下文
+            if event.get_extra("_ltm_active_reply", False):
+                return
             try:
                 await self.ltm.after_req_llm(event, resp)
             except Exception as e:
