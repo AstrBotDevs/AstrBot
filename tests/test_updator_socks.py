@@ -182,6 +182,8 @@ async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
     ]
     assert _FakeAsyncClient.requested_urls == ["https://api.soulter.top/releases"]
     assert _FakeAsyncClient.init_kwargs is not None
+    assert _FakeAsyncClient.init_kwargs["follow_redirects"] is True
+    assert _FakeAsyncClient.init_kwargs["timeout"] == 30.0
     assert _FakeAsyncClient.init_kwargs["trust_env"] is True
     assert _FakeAsyncClient.init_kwargs["verify"] == certifi.where()
 
@@ -232,6 +234,8 @@ async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
     assert (tmp_path / "AstrBot.zip").read_bytes() == b"zip-data"
     assert _FakeAsyncClient.stream_urls == ["https://example.com/archive.zip"]
     assert _FakeAsyncClient.init_kwargs is not None
+    assert _FakeAsyncClient.init_kwargs["follow_redirects"] is True
+    assert _FakeAsyncClient.init_kwargs["timeout"] == 1800.0
     assert _FakeAsyncClient.init_kwargs["trust_env"] is True
     assert _FakeAsyncClient.init_kwargs["verify"] == certifi.where()
 
