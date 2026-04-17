@@ -18,7 +18,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/AstrBotDevs/AstrBot/mast
 ```
 
 该脚本会自动完成以下步骤：
-1. 检测并提示安装必要的依赖（git、python>=3.10、uv）
+1. 检测并提示安装必要的依赖（git、curl、python>=3.12、uv）
 2. 克隆 AstrBot 官方仓库
 3. 使用 `uv sync` 安装项目依赖
 4. 启动 AstrBot 并打印访问链接

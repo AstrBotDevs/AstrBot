@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # deploy-cli.sh — AstrBot 一行命令部署脚本 (Linux / macOS / WSL)
 # 用法: bash -c "$(curl -fsSL https://raw.githubusercontent.com/AstrBotDevs/AstrBot/master/docs/scripts/deploy-cli.sh)"
+#
+# 环境变量:
+#   ASTRBOT_REPO  — 仓库地址 (默认: https://github.com/AstrBotDevs/AstrBot.git)
+#   ASTRBOT_DIR   — 安装目录 (默认: AstrBot)
 
 set -euo pipefail
 
@@ -15,6 +19,9 @@ err()   { echo -e "${RED}[ERROR]${NC} $*"; }
 # ── 检测命令 ──
 has() { command -v "$1" &>/dev/null; }
 
+# ── 可配置变量 ──
+REPO_URL="${ASTRBOT_REPO:-https://github.com/AstrBotDevs/AstrBot.git}"
+
 # ── 1. 检测并安装依赖 ──
 info "正在检测运行环境..."
 
@@ -23,20 +30,27 @@ if ! has git; then
     exit 1
 fi
 
+if ! has curl; then
+    err "未检测到 curl，请先安装: macOS 使用 'brew install curl'，Ubuntu/Debian 使用 'sudo apt install curl'"
+    exit 1
+fi
+
 if has python3; then
     PY=python3
 elif has python; then
     PY=python
 else
-    err "未检测到 Python (>=3.10)，请先安装: https://www.python.org/downloads/"
+    err "未检测到 Python (>=3.12)，请先安装: https://www.python.org/downloads/"
     exit 1
 fi
 
-PY_VER=$($PY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-if [ "$(printf '%s\n' "3.10" "$PY_VER" | sort -V | head -n1)" != "3.10" ]; then
-    err "Python 版本过低: $PY_VER，需要 >= 3.10"
+# 使用 Python 自身进行版本比较，兼容 macOS BSD sort
+if ! $PY -c 'import sys; exit(0 if sys.version_info >= (3, 12) else 1)'; then
+    PY_VER=$($PY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    err "Python 版本过低: $PY_VER，需要 >= 3.12"
     exit 1
 fi
+PY_VER=$($PY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 ok "Python $PY_VER"
 
 # ── 安装 uv（如未安装） ──
@@ -51,15 +65,23 @@ if ! has uv; then
 fi
 ok "uv $(uv --version)"
 
-# ── 2. 克隆仓库 ──
-INSTALL_DIR="${1:-AstrBot}"
-if [ ! -d "$INSTALL_DIR/.git" ]; then
-    info "正在克隆 AstrBot 仓库到 $INSTALL_DIR ..."
-    git clone --depth=1 https://github.com/AstrBotDevs/AstrBot.git "$INSTALL_DIR"
+# ── 2. 定位项目目录 ──
+# 优先检测当前目录是否已是项目根目录（支持本地运行场景）
+if [ -f "main.py" ] && [ -d ".git" ]; then
+    info "检测到已在项目目录中，跳过克隆"
 else
-    info "目录 $INSTALL_DIR 已存在，跳过克隆"
+    INSTALL_DIR="${ASTRBOT_DIR:-${1:-AstrBot}}"
+    if [ -d "$INSTALL_DIR/.git" ]; then
+        info "目录 $INSTALL_DIR 已存在，跳过克隆"
+    elif [ -d "$INSTALL_DIR" ]; then
+        err "目录 $INSTALL_DIR 已存在但不是 AstrBot 仓库，请指定其他目录或手动清理"
+        exit 1
+    else
+        info "正在克隆 AstrBot 仓库到 $INSTALL_DIR ..."
+        git clone --depth=1 "$REPO_URL" "$INSTALL_DIR"
+    fi
+    cd "$INSTALL_DIR"
 fi
-cd "$INSTALL_DIR"
 
 # ── 3. 安装依赖 ──
 info "正在安装项目依赖 (uv sync)..."
