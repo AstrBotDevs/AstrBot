@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -72,30 +73,13 @@ class _FakeStatusErrorResponse:
         )
 
 
-class _FakeAsyncClient:
+@dataclass
+class _FakeAsyncClientState:
+    json_payload: list[dict] = field(default_factory=list)
+    stream_payload: bytes = b""
     init_kwargs: dict | None = None
-    requested_urls: list[str] = []
-    stream_urls: list[str] = []
-    json_payload = []
-    stream_payload = b""
-
-    def __init__(self, **kwargs):
-        type(self).init_kwargs = kwargs
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        return None
-
-    async def get(self, url: str):
-        type(self).requested_urls.append(url)
-        return _FakeJSONResponse(type(self).json_payload)
-
-    def stream(self, method: str, url: str):
-        assert method == "GET"
-        type(self).stream_urls.append(url)
-        return _FakeStreamResponse(type(self).stream_payload)
+    requested_urls: list[str] = field(default_factory=list)
+    stream_urls: list[str] = field(default_factory=list)
 
 
 class _FakeStatusErrorAsyncClient:
@@ -123,22 +107,45 @@ class _FakeFailingStreamAsyncClient:
         return _FakeFailingStreamResponse()
 
 
-def _reset_fake_client() -> None:
-    _FakeAsyncClient.init_kwargs = None
-    _FakeAsyncClient.requested_urls = []
-    _FakeAsyncClient.stream_urls = []
-    _FakeAsyncClient.json_payload = []
-    _FakeAsyncClient.stream_payload = b""
+def _build_fake_httpx_module(state: _FakeAsyncClientState) -> SimpleNamespace:
+    class _FakeAsyncClient:
+        def __init__(self, **kwargs):
+            state.init_kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def get(self, url: str):
+            state.requested_urls.append(url)
+            return _FakeJSONResponse(state.json_payload)
+
+        def stream(self, method: str, url: str):
+            assert method == "GET"
+            state.stream_urls.append(url)
+            return _FakeStreamResponse(state.stream_payload)
+
+    return SimpleNamespace(
+        AsyncClient=_FakeAsyncClient,
+        HTTPStatusError=httpx.HTTPStatusError,
+    )
+
+
+@pytest.fixture
+def fake_async_client_state() -> _FakeAsyncClientState:
+    return _FakeAsyncClientState()
 
 
 @pytest.mark.asyncio
 async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
     monkeypatch: pytest.MonkeyPatch,
+    fake_async_client_state: _FakeAsyncClientState,
 ) -> None:
     import astrbot.core.zip_updator as zip_updator_module
 
-    _reset_fake_client()
-    _FakeAsyncClient.json_payload = [
+    fake_async_client_state.json_payload = [
         {
             "name": "AstrBot v4.23.2",
             "published_at": "2026-04-16T00:00:00Z",
@@ -163,7 +170,7 @@ async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
     monkeypatch.setattr(
         zip_updator_module,
         "httpx",
-        SimpleNamespace(AsyncClient=_FakeAsyncClient),
+        _build_fake_httpx_module(fake_async_client_state),
         raising=False,
     )
 
@@ -180,23 +187,23 @@ async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
             "zipball_url": "https://example.com/astrbot.zip",
         }
     ]
-    assert _FakeAsyncClient.requested_urls == ["https://api.soulter.top/releases"]
-    assert _FakeAsyncClient.init_kwargs is not None
-    assert _FakeAsyncClient.init_kwargs["follow_redirects"] is True
-    assert _FakeAsyncClient.init_kwargs["timeout"] == 30.0
-    assert _FakeAsyncClient.init_kwargs["trust_env"] is True
-    assert _FakeAsyncClient.init_kwargs["verify"] == certifi.where()
+    assert fake_async_client_state.requested_urls == ["https://api.soulter.top/releases"]
+    assert fake_async_client_state.init_kwargs is not None
+    assert fake_async_client_state.init_kwargs["follow_redirects"] is True
+    assert fake_async_client_state.init_kwargs["timeout"] == 30.0
+    assert fake_async_client_state.init_kwargs["trust_env"] is True
+    assert fake_async_client_state.init_kwargs["verify"] == certifi.where()
 
 
 @pytest.mark.asyncio
 async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    fake_async_client_state: _FakeAsyncClientState,
 ) -> None:
     import astrbot.core.zip_updator as zip_updator_module
 
-    _reset_fake_client()
-    _FakeAsyncClient.stream_payload = b"zip-data"
+    fake_async_client_state.stream_payload = b"zip-data"
 
     async def fake_fetch_release_info(self, url: str, latest: bool = True):  # noqa: ARG001
         return [
@@ -221,7 +228,7 @@ async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
     monkeypatch.setattr(
         zip_updator_module,
         "httpx",
-        SimpleNamespace(AsyncClient=_FakeAsyncClient),
+        _build_fake_httpx_module(fake_async_client_state),
         raising=False,
     )
 
@@ -232,12 +239,36 @@ async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
     )
 
     assert (tmp_path / "AstrBot.zip").read_bytes() == b"zip-data"
-    assert _FakeAsyncClient.stream_urls == ["https://example.com/archive.zip"]
-    assert _FakeAsyncClient.init_kwargs is not None
-    assert _FakeAsyncClient.init_kwargs["follow_redirects"] is True
-    assert _FakeAsyncClient.init_kwargs["timeout"] == 1800.0
-    assert _FakeAsyncClient.init_kwargs["trust_env"] is True
-    assert _FakeAsyncClient.init_kwargs["verify"] == certifi.where()
+    assert fake_async_client_state.stream_urls == ["https://example.com/archive.zip"]
+    assert fake_async_client_state.init_kwargs is not None
+    assert fake_async_client_state.init_kwargs["follow_redirects"] is True
+    assert fake_async_client_state.init_kwargs["timeout"] == 1800.0
+    assert fake_async_client_state.init_kwargs["trust_env"] is True
+    assert fake_async_client_state.init_kwargs["verify"] == certifi.where()
+
+
+def test_create_httpx_client_uses_custom_verify_setting(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_async_client_state: _FakeAsyncClientState,
+) -> None:
+    import astrbot.core.zip_updator as zip_updator_module
+
+    custom_verify = "/tmp/custom-ca.pem"
+
+    monkeypatch.setattr(
+        zip_updator_module,
+        "httpx",
+        _build_fake_httpx_module(fake_async_client_state),
+        raising=False,
+    )
+
+    RepoZipUpdator(verify=custom_verify)._create_httpx_client(timeout=45.0)
+
+    assert fake_async_client_state.init_kwargs is not None
+    assert fake_async_client_state.init_kwargs["follow_redirects"] is True
+    assert fake_async_client_state.init_kwargs["timeout"] == 45.0
+    assert fake_async_client_state.init_kwargs["trust_env"] is True
+    assert fake_async_client_state.init_kwargs["verify"] == custom_verify
 
 
 @pytest.mark.asyncio
@@ -295,3 +326,34 @@ async def test_download_file_removes_partial_file_when_stream_fails(
         )
 
     assert not target_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_download_file_logs_url_and_target_path_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import astrbot.core.zip_updator as zip_updator_module
+
+    url = "https://example.com/archive.zip"
+    target_path = tmp_path / "logged-partial.zip"
+    log_messages: list[str] = []
+
+    monkeypatch.setattr(
+        RepoZipUpdator,
+        "_create_httpx_client",
+        staticmethod(
+            lambda timeout=30.0: _FakeFailingStreamAsyncClient()  # noqa: ARG005
+        ),
+    )
+    monkeypatch.setattr(
+        zip_updator_module.logger,
+        "error",
+        lambda message: log_messages.append(message),
+    )
+
+    with pytest.raises(RuntimeError, match="stream interrupted"):
+        await RepoZipUpdator()._download_file(url, str(target_path))
+
+    assert any(url in message for message in log_messages)
+    assert any(str(target_path) in message for message in log_messages)

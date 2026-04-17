@@ -33,17 +33,17 @@ class ReleaseInfo:
 
 
 class RepoZipUpdator:
-    def __init__(self, repo_mirror: str = "") -> None:
+    def __init__(self, repo_mirror: str = "", verify: str | bool | None = None) -> None:
         self.repo_mirror = repo_mirror
         self.rm_on_error = on_error
+        self.httpx_verify = certifi.where() if verify is None else verify
 
-    @staticmethod
-    def _create_httpx_client(timeout: float = 30.0) -> httpx.AsyncClient:
+    def _create_httpx_client(self, timeout: float = 30.0) -> httpx.AsyncClient:
         return httpx.AsyncClient(
             follow_redirects=True,
             timeout=timeout,
             trust_env=True,
-            verify=certifi.where(),
+            verify=self.httpx_verify,
         )
 
     @staticmethod
@@ -65,7 +65,8 @@ class RepoZipUpdator:
                     with target_path.open("wb") as file:
                         async for chunk in response.aiter_bytes(8192):
                             file.write(chunk)
-        except Exception:
+        except Exception as e:
+            logger.error(f"下载文件失败: {url} -> {target_path}, 错误: {e}")
             if self.rm_on_error and target_path.exists():
                 target_path.unlink()
             raise

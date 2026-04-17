@@ -17,8 +17,8 @@ class AstrBotUpdator(RepoZipUpdator):
     功能包括检查更新、下载更新文件、解压缩更新文件等
     """
 
-    def __init__(self, repo_mirror: str = "") -> None:
-        super().__init__(repo_mirror)
+    def __init__(self, repo_mirror: str = "", verify: str | bool | None = None) -> None:
+        super().__init__(repo_mirror, verify=verify)
         self.MAIN_PATH = get_astrbot_path()
         self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
 
