@@ -12,7 +12,7 @@ MINIMAX_TOKEN_PLAN_MODELS = [
 
 @register_provider_adapter(
     "minimax_token_plan",
-    "MiniMax Token Plan 提供商适配器",
+    "MiniMax Token Plan Provider Adapter",
     default_config_tmpl={
         "key": "",
     },
@@ -21,8 +21,9 @@ MINIMAX_TOKEN_PLAN_MODELS = [
 class ProviderMiniMaxTokenPlan(ProviderAnthropic):
     """MiniMax Token Plan provider.
 
-    Token Plan API 不支持 /models 接口，因此 get_models() 返回硬编码的模型列表。
-    这是 Token Plan API 本身的限制，详见 https://github.com/AstrBotDevs/AstrBot/issues/7585
+    The Token Plan API does not support the /models endpoint, so get_models()
+    returns a hard-coded model list. This is a Token Plan API limitation.
+    See https://github.com/AstrBotDevs/AstrBot/issues/7585 for details.
     """
 
     def __init__(
@@ -30,9 +31,9 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
         provider_config,
         provider_settings,
     ) -> None:
-        # api_base 写死，Token Plan 用户无需配置此项
+        # Keep api_base fixed; Token Plan users do not need to configure it.
         provider_config["api_base"] = "https://api.minimaxi.com/anthropic"
-        # MiniMax Token Plan 要求 Authorization: Bearer <token> header
+        # MiniMax Token Plan requires the Authorization: Bearer <token> header.
         key = provider_config.get("key", "")
         actual_key = key[0] if isinstance(key, list) else key
         provider_config.setdefault("custom_headers", {})["Authorization"] = (
@@ -54,5 +55,5 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
         self.set_model(configured_model)
 
     async def get_models(self) -> list[str]:
-        """Token Plan 不支持动态获取模型列表，返回硬编码的已知模型列表。"""
+        """Return the hard-coded known model list because Token Plan cannot fetch it dynamically."""
         return MINIMAX_TOKEN_PLAN_MODELS.copy()
