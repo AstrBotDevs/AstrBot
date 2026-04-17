@@ -94,12 +94,10 @@ async def run_agent(
     show_tool_call_result: bool = False,
     stream_to_general: bool = False,
     show_reasoning: bool = False,
-    buffer_intermediate_messages: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
-    buffered_llm_chains: list[MessageChain] = []
     while step_idx < max_step + 1:
         step_idx += 1
 
@@ -199,31 +197,6 @@ async def run_agent(
                     continue
 
                 if stream_to_general or not agent_runner.streaming:
-                    if (
-                        buffer_intermediate_messages
-                        and not stream_to_general
-                        and not agent_runner.streaming
-                        and resp.type == "llm_result"
-                    ):
-                        buffered_llm_chains.append(resp.data["chain"])
-                        if not agent_runner.done():
-                            continue
-
-                        merged_chain = MessageChain()
-                        for chain in buffered_llm_chains:
-                            merged_chain.chain.extend(chain.chain)
-                        buffered_llm_chains.clear()
-
-                        astr_event.set_result(
-                            MessageEventResult(
-                                chain=merged_chain.chain,
-                                result_content_type=ResultContentType.LLM_RESULT,
-                            ),
-                        )
-                        yield
-                        astr_event.clear_result()
-                        continue
-
                     content_typ = (
                         ResultContentType.LLM_RESULT
                         if resp.type == "llm_result"
@@ -315,7 +288,6 @@ async def run_live_agent(
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,
-    buffer_intermediate_messages: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
     """Live Mode 的 Agent 运行器，支持流式 TTS
 
@@ -339,7 +311,6 @@ async def run_live_agent(
             show_tool_call_result=show_tool_call_result,
             stream_to_general=False,
             show_reasoning=show_reasoning,
-            buffer_intermediate_messages=buffer_intermediate_messages,
         ):
             yield chain
         return
@@ -372,7 +343,6 @@ async def run_live_agent(
             show_tool_use,
             show_tool_call_result,
             show_reasoning,
-            buffer_intermediate_messages,
         )
     )
 
@@ -460,7 +430,6 @@ async def _run_agent_feeder(
     show_tool_use: bool,
     show_tool_call_result: bool,
     show_reasoning: bool,
-    buffer_intermediate_messages: bool,
 ) -> None:
     """运行 Agent 并将文本输出分句放入队列"""
     buffer = ""
@@ -472,7 +441,6 @@ async def _run_agent_feeder(
             show_tool_call_result=show_tool_call_result,
             stream_to_general=False,
             show_reasoning=show_reasoning,
-            buffer_intermediate_messages=buffer_intermediate_messages,
         ):
             if chain is None:
                 continue
