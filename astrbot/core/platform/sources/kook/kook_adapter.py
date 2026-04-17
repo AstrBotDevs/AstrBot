@@ -232,7 +232,7 @@ class KookPlatformAdapter(Platform):
             mention_name_map = {}
         cursor = 0
 
-        role_mention_counter = 0
+        role_mention_counter = -1
 
         for match in KOOK_AT_SELECTOR_REGEX.finditer(content):
             if match.start() > cursor:
@@ -245,6 +245,7 @@ class KookPlatformAdapter(Platform):
             if tag_name == KookMentionTagName.MENTION and mention_target == "all":
                 components.append(AtAll())
             elif tag_name == KookMentionTagName.ROLE:
+                role_mention_counter += 1
                 role_id = 0
                 role_mention_name = mention_target
                 if mention_role_part is not None:
@@ -261,7 +262,6 @@ class KookPlatformAdapter(Platform):
                                     name=role_mention_name,  # 保留角色名称
                                 )
                             )
-                            role_mention_counter += 1
                             continue
                 if not mention_target.isdigit() and role_id == 0:
                     continue
