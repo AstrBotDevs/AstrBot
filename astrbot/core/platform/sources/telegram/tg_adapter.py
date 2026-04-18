@@ -83,7 +83,10 @@ class TelegramPlatformAdapter(Platform):
         self.scheduler = AsyncIOScheduler()
         self.scheduler.add_listener(
             lambda ev: logger.error(
-                "Scheduled job %s raised: %s", ev.job_id, ev.exception, exc_info=ev.exception
+                "Scheduled job %s raised: %s",
+                ev.job_id,
+                ev.exception,
+                exc_info=ev.exception,
             ),
             EVENT_JOB_ERROR,
         )
