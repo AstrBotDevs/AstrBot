@@ -47,7 +47,7 @@
                     <v-col cols="12">
                         <div class="d-flex align-center flex-wrap" style="gap: 6px; margin-top: 4px">
                             <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('theme.customize.presets')
-                            }}</span>
+                                }}</span>
                             <v-btn v-for="preset in colorPresets" :key="preset.name" size="small" variant="outlined"
                                 :style="{ borderColor: preset.primary, color: preset.primary }" class="preset-btn"
                                 @click="applyPreset(preset)">
@@ -76,7 +76,7 @@
 
             <v-list-item :subtitle="tm('system.restart.subtitle')" :title="tm('system.restart.title')">
                 <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button')
-                    }}</v-btn>
+                }}</v-btn>
             </v-list-item>
 
             <v-list-item class="py-2">
@@ -198,7 +198,7 @@
 
         <v-list-item :subtitle="tm('system.migration.subtitle')" :title="tm('system.migration.title')">
             <v-btn style="margin-top: 16px;" color="primary" @click="startMigration">{{ tm('system.migration.button')
-                }}</v-btn>
+            }}</v-btn>
         </v-list-item>
 
     </div>
@@ -253,10 +253,6 @@ const applyPreset = (preset) => {
     primaryColor.value = preset.primary;
     secondaryColor.value = preset.secondary;
     infoColor.value = preset.info;
-    localStorage.setItem('themePrimary', preset.primary);
-    localStorage.setItem('themeSecondary', preset.secondary);
-    localStorage.setItem('themeInfo', preset.info);
-    applyThemeColors(preset.primary, preset.secondary, preset.info);
 };
 
 const resolveThemes = () => {
@@ -493,13 +489,12 @@ const openBackupDialog = () => {
 }
 
 const resetThemeColors = () => {
-    primaryColor.value = PurpleTheme.colors.primary;
-    secondaryColor.value = PurpleTheme.colors.secondary;
-    infoColor.value = PurpleTheme.colors.info;
     localStorage.removeItem('themePrimary');
     localStorage.removeItem('themeSecondary');
     localStorage.removeItem('themeInfo');
-    applyThemeColors(primaryColor.value, secondaryColor.value, infoColor.value);
+    primaryColor.value = PurpleTheme.colors.primary;
+    secondaryColor.value = PurpleTheme.colors.secondary;
+    infoColor.value = PurpleTheme.colors.info;
 };
 
 onMounted(() => {
