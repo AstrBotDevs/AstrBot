@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import json
 import sys
 import time
 import traceback
@@ -166,6 +167,85 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         """Read persona-level custom error message from event extras when available."""
         event = getattr(self.run_context.context, "event", None)
         return extract_persona_custom_error_message_from_event(event)
+
+    @staticmethod
+    def _normalize_tool_call(tc: T.Any) -> dict[str, T.Any]:
+        """Normalize a raw tool call to a dictionary."""
+        if isinstance(tc, dict):
+            return tc
+        if isinstance(tc, str):
+            try:
+                return json.loads(tc)
+            except json.JSONDecodeError:
+                return {}
+        if hasattr(tc, "id") and hasattr(tc, "function"):
+            return {
+                "id": tc.id,
+                "function": {"name": getattr(tc.function, "name", "")},
+            }
+        return {}
+
+    def _build_failed_tool_results(
+        self, raw_tool_calls: T.Iterable[T.Any]
+    ) -> ToolCallsResult:
+        """Build ToolCallsResult with failure messages for each unparsed tool call."""
+        tool_call_result_blocks = []
+        tool_calls_info_list = []
+
+        for tc in raw_tool_calls:
+            tc_dict = self._normalize_tool_call(tc)
+            tool_call_id = tc_dict.get("id", "")
+            tool_name = tc_dict.get("function", {}).get("name", "unknown")
+
+            tool_call_result_blocks.append(
+                ToolCallMessageSegment(
+                    role="tool",
+                    tool_call_id=tool_call_id,
+                    content=self._merge_follow_up_notice(
+                        f"error: Tool '{tool_name}' is not available or tool parsing failed."
+                    ),
+                )
+            )
+            tool_calls_info_list.append(
+                {
+                    "id": tool_call_id,
+                    "type": "function",
+                    "function": {"name": tool_name, "arguments": "{}"},
+                }
+            )
+
+        return ToolCallsResult(
+            tool_calls_info=AssistantMessageSegment(
+                tool_calls=tool_calls_info_list,
+                content=[],
+            ),
+            tool_calls_result=tool_call_result_blocks,
+        )
+
+    def _build_empty_tool_call_failure_result(self) -> ToolCallsResult:
+        """Build ToolCallsResult when LLM requested tool calls but returned no tool call details."""
+        tool_call_id = f"failed_call_{uuid.uuid4().hex[:8]}"
+        return ToolCallsResult(
+            tool_calls_info=AssistantMessageSegment(
+                tool_calls=[
+                    {
+                        "id": tool_call_id,
+                        "type": "function",
+                        "function": {"name": "unknown", "arguments": "{}"},
+                    }
+                ],
+                content=[],
+            ),
+            tool_calls_result=[
+                ToolCallMessageSegment(
+                    role="tool",
+                    tool_call_id=tool_call_id,
+                    content=self._merge_follow_up_notice(
+                        "error: LLM requested tool call but no tool details were provided."
+                    ),
+                )
+            ],
+        )
 
     async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> None:
         """Finalize the current step as a plain assistant response with no tool calls."""
@@ -715,6 +795,35 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
 
         if not llm_resp.tools_call_name:
+            raw_completion = getattr(llm_resp, "raw_completion", None)
+            if raw_completion:
+                choices = getattr(raw_completion, "choices", None)
+                if choices and len(choices) > 0:
+                    choice = choices[0]
+                    finish_reason = getattr(choice, "finish_reason", None)
+                    if finish_reason == "tool_calls":
+                        message = getattr(choice, "message", None)
+                        raw_tool_calls = (
+                            getattr(message, "tool_calls", None) if message else None
+                        )
+                        logger.warning(
+                            "LLM finish_reason is 'tool_calls' but no tools were parsed. "
+                            "Returning tool failure results."
+                        )
+                        if raw_tool_calls:
+                            tool_calls_result = self._build_failed_tool_results(
+                                raw_tool_calls
+                            )
+                        else:
+                            tool_calls_result = (
+                                self._build_empty_tool_call_failure_result()
+                            )
+                        self.run_context.messages.extend(
+                            tool_calls_result.to_openai_messages_model()
+                        )
+                        self.req.append_tool_calls_result(tool_calls_result)
+                        return
+
             await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
