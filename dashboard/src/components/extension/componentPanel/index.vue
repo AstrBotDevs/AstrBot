@@ -84,11 +84,9 @@ const {
   openDetailsDialog
 } = useCommandActions(toast, () => fetchCommands(tm('messages.loadFailed')));
 
-const filteredTools = computed(() => {
-  const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
-  if (!query) return tools.value;
-  return tools.value.filter(tool => matchesToolSearch(tool, query));
-});
+const filteredTools = computed(() =>
+  tools.value.filter(tool => matchesToolSearch(tool, toolSearch.value))
+);
 
 // 处理切换指令状态
 const handleToggleCommand = async (cmd: CommandItem) => {

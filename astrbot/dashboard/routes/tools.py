@@ -83,6 +83,14 @@ class ToolsRoute(Route):
                 )
                 mcp_servers = {}
 
+            # 按 server 名预分组 MCP 工具，避免每台服务器都扫一遍 func_list
+            mcp_tools_by_server: dict[str, list[MCPTool]] = {}
+            for f in self.tool_mgr.func_list:
+                if isinstance(f, MCPTool):
+                    mcp_tools_by_server.setdefault(f.mcp_server_name, []).append(f)
+
+            runtime_view = self.tool_mgr.mcp_server_runtime_view
+
             # 获取所有服务器并添加它们的工具列表
             for name, server_config in mcp_servers.items():
                 if not isinstance(server_config, dict):
@@ -103,20 +111,14 @@ class ToolsRoute(Route):
 
                 # tools 为 namespaced 名（与 personaForm.tools 匹配），
                 # original_tool_names 为原始名（给 UI 显示）
-                for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
-                    if name_key == name:
-                        mcp_client = runtime.client
-                        mcp_tools = [
-                            f
-                            for f in self.tool_mgr.func_list
-                            if isinstance(f, MCPTool) and f.mcp_server_name == name
-                        ]
-                        server_info["tools"] = [f.name for f in mcp_tools]
-                        server_info["original_tool_names"] = [
-                            f.original_tool_name for f in mcp_tools
-                        ]
-                        server_info["errlogs"] = mcp_client.server_errlogs
-                        break
+                runtime = runtime_view.get(name)
+                if runtime is not None:
+                    mcp_tools = mcp_tools_by_server.get(name, [])
+                    server_info["tools"] = [f.name for f in mcp_tools]
+                    server_info["original_tool_names"] = [
+                        f.original_tool_name for f in mcp_tools
+                    ]
+                    server_info["errlogs"] = runtime.client.server_errlogs
                 else:
                     server_info["tools"] = []
                     server_info["original_tool_names"] = []
