@@ -242,11 +242,15 @@ class KookClient:
                 await self.event_callback(data)
 
             case KookMessageSignal.HELLO:
-                assert isinstance(data, KookHelloEventData)
+                assert isinstance(data, KookHelloEventData), (
+                    f"期望 data 为 {KookHelloEventData.__name__}, 实际为 {type(data).__name__}，"
+                )
                 await self._handle_hello(data)
 
             case KookMessageSignal.RESUME_ACK:
-                assert isinstance(data, KookResumeAckEventData)
+                assert isinstance(data, KookResumeAckEventData), (
+                    f"期望 data 为 {KookResumeAckEventData.__name__}, 实际为 {type(data).__name__}，"
+                )
                 await self._handle_resume_ack(data)
 
             case KookMessageSignal.PONG:

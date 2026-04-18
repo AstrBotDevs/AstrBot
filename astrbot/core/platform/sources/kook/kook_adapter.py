@@ -90,7 +90,7 @@ class KookPlatformAdapter(Platform):
         event_type = event.type
         if event_type in (KookMessageType.KMARKDOWN, KookMessageType.CARD):
             if self._should_ignore_event_by_bot_nickname(event.author_id):
-                logger.debug("[KOOK] 收到来自机器人自身的消息, 忽略此消息")
+                logger.debug("[KOOK] 判断此消息为来自机器人自身的消息, 忽略此消息")
                 return
             try:
                 abm = await self.convert_message(event)
@@ -98,15 +98,18 @@ class KookPlatformAdapter(Platform):
             except Exception as e:
                 logger.error(f"[KOOK] 消息处理异常: {e}")
         elif event_type == KookMessageType.SYSTEM:
-            logger.debug(f'[KOOK] 消息为系统通知, 通知类型为: "{event.extra.type}"')
-            logger.debug(f"[KOOK] 原始消息数据: {event.to_json()}")
-            if isinstance(event.extra.type, KookRoleExtraType):
-                # 此时 target_id 就是频道id(guild_id)
-                guild_id = event.target_id
-                logger.info(
-                    f'[KOOK] 收到频道"{guild_id}"的角色更新通知, 类型为"{event.extra.type.value}", 刷新角色id缓存'
-                )
-                self._roles_cache.clean_roles_cache(int(guild_id))
+            match event.extra.type:
+                case KookRoleExtraType():
+                    # 此时 target_id 就是频道id(guild_id)
+                    guild_id = event.target_id
+                    logger.info(
+                        f'[KOOK] 收到频道"{guild_id}"的角色更新通知, 类型为"{event.extra.type.value}", 刷新角色id缓存'
+                    )
+                    self._roles_cache.clean_roles_cache(int(guild_id))
+                case _:
+                    logger.debug(
+                        f'[KOOK] 判断此消息为"{event.extra.type}"类型的系统通知, 因未实现此消息的处理流程而忽略此消息, 原始消息数据: {event.to_json()}'
+                    )
 
     async def run(self):
         """主运行循环"""
