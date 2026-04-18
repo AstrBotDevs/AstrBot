@@ -209,7 +209,7 @@ class KookPlatformAdapter(Platform):
         content: str,
         raw_content: str,
         mention_role_part: list[KookMarkdownMentionRolePart] | None = None,
-        channel_id: str | None = None,
+        guild_id: str | None = None,
         mention_name_map: dict[str, str] | None = None,
     ) -> tuple[list[BaseMessageComponent], str]:
         # kook平台有一个角色(role)的概念,他表示拥有某一类权限的许多用户
@@ -266,14 +266,14 @@ class KookPlatformAdapter(Platform):
                     continue
 
                 role_id = role_id or int(mention_target)
-                if not channel_id:
+                if not guild_id:
                     continue
 
-                if not channel_id.isdigit():
+                if not guild_id.isdigit():
                     continue
 
                 if not await self._roles_cache.has_role_in_channel(
-                    role_id, int(channel_id)
+                    role_id, int(guild_id)
                 ):
                     continue
 
@@ -325,7 +325,7 @@ class KookPlatformAdapter(Platform):
         self, data: KookMessageEventData
     ) -> tuple[list[BaseMessageComponent], str]:
         kmarkdown = data.extra.kmarkdown
-        channel_id = data.extra.guild_id
+        guild_id = data.extra.guild_id
         mention_role_part = None
         if kmarkdown:
             mention_role_part = kmarkdown.mention_role_part
@@ -349,7 +349,7 @@ class KookPlatformAdapter(Platform):
             mention_name_map[str(mention_id)] = str(item.username)
 
         return await self._convert_text_message_to_component(
-            content, raw_content, mention_role_part, channel_id, mention_name_map
+            content, raw_content, mention_role_part, guild_id, mention_name_map
         )
 
     async def _parse_card_message(
@@ -358,7 +358,7 @@ class KookPlatformAdapter(Platform):
         content = data.content
         if not isinstance(content, str):
             content = str(content)
-        channel_id = data.extra.guild_id
+        guild_id = data.extra.guild_id
 
         card_list = KookCardMessageContainer.from_dict(json.loads(content))
 
@@ -393,7 +393,7 @@ class KookPlatformAdapter(Platform):
 
         if text:
             component_parts, text = await self._convert_text_message_to_component(
-                text, text, channel_id=channel_id
+                text, text, guild_id=guild_id
             )
             message.extend(component_parts)
 

@@ -60,7 +60,7 @@ class KookRolesRecord:
         self._roles_cache.clear()
         self._pending_tasks.clear()
 
-    async def _fetch_roles_by_channel_id(self, channel_id: int) -> set[int] | None:
+    async def _fetch_roles_by_guild_id(self, guild_id: int) -> set[int] | None:
         # 由于需要判断bot账号是属于某个角色(role)才会回复消息,
         # 而后续来自同一个频道的消息,在第一次查这个role的时候,
         # 会一直阻塞消息接收直到请求完成或者报错,
@@ -70,7 +70,7 @@ class KookRolesRecord:
             async with self._http_client.get(
                 url,
                 params={
-                    "guild_id": channel_id,
+                    "guild_id": guild_id,
                     "user_id": self._bot_id,
                 },
                 # TODO 这个超时时间后续加到适配器配置项里
@@ -78,43 +78,43 @@ class KookRolesRecord:
             ) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f'[KOOK] 获取机器人在频道"{channel_id}"的角色id信息失败，状态码: {resp.status} , {await resp.text()}'
+                        f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息失败，状态码: {resp.status} , {await resp.text()}'
                     )
                     return
                 try:
                     resp_content = KookUserViewResponse.from_dict(await resp.json())
                 except pydantic.ValidationError as e:
                     logger.error(
-                        f'[KOOK] 获取机器人在频道"{channel_id}"的角色id信息失败, 响应数据格式错误: \n{e}'
+                        f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息失败, 响应数据格式错误: \n{e}'
                     )
                     logger.error(f"[KOOK] 响应内容: {await resp.text()}")
                     return
 
                 if not resp_content.success():
                     logger.error(
-                        f'[KOOK] 获取机器人在频道"{channel_id}"的角色id信息失败: {resp_content.model_dump_json()}'
+                        f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息失败: {resp_content.model_dump_json()}'
                     )
                     return
 
-                logger.info(f'[KOOK] 获取机器人在频道"{channel_id}"的角色id成功')
+                logger.info(f'[KOOK] 获取机器人在频道"{guild_id}"的角色id成功')
                 return set(resp_content.data.roles)
 
         except Exception as e:
             logger.error(
-                f'[KOOK] 获取机器人在频道"{channel_id}"的角色id信息时请求异常: {e}'
+                f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息时请求异常: {e}'
             )
             return
 
-    async def has_role_in_channel(self, role_id: int, channel_id: int) -> bool:
-        if (cache := self._roles_cache.get(channel_id)) is not None:
-            self._roles_cache.move_to_end(channel_id)
+    async def has_role_in_channel(self, role_id: int, guild_id: int) -> bool:
+        if (cache := self._roles_cache.get(guild_id)) is not None:
+            self._roles_cache.move_to_end(guild_id)
             roles = cache.value
             if roles is not None:
                 return role_id in roles
 
         new_future: asyncio.Future[set[int] | None] = asyncio.Future()
         actual_future: asyncio.Future[set[int] | None] = self._pending_tasks.setdefault(
-            channel_id, new_future
+            guild_id, new_future
         )
 
         if actual_future is not new_future:
@@ -124,7 +124,7 @@ class KookRolesRecord:
             return role_id in roles
 
         try:
-            if (cache := self._roles_cache.get(channel_id)) is not None:
+            if (cache := self._roles_cache.get(guild_id)) is not None:
                 if (
                     cache.failed_count > self._max_retry_times
                     and time.time() - cache.latest_update_time < self._retry_interval
@@ -136,15 +136,15 @@ class KookRolesRecord:
             if len(self._roles_cache) + 1 > self._cache_max_size:
                 self._roles_cache.popitem(last=False)
 
-            roles_set = await self._fetch_roles_by_channel_id(channel_id)
+            roles_set = await self._fetch_roles_by_guild_id(guild_id)
 
-            cache = self._roles_cache.get(channel_id)
+            cache = self._roles_cache.get(guild_id)
             if cache is not None:
                 cache.update(roles_set)
-                self._roles_cache.move_to_end(channel_id)
+                self._roles_cache.move_to_end(guild_id)
             else:
                 cache = RolesCache(roles_set, latest_update_time=time.time())
-                self._roles_cache[channel_id] = cache
+                self._roles_cache[guild_id] = cache
 
             result = False
             if roles_set is None:
@@ -157,8 +157,8 @@ class KookRolesRecord:
         except Exception as e:
             new_future.set_result(None)
             logger.error(
-                f'[KOOK] 获取机器人在频道"{channel_id}"的角色id信息时发生异常: {e}'
+                f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息时发生异常: {e}'
             )
             return False
         finally:
-            self._pending_tasks.pop(channel_id, None)
+            self._pending_tasks.pop(guild_id, None)
