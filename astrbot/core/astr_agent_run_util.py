@@ -340,7 +340,7 @@ async def run_live_agent(
     audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
 
     # 为 TTS 创建过滤队列（Feeder 写入原始文本，TTS 读取过滤后文本）
-    tts_text_queue: asyncio.Queue[str | None] = (
+    text_queue: asyncio.Queue[str | None] = (
         FilteredQueue(raw_text_queue, tts_filter_custom_rules)
         if tts_filter_enable
         else raw_text_queue
@@ -361,11 +361,11 @@ async def run_live_agent(
     # 2. 启动 TTS 任务：负责从 text_queue 读取文本并生成音频到 audio_queue
     if support_stream:
         tts_task = asyncio.create_task(
-            _safe_tts_stream_wrapper(tts_provider, tts_text_queue, audio_queue)
+            _safe_tts_stream_wrapper(tts_provider, text_queue, audio_queue)
         )
     else:
         tts_task = asyncio.create_task(
-            _simulated_stream_tts(tts_provider, tts_text_queue, audio_queue)
+            _simulated_stream_tts(tts_provider, text_queue, audio_queue)
         )
 
     # 3. 主循环：从 audio_queue 读取音频并 yield
