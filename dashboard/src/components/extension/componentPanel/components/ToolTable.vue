@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import type { ToolItem } from '../types';
+import type { BuiltinToolConfigTag, ToolConfigCondition, ToolItem } from '../types';
 
 const { tm: tmTool } = useModuleI18n('features/tooluse');
-const { tm: tmCommand } = useModuleI18n('features/command');
 
 const props = defineProps<{
   items: ToolItem[];
@@ -16,15 +15,60 @@ const emit = defineEmits<{
 }>();
 
 const toolHeaders = computed(() => [
-  { title: tmTool('functionTools.title'), key: 'name', minWidth: '160px' },
+  { title: tmTool('functionTools.title'), key: 'name', minWidth: '320px' },
   { title: tmTool('functionTools.description'), key: 'description' },
   { title: tmTool('functionTools.table.origin'), key: 'origin', sortable: false, width: '120px' },
   { title: tmTool('functionTools.table.originName'), key: 'origin_name', sortable: false, width: '160px' },
-  { title: tmCommand('status.enabled'), key: 'active', sortable: false, width: '120px' },
   { title: tmTool('functionTools.table.actions'), key: 'actions', sortable: false, width: '120px' }
 ]);
 
 const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.properties || {});
+
+const formatConfigValue = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return value.map(item => String(item)).join(', ');
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+  if (value === null || value === undefined || value === '') {
+    return '-';
+  }
+  return String(value);
+};
+
+const formatCondition = (condition: ToolConfigCondition) => {
+  if (condition.message) {
+    return condition.message;
+  }
+
+  switch (condition.operator) {
+    case 'truthy':
+      return tmTool('functionTools.configTags.conditions.truthy', {
+        key: condition.key
+      });
+    case 'equals':
+      return tmTool('functionTools.configTags.conditions.equals', {
+        key: condition.key,
+        expected: formatConfigValue(condition.expected)
+      });
+    case 'in':
+      return tmTool('functionTools.configTags.conditions.in', {
+        key: condition.key,
+        expected: formatConfigValue(condition.expected)
+      });
+    default:
+      return tmTool('functionTools.configTags.conditions.fallback', {
+        key: condition.key,
+        actual: formatConfigValue(condition.actual)
+      });
+  }
+};
+
+const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
+  if (tool.origin !== 'builtin') return [];
+  return (tool.builtin_config_tags || []).filter(tag => tag.enabled);
+};
 </script>
 
 <template>
@@ -39,12 +83,39 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
       :loading="props.loading"
     >
       <template #item.name="{ item }">
-        <div class="d-flex align-center py-2">
-          <v-icon color="primary" class="mr-2" size="18">
-            {{ item.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
-          </v-icon>
-          <div>
-            <div class="text-subtitle-1 font-weight-medium">{{ item.name }}</div>
+        <div class="py-2">
+          <div class="d-flex flex-wrap align-center ga-1">
+            <div class="tool-name text-body-2 font-weight-medium">{{ item.name }}</div>
+            <v-tooltip
+              v-for="tag in enabledConfigTags(item)"
+              :key="`${item.name}-${tag.conf_id}`"
+              location="top"
+            >
+              <template #activator="{ props: tooltipProps }">
+                <v-chip
+                  v-bind="tooltipProps"
+                  size="x-small"
+                  variant="tonal"
+                  color="secondary"
+                  class="text-caption font-weight-medium"
+                >
+                  {{ tag.conf_name }}
+                </v-chip>
+              </template>
+
+              <div class="tool-config-tooltip">
+                <div class="text-body-2 font-weight-medium mb-2">
+                  {{ tmTool('functionTools.configTags.tooltipTitle', { config: tag.conf_name }) }}
+                </div>
+                <div
+                  v-for="(condition, index) in tag.matched_conditions"
+                  :key="`${tag.conf_id}-${index}-${condition.key}`"
+                  class="text-body-2 text-medium-emphasis mb-1"
+                >
+                  {{ formatCondition(condition) }}
+                </div>
+              </div>
+            </v-tooltip>
           </div>
         </div>
       </template>
@@ -56,7 +127,7 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
       </template>
 
       <template #item.origin="{ item }">
-        <v-chip size="small" variant="tonal" color="info" class="text-caption font-weight-medium">
+        <v-chip size="x-small" variant="tonal" color="info" class="text-caption font-weight-medium">
           {{ item.origin || '-' }}
         </v-chip>
       </template>
@@ -67,14 +138,10 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
         </div>
       </template>
 
-      <template #item.active="{ item }">
-        <v-chip :color="item.active ? 'success' : 'error'" size="small" class="font-weight-medium" :variant="item.active ? 'flat' : 'outlined'">
-          {{ item.active ? tmCommand('status.enabled') : tmCommand('status.disabled') }}
-        </v-chip>
-      </template>
-
       <template #item.actions="{ item }">
+        <span v-if="item.readonly" class="text-medium-emphasis">-</span>
         <v-switch
+          v-else
           :model-value="item.active"
           color="primary"
           density="compact"
@@ -140,5 +207,22 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
 
 .tool-table :deep(.v-data-table__td) {
   vertical-align: middle;
+}
+
+.tool-name {
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.tool-config-tooltip {
+  max-width: 360px;
+  padding: 4px 0;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.tool-config-tooltip :deep(.text-body-2),
+.tool-config-tooltip :deep(.text-medium-emphasis),
+.tool-config-tooltip :deep(.font-weight-medium) {
+  color: inherit !important;
 }
 </style>

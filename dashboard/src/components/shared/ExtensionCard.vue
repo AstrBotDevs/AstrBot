@@ -164,11 +164,13 @@ const viewChangelog = () => {
           ? marketMode
             ? '#f8f0dd'
             : '#ffffff'
-          : '#282833',
+          : marketMode
+            ? '#3a3425'
+            : '#282833',
       color:
         useCustomizerStore().uiTheme === 'PurpleTheme'
           ? '#000000dd'
-          : '#ffffff',
+          : '#ffffffdd',
     }"
   >
     <v-card-text

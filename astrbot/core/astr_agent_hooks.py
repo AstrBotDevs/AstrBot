@@ -30,9 +30,13 @@ def _sdk_safe_payload(value: Any) -> Any:
 
 class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     async def on_agent_begin(
-        self,
-        run_context: ContextWrapper[AstrAgentContext],
+        self, run_context: ContextWrapper[AstrAgentContext]
     ) -> None:
+        await call_event_hook(
+            run_context.context.event,
+            EventType.OnAgentBeginEvent,
+            run_context,
+        )
         sdk_plugin_bridge = getattr(
             run_context.context.context, "sdk_plugin_bridge", None
         )
@@ -79,6 +83,13 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
                 from astrbot.core import logger
 
                 logger.warning("SDK llm_response dispatch failed: %s", exc)
+        await call_event_hook(
+            run_context.context.event,
+            EventType.OnAgentDoneEvent,
+            run_context,
+            llm_response,
+        )
+        if sdk_plugin_bridge is not None:
             try:
                 await sdk_plugin_bridge.dispatch_message_event(
                     "agent_done",
@@ -168,7 +179,13 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         platform_name = run_context.context.event.get_platform_name()
         if (
             platform_name == "webchat"
-            and tool.name in ["web_search_tavily", "web_search_bocha"]
+            and tool.name
+            in [
+                "web_search_baidu",
+                "web_search_tavily",
+                "web_search_bocha",
+                "web_search_brave",
+            ]
             and len(run_context.messages) > 0
             and tool_result
             and len(tool_result.content)

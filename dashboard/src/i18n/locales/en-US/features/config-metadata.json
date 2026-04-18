@@ -121,6 +121,10 @@
           "description": "BoCha API Key",
           "hint": "Multiple keys can be added for rotation."
         },
+        "websearch_brave_key": {
+          "description": "Brave Search API Key",
+          "hint": "Multiple keys can be added for rotation."
+        },
         "websearch_baidu_app_builder_key": {
           "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
           "hint": "Reference: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -148,11 +152,11 @@
     },
     "agent_computer_use": {
       "description": "Agent Computer Use",
-      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See [Sandbox Mode](https://docs.astrbot.app/use/astrbot-agent-sandbox.html), [Skills](https://docs.astrbot.app/use/skills.html)",
+      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Computer Use](https://docs.astrbot.app/use/computer.html).",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
-          "hint": "sandbox means running in a sandbox environment, local means running in a local environment, none means disabling Computer Use. If skills are uploaded, choosing none will cause them to not be usable by the Agent."
+          "hint": "Environment allowed for Agent usage. `local` means the local machine environment, `sandbox` means the sandbox environment, and `none` means no environment is allowed."
         },
         "computer_use_require_admin": {
           "description": "Require AstrBot Admin Permission",
@@ -386,6 +390,10 @@
         "description": "Discord Activity Name",
         "hint": "Optional Discord activity name. Leave empty to disable."
       },
+      "discord_allow_bot_messages": {
+        "description": "Allow Bot Messages",
+        "hint": "When enabled, AstrBot will receive messages from other Discord bots. Useful for bot-to-bot communication scenarios (e.g., message forwarding). Disabled by default."
+      },
       "discord_command_register": {
         "description": "Register Discord slash commands",
         "hint": "When enabled, AstrBot will automatically register plugin commands as Discord slash commands"
@@ -555,6 +563,18 @@
       "telegram_token": {
         "description": "Bot Token",
         "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
+      },
+      "mattermost_url": {
+        "description": "Mattermost URL",
+        "hint": "Mattermost service URL, for example https://chat.example.com."
+      },
+      "mattermost_bot_token": {
+        "description": "Mattermost Bot Token",
+        "hint": "The access token generated after creating a bot account in Mattermost."
+      },
+      "mattermost_reconnect_delay": {
+        "description": "Mattermost Reconnect Delay",
+        "hint": "Delay in seconds before reconnecting after the WebSocket disconnects. Defaults to 5 seconds."
       },
       "type": {
         "description": "Adapter Type"
@@ -1075,7 +1095,11 @@
       },
       "rerank_api_base": {
         "description": "Rerank Model API Base URL",
-        "hint": "AstrBot appends /v1/rerank to the request URL."
+        "hint": "The full request URL is formed by combining the Base URL and a path suffix (defaults to /v1/rerank)."
+      },
+      "rerank_api_suffix": {
+        "description": "API URL path suffix",
+        "hint": "Path appended to base_url, e.g. /v1/rerank. Leave empty to disable auto-append."
       },
       "rerank_api_key": {
         "description": "API Key",
@@ -1092,6 +1116,24 @@
         "description": "Custom rerank task description",
         "hint": "Only effective for qwen3-rerank models. Recommended to write in English."
       },
+      "nvidia_rerank_api_base": {
+          "description": "API Base URL"
+      },
+      "nvidia_rerank_api_key": {
+          "description": "API Key"
+      },
+      "nvidia_rerank_model": {
+          "description": "Rerank Model Name",
+          "hint": "Please refer to the NVIDIA Docs for the model name."
+      },
+      "nvidia_rerank_model_endpoint": {
+          "description": "Custom Model Endpoint",
+          "hint": "Custom URL suffix endpoint, defaults to /reranking."
+      },
+      "nvidia_rerank_truncate": {
+          "description": "Text Truncation Strategy",
+          "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
+      },
       "launch_model_if_not_running": {
         "description": "Auto-start model if not running",
         "hint": "If the model is not running in Xinference, attempt to start it automatically. Recommended to disable in production."
@@ -1102,6 +1144,7 @@
         "labels": [
           "Text",
           "Image",
+          "Audio",
           "Tool use"
         ]
       },
@@ -1478,6 +1521,10 @@
       "whisper_hint": {
         "description": "Notes for local Whisper deployment",
         "hint": "Before enabling, install the openai-whisper library (NVIDIA users download ~2GB mainly for torch and cuda; CPU users download ~1GB), and install ffmpeg. Otherwise STT will not work."
+      },
+      "whisper_device": {
+        "description": "Inference device",
+        "hint": "Whisper inference device. Apple Silicon can use mps; other environments should use cpu. If mps is selected but unavailable, AstrBot will fall back to cpu."
       },
       "id": {
         "description": "ID"

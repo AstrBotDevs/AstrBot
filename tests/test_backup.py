@@ -18,9 +18,9 @@ from astrbot.core.backup import (
 )
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
-    DatabaseClearError,
     PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
     AstrBotImporter,
+    DatabaseClearError,
     ImportResult,
     _get_major_version,
 )
@@ -1057,6 +1057,8 @@ class TestModelMappings:
             "conversations",
             "personas",
             "preferences",
+            "chatui_projects",
+            "session_project_relations",
             "attachments",
         ]
         for table in expected_tables:

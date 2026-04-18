@@ -1,5 +1,5 @@
 <template>
-    <div class="flex-grow-1" style="display: flex; flex-direction: column; height: 100%;">
+    <div class="knowledge-base-view flex-grow-1" style="display: flex; flex-direction: column; height: 100%;">
         <div style="flex-grow: 1; width: 100%; border: 1px solid #eee; border-radius: 8px; padding: 16px">
             <v-banner lines="one">
                 <template v-slot:text>
@@ -18,7 +18,7 @@
                     {{ tm('notInstalled.install') }}
                 </v-btn>
                 <ConsoleDisplayer v-show="installing"
-                    style="background-color: #fff; max-height: 300px; margin-top: 16px; max-width: 100%"
+                    style="max-height: 300px; margin-top: 16px; max-width: 100%"
                     :show-level-btns="false"></ConsoleDisplayer>
             </div>
             <div v-else-if="kbCollections.length == 0" class="d-flex align-center justify-center flex-column"
@@ -1371,5 +1371,19 @@ export default {
 
 .data-source-select :deep(.v-field__prepend-inner) {
     padding-right: 12px;
+}
+</style>
+
+<style>
+.v-theme--PurpleThemeDark .knowledge-base-view .book-content {
+    background: linear-gradient(145deg, rgb(var(--v-theme-background)) 0%, rgb(var(--v-theme-lightprimary)) 100%);
+}
+
+.v-theme--PurpleThemeDark .knowledge-base-view .kb-name {
+    color: rgba(var(--v-theme-on-surface-variant), 0.84);
+}
+
+.v-theme--PurpleThemeDark .knowledge-base-view .kb-count {
+    color: rgba(var(--v-theme-on-surface-variant), 0.58);
 }
 </style>

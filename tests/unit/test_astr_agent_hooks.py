@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 from mcp.types import CallToolResult, TextContent
@@ -58,11 +58,10 @@ async def test_main_agent_hooks_dispatches_agent_done_to_sdk(
     await hooks.on_agent_done(run_context, llm_response)
 
     event.set_extra.assert_called_once_with("_llm_reasoning_content", "thinking")
-    call_event_hook_mock.assert_awaited_once_with(
-        event,
-        EventType.OnLLMResponseEvent,
-        llm_response,
-    )
+    assert call_event_hook_mock.await_args_list == [
+        call(event, EventType.OnLLMResponseEvent, llm_response),
+        call(event, EventType.OnAgentDoneEvent, run_context, llm_response),
+    ]
     assert sdk_plugin_bridge.dispatch_message_event.await_count == 2
     first_call = sdk_plugin_bridge.dispatch_message_event.await_args_list[0]
     assert first_call.args == (
