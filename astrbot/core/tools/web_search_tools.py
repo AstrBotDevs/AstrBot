@@ -197,6 +197,7 @@ async def _bocha_search(
     header = {
         "Authorization": f"Bearer {bocha_key}",
         "Content-Type": "application/json",
+        "Accept-Encoding": "gzip, deflate",
     }
     async with aiohttp.ClientSession(trust_env=True) as session:
         async with session.post(
