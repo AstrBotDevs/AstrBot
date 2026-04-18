@@ -32,6 +32,7 @@ class KookEventDataPath:
     RECONNECT_ERR = TEST_DATA_DIR / "kook_ws_event_reconnect_err.json"
     RESUME_ACK = TEST_DATA_DIR / "kook_ws_event_resume_ack.json"
     RESUME = TEST_DATA_DIR / "kook_ws_event_resume.json"
+    GROUP_SYSTEM_MESSAGE_UPDATE_ROLE = TEST_DATA_DIR / "kook_ws_event_group_system_message_update_role.json"
 
 
 class KookApiDataPath:

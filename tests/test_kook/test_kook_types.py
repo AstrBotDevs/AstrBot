@@ -128,6 +128,7 @@ def test_all_kook_card_type():
         (KookEventDataPath.RECONNECT_ERR),
         (KookEventDataPath.RESUME_ACK),
         (KookEventDataPath.RESUME),
+        (KookEventDataPath.GROUP_SYSTEM_MESSAGE_UPDATE_ROLE),
     ],
 )
 def test_websocket_event_type_parse(expected_json_data_path: Path):
