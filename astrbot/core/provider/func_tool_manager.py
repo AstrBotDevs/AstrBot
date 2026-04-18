@@ -321,13 +321,7 @@ class FunctionToolManager:
                 break
 
     def _find_mcp_tool_by_original_name(self, name: str) -> MCPTool | None:
-        """Best-effort lookup of an MCP tool by its original (pre-namespaced) name.
-
-        Prefers active tools to stay consistent with the active-first rule
-        applied for exact-name matches. When multiple candidates remain, the
-        one with the lexicographically smallest namespaced name is returned
-        for deterministic behavior, and a warning is logged.
-        """
+        """按原始（命名空间前）名查找 MCP 工具，active 优先。"""
         matches = [
             f
             for f in self.func_list
@@ -361,8 +355,7 @@ class FunctionToolManager:
                 return f
 
         if isinstance(name, str):
-            # Fallback: look up MCP tool by original (pre-namespaced) name
-            # for backward compatibility with legacy persona configurations.
+            # 老 persona 配置按原始 MCP 名回查
             mcp_tool = self._find_mcp_tool_by_original_name(name)
             if mcp_tool is not None:
                 return mcp_tool
@@ -609,8 +602,13 @@ class FunctionToolManager:
 
         lifecycle_task = asyncio.create_task(lifecycle(), name=f"mcp-client:{name}")
         async with self._runtime_lock:
-            # After successful initialization, mcp_client is guaranteed to be non-None
-            assert mcp_client is not None
+            # After successful initialization mcp_client is logically non-None;
+            # raise explicitly so this invariant still holds under `python -O`
+            # (which strips `assert`).
+            if mcp_client is None:
+                raise RuntimeError(
+                    f"MCP client {name} unexpectedly None after successful initialization"
+                )
             self._mcp_server_runtime[name] = _MCPServerRuntime(
                 name=name,
                 client=mcp_client,

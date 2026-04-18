@@ -101,17 +101,25 @@ class ToolsRoute(Route):
                     if key != "active":  # active 已经处理
                         server_info[key] = value
 
-                # If MCP client is initialized, get tool names from client
-                # Note: mcp_client.tools contains raw MCP tools (mcp.Tool), not MCPTool
-                # So we use tool.name directly (no namespace prefix to strip)
+                # tools 为 namespaced 名（与 personaForm.tools 匹配），
+                # original_tool_names 为原始名（给 UI 显示）
                 for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
                     if name_key == name:
                         mcp_client = runtime.client
-                        server_info["tools"] = [tool.name for tool in mcp_client.tools]
+                        mcp_tools = [
+                            f
+                            for f in self.tool_mgr.func_list
+                            if isinstance(f, MCPTool) and f.mcp_server_name == name
+                        ]
+                        server_info["tools"] = [f.name for f in mcp_tools]
+                        server_info["original_tool_names"] = [
+                            f.original_tool_name for f in mcp_tools
+                        ]
                         server_info["errlogs"] = mcp_client.server_errlogs
                         break
                 else:
                     server_info["tools"] = []
+                    server_info["original_tool_names"] = []
 
                 servers.append(server_info)
 
