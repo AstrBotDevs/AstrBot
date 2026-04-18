@@ -101,10 +101,12 @@ class KookPlatformAdapter(Platform):
             logger.debug(f'[KOOK] 消息为系统通知, 通知类型为: "{event.extra.type}"')
             logger.debug(f"[KOOK] 原始消息数据: {event.to_json()}")
             if isinstance(event.extra.type, KookRoleExtraType):
+                # 此时 target_id 就是频道id(guild_id)
+                guild_id = event.target_id
                 logger.info(
-                    f'[KOOK] 收到频道角色更新通知, 类型为"{event.extra.type.value}", 刷新角色id缓存'
+                    f'[KOOK] 收到频道"{guild_id}"的角色更新通知, 类型为"{event.extra.type.value}", 刷新角色id缓存'
                 )
-                self._roles_cache.clean_roles_cache()
+                self._roles_cache.clean_roles_cache(int(guild_id))
 
     async def run(self):
         """主运行循环"""

@@ -56,9 +56,9 @@ class KookRolesRecord:
     def set_bot_id(self, bot_id: str):
         self._bot_id = bot_id
 
-    def clean_roles_cache(self):
-        self._roles_cache.clear()
-        self._pending_tasks.clear()
+    def clean_roles_cache(self, guild_id: int):
+        self._roles_cache.pop(guild_id, None)
+        self._pending_tasks.pop(guild_id, None)
 
     async def _fetch_roles_by_guild_id(self, guild_id: int) -> set[int] | None:
         # 由于需要判断bot账号是属于某个角色(role)才会回复消息,
