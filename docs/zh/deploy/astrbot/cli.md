@@ -36,13 +36,35 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/AstrBotDevs/AstrBot/mast
 > [!WARNING]
 > 建议使用 [PowerShell 7](https://github.com/PowerShell/PowerShell/releases) 以获得最佳体验。
 
+**原生 Windows（PowerShell 7+）一行命令：**
+
+```powershell
+irm https://raw.githubusercontent.com/AstrBotDevs/AstrBot/master/docs/scripts/deploy-cli.ps1 | iex
+```
+
+> [!TIP]
+> 你也可以克隆仓库后本地运行脚本：
+> ```powershell
+> git clone https://github.com/AstrBotDevs/AstrBot.git
+> cd AstrBot
+> .\docs\scripts\deploy-cli.ps1
+> ```
+
+该脚本会自动完成以下步骤：
+1. 检测并提示安装必要的依赖（git、curl、python>=3.12、uv）
+2. 克隆 AstrBot 官方仓库
+3. 使用 `uv sync` 安装项目依赖
+4. 启动 AstrBot 并打印访问链接
+
+**或者使用 WSL 调用 bash 脚本：**
+
 ```powershell
 # 克隆仓库后运行部署脚本（WSL 方式）
 git clone https://github.com/AstrBotDevs/AstrBot.git; cd AstrBot; wsl bash docs/scripts/deploy-cli.sh
 ```
 
 > [!NOTE]
-> Windows 原生环境建议直接按照下方「下载/克隆仓库」和「安装依赖并运行」步骤手动操作，或使用 [Docker 部署](./docker.md)。
+> 如果你更喜欢在 Windows 原生环境运行，推荐使用上面的 PowerShell 脚本。WSL 方式适合需要在 Linux 环境下运行的用户，或使用 [Docker 部署](./docker.md)。
 :::
 
 
