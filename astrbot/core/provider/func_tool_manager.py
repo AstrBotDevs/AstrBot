@@ -323,9 +323,10 @@ class FunctionToolManager:
     def _find_mcp_tool_by_original_name(self, name: str) -> MCPTool | None:
         """Best-effort lookup of an MCP tool by its original (pre-namespaced) name.
 
-        When multiple MCP servers expose a tool with the same original name,
-        the one with the lexicographically smallest namespaced name is
-        returned for deterministic behavior, and a warning is logged.
+        Prefers active tools to stay consistent with the active-first rule
+        applied for exact-name matches. When multiple candidates remain, the
+        one with the lexicographically smallest namespaced name is returned
+        for deterministic behavior, and a warning is logged.
         """
         matches = [
             f
@@ -336,14 +337,17 @@ class FunctionToolManager:
         if not matches:
             return None
 
-        if len(matches) > 1:
-            matches.sort(key=lambda f: f.name)
+        active_matches = [f for f in matches if getattr(f, "active", True)]
+        candidates = active_matches or matches
+
+        if len(candidates) > 1:
+            candidates.sort(key=lambda f: f.name)
             logger.warning(
                 f"Multiple MCP tools found with original name '{name}': "
-                f"{[f.name for f in matches]}. Using {matches[0].name}"
+                f"{[f.name for f in candidates]}. Using {candidates[0].name}"
             )
 
-        return matches[0]
+        return candidates[0]
 
     def get_func(self, name) -> FuncTool | None:
         # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）

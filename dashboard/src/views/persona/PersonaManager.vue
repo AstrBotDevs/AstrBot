@@ -283,6 +283,7 @@ import {
 } from '@/utils/confirmDialog';
 import { resolveToolDisplayName } from '@/utils/toolDisplayName';
 
+import type { ToolItem } from '@/components/extension/componentPanel/types';
 import type { Folder, FolderTreeNode } from '@/components/folder/types';
 
 interface Persona {
@@ -352,7 +353,7 @@ export default defineComponent({
             skeletonTimer: null as ReturnType<typeof setTimeout> | null,
 
             // 工具列表用于显示名称
-            availableTools: [] as any[]
+            availableTools: [] as ToolItem[]
         };
     },
     computed: {
