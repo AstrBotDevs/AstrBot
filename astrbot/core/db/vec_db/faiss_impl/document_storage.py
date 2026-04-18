@@ -2,6 +2,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import Column, Text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
@@ -9,6 +10,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
 
 from astrbot.core import logger
+from astrbot.core.knowledge_base.retrieval.tokenizer import (
+    build_fts5_or_query,
+    load_stopwords,
+    to_fts5_search_text,
+)
+
+FTS_TABLE_NAME = "documents_fts"
+FTS_REBUILD_BATCH_SIZE = 1000
 
 
 class BaseDocModel(SQLModel, table=False):
@@ -42,6 +51,10 @@ class DocumentStorage:
             os.path.dirname(__file__),
             "sqlite_init.sql",
         )
+        self.fts5_available = False
+        self._fts_contentless_delete = False
+        self._fts_index_ready = False
+        self._stopwords: set[str] | None = None
 
     async def initialize(self) -> None:
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
@@ -78,7 +91,48 @@ class DocumentStorage:
             except BaseException:
                 pass
 
+            await self._initialize_fts5(conn)
             await conn.commit()
+
+    async def _initialize_fts5(self, executor) -> None:
+        try:
+            try:
+                await executor.execute(
+                    text(
+                        f"""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS {FTS_TABLE_NAME}
+                        USING fts5(
+                            search_text,
+                            content='',
+                            contentless_delete=1,
+                            tokenize='unicode61'
+                        )
+                        """,
+                    ),
+                )
+                self._fts_contentless_delete = True
+            except Exception:
+                await executor.execute(
+                    text(
+                        f"""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS {FTS_TABLE_NAME}
+                        USING fts5(
+                            search_text,
+                            content='',
+                            tokenize='unicode61'
+                        )
+                        """,
+                    ),
+                )
+                self._fts_contentless_delete = False
+            self.fts5_available = True
+        except Exception as e:
+            self.fts5_available = False
+            self._fts_contentless_delete = False
+            logger.warning(
+                f"SQLite FTS5 is unavailable for document storage {self.db_path}; "
+                f"falling back to in-memory BM25 sparse retrieval: {e}",
+            )
 
     async def connect(self) -> None:
         """Connect to the SQLite database."""
@@ -99,6 +153,18 @@ class DocumentStorage:
         """Context manager for database sessions."""
         async with self.async_session_maker() as session:  # type: ignore
             yield session
+
+    @property
+    def stopwords(self) -> set[str]:
+        if self._stopwords is None:
+            stopwords_path = (
+                Path(__file__).parents[3]
+                / "knowledge_base"
+                / "retrieval"
+                / "hit_stopwords.txt"
+            )
+            self._stopwords = load_stopwords(stopwords_path)
+        return self._stopwords
 
     async def get_documents(
         self,
@@ -172,6 +238,8 @@ class DocumentStorage:
             )
             session.add(document)
             await session.flush()  # Flush to get the ID
+            if document.id is not None:
+                await self._insert_fts_row(session, int(document.id), text)
             return document.id  # type: ignore
 
     async def insert_documents_batch(
@@ -209,6 +277,9 @@ class DocumentStorage:
                 session.add(document)
 
             await session.flush()  # Flush to get all IDs
+            for doc, doc_text in zip(documents, texts):
+                if doc.id is not None:
+                    await self._insert_fts_row(session, int(doc.id), doc_text)
             return [doc.id for doc in documents]  # type: ignore
 
     async def delete_document_by_doc_id(self, doc_id: str) -> None:
@@ -226,6 +297,8 @@ class DocumentStorage:
             document = result.scalar_one_or_none()
 
             if document:
+                if document.id is not None:
+                    await self._delete_fts_row(session, int(document.id), document.text)
                 await session.delete(document)
 
     async def get_document_by_doc_id(self, doc_id: str):
@@ -265,9 +338,13 @@ class DocumentStorage:
             document = result.scalar_one_or_none()
 
             if document:
+                if document.id is not None:
+                    await self._delete_fts_row(session, int(document.id), document.text)
                 document.text = new_text
                 document.updated_at = datetime.now()
                 session.add(document)
+                if document.id is not None:
+                    await self._insert_fts_row(session, int(document.id), new_text)
 
     async def delete_documents(self, metadata_filters: dict) -> None:
         """Delete documents by their metadata filters.
@@ -294,6 +371,8 @@ class DocumentStorage:
             documents = result.scalars().all()
 
             for doc in documents:
+                if doc.id is not None:
+                    await self._delete_fts_row(session, int(doc.id), doc.text)
                 await session.delete(doc)
 
     async def count_documents(self, metadata_filters: dict | None = None) -> int:
@@ -322,6 +401,194 @@ class DocumentStorage:
             result = await session.execute(query)
             count = result.scalar_one_or_none()
             return count if count is not None else 0
+
+    async def ensure_fts_index(self) -> bool:
+        """Ensure the FTS5 sparse index exists and matches the documents table."""
+        if not self.fts5_available:
+            return False
+        if self._fts_index_ready:
+            return True
+
+        assert self.engine is not None, "Database connection is not initialized."
+
+        async with self.get_session() as session:
+            doc_count = await self._count_documents_in_session(session)
+            fts_count = await self._count_fts_rows(session)
+            if doc_count == fts_count:
+                self._fts_index_ready = True
+                return True
+
+        logger.info(
+            f"Rebuilding FTS5 sparse index for {self.db_path}: "
+            f"documents={doc_count}, fts_rows={fts_count}",
+        )
+        await self.rebuild_fts_index()
+        return self.fts5_available
+
+    async def rebuild_fts_index(self) -> None:
+        """Rebuild the contentless FTS5 sparse index from documents."""
+        if not self.fts5_available:
+            return
+
+        assert self.engine is not None, "Database connection is not initialized."
+
+        async with self.get_session() as session, session.begin():
+            await session.execute(text(f"DROP TABLE IF EXISTS {FTS_TABLE_NAME}"))
+            await self._initialize_fts5(session)
+            if not self.fts5_available:
+                return
+
+            last_id = 0
+            while True:
+                query = (
+                    select(Document)
+                    .where(col(Document.id) > last_id)
+                    .order_by(col(Document.id))
+                    .limit(FTS_REBUILD_BATCH_SIZE)
+                )
+                result = await session.execute(query)
+                documents = result.scalars().all()
+                if not documents:
+                    break
+
+                for doc in documents:
+                    if doc.id is not None:
+                        await self._insert_fts_row(session, int(doc.id), doc.text)
+                last_id = int(documents[-1].id or last_id)
+
+        self._fts_index_ready = True
+
+    async def search_sparse(
+        self,
+        query_tokens: list[str],
+        limit: int,
+    ) -> list[dict] | None:
+        """Search chunks using the FTS5 sparse index.
+
+        Returns None when FTS5 is unavailable so callers can fall back to another
+        sparse retrieval implementation.
+        """
+        if limit <= 0:
+            return []
+        if not await self.ensure_fts_index():
+            return None
+
+        match_query = build_fts5_or_query(query_tokens)
+        if not match_query:
+            return []
+
+        async with self.get_session() as session:
+            try:
+                result = await session.execute(
+                    text(
+                        f"""
+                        SELECT
+                            d.id AS id,
+                            d.doc_id AS doc_id,
+                            d.text AS text,
+                            d.metadata AS metadata,
+                            d.created_at AS created_at,
+                            d.updated_at AS updated_at,
+                            bm25({FTS_TABLE_NAME}) AS score
+                        FROM {FTS_TABLE_NAME}
+                        JOIN documents d ON d.id = {FTS_TABLE_NAME}.rowid
+                        WHERE {FTS_TABLE_NAME} MATCH :query
+                        ORDER BY score ASC, d.id ASC
+                        LIMIT :limit
+                        """,
+                    ),
+                    {"query": match_query, "limit": int(limit)},
+                )
+            except Exception as e:
+                logger.warning(
+                    f"FTS5 sparse search failed for {self.db_path}; "
+                    f"falling back to in-memory BM25: {e}",
+                )
+                self.fts5_available = False
+                return None
+
+            rows = result.mappings().all()
+            return [
+                {
+                    "id": row["id"],
+                    "doc_id": row["doc_id"],
+                    "text": row["text"],
+                    "metadata": row["metadata"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "score": float(row["score"]),
+                }
+                for row in rows
+            ]
+
+    async def _count_documents_in_session(self, session: AsyncSession) -> int:
+        result = await session.execute(select(func.count(col(Document.id))))
+        count = result.scalar_one_or_none()
+        return int(count or 0)
+
+    async def _count_fts_rows(self, session: AsyncSession) -> int:
+        result = await session.execute(
+            text(f"SELECT count(*) FROM {FTS_TABLE_NAME}"),
+        )
+        count = result.scalar_one_or_none()
+        return int(count or 0)
+
+    async def _insert_fts_row(
+        self,
+        session: AsyncSession,
+        rowid: int,
+        content: str,
+    ) -> None:
+        if not self.fts5_available:
+            return
+
+        search_text = to_fts5_search_text(content, self.stopwords)
+        await session.execute(
+            text(
+                f"""
+                INSERT INTO {FTS_TABLE_NAME}(rowid, search_text)
+                VALUES (:rowid, :search_text)
+                """,
+            ),
+            {"rowid": rowid, "search_text": search_text},
+        )
+
+    async def _delete_fts_row(
+        self,
+        session: AsyncSession,
+        rowid: int,
+        content: str,
+    ) -> None:
+        if not self.fts5_available:
+            return
+
+        if self._fts_contentless_delete:
+            await session.execute(
+                text(f"DELETE FROM {FTS_TABLE_NAME} WHERE rowid = :rowid"),
+                {"rowid": rowid},
+            )
+            return
+
+        if not await self._fts_row_exists(session, rowid):
+            return
+
+        search_text = to_fts5_search_text(content, self.stopwords)
+        await session.execute(
+            text(
+                f"""
+                INSERT INTO {FTS_TABLE_NAME}({FTS_TABLE_NAME}, rowid, search_text)
+                VALUES ('delete', :rowid, :search_text)
+                """,
+            ),
+            {"rowid": rowid, "search_text": search_text},
+        )
+
+    async def _fts_row_exists(self, session: AsyncSession, rowid: int) -> bool:
+        result = await session.execute(
+            text(f"SELECT 1 FROM {FTS_TABLE_NAME} WHERE rowid = :rowid LIMIT 1"),
+            {"rowid": rowid},
+        )
+        return result.scalar_one_or_none() is not None
 
     async def get_user_ids(self) -> list[str]:
         """Retrieve all user IDs from the documents table.
