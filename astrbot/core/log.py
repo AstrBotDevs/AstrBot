@@ -41,8 +41,8 @@ class _QueueAnsiColorFilter(logging.Filter):
 
     _level_color = None
     _DEFAULT_COLOR = {
-        "DEBUG": "\u001b[1;34m",
-        "INFO": "\u001b[1;36m",
+        "DEBUG": "\u001b[36m",
+        "INFO": "\u001b[1;32m",
         "WARNING": "\u001b[1;33m",
         "ERROR": "\u001b[31m",
         "CRITICAL": "\u001b[1;31m",
