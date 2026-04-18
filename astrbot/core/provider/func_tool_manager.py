@@ -320,6 +320,31 @@ class FunctionToolManager:
                 self.func_list.pop(i)
                 break
 
+    def _find_mcp_tool_by_original_name(self, name: str) -> MCPTool | None:
+        """Best-effort lookup of an MCP tool by its original (pre-namespaced) name.
+
+        When multiple MCP servers expose a tool with the same original name,
+        the one with the lexicographically smallest namespaced name is
+        returned for deterministic behavior, and a warning is logged.
+        """
+        matches = [
+            f
+            for f in self.func_list
+            if isinstance(f, MCPTool) and f.original_tool_name == name
+        ]
+
+        if not matches:
+            return None
+
+        if len(matches) > 1:
+            matches.sort(key=lambda f: f.name)
+            logger.warning(
+                f"Multiple MCP tools found with original name '{name}': "
+                f"{[f.name for f in matches]}. Using {matches[0].name}"
+            )
+
+        return matches[0]
+
     def get_func(self, name) -> FuncTool | None:
         # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
         # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
@@ -331,24 +356,13 @@ class FunctionToolManager:
             if f.name == name:
                 return f
 
-        # Fallback: try to find MCP tool by original name for backward compatibility
-        # This handles cases where personas reference tools by their original names
         if isinstance(name, str):
-            mcp_matches = []
-            for f in self.func_list:
-                if isinstance(f, MCPTool) and f.original_tool_name == name:
-                    mcp_matches.append(f)
+            # Fallback: look up MCP tool by original (pre-namespaced) name
+            # for backward compatibility with legacy persona configurations.
+            mcp_tool = self._find_mcp_tool_by_original_name(name)
+            if mcp_tool is not None:
+                return mcp_tool
 
-            if len(mcp_matches) == 1:
-                return mcp_matches[0]
-            elif len(mcp_matches) > 1:
-                logger.warning(
-                    f"Multiple MCP tools found with original name '{name}': "
-                    f"{[f.name for f in mcp_matches]}. Using {mcp_matches[0].name}"
-                )
-                return mcp_matches[0]
-
-        if isinstance(name, str):
             try:
                 builtin_tool = self.get_builtin_tool(name)
             except KeyError:
@@ -391,27 +405,6 @@ class FunctionToolManager:
     def is_builtin_tool(self, name: str) -> bool:
         ensure_builtin_tools_loaded()
         return get_builtin_tool_class(name) is not None
-
-        # Fallback: try to find MCP tool by original name for backward compatibility
-        # This handles cases where personas reference tools by their original names
-        mcp_matches = []
-        for f in self.func_list:
-            if isinstance(f, MCPTool) and f.original_tool_name == name:
-                mcp_matches.append(f)
-
-        if len(mcp_matches) == 1:
-            return mcp_matches[0]
-        elif len(mcp_matches) > 1:
-            # Multiple MCP servers provide the same tool name
-            # Sort by namespaced name for deterministic selection
-            mcp_matches.sort(key=lambda f: f.name)
-            logger.warning(
-                f"Multiple MCP tools found with original name '{name}': "
-                f"{[f.name for f in mcp_matches]}. Using {mcp_matches[0].name}"
-            )
-            return mcp_matches[0]
-
-        return None
 
     def get_full_tool_set(self) -> ToolSet:
         """获取完整工具集
