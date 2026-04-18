@@ -181,10 +181,12 @@ async def test_epub_parser_reads_spine_order_as_text():
     assert result.media == []
     assert "**Title:**" not in result.text
     assert "[Chapter 2](chapter2.xhtml)" not in result.text
-    assert result.text.startswith("## Second")
+    assert result.text.startswith("1. Chapter 2")
+    assert "2. Chapter 1" in result.text
     assert "Beta paragraph." in result.text
     assert "# First" in result.text
     assert "* Point A" in result.text
+    assert result.text.index("1. Chapter 2") < result.text.index("## Second")
     assert result.text.index("## Second") < result.text.index("# First")
 
 
@@ -198,7 +200,7 @@ async def test_epub_parser_preserves_generic_container_text():
     assert "**Title:**" not in result.text
     assert "# First" in result.text
     assert "Lead text" in result.text
-    assert "Piura, continued." in result.text
+    assert r"Piura\*5, continued." in result.text
     assert "filepos" not in result.text
     assert r"[\*5]" not in result.text
     assert "Image00000.jpg" not in result.text
