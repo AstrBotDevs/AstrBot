@@ -14,8 +14,6 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from ..bridge_base import (
     _EventStreamState,
-    _get_runtime_astrbot_config,
-    _get_runtime_file_token_service,
     _get_runtime_html_renderer,
 )
 from ._host import CapabilityMixinHost
@@ -43,16 +41,6 @@ class SystemCapabilityMixin(CapabilityMixinHost):
         self.register(
             self._builtin_descriptor("system.html_render", "Render html template"),
             call_handler=self._system_html_render,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor("system.file.register", "Register file token"),
-            call_handler=self._system_file_register,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor("system.file.handle", "Resolve file token"),
-            call_handler=self._system_file_handle,
             exposed=False,
         )
         self.register(
@@ -106,46 +94,6 @@ class SystemCapabilityMixin(CapabilityMixinHost):
                 "Close sdk event streaming session",
             ),
             call_handler=self._system_event_send_streaming_close,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor(
-                "system.event.llm.get_state",
-                "Read sdk request llm state",
-            ),
-            call_handler=self._system_event_llm_get_state,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor(
-                "system.event.llm.request",
-                "Request default llm for current sdk request",
-            ),
-            call_handler=self._system_event_llm_request,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor(
-                "system.event.result.get",
-                "Read sdk request result",
-            ),
-            call_handler=self._system_event_result_get,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor(
-                "system.event.result.set",
-                "Write sdk request result",
-            ),
-            call_handler=self._system_event_result_set,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor(
-                "system.event.result.clear",
-                "Clear sdk request result",
-            ),
-            call_handler=self._system_event_result_clear,
             exposed=False,
         )
         self.register(
@@ -240,49 +188,6 @@ class SystemCapabilityMixin(CapabilityMixinHost):
             options=options,
         )
         return {"result": result}
-
-    async def _system_file_register(
-        self,
-        _request_id: str,
-        payload: dict[str, Any],
-        _token,
-    ) -> dict[str, Any]:
-        path = str(payload.get("path", "")).strip()
-        if not path:
-            raise AstrBotError.invalid_input("system.file.register requires path")
-        raw_timeout = payload.get("timeout")
-        timeout: float | None
-        if raw_timeout is None:
-            timeout = None
-        else:
-            try:
-                timeout = float(raw_timeout)
-            except (TypeError, ValueError) as exc:
-                raise AstrBotError.invalid_input(
-                    "system.file.register timeout must be a number or null"
-                ) from exc
-        file_token = await _get_runtime_file_token_service().register_file(
-            path, timeout
-        )
-        callback_host = _get_runtime_astrbot_config().get("callback_api_base")
-        if not callback_host:
-            raise AstrBotError.invalid_input(
-                "callback_api_base is required for system.file.register"
-            )
-        base_url = str(callback_host).rstrip("/")
-        return {"token": file_token, "url": f"{base_url}/api/file/{file_token}"}
-
-    async def _system_file_handle(
-        self,
-        _request_id: str,
-        payload: dict[str, Any],
-        _token,
-    ) -> dict[str, Any]:
-        file_token = str(payload.get("token", "")).strip()
-        if not file_token:
-            raise AstrBotError.invalid_input("system.file.handle requires token")
-        path = await _get_runtime_file_token_service().handle_file(file_token)
-        return {"path": str(path)}
 
     async def _system_session_waiter_register(
         self,
@@ -421,86 +326,6 @@ class SystemCapabilityMixin(CapabilityMixinHost):
                 )
             )
         }
-
-    async def _system_event_llm_get_state(
-        self,
-        request_id: str,
-        payload: dict[str, Any],
-        _token,
-    ) -> dict[str, Any]:
-        overlay_request_id = self._overlay_request_id(request_id, payload)
-        overlay = self._plugin_bridge.get_request_overlay_by_request_id(
-            overlay_request_id
-        )
-        should_call_llm = self._plugin_bridge.get_should_call_llm_for_request(
-            overlay_request_id
-        )
-        return {
-            "should_call_llm": bool(should_call_llm),
-            "requested_llm": bool(overlay.requested_llm)
-            if overlay is not None
-            else False,
-        }
-
-    async def _system_event_llm_request(
-        self,
-        request_id: str,
-        payload: dict[str, Any],
-        _token,
-    ) -> dict[str, Any]:
-        overlay_request_id = self._overlay_request_id(request_id, payload)
-        self._plugin_bridge.request_llm_for_request(overlay_request_id)
-        return await self._system_event_llm_get_state(
-            request_id,
-            {"_request_scope_id": overlay_request_id},
-            _token,
-        )
-
-    async def _system_event_result_get(
-        self,
-        request_id: str,
-        payload: dict[str, Any],
-        _token,
-    ) -> dict[str, Any]:
-        overlay_request_id = self._overlay_request_id(request_id, payload)
-        return {
-            "result": self._plugin_bridge.get_result_payload_for_request(
-                overlay_request_id
-            )
-        }
-
-    async def _system_event_result_set(
-        self,
-        request_id: str,
-        payload: dict[str, Any],
-        _token,
-    ) -> dict[str, Any]:
-        result_payload = payload.get("result")
-        if not isinstance(result_payload, dict):
-            raise AstrBotError.invalid_input(
-                "system.event.result.set requires an object result payload"
-            )
-        overlay_request_id = self._overlay_request_id(request_id, payload)
-        if not self._plugin_bridge.set_result_for_request(
-            overlay_request_id,
-            result_payload,
-        ):
-            raise AstrBotError.cancelled("The SDK request overlay has been closed")
-        return {
-            "result": self._plugin_bridge.get_result_payload_for_request(
-                overlay_request_id
-            )
-        }
-
-    async def _system_event_result_clear(
-        self,
-        request_id: str,
-        payload: dict[str, Any],
-        _token,
-    ) -> dict[str, Any]:
-        overlay_request_id = self._overlay_request_id(request_id, payload)
-        self._plugin_bridge.clear_result_for_request(overlay_request_id)
-        return {}
 
     async def _system_event_handler_whitelist_get(
         self,

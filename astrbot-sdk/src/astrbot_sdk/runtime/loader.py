@@ -67,11 +67,11 @@ import sys
 import threading
 import types
 import typing
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from importlib import import_module
-from pathlib import Path
-from collections.abc import Sequence
 from importlib.machinery import ModuleSpec, PathFinder
+from pathlib import Path
 from typing import Any, Literal, TypeAlias, TypeVar, cast
 
 import yaml

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import json
 import uuid
 from typing import TYPE_CHECKING, Any
 

@@ -879,7 +879,7 @@ class SdkPluginBridge:
     def has_active_sdk_command_handlers(self) -> bool:
         if not self._records:
             return False
-        for record in self._store.snapshot_records():
+        for record in self._snapshot_records():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -904,7 +904,7 @@ class SdkPluginBridge:
         for conflict in conflicts:
             conflict_map.setdefault(conflict.sdk.plugin_name, []).append(conflict)
 
-        for record in self._store.snapshot_records():
+        for record in self._snapshot_records():
             record.issues = [
                 issue
                 for issue in record.issues
@@ -980,7 +980,7 @@ class SdkPluginBridge:
 
     def _collect_sdk_command_registrations(self) -> list[Any]:
         registrations: list[Any] = []
-        for record in self._store.snapshot_records_sorted():
+        for record in self._snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1152,7 +1152,7 @@ class SdkPluginBridge:
         if not root_name:
             return None
         normalized_platform = self._normalize_platform_name(event.get_platform_name())
-        for record in self._store.snapshot_records_sorted():
+        for record in self._snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1348,7 +1348,7 @@ class SdkPluginBridge:
         platform_name: str = "",
     ) -> list[tuple[SdkPluginRecord, HandlerDescriptor]]:
         matches: list[tuple[int, int, int, SdkPluginRecord, HandlerDescriptor]] = []
-        for record in self._store.snapshot_records():
+        for record in self._snapshot_records():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1430,7 +1430,7 @@ class SdkPluginBridge:
 
     def get_handlers_by_event_type(self, event_type: str) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
-        for record in self._store.snapshot_records_sorted():
+        for record in self._snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1479,7 +1479,7 @@ class SdkPluginBridge:
         entries: list[dict[str, Any]] = []
         seen_names: set[str] = set()
 
-        for record in self._store.snapshot_records_sorted():
+        for record in self._snapshot_records_sorted():
             if record.state in {
                 SDK_STATE_DISABLED,
                 SDK_STATE_FAILED,
@@ -1517,7 +1517,7 @@ class SdkPluginBridge:
         return entries
 
     def get_handler_by_full_name(self, full_name: str) -> dict[str, Any] | None:
-        for record in self._store.snapshot_records():
+        for record in self._snapshot_records():
             for handler in record.handlers:
                 if handler.descriptor.id == full_name:
                     return self._descriptor_metadata(
@@ -1528,14 +1528,14 @@ class SdkPluginBridge:
 
     def list_dashboard_commands(self) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
-        for record in self._store.snapshot_records_sorted():
+        for record in self._snapshot_records_sorted():
             items.extend(self._build_dashboard_command_items(record))
         items.sort(key=lambda item: str(item.get("effective_command", "")).lower())
         return items
 
     def list_dashboard_tools(self) -> list[dict[str, Any]]:
         tools: list[dict[str, Any]] = []
-        for record in self._store.snapshot_records_sorted():
+        for record in self._snapshot_records_sorted():
             display_name = str(
                 record.plugin.manifest_data.get("display_name") or record.plugin_id
             )
@@ -2778,6 +2778,18 @@ class SdkPluginBridge:
 
     def _discover_plugins(self):
         return discover_plugins(self.plugins_dir)
+
+    def _snapshot_records(self) -> list[SdkPluginRecord]:
+        """Preserve compatibility for callers that replace ``bridge._records``."""
+        if self._records is self._store.records:
+            return self._store.snapshot_records()
+        return list(self._records.values())
+
+    def _snapshot_records_sorted(self) -> list[SdkPluginRecord]:
+        """Mirror store ordering even when tests inject a plain record mapping."""
+        if self._records is self._store.records:
+            return self._store.snapshot_records_sorted()
+        return sorted(self._records.values(), key=lambda item: item.load_order)
 
     @staticmethod
     def _make_mcp_client() -> MCPClient:

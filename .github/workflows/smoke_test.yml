@@ -24,8 +24,6 @@ jobs:
           - macos-latest
           - windows-latest
         python-version:
-          - '3.10'
-          - '3.11'
           - '3.12'
           - '3.13'
           - '3.14'
@@ -51,6 +49,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv pip install --system -r requirements.txt
+          uv pip install --system -e ./astrbot-sdk
         timeout-minutes: 15
 
       - name: Run smoke tests
