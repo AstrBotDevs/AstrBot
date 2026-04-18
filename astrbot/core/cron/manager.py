@@ -277,7 +277,7 @@ class CronJobManager:
             extras=extras,
         )
 
-    async def _woke_main_agent(
+    async def _dispatch_to_pipeline(
         self,
         *,
         message: str,
@@ -324,6 +324,15 @@ class CronJobManager:
         if cron_payload.get("origin", "tool") == "api":
             cron_event.role = "admin"
 
+        # 步骤 1: 将事件放入事件队列，触发插件钩子（如 on_llm_response, on_decorating_result）
+        # 设置 skip_llm 标志，提示 Pipeline 跳过 LLM 调用（需要 Pipeline 支持）
+        cron_event.set_extra("skip_llm", True)
+        await self._event_queue.put(cron_event)
+        logger.debug(
+            f"Cron job {extras.get('cron_job', {}).get('id')} dispatched to pipeline (hooks triggered)."
+        )
+
+        # 步骤 2: 直接调用 build_main_agent 处理 LLM 请求（注入系统提示词）
         tool_call_timeout = cfg.get("provider_settings", {}).get(
             "tool_call_timeout", 120
         )
@@ -335,7 +344,8 @@ class CronJobManager:
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
         req.conversation = conv
-        # finetine the messages
+
+        # 注入历史对话上下文
         context = json.loads(conv.history)
         if context:
             req.contexts = context
@@ -347,6 +357,8 @@ class CronJobManager:
                 f"{context_dump}\n"
                 f"---\n"
             )
+
+        # 注入 cron 任务系统提示词
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
             cron_job=cron_job_str
@@ -375,6 +387,8 @@ class CronJobManager:
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+
+        # 步骤 3: 保存历史记录（含 cron 元数据）
         cron_meta = extras.get("cron_job", {}) if extras else {}
         summary_note = (
             f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
@@ -394,52 +408,6 @@ class CronJobManager:
         if not llm_resp:
             logger.warning("Cron job agent got no response")
             return
-
-    async def _dispatch_to_pipeline(
-        self,
-        *,
-        message: str,
-        session_str: str,
-        extras: dict,
-    ) -> None:
-        """将定时任务消息放入事件队列，使其经过完整的 PipelineScheduler 流程。"""
-        from astrbot.core.cron.events import CronMessageEvent
-        from astrbot.core.platform.message_session import MessageSession
-
-        try:
-            session = (
-                session_str
-                if isinstance(session_str, MessageSession)
-                else MessageSession.from_str(session_str)
-            )
-        except Exception as e:
-            logger.error(f"Invalid session for cron job: {e}")
-            return
-
-        cron_event = CronMessageEvent(
-            context=self.ctx,
-            session=session,
-            message=message,
-            extras=extras or {},
-            message_type=session.message_type,
-        )
-
-        # 判断用户角色
-        umo = cron_event.unified_msg_origin
-        cfg = self.ctx.get_config(umo=umo)
-        cron_payload = extras.get("cron_payload", {}) if extras else {}
-        sender_id = cron_payload.get("sender_id")
-        admin_ids = cfg.get("admins_id", [])
-        if admin_ids:
-            cron_event.role = "admin" if sender_id in admin_ids else "member"
-        if cron_payload.get("origin", "tool") == "api":
-            cron_event.role = "admin"
-
-        # 将事件放入事件队列，由 EventBus 调度到 PipelineScheduler
-        await self._event_queue.put(cron_event)
-        logger.debug(
-            f"Cron job {extras.get('cron_job', {}).get('id')} dispatched to pipeline."
-        )
 
 
 __all__ = ["CronJobManager"]
