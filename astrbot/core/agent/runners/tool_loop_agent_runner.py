@@ -734,7 +734,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             yield AgentResponse(
                 type="llm_result",
                 data=AgentResponseData(
-                    chain=MessageChain().message(llm_resp.reasoning_content),
+                    chain=MessageChain(type="reasoning").message(
+                        llm_resp.reasoning_content,
+                    ),
                 ),
             )
 
@@ -762,7 +764,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         yield AgentResponse(
                             type="llm_result",
                             data=AgentResponseData(
-                                chain=MessageChain().message(llm_resp.reasoning_content),
+                                chain=MessageChain(type="reasoning").message(
+                                    llm_resp.reasoning_content,
+                                ),
                             ),
                         )
                     await self._complete_with_assistant_response(llm_resp)
