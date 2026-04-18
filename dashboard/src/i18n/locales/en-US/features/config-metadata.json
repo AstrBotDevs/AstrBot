@@ -1007,6 +1007,10 @@
         "description": "Console Log Level",
         "hint": "Log level for console output."
       },
+      "log_colors": {
+        "description": "Log Color Settings",
+        "hint": "Customizable log color settings, using ANSI escape sequence color codes to represent the colors for DEBUG, INFO, WARNING, ERROR, and CRITICAL logs, separated by commas. If parsing fails, AstrBot will use the default settings. (Basic format: (bold or not);(color code) For example: '1;32' represents bold green)"
+      },
       "log_file_enable": {
         "description": "Enable File Logging",
         "hint": "Write logs to a file in addition to the console."

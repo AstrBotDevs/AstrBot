@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import re
 import sys
 import time
 from asyncio import Queue
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger as _raw_loguru_logger
 
-from astrbot.core.config.default import VERSION
+from astrbot.core.config.default import VERSION, DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 CACHED_SIZE = 500
@@ -38,7 +39,8 @@ class _RecordEnricherFilter(logging.Filter):
 class _QueueAnsiColorFilter(logging.Filter):
     """Attach ANSI color prefix for WebUI console rendering."""
 
-    _LEVEL_COLOR = {
+    _level_color = None
+    _DEFAULT_COLOR = {
         "DEBUG": "\u001b[1;34m",
         "INFO": "\u001b[1;36m",
         "WARNING": "\u001b[1;33m",
@@ -46,8 +48,41 @@ class _QueueAnsiColorFilter(logging.Filter):
         "CRITICAL": "\u001b[1;31m",
     }
 
+    _COLOR_PATTERN = re.compile(r'^\u001b\[[0-9;]*m$')
+
+    def __init__(self) -> None:
+        super().__init__()
+        if _QueueAnsiColorFilter._level_color is None:
+            from astrbot.core import astrbot_config
+            _QueueAnsiColorFilter._level_color = self.parse_ansi_config(astrbot_config)
+
+    def parse_ansi_config(self, config: dict):
+        ansi_str = config.get("log_colors", DEFAULT_CONFIG['log_colors']).strip()
+        color_list = [c.strip() for c in ansi_str.split(",")]
+        
+        if len(color_list) != 5:
+            return _QueueAnsiColorFilter._DEFAULT_COLOR
+        
+        levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        parsed = {}
+        
+        for level, code in zip(levels, color_list):
+            ansi_code = f"\u001b[{code}m"
+            if not self.is_ansi_escape(ansi_code):
+                return _QueueAnsiColorFilter._DEFAULT_COLOR
+            parsed[level] = ansi_code
+
+        return parsed
+
+    def is_ansi_escape(self, s: str):
+        # 匹配标准 ANSI 转义序列：ESC [ 参数 字母
+        return bool(_QueueAnsiColorFilter._COLOR_PATTERN.match(s))
+
     def filter(self, record: logging.LogRecord) -> bool:
-        record.ansi_prefix = self._LEVEL_COLOR.get(record.levelname, "\u001b[0m")
+        colors = _QueueAnsiColorFilter._level_color
+        if not isinstance(colors,dict):
+            colors = _QueueAnsiColorFilter._DEFAULT_COLOR
+        record.ansi_prefix = colors.get(record.levelname, "\u001b[0m")
         record.ansi_reset = "\u001b[0m"
         return True
 
