@@ -56,37 +56,12 @@ __all__ = [
     "_load_group_plugin_specs",
 ]
 
-GLOBAL_MCP_RISK_ATTR = "__astrbot_acknowledge_global_mcp_risk__"
-
 
 @dataclass(slots=True)
 class GroupPluginRuntimeState:
     plugin: PluginSpec
     loaded_plugin: LoadedPlugin
     lifecycle_context: RuntimeContext
-
-
-def _plugin_acknowledges_global_mcp_risk(instances: list[Any]) -> bool:
-    return any(
-        bool(getattr(instance.__class__, GLOBAL_MCP_RISK_ATTR, False))
-        for instance in instances
-    )
-
-
-def _metadata_plugin_instances(loaded_plugin: Any) -> list[Any]:
-    """Return plugin instances for metadata-only inspection.
-
-    Metadata serialization is also exercised by lightweight tests that stub
-    ``loaded_plugin`` with only the fields relevant to the payload. Missing
-    ``instances`` means the plugin cannot acknowledge the global MCP risk, but
-    it should not break issue/metadata reporting.
-    """
-    instances = getattr(loaded_plugin, "instances", [])
-    if isinstance(instances, list):
-        return instances
-    if isinstance(instances, tuple):
-        return list(instances)
-    return []
 
 
 def _load_group_plugin_specs(group_metadata_path: Path) -> tuple[str, list[PluginSpec]]:
@@ -146,6 +121,62 @@ def _build_worker_registry_entry(
         "version": str(manifest.get("version") or "0.0.0"),
         "enabled": enabled,
         "config": load_plugin_config(plugin),
+    }
+
+
+def _build_worker_initialize_metadata(
+    *,
+    worker_id: str,
+    plugins: list[PluginSpec],
+    loaded_plugins: list[tuple[PluginSpec, LoadedPlugin]],
+    skipped_plugins: dict[str, str],
+    issues: list[PluginDiscoveryIssue],
+) -> dict[str, Any]:
+    loaded_plugin_names = [plugin.name for plugin, _loaded_plugin in loaded_plugins]
+    enabled_plugins = set(loaded_plugin_names)
+    capability_sources: dict[str, str] = {}
+    llm_tools: list[dict[str, Any]] = []
+    agents: list[dict[str, Any]] = []
+
+    for plugin, loaded_plugin in loaded_plugins:
+        plugin_name = plugin.name
+        capability_sources.update(
+            {
+                capability.descriptor.name: plugin_name
+                for capability in loaded_plugin.capabilities
+            }
+        )
+        llm_tools.extend(
+            {
+                **tool.spec.to_payload(),
+                "plugin_id": plugin_name,
+            }
+            for tool in loaded_plugin.llm_tools
+        )
+        agents.extend(
+            {
+                **agent.spec.to_payload(),
+                "plugin_id": plugin_name,
+            }
+            for agent in loaded_plugin.agents
+        )
+
+    return {
+        "worker_id": worker_id,
+        "plugins": [plugin.name for plugin in plugins],
+        "loaded_plugins": loaded_plugin_names,
+        "skipped_plugins": dict(skipped_plugins),
+        "worker_registry": [
+            _build_worker_registry_entry(
+                plugin,
+                enabled=plugin.name in enabled_plugins,
+            )
+            for plugin in plugins
+        ],
+        "capability_sources": capability_sources,
+        "issues": [issue.to_payload() for issue in issues],
+        "llm_tools": llm_tools,
+        "agents": agents,
     }
 
 
@@ -361,50 +392,16 @@ class GroupWorkerRuntime:
         await self.capability_dispatcher.cancel(request_id)
 
     def _initialize_metadata(self) -> dict[str, Any]:
-        return {
-            "worker_id": self.worker_id,
-            "plugins": [plugin.name for plugin in self.plugins],
-            "loaded_plugins": [
-                state.plugin.name for state in self._active_plugin_states
-            ],
-            "skipped_plugins": dict(self.skipped_plugins),
-            "worker_registry": [
-                _build_worker_registry_entry(
-                    plugin,
-                    enabled=plugin.name
-                    in {state.plugin.name for state in self._active_plugin_states},
-                )
-                for plugin in self.plugins
-            ],
-            "capability_sources": {
-                capability.descriptor.name: state.plugin.name
+        return _build_worker_initialize_metadata(
+            worker_id=self.worker_id,
+            plugins=self.plugins,
+            loaded_plugins=[
+                (state.plugin, state.loaded_plugin)
                 for state in self._active_plugin_states
-                for capability in state.loaded_plugin.capabilities
-            },
-            "issues": [issue.to_payload() for issue in self.issues],
-            "llm_tools": [
-                {
-                    **tool.spec.to_payload(),
-                    "plugin_id": state.plugin.name,
-                }
-                for state in self._active_plugin_states
-                for tool in state.loaded_plugin.llm_tools
             ],
-            "agents": [
-                {
-                    **agent.spec.to_payload(),
-                    "plugin_id": state.plugin.name,
-                }
-                for state in self._active_plugin_states
-                for agent in state.loaded_plugin.agents
-            ],
-            "acknowledge_global_mcp_risk": any(
-                _plugin_acknowledges_global_mcp_risk(
-                    _metadata_plugin_instances(state.loaded_plugin)
-                )
-                for state in self._active_plugin_states
-            ),
-        }
+            skipped_plugins=self.skipped_plugins,
+            issues=self.issues,
+        )
 
     async def _run_lifecycle(
         self,
@@ -464,37 +461,13 @@ class PluginWorkerRuntime:
                 provided_capabilities=[
                     item.descriptor for item in self.loaded_plugin.capabilities
                 ],
-                metadata={
-                    "worker_id": self.worker_id,
-                    "plugins": [self.plugin.name],
-                    "loaded_plugins": [self.plugin.name],
-                    "skipped_plugins": {},
-                    "worker_registry": [
-                        _build_worker_registry_entry(self.plugin, enabled=True)
-                    ],
-                    "issues": [issue.to_payload() for issue in self.issues],
-                    "capability_sources": {
-                        item.descriptor.name: self.plugin.name
-                        for item in self.loaded_plugin.capabilities
-                    },
-                    "llm_tools": [
-                        {
-                            **item.spec.to_payload(),
-                            "plugin_id": self.plugin.name,
-                        }
-                        for item in self.loaded_plugin.llm_tools
-                    ],
-                    "agents": [
-                        {
-                            **item.spec.to_payload(),
-                            "plugin_id": self.plugin.name,
-                        }
-                        for item in self.loaded_plugin.agents
-                    ],
-                    "acknowledge_global_mcp_risk": _plugin_acknowledges_global_mcp_risk(
-                        _metadata_plugin_instances(self.loaded_plugin)
-                    ),
-                },
+                metadata=_build_worker_initialize_metadata(
+                    worker_id=self.worker_id,
+                    plugins=[self.plugin],
+                    loaded_plugins=[(self.plugin, self.loaded_plugin)],
+                    skipped_plugins={},
+                    issues=self.issues,
+                ),
             )
         except Exception:
             if lifecycle_started:

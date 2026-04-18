@@ -15,25 +15,6 @@ from ..bridge_base import (
 
 
 class ProviderCapabilityMixin(CapabilityRouterBridgeBase):
-    @staticmethod
-    def _active_local_mcp_tool_names(plugin: Any | None) -> list[str]:
-        if plugin is None:
-            return []
-        local_tools: list[str] = []
-        for server in plugin.local_mcp_servers.values():
-            if not bool(server.get("active", False)):
-                continue
-            if not bool(server.get("running", False)):
-                continue
-            server_name = str(server.get("name", "")).strip()
-            if not server_name:
-                continue
-            for tool_name in server.get("tools", []):
-                if not isinstance(tool_name, str) or not tool_name.strip():
-                    continue
-                local_tools.append(f"mcp.{server_name}.{tool_name}")
-        return local_tools
-
     def _provider_payload(
         self, kind: str, provider_id: str | None
     ) -> dict[str, Any] | None:
@@ -860,15 +841,14 @@ class ProviderCapabilityMixin(CapabilityRouterBridgeBase):
         requested_tools = payload.get("tool_names")
         active_tools: list[str] = []
         if plugin is not None:
-            local_tools = self._active_local_mcp_tool_names(plugin)
             if isinstance(requested_tools, list) and requested_tools:
                 active_tools = [
                     name
                     for name in (str(item) for item in requested_tools)
-                    if name in plugin.active_llm_tools or name in local_tools
+                    if name in plugin.active_llm_tools
                 ]
             else:
-                active_tools = sorted([*plugin.active_llm_tools, *local_tools])
+                active_tools = sorted(plugin.active_llm_tools)
         prompt = str(payload.get("prompt", "") or "")
         suffix = ""
         if active_tools:

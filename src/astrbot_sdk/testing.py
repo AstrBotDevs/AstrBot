@@ -260,16 +260,6 @@ class PluginHarness:
             plugin_id=self.plugin.name,
         )
         plugin_metadata = _plugin_metadata_from_spec(self.plugin, enabled=True)
-        plugin_metadata["acknowledge_global_mcp_risk"] = any(
-            bool(
-                getattr(
-                    instance.__class__,
-                    "__astrbot_acknowledge_global_mcp_risk__",
-                    False,
-                )
-            )
-            for instance in self.loaded_plugin.instances
-        )
         self.router.upsert_plugin(
             metadata=plugin_metadata,
             config=load_plugin_config(self.plugin),

@@ -31,7 +31,6 @@ from .clients.managers import (
     PersonaRecord,
     PersonaUpdateParams,
 )
-from .clients.mcp import MCPManagerClient, MCPServerRecord, MCPServerScope, MCPSession
 from .clients.metadata import PluginMetadata, StarMetadata
 from .clients.permission import (
     PermissionCheckResult,
@@ -54,14 +53,12 @@ from .conversation import (
     ConversationState,
 )
 from .decorators import (
-    acknowledge_global_mcp_risk,
     admin_only,
     background_task,
     conversation_command,
     cooldown,
     group_only,
     http_api,
-    mcp_server,
     message_types,
     on_command,
     on_event,
@@ -147,10 +144,6 @@ __all__ = [
     "KnowledgeBaseRetrieveResultItem",
     "KnowledgeBaseUpdateParams",
     "ManagedProviderRecord",
-    "MCPManagerClient",
-    "MCPSession",
-    "MCPServerRecord",
-    "MCPServerScope",
     "MediaHelper",
     "MessageHistoryManagerClient",
     "MessageHistoryPage",
@@ -190,7 +183,6 @@ __all__ = [
     "StarTools",
     "UnknownComponent",
     "Video",
-    "acknowledge_global_mcp_risk",
     "admin_only",
     "all_of",
     "any_of",
@@ -201,7 +193,6 @@ __all__ = [
     "custom_filter",
     "group_only",
     "http_api",
-    "mcp_server",
     "message_types",
     "on_command",
     "on_event",

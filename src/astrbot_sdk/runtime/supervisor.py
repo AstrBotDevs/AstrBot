@@ -173,6 +173,14 @@ def _group_records_by_plugin(
     return grouped
 
 
+def _plugin_ids_from_worker_registry(entries: list[dict[str, Any]]) -> set[str]:
+    plugin_ids = {
+        str(item.get("name", "")).strip() for item in entries if isinstance(item, dict)
+    }
+    plugin_ids.discard("")
+    return plugin_ids
+
+
 def _wire_codec_cli_name(codec: ProtocolCodec) -> str:
     if isinstance(codec, MsgpackProtocolCodec):
         return "msgpack"
@@ -350,12 +358,7 @@ class WorkerSession:
                     f"expected {self.worker_id!r}, got {self.peer.remote_peer.name!r}"
                 )
 
-        plugin_ids = {
-            str(item.get("name", "")).strip()
-            for item in self.worker_registry
-            if isinstance(item, dict)
-        }
-        plugin_ids.discard("")
+        plugin_ids = _plugin_ids_from_worker_registry(self.worker_registry)
         if not plugin_ids and self.plugins:
             plugin_ids = {plugin.name for plugin in self.plugins}
         if self.remote_worker is not None and not plugin_ids:
@@ -661,12 +664,7 @@ class SupervisorRuntime:
 
     @staticmethod
     def _session_plugin_ids(session: WorkerSession) -> set[str]:
-        plugin_ids = {
-            str(item.get("name", "")).strip()
-            for item in session.worker_registry
-            if isinstance(item, dict)
-        }
-        plugin_ids.discard("")
+        plugin_ids = _plugin_ids_from_worker_registry(session.worker_registry)
         if plugin_ids:
             return plugin_ids
         return {plugin.name for plugin in session.plugins}

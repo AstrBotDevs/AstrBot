@@ -9,7 +9,6 @@
     - LLMClient: 文本/结构化/流式 LLM 调用
     - MemoryClient: 记忆搜索、保存、读取、删除
     - DBClient: 键值存储 get/set/delete/list
-    - FileServiceClient: 文件令牌注册与解析
     - PlatformClient: 平台消息发送与成员查询
     - ProviderClient: Provider 元信息与专用 provider proxy
     - PersonaManagerClient: 人格管理
@@ -21,7 +20,6 @@
 """
 
 from .db import DBClient
-from .files import FileRegistration, FileServiceClient
 from .http import HTTPClient
 from .llm import ChatMessage, LLMClient, LLMResponse
 from .managers import (
@@ -41,7 +39,6 @@ from .managers import (
     PersonaRecord,
     PersonaUpdateParams,
 )
-from .mcp import MCPManagerClient, MCPServerRecord, MCPServerScope, MCPSession
 from .memory import MemoryClient
 from .metadata import MetadataClient, PluginMetadata, StarMetadata
 from .permission import PermissionCheckResult, PermissionClient, PermissionManagerClient
@@ -63,8 +60,6 @@ __all__ = [
     "ConversationRecord",
     "ConversationUpdateParams",
     "DBClient",
-    "FileRegistration",
-    "FileServiceClient",
     "HTTPClient",
     "KnowledgeBaseCreateParams",
     "KnowledgeBaseManagerClient",
@@ -75,10 +70,6 @@ __all__ = [
     "MessageHistorySender",
     "LLMClient",
     "LLMResponse",
-    "MCPManagerClient",
-    "MCPSession",
-    "MCPServerRecord",
-    "MCPServerScope",
     "MemoryClient",
     "ManagedProviderRecord",
     "MetadataClient",
