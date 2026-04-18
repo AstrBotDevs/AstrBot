@@ -100,10 +100,9 @@ class KookPlatformAdapter(Platform):
         elif event_type == KookMessageType.SYSTEM:
             logger.debug(f'[KOOK] 消息为系统通知, 通知类型为: "{event.extra.type}"')
             logger.debug(f"[KOOK] 原始消息数据: {event.to_json()}")
-
             if isinstance(event.extra.type, KookRoleExtraType):
                 logger.info(
-                    f'[KOOK] 收到频道角色更新通知, 类型为"{event.extra.type.value}", 刷新角色缓存'
+                    f'[KOOK] 收到频道角色更新通知, 类型为"{event.extra.type.value}", 刷新角色id缓存'
                 )
                 self._roles_cache.clean_roles_cache()
 
