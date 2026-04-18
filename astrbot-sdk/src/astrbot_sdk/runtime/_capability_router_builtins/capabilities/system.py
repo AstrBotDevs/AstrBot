@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import uuid
 from typing import Any
 
 from ....errors import AstrBotError
@@ -34,16 +33,6 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
         self.register(
             self._builtin_descriptor("system.html_render", "渲染 HTML 模板"),
             call_handler=self._system_html_render,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor("system.file.register", "注册文件令牌"),
-            call_handler=self._system_file_register,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor("system.file.handle", "解析文件令牌"),
-            call_handler=self._system_file_handle,
             exposed=False,
         )
         self.register(
@@ -98,37 +87,6 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
         )
         self.register(
             self._builtin_descriptor(
-                "system.event.llm.get_state",
-                "读取当前请求的默认 LLM 状态",
-            ),
-            call_handler=self._system_event_llm_get_state,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor(
-                "system.event.llm.request",
-                "请求当前事件继续进入默认 LLM 链路",
-            ),
-            call_handler=self._system_event_llm_request,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor("system.event.result.get", "读取当前请求结果"),
-            call_handler=self._system_event_result_get,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor("system.event.result.set", "写入当前请求结果"),
-            call_handler=self._system_event_result_set,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor("system.event.result.clear", "清理当前请求结果"),
-            call_handler=self._system_event_result_clear,
-            exposed=False,
-        )
-        self.register(
-            self._builtin_descriptor(
                 "system.event.handler_whitelist.get",
                 "读取当前请求 handler 白名单",
             ),
@@ -169,9 +127,6 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
         overlay = self._request_overlays.get(request_id)
         if overlay is None:
             overlay = {
-                "should_call_llm": False,
-                "requested_llm": False,
-                "result": None,
                 "handler_whitelist": None,
             }
             self._request_overlays[request_id] = overlay
@@ -206,83 +161,6 @@ class SystemCapabilityMixin(CapabilityRouterBridgeBase):
         if bool(payload.get("return_url", True)):
             return {"result": f"mock://html_render/{tmpl}"}
         return {"result": json.dumps({"tmpl": tmpl, "data": data}, ensure_ascii=False)}
-
-    async def _system_file_register(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        path = str(payload.get("path", "")).strip()
-        if not path:
-            raise AstrBotError.invalid_input("system.file.register requires path")
-        file_token = uuid.uuid4().hex
-        self._file_token_store[file_token] = path
-        return {"token": file_token, "url": f"mock://file/{file_token}"}
-
-    async def _system_file_handle(
-        self, _request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        file_token = str(payload.get("token", "")).strip()
-        if not file_token:
-            raise AstrBotError.invalid_input("system.file.handle requires token")
-        path = self._file_token_store.pop(file_token, None)
-        if path is None:
-            raise AstrBotError.invalid_input(f"Unknown file token: {file_token}")
-        return {"path": path}
-
-    async def _system_event_llm_get_state(
-        self, request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        overlay = self._ensure_request_overlay(
-            self._overlay_request_id(request_id, payload)
-        )
-        return {
-            "should_call_llm": bool(overlay["should_call_llm"]),
-            "requested_llm": bool(overlay["requested_llm"]),
-        }
-
-    async def _system_event_llm_request(
-        self, request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        overlay_request_id = self._overlay_request_id(request_id, payload)
-        overlay = self._ensure_request_overlay(overlay_request_id)
-        overlay["requested_llm"] = True
-        overlay["should_call_llm"] = True
-        return await self._system_event_llm_get_state(
-            request_id,
-            {"_request_scope_id": overlay_request_id},
-            _token,
-        )
-
-    async def _system_event_result_get(
-        self, request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        overlay = self._ensure_request_overlay(
-            self._overlay_request_id(request_id, payload)
-        )
-        result = overlay.get("result")
-        return {"result": dict(result) if isinstance(result, dict) else None}
-
-    async def _system_event_result_set(
-        self, request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        result = payload.get("result")
-        if not isinstance(result, dict):
-            raise AstrBotError.invalid_input(
-                "system.event.result.set 的 result 必须是 object"
-            )
-        overlay = self._ensure_request_overlay(
-            self._overlay_request_id(request_id, payload)
-        )
-        overlay["result"] = dict(result)
-        return {"result": dict(result)}
-
-    async def _system_event_result_clear(
-        self, request_id: str, payload: dict[str, Any], _token
-    ) -> dict[str, Any]:
-        overlay = self._ensure_request_overlay(
-            self._overlay_request_id(request_id, payload)
-        )
-        overlay["result"] = None
-        return {}
 
     async def _system_event_handler_whitelist_get(
         self, request_id: str, payload: dict[str, Any], _token

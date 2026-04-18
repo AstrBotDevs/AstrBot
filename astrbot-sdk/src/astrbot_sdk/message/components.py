@@ -8,18 +8,14 @@ SDK工作线程应该保持轻量级并且不能依赖于主机核心引导程�
 from __future__ import annotations
 
 import asyncio
-import base64
 import inspect
 import os
-import tempfile
-import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 from urllib.request import urlretrieve
 
-from .._internal.star_runtime import current_runtime_context
 from ..errors import AstrBotError
 
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
@@ -27,43 +23,8 @@ _RECORD_SUFFIXES = {".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a"}
 _VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
 
 
-def _temp_path(prefix: str, suffix: str = "") -> Path:
-    return Path(tempfile.gettempdir()) / f"{prefix}_{uuid.uuid4().hex}{suffix}"
-
-
-def _guess_suffix_from_url(url: str, fallback: str = "") -> str:
-    suffix = Path(urlparse(url).path).suffix
-    return suffix or fallback
-
-
-def _download_to_temp(url: str, prefix: str, fallback_suffix: str = "") -> str:
-    target = _temp_path(prefix, _guess_suffix_from_url(url, fallback_suffix))
-    urlretrieve(url, target)
-    return str(target.resolve())
-
-
-async def _download_to_temp_async(
-    url: str,
-    prefix: str,
-    fallback_suffix: str = "",
-) -> str:
-    return await asyncio.to_thread(
-        _download_to_temp,
-        url,
-        prefix,
-        fallback_suffix,
-    )
-
-
 def _stringify_mapping(mapping: Mapping[Any, Any]) -> dict[str, Any]:
     return {str(key): value for key, value in mapping.items()}
-
-
-async def _register_file_to_service(path: str) -> str:
-    context = current_runtime_context()
-    if context is None:
-        raise RuntimeError("message component file service requires runtime context")
-    return await context._register_file_url(path)
 
 
 def _reply_chain_payloads_sync(value: Any) -> list[dict[str, Any]]:
@@ -262,25 +223,6 @@ class Image(BaseMessageComponent):
     def fromBase64(base64_data: str, **kwargs: Any) -> Image:
         return Image(f"base64://{base64_data}", **kwargs)
 
-    async def convert_to_file_path(self) -> str:
-        url = self.url or self.file
-        if not url:
-            raise ValueError("No valid file or URL provided")
-        if url.startswith("file:///"):
-            return os.path.abspath(url[8:])
-        if url.startswith(("http://", "https://")):
-            return await _download_to_temp_async(url, "imgseg", ".jpg")
-        if url.startswith("base64://"):
-            file_path = _temp_path("imgseg", ".jpg")
-            file_path.write_bytes(base64.b64decode(url.removeprefix("base64://")))
-            return str(file_path.resolve())
-        if os.path.exists(url):
-            return os.path.abspath(url)
-        raise ValueError(f"not a valid file: {url}")
-
-    async def register_to_file_service(self) -> str:
-        return await _register_file_to_service(await self.convert_to_file_path())
-
 
 class Record(BaseMessageComponent):
     type = "record"
@@ -303,22 +245,6 @@ class Record(BaseMessageComponent):
     def fromURL(url: str, **kwargs: Any) -> Record:
         return Record(url, **kwargs)
 
-    async def convert_to_file_path(self) -> str:
-        if self.file.startswith("file:///"):
-            return os.path.abspath(self.file[8:])
-        if self.file.startswith(("http://", "https://")):
-            return await _download_to_temp_async(self.file, "recordseg", ".dat")
-        if self.file.startswith("base64://"):
-            file_path = _temp_path("recordseg", ".dat")
-            file_path.write_bytes(base64.b64decode(self.file.removeprefix("base64://")))
-            return str(file_path.resolve())
-        if os.path.exists(self.file):
-            return os.path.abspath(self.file)
-        raise ValueError(f"not a valid file: {self.file}")
-
-    async def register_to_file_service(self) -> str:
-        return await _register_file_to_service(await self.convert_to_file_path())
-
 
 class Video(BaseMessageComponent):
     type = "video"
@@ -336,18 +262,6 @@ class Video(BaseMessageComponent):
     @staticmethod
     def fromURL(url: str, **kwargs: Any) -> Video:
         return Video(url, **kwargs)
-
-    async def convert_to_file_path(self) -> str:
-        if self.file.startswith("file:///"):
-            return os.path.abspath(self.file[8:])
-        if self.file.startswith(("http://", "https://")):
-            return await _download_to_temp_async(self.file, "videoseg")
-        if os.path.exists(self.file):
-            return os.path.abspath(self.file)
-        raise ValueError(f"not a valid file: {self.file}")
-
-    async def register_to_file_service(self) -> str:
-        return await _register_file_to_service(await self.convert_to_file_path())
 
 
 class File(BaseMessageComponent):
@@ -369,32 +283,6 @@ class File(BaseMessageComponent):
         else:
             self.file_ = value
 
-    async def get_file(self, allow_return_url: bool = False) -> str:
-        if allow_return_url and self.url:
-            return self.url
-        if self.file_:
-            path = self.file_
-            if path.startswith("file://"):
-                path = path[7:]
-                if (
-                    os.name == "nt"
-                    and len(path) > 2
-                    and path[0] == "/"
-                    and path[2] == ":"
-                ):
-                    path = path[1:]
-            if os.path.exists(path):
-                return os.path.abspath(path)
-        if self.url:
-            suffix = Path(urlparse(self.url).path).suffix
-            target = await _download_to_temp_async(self.url, "fileseg", suffix)
-            self.file_ = target
-            return target
-        return ""
-
-    async def register_to_file_service(self) -> str:
-        return await _register_file_to_service(await self.get_file())
-
     def toDict(self) -> dict[str, Any]:
         payload_file = self.url or self.file_
         return {
@@ -406,7 +294,7 @@ class File(BaseMessageComponent):
         }
 
     async def to_dict(self) -> dict[str, Any]:
-        payload_file = await self.get_file(allow_return_url=True)
+        payload_file = self.url or self.file_
         return {
             "type": "file",
             "data": {

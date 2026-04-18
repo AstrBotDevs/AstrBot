@@ -81,7 +81,6 @@ HTTP_API_META_ATTR = "__astrbot_http_api_meta__"
 VALIDATE_CONFIG_META_ATTR = "__astrbot_validate_config_meta__"
 PROVIDER_CHANGE_META_ATTR = "__astrbot_provider_change_meta__"
 BACKGROUND_TASK_META_ATTR = "__astrbot_background_task_meta__"
-MCP_SERVER_META_ATTR = "__astrbot_mcp_server_meta__"
 SKILL_META_ATTR = "__astrbot_skill_meta__"
 
 LimiterScope = Literal["session", "user", "group", "global"]
@@ -214,15 +213,6 @@ class BackgroundTaskMeta:
 
 
 @dataclass(slots=True)
-class MCPServerMeta:
-    name: str
-    scope: Literal["local", "global"] = "global"
-    config: dict[str, Any] | None = None
-    timeout: float = 30.0
-    wait_until_ready: bool = True
-
-
-@dataclass(slots=True)
 class SkillMeta:
     name: str
     path: str
@@ -284,13 +274,6 @@ def get_provider_change_meta(func: HandlerCallable) -> ProviderChangeMeta | None
 
 def get_background_task_meta(func: HandlerCallable) -> BackgroundTaskMeta | None:
     return getattr(func, BACKGROUND_TASK_META_ATTR, None)
-
-
-def get_mcp_server_meta(obj: Any) -> list[MCPServerMeta]:
-    values = getattr(obj, MCP_SERVER_META_ATTR, None)
-    if not isinstance(values, list):
-        return []
-    return [item for item in values if isinstance(item, MCPServerMeta)]
 
 
 def get_skill_meta(obj: Any) -> list[SkillMeta]:
@@ -863,39 +846,6 @@ def background_task(
     return decorator
 
 
-def mcp_server(
-    *,
-    name: str,
-    scope: Literal["local", "global"] = "global",
-    config: dict[str, Any] | None = None,
-    timeout: float = 30.0,
-    wait_until_ready: bool = True,
-):
-    normalized_name = str(name).strip()
-    if not normalized_name:
-        raise ValueError("mcp_server(...) requires a non-empty name")
-    if scope not in {"local", "global"}:
-        raise ValueError("mcp_server scope must be 'local' or 'global'")
-    if config is not None and not isinstance(config, dict):
-        raise TypeError("mcp_server config must be a dict")
-    if float(timeout) <= 0:
-        raise ValueError("mcp_server timeout must be positive")
-
-    meta = MCPServerMeta(
-        name=normalized_name,
-        scope=scope,
-        config=dict(config) if isinstance(config, dict) else None,
-        timeout=float(timeout),
-        wait_until_ready=bool(wait_until_ready),
-    )
-
-    def decorator(target):
-        _append_list_meta(target, MCP_SERVER_META_ATTR, meta)
-        return target
-
-    return decorator
-
-
 def register_skill(
     *,
     name: str,
@@ -1380,14 +1330,3 @@ def register_agent(
         return cls
 
     return decorator
-
-
-def acknowledge_global_mcp_risk(cls: type[Any]) -> type[Any]:
-    """Mark an SDK plugin class as eligible to mutate global MCP state.
-
-    This is intentionally a coarse, class-level marker. Runtime enforcement lives
-    in the Core MCP capability bridge.
-    """
-
-    setattr(cls, "__astrbot_acknowledge_global_mcp_risk__", True)
-    return cls

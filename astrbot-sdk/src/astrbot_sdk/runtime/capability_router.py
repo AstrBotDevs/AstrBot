@@ -119,8 +119,6 @@
         system.get_data_dir: 获取插件数据目录
         system.text_to_image: 文本转图片
         system.html_render: 渲染 HTML 模板
-        system.file.register: 注册文件令牌
-        system.file.handle: 解析文件令牌
         system.session_waiter.register: 注册会话等待器
         system.session_waiter.unregister: 注销会话等待器
         system.event.react: 发送事件表情回应
@@ -220,7 +218,6 @@ class _RegisteredPlugin:
     handlers: list[dict[str, Any]]
     llm_tools: dict[str, dict[str, Any]] = field(default_factory=dict)
     active_llm_tools: set[str] = field(default_factory=set)
-    local_mcp_servers: dict[str, dict[str, Any]] = field(default_factory=dict)
     agents: dict[str, dict[str, Any]] = field(default_factory=dict)
     skills: dict[str, dict[str, str]] = field(default_factory=dict)
 
@@ -302,15 +299,11 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         self._session_plugin_configs: dict[str, dict[str, Any]] = {}
         self._session_service_configs: dict[str, dict[str, Any]] = {}
         self._dynamic_command_routes: dict[str, list[dict[str, Any]]] = {}
-        self._file_token_store: dict[str, str] = {}
         self._persona_store: dict[str, dict[str, Any]] = {}
         self._conversation_store: dict[str, dict[str, Any]] = {}
         self._session_current_conversation_ids: dict[str, str] = {}
         self._message_history_store: dict[str, list[dict[str, Any]]] = {}
         self._message_history_next_id = 1
-        self._mcp_session_store: dict[str, dict[str, Any]] = {}
-        self._mcp_global_servers: dict[str, dict[str, Any]] = {}
-        self._mcp_audit_logs: list[dict[str, str]] = []
         self._kb_store: dict[str, dict[str, Any]] = {}
         self._kb_document_store: dict[str, dict[str, dict[str, Any]]] = {}
         self._kb_document_content_store: dict[str, str] = {}
@@ -342,30 +335,17 @@ class CapabilityRouter(BuiltinCapabilityRouterMixin):
         normalized_metadata.setdefault("version", "0.0.0")
         normalized_metadata.setdefault("enabled", True)
         normalized_metadata.setdefault("reserved", False)
-        normalized_metadata.setdefault("acknowledge_global_mcp_risk", False)
         normalized_metadata.setdefault("support_platforms", [])
         normalized_metadata.setdefault("astrbot_version", None)
-        local_mcp_servers = normalized_metadata.pop("local_mcp_servers", {})
-        normalized_servers = (
-            {
-                str(server_name): dict(server_payload)
-                for server_name, server_payload in local_mcp_servers.items()
-                if str(server_name).strip() and isinstance(server_payload, dict)
-            }
-            if isinstance(local_mcp_servers, dict)
-            else {}
-        )
         existing = self._plugins.get(name)
         if existing is not None:
             existing.metadata = normalized_metadata
             existing.config = dict(config or {})
-            existing.local_mcp_servers = normalized_servers
             return
         self._plugins[name] = _RegisteredPlugin(
             metadata=normalized_metadata,
             config=dict(config or {}),
             handlers=[],
-            local_mcp_servers=normalized_servers,
         )
 
     def set_plugin_handlers(

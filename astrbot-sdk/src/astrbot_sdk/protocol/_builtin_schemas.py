@@ -229,24 +229,6 @@ SYSTEM_HTML_RENDER_OUTPUT_SCHEMA = _object_schema(
     required=("result",),
     result={"type": "string"},
 )
-SYSTEM_FILE_REGISTER_INPUT_SCHEMA = _object_schema(
-    required=("path",),
-    path={"type": "string"},
-    timeout=_nullable({"type": "number"}),
-)
-SYSTEM_FILE_REGISTER_OUTPUT_SCHEMA = _object_schema(
-    required=("token", "url"),
-    token={"type": "string"},
-    url={"type": "string"},
-)
-SYSTEM_FILE_HANDLE_INPUT_SCHEMA = _object_schema(
-    required=("token",),
-    token={"type": "string"},
-)
-SYSTEM_FILE_HANDLE_OUTPUT_SCHEMA = _object_schema(
-    required=("path",),
-    path={"type": "string"},
-)
 SYSTEM_SESSION_WAITER_REGISTER_INPUT_SCHEMA = _object_schema(
     required=("session_key",),
     session_key={"type": "string"},
@@ -1807,30 +1789,6 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": MCP_SESSION_CLOSE_INPUT_SCHEMA,
         "output": MCP_SESSION_CLOSE_OUTPUT_SCHEMA,
     },
-    "mcp.global.register": {
-        "input": MCP_GLOBAL_REGISTER_INPUT_SCHEMA,
-        "output": MCP_GLOBAL_REGISTER_OUTPUT_SCHEMA,
-    },
-    "mcp.global.get": {
-        "input": MCP_GLOBAL_GET_INPUT_SCHEMA,
-        "output": MCP_GLOBAL_GET_OUTPUT_SCHEMA,
-    },
-    "mcp.global.list": {
-        "input": MCP_GLOBAL_LIST_INPUT_SCHEMA,
-        "output": MCP_GLOBAL_LIST_OUTPUT_SCHEMA,
-    },
-    "mcp.global.enable": {
-        "input": MCP_GLOBAL_ENABLE_INPUT_SCHEMA,
-        "output": MCP_GLOBAL_ENABLE_OUTPUT_SCHEMA,
-    },
-    "mcp.global.disable": {
-        "input": MCP_GLOBAL_DISABLE_INPUT_SCHEMA,
-        "output": MCP_GLOBAL_DISABLE_OUTPUT_SCHEMA,
-    },
-    "mcp.global.unregister": {
-        "input": MCP_GLOBAL_UNREGISTER_INPUT_SCHEMA,
-        "output": MCP_GLOBAL_UNREGISTER_OUTPUT_SCHEMA,
-    },
     "internal.mcp.local.execute": {
         "input": INTERNAL_MCP_LOCAL_EXECUTE_INPUT_SCHEMA,
         "output": INTERNAL_MCP_LOCAL_EXECUTE_OUTPUT_SCHEMA,
@@ -2109,14 +2067,6 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": SYSTEM_HTML_RENDER_INPUT_SCHEMA,
         "output": SYSTEM_HTML_RENDER_OUTPUT_SCHEMA,
     },
-    "system.file.register": {
-        "input": SYSTEM_FILE_REGISTER_INPUT_SCHEMA,
-        "output": SYSTEM_FILE_REGISTER_OUTPUT_SCHEMA,
-    },
-    "system.file.handle": {
-        "input": SYSTEM_FILE_HANDLE_INPUT_SCHEMA,
-        "output": SYSTEM_FILE_HANDLE_OUTPUT_SCHEMA,
-    },
     "system.session_waiter.register": {
         "input": SYSTEM_SESSION_WAITER_REGISTER_INPUT_SCHEMA,
         "output": SYSTEM_SESSION_WAITER_REGISTER_OUTPUT_SCHEMA,
@@ -2144,26 +2094,6 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "system.event.send_streaming_close": {
         "input": SYSTEM_EVENT_SEND_STREAMING_CLOSE_INPUT_SCHEMA,
         "output": SYSTEM_EVENT_SEND_STREAMING_CLOSE_OUTPUT_SCHEMA,
-    },
-    "system.event.llm.get_state": {
-        "input": SYSTEM_EVENT_LLM_GET_STATE_INPUT_SCHEMA,
-        "output": SYSTEM_EVENT_LLM_GET_STATE_OUTPUT_SCHEMA,
-    },
-    "system.event.llm.request": {
-        "input": SYSTEM_EVENT_LLM_REQUEST_INPUT_SCHEMA,
-        "output": SYSTEM_EVENT_LLM_REQUEST_OUTPUT_SCHEMA,
-    },
-    "system.event.result.get": {
-        "input": SYSTEM_EVENT_RESULT_GET_INPUT_SCHEMA,
-        "output": SYSTEM_EVENT_RESULT_GET_OUTPUT_SCHEMA,
-    },
-    "system.event.result.set": {
-        "input": SYSTEM_EVENT_RESULT_SET_INPUT_SCHEMA,
-        "output": SYSTEM_EVENT_RESULT_SET_OUTPUT_SCHEMA,
-    },
-    "system.event.result.clear": {
-        "input": SYSTEM_EVENT_RESULT_CLEAR_INPUT_SCHEMA,
-        "output": SYSTEM_EVENT_RESULT_CLEAR_OUTPUT_SCHEMA,
     },
     "system.event.handler_whitelist.get": {
         "input": SYSTEM_EVENT_HANDLER_WHITELIST_GET_INPUT_SCHEMA,
@@ -2463,8 +2393,4 @@ __all__ = [
     "SYSTEM_EVENT_SEND_STREAMING_OUTPUT_SCHEMA",
     "SYSTEM_EVENT_SEND_TYPING_INPUT_SCHEMA",
     "SYSTEM_EVENT_SEND_TYPING_OUTPUT_SCHEMA",
-    "SYSTEM_FILE_HANDLE_INPUT_SCHEMA",
-    "SYSTEM_FILE_HANDLE_OUTPUT_SCHEMA",
-    "SYSTEM_FILE_REGISTER_INPUT_SCHEMA",
-    "SYSTEM_FILE_REGISTER_OUTPUT_SCHEMA",
 ]

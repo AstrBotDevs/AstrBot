@@ -12,11 +12,9 @@ from ..context import Context as RuntimeContext
 from ..decorators import (
     BackgroundTaskMeta,
     HttpApiMeta,
-    MCPServerMeta,
     ValidateConfigMeta,
     get_background_task_meta,
     get_http_api_meta,
-    get_mcp_server_meta,
     get_provider_change_meta,
     get_skill_meta,
     get_validate_config_meta,
@@ -35,8 +33,6 @@ class DecoratorRuntimeState:
     provider_hooks: list[asyncio.Task[None]] = field(default_factory=list)
     background_tasks: list[asyncio.Task[Any]] = field(default_factory=list)
     registered_skills: list[str] = field(default_factory=list)
-    local_mcp_servers: list[str] = field(default_factory=list)
-    global_mcp_servers: list[str] = field(default_factory=list)
 
 
 def _runtime_state(instance: Any) -> DecoratorRuntimeState:
@@ -140,13 +136,6 @@ def _background_task_details(meta: BackgroundTaskMeta, method_name: str) -> str:
     return (
         f"description={description!r}, auto_start={meta.auto_start!r}, "
         f"on_error={meta.on_error!r}"
-    )
-
-
-def _mcp_server_details(meta: MCPServerMeta) -> str:
-    return (
-        f"name={meta.name!r}, scope={meta.scope!r}, timeout={meta.timeout!r}, "
-        f"wait_until_ready={meta.wait_until_ready!r}"
     )
 
 
@@ -465,52 +454,6 @@ async def _register_skills(instance: Any, context: RuntimeContext) -> None:
         state.registered_skills.append(meta.name)
 
 
-async def _register_mcp_servers(instance: Any, context: RuntimeContext) -> None:
-    state = _runtime_state(instance)
-    for target_name, meta in _iter_class_and_method_meta_entries(
-        instance, get_mcp_server_meta
-    ):
-        try:
-            await _register_mcp_server(meta=meta, context=context)
-        except Exception as exc:
-            raise RuntimeError(
-                f"{target_name} @mcp_server failed ({_mcp_server_details(meta)}): {exc}"
-            ) from exc
-        if meta.scope == "global":
-            state.global_mcp_servers.append(meta.name)
-        else:
-            state.local_mcp_servers.append(meta.name)
-
-
-async def _register_mcp_server(
-    *,
-    meta: MCPServerMeta,
-    context: RuntimeContext,
-) -> None:
-    if meta.scope == "global":
-        if meta.config is None:
-            raise ValueError(
-                f"mcp_server(name={meta.name!r}, scope='global') requires config"
-            )
-        await context.mcp.register_global_server(
-            meta.name,
-            dict(meta.config),
-            timeout=meta.timeout,
-        )
-        return
-
-    if meta.config not in (None, {}):
-        raise ValueError(
-            f"mcp_server(name={meta.name!r}, scope='local') does not support config registration"
-        )
-    # TODO: local MCP only supports enable/disable of predeclared servers today.
-    # If the decorator is expected to register brand-new local servers, the MCP
-    # client/runtime needs a first-class local register/unregister API.
-    await context.mcp.enable_server(meta.name)
-    if meta.wait_until_ready:
-        await context.mcp.wait_until_ready(meta.name, timeout=meta.timeout)
-
-
 async def _teardown_decorator_resources(instance: Any, context: RuntimeContext) -> None:
     state = _runtime_state(instance)
 
@@ -542,16 +485,6 @@ async def _teardown_decorator_resources(instance: Any, context: RuntimeContext) 
         with suppress(Exception):
             await context.unregister_skill(name)
     state.registered_skills.clear()
-
-    for name in reversed(state.local_mcp_servers):
-        with suppress(Exception):
-            await context.mcp.disable_server(name)
-    state.local_mcp_servers.clear()
-
-    for name in reversed(state.global_mcp_servers):
-        with suppress(Exception):
-            await context.mcp.unregister_global_server(name)
-    state.global_mcp_servers.clear()
 
 
 async def _invoke_hook(
@@ -585,7 +518,6 @@ async def run_lifecycle_with_decorators(
         await _register_http_apis(instance, context)
         await _register_provider_change_hooks(instance, context)
         await _register_skills(instance, context)
-        await _register_mcp_servers(instance, context)
         await _start_background_tasks(instance, context)
         return
 

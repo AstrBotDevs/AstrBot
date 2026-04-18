@@ -10,7 +10,6 @@ Attributes:
     llm: LLM 能力客户端，用于 AI 对话
     memory: 记忆能力客户端，用于语义存储
     db: 数据库客户端，用于 KV 持久化
-    files: 文件服务客户端，用于文件令牌注册与解析
     platform: 平台客户端，用于发送消息
     permission: 权限客户端，用于查询用户角色
     providers: Provider 客户端，用于查询和调用专用 Provider
@@ -22,7 +21,6 @@ Attributes:
     message_history: 消息历史管理客户端
     http: HTTP 客户端，用于注册 API 端点
     metadata: 元数据客户端，用于查询插件信息
-    mcp: MCP 管理客户端，用于本地/全局 MCP 服务管理
     skills: Skill 客户端，用于向 AstrBot 注册插件技能
     plugin_id: 当前插件的唯一标识
     logger: 绑定了插件 ID 的日志器
@@ -45,7 +43,6 @@ from .clients import (
     DBClient,
     HTTPClient,
     LLMClient,
-    MCPManagerClient,
     MemoryClient,
     MetadataClient,
     PermissionClient,
@@ -58,7 +55,6 @@ from .clients import (
     SkillClient,
 )
 from .clients._proxy import CapabilityProxy
-from .clients.files import FileServiceClient
 from .clients.llm import LLMResponse
 from .clients.managers import (
     ConversationManagerClient,
@@ -328,7 +324,6 @@ class Context:
         llm: LLM 客户端
         memory: 记忆客户端
         db: 数据库客户端
-        files: 文件服务客户端
         platform: 平台客户端
         permission: 权限客户端
         providers: Provider 客户端
@@ -344,7 +339,6 @@ class Context:
         skills: 技能客户端
         session_plugins: 会话插件管理器
         session_services: 会话服务管理器
-        mcp: MCP 管理客户端
         plugin_id: 当前插件 ID
         logger: 日志器
         cancel_token: 取消令牌
@@ -382,7 +376,6 @@ class Context:
         self.llm = LLMClient(proxy)
         self.memory = MemoryClient(proxy)
         self.db = DBClient(proxy)
-        self.files = FileServiceClient(proxy)
         self.platform = PlatformClient(proxy)
         self.permission = PermissionClient(proxy)
         self.providers = ProviderClient(proxy)
@@ -401,7 +394,6 @@ class Context:
         self.message_history = MessageHistoryManagerClient(proxy)
         self.http = HTTPClient(proxy)
         self.metadata = MetadataClient(proxy, plugin_id)
-        self.mcp = MCPManagerClient(proxy)
         self.registry = RegistryClient(proxy)
         self.skills = SkillClient(proxy)
         self.session_plugins = SessionPluginManager(proxy)
@@ -410,7 +402,6 @@ class Context:
         self.conversation_manager = self.conversations
         self.kb_manager = self.kbs
         self.message_history_manager = self.message_history
-        self.mcp_manager = self.mcp
         self._llm_tool_manager = LLMToolManager(proxy)
         self.plugin_id = plugin_id
         self.logger: PluginLogger = (
@@ -469,20 +460,6 @@ class Context:
             method_name="get_data_dir",
         )
         return Path(str(output.get("path", "")))
-
-    async def _register_file_url(
-        self,
-        path: str,
-        timeout: float | None = None,
-    ) -> str:
-        try:
-            return await self.files.register_file_url(path, timeout=timeout)
-        except Exception as exc:
-            raise _wrap_context_exception(
-                method_name="register_file_url",
-                details=f"path={str(path)!r}, timeout={timeout!r}",
-                exc=exc,
-            ) from exc
 
     async def text_to_image(
         self,

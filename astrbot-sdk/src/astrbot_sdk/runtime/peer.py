@@ -389,11 +389,8 @@ class Peer:
             self.supported_protocol_versions
         )
         handshake_metadata[WIRE_CODEC_METADATA_KEY] = self.wire_codec_name
-        future: asyncio.Future[ResultMessage] = (
-            asyncio.get_running_loop().create_future()
-        )
-        self._pending_results[request_id] = future
-        await self._send(
+        future = await self._send_pending_result_request(
+            request_id,
             InitializeMessage(
                 id=request_id,
                 protocol_version=self.protocol_version,
@@ -401,7 +398,7 @@ class Peer:
                 handlers=list(handlers),
                 provided_capabilities=list(provided_capabilities or []),
                 metadata=handshake_metadata,
-            )
+            ),
         )
         result = await future
         if result.kind != "initialize_result":
@@ -460,18 +457,15 @@ class Peer:
         if stream:
             raise ValueError("stream=True 请使用 invoke_stream()")
         request_id = request_id or self._next_id()
-        future: asyncio.Future[ResultMessage] = (
-            asyncio.get_running_loop().create_future()
-        )
-        self._pending_results[request_id] = future
-        await self._send(
+        future = await self._send_pending_result_request(
+            request_id,
             InvokeMessage(
                 id=request_id,
                 capability=capability,
                 input=payload,
                 stream=False,
                 caller_plugin_id=current_caller_plugin_id(),
-            )
+            ),
         )
         result = await future
         if not result.success:
@@ -501,16 +495,15 @@ class Peer:
         """
         self._ensure_usable()
         request_id = request_id or self._next_id()
-        queue: asyncio.Queue[Any] = asyncio.Queue()
-        self._pending_streams[request_id] = queue
-        await self._send(
+        queue = await self._send_pending_stream_request(
+            request_id,
             InvokeMessage(
                 id=request_id,
                 capability=capability,
                 input=payload,
                 stream=True,
                 caller_plugin_id=current_caller_plugin_id(),
-            )
+            ),
         )
 
         async def iterator() -> AsyncIterator[EventMessage]:
@@ -569,6 +562,40 @@ class Peer:
         """确保连接仍处于可用状态，否则立即抛出协议错误。"""
         if self._unusable:
             raise AstrBotError.protocol_error("连接已进入不可用状态")
+
+    async def _send_pending_result_request(
+        self,
+        request_id: str,
+        message,
+    ) -> asyncio.Future[ResultMessage]:
+        """注册等待中的结果请求，并在发送失败时回收挂起状态。"""
+        future: asyncio.Future[ResultMessage] = (
+            asyncio.get_running_loop().create_future()
+        )
+        self._pending_results[request_id] = future
+        try:
+            await self._send(message)
+        except Exception:
+            self._pending_results.pop(request_id, None)
+            if not future.done():
+                future.cancel()
+            raise
+        return future
+
+    async def _send_pending_stream_request(
+        self,
+        request_id: str,
+        message,
+    ) -> asyncio.Queue[Any]:
+        """注册等待中的流请求，并在发送失败时回收挂起状态。"""
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._pending_streams[request_id] = queue
+        try:
+            await self._send(message)
+        except Exception:
+            self._pending_streams.pop(request_id, None)
+            raise
+        return queue
 
     async def _handle_raw_message(self, payload: bytes) -> None:
         """解析原始消息并分发到对应的消息处理分支。"""
