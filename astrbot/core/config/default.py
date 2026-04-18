@@ -4090,7 +4090,7 @@ CONFIG_METADATA_3_SYSTEM = {
                     "log_colors": {
                         "description": "日志颜色设置",
                         "type": "string",
-                        "hint": "可自定义的日志颜色设置，使用ANSI转义序列的颜色表示，分别表示DEBUG,INFO,WARING,ERROR,CRITICAL日志的颜色，使用半角逗号分隔，解析失败时AstrBot将会使用默认设置。（基本格式：(是否加粗);(颜色编号)例如：“1;32”表示加粗的绿色）",
+                        "hint": "可自定义的日志颜色设置，使用ANSI转义序列的颜色表示，分别表示DEBUG,INFO,WARNING,ERROR,CRITICAL日志的颜色，使用半角逗号分隔，解析失败时AstrBot将会使用默认设置。（基本格式：(是否加粗);(颜色编号)例如：“1;32”表示加粗的绿色）",
                     },
                     "dashboard.ssl.enable": {
                         "description": "启用 WebUI HTTPS",
