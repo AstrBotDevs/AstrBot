@@ -63,6 +63,8 @@ class RateLimitStage(Stage):
                 timestamps = self.event_timestamps[session_id]
                 self._remove_expired_timestamps(timestamps, now)
 
+                if self.rate_limit_count <= 0:
+                    break
                 if len(timestamps) < self.rate_limit_count:
                     timestamps.append(now)
                     break
