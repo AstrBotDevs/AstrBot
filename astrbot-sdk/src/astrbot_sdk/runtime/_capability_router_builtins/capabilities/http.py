@@ -84,7 +84,13 @@ class HttpCapabilityMixin(CapabilityRouterBridgeBase):
         plugin_name = self._require_caller_plugin_id("http.register_api")
         _validate_plugin_route_namespace(route, plugin_name)
         _validate_handler_capability_namespace(handler_capability, plugin_name)
-        methods = sorted({method.upper() for method in methods_payload if method})
+        methods = sorted(
+            {method.strip().upper() for method in methods_payload if method.strip()}
+        )
+        if not methods:
+            raise AstrBotError.invalid_input(
+                "http.register_api 的 methods 至少需要一个非空 HTTP 方法"
+            )
         entry: dict[str, Any] = {
             "route": route,
             "methods": methods,

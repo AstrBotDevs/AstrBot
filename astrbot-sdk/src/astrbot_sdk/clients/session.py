@@ -13,8 +13,6 @@ from .registry import HandlerMetadata
 def _normalize_session(session: str | MessageSession | MessageEvent) -> str:
     if isinstance(session, MessageEvent):
         return str(session.unified_msg_origin)
-    if isinstance(session, MessageSession):
-        return str(session)
     return str(session)
 
 

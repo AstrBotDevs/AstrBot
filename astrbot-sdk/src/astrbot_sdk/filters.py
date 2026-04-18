@@ -49,13 +49,19 @@ class LocalFilterBinding:
     filter_id: str
     callable: Callable[..., bool]
     args: dict[str, Any] = field(default_factory=dict)
+    _accepts_event: bool = field(init=False, repr=False)
+    _accepts_ctx: bool = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        parameters = inspect.signature(self.callable).parameters
+        self._accepts_event = "event" in parameters
+        self._accepts_ctx = "ctx" in parameters
 
     def evaluate(self, *, event=None, ctx=None) -> bool:
-        signature = inspect.signature(self.callable)
         kwargs: dict[str, Any] = {}
-        if "event" in signature.parameters:
+        if self._accepts_event:
             kwargs["event"] = event
-        if "ctx" in signature.parameters:
+        if self._accepts_ctx:
             kwargs["ctx"] = ctx
         result = self.callable(**kwargs)
         if inspect.isawaitable(result):

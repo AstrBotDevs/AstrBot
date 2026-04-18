@@ -187,7 +187,8 @@ def format_command_model_help(command_name: str, model_cls: type[BaseModel]) -> 
         detail += "，必填" if required else "，可选"
         detail += default_text
         if field_type is bool:
-            detail += f"，使用 --{name} / --no-{name}"
+            option_name = _format_option_name(name)
+            detail += f"，使用 {option_name} / --no-{option_name[2:]}"
         lines.append(detail)
     return "\n".join(lines)
 

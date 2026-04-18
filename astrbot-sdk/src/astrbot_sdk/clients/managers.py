@@ -28,8 +28,6 @@ class _ManagerModel(BaseModel):
 
 
 def _normalize_session(session: str | MessageSession) -> str:
-    if isinstance(session, MessageSession):
-        return str(session)
     return str(session)
 
 
@@ -189,9 +187,10 @@ class MessageHistoryRecord(_ManagerModel):
         parts_payload = normalized.get("parts")
         if isinstance(parts_payload, list):
             normalized["parts"] = [
-                payload_to_component(item)
+                item
+                if isinstance(item, BaseMessageComponent)
+                else payload_to_component(item)
                 for item in parts_payload
-                if isinstance(item, dict)
             ]
 
         metadata_payload = normalized.get("metadata")
@@ -226,9 +225,9 @@ class MessageHistoryPage(_ManagerModel):
             normalized["records"] = [
                 record
                 for record in (
-                    MessageHistoryRecord.from_payload(item)
-                    if isinstance(item, dict)
-                    else None
+                    item
+                    if isinstance(item, MessageHistoryRecord)
+                    else MessageHistoryRecord.from_payload(item)
                     for item in records_payload
                 )
                 if record is not None
