@@ -1242,14 +1242,6 @@ def build_roundtrip_runtime(
         lambda: runtime_sp,
     )
     monkeypatch.setattr(
-        "astrbot.core.sdk_bridge.capabilities.system._get_runtime_file_token_service",
-        lambda: file_token_service,
-    )
-    monkeypatch.setattr(
-        "astrbot.core.sdk_bridge.capabilities.system._get_runtime_astrbot_config",
-        lambda: config,
-    )
-    monkeypatch.setattr(
         "astrbot.core.sdk_bridge.capabilities.system._get_runtime_html_renderer",
         lambda: FakeHTMLRenderer(),
     )

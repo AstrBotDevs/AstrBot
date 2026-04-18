@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import Any
 
 from astrbot_sdk.errors import AstrBotError
-
-from astrbot.core.sdk_bridge.bridge_base import _get_runtime_file_token_service
 
 from ._host import CapabilityMixinHost
 
@@ -354,43 +351,7 @@ class KnowledgeBaseCapabilityMixin(CapabilityMixinHost):
                 raise AstrBotError.invalid_input(str(exc)) from exc
             return {"document": self._serialize_kb_document(document)}
 
-        file_token = str(raw_document.get("file_token", "")).strip()
-        if not file_token:
-            raise AstrBotError.invalid_input(
-                "kb.document.upload requires file_token, url, or text"
-            )
-        try:
-            file_path = await _get_runtime_file_token_service().handle_file(file_token)
-        except KeyError as exc:
-            raise AstrBotError.invalid_input(str(exc)) from exc
-        path = Path(file_path)
-        if not path.exists():
-            raise AstrBotError.invalid_input(f"File does not exist: {file_path}")
-        file_name = str(raw_document.get("file_name", "")).strip() or path.name
-        file_type = str(
-            raw_document.get("file_type", "")
-        ).strip() or path.suffix.lstrip(".")
-        if not file_type:
-            raise AstrBotError.invalid_input(
-                "kb.document.upload requires file_type when the file has no suffix"
-            )
-        file_content = await asyncio.to_thread(path.read_bytes)
-        try:
-            document = await kb_helper.upload_document(
-                file_name=file_name,
-                file_content=file_content,
-                file_type=file_type,
-                chunk_size=self._optional_int(raw_document.get("chunk_size")) or 512,
-                chunk_overlap=(
-                    self._optional_int(raw_document.get("chunk_overlap")) or 50
-                ),
-                batch_size=self._optional_int(raw_document.get("batch_size")) or 32,
-                tasks_limit=self._optional_int(raw_document.get("tasks_limit")) or 3,
-                max_retries=self._optional_int(raw_document.get("max_retries")) or 3,
-            )
-        except ValueError as exc:
-            raise AstrBotError.invalid_input(str(exc)) from exc
-        return {"document": self._serialize_kb_document(document)}
+        raise AstrBotError.invalid_input("kb.document.upload requires url or text")
 
     async def _kb_document_list(
         self,

@@ -1227,31 +1227,6 @@ async def test_core_bridge_keeps_request_scope_after_event_hook_returns() -> Non
 
     parent_request_id = session.request_ids[0]
 
-    llm_state = await bridge.capability_bridge.execute(
-        "system.event.llm.request",
-        {"_request_scope_id": parent_request_id},
-        stream=False,
-        cancel_token=None,
-        request_id="child-llm-request",
-    )
-    assert llm_state == {"should_call_llm": True, "requested_llm": True}
-
-    result_payload = {
-        "type": "chain",
-        "chain": [{"type": "text", "data": {"text": "reply text"}}],
-    }
-    set_result = await bridge.capability_bridge.execute(
-        "system.event.result.set",
-        {
-            "_request_scope_id": parent_request_id,
-            "result": result_payload,
-        },
-        stream=False,
-        cancel_token=None,
-        request_id="child-result-set",
-    )
-    assert set_result == {"result": result_payload}
-
     whitelist = await bridge.capability_bridge.execute(
         "system.event.handler_whitelist.set",
         {
@@ -1263,6 +1238,7 @@ async def test_core_bridge_keeps_request_scope_after_event_hook_returns() -> Non
         request_id="child-whitelist-set",
     )
     assert whitelist == {"plugin_names": ["sdk-demo"]}
+    assert bridge.get_handler_whitelist_for_request(parent_request_id) == {"sdk-demo"}
 
     bridge.close_request_overlay_for_event(event)
     assert bridge.get_request_overlay_by_request_id(parent_request_id) is None

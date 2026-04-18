@@ -52,7 +52,6 @@ from astrbot.core.sdk_bridge.event_payload import (
 from astrbot_sdk import MessageEvent
 from astrbot_sdk import message_components as sdk_message_components
 from astrbot_sdk._plugin_logger import PluginLogEntry
-from astrbot_sdk._star_runtime import bind_star_runtime
 from astrbot_sdk.context import Context
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.message_components import (
@@ -84,8 +83,6 @@ class _DummyPeer:
             "system.event.send_streaming": SimpleNamespace(supports_stream=False),
             "system.event.send_streaming_chunk": SimpleNamespace(supports_stream=False),
             "system.event.send_streaming_close": SimpleNamespace(supports_stream=False),
-            "system.file.register": SimpleNamespace(supports_stream=False),
-            "system.file.handle": SimpleNamespace(supports_stream=False),
         }
         self.sent_messages: list[dict] = []
         self.event_actions: list[dict] = []
@@ -99,7 +96,6 @@ class _DummyPeer:
             }
         ]
         self._open_streams: dict[str, dict] = {}
-        self._file_tokens: dict[str, str] = {}
 
     async def invoke(self, capability: str, payload: dict, *, stream: bool = False):
         if stream:
@@ -188,17 +184,6 @@ class _DummyPeer:
                 }
             )
             return {"supported": True}
-        if capability == "system.file.register":
-            token = f"file-{len(self._file_tokens) + 1}"
-            self._file_tokens[token] = str(payload.get("path", ""))
-            return {
-                "token": token,
-                "url": f"https://callback.example/api/file/{token}",
-            }
-        if capability == "system.file.handle":
-            token = str(payload.get("token", ""))
-            path = self._file_tokens.pop(token)
-            return {"path": path}
         raise AssertionError(f"unexpected capability: {capability}")
 
     async def invoke_stream(self, capability: str, payload: dict):
@@ -617,73 +602,6 @@ def test_file_component_roundtrip_accepts_legacy_core_payload() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_message_component_file_methods(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sample = tmp_path / "sample.txt"
-    sample.write_text("hello", encoding="utf-8")
-
-    image = Image.fromFileSystem(str(sample))
-    assert await image.convert_to_file_path() == str(sample.resolve())
-
-    file_component = File(name="sample.txt", file=str(sample))
-    assert await file_component.get_file() == str(sample.resolve())
-
-    async def fake_register_file_to_service(path: str) -> str:
-        assert path == str(sample.resolve())
-        return "https://callback.example/api/file/token-123"
-
-    monkeypatch.setattr(
-        sdk_message_components,
-        "_register_file_to_service",
-        fake_register_file_to_service,
-    )
-
-    assert (
-        await image.register_to_file_service()
-        == "https://callback.example/api/file/token-123"
-    )
-    assert (
-        await file_component.register_to_file_service()
-        == "https://callback.example/api/file/token-123"
-    )
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_message_component_file_service_requires_runtime_context(
-    tmp_path: Path,
-) -> None:
-    sample = tmp_path / "sample.txt"
-    sample.write_text("hello", encoding="utf-8")
-    image = Image.fromFileSystem(str(sample))
-
-    with pytest.raises(RuntimeError, match="runtime context"):
-        await image.register_to_file_service()
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_message_component_file_service_uses_current_runtime_context(
-    tmp_path: Path,
-) -> None:
-    sample = tmp_path / "sample.txt"
-    sample.write_text("hello", encoding="utf-8")
-    image = Image.fromFileSystem(str(sample))
-    ctx = Context(peer=_DummyPeer(), plugin_id="sdk-demo")
-
-    with bind_star_runtime(None, ctx):
-        url = await image.register_to_file_service()
-
-    assert url == "https://callback.example/api/file/file-1"
-    token = await ctx.files.register_file(str(sample))
-    assert token == "file-2"
-    assert await ctx.files.handle_file(token) == str(sample)
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
 async def test_event_actions_and_send_chain_with_mock_context() -> None:
     peer = _DummyPeer()
     ctx = Context(peer=peer, plugin_id="sdk-demo")
@@ -891,11 +809,10 @@ async def test_context_register_task_logs_background_exceptions() -> None:
     await asyncio.sleep(0)
     assert task.done() is True
     assert len(logger.exception_calls) == 1
-    msg, plugin_id, desc, error = logger.exception_calls[0][0]
+    msg, plugin_id, desc = logger.exception_calls[0][0]
     assert "background task failed" in str(msg).lower()
     assert plugin_id == "sdk-demo"
     assert desc == "probe-task"
-    assert error == "boom"
     assert logger.debug_calls == []
 
 

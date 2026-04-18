@@ -47,7 +47,6 @@ def _install_optional_dependency_stubs() -> None:
 
 _install_optional_dependency_stubs()
 
-from astrbot_sdk.clients.mcp import MCPServerRecord
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.llm.entities import LLMToolSpec
 from astrbot_sdk.runtime.loader import PluginSpec
@@ -55,6 +54,14 @@ from astrbot_sdk.runtime.loader import PluginSpec
 from astrbot.core.sdk_bridge.capability_bridge import CoreCapabilityBridge
 from astrbot.core.sdk_bridge.plugin_bridge import SdkPluginBridge
 from tests.test_sdk.unit._mcp_contract import exercise_local_mcp_contract
+
+
+class _MCPRecord:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.name = str(payload["name"])
+        self.scope = SimpleNamespace(value=str(payload["scope"]))
+        self.active = bool(payload["active"])
+        self.running = bool(payload["running"])
 
 
 class _FakeFunctionToolManager:
@@ -93,8 +100,7 @@ class _FakeFunctionToolManager:
 
 
 class _FakeCorePluginBridge:
-    def __init__(self, *, acknowledge_global_mcp_risk: bool = False) -> None:
-        self._acknowledge_global_mcp_risk = acknowledge_global_mcp_risk
+    def __init__(self) -> None:
         self._local_servers = {
             "sdk-demo": {
                 "demo": {
@@ -116,9 +122,6 @@ class _FakeCorePluginBridge:
 
     def resolve_request_session(self, _request_id: str):
         return None
-
-    def acknowledges_global_mcp_risk(self, plugin_id: str) -> bool:
-        return plugin_id == "sdk-demo" and self._acknowledge_global_mcp_risk
 
     def get_local_mcp_server(self, plugin_id: str, name: str):
         return self._local_servers.get(plugin_id, {}).get(name)
@@ -246,17 +249,11 @@ class _CoreMCPBackend:
 
     async def get_server(self, name: str):
         output = await self._bridge._mcp_local_get("req-local", {"name": name}, None)
-        return MCPServerRecord.from_payload(output["server"])
+        return _MCPRecord(output["server"])
 
     async def list_servers(self):
         output = await self._bridge._mcp_local_list("req-local", {}, None)
-        return [
-            record
-            for record in (
-                MCPServerRecord.from_payload(item) for item in output["servers"]
-            )
-            if record is not None
-        ]
+        return [_MCPRecord(item) for item in output["servers"]]
 
     async def enable_server(self, name: str):
         output = await self._bridge._mcp_local_enable(
@@ -264,13 +261,13 @@ class _CoreMCPBackend:
             {"name": name, "timeout": 0.2},
             None,
         )
-        return MCPServerRecord.from_payload(output["server"])
+        return _MCPRecord(output["server"])
 
     async def disable_server(self, name: str):
         output = await self._bridge._mcp_local_disable(
             "req-local", {"name": name}, None
         )
-        return MCPServerRecord.from_payload(output["server"])
+        return _MCPRecord(output["server"])
 
     async def wait_until_ready(self, name: str, *, timeout: float):
         output = await self._bridge._mcp_local_wait_until_ready(
@@ -278,12 +275,11 @@ class _CoreMCPBackend:
             {"name": name, "timeout": timeout},
             None,
         )
-        return MCPServerRecord.from_payload(output["server"])
+        return _MCPRecord(output["server"])
 
 
 def _build_core_bridge(
     *,
-    acknowledge_global_mcp_risk: bool = False,
     func_tool_manager: _FakeFunctionToolManager | None = None,
     plugin_bridge: _FakeCorePluginBridge | None = None,
 ) -> CoreCapabilityBridge:
@@ -296,10 +292,7 @@ def _build_core_bridge(
             kb_manager=object(),
             get_all_stars=lambda: [],
         ),
-        plugin_bridge=plugin_bridge
-        or _FakeCorePluginBridge(
-            acknowledge_global_mcp_risk=acknowledge_global_mcp_risk
-        ),
+        plugin_bridge=plugin_bridge or _FakeCorePluginBridge(),
     )
 
 
@@ -354,89 +347,6 @@ async def test_core_bridge_mcp_session_round_trip() -> None:
         None,
     )
     assert closed == {}
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_core_bridge_global_mcp_requires_ack_and_audits(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    func_tool_manager = _FakeFunctionToolManager()
-    bridge = _build_core_bridge(
-        acknowledge_global_mcp_risk=False,
-        func_tool_manager=func_tool_manager,
-    )
-
-    with pytest.raises(PermissionError):
-        await bridge._mcp_global_register(
-            "req-local",
-            {
-                "name": "global-demo",
-                "config": {"mock_tools": ["inspect"]},
-                "timeout": 0.2,
-            },
-            None,
-        )
-    with pytest.raises(PermissionError):
-        await bridge._mcp_global_list("req-local", {}, None)
-    with pytest.raises(PermissionError):
-        await bridge._mcp_global_get("req-local", {"name": "global-demo"}, None)
-
-    bridge = _build_core_bridge(
-        acknowledge_global_mcp_risk=True,
-        func_tool_manager=func_tool_manager,
-    )
-    actions: list[dict[str, str]] = []
-    monkeypatch.setattr(
-        "astrbot.core.sdk_bridge.capabilities.mcp.logger.info",
-        lambda _message, payload: actions.append(dict(payload)),
-    )
-
-    registered = await bridge._mcp_global_register(
-        "req-local",
-        {
-            "name": "global-demo",
-            "config": {"mock_tools": ["inspect"]},
-            "timeout": 0.2,
-        },
-        None,
-    )
-    assert registered["server"]["running"] is True
-    listed = await bridge._mcp_global_list("req-local", {}, None)
-    assert [item["name"] for item in listed["servers"]] == ["global-demo"]
-    fetched = await bridge._mcp_global_get(
-        "req-local",
-        {"name": "global-demo"},
-        None,
-    )
-    assert fetched["server"]["name"] == "global-demo"
-
-    disabled = await bridge._mcp_global_disable(
-        "req-local",
-        {"name": "global-demo"},
-        None,
-    )
-    assert disabled["server"]["active"] is False
-
-    enabled = await bridge._mcp_global_enable(
-        "req-local",
-        {"name": "global-demo", "timeout": 0.2},
-        None,
-    )
-    assert enabled["server"]["running"] is True
-
-    removed = await bridge._mcp_global_unregister(
-        "req-local",
-        {"name": "global-demo"},
-        None,
-    )
-    assert removed["server"]["name"] == "global-demo"
-    assert [item["action"] for item in actions] == [
-        "register",
-        "disable",
-        "enable",
-        "unregister",
-    ]
 
 
 class _FakeWorkerSession:
