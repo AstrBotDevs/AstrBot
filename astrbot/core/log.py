@@ -58,7 +58,11 @@ class _QueueAnsiColorFilter(logging.Filter):
             _QueueAnsiColorFilter._level_color = self.parse_ansi_config(astrbot_config)
 
     def parse_ansi_config(self, config: dict):
-        ansi_str = (config.get("log_colors", DEFAULT_CONFIG["log_colors"]) if config else DEFAULT_CONFIG["log_colors"]).strip()
+        ansi_str = (
+            config.get("log_colors", DEFAULT_CONFIG["log_colors"])
+            if config
+            else DEFAULT_CONFIG["log_colors"]
+        ).strip()
         color_list = [c.strip() for c in ansi_str.split(",")]
 
         if len(color_list) != 5:
