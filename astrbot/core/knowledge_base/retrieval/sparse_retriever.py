@@ -73,12 +73,12 @@ class SparseRetriever:
         """
         fts_results = []
         fallback_kb_ids = []
+        query_tokens = tokenize_text(query, self.hit_stopwords)
         for kb_id in kb_ids:
             vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
             if not vec_db:
                 continue
             top_k_sparse = kb_options.get(kb_id, {}).get("top_k_sparse", 50)
-            query_tokens = tokenize_text(query, self.hit_stopwords)
             result = await vec_db.document_storage.search_sparse(
                 query_tokens=query_tokens,
                 limit=top_k_sparse,

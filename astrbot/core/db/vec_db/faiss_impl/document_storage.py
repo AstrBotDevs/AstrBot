@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import Column, Text
+from sqlalchemy import Column, Text, bindparam
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
@@ -277,9 +277,7 @@ class DocumentStorage:
                 session.add(document)
 
             await session.flush()  # Flush to get all IDs
-            for doc, doc_text in zip(documents, texts):
-                if doc.id is not None:
-                    await self._insert_fts_row(session, int(doc.id), doc_text)
+            await self._insert_fts_rows_batch(session, documents, texts)
             return [doc.id for doc in documents]  # type: ignore
 
     async def delete_document_by_doc_id(self, doc_id: str) -> None:
@@ -370,9 +368,8 @@ class DocumentStorage:
             result = await session.execute(query)
             documents = result.scalars().all()
 
+            await self._delete_fts_rows_batch(session, documents)
             for doc in documents:
-                if doc.id is not None:
-                    await self._delete_fts_row(session, int(doc.id), doc.text)
                 await session.delete(doc)
 
     async def count_documents(self, metadata_filters: dict | None = None) -> int:
@@ -451,9 +448,11 @@ class DocumentStorage:
                 if not documents:
                     break
 
-                for doc in documents:
-                    if doc.id is not None:
-                        await self._insert_fts_row(session, int(doc.id), doc.text)
+                await self._insert_fts_rows_batch(
+                    session,
+                    documents,
+                    [doc.text for doc in documents],
+                )
                 last_id = int(documents[-1].id or last_id)
 
         self._fts_index_ready = True
@@ -553,6 +552,36 @@ class DocumentStorage:
             {"rowid": rowid, "search_text": search_text},
         )
 
+    async def _insert_fts_rows_batch(
+        self,
+        session: AsyncSession,
+        documents: list[Document],
+        contents: list[str],
+    ) -> None:
+        if not self.fts5_available:
+            return
+
+        fts_params = [
+            {
+                "rowid": int(doc.id),
+                "search_text": to_fts5_search_text(content, self.stopwords),
+            }
+            for doc, content in zip(documents, contents)
+            if doc.id is not None
+        ]
+        if not fts_params:
+            return
+
+        await session.execute(
+            text(
+                f"""
+                INSERT INTO {FTS_TABLE_NAME}(rowid, search_text)
+                VALUES (:rowid, :search_text)
+                """,
+            ),
+            fts_params,
+        )
+
     async def _delete_fts_row(
         self,
         session: AsyncSession,
@@ -583,12 +612,72 @@ class DocumentStorage:
             {"rowid": rowid, "search_text": search_text},
         )
 
+    async def _delete_fts_rows_batch(
+        self,
+        session: AsyncSession,
+        documents: list[Document],
+    ) -> None:
+        if not self.fts5_available:
+            return
+
+        docs_with_ids = [doc for doc in documents if doc.id is not None]
+        if not docs_with_ids:
+            return
+
+        if self._fts_contentless_delete:
+            await session.execute(
+                text(f"DELETE FROM {FTS_TABLE_NAME} WHERE rowid = :rowid"),
+                [{"rowid": int(doc.id)} for doc in docs_with_ids if doc.id is not None],
+            )
+            return
+
+        existing_rowids = await self._existing_fts_rowids(
+            session,
+            [int(doc.id) for doc in docs_with_ids if doc.id is not None],
+        )
+        fts_params = [
+            {
+                "rowid": int(doc.id),
+                "search_text": to_fts5_search_text(doc.text, self.stopwords),
+            }
+            for doc in docs_with_ids
+            if doc.id is not None and int(doc.id) in existing_rowids
+        ]
+        if not fts_params:
+            return
+
+        await session.execute(
+            text(
+                f"""
+                INSERT INTO {FTS_TABLE_NAME}({FTS_TABLE_NAME}, rowid, search_text)
+                VALUES ('delete', :rowid, :search_text)
+                """,
+            ),
+            fts_params,
+        )
+
     async def _fts_row_exists(self, session: AsyncSession, rowid: int) -> bool:
         result = await session.execute(
             text(f"SELECT 1 FROM {FTS_TABLE_NAME} WHERE rowid = :rowid LIMIT 1"),
             {"rowid": rowid},
         )
         return result.scalar_one_or_none() is not None
+
+    async def _existing_fts_rowids(
+        self,
+        session: AsyncSession,
+        rowids: list[int],
+    ) -> set[int]:
+        if not rowids:
+            return set()
+
+        result = await session.execute(
+            text(
+                f"SELECT rowid FROM {FTS_TABLE_NAME} WHERE rowid IN :rowids"
+            ).bindparams(bindparam("rowids", expanding=True)),
+            {"rowids": rowids},
+        )
+        return {int(row[0]) for row in result.fetchall()}
 
     async def get_user_ids(self) -> list[str]:
         """Retrieve all user IDs from the documents table.
