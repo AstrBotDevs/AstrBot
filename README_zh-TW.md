@@ -32,7 +32,7 @@
 <a href="https://astrbot.app/">文件</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">路線圖</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">問題回報</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">問題回報</a> ｜
 <a href="mailto:community@astrbot.app">Email</a>
 </div>
 
@@ -100,7 +100,7 @@ uv tool upgrade astrbot --python 3.12
 
 對於熟悉容器、希望獲得更穩定且更適合正式環境部署方式的使用者，我們推薦使用 Docker / Docker Compose 部署 AstrBot。
 
-請參考官方文件 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
+請參考官方文件 [使用 Docker 部署 AstrBot](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
 
 ### 在雨雲上部署
 
@@ -138,7 +138,7 @@ yay -S astrbot-git
 
 **更多部署方式**
 
-若你需要面板化或更高自訂程度的部署，可參考 [寶塔面板](https://astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 應用商店安裝）、[1Panel](https://astrbot.app/deploy/astrbot/1panel.html)（1Panel 應用商店安裝）、[CasaOS](https://astrbot.app/deploy/astrbot/casaos.html)（NAS / 家用伺服器可視化部署）與 [手動部署](https://astrbot.app/deploy/astrbot/cli.html)（基於原始碼與 `uv` 的完整自訂安裝）。
+若你需要面板化或更高自訂程度的部署，可參考 [寶塔面板](https://docs.astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 應用商店安裝）、[1Panel](https://docs.astrbot.app/deploy/astrbot/1panel.html)（1Panel 應用商店安裝）、[CasaOS](https://docs.astrbot.app/deploy/astrbot/casaos.html)（NAS / 家用伺服器可視化部署）與 [手動部署](https://docs.astrbot.app/deploy/astrbot/cli.html)（基於原始碼與 `uv` 的完整自訂安裝）。
 
 ## 支援的訊息平台
 
@@ -160,7 +160,7 @@ yay -S astrbot-git
 | KOOK | 官方維護 |
 | Misskey | 官方維護 |
 | Mattermost | 官方維護 |
-| Whatsapp（即將支援） | 官方維護 |
+| WhatsApp（即將支援） | 官方維護 |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | 社群維護 |
 | [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | 社群維護 |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | 社群維護 |

@@ -35,6 +35,8 @@ export function getProviderIcon(type) {
     kimi: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi.svg",
     "kimi-code":
       "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi.svg",
+    longcat:
+      "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/longcat-color.svg",
     ppio: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/ppio.svg",
     dify: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/dify-color.svg",
     coze: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.66.0/icons/coze.svg",
@@ -49,6 +51,8 @@ export function getProviderIcon(type) {
     fishaudio:
       "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/fishaudio.svg",
     minimax:
+      "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg",
+    "minimax-token-plan":
       "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg",
     mimo: "https://platform.xiaomimimo.com/favicon.874c9507.png",
     "302ai":
@@ -69,8 +73,7 @@ export function getProviderIcon(type) {
       "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/bailian-color.svg",
     volcengine:
       "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine-color.svg",
-    longcat:
-      "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/longcat-color.svg",
+  }
   };
   return icons[type] || "";
 }

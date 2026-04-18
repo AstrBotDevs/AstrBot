@@ -4,6 +4,7 @@ import re
 import sys
 import uuid
 
+from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
@@ -80,6 +81,15 @@ class TelegramPlatformAdapter(Platform):
         self.client = self.application.bot
         logger.debug(f"Telegram base url: {self.client.base_url}")
         self.scheduler = AsyncIOScheduler()
+        self.scheduler.add_listener(
+            lambda ev: logger.error(
+                "Scheduled job %s raised: %s",
+                ev.job_id,
+                ev.exception,
+                exc_info=ev.exception,
+            ),
+            EVENT_JOB_ERROR,
+        )
         self._terminating = False
         raw_delay = self.config.get("telegram_polling_restart_delay", 5.0)
         try:
@@ -513,22 +523,32 @@ class TelegramPlatformAdapter(Platform):
         logger.info(
             f"Processing media group {media_group_id}, total {len(updates_and_contexts)} items",
         )
-        first_update, first_context = updates_and_contexts[0]
-        abm = await self.convert_message(first_update, first_context)
-        if not abm:
-            logger.warning(
-                f"Failed to convert the first message of media group {media_group_id}",
+
+        try:
+            first_update, first_context = updates_and_contexts[0]
+            abm = await self.convert_message(first_update, first_context)
+
+            if not abm:
+                logger.warning(
+                    f"Failed to convert the first message of media group {media_group_id}"
+                )
+                return
+
+            for update, context in updates_and_contexts[1:]:
+                extra = await self.convert_message(update, context, get_reply=False)
+                if not extra:
+                    continue
+
+                abm.message.extend(extra.message)
+                logger.debug(
+                    f"Added {len(extra.message)} components to media group {media_group_id}"
+                )
+
+            await self.handle_msg(abm)
+        except Exception:
+            logger.error(
+                f"Failed to process media group {media_group_id}", exc_info=True
             )
-            return
-        for update, context in updates_and_contexts[1:]:
-            extra = await self.convert_message(update, context, get_reply=False)
-            if not extra:
-                continue
-            abm.message.extend(extra.message)
-            logger.debug(
-                f"Added {len(extra.message)} components to media group {media_group_id}",
-            )
-        await self.handle_msg(abm)
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = TelegramPlatformEvent(

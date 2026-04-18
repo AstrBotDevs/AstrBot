@@ -10,8 +10,8 @@ from astrbot.core.utils.io import on_error, remove_dir
 
 
 class PluginUpdator(RepoZipUpdator):
-    def __init__(self, repo_mirror: str = "") -> None:
-        super().__init__(repo_mirror)
+    def __init__(self, repo_mirror: str = "", verify: str | bool | None = None) -> None:
+        super().__init__(repo_mirror, verify=verify)
         self.plugin_store_path = get_astrbot_plugin_path()
 
     def get_plugin_store_path(self) -> str:
