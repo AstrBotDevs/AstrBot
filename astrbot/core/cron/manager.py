@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
+from asyncio import Queue
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -41,6 +42,8 @@ class CronJobManager:
     async def start(self, ctx: "Context") -> None:
         self.ctx: Context = ctx  # star context
         async with self._lock:
+            # 从 Context 获取事件队列，用于将定时任务消息放入管道
+            self._event_queue: Queue = ctx.get_event_queue()
             if self._started:
                 return
             self.scheduler.start()
@@ -266,7 +269,9 @@ class CronJobManager:
             "cron_payload": payload,
         }
 
-        await self._woke_main_agent(
+        # 将定时任务消息放入事件队列，使其经过完整的 PipelineScheduler 流程
+        # 这样插件的 on_llm_response 等处理器可以正常拦截和处理消息
+        await self._dispatch_to_pipeline(
             message=note,
             session_str=session_str,
             extras=extras,
@@ -389,6 +394,52 @@ class CronJobManager:
         if not llm_resp:
             logger.warning("Cron job agent got no response")
             return
+
+    async def _dispatch_to_pipeline(
+        self,
+        *,
+        message: str,
+        session_str: str,
+        extras: dict,
+    ) -> None:
+        """将定时任务消息放入事件队列，使其经过完整的 PipelineScheduler 流程。"""
+        from astrbot.core.cron.events import CronMessageEvent
+        from astrbot.core.platform.message_session import MessageSession
+
+        try:
+            session = (
+                session_str
+                if isinstance(session_str, MessageSession)
+                else MessageSession.from_str(session_str)
+            )
+        except Exception as e:
+            logger.error(f"Invalid session for cron job: {e}")
+            return
+
+        cron_event = CronMessageEvent(
+            context=self.ctx,
+            session=session,
+            message=message,
+            extras=extras or {},
+            message_type=session.message_type,
+        )
+
+        # 判断用户角色
+        umo = cron_event.unified_msg_origin
+        cfg = self.ctx.get_config(umo=umo)
+        cron_payload = extras.get("cron_payload", {}) if extras else {}
+        sender_id = cron_payload.get("sender_id")
+        admin_ids = cfg.get("admins_id", [])
+        if admin_ids:
+            cron_event.role = "admin" if sender_id in admin_ids else "member"
+        if cron_payload.get("origin", "tool") == "api":
+            cron_event.role = "admin"
+
+        # 将事件放入事件队列，由 EventBus 调度到 PipelineScheduler
+        await self._event_queue.put(cron_event)
+        logger.debug(
+            f"Cron job {extras.get('cron_job', {}).get('id')} dispatched to pipeline."
+        )
 
 
 __all__ = ["CronJobManager"]
