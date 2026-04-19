@@ -77,6 +77,18 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def _resolve_path_from_sandbox(
         self, context: ContextWrapper[AstrAgentContext], path: str
     ) -> tuple[str, bool]:
+        if not os.path.isabs(path):
+            unified_msg_origin = context.context.event.unified_msg_origin
+            if unified_msg_origin:
+                from astrbot.core.tools.computer_tools.util import (
+                    workspace_root,
+                )
+
+                ws_path = workspace_root(unified_msg_origin)
+                ws_candidate = ws_path / path
+                if ws_candidate.exists():
+                    return str(ws_candidate), False
+
         if os.path.exists(path):
             return path, False
 
