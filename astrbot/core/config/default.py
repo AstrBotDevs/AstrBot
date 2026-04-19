@@ -206,6 +206,8 @@ DEFAULT_CONFIG = {
         "dual_output": False,
         "use_file_service": False,
         "trigger_probability": 1.0,
+        "tts_all_messages": False,
+        "filter_regex": "",
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
@@ -2857,6 +2859,12 @@ CONFIG_METADATA_2 = {
                     "trigger_probability": {
                         "type": "float",
                     },
+                    "tts_all_messages": {
+                        "type": "bool",
+                    },
+                    "filter_regex": {
+                        "type": "string",
+                    },
                 },
             },
             "provider_ltm_settings": {
@@ -3107,6 +3115,14 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "TTS 总开关",
                     },
+                    "provider_tts_settings.tts_all_messages": {
+                        "description": "转换所有文本消息为语音",
+                        "type": "bool",
+                        "hint": "开启后，不仅仅是 AI 的回复，所有通过 AstrBot 发送的文本消息（包括插件被动回复和主动推送）都会被转为语音。",
+                        "condition": {
+                            "provider_tts_settings.enable": True,
+                        },
+                    },
                     "provider_tts_settings.provider_id": {
                         "description": "默认文本转语音模型",
                         "type": "string",
@@ -3119,6 +3135,14 @@ CONFIG_METADATA_3 = {
                         "description": "TTS 触发概率",
                         "type": "float",
                         "slider": {"min": 0, "max": 1, "step": 0.05},
+                        "condition": {
+                            "provider_tts_settings.enable": True,
+                        },
+                    },
+                    "provider_tts_settings.filter_regex": {
+                        "description": "全局语音文本过滤 (正则)",
+                        "type": "string",
+                        "hint": "在送入 TTS 朗读前清洗文本。例如填写 \\(.*?\\)|\\（.*?\\)|\\*.*?\\* 可过滤掉所有括号及星号内的动作描写。",
                         "condition": {
                             "provider_tts_settings.enable": True,
                         },
