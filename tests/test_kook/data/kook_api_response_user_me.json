@@ -1,0 +1,36 @@
+{
+    "code": 0,
+    "message": "操作成功",
+    "data": {
+        "id": "-1007",
+        "username": "FixtureUser05",
+        "identify_num": "0000",
+        "online": false,
+        "os": "Websocket",
+        "status": 0,
+        "avatar": "https://example.com",
+        "vip_avatar": "https://example.com",
+        "banner": "",
+        "nickname": "FixtureUser04",
+        "roles": [],
+        "is_vip": false,
+        "vip_amp": false,
+        "bot": true,
+        "kpm_vip": null,
+        "wealth_level": 0,
+        "bot_status": 0,
+        "tag_info": {
+            "color": "#0096FF",
+            "bg_color": "#0096FF33",
+            "text": "机器人"
+        },
+        "mobile_verified": true,
+        "is_sys": false,
+        "client_id": "FixtureUser06",
+        "verified": false,
+        "mobile_prefix": "0000",
+        "mobile": "FixtureUser01",
+        "invited_count": 0,
+        "intent": 255
+    }
+}

@@ -1,0 +1,36 @@
+{
+    "code": 0,
+    "message": "操作成功",
+    "data": {
+        "id": "-1007",
+        "username": "FixtureUser05",
+        "identify_num": "0000",
+        "online": false,
+        "os": "Websocket",
+        "status": 0,
+        "avatar": "https://example.invalid/kook-fixture-01.png",
+        "vip_avatar": "https://example.invalid/kook-fixture-01.png",
+        "banner": "",
+        "nickname": "FixtureUser04",
+        "roles": [
+            -1001
+        ],
+        "is_vip": false,
+        "vip_amp": false,
+        "bot": true,
+        "kpm_vip": null,
+        "wealth_level": 0,
+        "bot_status": 0,
+        "tag_info": {
+            "color": "#0096FF",
+            "bg_color": "#0096FF33",
+            "text": "机器人"
+        },
+        "mobile_verified": true,
+        "is_sys": false,
+        "client_id": "FixtureUser06",
+        "verified": false,
+        "joined_at": 1700000002000,
+        "active_time": 1700000012000
+    }
+}

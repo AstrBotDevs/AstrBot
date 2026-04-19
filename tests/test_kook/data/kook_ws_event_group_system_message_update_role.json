@@ -1,0 +1,38 @@
+{
+    "s": 0,
+    "d": {
+        "channel_type": "GROUP",
+        "type": 255,
+        "target_id": "-1014",
+        "author_id": "1",
+        "content": "[系统消息]",
+        "msg_id": "00000000-0000-0000-0000-000000000002",
+        "msg_timestamp": 1700000013000,
+        "nonce": "",
+        "from_type": 1,
+        "extra": {
+            "type": "updated_role",
+            "body": {
+                "role_id": -1002,
+                "name": "some_username",
+                "color": 0,
+                "position": 5,
+                "hoist": 0,
+                "mentionable": 0,
+                "permissions": 5571747823,
+                "desc": "",
+                "color_type": 1,
+                "color_map": {},
+                "type": 1,
+                "op_permissions": 0
+            }
+        }
+    },
+    "sn": 4,
+    "extra": {
+        "verifyToken": "test-only-000001",
+        "encryptKey": "",
+        "callbackUrl": "",
+        "intent": 255
+    }
+}
