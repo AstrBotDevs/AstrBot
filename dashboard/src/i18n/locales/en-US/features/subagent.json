@@ -1,86 +1,129 @@
 {
   "header": {
-    "eyebrow": "Orchestration"
+    "eyebrow": "Subagent Orchestration"
   },
   "page": {
-    "title": "SubAgent Orchestration",
+    "title": "Subagent Orchestration",
     "beta": "Experimental",
-    "subtitle": "The main LLM can use its own tools directly and delegate tasks to SubAgents via handoff."
+    "subtitle": "The main agent can use its own tools directly, or delegate tasks to subagents to complete more complex tasks and avoid excessive context length."
   },
   "actions": {
     "refresh": "Refresh",
     "save": "Save",
-    "add": "Add SubAgent",
+    "add": "Add Subagent",
     "expand": "Expand",
     "collapse": "Collapse",
     "delete": "Delete",
     "close": "Close"
   },
   "overview": {
-    "totalAgents": "Total SubAgents",
-    "totalAgentsNote": "Configured delegate agents",
+    "totalAgents": "Total Subagents",
+    "totalAgentsNote": "Number of configured subagents",
     "enabledAgents": "Enabled Agents",
-    "enabledAgentsNote": "Agents available for handoff",
-    "mainOrchestration": "Main Orchestration",
+    "enabledAgentsNote": "Subagents participating in handoff orchestration",
+    "mainOrchestration": "Main Orchestration Status",
     "boundPersonas": "Bound Personas",
-    "boundPersonasNote": "Agents with an attached persona"
+    "boundPersonasNote": "Subagents with persona bindings"
   },
   "switches": {
-    "enable": "Enable SubAgent orchestration",
-    "enableHint": "Enable sub-agent functionality",
-    "dedupe": "Deduplicate main LLM tools (hide tools duplicated by SubAgents)",
-    "dedupeHint": "Remove duplicate tools from main agent"
+    "enable": "Enable Subagent Orchestration",
+    "enableHint": "Enable subagent functionality",
+    "dedupe": "Deduplicate tools for main LLM",
+    "dedupeHint": "Remove duplicate tools from the main agent that overlap with subagents"
   },
   "description": {
-    "disabled": "When off: SubAgent is disabled; the main LLM mounts tools via persona rules (all by default) and calls them directly.",
-    "enabled": "When on: the main LLM keeps its own tools and mounts transfer_to_* delegate tools. With deduplication, tools overlapping with SubAgents are removed from the main tool set."
+    "disabled": "Subagent orchestration is not enabled.",
+    "enabled": "Subagents will be placed in the main agent's tool set as tools, and the main agent will call subagents at appropriate times to complete tasks."
   },
   "section": {
-    "title": "SubAgents",
-    "subtitle": "Configure delegate agents, personas, and descriptions for the main LLM",
+    "title": "Subagent Configuration",
+    "subtitle": "Configure delegatable subagents, personas, and descriptions for the main agent",
     "globalSettings": "Global Settings",
-    "agentSetup": "Agent Setup"
+    "agentSetup": "Agent Setup",
+    "orchestratorTitle": "Subagent Orchestration",
+    "orchestratorSubtitle": "Configure basic orchestration features including subagent list and router system prompt",
+    "enhancedSettings": "Enhanced Subagent Settings",
+    "enhancedSettingsHint": "Configure runtime parameters, resource limits, and tool strategies for dynamic subagents"
   },
   "cards": {
     "statusEnabled": "Enabled",
     "statusDisabled": "Disabled",
-    "unnamed": "Untitled SubAgent",
+    "unnamed": "Unnamed Subagent",
     "transferPrefix": "transfer_to_{name}",
     "switchLabel": "Enable",
-    "previewTitle": "Preview: handoff tool shown to the main LLM",
+    "previewTitle": "Preview: handoff tools seen by main LLM",
     "personaChip": "Persona: {id}",
+    "noDescription": "No description",
     "personaPreview": "Persona Preview",
-    "noDescription": "No description yet",
-    "previewHint": "Review the currently selected persona to verify the handoff target."
+    "previewHint": "Shows a preview of the currently selected Persona for easy confirmation of handoff targets."
   },
   "form": {
-    "nameLabel": "Agent name (used for transfer_to_{name})",
-    "nameHint": "Use lowercase letters + underscores; must be globally unique.",
+    "nameLabel": "Agent Name (used for transfer_to_{name})",
+    "nameHint": "Use lowercase letters and underscores, globally unique",
     "providerLabel": "Chat Provider (optional)",
-    "providerHint": "Leave empty to follow the global default provider.",
-    "personaLabel": "Choose Persona",
-    "personaHint": "The SubAgent inherits the selected Persona's system settings and tools.",
-    "descriptionLabel": "Description for the main LLM (used to decide handoff)",
-    "descriptionHint": "Shown to the main LLM as the transfer_to_* tool description—keep it short and clear."
+    "providerHint": "Leave empty to use global default provider.",
+    "personaLabel": "Select Persona",
+    "personaHint": "The subagent will directly inherit the selected Persona's system settings and tools. Manage and create personas on the Persona settings page.",
+    "personaPreview": "Persona Preview",
+    "descriptionLabel": "Description for Main LLM (used to decide handoff)",
+    "descriptionHint": "This will be used as the description for transfer_to_* tools shown to the main LLM. Keep it concise and clear."
   },
   "messages": {
-    "loadConfigFailed": "Failed to load config",
+    "loadConfigFailed": "Failed to load configuration",
     "loadPersonaFailed": "Failed to load persona list",
-    "unsavedChangesNotice": "You have unsaved changes on this page. Save before leaving.",
-    "unsavedChangesLeaveConfirm": "You have unsaved changes. Leaving will discard them. Continue?",
-    "unsavedChangesReloadConfirm": "You have unsaved changes. Reloading will discard them. Continue?",
-    "nameMissing": "A SubAgent is missing a name",
-    "nameInvalid": "Invalid SubAgent name: only lowercase letters/numbers/underscores, starting with a letter",
-    "nameDuplicate": "Duplicate SubAgent name: {name}",
-    "personaMissing": "SubAgent {name} has no persona selected",
+    "unsavedChangesNotice": "There are unsaved changes on this page. Please save before leaving.",
+    "unsavedChangesLeaveConfirm": "There are unsaved changes. Leaving will discard these changes. Continue?",
+    "unsavedChangesReloadConfirm": "There are unsaved changes. Refreshing will discard these changes. Continue?",
+    "nameMissing": "A subagent is missing a name",
+    "nameInvalid": "Invalid subagent name: only lowercase letters, numbers, and underscores are allowed, must start with a letter",
+    "nameDuplicate": "Duplicate subagent name: {name}",
+    "personaMissing": "Subagent {name} has no selected Persona",
     "saveSuccess": "Saved successfully",
     "saveFailed": "Failed to save",
     "nameRequired": "Name is required",
-    "namePattern": "Lowercase letters, numbers, underscore only"
+    "namePattern": "Only lowercase letters, numbers, and underscores allowed"
   },
   "empty": {
-    "title": "No Agents Configured",
-    "subtitle": "Add a new sub-agent to get started",
+    "title": "No Subagents Configured",
+    "subtitle": "Add a new subagent to get started",
     "action": "Create First Agent"
+  },
+  "enhancedSwitches": {
+    "enable": "Enable Enhanced Subagents",
+    "enableHint": "Enable dynamic subagent creation and management. When enabled, tools like create_dynamic_subagent can be used.",
+    "autoCleanup": "Auto Cleanup Per Turn",
+    "autoCleanupHint": "Automatically clean up inactive subagents after each turn",
+    "sharedContext": "Shared Context",
+    "sharedContextHint": "Share partial context between subagents"
+  },
+  "enhancedFields": {
+    "maxSubagentCount": "Max Subagent Count",
+    "maxSubagentCountHint": "Maximum number of concurrent subagents",
+    "sharedContextMaxlen": "Shared Context Max Length",
+    "sharedContextMaxlenHint": "Maximum token count for shared context",
+    "maxSubagentHistory": "Max History Messages",
+    "maxSubagentHistoryHint": "Maximum history messages per subagent",
+    "executionTimeout": "Execution Timeout (seconds)",
+    "executionTimeoutHint": "Maximum execution timeout for subagent tasks"
+  },
+  "enhancedSection": {
+    "runtimeParams": "Runtime Parameters",
+    "runtimeParamsHint": "Control subagent count, history, and execution timeout",
+    "sharedContext": "Shared Context",
+    "sharedContextHint": "Context sharing strategy between subagents",
+    "toolStrategy": "Tool Strategy",
+    "toolStrategyHint": "Control which tools subagents can use"
+  },
+  "enhancedTools": {
+    "blacklist": "Tools Blacklist",
+    "blacklistHint": "Tools that subagents cannot use. Blacklisted tools will not be assigned to subagents.",
+    "inherent": "Inherent Tools List",
+    "inherentHint": "Tools inherent to subagents. Tools in this list are guaranteed to be assigned to subagents.",
+    "selectTool": "Select Tool",
+    "addTool": "Add Tool",
+    "selectBlacklistTool": "Add Tool to Blacklist",
+    "selectInherentTool": "Add Tool to Inherent List",
+    "emptyBlacklist": "No blacklisted tools",
+    "emptyInherent": "No inherent tools"
   }
 }

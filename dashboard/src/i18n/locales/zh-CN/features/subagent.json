@@ -39,7 +39,11 @@
     "title": "子代理配置",
     "subtitle": "为主代理配置可委派的子代理、人格与描述信息",
     "globalSettings": "全局设置",
-    "agentSetup": "Agent 设置"
+    "agentSetup": "Agent 设置",
+    "orchestratorTitle": "子代理编排",
+    "orchestratorSubtitle": "配置子代理列表、主代理路由提示词等基础编排功能",
+    "enhancedSettings": "增强子代理设置",
+    "enhancedSettingsHint": "配置动态子代理的运行参数、资源限制和工具策略"
   },
   "cards": {
     "statusEnabled": "启用",
@@ -83,5 +87,43 @@
     "title": "未配置子代理",
     "subtitle": "添加一个新的子代理以开始",
     "action": "创建第一个 Agent"
+  },
+  "enhancedSwitches": {
+    "enable": "启用增强子代理",
+    "enableHint": "启用动态子代理创建和管理能力。开启后可使用 create_dynamic_subagent 等工具。",
+    "autoCleanup": "每轮自动清理",
+    "autoCleanupHint": "每轮对话结束后自动清理不活跃的子代理",
+    "sharedContext": "共享上下文",
+    "sharedContextHint": "子代理之间共享部分上下文信息"
+  },
+  "enhancedFields": {
+    "maxSubagentCount": "最大子代理数量",
+    "maxSubagentCountHint": "同时存在的最大子代理数量",
+    "sharedContextMaxlen": "共享上下文最大长度",
+    "sharedContextMaxlenHint": "共享上下文的最大 token 数量",
+    "maxSubagentHistory": "最大历史消息数",
+    "maxSubagentHistoryHint": "每个子代理保留的最大历史消息数量",
+    "executionTimeout": "执行超时时间(秒)",
+    "executionTimeoutHint": "子代理执行任务的最大超时时间"
+  },
+  "enhancedSection": {
+    "runtimeParams": "运行参数",
+    "runtimeParamsHint": "控制子代理的数量、历史和执行超时",
+    "sharedContext": "共享上下文",
+    "sharedContextHint": "子代理之间的上下文共享策略",
+    "toolStrategy": "工具策略",
+    "toolStrategyHint": "控制子代理可使用哪些工具"
+  },
+  "enhancedTools": {
+    "blacklist": "工具黑名单",
+    "blacklistHint": "子代理不可使用的工具列表。被加入黑名单的工具将不会分配给子代理。",
+    "inherent": "固有工具名单",
+    "inherentHint": "子代理固有的工具名单，在该名单内的工具会确保分配给子代理。",
+    "selectTool": "选择工具",
+    "addTool": "添加工具",
+    "selectBlacklistTool": "添加工具到黑名单",
+    "selectInherentTool": "添加工具到固有名单",
+    "emptyBlacklist": "暂无黑名单工具",
+    "emptyInherent": "暂无固有工具"
   }
 }

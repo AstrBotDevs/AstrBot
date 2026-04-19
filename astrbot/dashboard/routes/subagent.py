@@ -59,7 +59,21 @@ class SubAgentRoute(Route):
                     if isinstance(a, dict):
                         a.setdefault("provider_id", None)
                         a.setdefault("persona_id", None)
-            return jsonify(Response().ok(data=data).__dict__)
+
+            # 获取 enhanced_subagent 配置
+            enhanced_data = cfg.get("enhanced_subagent", {})
+
+            # 合并返回
+            return jsonify(
+                Response()
+                .ok(
+                    data={
+                        "subagent_orchestrator": data,
+                        "enhanced_subagent": enhanced_data,
+                    }
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return jsonify(Response().error(f"获取 subagent 配置失败: {e!s}").__dict__)
@@ -71,16 +85,22 @@ class SubAgentRoute(Route):
                 return jsonify(Response().error("配置必须为 JSON 对象").__dict__)
 
             cfg = self.core_lifecycle.astrbot_config
-            cfg["subagent_orchestrator"] = data
+
+            # 分别处理两个配置
+            if "subagent_orchestrator" in data:
+                orch_data = data["subagent_orchestrator"]
+                cfg["subagent_orchestrator"] = orch_data
+
+                # Reload dynamic handoff tools if orchestrator exists
+                orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
+                if orch is not None:
+                    await orch.reload_from_config(orch_data)
+
+            if "enhanced_subagent" in data:
+                cfg["enhanced_subagent"] = data["enhanced_subagent"]
 
             # Persist to cmd_config.json
-            # AstrBotConfigManager does not expose a `save()` method; persist via AstrBotConfig.
             cfg.save_config()
-
-            # Reload dynamic handoff tools if orchestrator exists
-            orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
-            if orch is not None:
-                await orch.reload_from_config(data)
 
             return jsonify(Response().ok(message="保存成功").__dict__)
         except Exception as e:
