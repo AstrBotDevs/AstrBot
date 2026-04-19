@@ -940,6 +940,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
                     else:
                         func_tool = req.func_tool.get_tool(func_tool_name)
+                if (
+                    self.tool_schema_mode == "skills_like"
+                    and self._skill_like_raw_tool_set
+                ):
+                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
+                    # so we need to get the tool from the raw tool set
+                    func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
+                    available_tools = self._skill_like_raw_tool_set.names()
+                else:
+                    func_tool = req.func_tool.get_tool(func_tool_name)
+                    available_tools = req.func_tool.names()
 
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
@@ -947,7 +958,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
                     _append_tool_call_result(
                         func_tool_id,
-                        f"error: Tool {func_tool_name} not found.",
+                        f"error: Tool {func_tool_name} not found. Available tools are: {', '.join(available_tools)}",
                     )
                     continue
 

@@ -1,10 +1,8 @@
-from unittest.mock import AsyncMock, MagicMock
+import json
 
 import pytest
-from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata, Unknown
-from astrbot.api.event import MessageChain
+from astrbot.api.platform import PlatformMetadata, Unknown
 from astrbot.core.message.components import (
-    File,
     Image,
     Plain,
     Video,
@@ -12,44 +10,18 @@ from astrbot.core.message.components import (
     AtAll,
     BaseMessageComponent,
     Json,
-    Record,
     Reply,
 )
 
 
 from astrbot.core.platform.sources.kook.kook_event import KookEvent
 from astrbot.core.platform.sources.kook.kook_types import KookMessageType, OrderMessage
-
-
-async def mock_kook_client(upload_asset_return: str, send_text_return: str):
-    # 1. Mock 掉整个 KookClient 类
-    client = MagicMock()
-
-    client.upload_asset = AsyncMock(return_value=upload_asset_return)
-    client.send_text = AsyncMock(return_value=send_text_return)
-    return client
-
-
-def mock_file_message(input: str):
-    message = MagicMock(spec=File)
-    message.get_file = AsyncMock(return_value=input)
-    return message
-
-
-def mock_record_message(input: str):
-    message = MagicMock(spec=Record)
-    message.text = input
-    message.convert_to_file_path = AsyncMock(return_value=input)
-    return message
-
-
-def mock_astrbot_message():
-    message = AstrBotMessage()
-    message.type = MessageType.OTHER_MESSAGE
-    message.group_id = "test"
-    message.session_id = "test"
-    message.message_id = "test"
-    return message
+from tests.test_kook.shared import (
+    mock_astrbot_message,
+    mock_file_message,
+    mock_kook_client,
+    mock_record_message,
+)
 
 
 @pytest.mark.asyncio
@@ -161,7 +133,7 @@ async def test_kook_event_warp_message(
     expected_output: OrderMessage,
     expected_error: type[BaseException] | None,
 ):
-    client = await mock_kook_client(
+    client = mock_kook_client(
         upload_asset_return,
         "",
     )
@@ -184,5 +156,20 @@ async def test_kook_event_warp_message(
         return
 
     result = await event._wrap_message(1, input_message)
-    assert result == expected_output
-    
+
+    expected_output_text: str | list | dict = expected_output.text
+    is_json_text = False
+    try:
+        expected_output_text = json.loads(expected_output_text)
+        is_json_text = True
+    except:
+        pass
+
+    if is_json_text:
+        assert json.loads(result.text) == expected_output_text
+    else:
+        assert result.text == expected_output_text
+
+    assert result.index == expected_output.index
+    assert result.type == expected_output.type
+    assert result.reply_id == expected_output.reply_id

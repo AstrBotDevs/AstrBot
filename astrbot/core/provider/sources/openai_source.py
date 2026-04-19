@@ -854,24 +854,26 @@ class ProviderOpenAIOfficial(Provider):
                     # 工具集未提供
                     # Should be unreachable
                     raise Exception("工具集未提供")
-                for tool in tools.func_list:
-                    if (
-                        tool_call.type == "function"
-                        and tool.name == tool_call.function.name
-                    ):
-                        # workaround for #1454
-                        if isinstance(tool_call.function.arguments, str):
-                            args = json.loads(tool_call.function.arguments)
-                        else:
-                            args = tool_call.function.arguments
-                        args_ls.append(args)
-                        func_name_ls.append(tool_call.function.name)
-                        tool_call_ids.append(tool_call.id)
 
-                        # gemini-2.5 / gemini-3 series extra_content handling
-                        extra_content = getattr(tool_call, "extra_content", None)
-                        if extra_content is not None:
-                            tool_call_extra_content_dict[tool_call.id] = extra_content
+                if tool_call.type == "function":
+                    # workaround for #1454
+                    if isinstance(tool_call.function.arguments, str):
+                        try:
+                            args = json.loads(tool_call.function.arguments)
+                        except json.JSONDecodeError as e:
+                            logger.error(f"解析参数失败: {e}")
+                            args = {}
+                    else:
+                        args = tool_call.function.arguments
+                    args_ls.append(args)
+                    func_name_ls.append(tool_call.function.name)
+                    tool_call_ids.append(tool_call.id)
+
+                    # gemini-2.5 / gemini-3 series extra_content handling
+                    extra_content = getattr(tool_call, "extra_content", None)
+                    if extra_content is not None:
+                        tool_call_extra_content_dict[tool_call.id] = extra_content
+
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls

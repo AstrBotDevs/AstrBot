@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.23.1"
+VERSION = "4.23.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -1227,7 +1227,7 @@ CONFIG_METADATA_2 = {
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
-                        "api_base": "https://api.kimi.com/coding/",
+                        "api_base": "https://api.kimi.com/coding",
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {"User-Agent": "claude-code/0.1.0"},
@@ -1256,6 +1256,19 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
+                    },
+                    "MiniMax Token Plan": {
+                        "id": "minimax-token-plan",
+                        "provider": "minimax-token-plan",
+                        "type": "minimax_token_plan",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.minimaxi.com/anthropic",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "xAI": {
                         "id": "xai",
