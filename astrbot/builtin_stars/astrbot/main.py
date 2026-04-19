@@ -6,6 +6,7 @@ from astrbot.api.message_components import Image, Plain
 from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
 
+from .constants import LTM_ACTIVE_REPLY_KEY
 from .long_term_memory import LongTermMemory
 
 
@@ -75,11 +76,15 @@ class Main(star.Star):
                         logger.error("未找到对话，无法主动回复")
                         return
 
-                    yield event.request_llm(
+                    req = event.request_llm(
                         prompt=prompt,
                         session_id=event.session_id,
-                        conversation=conv,
+                        conversation=None,  # 主动回复不应写回会话历史，避免 chatroom 内容污染 conv.history
                     )
+                    event.set_extra(
+                        LTM_ACTIVE_REPLY_KEY, id(req)
+                    )  # 存 req 的 id，避免影响其他插件触发的 LLM 请求
+                    yield req
                 except BaseException as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
@@ -101,6 +106,10 @@ class Main(star.Star):
     ) -> None:
         """在 LLM 响应后记录对话"""
         if self.ltm and self.ltm_enabled(event):
+            # 主动回复的响应不记入 session_chats
+            # 避免 chatroom 风格的回复污染后续主动回复所使用的群聊上下文
+            if event.get_extra(LTM_ACTIVE_REPLY_KEY, None) is not None:
+                return
             try:
                 await self.ltm.after_req_llm(event, resp)
             except Exception as e:
@@ -116,3 +125,5 @@ class Main(star.Star):
                     await self.ltm.remove_session(event)
             except Exception as e:
                 logger.error(f"ltm: {e}")
+        # 清除主动回复标记，避免 event 被复用时意外影响后续流程
+        event.set_extra(LTM_ACTIVE_REPLY_KEY, None)
