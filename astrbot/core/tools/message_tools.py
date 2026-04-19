@@ -84,10 +84,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     workspace_root,
                 )
 
-                ws_path = workspace_root(unified_msg_origin)
-                ws_candidate = ws_path / path
-                if ws_candidate.exists():
-                    return str(ws_candidate), False
+                try:
+                    ws_path = workspace_root(unified_msg_origin)
+                    ws_candidate = (ws_path / path).resolve()
+                    if ws_candidate.exists() and ws_candidate.is_relative_to(ws_path):
+                        return str(ws_candidate), False
+                except Exception:
+                    pass
 
         if os.path.exists(path):
             return path, False
