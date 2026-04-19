@@ -2,7 +2,7 @@ import json
 from enum import Enum, IntEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class KookApiPaths:
@@ -13,6 +13,7 @@ class KookApiPaths:
 
     # 初始化相关
     USER_ME = f"{BASE_URL}{API_VERSION_PATH}/user/me"
+    USER_VIEW = f"{BASE_URL}{API_VERSION_PATH}/user/view"
     GATEWAY_INDEX = f"{BASE_URL}{API_VERSION_PATH}/gateway/index"
 
     # 消息相关
@@ -21,6 +22,14 @@ class KookApiPaths:
     CHANNEL_MESSAGE_CREATE = f"{BASE_URL}{API_VERSION_PATH}/message/create"
     ## 私聊消息
     DIRECT_MESSAGE_CREATE = f"{BASE_URL}{API_VERSION_PATH}/direct-message/create"
+
+
+class KookMentionTagName(str, Enum):
+    """用来匹配 `(tagName)value(tagName)` 格式里的tagName , 例如: `(met)all(met)`
+    定义参见KMarkdown语法文档: https://developer.kookapp.cn/doc/kmarkdown"""
+
+    MENTION = "met"
+    ROLE = "rol"
 
 
 class KookMessageType(IntEnum):
@@ -56,6 +65,14 @@ class KookModuleType(str, Enum):
     CARD = "card"
 
 
+class KookRoleExtraType(str, Enum):
+    """定义参见kook事件结构文档: https://developer.kookapp.cn/doc/event/event-introduction"""
+
+    ADDED_ROLE = "added_role"
+    DELETED_ROLE = "deleted_role"
+    UPDATED_ROLE = "updated_role"
+
+
 ThemeType = Literal[
     "primary", "success", "danger", "warning", "info", "secondary", "none", "invisible"
 ]
@@ -67,7 +84,9 @@ SectionMode = Literal["left", "right"]
 CountdownMode = Literal["day", "hour", "second"]
 
 
-class KookBaseDataClass(BaseModel):
+class KookBaseReceiveDataClass(BaseModel):
+    """接收数据基类,`to_dict`/`to_json`默认保证尽量json原样输出"""
+
     model_config = ConfigDict(
         extra="allow",
         arbitrary_types_allowed=True,
@@ -84,11 +103,51 @@ class KookBaseDataClass(BaseModel):
 
     def to_dict(
         self,
-        mode: Literal["json", "python"] | str = "python",
+        mode: Literal["json", "python"] | str = "json",
+        by_alias=True,
+        exclude_none=False,
+        exclude_unset=True,
+    ) -> dict:
+        """默认配置预期场景为尽量原样输出,若需要使用此数据类发送json数据,
+        请`exclude_none=True, exclude_unset=False`"""
+        return self.model_dump(
+            by_alias=by_alias,
+            exclude_none=exclude_none,
+            mode=mode,
+            exclude_unset=exclude_unset,
+        )
+
+    def to_json(
+        self,
+        indent: int | None = None,
+        ensure_ascii=False,
+        by_alias=True,
+        exclude_none=False,
+        exclude_unset=True,
+    ) -> str:
+        """默认配置预期场景为尽量原样输出,若需要使用此数据类发送json数据,
+        请`exclude_none=True, exclude_unset=False`"""
+        return self.model_dump_json(
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            by_alias=by_alias,
+            exclude_none=exclude_none,
+            exclude_unset=exclude_unset,
+        )
+
+
+class KookBaseSendDataClass(KookBaseReceiveDataClass):
+    """发送数据基类,`to_dict`/`to_json`保证默认输出内容格式包含接口格式所需最简格式内容"""
+
+    def to_dict(
+        self,
+        mode: Literal["json", "python"] | str = "json",
         by_alias=True,
         exclude_none=True,
         exclude_unset=False,
     ) -> dict:
+        """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
+        请`exclude_none=False, exclude_unset=True`"""
         return self.model_dump(
             by_alias=by_alias,
             exclude_none=exclude_none,
@@ -104,6 +163,8 @@ class KookBaseDataClass(BaseModel):
         exclude_none=True,
         exclude_unset=False,
     ) -> str:
+        """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
+        请`exclude_none=False, exclude_unset=True`"""
         return self.model_dump_json(
             indent=indent,
             ensure_ascii=ensure_ascii,
@@ -113,7 +174,7 @@ class KookBaseDataClass(BaseModel):
         )
 
 
-class KookCardModelBase(KookBaseDataClass):
+class KookCardModelBase(KookBaseSendDataClass):
     """卡片模块基类"""
 
     type: str
@@ -249,10 +310,28 @@ AnyModule = Annotated[
 ]
 
 
-class KookCardMessage(KookBaseDataClass):
+class KookCardMessage(KookBaseSendDataClass):
     """卡片定义文档详见 : https://developer.kookapp.cn/doc/cardmessage
-    此类型不能直接to_json后发送,因为kook要求卡片容器json顶层必须是**列表**
-    若要发送卡片消息，请使用KookCardMessageContainer
+    适用于发送单个卡片消息
+    将此消息类型放入`Json`的data字段进行卡片消息发送,适配器会自动添加顶层的列表
+    若要发送多个卡片消息，推荐使用KookCardMessageContainer进行卡片消息组装
+
+    使用方法：
+    ```python
+    chain = []
+    chain.append(
+            Json(
+                data=KookCardMessage(
+                    theme="info",
+                    size="lg",
+                    modules=[
+                        HeaderModule(text=PlainTextElement(content="test1")),
+                    ],
+                ).to_dict()
+            )
+        )
+    yield event.chain_result(chain)
+    ```
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -269,14 +348,71 @@ class KookCardMessage(KookBaseDataClass):
 
 
 class KookCardMessageContainer(list[KookCardMessage]):
-    """卡片消息容器(列表),此类型可以直接to_json后发送出去"""
+    """卡片消息容器(列表),可放入多个卡片消息(KookCardMessage)
+
+    使用方法:
+    ```python
+    chain = []
+        chain.append(
+            Json(
+                data=KookCardMessageContainer(
+                    [
+                        KookCardMessage(
+                            theme="info",
+                            size="lg",
+                            modules=[
+                                HeaderModule(text=PlainTextElement(content="test1")),
+                            ],
+                        )
+                    ]
+                ).to_dict()
+            )
+        )
+        yield event.chain_result(chain)
+    ```
+    """
 
     def append(self, object: KookCardMessage) -> None:
         return super().append(object)
 
-    def to_json(self, indent: int | None = None, ensure_ascii: bool = True) -> str:
+    def to_dict(
+        self,
+        by_alias=True,
+        exclude_none=True,
+        exclude_unset=False,
+    ) -> list[dict]:
+        """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
+        请`exclude_none=False, exclude_unset=True`"""
+        return [
+            i.to_dict(
+                by_alias=by_alias,
+                exclude_none=exclude_none,
+                exclude_unset=exclude_unset,
+            )
+            for i in self
+        ]
+
+    def to_json(
+        self,
+        indent: int | None = None,
+        ensure_ascii: bool = True,
+        by_alias=True,
+        exclude_none=True,
+        exclude_unset=False,
+    ) -> str:
+        """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
+        请`exclude_none=False, exclude_unset=True`"""
         return json.dumps(
-            [i.to_dict() for i in self], indent=indent, ensure_ascii=ensure_ascii
+            [
+                i.to_dict(
+                    by_alias=by_alias,
+                    exclude_none=exclude_none,
+                    exclude_unset=exclude_unset,
+                )
+                for i in self
+            ],
+            indent=indent,
+            ensure_ascii=ensure_ascii,
         )
 
     @classmethod
@@ -293,7 +429,7 @@ class OrderMessage(BaseModel):
 
 class KookMessageSignal(IntEnum):
     """KOOK WebSocket 信令类型
-    ws文档: https://developer.kookapp.cn/doc/websocket"""  # noqa: W291
+    ws文档: https://developer.kookapp.cn/doc/websocket"""
 
     MESSAGE = 0
     """server->client  消息(s包含聊天和通知消息)"""
@@ -317,7 +453,7 @@ class KookChannelType(str, Enum):
     BROADCAST = "BROADCAST"
 
 
-class KookAuthor(KookBaseDataClass):
+class KookAuthor(KookBaseReceiveDataClass):
     id: str
     username: str
     identify_num: str
@@ -330,25 +466,110 @@ class KookAuthor(KookBaseDataClass):
     roles: list[int] = Field(default_factory=list)
 
 
-class KookKMarkdown(KookBaseDataClass):
+class KookMarkdownMentionPart(KookBaseReceiveDataClass):
+    """
+    文档参考: https://developer.kookapp.cn/doc/event/message
+    """
+
+    id: str
+    username: str
+    full_name: str
+    avatar: str
+
+
+class KookMarkdownMentionRolePart(KookBaseReceiveDataClass):
+    """
+    文档参考: https://developer.kookapp.cn/doc/event/message
+    """
+
+    role_id: int
+    name: str
+    color: int
+    color_type: int
+    color_map: list[Any]
+    position: int | None = None
+    hoist: int | None = None
+    mentionable: int | None = None
+    permissions: int | None = None
+
+
+class KookKMarkdown(KookBaseReceiveDataClass):
     raw_content: str
-    mention_part: list[Any] = Field(default_factory=list)
-    mention_role_part: list[Any] = Field(default_factory=list)
+    mention_part: list[KookMarkdownMentionPart] = Field(default_factory=list)
+    mention_role_part: list[KookMarkdownMentionRolePart] = Field(default_factory=list)
 
 
-class KookExtra(KookBaseDataClass):
-    type: int | str
+class KookRole(KookBaseReceiveDataClass):
+    """服务器角色对象数据结构"""
+
+    role_id: int = Field(alias="role_id")
+    name: str | None = None
+    color: int | None = None
+    position: int | None = None
+    hoist: int | None = 0  # 是否在成员列表中单独展示
+    mentionable: int | None = 0  # 是否允许所有人提到该角色
+    permissions: int | None = None
+
+
+class KookRoleEventBody(KookBaseReceiveDataClass):
+    """
+    服务器角色相关事件 (added_role, updated_role, deleted_role) 的 Body 部分
+    文档参考: https://developer.kookapp.cn/doc/event/guild-role
+    """
+
+    role_id: int | None = None  # 在 deleted_role 中通常只给 ID
+    name: str | None = None
+    color: int | None = None
+    position: int | None = None
+    hoist: int | None = None
+    mentionable: int | None = None
+    permissions: int | None = None
+    # 有些事件会将完整的 role 对象包裹在 body 里
+    # 如果是 added_role 且需要处理更完整的结构，可以扩展
+
+
+class KookExtra(KookBaseReceiveDataClass):
+    """事件结构定义
+    文档参考 : https://developer.kookapp.cn/doc/event/event-introduction"""
+
+    type: KookRoleExtraType | str | int
+    """当 type 非系统消息(255)时, type为int
+
+    当 type 为系统消息(255)时, type为str
+    """
+
     code: str | None = None
-    body: dict[str, Any] | None = None
+    body: KookRole | dict[str, Any] | None = None
     author: KookAuthor | None = None
     kmarkdown: KookKMarkdown | None = None
     last_msg_content: str | None = None
     mention: list[str] = Field(default_factory=list)
     mention_all: bool = False
     mention_here: bool = False
+    guild_id: str | None = None
+    guild_type: int | None = None
+    channel_name: str | None = None
+    visible_only: str | None = None
+    mention_no_at: list | None = None
+    mention_roles: list[int] | None = None
+    nav_channels: list | None = None
+    emoji: list | None = None
+    preview_content: str | None = None
+    channel_type: int | None = None
+    send_msg_device: int | None = None
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def parse_type(cls, value):
+        """优先尝试匹配枚举，失败则保留原值"""
+        if isinstance(value, str):
+            if value in {e.value for e in KookRoleExtraType}:
+                return KookRoleExtraType(value)
+
+        return value
 
 
-class KookMessageEventData(KookBaseDataClass):
+class KookMessageEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.MESSAGE] = Field(
         KookMessageSignal.MESSAGE, exclude=True
     )
@@ -358,7 +579,7 @@ class KookMessageEventData(KookBaseDataClass):
     type: KookMessageType
     target_id: str
     author_id: str
-    content: str | dict[str, Any]
+    content: str | dict[str, Any]  # 道具消息时这里是dict
     msg_id: str
     msg_timestamp: int
     nonce: str
@@ -366,7 +587,7 @@ class KookMessageEventData(KookBaseDataClass):
     extra: KookExtra
 
 
-class KookHelloEventData(KookBaseDataClass):
+class KookHelloEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.HELLO] = Field(
         KookMessageSignal.HELLO, exclude=True
     )
@@ -376,28 +597,28 @@ class KookHelloEventData(KookBaseDataClass):
     session_id: str
 
 
-class KookPingEventData(KookBaseDataClass):
+class KookPingEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.PING] = Field(
         KookMessageSignal.PING, exclude=True
     )
     """only for type hint"""
 
 
-class KookPongEventData(KookBaseDataClass):
+class KookPongEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.PONG] = Field(
         KookMessageSignal.PONG, exclude=True
     )
     """only for type hint"""
 
 
-class KookResumeEventData(KookBaseDataClass):
+class KookResumeEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.RESUME] = Field(
         KookMessageSignal.RESUME, exclude=True
     )
     """only for type hint"""
 
 
-class KookReconnectEventData(KookBaseDataClass):
+class KookReconnectEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.RECONNECT] = Field(
         KookMessageSignal.RECONNECT, exclude=True
     )
@@ -407,7 +628,7 @@ class KookReconnectEventData(KookBaseDataClass):
     err: str
 
 
-class KookResumeAckEventData(KookBaseDataClass):
+class KookResumeAckEventData(KookBaseReceiveDataClass):
     signal: Literal[KookMessageSignal.RESUME_ACK] = Field(
         KookMessageSignal.RESUME_ACK, exclude=True
     )
@@ -416,7 +637,7 @@ class KookResumeAckEventData(KookBaseDataClass):
     session_id: str
 
 
-class KookWebsocketEvent(KookBaseDataClass):
+class KookWebsocketEvent(KookBaseReceiveDataClass):
     """KOOK WebSocket 原始推送结构"""
 
     signal: KookMessageSignal = Field(
@@ -451,22 +672,22 @@ class KookWebsocketEvent(KookBaseDataClass):
         return data
 
 
-class KookUserTag(KookBaseDataClass):
+class KookUserTag(KookBaseReceiveDataClass):
     color: str
     bg_color: str
     text: str
 
 
-class KookApiResponseBase(KookBaseDataClass):
+class KookApiResponseBase(KookBaseReceiveDataClass):
     code: int
     message: str
-    data: Any
+    data: dict  # 就算请求失败了也是空dict
 
     def success(self) -> bool:
         return self.code == 0
 
 
-class KookUserMeData(KookBaseDataClass):
+class KookUserMeData(KookBaseReceiveDataClass):
     """USER_ME 接口返回的 'data' 字段主体"""
 
     id: str
@@ -495,7 +716,47 @@ class KookUserMeResponse(KookApiResponseBase):
     data: KookUserMeData
 
 
-class KookGatewayIndexData(KookBaseDataClass):
+class KookUserMeViewData(KookBaseReceiveDataClass):
+    """USER_ME 接口返回的 'data' 字段主体"""
+
+    class KookTagInfo(KookBaseReceiveDataClass):
+        color: str
+        bg_color: str
+        text: str
+
+    id: str
+    username: str
+    identify_num: str
+    online: bool
+    os: str
+    status: int
+    avatar: str
+    vip_avatar: str
+    banner: str
+    nickname: str
+    roles: list[int]
+    is_vip: bool
+    vip_amp: bool
+    bot: bool
+    kpm_vip: str | None = None
+    wealth_level: int
+    bot_status: int
+    tag_info: KookTagInfo
+    mobile_verified: bool
+    is_sys: bool
+    client_id: str
+    verified: bool
+    joined_at: int
+    active_time: int
+
+
+class KookUserViewResponse(KookApiResponseBase):
+    """USER_VIEW 完整响应结构"""
+
+    data: KookUserMeViewData
+
+
+class KookGatewayIndexData(KookBaseReceiveDataClass):
     url: str
 
 

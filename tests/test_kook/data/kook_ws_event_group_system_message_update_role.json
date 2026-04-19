@@ -1,0 +1,38 @@
+{
+    "s": 0,
+    "d": {
+        "channel_type": "GROUP",
+        "type": 255,
+        "target_id": "6059671921720469",
+        "author_id": "1",
+        "content": "[系统消息]",
+        "msg_id": "35de353d-aa69-40a8-b329-e4498ed8d30d",
+        "msg_timestamp": 1776498088031,
+        "nonce": "",
+        "from_type": 1,
+        "extra": {
+            "type": "updated_role",
+            "body": {
+                "role_id": 16752184,
+                "name": "some_username",
+                "color": 0,
+                "position": 5,
+                "hoist": 0,
+                "mentionable": 0,
+                "permissions": 5571747823,
+                "desc": "",
+                "color_type": 1,
+                "color_map": {},
+                "type": 1,
+                "op_permissions": 0
+            }
+        }
+    },
+    "sn": 4,
+    "extra": {
+        "verifyToken": "kW4FH_ASHio1hosd",
+        "encryptKey": "",
+        "callbackUrl": "",
+        "intent": 255
+    }
+}
