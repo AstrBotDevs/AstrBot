@@ -744,7 +744,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
-        yield from self._yield_llm_result_response(llm_resp)
+        for response in self._yield_llm_result_response(llm_resp):
+            yield response
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
@@ -754,7 +755,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(
                         "skills_like tool re-query returned no tool calls; fallback to assistant response."
                     )
-                    yield from self._yield_llm_result_response(llm_resp)
+                    for response in self._yield_llm_result_response(llm_resp):
+                        yield response
                     await self._complete_with_assistant_response(llm_resp)
                     return
 
