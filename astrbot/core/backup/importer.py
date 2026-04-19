@@ -65,12 +65,12 @@ def _validate_path_within(target_path: Path, base_dir: Path) -> bool:
     """Validate that target_path is within base_dir after resolving symlinks.
 
     Prevents path traversal attacks (CWE-22) by ensuring the resolved
-    target path starts with the resolved base directory.
+    target path is relative to the resolved base directory.
     """
     try:
         resolved = target_path.resolve()
         base_resolved = base_dir.resolve()
-        return resolved == base_resolved or str(resolved).startswith(str(base_resolved) + os.sep)
+        return resolved.is_relative_to(base_resolved)
     except (OSError, ValueError):
         return False
 
