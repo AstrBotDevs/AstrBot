@@ -105,7 +105,7 @@ class KookPlatformAdapter(Platform):
                     logger.info(
                         f'[KOOK] 收到频道"{guild_id}"的角色更新通知, 类型为"{event.extra.type.value}", 刷新角色id缓存'
                     )
-                    self._roles_cache.clean_roles_cache(int(guild_id))
+                    self._roles_cache.clear_guild_roles_cache(int(guild_id))
                 case _:
                     logger.debug(
                         f'[KOOK] 判断此消息为"{event.extra.type}"类型的系统通知, 因未实现此消息的处理流程而忽略此消息, 原始消息数据: {event.to_json()}'

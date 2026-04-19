@@ -56,7 +56,7 @@ class KookRolesRecord:
     def set_bot_id(self, bot_id: str):
         self._bot_id = bot_id
 
-    def clean_roles_cache(self, guild_id: int):
+    def clear_guild_roles_cache(self, guild_id: int):
         self._roles_cache.pop(guild_id, None)
         self._pending_tasks.pop(guild_id, None)
 
