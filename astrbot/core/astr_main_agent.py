@@ -29,7 +29,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.message.components import File, Image, Record, Reply
+from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
     set_persona_custom_error_message_on_event,
@@ -1278,6 +1278,11 @@ async def build_main_agent(
                             text=f"[File Attachment: name {file_name}, path {file_path}]"
                         )
                     )
+                elif isinstance(comp, Video):
+                    video_path = await comp.convert_to_file_path()
+                    req.extra_user_content_parts.append(
+                        TextPart(text=f"[Video Attachment: path {video_path}]")
+                    )
             # quoted message attachments
             reply_comps = [
                 comp for comp in event.message_obj.message if isinstance(comp, Reply)
@@ -1314,6 +1319,13 @@ async def build_main_agent(
                                         f"[File Attachment in quoted message: "
                                         f"name {file_name}, path {file_path}]"
                                     )
+                                )
+                            )
+                        elif isinstance(reply_comp, Video):
+                            video_path = await reply_comp.convert_to_file_path()
+                            req.extra_user_content_parts.append(
+                                TextPart(
+                                    text=f"[Video Attachment in quoted message: path {video_path}]"
                                 )
                             )
 
