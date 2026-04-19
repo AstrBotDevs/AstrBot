@@ -80,6 +80,10 @@ class ChatRoute(Route):
             ),
             "/chat/message/edit": ("POST", self.update_message),
             "/chat/message/regenerate": ("POST", self.regenerate_message),
+            "/chat/thread/create": ("POST", self.create_thread),
+            "/chat/thread/get": ("GET", self.get_thread),
+            "/chat/thread/send": ("POST", self.send_thread_message),
+            "/chat/thread/delete": ("POST", self.delete_thread),
             "/chat/get_file": ("GET", self.get_file),
             "/chat/get_attachment": ("GET", self.get_attachment),
             "/chat/post_file": ("POST", self.post_file),
@@ -321,6 +325,37 @@ class ChatRoute(Route):
             f"{session.platform_id}!{session.creator}!{session.session_id}"
         )
 
+    def _build_thread_unified_msg_origin(self, creator: str, thread_id: str) -> str:
+        return (
+            f"webchat:{MessageType.FRIEND_MESSAGE.value}:webchat!{creator}!{thread_id}"
+        )
+
+    def _serialize_thread(self, thread) -> dict:
+        return {
+            "thread_id": thread.thread_id,
+            "parent_session_id": thread.parent_session_id,
+            "parent_message_id": thread.parent_message_id,
+            "base_checkpoint_id": thread.base_checkpoint_id,
+            "selected_text": thread.selected_text,
+            "created_at": to_utc_isoformat(thread.created_at),
+            "updated_at": to_utc_isoformat(thread.updated_at),
+        }
+
+    async def _delete_threads_by_ids(self, thread_ids: list[str], creator: str) -> None:
+        for thread_id in thread_ids:
+            unified_msg_origin = self._build_thread_unified_msg_origin(
+                creator, thread_id
+            )
+            active_event_registry.request_agent_stop_all(unified_msg_origin)
+            await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
+            await self.platform_history_mgr.delete(
+                platform_id="webchat_thread",
+                user_id=thread_id,
+                offset_sec=99999999,
+            )
+            webchat_queue_mgr.remove_queues(thread_id)
+            self.running_convs.pop(thread_id, None)
+
     async def _load_current_conversation_history(self, session) -> tuple[str, list]:
         unified_msg_origin = self._build_webchat_unified_msg_origin(session)
         conversation_id = await self.conv_mgr.get_curr_conversation_id(
@@ -465,15 +500,21 @@ class ChatRoute(Route):
         history_list.sort(key=lambda item: (item.created_at, item.id))
         return history_list
 
-    async def _delete_platform_history_after(self, session, message_id: int) -> None:
+    async def _delete_platform_history_after(
+        self, session, message_id: int
+    ) -> list[int]:
         history_list = await self._get_sorted_platform_history(session)
         should_delete = False
+        deleted_ids: list[int] = []
         for item in history_list:
             if should_delete:
-                await self.platform_history_mgr.delete_by_id(item.id)
+                if item.id is not None:
+                    deleted_ids.append(item.id)
+                    await self.platform_history_mgr.delete_by_id(item.id)
                 continue
             if item.id == message_id:
                 should_delete = True
+        return deleted_ids
 
     async def _save_bot_message(
         self,
@@ -484,6 +525,7 @@ class ChatRoute(Route):
         agent_stats: dict,
         refs: dict,
         llm_checkpoint_id: str | None = None,
+        platform_history_id: str = "webchat",
     ):
         """保存 bot 消息到历史记录，返回保存的记录"""
         bot_message_parts = []
@@ -500,7 +542,7 @@ class ChatRoute(Route):
             new_his["refs"] = refs
 
         record = await self.platform_history_mgr.insert(
-            platform_id="webchat",
+            platform_id=platform_history_id,
             user_id=webchat_conv_id,
             content=new_his,
             sender_id="bot",
@@ -529,6 +571,8 @@ class ChatRoute(Route):
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
+        platform_history_id = post_data.get("_platform_history_id") or "webchat"
+        thread_selected_text = post_data.get("_thread_selected_text")
 
         if not session_id:
             return Response().error("session_id is empty").__dict__
@@ -724,6 +768,7 @@ class ChatRoute(Route):
                                 agent_stats,
                                 refs,
                                 llm_checkpoint_id,
+                                platform_history_id,
                             )
                             # 发送保存的消息信息给前端
                             if saved_record and not client_disconnected:
@@ -765,6 +810,7 @@ class ChatRoute(Route):
                     "enable_streaming": enable_streaming,
                     "message_id": message_id,
                     "llm_checkpoint_id": llm_checkpoint_id,
+                    "thread_selected_text": thread_selected_text,
                 },
             ),
         )
@@ -773,7 +819,7 @@ class ChatRoute(Route):
 
         if not skip_user_history:
             saved_user_record = await self.platform_history_mgr.insert(
-                platform_id="webchat",
+                platform_id=platform_history_id,
                 user_id=webchat_conv_id,
                 content={"type": "user", "message": message_parts_for_storage},
                 sender_id=username,
@@ -852,6 +898,8 @@ class ChatRoute(Route):
             user_id=session_id,
             offset_sec=99999999,
         )
+        thread_ids = await self.db.delete_webchat_threads_by_parent_session(session_id)
+        await self._delete_threads_by_ids(thread_ids, username)
 
         # 删除与会话关联的配置路由
         try:
@@ -1053,9 +1101,14 @@ class ChatRoute(Route):
         )
 
         history_res = [history.model_dump() for history in history_ls]
+        threads = await self.db.get_webchat_threads_by_parent_session(
+            parent_session_id=session_id,
+            creator=username,
+        )
 
         response_data = {
             "history": history_res,
+            "threads": [self._serialize_thread(thread) for thread in threads],
             "is_running": self.running_convs.get(session_id, False),
         }
 
@@ -1068,6 +1121,170 @@ class ChatRoute(Route):
             }
 
         return Response().ok(data=response_data).__dict__
+
+    async def create_thread(self):
+        """Create or reuse a side thread from a selected assistant message."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = post_data.get("session_id")
+        parent_message_id = post_data.get("parent_message_id")
+        selected_text = str(post_data.get("selected_text") or "").strip()
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if parent_message_id is None:
+            return Response().error("Missing key: parent_message_id").__dict__
+        if not selected_text:
+            return Response().error("Missing key: selected_text").__dict__
+
+        try:
+            parent_message_id = int(parent_message_id)
+        except (TypeError, ValueError):
+            return Response().error("Invalid key: parent_message_id").__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        parent_record = await self.db.get_platform_message_history_by_id(
+            parent_message_id
+        )
+        if (
+            not parent_record
+            or parent_record.platform_id != session.platform_id
+            or parent_record.user_id != session_id
+        ):
+            return Response().error("Parent message not found").__dict__
+        if not isinstance(parent_record.content, dict):
+            return Response().error("Invalid parent message content").__dict__
+        if parent_record.content.get("type") != "bot":
+            return Response().error("Only bot messages can create threads").__dict__
+
+        checkpoint_id = parent_record.llm_checkpoint_id
+        if not checkpoint_id:
+            return (
+                Response().error("Parent message is not linked to LLM history").__dict__
+            )
+
+        existing = await self.db.get_webchat_thread_by_parent_message_and_text(
+            parent_session_id=session_id,
+            parent_message_id=parent_message_id,
+            selected_text=selected_text,
+            creator=username,
+        )
+        if existing:
+            return Response().ok(data=self._serialize_thread(existing)).__dict__
+
+        conversation_id, history = await self._load_current_conversation_history(
+            session
+        )
+        turn_range = self._find_turn_range(history, checkpoint_id)
+        if not conversation_id or not turn_range:
+            return Response().error("Linked checkpoint not found").__dict__
+
+        _start, end = turn_range
+        base_history = history[: end + 1]
+        thread = await self.db.create_webchat_thread(
+            creator=username,
+            parent_session_id=session_id,
+            parent_message_id=parent_message_id,
+            base_checkpoint_id=checkpoint_id,
+            selected_text=selected_text,
+        )
+        await self.conv_mgr.new_conversation(
+            unified_msg_origin=self._build_thread_unified_msg_origin(
+                username,
+                thread.thread_id,
+            ),
+            platform_id="webchat",
+            content=base_history,
+        )
+        return Response().ok(data=self._serialize_thread(thread)).__dict__
+
+    async def get_thread(self):
+        """Get a side thread and its message history."""
+        thread_id = request.args.get("thread_id")
+        if not thread_id:
+            return Response().error("Missing key: thread_id").__dict__
+
+        username = g.get("username", "guest")
+        thread = await self.db.get_webchat_thread_by_id(thread_id)
+        if not thread:
+            return Response().error(f"Thread {thread_id} not found").__dict__
+        if thread.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        history_ls = await self.platform_history_mgr.get(
+            platform_id="webchat_thread",
+            user_id=thread_id,
+            page=1,
+            page_size=1000,
+        )
+        return (
+            Response()
+            .ok(
+                data={
+                    "thread": self._serialize_thread(thread),
+                    "history": [history.model_dump() for history in history_ls],
+                    "is_running": self.running_convs.get(thread_id, False),
+                }
+            )
+            .__dict__
+        )
+
+    async def send_thread_message(self):
+        """Send a message inside a WebChat side thread."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        thread_id = post_data.get("thread_id")
+        if not thread_id:
+            return Response().error("Missing key: thread_id").__dict__
+
+        username = g.get("username", "guest")
+        thread = await self.db.get_webchat_thread_by_id(thread_id)
+        if not thread:
+            return Response().error(f"Thread {thread_id} not found").__dict__
+        if thread.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        return await self.chat(
+            {
+                "session_id": thread.thread_id,
+                "message": post_data.get("message", []),
+                "enable_streaming": post_data.get("enable_streaming", True),
+                "selected_provider": post_data.get("selected_provider"),
+                "selected_model": post_data.get("selected_model"),
+                "_platform_history_id": "webchat_thread",
+                "_thread_selected_text": thread.selected_text,
+            }
+        )
+
+    async def delete_thread(self):
+        """Delete a WebChat side thread and its isolated history."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        thread_id = post_data.get("thread_id")
+        if not thread_id:
+            return Response().error("Missing key: thread_id").__dict__
+
+        username = g.get("username", "guest")
+        thread = await self.db.get_webchat_thread_by_id(thread_id)
+        if not thread:
+            return Response().error(f"Thread {thread_id} not found").__dict__
+        if thread.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        await self.db.delete_webchat_thread(thread_id)
+        await self._delete_threads_by_ids([thread_id], username)
+        return Response().ok(data={"thread_id": thread_id}).__dict__
 
     async def update_message(self):
         """Update a persisted WebChat message and its linked LLM turn."""
@@ -1113,7 +1330,14 @@ class ChatRoute(Route):
             await self.platform_history_mgr.update(
                 message_id=message_id, content=content
             )
-            await self._delete_platform_history_after(session, message_id)
+            deleted_message_ids = await self._delete_platform_history_after(
+                session, message_id
+            )
+            thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
+                session_id,
+                deleted_message_ids,
+            )
+            await self._delete_threads_by_ids(thread_ids, username)
             updated = await self.db.get_platform_message_history_by_id(message_id)
             return (
                 Response()
@@ -1147,7 +1371,14 @@ class ChatRoute(Route):
             content=content,
             llm_checkpoint_id=new_checkpoint_id,
         )
-        await self._delete_platform_history_after(session, message_id)
+        deleted_message_ids = await self._delete_platform_history_after(
+            session, message_id
+        )
+        thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
+            session_id,
+            deleted_message_ids,
+        )
+        await self._delete_threads_by_ids(thread_ids, username)
         await self.conv_mgr.update_conversation(
             unified_msg_origin=self._build_webchat_unified_msg_origin(session),
             conversation_id=conversation_id,
@@ -1248,6 +1479,11 @@ class ChatRoute(Route):
             conversation_id=conversation_id,
             history=new_history,
         )
+        thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
+            session_id,
+            [message_id],
+        )
+        await self._delete_threads_by_ids(thread_ids, username)
         await self.platform_history_mgr.delete_by_id(message_id)
         await self.platform_history_mgr.update(
             message_id=source_user_record.id,

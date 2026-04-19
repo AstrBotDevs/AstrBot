@@ -63,6 +63,13 @@
     "done": "Готово",
     "running": "Выполняется"
   },
+  "thread": {
+    "title": "Thread",
+    "askInThread": "Спросить в ветке",
+    "delete": "Удалить ветку",
+    "confirmDelete": "Удалить эту ветку? Это действие необратимо.",
+    "placeholder": "Спросить об этом фрагменте..."
+  },
   "conversation": {
     "newConversation": "Новый чат",
     "noHistory": "История диалогов пуста",

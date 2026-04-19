@@ -63,6 +63,13 @@
     "done": "已完成",
     "running": "运行中"
   },
+  "thread": {
+    "title": "分支",
+    "askInThread": "在新分支中询问",
+    "delete": "删除分支",
+    "confirmDelete": "确定要删除这个分支吗？此操作无法撤销。",
+    "placeholder": "继续追问这段内容..."
+  },
   "conversation": {
     "newConversation": "新的聊天",
     "noHistory": "暂无对话历史",

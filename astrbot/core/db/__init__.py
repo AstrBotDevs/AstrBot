@@ -24,6 +24,7 @@ from astrbot.core.db.po import (
     ProviderStat,
     SessionProjectRelation,
     Stats,
+    WebChatThread,
 )
 
 
@@ -251,6 +252,68 @@ class BaseDatabase(abc.ABC):
         message_id: int,
     ) -> PlatformMessageHistory | None:
         """Get a platform message history record by its ID."""
+        ...
+
+    @abc.abstractmethod
+    async def create_webchat_thread(
+        self,
+        creator: str,
+        parent_session_id: str,
+        parent_message_id: int,
+        base_checkpoint_id: str,
+        selected_text: str,
+    ) -> WebChatThread:
+        """Create a WebChat side thread."""
+        ...
+
+    @abc.abstractmethod
+    async def get_webchat_thread_by_id(
+        self,
+        thread_id: str,
+    ) -> WebChatThread | None:
+        """Get a WebChat side thread by thread_id."""
+        ...
+
+    @abc.abstractmethod
+    async def get_webchat_threads_by_parent_session(
+        self,
+        parent_session_id: str,
+        creator: str | None = None,
+    ) -> list[WebChatThread]:
+        """Get side threads for a parent WebChat session."""
+        ...
+
+    @abc.abstractmethod
+    async def get_webchat_thread_by_parent_message_and_text(
+        self,
+        parent_session_id: str,
+        parent_message_id: int,
+        selected_text: str,
+        creator: str | None = None,
+    ) -> WebChatThread | None:
+        """Get an existing side thread for the same selected text."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_webchat_thread(self, thread_id: str) -> None:
+        """Delete a WebChat side thread."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_webchat_threads_by_parent_session(
+        self,
+        parent_session_id: str,
+    ) -> list[str]:
+        """Delete side threads for a parent WebChat session."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_webchat_threads_by_parent_message_ids(
+        self,
+        parent_session_id: str,
+        parent_message_ids: list[int],
+    ) -> list[str]:
+        """Delete side threads linked to parent message IDs."""
         ...
 
     @abc.abstractmethod

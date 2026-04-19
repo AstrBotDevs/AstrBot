@@ -42,6 +42,17 @@ export interface ChatRecord {
   sender_id?: string;
   sender_name?: string;
   llm_checkpoint_id?: string | null;
+  threads?: ChatThread[];
+}
+
+export interface ChatThread {
+  thread_id: string;
+  parent_session_id: string;
+  parent_message_id: number;
+  base_checkpoint_id: string;
+  selected_text: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ChatSessionProject {
@@ -197,6 +208,7 @@ export function useMessages(options: UseMessagesOptions) {
       const payload = response.data?.data || {};
       const history = payload.history || [];
       const records = history.map(normalizeHistoryRecord);
+      attachThreads(records, payload.threads || []);
       await resolveRecordMedia(records);
       messagesBySession[sessionId] = records;
       sessionProjects[sessionId] = normalizeSessionProject(payload.project);
@@ -451,6 +463,20 @@ export function useMessages(options: UseMessagesOptions) {
       ...record,
       content: normalizedContent,
     };
+  }
+
+  function attachThreads(records: ChatRecord[], threads: ChatThread[]) {
+    const threadsByMessage = new Map<string, ChatThread[]>();
+    for (const thread of threads) {
+      const key = String(thread.parent_message_id);
+      const list = threadsByMessage.get(key) || [];
+      list.push(thread);
+      threadsByMessage.set(key, list);
+    }
+    for (const record of records) {
+      const key = record.id == null ? "" : String(record.id);
+      record.threads = threadsByMessage.get(key) || [];
+    }
   }
 
   function normalizeParts(parts: unknown): MessagePart[] {

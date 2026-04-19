@@ -63,6 +63,13 @@
     "done": "Done",
     "running": "Running"
   },
+  "thread": {
+    "title": "Thread",
+    "askInThread": "Ask in thread",
+    "delete": "Delete thread",
+    "confirmDelete": "Delete this thread? This action cannot be undone.",
+    "placeholder": "Ask about this excerpt..."
+  },
   "conversation": {
     "newConversation": "New Conversation",
     "noHistory": "No conversation history",

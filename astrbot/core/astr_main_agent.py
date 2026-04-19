@@ -1373,6 +1373,17 @@ async def build_main_agent(
         req.contexts = json.loads(req.contexts)
     if req.contexts:
         req.contexts = strip_checkpoint_messages(req.contexts)
+    thread_selected_text = event.get_extra("thread_selected_text")
+    if isinstance(thread_selected_text, str) and thread_selected_text.strip():
+        req.extra_user_content_parts.append(
+            TextPart(
+                text=(
+                    "The user is asking in a side thread about this selected "
+                    "excerpt from the previous assistant answer:\n"
+                    f"<selected_excerpt>{thread_selected_text.strip()}</selected_excerpt>"
+                )
+            )
+        )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
 
