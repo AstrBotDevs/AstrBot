@@ -55,6 +55,7 @@ const {
   installedStatusFilter,
   installedSortBy,
   installedSortOrder,
+  pinUpdatesOnTop,
   loading_,
   currentPage,
   dangerConfirmDialog,
