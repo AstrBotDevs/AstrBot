@@ -244,6 +244,7 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
         default=None,
     )  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
+    llm_checkpoint_id: str | None = Field(default=None, index=True)
 
 
 class PlatformSession(TimestampMixin, SQLModel, table=True):

@@ -380,6 +380,38 @@
                     <span>{{ tm("message.loading") }}</span>
                   </div>
 
+                  <template v-else-if="isEditingMessage(msg)">
+                    <div class="inline-message-editor">
+                      <textarea
+                        v-model="messageEditDraft"
+                        class="inline-message-editor-input"
+                        rows="2"
+                        autofocus
+                        @keydown.esc="cancelMessageEdit"
+                      ></textarea>
+                      <div class="inline-message-editor-actions">
+                        <v-btn
+                          class="inline-message-editor-action"
+                          size="small"
+                          variant="text"
+                          @click="cancelMessageEdit"
+                        >
+                          {{ t("core.common.cancel") }}
+                        </v-btn>
+                        <v-btn
+                          class="inline-message-editor-action"
+                          size="small"
+                          color="primary"
+                          variant="tonal"
+                          :loading="savingMessageEdit"
+                          @click="saveMessageEdit"
+                        >
+                          {{ t("core.common.save") }}
+                        </v-btn>
+                      </div>
+                    </div>
+                  </template>
+
                   <template v-else>
                     <ReasoningBlock
                       v-if="messageContent(msg).reasoning"
@@ -511,21 +543,30 @@
                     formatTime(msg.created_at)
                   }}</span>
                   <v-btn
+                    v-if="canEditMessage(msg)"
+                    icon="mdi-pencil-outline"
+                    size="x-small"
+                    variant="text"
+                    @click="openMessageEdit(msg)"
+                  />
+                  <RegenerateMenu
+                    v-if="canRegenerateMessage(msg, msgIndex)"
+                    @retry="handleRegenerateMessage(msg)"
+                    @retry-with-model="
+                      (selection) => handleRegenerateMessage(msg, selection)
+                    "
+                  />
+                  <v-btn
                     v-if="!isUserMessage(msg)"
                     icon="mdi-content-copy"
                     size="x-small"
                     variant="text"
                     @click="copyMessage(msg)"
                   />
-                  <v-btn
-                    icon="mdi-reply-outline"
-                    size="x-small"
-                    variant="text"
-                    @click="setReplyTarget(msg)"
-                  />
                   <v-menu
                     v-if="messageContent(msg).agentStats"
                     location="bottom"
+                    transition="none"
                   >
                     <template #activator="{ props: statsProps }">
                       <v-btn
@@ -688,6 +729,9 @@ import ProjectDialog, {
 import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
 import ProjectView from "@/components/chat/ProjectView.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
+import RegenerateMenu, {
+  type RegenerateModelSelection,
+} from "@/components/chat/RegenerateMenu.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
@@ -777,6 +821,9 @@ const sessionTitleDraft = ref("");
 const editingSessionTitleId = ref("");
 const refreshProjectSessionsAfterTitleSave = ref(false);
 const savingSessionTitle = ref(false);
+const messageEditDraft = ref("");
+const editingMessage = ref<ChatRecord | null>(null);
+const savingMessageEdit = ref(false);
 const projectSessions = ref<Session[]>([]);
 const loadingSessions = ref(false);
 const draft = ref("");
@@ -817,6 +864,9 @@ const {
   loadSessionMessages,
   createLocalExchange,
   sendMessageStream,
+  editMessage,
+  continueEditedMessage,
+  regenerateMessage,
   stopSession,
 } = useMessages({
   currentSessionId: currSessionId,
@@ -1109,7 +1159,7 @@ async function sendCurrentMessage() {
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     const outgoingParts = buildOutgoingParts(text);
     const selection = inputRef.value?.getCurrentSelection();
-    const { botRecord } = createLocalExchange({
+    const { userRecord, botRecord } = createLocalExchange({
       sessionId,
       messageId,
       parts: outgoingParts,
@@ -1129,6 +1179,7 @@ async function sendCurrentMessage() {
       enableStreaming: enableStreaming.value,
       selectedProvider: selection?.providerId || "",
       selectedModel: selection?.modelName || "",
+      userRecord,
       botRecord,
     });
   } catch (error) {
@@ -1230,14 +1281,99 @@ function scrollToMessage(messageId?: string | number) {
   rows?.[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-function setReplyTarget(message: ChatRecord) {
-  replyTarget.value = message;
-  nextTick(() => inputRef.value?.focusInput?.());
-}
-
 function showMessageMeta(message: ChatRecord, msgIndex: number) {
   return (
     !messageContent(message).isLoading && !isMessageStreaming(message, msgIndex)
+  );
+}
+
+function canRegenerateMessage(message: ChatRecord, msgIndex: number) {
+  return (
+    !isUserMessage(message) &&
+    msgIndex === activeMessages.value.length - 1 &&
+    !isMessageStreaming(message, msgIndex) &&
+    Boolean(message.llm_checkpoint_id)
+  );
+}
+
+function canEditMessage(message: ChatRecord) {
+  return (
+    isUserMessage(message) &&
+    message.id != null &&
+    !String(message.id).startsWith("local-") &&
+    !Boolean(currSessionId.value && isSessionRunning(currSessionId.value))
+  );
+}
+
+function openMessageEdit(message: ChatRecord) {
+  messageEditDraft.value = plainTextFromMessage(message);
+  editingMessage.value = message;
+  nextTick(() => scrollToMessage(message.id));
+}
+
+function isEditingMessage(message: ChatRecord) {
+  return (
+    editingMessage.value?.id != null &&
+    message.id != null &&
+    String(editingMessage.value.id) === String(message.id)
+  );
+}
+
+function cancelMessageEdit() {
+  editingMessage.value = null;
+  messageEditDraft.value = "";
+}
+
+async function saveMessageEdit() {
+  if (!currSessionId.value || !editingMessage.value) return;
+  savingMessageEdit.value = true;
+  try {
+    const target = editingMessage.value;
+    const result = await editMessage(
+      currSessionId.value,
+      target,
+      messageEditDraft.value,
+    );
+    cancelMessageEdit();
+
+    if (result.needsRegenerate && result.truncatedAfterMessage) {
+      const selection = inputRef.value?.getCurrentSelection();
+      continueEditedMessage({
+        sessionId: currSessionId.value,
+        sourceRecord: target,
+        enableStreaming: enableStreaming.value,
+        selectedProvider: selection?.providerId || "",
+        selectedModel: selection?.modelName || "",
+      });
+      scrollToBottom();
+    } else if (result.needsRegenerate) {
+      const index = activeMessages.value.findIndex(
+        (message) => String(message.id) === String(target.id),
+      );
+      const nextBot = activeMessages.value
+        .slice(index + 1)
+        .find((message) => !isUserMessage(message));
+      if (nextBot) {
+        await handleRegenerateMessage(nextBot);
+      }
+    }
+  } catch (error) {
+    console.error("Failed to edit message:", error);
+  } finally {
+    savingMessageEdit.value = false;
+  }
+}
+
+async function handleRegenerateMessage(
+  message: ChatRecord,
+  selection?: RegenerateModelSelection,
+) {
+  if (!currSessionId.value || isUserMessage(message)) return;
+  await regenerateMessage(
+    currSessionId.value,
+    message,
+    selection?.providerId || "",
+    selection?.modelName || "",
   );
 }
 
@@ -1806,6 +1942,41 @@ function formatDuration(seconds: number) {
   white-space: pre-wrap;
 }
 
+.inline-message-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: min(420px, 72vw);
+}
+
+.inline-message-editor-input {
+  width: 100%;
+  min-height: 0;
+  max-height: 220px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  resize: vertical;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.inline-message-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.inline-message-editor-action {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 14px;
+}
+
 .loading-message {
   display: flex;
   align-items: center;
@@ -1933,9 +2104,9 @@ function formatDuration(seconds: number) {
 .stats-row {
   display: flex;
   justify-content: space-between;
-  gap: 14px;
+  margin-bottom: 4px;
   padding: 2px 0;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.35;
 }
 

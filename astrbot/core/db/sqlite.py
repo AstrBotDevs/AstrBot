@@ -60,6 +60,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
+            await self._ensure_platform_message_history_checkpoint_column(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -102,6 +103,26 @@ class SQLiteDatabase(BaseDatabase):
         if "custom_error_message" not in columns:
             await conn.execute(
                 text("ALTER TABLE personas ADD COLUMN custom_error_message TEXT")
+            )
+
+    async def _ensure_platform_message_history_checkpoint_column(self, conn) -> None:
+        """Ensure platform_message_history has llm_checkpoint_id."""
+        result = await conn.execute(text("PRAGMA table_info(platform_message_history)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "llm_checkpoint_id" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE platform_message_history "
+                    "ADD COLUMN llm_checkpoint_id VARCHAR DEFAULT NULL"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_platform_message_history_llm_checkpoint_id "
+                    "ON platform_message_history (llm_checkpoint_id)"
+                )
             )
 
     # ====
@@ -499,6 +520,7 @@ class SQLiteDatabase(BaseDatabase):
         content,
         sender_id=None,
         sender_name=None,
+        llm_checkpoint_id=None,
     ):
         """Insert a new platform message history record."""
         async with self.get_db() as session:
@@ -510,9 +532,45 @@ class SQLiteDatabase(BaseDatabase):
                     content=content,
                     sender_id=sender_id,
                     sender_name=sender_name,
+                    llm_checkpoint_id=llm_checkpoint_id,
                 )
                 session.add(new_history)
                 return new_history
+
+    async def update_platform_message_history(
+        self,
+        message_id: int,
+        content: dict | None = None,
+        llm_checkpoint_id: str | None = None,
+    ) -> None:
+        """Update a platform message history record."""
+        values = {}
+        if content is not None:
+            values["content"] = content
+        if llm_checkpoint_id is not None:
+            values["llm_checkpoint_id"] = llm_checkpoint_id
+        if not values:
+            return
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    update(PlatformMessageHistory)
+                    .where(PlatformMessageHistory.id == message_id)
+                    .values(**values)
+                )
+
+    async def delete_platform_message_history_by_id(self, message_id: int) -> None:
+        """Delete a platform message history record by ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        PlatformMessageHistory.id == message_id
+                    )
+                )
 
     async def delete_platform_message_offset(
         self,

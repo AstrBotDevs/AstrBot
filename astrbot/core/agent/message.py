@@ -165,6 +165,15 @@ class ToolCallPart(BaseModel):
     """A part of the arguments of the tool call."""
 
 
+class CheckpointData(BaseModel):
+    """Internal checkpoint data for linking LLM turns to platform history."""
+
+    id: str
+
+
+CHECKPOINT_ROLE = "_checkpoint"
+
+
 class Message(BaseModel):
     """A message in a conversation."""
 
@@ -173,9 +182,10 @@ class Message(BaseModel):
         "user",
         "assistant",
         "tool",
+        "_checkpoint",
     ]
 
-    content: str | list[ContentPart] | None = None
+    content: str | list[ContentPart] | CheckpointData | None = None
     """The content of the message."""
 
     tool_calls: list[ToolCall] | list[dict] | None = None
@@ -188,6 +198,14 @@ class Message(BaseModel):
 
     @model_validator(mode="after")
     def check_content_required(self):
+        if self.role == CHECKPOINT_ROLE:
+            if not isinstance(self.content, CheckpointData):
+                raise ValueError("checkpoint message content must be CheckpointData")
+            return self
+
+        if isinstance(self.content, CheckpointData):
+            raise ValueError("CheckpointData is only allowed for role='_checkpoint'")
+
         # assistant + tool_calls is not None: allow content to be None
         if self.role == "assistant" and self.tool_calls is not None:
             return self
@@ -231,3 +249,65 @@ class SystemMessageSegment(Message):
     """A message segment from the system."""
 
     role: Literal["system"] = "system"
+
+
+class CheckpointMessageSegment(Message):
+    """Internal checkpoint segment for persisted conversation history."""
+
+    role: Literal["_checkpoint"] = "_checkpoint"
+    content: CheckpointData
+
+
+def is_checkpoint_message(message: Message | dict) -> bool:
+    """Return whether a message is an internal checkpoint."""
+    if isinstance(message, Message):
+        return message.role == CHECKPOINT_ROLE
+    return isinstance(message, dict) and message.get("role") == CHECKPOINT_ROLE
+
+
+def get_checkpoint_id(message: Message | dict) -> str | None:
+    """Return the checkpoint id from an internal checkpoint message."""
+    if not is_checkpoint_message(message):
+        return None
+
+    content = (
+        message.content if isinstance(message, Message) else message.get("content")
+    )
+    if isinstance(content, CheckpointData):
+        return content.id
+    if isinstance(content, dict):
+        checkpoint_id = content.get("id")
+        return (
+            checkpoint_id if isinstance(checkpoint_id, str) and checkpoint_id else None
+        )
+    return None
+
+
+def strip_checkpoint_messages(history: list[dict]) -> list[dict]:
+    """Remove internal checkpoint messages from provider-facing history."""
+    return [message for message in history if not is_checkpoint_message(message)]
+
+
+def merge_existing_checkpoint_messages(
+    existing_history: list[dict],
+    provider_messages: list[dict],
+) -> list[dict]:
+    """Merge existing checkpoint messages back into provider-facing history.
+
+    Agent runners operate on provider messages only. When saving the updated
+    history back, this restores persisted checkpoint boundaries by their
+    original positions among non-checkpoint messages.
+    """
+    merged: list[dict] = []
+    provider_index = 0
+
+    for existing in existing_history:
+        if is_checkpoint_message(existing):
+            merged.append(existing)
+            continue
+        if provider_index < len(provider_messages):
+            merged.append(provider_messages[provider_index])
+            provider_index += 1
+
+    merged.extend(provider_messages[provider_index:])
+    return merged

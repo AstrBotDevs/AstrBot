@@ -41,6 +41,7 @@ export interface ChatRecord {
   created_at?: string;
   sender_id?: string;
   sender_name?: string;
+  llm_checkpoint_id?: string | null;
 }
 
 export interface ChatSessionProject {
@@ -65,7 +66,18 @@ interface SendMessageStreamOptions {
   enableStreaming?: boolean;
   selectedProvider?: string;
   selectedModel?: string;
+  userRecord?: ChatRecord;
   botRecord: ChatRecord;
+  skipUserHistory?: boolean;
+  llmCheckpointId?: string | null;
+}
+
+interface ContinueEditedMessageOptions {
+  sessionId: string;
+  sourceRecord: ChatRecord;
+  enableStreaming?: boolean;
+  selectedProvider?: string;
+  selectedModel?: string;
 }
 
 interface CreateLocalExchangeOptions {
@@ -243,6 +255,9 @@ export function useMessages(options: UseMessagesOptions) {
     selectedProvider = "",
     selectedModel = "",
     botRecord,
+    userRecord,
+    skipUserHistory = false,
+    llmCheckpointId = null,
   }: SendMessageStreamOptions) {
     if (transport === "websocket") {
       startWebSocketStream(
@@ -250,6 +265,7 @@ export function useMessages(options: UseMessagesOptions) {
         messageId,
         parts,
         botRecord,
+        userRecord,
         enableStreaming,
         selectedProvider,
         selectedModel,
@@ -261,10 +277,152 @@ export function useMessages(options: UseMessagesOptions) {
       messageId,
       parts,
       botRecord,
+      userRecord,
       enableStreaming,
       selectedProvider,
       selectedModel,
+      skipUserHistory,
+      llmCheckpointId,
     );
+  }
+
+  async function editMessage(
+    sessionId: string,
+    record: ChatRecord,
+    editedText: string,
+  ) {
+    if (!sessionId || record.id == null) return { needsRegenerate: false };
+    const content = cloneContentWithEditedText(record, editedText);
+    const response = await axios.post("/api/chat/message/edit", {
+      session_id: sessionId,
+      message_id: record.id,
+      content,
+    });
+    const payload = response.data?.data || {};
+    const updated = payload.message ? normalizeHistoryRecord(payload.message) : null;
+    if (updated) {
+      Object.assign(record, updated);
+      await resolveRecordMedia([record]);
+    }
+    if (payload.truncated_after_message) {
+      truncateMessagesAfter(sessionId, record);
+    }
+    return {
+      needsRegenerate: Boolean(payload.needs_regenerate),
+      truncatedAfterMessage: Boolean(payload.truncated_after_message),
+    };
+  }
+
+  function truncateMessagesAfter(sessionId: string, record: ChatRecord) {
+    const records = messagesBySession[sessionId];
+    if (!records?.length || record.id == null) return;
+    const index = records.findIndex(
+      (message) => String(message.id) === String(record.id),
+    );
+    if (index < 0) return;
+    messagesBySession[sessionId] = records.slice(0, index + 1);
+  }
+
+  function continueEditedMessage({
+    sessionId,
+    sourceRecord,
+    enableStreaming = true,
+    selectedProvider = "",
+    selectedModel = "",
+  }: ContinueEditedMessageOptions) {
+    if (!sessionId) return;
+    const parts = messageParts(sourceRecord).map(stripUploadOnlyFields);
+    const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    messagesBySession[sessionId] = messagesBySession[sessionId] || [];
+
+    const botRecord: ChatRecord = {
+      id: `local-edited-bot-${messageId}`,
+      created_at: new Date().toISOString(),
+      content: {
+        type: "bot",
+        message: [{ type: "plain", text: "" }],
+        reasoning: "",
+        isLoading: true,
+      },
+    };
+    messagesBySession[sessionId].push(botRecord);
+
+    startSseStream(
+      sessionId,
+      messageId,
+      parts,
+      botRecord,
+      undefined,
+      enableStreaming,
+      selectedProvider,
+      selectedModel,
+      true,
+      sourceRecord.llm_checkpoint_id || null,
+    );
+  }
+
+  async function regenerateMessage(
+    sessionId: string,
+    botRecord: ChatRecord,
+    selectedProvider = "",
+    selectedModel = "",
+  ) {
+    if (!sessionId || botRecord.id == null) return;
+    const targetMessageId = botRecord.id;
+
+    botRecord.id = `local-regenerate-${Date.now()}`;
+    botRecord.created_at = new Date().toISOString();
+    botRecord.content = {
+      type: "bot",
+      message: [{ type: "plain", text: "" }],
+      reasoning: "",
+      isLoading: true,
+    };
+
+    const abort = new AbortController();
+    activeConnections[sessionId] = {
+      sessionId,
+      messageId: String(botRecord.id),
+      transport: "sse",
+      abort,
+    };
+
+    try {
+      const response = await fetch("/api/chat/message/regenerate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          message_id: targetMessageId,
+          selected_provider: selectedProvider,
+          selected_model: selectedModel,
+        }),
+        signal: abort.signal,
+      });
+      if (!response.ok || !response.body) {
+        throw new Error(`Regenerate failed: ${response.status}`);
+      }
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text/event-stream")) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.message || "Regenerate failed.");
+      }
+      await readSseStream(response.body, (payload) => {
+        processStreamPayload(botRecord, payload);
+        options.onStreamUpdate?.(sessionId);
+      });
+    } catch (error) {
+      if (!abort.signal.aborted) {
+        appendPlain(botRecord, `\n\n${String((error as Error)?.message || error)}`);
+        console.error("Regenerate failed:", error);
+      }
+    } finally {
+      delete activeConnections[sessionId];
+      await options.onSessionsChanged?.();
+    }
   }
 
   async function stopSession(sessionId: string) {
@@ -312,9 +470,12 @@ export function useMessages(options: UseMessagesOptions) {
     messageId: string,
     parts: MessagePart[],
     botRecord: ChatRecord,
+    userRecord: ChatRecord | undefined,
     enableStreaming: boolean,
     selectedProvider: string,
     selectedModel: string,
+    skipUserHistory = false,
+    llmCheckpointId: string | null = null,
   ) {
     const abort = new AbortController();
     activeConnections[sessionId] = {
@@ -336,6 +497,8 @@ export function useMessages(options: UseMessagesOptions) {
         enable_streaming: enableStreaming,
         selected_provider: selectedProvider,
         selected_model: selectedModel,
+        _skip_user_history: skipUserHistory,
+        _llm_checkpoint_id: llmCheckpointId || undefined,
       }),
       signal: abort.signal,
     })
@@ -344,7 +507,7 @@ export function useMessages(options: UseMessagesOptions) {
           throw new Error(`SSE connection failed: ${response.status}`);
         }
         await readSseStream(response.body, (payload) => {
-          processStreamPayload(botRecord, payload);
+          processStreamPayload(botRecord, payload, userRecord);
           options.onStreamUpdate?.(sessionId);
         });
       })
@@ -364,6 +527,7 @@ export function useMessages(options: UseMessagesOptions) {
     messageId: string,
     parts: MessagePart[],
     botRecord: ChatRecord,
+    userRecord: ChatRecord | undefined,
     enableStreaming: boolean,
     selectedProvider: string,
     selectedModel: string,
@@ -398,7 +562,7 @@ export function useMessages(options: UseMessagesOptions) {
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        processStreamPayload(botRecord, payload);
+        processStreamPayload(botRecord, payload, userRecord);
         options.onStreamUpdate?.(sessionId);
         if (payload.type === "end" || payload.t === "end") {
           ws.close();
@@ -416,7 +580,11 @@ export function useMessages(options: UseMessagesOptions) {
     };
   }
 
-  function processStreamPayload(botRecord: ChatRecord, payload: any) {
+  function processStreamPayload(
+    botRecord: ChatRecord,
+    payload: any,
+    userRecord?: ChatRecord,
+  ) {
     const normalized =
       payload?.ct === "chat"
         ? { ...payload, type: payload.type || payload.t }
@@ -426,10 +594,21 @@ export function useMessages(options: UseMessagesOptions) {
     const data = normalized?.data ?? "";
 
     if (msgType === "session_id" || msgType === "session_bound") return;
+    if (msgType === "user_message_saved") {
+      if (userRecord) {
+        userRecord.id = data?.id || userRecord.id;
+        userRecord.created_at = data?.created_at || userRecord.created_at;
+        userRecord.llm_checkpoint_id =
+          data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+      }
+      return;
+    }
     if (msgType === "message_saved") {
       markMessageStarted(botRecord);
       botRecord.id = data?.id || botRecord.id;
       botRecord.created_at = data?.created_at || botRecord.created_at;
+      botRecord.llm_checkpoint_id =
+        data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
       if (data?.refs) {
         messageContent(botRecord).refs = data.refs;
       }
@@ -512,8 +691,36 @@ export function useMessages(options: UseMessagesOptions) {
     loadSessionMessages,
     createLocalExchange,
     sendMessageStream,
+    editMessage,
+    continueEditedMessage,
+    regenerateMessage,
     stopSession,
     cleanupConnections,
+  };
+}
+
+function cloneContentWithEditedText(
+  record: ChatRecord,
+  editedText: string,
+): ChatContent {
+  const content = record.content || { type: "bot", message: [] };
+  const message = Array.isArray(content.message)
+    ? content.message.map((part) => ({ ...part }))
+    : [];
+  let replaced = false;
+  for (const part of message) {
+    if (part.type === "plain") {
+      part.text = editedText;
+      replaced = true;
+      break;
+    }
+  }
+  if (!replaced && editedText) {
+    message.push({ type: "plain", text: editedText });
+  }
+  return {
+    ...content,
+    message,
   };
 }
 

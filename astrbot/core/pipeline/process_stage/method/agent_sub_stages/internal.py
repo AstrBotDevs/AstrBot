@@ -2,11 +2,17 @@
 
 import asyncio
 import base64
+import json
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot.core import db_helper, logger
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import (
+    CheckpointData,
+    CheckpointMessageSegment,
+    Message,
+    merge_existing_checkpoint_messages,
+)
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
@@ -446,6 +452,23 @@ class InternalAgentSubStage(Stage):
             if message.role in ["assistant", "user"] and message._no_save:
                 continue
             message_to_save.append(message.model_dump())
+
+        checkpoint_id = event.get_extra("llm_checkpoint_id")
+        existing_history = []
+        try:
+            existing_history = json.loads(req.conversation.history or "[]")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to parse conversation history: %s", exc)
+        message_to_save = merge_existing_checkpoint_messages(
+            existing_history,
+            message_to_save,
+        )
+        if isinstance(checkpoint_id, str) and checkpoint_id:
+            message_to_save.append(
+                CheckpointMessageSegment(
+                    content=CheckpointData(id=checkpoint_id),
+                ).model_dump()
+            )
 
         # if user_aborted:
         #     message_to_save.append(

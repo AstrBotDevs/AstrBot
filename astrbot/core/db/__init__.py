@@ -204,8 +204,24 @@ class BaseDatabase(abc.ABC):
         content: dict,
         sender_id: str | None = None,
         sender_name: str | None = None,
+        llm_checkpoint_id: str | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
+        ...
+
+    @abc.abstractmethod
+    async def update_platform_message_history(
+        self,
+        message_id: int,
+        content: dict | None = None,
+        llm_checkpoint_id: str | None = None,
+    ) -> None:
+        """Update a platform message history record."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_platform_message_history_by_id(self, message_id: int) -> None:
+        """Delete a platform message history record by its ID."""
         ...
 
     @abc.abstractmethod

@@ -49,7 +49,12 @@ from ..context.config import ContextConfig
 from ..context.manager import ContextManager
 from ..context.token_counter import EstimateTokenCounter, TokenCounter
 from ..hooks import BaseAgentRunHooks
-from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
+from ..message import (
+    AssistantMessageSegment,
+    Message,
+    ToolCallMessageSegment,
+    is_checkpoint_message,
+)
 from ..response import AgentResponseData, AgentStats
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
@@ -296,6 +301,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         messages = []
         # append existing messages in the run context
         for msg in request.contexts:
+            if is_checkpoint_message(msg):
+                continue
             m = Message.model_validate(msg)
             if isinstance(msg, dict) and msg.get("_no_save"):
                 m._no_save = True

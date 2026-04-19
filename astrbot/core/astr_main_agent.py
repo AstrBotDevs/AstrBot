@@ -14,7 +14,7 @@ from pathlib import Path
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import TextPart
+from astrbot.core.agent.message import TextPart, strip_checkpoint_messages
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
@@ -1371,6 +1371,8 @@ async def build_main_agent(
 
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
+    if req.contexts:
+        req.contexts = strip_checkpoint_messages(req.contexts)
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
 

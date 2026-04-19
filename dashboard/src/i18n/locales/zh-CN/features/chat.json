@@ -39,6 +39,9 @@
   "actions": {
     "copy": "复制",
     "regenerate": "重新生成",
+    "retry": "重试",
+    "retryWithModel": "使用其他模型",
+    "noAvailableModels": "暂无可用模型",
     "like": "点赞",
     "dislike": "踩",
     "share": "分享",

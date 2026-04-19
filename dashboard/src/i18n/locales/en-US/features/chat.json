@@ -39,6 +39,9 @@
   "actions": {
     "copy": "Copy",
     "regenerate": "Regenerate",
+    "retry": "Retry",
+    "retryWithModel": "Use another model",
+    "noAvailableModels": "No available models",
     "like": "Like",
     "dislike": "Dislike",
     "share": "Share",
