@@ -197,6 +197,10 @@ async def _bocha_search(
     header = {
         "Authorization": f"Bearer {bocha_key}",
         "Content-Type": "application/json",
+        # Explicitly disable brotli encoding to avoid aiohttp >= 3.13.3 brotli
+        # decompression incompatibility (TypeError: process() takes exactly 1 argument).
+        # See: https://github.com/aio-libs/aiohttp/issues/11898
+        "Accept-Encoding": "gzip, deflate",
     }
     async with aiohttp.ClientSession(trust_env=True) as session:
         async with session.post(
