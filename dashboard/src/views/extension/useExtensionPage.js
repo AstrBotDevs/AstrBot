@@ -188,6 +188,7 @@ export const useExtensionPage = () => {
   const installedStatusFilter = ref("all");
   const installedSortBy = ref("default");
   const installedSortOrder = ref("desc");
+  const pinUpdatesOnTop = ref(true);
   const loading_ = ref(false);
   
   // 分页相关
@@ -440,6 +441,17 @@ export const useExtensionPage = () => {
         );
         const fallbackResult =
           fallbackNameCompare !== 0 ? fallbackNameCompare : left.index - right.index;
+
+        if (
+          pinUpdatesOnTop.value &&
+          installedSortBy.value !== "update_status"
+        ) {
+          const leftHasUpdate = left.plugin?.has_update ? 1 : 0;
+          const rightHasUpdate = right.plugin?.has_update ? 1 : 0;
+          if (leftHasUpdate !== rightHasUpdate) {
+            return rightHasUpdate - leftHasUpdate;
+          }
+        }
 
         if (installedSortBy.value === "install_time") {
           const leftTimestamp = left.installedAtTimestamp;
@@ -1695,6 +1707,7 @@ export const useExtensionPage = () => {
     installedStatusFilter,
     installedSortBy,
     installedSortOrder,
+    pinUpdatesOnTop,
     loading_,
     currentPage,
     marketCategoryFilter,

@@ -354,6 +354,15 @@ const pinnedPlugins = computed(() => {
                       :show-order="installedSortUsesOrder"
                       @update:order="installedSortOrder = $event"
                     />
+                    <v-switch
+                      v-model="pinUpdatesOnTop"
+                      :label="tm('sort.pinUpdatesOnTop')"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      class="ml-4"
+                      style="max-width: 160px"
+                    />
                   </div>
                 </div>
               </v-col>
