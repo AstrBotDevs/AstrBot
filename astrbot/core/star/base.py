@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
 from astrbot.core import html_renderer
@@ -20,6 +21,14 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
 
     class _ContextLike(Protocol):
         def get_config(self, umo: str | None = None) -> Any: ...
+
+        def register_unified_webhook(
+            self,
+            webhook_uuid: str,
+            view_handler: Callable[..., Awaitable[Any]],
+            methods: list[str] | None = None,
+            desc: str = "",
+        ) -> None: ...
 
     def __init__(self, context: _ContextLike, config: dict | None = None) -> None:
         self.context = context
@@ -75,6 +84,28 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             data,
             return_url=return_url,
             options=options,
+        )
+
+    def register_unified_webhook(
+        self,
+        webhook_uuid: str,
+        view_handler: Callable[..., Awaitable[Any]],
+        methods: list[str] | None = None,
+        desc: str = "",
+    ) -> None:
+        """注册统一 Webhook 回调。
+
+        插件可以通过该方法注册回调，Dashboard 会通过
+        /api/plug/webhook/<webhook_uuid> 转发到对应处理函数。
+        """
+        register = getattr(self.context, "register_unified_webhook", None)
+        if not callable(register):
+            raise RuntimeError("Context does not support unified webhook registration")
+        register(
+            webhook_uuid=webhook_uuid,
+            view_handler=view_handler,
+            methods=methods,
+            desc=desc,
         )
 
     async def initialize(self) -> None:
