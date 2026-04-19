@@ -375,9 +375,6 @@ class KookCardMessageContainer(list[KookCardMessage]):
     def append(self, object: KookCardMessage) -> None:
         return super().append(object)
 
-    def pop(self, index: int = -1) -> KookCardMessage:
-        return super().pop(index)
-
     def to_dict(
         self,
         by_alias=True,
