@@ -193,6 +193,32 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
         self._resolve_unconsumed_follow_ups()
 
+    def _yield_llm_result_response(
+        self, llm_resp: LLMResponse
+    ) -> T.Generator[AgentResponse, None, None]:
+        """Yield an AgentResponse for llm_result based on llm_resp content."""
+        if llm_resp.result_chain:
+            yield AgentResponse(
+                type="llm_result",
+                data=AgentResponseData(chain=llm_resp.result_chain),
+            )
+        elif llm_resp.completion_text:
+            yield AgentResponse(
+                type="llm_result",
+                data=AgentResponseData(
+                    chain=MessageChain().message(llm_resp.completion_text),
+                ),
+            )
+        elif llm_resp.reasoning_content:
+            yield AgentResponse(
+                type="llm_result",
+                data=AgentResponseData(
+                    chain=MessageChain(type="reasoning").message(
+                        llm_resp.reasoning_content,
+                    ),
+                ),
+            )
+
     @override
     async def reset(
         self,
@@ -718,27 +744,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
-        if llm_resp.result_chain:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(chain=llm_resp.result_chain),
-            )
-        elif llm_resp.completion_text:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(
-                    chain=MessageChain().message(llm_resp.completion_text),
-                ),
-            )
-        elif llm_resp.reasoning_content:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(
-                    chain=MessageChain(type="reasoning").message(
-                        llm_resp.reasoning_content,
-                    ),
-                ),
-            )
+        yield from self._yield_llm_result_response(llm_resp)
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
@@ -748,27 +754,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(
                         "skills_like tool re-query returned no tool calls; fallback to assistant response."
                     )
-                    if llm_resp.result_chain:
-                        yield AgentResponse(
-                            type="llm_result",
-                            data=AgentResponseData(chain=llm_resp.result_chain),
-                        )
-                    elif llm_resp.completion_text:
-                        yield AgentResponse(
-                            type="llm_result",
-                            data=AgentResponseData(
-                                chain=MessageChain().message(llm_resp.completion_text),
-                            ),
-                        )
-                    elif llm_resp.reasoning_content:
-                        yield AgentResponse(
-                            type="llm_result",
-                            data=AgentResponseData(
-                                chain=MessageChain(type="reasoning").message(
-                                    llm_resp.reasoning_content,
-                                ),
-                            ),
-                        )
+                    yield from self._yield_llm_result_response(llm_resp)
                     await self._complete_with_assistant_response(llm_resp)
                     return
 
