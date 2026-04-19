@@ -95,6 +95,11 @@ class Main(star.Star):
     ) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
         if self.ltm and self.ltm_enabled(event):
+            # If this request matches the active reply req id, mark it as in-progress
+            # so on_llm_response can correctly identify the active reply response
+            active_reply_req_id = event.get_extra(LTM_ACTIVE_REPLY_KEY, None)
+            if active_reply_req_id is not None and id(req) == active_reply_req_id:
+                event.set_extra("_ltm_active_reply_in_progress", True)
             try:
                 await self.ltm.on_req_llm(event, req)
             except BaseException as e:
@@ -106,9 +111,13 @@ class Main(star.Star):
     ) -> None:
         """在 LLM 响应后记录对话"""
         if self.ltm and self.ltm_enabled(event):
-            # 主动回复的响应不记入 session_chats
-            # 避免 chatroom 风格的回复污染后续主动回复所使用的群聊上下文
-            if event.get_extra(LTM_ACTIVE_REPLY_KEY, None) is not None:
+            # Skip recording if this response is from an active reply request
+            if event.get_extra("_ltm_active_reply_in_progress", False):
+                return
+            # Only record if group_icl_enable is on, to keep session_chats consistent
+            # (handle_message is also guarded by group_icl_enable)
+            cfg = self.context.get_config(umo=event.unified_msg_origin)
+            if not cfg["provider_ltm_settings"]["group_icl_enable"]:
                 return
             try:
                 await self.ltm.after_req_llm(event, resp)
@@ -127,3 +136,4 @@ class Main(star.Star):
                 logger.error(f"ltm: {e}")
         # 清除主动回复标记，避免 event 被复用时意外影响后续流程
         event.set_extra(LTM_ACTIVE_REPLY_KEY, None)
+        event.set_extra("_ltm_active_reply_in_progress", False)
