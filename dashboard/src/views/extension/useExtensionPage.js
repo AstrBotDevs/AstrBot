@@ -188,7 +188,19 @@ export const useExtensionPage = () => {
   const installedStatusFilter = ref("all");
   const installedSortBy = ref("default");
   const installedSortOrder = ref("desc");
-  const pinUpdatesOnTop = ref(true);
+  const getInitialPinUpdatesOnTop = () => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const saved = localStorage.getItem("pinUpdatesOnTop");
+      return saved !== "false";
+    }
+    return true;
+  };
+  const pinUpdatesOnTop = ref(getInitialPinUpdatesOnTop());
+  watch(pinUpdatesOnTop, (val) => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      localStorage.setItem("pinUpdatesOnTop", val.toString());
+    }
+  });
   const loading_ = ref(false);
   
   // 分页相关

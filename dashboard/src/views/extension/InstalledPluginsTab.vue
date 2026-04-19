@@ -362,7 +362,7 @@ const pinnedPlugins = computed(() => {
                       density="compact"
                       hide-details
                       class="ml-4"
-                      style="max-width: 160px"
+                      style="max-width: 200px"
                     />
                   </div>
                 </div>
