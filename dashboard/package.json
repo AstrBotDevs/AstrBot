@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host",
     "subset-icons": "node scripts/subset-mdi-font.mjs",
+    "build:t2i-shiki-runtime": "node scripts/build-t2i-shiki-runtime.mjs",
     "build": "vue-tsc --noEmit && vite build",
     "build-stage": "vue-tsc --noEmit && vite build --base=/vue/free/stage/",
     "build-prod": "vue-tsc --noEmit && vite build --base=/vue/free/",
@@ -14,7 +15,6 @@
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
   },
   "dependencies": {
-    "qrcode": "^1.5.4",
     "@guolao/vue-monaco-editor": "^1.5.4",
     "@tiptap/starter-kit": "2.1.7",
     "@tiptap/vue-3": "2.1.7",
@@ -25,7 +25,6 @@
     "date-fns": "2.30.0",
     "dompurify": "^3.3.2",
     "event-source-polyfill": "^1.0.31",
-    "highlight.js": "^11.11.1",
     "js-md5": "^0.8.3",
     "katex": "^0.16.27",
     "lodash": "4.17.23",
@@ -35,6 +34,7 @@
     "monaco-editor": "^0.52.2",
     "pinia": "2.1.6",
     "pinyin-pro": "^3.26.0",
+    "qrcode": "^1.5.4",
     "shiki": "^3.20.0",
     "stream-markdown": "^0.0.13",
     "vee-validate": "4.11.3",

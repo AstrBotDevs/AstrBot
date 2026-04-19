@@ -77,7 +77,21 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def _resolve_path_from_sandbox(
         self, context: ContextWrapper[AstrAgentContext], path: str
     ) -> tuple[str, bool]:
-        if os.path.exists(path):
+        # if the path is relative, check if the file exists in user's local workspace
+        if not os.path.isabs(path):
+            unified_msg_origin = context.context.event.unified_msg_origin
+            if unified_msg_origin:
+                from astrbot.core.tools.computer_tools.util import workspace_root
+
+                try:
+                    ws_path = workspace_root(unified_msg_origin)
+                    ws_candidate = (ws_path / path).resolve()
+                    if ws_candidate.is_file() and ws_candidate.is_relative_to(ws_path):
+                        return str(ws_candidate), False
+                except Exception:
+                    pass
+        # check if the file exists in local environment (only allow absolute paths to prevent traversal)
+        elif os.path.isfile(path):
             return path, False
 
         try:

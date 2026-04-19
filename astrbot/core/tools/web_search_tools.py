@@ -26,6 +26,26 @@ WEB_SEARCH_TOOL_NAMES = [
     "exa_extract_web_page",
     "exa_find_similar",
 ]
+_TAVILY_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "tavily",
+}
+_BOCHA_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "bocha",
+}
+_BRAVE_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "brave",
+}
+_BAIDU_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "baidu_ai_search",
+}
+_EXA_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "exa",
+}
 
 
 @std_dataclass
@@ -245,6 +265,10 @@ async def _bocha_search(
     header = {
         "Authorization": f"Bearer {bocha_key}",
         "Content-Type": "application/json",
+        # Explicitly disable brotli encoding to avoid aiohttp >= 3.13.3 brotli
+        # decompression incompatibility (TypeError: process() takes exactly 1 argument).
+        # See: https://github.com/aio-libs/aiohttp/issues/11898
+        "Accept-Encoding": "gzip, deflate",
     }
     async with aiohttp.ClientSession(trust_env=True) as session:
         async with session.post(
@@ -459,7 +483,7 @@ async def _exa_find_similar(
             ]
 
 
-@builtin_tool
+@builtin_tool(config=_TAVILY_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_tavily"
@@ -550,7 +574,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool
+@builtin_tool(config=_TAVILY_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "tavily_extract_web_page"
@@ -602,7 +626,7 @@ class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
         return ret or "Error: Tavily web searcher does not return any results."
 
 
-@builtin_tool
+@builtin_tool(config=_EXA_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_exa"
@@ -674,7 +698,7 @@ class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool
+@builtin_tool(config=_EXA_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class ExaExtractWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "exa_extract_web_page"
@@ -721,7 +745,7 @@ class ExaExtractWebPageTool(FunctionTool[AstrAgentContext]):
         return ret or "Error: Exa content extraction does not return any results."
 
 
-@builtin_tool
+@builtin_tool(config=_EXA_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class ExaFindSimilarTool(FunctionTool[AstrAgentContext]):
     name: str = "exa_find_similar"
@@ -842,7 +866,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool
+@builtin_tool(config=_BRAVE_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_brave"
@@ -908,7 +932,7 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool
+@builtin_tool(config=_BAIDU_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_baidu"

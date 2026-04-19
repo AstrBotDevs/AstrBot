@@ -31,12 +31,12 @@
 <a href="https://astrbot.app/">文档</a> ｜
 <a href="https://blog.astrbot.app/">博客</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">路线图</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">问题提交</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">问题提交</a> ｜
 <a href="mailto:community@astrbot.app">Email</a>
 
 </div>
 
-AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、Telegram、企业微信、飞书、钉钉、Slack、等数十款主流即时通讯软件上部署，此外还内置类似 OpenWebUI 的轻量化 ChatUI，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建 AI 应用。
+AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、Telegram、企业微信、飞书、钉钉、Slack 等数十款主流即时通讯软件上部署，此外还内置类似 OpenWebUI 的轻量化 ChatUI，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建 AI 应用。
 
 ![landingpage](https://github.com/user-attachments/assets/45fc5699-cddf-4e21-af35-13040706f6c0)
 
@@ -76,12 +76,13 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 对于想快速体验 AstrBot、且熟悉命令行并能够自行安装 `uv` 环境的用户，我们推荐使用 `uv` 一键部署方式 ⚡️。
 
 ```bash
-uv tool install astrbot
+uv tool install astrbot --python 3.12
 astrbot init # 仅首次执行此命令以初始化环境
 astrbot run
 ```
 
 > 需要安装 [uv](https://docs.astral.sh/uv/)。
+> AstrBot 需要 Python 3.12 或更高版本。`--python 3.12` 会确保 `uv` 使用 Python 3.12 创建 tool 环境。
 
 > [!NOTE]
 > 对于 macOS 用户：由于 macOS 安全检查，首次运行 `astrbot` 命令可能需要较长时间（约 10-20 秒）。
@@ -89,7 +90,7 @@ astrbot run
 更新 `astrbot`：
 
 ```bash
-uv tool upgrade astrbot
+uv tool upgrade astrbot --python 3.12
 ```
 
 > [!WARNING]
@@ -99,7 +100,7 @@ uv tool upgrade astrbot
 
 对于熟悉容器、希望获得更稳定且更适合生产环境部署方式的用户，我们推荐使用 Docker / Docker Compose 部署 AstrBot。
 
-请参考官方文档 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
+请参考官方文档 [使用 Docker 部署 AstrBot](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
 
 ### 在 雨云 上部署
 
@@ -137,7 +138,7 @@ yay -S astrbot-git
 
 **更多部署方式**
 
-若你需要面板化或更高自定义部署，可参考 [宝塔面板](https://astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 应用商店安装）、[1Panel](https://astrbot.app/deploy/astrbot/1panel.html)（1Panel 应用商店安装）、[CasaOS](https://astrbot.app/deploy/astrbot/casaos.html)（NAS / 家庭服务器可视化部署）和 [手动部署](https://astrbot.app/deploy/astrbot/cli.html)（基于源码与 `uv` 的完整自定义安装）。
+若你需要面板化或更高自定义部署，可参考 [宝塔面板](https://docs.astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 应用商店安装）、[1Panel](https://docs.astrbot.app/deploy/astrbot/1panel.html)（1Panel 应用商店安装）、[CasaOS](https://docs.astrbot.app/deploy/astrbot/casaos.html)（NAS / 家庭服务器可视化部署）和 [手动部署](https://docs.astrbot.app/deploy/astrbot/cli.html)（基于源码与 `uv` 的完整自定义安装）。
 
 ## 支持的消息平台
 
@@ -156,10 +157,12 @@ yay -S astrbot-git
 | **Discord** | 官方维护 |
 | **LINE** | 官方维护 |
 | **Satori** | 官方维护 |
+| **KOOK** | 官方维护 |
 | **Misskey** | 官方维护 |
-| **Whatsapp (将支持)** | 官方维护 |
+| **Mattermost** | 官方维护 |
+| **WhatsApp（将支持）** | 官方维护 |
 | [**Matrix**](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | 社区维护 |
-| [**KOOK**](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | 社区维护 |
+| [**Rocket.Chat**](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | 社区维护 |
 | [**VoceChat**](https://github.com/HikariFroya/astrbot_plugin_vocechat) | 社区维护 |
 
 ## 支持的模型提供商
