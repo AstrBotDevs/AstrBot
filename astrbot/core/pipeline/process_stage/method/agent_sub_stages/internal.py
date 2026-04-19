@@ -373,6 +373,7 @@ class InternalAgentSubStage(Stage):
                             agent_runner.run_context.messages,
                             agent_runner.stats,
                             user_aborted=agent_runner.was_aborted(),
+                            save_failed_history=self.save_failed_agent_history,
                         )
 
                     asyncio.create_task(
@@ -442,6 +443,11 @@ class InternalAgentSubStage(Stage):
         ):
             logger.debug("LLM 响应为空，不保存记录。")
             return
+
+        if save_failed_history and not llm_response.completion_text:
+            logger.info(
+                "Saving failed agent history as save_failed_agent_history is enabled."
+            )
 
         message_to_save = []
         skipped_initial_system = False
