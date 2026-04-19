@@ -1527,10 +1527,32 @@ export const useExtensionPage = () => {
   
       toast(tm("messages.refreshSuccess"), "success");
     } catch (err) {
-      toast(tm("messages.refreshFailed") + " " + err, "error");
+      toast(resolveErrorMessage(err, tm("messages.refreshFailed")), "error");
     } finally {
       refreshingMarket.value = false;
       loading_.value = false;
+    }
+  };
+
+  // 手动检查插件更新：刷新市场数据并重新比对已安装插件版本
+  const isCheckingUpdates = ref(false);
+  const checkPluginUpdates = async () => {
+    isCheckingUpdates.value = true;
+    try {
+      const data = await commonStore.getPluginCollections(
+        true,
+        selectedSource.value,
+      );
+      pluginMarketData.value = data;
+      trimExtensionName();
+      checkAlreadyInstalled();
+      checkUpdate();
+      const updateCount = updatableExtensions.value.length;
+      toast(tm("messages.checkUpdatesSuccess", { count: updateCount }), "success");
+    } catch (err) {
+      toast(resolveErrorMessage(err, tm("messages.checkUpdatesFailed")), "error");
+    } finally {
+      isCheckingUpdates.value = false;
     }
   };
   
@@ -1803,6 +1825,8 @@ export const useExtensionPage = () => {
     selectedInstallPlugin,
     checkInstallCompatibility,
     refreshPluginMarket,
+    isCheckingUpdates,
+    checkPluginUpdates,
     handleLocaleChange,
     searchDebounceTimer,
   };
