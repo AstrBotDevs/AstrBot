@@ -27,9 +27,10 @@ jobs:
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Install and Build
+        working-directory: dashboard
         run: |
-          pnpm --dir dashboard install --frozen-lockfile
-          pnpm --dir dashboard run build
+          pnpm install --frozen-lockfile
+          pnpm run build
 
       - name: Inject Commit SHA
         id: get_sha
