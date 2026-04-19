@@ -77,6 +77,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def _resolve_path_from_sandbox(
         self, context: ContextWrapper[AstrAgentContext], path: str
     ) -> tuple[str, bool]:
+        # if the path is relative, check if the file exists in user's local workspace
         if not os.path.isabs(path):
             unified_msg_origin = context.context.event.unified_msg_origin
             if unified_msg_origin:
@@ -91,7 +92,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         return str(ws_candidate), False
                 except Exception:
                     pass
-
+        # check if the file exists in local environment
         if os.path.exists(path):
             return path, False
 
