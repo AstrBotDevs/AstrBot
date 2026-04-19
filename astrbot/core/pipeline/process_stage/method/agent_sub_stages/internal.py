@@ -448,6 +448,12 @@ class InternalAgentSubStage(Stage):
             logger.info(
                 "Saving failed agent history as save_failed_agent_history is enabled."
             )
+            all_messages.append(
+                Message(
+                    role="assistant",
+                    content="[Agent run failed. History saved for debugging.]",
+                )
+            )
 
         message_to_save = []
         skipped_initial_system = False
