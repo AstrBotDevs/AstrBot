@@ -81,19 +81,17 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         if not os.path.isabs(path):
             unified_msg_origin = context.context.event.unified_msg_origin
             if unified_msg_origin:
-                from astrbot.core.tools.computer_tools.util import (
-                    workspace_root,
-                )
+                from astrbot.core.tools.computer_tools.util import workspace_root
 
                 try:
                     ws_path = workspace_root(unified_msg_origin)
                     ws_candidate = (ws_path / path).resolve()
-                    if ws_candidate.exists() and ws_candidate.is_relative_to(ws_path):
+                    if ws_candidate.is_file() and ws_candidate.is_relative_to(ws_path):
                         return str(ws_candidate), False
                 except Exception:
                     pass
-        # check if the file exists in local environment
-        if os.path.exists(path):
+        # check if the file exists in local environment (only allow absolute paths to prevent traversal)
+        elif os.path.isfile(path):
             return path, False
 
         try:
