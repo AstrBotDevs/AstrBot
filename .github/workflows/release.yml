@@ -64,11 +64,11 @@ jobs:
 
       - name: Build dashboard dist
         shell: bash
+        working-directory: dashboard
         run: |
-          pnpm --dir dashboard install --frozen-lockfile
-          pnpm --dir dashboard run build
-          echo "${{ steps.tag.outputs.tag }}" > dashboard/dist/assets/version
-          cd dashboard
+          pnpm install --frozen-lockfile
+          pnpm run build
+          echo "${{ steps.tag.outputs.tag }}" > dist/assets/version
           zip -r "AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" dist
 
       - name: Upload dashboard artifact
