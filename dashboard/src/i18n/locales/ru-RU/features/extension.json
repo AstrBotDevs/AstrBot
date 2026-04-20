@@ -1,0 +1,367 @@
+﻿{
+    "title": "Плагины",
+    "subtitle": "Управление и настройка расширений системы",
+    "tabs": {
+        "installedPlugins": "Плагины AstrBot",
+        "market": "Магазин плагинов",
+        "installedMcpServers": "MCP",
+        "skills": "Навыки",
+        "handlersOperation": "Управление поведением"
+    },
+    "titles": {
+        "installedAstrBotPlugins": "Установленные плагины AstrBot"
+    },
+    "failedPlugins": {
+        "title": "Ошибка загрузки ({count})",
+        "hint": "Эти плагины не удалось загрузить. Вы можете попробовать перезагрузить их или удалить.",
+        "columns": {
+            "plugin": "Плагин",
+            "error": "Ошибка"
+        }
+    },
+    "search": {
+        "placeholder": "Поиск плагинов...",
+        "marketPlaceholder": "Поиск в магазине..."
+    },
+    "filters": {
+        "all": "Все"
+    },
+    "views": {
+        "card": "Плитка",
+        "list": "Список"
+    },
+    "buttons": {
+        "showSystemPlugins": "Показать системные",
+        "hideSystemPlugins": "Скрыть системные",
+        "install": "Установить",
+        "uninstall": "Удалить",
+        "update": "Обновить",
+        "reload": "Перезагрузить",
+        "enable": "Включить",
+        "disable": "Выключить",
+        "configure": "Настроить",
+        "viewInfo": "Детали",
+        "viewDocs": "Документация",
+        "viewRepo": "Репозиторий",
+        "close": "Закрыть",
+        "save": "Сохранить",
+        "saveAndClose": "Сохранить и закрыть",
+        "cancel": "Отмена",
+        "actions": "Действия",
+        "back": "Назад",
+        "selectFile": "Выбрать файл",
+        "refresh": "Обновить",
+        "updateAll": "Обновить все",
+        "deleteSource": "Удалить источник",
+        "reshuffle": "Мне повезет!"
+    },
+    "status": {
+        "enabled": "Включен",
+        "disabled": "Выключен",
+        "system": "Системный",
+        "loading": "Загрузка...",
+        "installed": "Установлен",
+        "unknown": "Неизвестно"
+    },
+    "tooltips": {
+        "enable": "Включить",
+        "disable": "Выключить",
+        "reload": "Перезагрузить",
+        "configure": "Настроить",
+        "viewInfo": "Просмотр поведения",
+        "viewDocs": "Документация",
+        "update": "Обновить",
+        "uninstall": "Удалить"
+    },
+    "table": {
+        "headers": {
+            "name": "Имя",
+            "description": "Описание",
+            "version": "Версия",
+            "author": "Автор",
+            "status": "Статус",
+            "actions": "Действия",
+            "stars": "Звезды",
+            "lastUpdate": "Обновлен",
+            "tags": "Теги",
+            "eventType": "Тип события",
+            "specificType": "Тип",
+            "trigger": "Триггер"
+        }
+    },
+    "empty": {
+        "noPlugins": "Плагины не найдены",
+        "noPluginsDesc": "Попробуйте установить новые плагины или включите отображение системных."
+    },
+    "market": {
+        "recommended": "🥳 Рекомендуем",
+        "allPlugins": "📦 Все плагины",
+        "categories": {
+            "all": "Все",
+            "ai_tools": "AI Tools",
+            "entertainment": "Развлечения",
+            "productivity": "Продуктивность",
+            "integrations": "Интеграции",
+            "utilities": "Утилиты",
+            "other": "Другое"
+        },
+        "showFullName": "Полное имя",
+        "devDocs": "Документация для разработчиков",
+        "submitRepo": "Добавить репозиторий",
+        "customSource": "Свои источники",
+        "source": "Источник",
+        "availableSources": "Доступные источники",
+        "sourceManagement": "Управление источниками",
+        "addSource": "Добавить источник",
+        "sourceName": "Имя",
+        "sourceUrl": "Исходный URL",
+        "defaultSource": "Источник по умолчанию",
+        "removeSource": "Удалить источник",
+        "confirmRemoveSource": "Вы уверены, что хотите удалить этот источник плагинов?",
+        "sourceAdded": "Источник успешно добавлен",
+        "sourceRemoved": "Источник удален",
+        "sourceError": "Ошибка операции",
+        "selectSource": "Выбрать источник",
+        "currentSource": "Текущий источник",
+        "editSource": "Изменить источник",
+        "sourceUpdated": "Источник обновлен",
+        "defaultOfficialSource": "Официальный источник",
+        "sourceExists": "Этот источник уже есть в списке",
+        "installPlugin": "Установить плагин",
+        "randomPlugins": "🎲 Случайные плагины",
+        "showRandomPlugins": "Показать случайные",
+        "hideRandomPlugins": "Скрыть случайные",
+        "sourceSafetyWarning": "Даже при использовании источников по умолчанию мы не можем гарантировать 100% безопасность и стабильность сторонних плагинов. Пожалуйста, будьте внимательны."
+    },
+    "sort": {
+        "by": "Сортировать по",
+        "default": "По умолчанию",
+        "installTime": "Дате установки",
+        "name": "Имени",
+        "stars": "Звездам",
+        "author": "Автору",
+        "updated": "Дате обновления",
+        "updateStatus": "Статусу обновления",
+        "ascending": "По возрастанию",
+        "descending": "По убыванию"
+    },
+    "tags": {
+        "danger": "Опасно"
+    },
+    "dialogs": {
+        "error": {
+            "title": "Ошибка",
+            "checkConsole": "Подробности смотрите в логах платформы"
+        },
+        "config": {
+            "title": "Настройка плагина",
+            "noConfig": "У этого плагина нет настраиваемых параметров"
+        },
+        "loading": {
+            "title": "Загрузка...",
+            "logs": "Логи"
+        },
+        "uninstall": {
+            "title": "Подтверждение удаления",
+            "message": "Вы уверены, что хотите удалить этот плагин?",
+            "deleteConfig": "Удалить файл конфигурации плагина",
+            "deleteData": "Удалить сохраненные данные плагина",
+            "configHint": "Конфиг находится в data/config",
+            "dataHint": "Данные находятся в data/plugin_data и data/plugins_data"
+        },
+        "install": {
+            "title": "Установка плагина",
+            "fromFile": "Из файла",
+            "fromUrl": "По ссылке",
+            "supportPlatformsCount": "Поддерживает платформ: {count}"
+        },
+        "danger_warning": {
+            "title": "Внимание!",
+            "message": "Этот плагин может содержать небезопасный код или функции, которые могут привести к нестабильности системы или потере данных. Вы уверены, что хотите продолжить установку?",
+            "confirm": "Продолжить",
+            "cancel": "Отмена"
+        },
+        "versionCompatibility": {
+            "title": "Предупреждение о версии",
+            "message": "Требуемая плагином версия AstrBot не совпадает с вашей текущей версией. Вы можете продолжить установку на свой страх и риск.",
+            "confirm": "Игнорировать и установить",
+            "cancel": "Отмена"
+        },
+        "forceUpdate": {
+            "title": "Новых версий не найдено",
+            "message": "Новых версий не обнаружено. Выполнить принудительную переустановку из удаленного репозитория?",
+            "confirm": "Принудительно"
+        },
+        "updateAllConfirm": {
+            "title": "Обновить всё",
+            "message": "Обновить все плагины ({count} шт.)? Это может занять некоторое время.",
+            "confirm": "Подтвердить"
+        }
+    },
+    "messages": {
+        "uninstalling": "Удаление",
+        "refreshing": "Обновление списка плагинов...",
+        "refreshSuccess": "Список плагинов обновлен",
+        "refreshFailed": "Ошибка при обновлении списка",
+        "operationFailed": "Ошибка операции",
+        "reloadSuccess": "Перезагрузка завершена",
+        "reloadFailed": "Ошибка перезагрузки",
+        "updateSuccess": "Обновление завершено",
+        "addSuccess": "Успешно добавлено",
+        "saveSuccess": "Сохранено",
+        "deleteSuccess": "Удалено",
+        "installing": "Установка из файла...",
+        "installingFromUrl": "Установка по ссылке...",
+        "installFailed": "Ошибка установки:",
+        "getMarketDataFailed": "Ошибка получения данных магазина:",
+        "hasUpdate": "Доступно обновление:",
+        "confirmDelete": "Вы уверены, что хотите удалить плагин?",
+        "fillUrlOrFile": "Укажите ссылку или выберите файл",
+        "dontFillBoth": "Пожалуйста, используйте либо ссылку, либо файл, но не оба сразу",
+        "supportedFormats": "Поддерживаются файлы плагинов в формате .zip",
+        "updateAllSuccess": "Все плагины успешно обновлены",
+        "updateAllFailed": "Ошибок при обновлении: {failed} из {total}:",
+        "fillSourceNameAndUrl": "Пожалуйста, введите имя и адрес источника",
+        "invalidUrl": "Введите корректный URL",
+        "enterJsonUrl": "Введите URL, возвращающий список плагинов в формате JSON"
+    },
+    "upload": {
+        "fromFile": "Загрузить файл",
+        "fromUrl": "Указать ссылку",
+        "selectFile": "Выбрать файл",
+        "enterUrl": "Ссылка на репозиторий"
+    },
+    "skills": {
+        "modeLocal": "Локальные навыки",
+        "modeNeo": "Навыки Neo",
+        "actions": "Действия",
+        "upload": "Загрузить навыки",
+        "refresh": "Обновить",
+        "empty": "Навыки не найдены",
+        "emptyHint": "Пожалуйста, загрузите архив с навыками",
+        "uploadDialogTitle": "Загрузка навыков",
+        "uploadHint": "Поддерживается массовая загрузка zip-архивов. Вы также можете перетащить файлы в это окно. Система автоматически проверит структуру каждого архива.",
+        "structureRequirement": "Поддерживаются архивы с несколькими папками skills.",
+        "abilityMultiple": "Поддержка массовой загрузки",
+        "abilityValidate": "Автопроверка `SKILL.md`",
+        "abilitySkip": "Пропуск дубликатов",
+        "selectFile": "Выбрать файл",
+        "selectFiles": "Выбрать файлы",
+        "dropzoneTitle": "Перетащите zip-файлы сюда",
+        "dropzoneAction": "или нажмите, чтобы выбрать файлы на компьютере",
+        "dropzoneHint": "Система проверит структуру архивов перед загрузкой",
+        "fileListTitle": "Очередь загрузки",
+        "fileListEmpty": "Здесь будет отображаться статус проверки и загрузки файлов",
+        "uploading": "Загрузка...",
+        "batchResultTitle": "Результаты загрузки",
+        "batchResultSummary": "Всего: {total}, успешно: {success}",
+        "batchSuccessList": "Успешно загружено",
+        "batchFailedList": "Ошибка загрузки",
+        "confirm": "ОК",
+        "confirmUpload": "Начать загрузку",
+        "cancel": "Отмена",
+        "statusWaiting": "В очереди",
+        "statusUploading": "Загрузка...",
+        "statusSuccess": "Готово",
+        "statusError": "Ошибка структуры",
+        "statusSkipped": "Пропущено",
+        "summaryTotal": "Всего: {count}",
+        "summaryReady": "Готовы: {count}",
+        "summarySuccess": "Успешно: {count}",
+        "summaryFailed": "Ошибок: {count}",
+        "summarySkipped": "Дубликатов: {count}",
+        "validationReady": "Ожидает загрузки (проверка структуры будет выполнена автоматически)",
+        "validationZipOnly": "Допускаются только zip-архивы",
+        "validationDuplicate": "Файл уже есть в списке, пропуск",
+        "validationUploading": "Проверка и загрузка...",
+        "validationUploadFailed": "Ошибка загрузки, попробуйте еще раз",
+        "validationUploadedAs": "Установлено как {name}",
+        "validationNoResult": "Результат не получен, проверьте логи платформы",
+        "noDescription": "Нет описания",
+        "path": "Путь",
+        "uploadSuccess": "Успешно загружено",
+        "uploadFailed": "Ошибка загрузки",
+        "download": "Скачать",
+        "downloadSuccess": "Скачивание начато",
+        "downloadFailed": "Ошибка скачивания",
+        "loadFailed": "Не удалось загрузить навыки",
+        "updateSuccess": "Обновлено",
+        "updateFailed": "Ошибка обновления",
+        "deleteTitle": "Подтверждение удаления",
+        "deleteMessage": "Вы уверены, что хотите удалить этот навык?",
+        "deleteSuccess": "Удалено",
+        "deleteFailed": "Ошибка удаления",
+        "neoSkillKey": "Фильтр по ключу",
+        "neoStatus": "Статус кандидата",
+        "neoStage": "Этап публикации",
+        "neoFilterHint": "Фильтрация записей о публикации",
+        "neoAll": "Все",
+        "neoCandidates": "Кандидаты Neo",
+        "neoReleases": "Релизы Neo",
+        "neoLoadFailed": "Ошибка загрузки данных Neo Skills",
+        "neoPass": "Одобрить",
+        "neoReject": "Отклонить",
+        "neoEvaluateSuccess": "Оценка обновлена",
+        "neoEvaluateFailed": "Ошибка обновления оценки",
+        "neoPromoteSuccess": "Опубликовано",
+        "neoPromoteFailed": "Ошибка публикации",
+        "neoRollback": "Откат",
+        "neoRollbackSuccess": "Откат выполнен",
+        "neoRollbackFailed": "Ошибка отката",
+        "neoDeactivate": "Деактивация",
+        "neoDeactivateSuccess": "Деактивировано",
+        "neoDeactivateFailed": "Ошибка деактивации",
+        "neoSync": "Синхронизация",
+        "neoSyncSuccess": "Синхронизировано",
+        "neoSyncFailed": "Ошибка синхронизации",
+        "neoDelete": "Удалить",
+        "neoDeleteSuccess": "Удалено",
+        "neoDeleteFailed": "Ошибка удаления",
+        "neoPayloadTitle": "Детали Neo Payload",
+        "neoPayloadFailed": "Ошибка чтения Payload",
+        "runtimeNoneWarning": "Среда выполнения Computer Use не задана. Навыки могут не работать, так как нет активного окружения.",
+        "runtimeHint": "Установите среду выполнения в «local» или «sandbox» в настройках способностей использования компьютера.",
+        "neoRuntimeRequired": "Neo Skills доступны только в среде sandbox с драйвером shipyard_neo.",
+        "sourceLocalOnly": "Локальный навык",
+        "sourceSandboxOnly": "Предустановленный Sandbox навык",
+        "sourceBoth": "Локальный + Sandbox",
+        "sandboxDiscoveryPending": "Предустановленные Sandbox навыки не найдены. Запустите сессию Sandbox хотя бы один раз.",
+        "sandboxPresetReadonly": "Предустановленные навыки Sandbox доступны только для чтения и не могут быть удалены здесь."
+    },
+    "card": {
+        "actions": {
+            "pluginConfig": "Настройки",
+            "uninstallPlugin": "Удалить",
+            "reloadPlugin": "Перезагрузить",
+            "togglePlugin": "Плагин",
+            "viewHandlers": "Действия",
+            "updateTo": "Обновить до",
+            "reinstall": "Переустановить"
+        },
+        "status": {
+            "hasUpdate": "Доступно обновление",
+            "disabled": "Плагин выключен",
+            "handlersCount": "действий",
+            "supportPlatform": "Платформы",
+            "supportPlatformsCount": "Платформ: {count}",
+            "astrbotVersion": "Требуемая версия AstrBot"
+        },
+        "alt": {
+            "logo": "логотип",
+            "extensionIcon": "иконка расширения"
+        },
+        "errors": {
+            "confirmNotRegistered": "$confirm не зарегистрирован"
+        }
+    },
+    "conflicts": {
+        "title": "Конфликт команд",
+        "message": "Обнаружены конфликтующие команды. Это может привести к некорректной работе. Рекомендуется разрешить конфликты в панели «Управление командами».",
+        "pairs": "конфликтующих пар",
+        "goToManage": "Управление",
+        "later": "Позже"
+    },
+    "pluginChangelog": {
+        "menuTitle": "Журнал изменений"
+    }
+}

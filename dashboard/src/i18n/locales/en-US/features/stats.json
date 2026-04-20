@@ -1,0 +1,104 @@
+{
+  "header": {
+    "eyebrow": "Dashboard",
+    "title": "System Statistics",
+    "subtitle": "A unified view of platforms, messages, and model calls.",
+    "notUpdated": "Not updated yet"
+  },
+  "ranges": {
+    "oneDay": "1 Day",
+    "threeDays": "3 Days",
+    "oneWeek": "1 Week"
+  },
+  "rangeLabels": {
+    "oneDay": "Last 1 day",
+    "threeDays": "Last 3 days",
+    "oneWeek": "Last 1 week"
+  },
+  "overviewCards": {
+    "platformCount": {
+      "label": "Platform Instances",
+      "note": "Configured and currently running platform instances"
+    },
+    "messageCount": {
+      "label": "Messages",
+      "note": "Total accumulated messages"
+    },
+    "todayModelCalls": {
+      "label": "Today's Model Calls",
+      "note": "Tokens"
+    },
+    "cpu": {
+      "label": "CPU",
+      "note": "AstrBot CPU usage"
+    },
+    "memory": {
+      "label": "Process Memory",
+      "note": "System memory {systemMemory}"
+    },
+    "uptime": {
+      "label": "Uptime",
+      "note": "Started at {startTime}"
+    }
+  },
+  "messageOverview": {
+    "title": "Message Overview",
+    "subtitle": "Robot message statistics"
+  },
+  "messageTrend": {
+    "title": "Message Trend",
+    "subtitle": "{range}, aggregated by hour",
+    "totalMessages": "Total Messages"
+  },
+  "platformRanking": {
+    "title": "Platform Message Ranking",
+    "subtitle": "{range}, sorted by aggregated message volume"
+  },
+  "modelCalls": {
+    "title": "Model Calls",
+    "subtitle": "Model call statistics"
+  },
+  "modelTrend": {
+    "title": "Model Call Trend",
+    "subtitle": "Token trend for model calls"
+  },
+  "modelTotal": {
+    "title": "{range} total model calls",
+    "callCount": "{count} calls",
+    "avgTtft": "Average TTFT",
+    "avgDuration": "Average Response Time",
+    "avgTpm": "Average TPM",
+    "successRate": "Success Rate"
+  },
+  "modelRanking": {
+    "title": "{range} model call ranking",
+    "subtitle": "Ranked by model call tokens"
+  },
+  "sessionRanking": {
+    "title": "{range} session token top 10",
+    "subtitle": "Sessions ranked by token usage"
+  },
+  "empty": {
+    "platformStats": "No platform message statistics available.",
+    "modelCalls": "No model call data for {range}.",
+    "sessionCalls": "No session call data for {range}."
+  },
+  "chart": {
+    "messages": "Messages",
+    "others": "Others"
+  },
+  "units": {
+    "tokens": "Tokens",
+    "tpm": "TPM",
+    "gb": "GB",
+    "mb": "MB",
+    "ms": "ms",
+    "hoursShort": "h",
+    "minutesShort": "m",
+    "secondsShort": "s"
+  },
+  "errors": {
+    "loadFailed": "Failed to load statistics. Please try again later.",
+    "rangeFailed": "Failed to switch the statistics range. Please try again later."
+  }
+}

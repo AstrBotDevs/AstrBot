@@ -78,6 +78,7 @@
     },
     "persona": {
       "description": "Persona",
+      "hint": "Set the default persona for AI conversations. Personas can be managed in the Persona tab.",
       "provider_settings": {
         "default_personality": {
           "description": "Default Persona"
@@ -120,6 +121,10 @@
           "description": "BoCha API Key",
           "hint": "Multiple keys can be added for rotation."
         },
+        "websearch_brave_key": {
+          "description": "Brave Search API Key",
+          "hint": "Multiple keys can be added for rotation."
+        },
         "websearch_baidu_app_builder_key": {
           "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
           "hint": "Reference: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -147,11 +152,11 @@
     },
     "agent_computer_use": {
       "description": "Agent Computer Use",
-      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See [Sandbox Mode](https://docs.astrbot.app/use/astrbot-agent-sandbox.html), [Skills](https://docs.astrbot.app/use/skills.html)",
+      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See: [Computer Use](https://docs.astrbot.app/use/computer.html).",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
-          "hint": "sandbox means running in a sandbox environment, local means running in a local environment, none means disabling Computer Use. If skills are uploaded, choosing none will cause them to not be usable by the Agent."
+          "hint": "Environment allowed for Agent usage. `local` means the local machine environment, `sandbox` means the sandbox environment, and `none` means no environment is allowed."
         },
         "computer_use_require_admin": {
           "description": "Require AstrBot Admin Permission",
@@ -334,6 +339,22 @@
           "description": "User Prompt",
           "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
         },
+        "image_compress_enabled": {
+          "description": "Enable image compression",
+          "hint": "When enabled, large local images are compressed before being sent to multimodal models."
+        },
+        "image_compress_options": {
+          "description": "Image compression settings",
+          "hint": "Control image resize limits, JPEG quality, and the minimum size threshold for compression.",
+          "max_size": {
+            "description": "Maximum edge length",
+            "hint": "Longest edge of the compressed image in pixels. Images larger than this are resized proportionally."
+          },
+          "quality": {
+            "description": "JPEG quality",
+            "hint": "JPEG output quality from 1 to 100. Higher values preserve more detail but produce larger files."
+          }
+        },
         "reachability_check": {
           "description": "Provider Reachability Check",
           "hint": "When running the /provider command, test provider connectivity in parallel. This actively pings models and may consume extra tokens."
@@ -368,6 +389,10 @@
       "discord_activity_name": {
         "description": "Discord Activity Name",
         "hint": "Optional Discord activity name. Leave empty to disable."
+      },
+      "discord_allow_bot_messages": {
+        "description": "Allow Bot Messages",
+        "hint": "When enabled, AstrBot will receive messages from other Discord bots. Useful for bot-to-bot communication scenarios (e.g., message forwarding). Disabled by default."
       },
       "discord_command_register": {
         "description": "Register Discord slash commands",
@@ -531,9 +556,25 @@
         "description": "Telegram Command Auto Refresh Interval",
         "hint": "Telegram command auto-refresh interval in seconds."
       },
+      "telegram_polling_restart_delay": {
+        "description": "Telegram Polling Restart Delay",
+        "hint": "Waiting time in seconds when the polling loop needs to restart after unexpected exits. Defaults to 5s."
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
+      },
+      "mattermost_url": {
+        "description": "Mattermost URL",
+        "hint": "Mattermost service URL, for example https://chat.example.com."
+      },
+      "mattermost_bot_token": {
+        "description": "Mattermost Bot Token",
+        "hint": "The access token generated after creating a bot account in Mattermost."
+      },
+      "mattermost_reconnect_delay": {
+        "description": "Mattermost Reconnect Delay",
+        "hint": "Delay in seconds before reconnecting after the WebSocket disconnects. Defaults to 5 seconds."
       },
       "type": {
         "description": "Adapter Type"
@@ -613,15 +654,34 @@
         "description": "Send Replies via Webhook Only",
         "hint": "When enabled, all WeCom AI Bot replies are sent through msg_push_webhook_url. The message push webhook supports more message types (such as images, files, etc.). If you do not need the typing effect, it is strongly recommended to use this option. "
       },
+      "weixin_oc_base_url": {
+        "description": "API Base URL",
+        "hint": "Default: https://ilinkai.weixin.qq.com"
+      },
+      "weixin_oc_bot_type": {
+        "description": "bot_type (QR login parameter)",
+        "hint": "Default: 3"
+      },
+      "weixin_oc_qr_poll_interval": {
+        "description": "QR status poll interval (seconds)",
+        "hint": "Polling interval in seconds for QR code status."
+      },
+      "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates long-poll timeout (ms)",
+        "hint": "Timeout parameter for polling messages."
+      },
+      "weixin_oc_api_timeout_ms": {
+        "description": "HTTP timeout (ms)",
+        "hint": "Generic API request timeout."
+      },
+      "weixin_oc_token": {
+        "description": "Token after login (optional)",
+        "hint": "Automatically written after QR login; can be filled manually for advanced scenarios."
+      },
       "kook_bot_token": {
         "description": "Bot Token",
         "type": "string",
         "hint": "Required. The Bot Token obtained from the KOOK Developer Platform."
-      },
-      "kook_bot_nickname": {
-        "description": "Bot Nickname",
-        "type": "string",
-        "hint": "Optional. If the sender nickname matches this value, the message will be ignored to prevent broadcast storms."
       },
       "kook_reconnect_delay": {
         "description": "Reconnect Delay",
@@ -701,11 +761,11 @@
       "platform_settings": {
         "enable_id_white_list": {
           "description": "Enable Whitelist",
-          "hint": "When enabled, only sessions in the whitelist will be responded to."
+          "hint": "When enabled, only sessions in the whitelist will be responded to. If the whitelist is empty, the whitelist is disabled and all IDs are allowed."
         },
         "id_whitelist": {
           "description": "Whitelist ID List",
-          "hint": "Use /sid to get IDs."
+          "hint": "Use /sid to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
         },
         "id_whitelist_log": {
           "description": "Output Logs",
@@ -850,7 +910,7 @@
           },
           "interval_method": {
             "description": "Interval Method",
-            "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。"
+            "hint": "random uses a random delay. log calculates delay by message length: $y=log_{log\\_base}(x)$, where x is word count and y is in seconds."
           },
           "interval": {
             "description": "Random Interval Time",
@@ -1035,7 +1095,11 @@
       },
       "rerank_api_base": {
         "description": "Rerank Model API Base URL",
-        "hint": "AstrBot appends /v1/rerank to the request URL."
+        "hint": "The full request URL is formed by combining the Base URL and a path suffix (defaults to /v1/rerank)."
+      },
+      "rerank_api_suffix": {
+        "description": "API URL path suffix",
+        "hint": "Path appended to base_url, e.g. /v1/rerank. Leave empty to disable auto-append."
       },
       "rerank_api_key": {
         "description": "API Key",
@@ -1052,6 +1116,24 @@
         "description": "Custom rerank task description",
         "hint": "Only effective for qwen3-rerank models. Recommended to write in English."
       },
+      "nvidia_rerank_api_base": {
+          "description": "API Base URL"
+      },
+      "nvidia_rerank_api_key": {
+          "description": "API Key"
+      },
+      "nvidia_rerank_model": {
+          "description": "Rerank Model Name",
+          "hint": "Please refer to the NVIDIA Docs for the model name."
+      },
+      "nvidia_rerank_model_endpoint": {
+          "description": "Custom Model Endpoint",
+          "hint": "Custom URL suffix endpoint, defaults to /reranking."
+      },
+      "nvidia_rerank_truncate": {
+          "description": "Text Truncation Strategy",
+          "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
+      },
       "launch_model_if_not_running": {
         "description": "Auto-start model if not running",
         "hint": "If the model is not running in Xinference, attempt to start it automatically. Recommended to disable in production."
@@ -1062,12 +1144,17 @@
         "labels": [
           "Text",
           "Image",
+          "Audio",
           "Tool use"
         ]
       },
       "custom_headers": {
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
+      },
+      "ollama_disable_thinking": {
+        "description": "Disable thinking mode",
+        "hint": "Close Ollama thinking mode."
       },
       "custom_extra_body": {
         "description": "Custom request body parameters",
@@ -1193,7 +1280,7 @@
         "description": "API Base URL"
       },
       "openai_embedding": {
-        "hint": "OpenAI Embedding automatically appends /v1 at request time."
+        "hint": "If testing fails, try adding /v1 at the end to be compatible with some OpenAI API versions."
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."
@@ -1391,9 +1478,37 @@
         "description": "Timeout",
         "hint": "Timeout in seconds."
       },
+      "mimo-stt-system-prompt": {
+        "description": "System prompt",
+        "hint": "System prompt used to guide MiMo STT transcription behavior."
+      },
+      "mimo-stt-user-prompt": {
+        "description": "User prompt",
+        "hint": "Additional user prompt sent to MiMo STT to constrain the returned transcription format."
+      },
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
+      },
+      "mimo-tts-voice": {
+        "description": "Voice",
+        "hint": "MiMo TTS voice name. Supported values include 'mimo_default', 'default_en', and 'default_zh'."
+      },
+      "mimo-tts-format": {
+        "description": "Output format",
+        "hint": "Audio format generated by MiMo TTS. Supported values: 'wav', 'mp3', and 'pcm'."
+      },
+      "mimo-tts-style-prompt": {
+        "description": "Style prompt",
+        "hint": "Prepended to the synthesis target text as a <style>...</style> tag to control speed, emotion, character, or style, such as happy, faster, Sun Wukong, or whispering. Optional."
+      },
+      "mimo-tts-dialect": {
+        "description": "Dialect",
+        "hint": "Combined with the style prompt inside the leading <style>...</style> tag, for example Northeastern Mandarin, Sichuan dialect, Henan dialect, or Cantonese. Optional."
+      },
+      "mimo-tts-seed-text": {
+        "description": "Seed text",
+        "hint": "Sent as an optional user message to help guide tone and speaking style. It is not appended to the synthesis target text."
       },
       "fishaudio-tts-character": {
         "description": "character",
@@ -1406,6 +1521,10 @@
       "whisper_hint": {
         "description": "Notes for local Whisper deployment",
         "hint": "Before enabling, install the openai-whisper library (NVIDIA users download ~2GB mainly for torch and cuda; CPU users download ~1GB), and install ffmpeg. Otherwise STT will not work."
+      },
+      "whisper_device": {
+        "description": "Inference device",
+        "hint": "Whisper inference device. Apple Silicon can use mps; other environments should use cpu. If mps is selected but unavailable, AstrBot will fall back to cpu."
       },
       "id": {
         "description": "ID"

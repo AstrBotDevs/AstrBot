@@ -12,6 +12,15 @@ from astrbot.core.star.star_handler import EventType
 
 
 class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
+    async def on_agent_begin(
+        self, run_context: ContextWrapper[AstrAgentContext]
+    ) -> None:
+        await call_event_hook(
+            run_context.context.event,
+            EventType.OnAgentBeginEvent,
+            run_context,
+        )
+
     async def on_agent_done(self, run_context, llm_response) -> None:
         # 执行事件钩子
         if llm_response and llm_response.reasoning_content:
@@ -23,6 +32,12 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         await call_event_hook(
             run_context.context.event,
             EventType.OnLLMResponseEvent,
+            llm_response,
+        )
+        await call_event_hook(
+            run_context.context.event,
+            EventType.OnAgentDoneEvent,
+            run_context,
             llm_response,
         )
 
@@ -59,7 +74,13 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         platform_name = run_context.context.event.get_platform_name()
         if (
             platform_name == "webchat"
-            and tool.name in ["web_search_tavily", "web_search_bocha"]
+            and tool.name
+            in [
+                "web_search_baidu",
+                "web_search_tavily",
+                "web_search_bocha",
+                "web_search_brave",
+            ]
             and len(run_context.messages) > 0
             and tool_result
             and len(tool_result.content)

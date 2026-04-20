@@ -62,4 +62,5 @@ GenieData/
 .opencode/
 .kilocode/
 .worktrees/
-docs/plans/
+
+dashboard/bun.lock

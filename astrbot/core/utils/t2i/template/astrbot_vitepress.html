@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="utf-8"/>
+  <title>AstrBot Docs {{ version }}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+  <style>
+    :root {
+      --vp-c-bg: #1b1b1f;
+      --vp-c-bg-soft: #202127;
+      --vp-c-bg-alt: #161618;
+      --vp-c-bg-elv: #202127;
+      --vp-c-border: #3c3f44;
+      --vp-c-divider: #2e2e32;
+      --vp-c-gutter: #000000;
+      --vp-c-text-1: #dfdfd6;
+      --vp-c-text-2: #98989f;
+      --vp-c-text-3: #6a6a71;
+      --vp-c-brand-1: #a8b1ff;
+      --vp-c-brand-2: #5c73e7;
+      --vp-c-brand-3: #3e63dd;
+      --vp-c-brand-soft: rgba(100, 108, 255, 0.16);
+      --vp-c-default-soft: rgba(101, 117, 133, 0.16);
+      --vp-code-bg: var(--vp-c-default-soft);
+      --vp-code-block-bg: var(--vp-c-bg-alt);
+      --vp-code-line-height: 1.7;
+      --vp-code-font-size: 0.875em;
+      --vp-shadow-2: 0 3px 12px rgba(0, 0, 0, 0.07), 0 1px 4px rgba(0, 0, 0, 0.07);
+      --vp-shadow-3: 0 12px 32px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.08);
+      --vp-layout-max-width: 1440px;
+      --vp-nav-height: 64px;
+      --vp-radius: 12px;
+      --vp-font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+      --vp-font-family-cjk: "Inter4CJK", -apple-system, BlinkMacSystemFont, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+      --vp-code-font-family: ui-monospace, "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: var(--vp-c-bg);
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--vp-c-text-1);
+      font-family: var(--vp-font-family);
+      background: linear-gradient(180deg, rgba(27, 27, 31, 0.96), rgba(27, 27, 31, 1));
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    body:lang(zh),
+    body:lang(ja) {
+      font-family: var(--vp-font-family-cjk);
+    }
+
+    a {
+      color: var(--vp-c-brand-1);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      transition: color 0.25s, opacity 0.25s;
+    }
+
+    a:hover {
+      color: var(--vp-c-brand-2);
+    }
+
+    #app {
+      max-width: var(--vp-layout-max-width);
+      margin: 0 auto;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .vp-nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: var(--vp-nav-height);
+      padding: 0 32px;
+      backdrop-filter: blur(18px);
+      background: rgba(27, 27, 31, 0.9);
+      border-bottom: 1px solid var(--vp-c-gutter);
+    }
+
+    .vp-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 20px;
+      letter-spacing: -0.01em;
+    }
+
+    .vp-brand-logo {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+      filter: drop-shadow(0 6px 16px rgba(62, 99, 221, 0.24));
+    }
+
+    .vp-brand-name {
+      color: #ffffff;
+    }
+
+    .vp-nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--vp-c-text-2);
+      font-size: 14px;
+    }
+
+    .vp-search {
+      display: none;
+    }
+
+    .vp-search kbd {
+      display: none;
+    }
+
+    .vp-shell {
+      padding: 42px 32px 56px;
+      flex: 1 0 auto;
+    }
+
+    .vp-main {
+      min-width: 0;
+    }
+
+    .vp-content-frame {
+      max-width: 980px;
+      margin: 0 auto;
+    }
+
+    .vp-hero {
+      display: block;
+      margin-bottom: 36px;
+    }
+
+    .vp-hero.is-hidden {
+      display: none;
+    }
+
+    .vp-hero-copy h1 {
+      margin: 0;
+      font-size: 48px;
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+      color: #ffffff;
+    }
+
+    .vp-hero-copy p {
+      max-width: 720px;
+      margin: 16px 0 0;
+      font-size: 18px;
+      line-height: 1.78;
+      color: var(--vp-c-text-2);
+    }
+
+    .vp-doc {
+      color: var(--vp-c-text-1);
+      font-size: 16px;
+      line-height: 28px;
+    }
+
+    .vp-doc > *:first-child {
+      margin-top: 0;
+    }
+
+    .vp-doc h1,
+    .vp-doc h2,
+    .vp-doc h3,
+    .vp-doc h4 {
+      position: relative;
+      scroll-margin-top: 100px;
+      color: #ffffff;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .vp-doc h1 {
+      margin: 0 0 20px;
+      font-size: 32px;
+      line-height: 40px;
+    }
+
+    .vp-doc h2 {
+      margin: 48px 0 16px;
+      padding-top: 24px;
+      font-size: 24px;
+      line-height: 32px;
+      border-top: 1px solid var(--vp-c-divider);
+    }
+
+    .vp-doc h3 {
+      margin: 32px 0 0;
+      font-size: 20px;
+      line-height: 28px;
+    }
+
+    .vp-doc p,
+    .vp-doc ul,
+    .vp-doc ol,
+    .vp-doc table,
+    .vp-doc blockquote,
+    .vp-doc [class*="language-"],
+    .vp-doc .math {
+      margin: 16px 0;
+    }
+
+    .vp-doc strong {
+      color: #ffffff;
+    }
+
+    .vp-doc code {
+      font-family: var(--vp-code-font-family);
+      padding: 3px 6px;
+      border-radius: 4px;
+      color: var(--vp-c-brand-1);
+      background: var(--vp-code-bg);
+    }
+
+    .vp-doc pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+    }
+
+    .vp-doc [class*="language-"],
+    .vp-block {
+      position: relative;
+      overflow: hidden;
+      background-color: var(--vp-code-block-bg);
+      transition: background-color 0.5s;
+      border-radius: 8px;
+    }
+
+    .vp-doc [class*="language-"] > span.lang,
+    .vp-block > span.lang {
+      position: absolute;
+      top: 2px;
+      right: 8px;
+      z-index: 2;
+      font-size: 12px;
+      font-weight: 500;
+      user-select: none;
+      color: var(--vp-c-text-2);
+      background: transparent;
+      transition: color 0.4s, opacity 0.4s;
+    }
+
+    .vp-doc [class*="language-"] pre.shiki,
+    .vp-doc [class*="language-"] pre,
+    .vp-block pre.shiki,
+    .vp-block pre {
+      margin: 0;
+      padding: 20px 0;
+      border: 0;
+      border-radius: 8px;
+      overflow-x: auto;
+      background: var(--vp-code-block-bg) !important;
+      line-height: var(--vp-code-line-height);
+      font-size: var(--vp-code-font-size);
+    }
+
+    .vp-doc [class*="language-"] code,
+    .vp-block code {
+      -moz-tab-size: 4;
+      -o-tab-size: 4;
+      tab-size: 4;
+    }
+
+    .vp-doc [class*="language-"] pre.shiki code,
+    .vp-doc [class*="language-"] pre code,
+    .vp-block pre.shiki code,
+    .vp-block pre code {
+      font-family: var(--vp-code-font-family);
+      display: block;
+      width: fit-content;
+      min-width: 100%;
+      padding: 0 24px;
+      font-size: 14px;
+      color: inherit;
+    }
+
+    .vp-doc [class*="language-"] pre.shiki,
+    .vp-block pre.shiki {
+      color: var(--shiki-dark, #e1e4e8) !important;
+      background-color: var(--shiki-dark-bg, var(--vp-code-block-bg)) !important;
+    }
+
+    .vp-doc [class*="language-"] pre.shiki > code,
+    .vp-doc [class*="language-"] pre.shiki span,
+    .vp-block pre.shiki > code,
+    .vp-block pre.shiki span {
+      text-shadow: none;
+    }
+
+    .vp-doc blockquote {
+      margin: 16px 0;
+      padding-left: 16px;
+      border-left: 2px solid var(--vp-c-divider);
+      color: var(--vp-c-text-2);
+    }
+
+    .vp-doc blockquote p {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .vp-doc hr {
+      height: 1px;
+      border: 0;
+      margin: 38px 0;
+      background: var(--vp-c-divider);
+    }
+
+    .vp-doc img {
+      max-width: 100%;
+      display: block;
+      margin: 22px auto;
+      border-radius: 8px;
+      border: 1px solid var(--vp-c-divider);
+      box-shadow: var(--vp-shadow-3);
+    }
+
+    .vp-doc ul,
+    .vp-doc ol {
+      padding-left: 1.35rem;
+      color: var(--vp-c-text-1);
+    }
+
+    .vp-doc li {
+      margin: 8px 0;
+    }
+
+    .vp-doc table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 8px;
+      border: 1px solid var(--vp-c-border);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .vp-doc thead {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .vp-doc th,
+    .vp-doc td {
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--vp-c-divider);
+      text-align: left;
+    }
+
+    .vp-doc tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .vp-footer {
+      height: 72px;
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 72px;
+      color: var(--vp-c-text-3);
+      font-size: 14px;
+      border-top: 1px solid var(--vp-c-gutter);
+    }
+
+    @media (max-width: 1180px) {
+      .vp-shell {
+        padding-inline: 28px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="vp-nav">
+      <div class="vp-brand">
+        <img class="vp-brand-logo" src="https://cf.s3.soulter.top/astrbot-logo.svg" alt="AstrBot logo" />
+        <div class="vp-brand-name">AstrBot</div>
+      </div>
+      <div class="vp-nav-actions">
+        <span>{{ version }}</span>
+      </div>
+    </header>
+
+    <div class="vp-shell">
+      <main class="vp-main">
+        <div class="vp-content-frame">
+          <div class="vp-hero is-hidden" id="heroBlock">
+            <div class="vp-hero-copy">
+              <h1 id="heroTitle">AstrBot Docs</h1>
+              <p id="heroLead">将长文本内容整理为单页文档，参考 VitePress 默认主题的深色配色、正文排版与代码块节奏，适合技术说明与发布页。</p>
+            </div>
+          </div>
+          <article class="vp-doc" id="content"></article>
+        </div>
+      </main>
+    </div>
+
+    <footer class="vp-footer">Rendered by AstrBot {{ version }}</footer>
+  </div>
+
+  <script>{{ shiki_runtime | safe }}</script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+  <script>
+    (function () {
+      const contentElement = document.getElementById("content");
+      const source = decodeBase64Utf8("{{ text_base64 }}");
+
+      marked.setOptions({
+        gfm: true,
+        breaks: false,
+      });
+
+      contentElement.innerHTML = marked.parse(source);
+
+      assignHeadingIds(contentElement);
+      enhanceCodeBlocks(contentElement);
+
+      if (window.renderMathInElement) {
+        window.renderMathInElement(contentElement, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false }
+          ]
+        });
+      }
+
+      const headings = collectHeadings(contentElement);
+      populateHero(contentElement, headings);
+
+      function decodeBase64Utf8(base64Text) {
+        const binary = window.atob(base64Text || "");
+        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+
+        if (window.TextDecoder) {
+          return new TextDecoder().decode(bytes);
+        }
+
+        let fallback = "";
+        bytes.forEach((byte) => {
+          fallback += String.fromCharCode(byte);
+        });
+        return decodeURIComponent(escape(fallback));
+      }
+
+      function escapeHtml(value) {
+        return String(value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function assignHeadingIds(root) {
+        Array.from(root.querySelectorAll("h1, h2, h3")).forEach((heading, index) => {
+          heading.id = `section-${index + 1}`;
+        });
+      }
+
+      function collectHeadings(root) {
+        return Array.from(root.querySelectorAll("h1, h2, h3")).map((heading) => ({
+          element: heading,
+          id: heading.id,
+          level: Number(heading.tagName.slice(1)),
+          text: heading.textContent.trim(),
+        }));
+      }
+
+      function populateHero(root, headings) {
+        const heroBlock = document.getElementById("heroBlock");
+        const heroTitle = document.getElementById("heroTitle");
+        const heroLead = document.getElementById("heroLead");
+        const firstHeading = headings.find((heading) => heading.level === 1) || headings[0];
+
+        if (!firstHeading) {
+          return;
+        }
+
+        heroBlock.classList.remove("is-hidden");
+
+        const leadParagraph = firstHeading.element.nextElementSibling;
+        const title = firstHeading.text;
+
+        heroTitle.textContent = title;
+
+        if (leadParagraph && leadParagraph.tagName === "P") {
+          heroLead.textContent = leadParagraph.textContent.trim();
+          leadParagraph.remove();
+        }
+
+        if (firstHeading.element.parentElement === root) {
+          firstHeading.element.remove();
+        }
+      }
+
+      function extractLanguage(codeElement) {
+        const className = codeElement.className || "";
+        const match = className.match(/language-([\\w+#.-]+)/i);
+        return match ? match[1] : "";
+      }
+
+      function enhanceCodeBlocks(root) {
+        const blocks = Array.from(root.querySelectorAll("pre > code")).map((codeElement) => ({
+          rawLanguage: extractLanguage(codeElement),
+          displayLanguage: extractLanguage(codeElement).trim().split(/\\s+/, 1)[0].toLowerCase(),
+        }));
+
+        if (window.AstrBotT2IShiki) {
+          window.AstrBotT2IShiki.highlightAllCodeBlocks(root, "github-dark");
+        }
+
+        Array.from(root.querySelectorAll("pre")).forEach((preElement, index) => {
+          if (preElement.parentElement && preElement.parentElement.classList.contains("vp-code-block")) {
+            return;
+          }
+
+          const block = blocks[index] || { displayLanguage: "" };
+          const wrapper = document.createElement("div");
+          wrapper.className = `language-${block.displayLanguage || "text"}`;
+
+          if (block.displayLanguage) {
+            wrapper.innerHTML = `<span class="lang">${escapeHtml(block.displayLanguage)}</span>`;
+          }
+
+          preElement.replaceWith(wrapper);
+          wrapper.appendChild(preElement);
+        });
+      }
+
+    })();
+  </script>
+</body>
+</html>

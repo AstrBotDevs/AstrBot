@@ -1,10 +1,8 @@
-from unittest.mock import AsyncMock, MagicMock
+import json
 
 import pytest
-from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata, Unknown
-from astrbot.api.event import MessageChain
+from astrbot.api.platform import PlatformMetadata, Unknown
 from astrbot.core.message.components import (
-    File,
     Image,
     Plain,
     Video,
@@ -12,44 +10,18 @@ from astrbot.core.message.components import (
     AtAll,
     BaseMessageComponent,
     Json,
-    Record,
     Reply,
 )
 
 
 from astrbot.core.platform.sources.kook.kook_event import KookEvent
 from astrbot.core.platform.sources.kook.kook_types import KookMessageType, OrderMessage
-
-
-async def mock_kook_client(upload_asset_return: str, send_text_return: str):
-    # 1. Mock 掉整个 KookClient 类
-    client = MagicMock()
-
-    client.upload_asset = AsyncMock(return_value=upload_asset_return)
-    client.send_text = AsyncMock(return_value=send_text_return)
-    return client
-
-
-def mock_file_message(input: str):
-    message = MagicMock(spec=File)
-    message.get_file = AsyncMock(return_value=input)
-    return message
-
-
-def mock_record_message(input: str):
-    message = MagicMock(spec=Record)
-    message.text = input
-    message.convert_to_file_path = AsyncMock(return_value=input)
-    return message
-
-
-def mock_astrbot_message():
-    message = AstrBotMessage()
-    message.type = MessageType.OTHER_MESSAGE
-    message.group_id = "test"
-    message.session_id = "test"
-    message.message_id = "test"
-    return message
+from tests.test_kook.shared import (
+    mock_astrbot_message,
+    mock_file_message,
+    mock_kook_client,
+    mock_record_message,
+)
 
 
 @pytest.mark.asyncio
@@ -60,7 +32,7 @@ def mock_astrbot_message():
             Image("test image"),
             "test image",
             OrderMessage(
-                1,
+                index=1,
                 text="test image",
                 type=KookMessageType.IMAGE,
             ),
@@ -70,7 +42,7 @@ def mock_astrbot_message():
             Video("test video"),
             "test video",
             OrderMessage(
-                1,
+                index=1,
                 text="test video",
                 type=KookMessageType.VIDEO,
             ),
@@ -80,7 +52,7 @@ def mock_astrbot_message():
             mock_file_message("test file"),
             "test file",
             OrderMessage(
-                1,
+                index=1,
                 text="test file",
                 type=KookMessageType.FILE,
             ),
@@ -90,8 +62,8 @@ def mock_astrbot_message():
             mock_record_message("./tests/file.wav"),
             "./tests/file.wav",
             OrderMessage(
-                1,
-                text='[{"type": "card", "modules": [{"src": "./tests/file.wav", "title": "./tests/file.wav", "type": "audio"}]}]',
+                index=1,
+                text='[{"type": "card", "modules": [{"type": "audio", "src": "./tests/file.wav", "title": "./tests/file.wav"}]}]',
                 type=KookMessageType.CARD,
             ),
             None,
@@ -100,7 +72,7 @@ def mock_astrbot_message():
             Plain("test plain"),
             "test plain",
             OrderMessage(
-                1,
+                index=1,
                 text="test plain",
                 type=KookMessageType.KMARKDOWN,
             ),
@@ -110,7 +82,7 @@ def mock_astrbot_message():
             At(qq="test at"),
             "test at",
             OrderMessage(
-                1,
+                index=1,
                 text="(met)test at(met)",
                 type=KookMessageType.KMARKDOWN,
             ),
@@ -120,7 +92,7 @@ def mock_astrbot_message():
             AtAll(qq="all"),
             "test atAll",
             OrderMessage(
-                1,
+                index=1,
                 text="(met)all(met)",
                 type=KookMessageType.KMARKDOWN,
             ),
@@ -130,7 +102,7 @@ def mock_astrbot_message():
             Reply(id="test reply"),
             "test reply",
             OrderMessage(
-                1,
+                index=1,
                 text="",
                 type=KookMessageType.KMARKDOWN,
                 reply_id="test reply",
@@ -141,7 +113,7 @@ def mock_astrbot_message():
             Json(data={"test": "json"}),
             "test json",
             OrderMessage(
-                1,
+                index=1,
                 text='[{"test": "json"}]',
                 type=KookMessageType.CARD,
             ),
@@ -159,9 +131,9 @@ async def test_kook_event_warp_message(
     input_message: BaseMessageComponent,
     upload_asset_return: str,
     expected_output: OrderMessage,
-    expected_error: type[Exception] | None,
+    expected_error: type[BaseException] | None,
 ):
-    client = await mock_kook_client(
+    client = mock_kook_client(
         upload_asset_return,
         "",
     )
@@ -184,40 +156,20 @@ async def test_kook_event_warp_message(
         return
 
     result = await event._wrap_message(1, input_message)
-    assert result == expected_output
 
+    expected_output_text: str | list | dict = expected_output.text
+    is_json_text = False
+    try:
+        expected_output_text = json.loads(expected_output_text)
+        is_json_text = True
+    except:
+        pass
 
-# @pytest.mark.asyncio
-# @pytest.mark.parametrize(
-#     "message_chain,send_text_expected_output,expected_error",
-#     [
-#         (
-#             MessageChain(
-#                 chain=[
-#                     Image(file="test image"),
-#                     Plain(text="test plain"),
-#                 ],
-#             ),
-#             ""
-#         ),
-#     ],
-# )
-# async def test_kook_event_send():
-#     client = await mock_kook_client(
-#         "",
-#         "",
-#     )
+    if is_json_text:
+        assert json.loads(result.text) == expected_output_text
+    else:
+        assert result.text == expected_output_text
 
-#     event = KookEvent(
-#         "",
-#         mock_astrbot_message(),
-#         PlatformMetadata(
-#             name="test",
-#             id="test",
-#             description="test",
-#         ),
-#         "",
-#         client,
-#     )
-
-#     await event.send(message=mock_astrbot_message())
+    assert result.index == expected_output.index
+    assert result.type == expected_output.type
+    assert result.reply_id == expected_output.reply_id

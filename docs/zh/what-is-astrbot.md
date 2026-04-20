@@ -6,7 +6,7 @@ outline: deep
 
 ## 简介
 
-AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、Telegram、企业微信、飞书、钉钉、Slack、等数十款主流即时通讯软件上部署，此外还内置类似 OpenWebUI 的轻量化 ChatUI，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建 AI 应用。
+AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、Telegram、企业微信、飞书、钉钉、Slack 等数十款主流即时通讯软件上部署，此外还内置类似 OpenWebUI 的轻量化 ChatUI，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建 AI 应用。
 
 ## 文档概览
 
@@ -23,7 +23,7 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 
 - 部署 AstrBot：阅读部署指南，快速在本地机器或云服务器上部署 AstrBot。
 - 连接 IM 平台：按照说明将 AstrBot 连接到您喜欢的 IM 平台，如 Discord、Telegram、Slack 等。
-- 配置 AI 模型：AstrBot 支持各种 AI 模型。请参阅 [连接模型服务](/config/providers/start)
+- 配置 AI 模型：AstrBot 支持各种 AI 模型。请参阅 [连接模型服务](/providers/start)
 
 ## 它是如何实现的？
 

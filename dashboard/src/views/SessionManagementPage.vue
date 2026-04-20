@@ -137,7 +137,7 @@
               </v-select>
             </v-col>
             <v-col cols="12" md="6" lg="3">
-              <v-select v-model="batchChatProvider" :items="chatProviderOptions" item-title="label" item-value="value"
+              <v-select v-model="batchChatProvider" :items="batchChatProviderOptions" item-title="label" item-value="value"
                 :label="tm('batchOperations.chatProvider')" hide-details clearable variant="solo-filled" flat density="comfortable">
               </v-select>
             </v-col>
@@ -156,24 +156,24 @@
       <!-- 分组管理面板 -->
       <v-card flat class="mt-4">
         <v-card-title class="d-flex align-center py-3 px-4">
-          <span class="text-h6">分组管理</span>
+          <span class="text-h6">{{ tm('groups.title') }}</span>
           <v-chip size="small" class="ml-2" color="secondary" variant="outlined">
-            {{ groups.length }} 个分组
+            {{ tm('groups.count', { count: groups.length }) }}
           </v-chip>
           <v-spacer></v-spacer>
           <v-btn v-if="selectedItems.length > 0 && groups.length > 0" color="info" variant="tonal" size="small" class="mr-2">
             <v-icon start>mdi-folder-plus</v-icon>
-            添加到分组
+            {{ tm('groups.addToGroup') }}
             <v-menu activator="parent">
               <v-list density="compact">
                 <v-list-item v-for="g in groups" :key="g.id" @click="addSelectedToGroup(g.id)">
-                  <v-list-item-title>{{ g.name }} ({{ g.umo_count }})</v-list-item-title>
+                  <v-list-item-title>{{ tm('groups.customGroupOption', { name: g.name, count: g.umo_count }) }}</v-list-item-title>
                 </v-list-item>
               </v-list>
             </v-menu>
           </v-btn>
           <v-btn color="success" variant="tonal" size="small" @click="openCreateGroupDialog" prepend-icon="mdi-folder-plus">
-            新建分组
+            {{ tm('groups.create') }}
           </v-btn>
         </v-card-title>
         <v-card-text v-if="groups.length > 0">
@@ -183,7 +183,7 @@
                 <div class="d-flex align-center justify-space-between">
                   <div>
                     <div class="font-weight-bold">{{ group.name }}</div>
-                    <div class="text-caption text-grey">{{ group.umo_count }} 个会话</div>
+                    <div class="text-caption text-grey">{{ tm('groups.sessionsCount', { count: group.umo_count }) }}</div>
                   </div>
                   <div>
                     <v-btn icon size="small" variant="text" @click="openEditGroupDialog(group)">
@@ -199,7 +199,7 @@
           </v-row>
         </v-card-text>
         <v-card-text v-else class="text-center text-grey py-6">
-          暂无分组，点击「新建分组」创建
+          {{ tm('groups.empty') }}
         </v-card-text>
       </v-card>
 
@@ -207,15 +207,15 @@
       <v-dialog v-model="groupDialog" max-width="800" @after-enter="loadAvailableUmos">
         <v-card>
           <v-card-title class="py-3 px-4">
-            {{ groupDialogMode === 'create' ? '新建分组' : '编辑分组' }}
+            {{ groupDialogMode === 'create' ? tm('groups.create') : tm('groups.edit') }}
           </v-card-title>
           <v-card-text>
-            <v-text-field v-model="editingGroup.name" label="分组名称" variant="outlined" hide-details class="mb-4"></v-text-field>
+            <v-text-field v-model="editingGroup.name" :label="tm('groups.name')" variant="outlined" hide-details class="mb-4"></v-text-field>
             <v-row dense>
               <!-- 左侧：可选会话 -->
               <v-col cols="5">
-                <div class="text-subtitle-2 mb-2">可选会话 ({{ unselectedUmos.length }})</div>
-                <v-text-field v-model="groupMemberSearch" placeholder="搜索..." variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
+                <div class="text-subtitle-2 mb-2">{{ tm('groups.availableSessions', { count: unselectedUmos.length }) }}</div>
+                <v-text-field v-model="groupMemberSearch" :placeholder="tm('groups.searchPlaceholder')" variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
                 <v-list density="compact" class="transfer-list" lines="one">
                   <v-list-item v-for="umo in filteredUnselectedUmos" :key="umo" @click="addToGroup(umo)" class="transfer-item">
                     <template v-slot:prepend>
@@ -224,7 +224,7 @@
                     <v-list-item-title class="text-caption">{{ formatUmoShort(umo) }}</v-list-item-title>
                   </v-list-item>
                   <v-list-item v-if="filteredUnselectedUmos.length === 0 && !loadingUmos">
-                    <v-list-item-title class="text-caption text-grey text-center">无匹配项</v-list-item-title>
+                    <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMatch') }}</v-list-item-title>
                   </v-list-item>
                   <v-list-item v-if="loadingUmos">
                     <v-list-item-title class="text-center"><v-progress-circular indeterminate size="20"></v-progress-circular></v-list-item-title>
@@ -242,8 +242,8 @@
               </v-col>
               <!-- 右侧：已选会话 -->
               <v-col cols="5">
-                <div class="text-subtitle-2 mb-2">已选会话 ({{ editingGroup.umos.length }})</div>
-                <v-text-field v-model="groupSelectedSearch" placeholder="搜索..." variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
+                <div class="text-subtitle-2 mb-2">{{ tm('groups.selectedSessions', { count: editingGroup.umos.length }) }}</div>
+                <v-text-field v-model="groupSelectedSearch" :placeholder="tm('groups.searchPlaceholder')" variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
                 <v-list density="compact" class="transfer-list" lines="one">
                   <v-list-item v-for="umo in filteredSelectedUmos" :key="umo" @click="removeFromGroup(umo)" class="transfer-item">
                     <template v-slot:prepend>
@@ -252,7 +252,7 @@
                     <v-list-item-title class="text-caption">{{ formatUmoShort(umo) }}</v-list-item-title>
                   </v-list-item>
                   <v-list-item v-if="editingGroup.umos.length === 0">
-                    <v-list-item-title class="text-caption text-grey text-center">暂无成员</v-list-item-title>
+                    <v-list-item-title class="text-caption text-grey text-center">{{ tm('groups.noMembers') }}</v-list-item-title>
                   </v-list-item>
                 </v-list>
               </v-col>
@@ -260,8 +260,8 @@
           </v-card-text>
           <v-card-actions class="px-4 pb-4">
             <v-spacer></v-spacer>
-            <v-btn variant="text" @click="groupDialog = false">取消</v-btn>
-            <v-btn color="primary" variant="tonal" @click="saveGroup">保存</v-btn>
+            <v-btn variant="text" @click="groupDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+            <v-btn color="primary" variant="tonal" @click="saveGroup">{{ tm('buttons.save') }}</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -527,6 +527,8 @@ import {
   useConfirmDialog
 } from '@/utils/confirmDialog'
 
+const FOLLOW_CONFIG_VALUE = '__astrbot_follow_config__'
+
 export default {
   name: 'SessionManagementPage',
   setup() {
@@ -584,9 +586,9 @@ export default {
 
       // Provider 配置
       providerConfig: {
-        chat_completion: null,
-        speech_to_text: null,
-        text_to_speech: null,
+        chat_completion: FOLLOW_CONFIG_VALUE,
+        speech_to_text: FOLLOW_CONFIG_VALUE,
+        text_to_speech: FOLLOW_CONFIG_VALUE,
       },
 
       // 插件配置
@@ -671,7 +673,7 @@ export default {
 
     chatProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: null },
+        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
         ...this.availableChatProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -681,7 +683,7 @@ export default {
 
     sttProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: null },
+        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
         ...this.availableSttProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -691,7 +693,27 @@ export default {
 
     ttsProviderOptions() {
       return [
-        { label: this.tm('provider.followConfig'), value: null },
+        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
+        ...this.availableTtsProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
+    },
+
+    batchChatProviderOptions() {
+      return [
+        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
+        ...this.availableChatProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
+    },
+
+    batchTtsProviderOptions() {
+      return [
+        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
         ...this.availableTtsProviders.map(p => ({
           label: `${p.name} (${p.model})`,
           value: p.id
@@ -721,9 +743,12 @@ export default {
       ]
       // 添加自定义分组选项
       if (this.groups.length > 0) {
-        options.push({ label: '── 自定义分组 ──', value: '_divider', disabled: true })
+        options.push({ label: this.tm('groups.customGroupDivider'), value: '_divider', disabled: true })
         this.groups.forEach(g => {
-          options.push({ label: `📁 ${g.name} (${g.umo_count})`, value: `custom_group:${g.id}` })
+          options.push({
+            label: this.tm('groups.customGroupOption', { name: g.name, count: g.umo_count }),
+            value: `custom_group:${g.id}`
+          })
         })
       }
       return options
@@ -731,7 +756,7 @@ export default {
 
     groupOptions() {
       return this.groups.map(g => ({
-        label: `${g.name} (${g.umo_count} 个会话)`,
+        label: this.tm('groups.groupOption', { name: g.name, count: g.umo_count }),
         value: g.id
       }))
     },
@@ -911,9 +936,9 @@ export default {
 
       // 初始化 Provider 配置
       this.providerConfig = {
-        chat_completion: this.editingRules['provider_perf_chat_completion'] || null,
-        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || null,
-        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || null,
+        chat_completion: this.editingRules['provider_perf_chat_completion'] || FOLLOW_CONFIG_VALUE,
+        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || FOLLOW_CONFIG_VALUE,
+        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || FOLLOW_CONFIG_VALUE,
       }
 
       // 初始化插件配置
@@ -994,7 +1019,7 @@ export default {
 
         for (const type of providerTypes) {
           const value = this.providerConfig[type]
-          if (value) {
+          if (value && value !== FOLLOW_CONFIG_VALUE) {
             // 有值时更新
             updateTasks.push(
               axios.post('/api/session/update-rule', {
@@ -1004,7 +1029,7 @@ export default {
               })
             )
           } else if (this.editingRules[`provider_perf_${type}`]) {
-            // 选择了"跟随配置文件"（null）且之前有配置，则删除
+            // 选择了"跟随配置文件" (__astrbot_follow_config__) 且之前有配置，则删除
             deleteTasks.push(
               axios.post('/api/session/delete-rule', {
                 umo: this.selectedUmo.umo,
@@ -1032,9 +1057,10 @@ export default {
             this.rulesList.push(item)
           }
           for (const type of providerTypes) {
-            if (this.providerConfig[type]) {
-              item.rules[`provider_perf_${type}`] = this.providerConfig[type]
-              this.editingRules[`provider_perf_${type}`] = this.providerConfig[type]
+            const val = this.providerConfig[type]
+            if (val && val !== FOLLOW_CONFIG_VALUE) {
+              item.rules[`provider_perf_${type}`] = val
+              this.editingRules[`provider_perf_${type}`] = val
             } else {
               // 删除本地数据
               delete item.rules[`provider_perf_${type}`]
@@ -1331,7 +1357,7 @@ export default {
         if (scope === 'selected') {
           umos = this.selectedItems.map(item => item.umo)
           if (umos.length === 0) {
-            this.showError('请先选择要操作的会话')
+            this.showError(this.tm('messages.selectSessionsFirst'))
             this.batchUpdating = false
             return
           }
@@ -1351,27 +1377,45 @@ export default {
         }
 
         if (this.batchChatProvider !== null) {
-          tasks.push(axios.post('/api/session/batch-update-provider', {
-            scope,
-            umos,
-            group_id: groupId,
-            provider_type: 'chat_completion',
-            provider_id: this.batchChatProvider || null
-          }))
+          if (this.batchChatProvider === FOLLOW_CONFIG_VALUE) {
+            tasks.push(axios.post('/api/session/batch-delete-rule', {
+              scope,
+              umos,
+              group_id: groupId,
+              rule_key: 'provider_perf_chat_completion'
+            }))
+          } else {
+            tasks.push(axios.post('/api/session/batch-update-provider', {
+              scope,
+              umos,
+              group_id: groupId,
+              provider_type: 'chat_completion',
+              provider_id: this.batchChatProvider
+            }))
+          }
         }
 
         if (this.batchTtsProvider !== null) {
-          tasks.push(axios.post('/api/session/batch-update-provider', {
-            scope,
-            umos,
-            group_id: groupId,
-            provider_type: 'text_to_speech',
-            provider_id: this.batchTtsProvider || null
-          }))
+          if (this.batchTtsProvider === FOLLOW_CONFIG_VALUE) {
+            tasks.push(axios.post('/api/session/batch-delete-rule', {
+              scope,
+              umos,
+              group_id: groupId,
+              rule_key: 'provider_perf_text_to_speech'
+            }))
+          } else {
+            tasks.push(axios.post('/api/session/batch-update-provider', {
+              scope,
+              umos,
+              group_id: groupId,
+              provider_type: 'text_to_speech',
+              provider_id: this.batchTtsProvider
+            }))
+          }
         }
 
         if (tasks.length === 0) {
-          this.showError('请至少选择一项要修改的配置')
+          this.showError(this.tm('messages.selectAtLeastOneConfig'))
           this.batchUpdating = false
           return
         }
@@ -1380,17 +1424,17 @@ export default {
         const allOk = results.every(r => r.data.status === 'ok')
 
         if (allOk) {
-          this.showSuccess('批量更新成功')
+          this.showSuccess(this.tm('messages.batchUpdateSuccess'))
           this.batchLlmStatus = null
           this.batchTtsStatus = null
           this.batchChatProvider = null
           this.batchTtsProvider = null
           await this.loadData()
         } else {
-          this.showError('部分更新失败')
+          this.showError(this.tm('messages.partialUpdateFailed'))
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || '批量更新失败')
+        this.showError(error.response?.data?.message || this.tm('messages.batchUpdateError'))
       }
       this.batchUpdating = false
     },
@@ -1477,7 +1521,7 @@ export default {
 
     async saveGroup() {
       if (!this.editingGroup.name.trim()) {
-        this.showError('分组名称不能为空')
+        this.showError(this.tm('messages.groupNameRequired'))
         return
       }
 
@@ -1504,12 +1548,12 @@ export default {
           this.showError(response.data.message)
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || '保存分组失败')
+        this.showError(error.response?.data?.message || this.tm('messages.saveGroupError'))
       }
     },
 
     async deleteGroup(group) {
-      const message = `确定要删除分组 "${group.name}" 吗？`
+      const message = this.tm('groups.deleteConfirm', { name: group.name })
       if (!(await askForConfirmationDialog(message, this.confirmDialog))) return
 
       try {
@@ -1521,7 +1565,7 @@ export default {
           this.showError(response.data.message)
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || '删除分组失败')
+        this.showError(error.response?.data?.message || this.tm('messages.deleteGroupError'))
       }
     },
 
@@ -1532,7 +1576,7 @@ export default {
 
     async addSelectedToGroup(groupId) {
       if (this.selectedItems.length === 0) {
-        this.showError('请先选择要添加的会话')
+        this.showError(this.tm('messages.selectSessionsToAddFirst'))
         return
       }
 
@@ -1542,13 +1586,13 @@ export default {
           add_umos: this.selectedItems.map(item => item.umo)
         })
         if (response.data.status === 'ok') {
-          this.showSuccess(`已添加 ${this.selectedItems.length} 个会话到分组`)
+          this.showSuccess(this.tm('messages.addToGroupSuccess', { count: this.selectedItems.length }))
           await this.loadGroups()
         } else {
           this.showError(response.data.message)
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || '添加失败')
+        this.showError(error.response?.data?.message || this.tm('messages.addToGroupError'))
       }
     },
   },

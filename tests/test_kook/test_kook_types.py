@@ -15,13 +15,19 @@ from astrbot.core.platform.sources.kook.kook_types import (
     ImageGroupModule,
     InviteModule,
     KmarkdownElement,
+    KookApiResponseBase,
     KookCardMessage,
+    KookMessageSignal,
+    KookModuleType,
+    KookUserMeResponse,
+    KookUserViewResponse,
+    KookWebsocketEvent,
     ParagraphStructure,
     PlainTextElement,
     SectionModule,
     KookCardMessageContainer,
 )
-from tests.test_kook.shared import TEST_DATA_DIR
+from tests.test_kook.shared import TEST_DATA_DIR, KookApiDataPath, KookEventDataPath
 
 
 def test_kook_card_message_container_append():
@@ -77,7 +83,7 @@ def test_all_kook_card_type():
             FileModule(
                 src="https://img.kookapp.cn/attachments/2023-01/05/63b645851ff19.svg",
                 title="test5",
-                type="file",
+                type=KookModuleType.FILE,
             ),
             CountdownModule(
                 endTime=1772343427360,
@@ -105,3 +111,62 @@ def test_all_kook_card_type():
         ],
     ).to_json(indent=4, ensure_ascii=False)
     assert json_output == expect_json_data
+
+
+@pytest.mark.parametrize(
+    "expected_json_data_path",
+    [
+        (KookEventDataPath.GROUP_MESSAGE_WITH_MENTION),
+        (KookEventDataPath.GROUP_MESSAGE),
+        (KookEventDataPath.HELLO),
+        (KookEventDataPath.MESSAGE_WITH_CARD_1),
+        (KookEventDataPath.MESSAGE_WITH_CARD_2),
+        (KookEventDataPath.PING),
+        (KookEventDataPath.PONG),
+        (KookEventDataPath.PRIVATE_MESSAGE),
+        (KookEventDataPath.PRIVATE_SYSTEM_MESSAGE),
+        (KookEventDataPath.RECONNECT_ERR),
+        (KookEventDataPath.RESUME_ACK),
+        (KookEventDataPath.RESUME),
+        (KookEventDataPath.GROUP_SYSTEM_MESSAGE_UPDATE_ROLE),
+    ],
+)
+def test_websocket_event_type_parse(expected_json_data_path: Path):
+    expected_json_data_str = (expected_json_data_path).read_text(encoding="utf-8")
+    event = KookWebsocketEvent.from_json(
+        expected_json_data_str,
+    )
+    event_dict = event.to_dict()
+    assert event_dict == json.loads(expected_json_data_str)
+
+
+def test_websocket_event_create():
+    ping_data = KookWebsocketEvent(
+        signal=KookMessageSignal.PING,
+        data=None,
+        sn=0,
+    )
+    assert ping_data.to_dict(exclude_none=True, exclude_unset=False) == {
+        "s": KookMessageSignal.PING.value,
+        "sn": 0,
+    }
+
+
+@pytest.mark.parametrize(
+    "expected_json_data_path, expected_dataclass",
+    [
+        (KookApiDataPath.USER_ME, KookUserMeResponse),
+        (KookApiDataPath.USER_VIEW, KookUserViewResponse),
+    ],
+)
+def test_api_response_type_parse(
+    expected_json_data_path: Path, expected_dataclass: type[KookApiResponseBase]
+):
+    expected_json_data_str = (expected_json_data_path).read_text(encoding="utf-8")
+
+    response_body = expected_dataclass.from_json(
+        expected_json_data_str,
+    )
+
+    body_dict = response_body.to_dict()
+    assert body_dict == json.loads(expected_json_data_str)

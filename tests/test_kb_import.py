@@ -8,8 +8,10 @@ from quart import Quart
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
+from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
 from astrbot.dashboard.server import AstrBotDashboard
 
 
@@ -87,6 +89,9 @@ async def test_import_documents(
 ):
     """Tests the import documents functionality."""
     test_client = app.test_client()
+    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper.upload_document.reset_mock()
+    kb_helper.upload_document.side_effect = None
 
     # Test data
     import_data = {
@@ -129,7 +134,6 @@ async def test_import_documents(
     assert result["failed_count"] == 0
 
     # Verify kb_helper.upload_document was called correctly
-    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     assert kb_helper.upload_document.call_count == 2
 
     # Check first call arguments
@@ -144,6 +148,48 @@ async def test_import_documents(
     args2, kwargs2 = call_args_list[1]
     assert kwargs2["file_name"] == "test_file_2.md"
     assert kwargs2["pre_chunked_text"] == ["chunk3", "chunk4", "chunk5"]
+
+
+@pytest.mark.asyncio
+async def test_import_documents_returns_friendly_failure_message(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper.upload_document.reset_mock()
+    kb_helper.upload_document.side_effect = KnowledgeBaseUploadError(
+        stage="embedding",
+        user_message=(
+            "向量化失败：嵌入模型返回的向量数量与文本分块数量不一致（期望 2，实际 1）。"
+        ),
+        details={"expected_contents": 2, "actual_vectors": 1},
+    )
+
+    route = KnowledgeBaseRoute.__new__(KnowledgeBaseRoute)
+    route.upload_progress = {}
+    route.upload_tasks = {}
+
+    await KnowledgeBaseRoute._background_import_task(
+        route,
+        task_id="task-1",
+        kb_helper=kb_helper,
+        documents=[{"file_name": "broken.txt", "chunks": ["chunk1", "chunk2"]}],
+        batch_size=32,
+        tasks_limit=3,
+        max_retries=3,
+    )
+
+    assert route.upload_tasks["task-1"]["status"] == "completed"
+    result = route.upload_tasks["task-1"]["result"]
+    assert result["success_count"] == 0
+    assert result["failed_count"] == 1
+    assert result["failed"][0]["file_name"] == "broken.txt"
+    assert result["failed"][0]["error"].startswith("broken.txt:")
+    assert "向量化失败" in result["failed"][0]["error"]
+    assert "期望 2，实际 1" in result["failed"][0]["error"]
+    assert "not same nb of vectors as ids" not in result["failed"][0]["error"]
+    assert kb_helper.upload_document.await_count == 1
+
+    kb_helper.upload_document.side_effect = None
 
 
 @pytest.mark.asyncio

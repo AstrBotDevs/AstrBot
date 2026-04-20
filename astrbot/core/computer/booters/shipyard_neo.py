@@ -13,6 +13,15 @@ from ..olayer import (
     ShellComponent,
 )
 from .base import ComputerBooter
+from .shipyard_search_file_util import search_files_via_shell
+
+try:
+    from shipyard_neo import BayClient
+    from shipyard_neo.sandbox import Sandbox
+except ImportError:
+    logger.warning(
+        "shipyard_neo_sdk is not installed. ShipyardNeoBooter will not work without it."
+    )
 
 
 def _maybe_model_dump(value: Any) -> dict[str, Any]:
@@ -25,8 +34,20 @@ def _maybe_model_dump(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _slice_content_by_lines(
+    content: str,
+    *,
+    offset: int | None = None,
+    limit: int | None = None,
+) -> str:
+    lines = content.splitlines(keepends=True)
+    start = 0 if offset is None else offset
+    selected = lines[start:] if limit is None else lines[start : start + limit]
+    return "".join(selected)
+
+
 class NeoPythonComponent(PythonComponent):
-    def __init__(self, sandbox: Any) -> None:
+    def __init__(self, sandbox: Sandbox) -> None:
         self._sandbox = sandbox
 
     async def exec(
@@ -67,7 +88,7 @@ class NeoPythonComponent(PythonComponent):
 
 
 class NeoShellComponent(ShellComponent):
-    def __init__(self, sandbox: Any) -> None:
+    def __init__(self, sandbox: Sandbox) -> None:
         self._sandbox = sandbox
 
     async def exec(
@@ -136,8 +157,9 @@ class NeoShellComponent(ShellComponent):
 
 
 class NeoFileSystemComponent(FileSystemComponent):
-    def __init__(self, sandbox: Any) -> None:
+    def __init__(self, sandbox: Sandbox, shell: ShellComponent) -> None:
         self._sandbox = sandbox
+        self._shell = shell
 
     async def create_file(
         self,
@@ -149,10 +171,71 @@ class NeoFileSystemComponent(FileSystemComponent):
         await self._sandbox.filesystem.write_file(path, content)
         return {"success": True, "path": path}
 
-    async def read_file(self, path: str, encoding: str = "utf-8") -> dict[str, Any]:
+    async def read_file(
+        self,
+        path: str,
+        encoding: str = "utf-8",
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
         _ = encoding
         content = await self._sandbox.filesystem.read_file(path)
-        return {"success": True, "path": path, "content": content}
+        return {
+            "success": True,
+            "path": path,
+            "content": _slice_content_by_lines(
+                content,
+                offset=offset,
+                limit=limit,
+            ),
+        }
+
+    async def search_files(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        after_context: int | None = None,
+        before_context: int | None = None,
+    ) -> dict[str, Any]:
+        return await search_files_via_shell(
+            self._shell,
+            pattern=pattern,
+            path=path,
+            glob=glob,
+            after_context=after_context,
+            before_context=before_context,
+        )
+
+    async def edit_file(
+        self,
+        path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        _ = encoding
+        content = await self._sandbox.filesystem.read_file(path)
+        occurrences = content.count(old_string)
+        if occurrences == 0:
+            return {
+                "success": False,
+                "error": "old string not found in file",
+                "replacements": 0,
+            }
+        if replace_all:
+            updated = content.replace(old_string, new_string)
+            replacements = occurrences
+        else:
+            updated = content.replace(old_string, new_string, 1)
+            replacements = 1
+        await self._sandbox.filesystem.write_file(path, updated)
+        return {
+            "success": True,
+            "path": path,
+            "replacements": replacements,
+        }
 
     async def write_file(
         self,
@@ -186,7 +269,7 @@ class NeoFileSystemComponent(FileSystemComponent):
 
 
 class NeoBrowserComponent(BrowserComponent):
-    def __init__(self, sandbox: Any) -> None:
+    def __init__(self, sandbox: Sandbox) -> None:
         self._sandbox = sandbox
 
     async def exec(
@@ -271,8 +354,8 @@ class ShipyardNeoBooter(ComputerBooter):
         self._access_token = access_token
         self._profile = profile
         self._ttl = ttl
-        self._client: Any = None
-        self._sandbox: Any = None
+        self._client: BayClient | None = None
+        self._sandbox: Sandbox | None = None
         self._bay_manager: Any = None  # BayContainerManager when auto-started
         self._fs: FileSystemComponent | None = None
         self._python: PythonComponent | None = None
@@ -336,8 +419,6 @@ class ShipyardNeoBooter(ComputerBooter):
                 "or ensure Bay's credentials.json is accessible for auto-discovery."
             )
 
-        from shipyard_neo import BayClient
-
         self._client = BayClient(
             endpoint_url=self._endpoint_url,
             access_token=self._access_token,
@@ -352,9 +433,9 @@ class ShipyardNeoBooter(ComputerBooter):
             ttl=self._ttl,
         )
 
-        self._fs = NeoFileSystemComponent(self._sandbox)
-        self._python = NeoPythonComponent(self._sandbox)
         self._shell = NeoShellComponent(self._sandbox)
+        self._fs = NeoFileSystemComponent(self._sandbox, self._shell)
+        self._python = NeoPythonComponent(self._sandbox)
 
         caps = self.capabilities or ()
         self._browser = (

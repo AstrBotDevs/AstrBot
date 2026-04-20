@@ -20,6 +20,7 @@ permissions:
 jobs:
   build-dashboard:
     name: Build Dashboard
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-24.04
     env:
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -50,7 +51,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5.0.0
         with:
           version: 10.28.2
 
@@ -63,11 +64,11 @@ jobs:
 
       - name: Build dashboard dist
         shell: bash
+        working-directory: dashboard
         run: |
-          pnpm --dir dashboard install --frozen-lockfile
-          pnpm --dir dashboard run build
-          echo "${{ steps.tag.outputs.tag }}" > dashboard/dist/assets/version
-          cd dashboard
+          pnpm install --frozen-lockfile
+          pnpm run build
+          echo "${{ steps.tag.outputs.tag }}" > dist/assets/version
           zip -r "AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" dist
 
       - name: Upload dashboard artifact
@@ -104,6 +105,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-24.04
     needs:
       - build-dashboard
@@ -183,6 +185,7 @@ jobs:
 
   publish-pypi:
     name: Publish PyPI
+    if: github.repository == 'AstrBotDevs/AstrBot'
     runs-on: ubuntu-24.04
     needs:
       - publish-release
