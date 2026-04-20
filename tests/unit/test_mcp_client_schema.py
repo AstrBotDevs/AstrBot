@@ -45,8 +45,13 @@ class TestNormalizeMcpInputSchema:
             "transport",
             "stock_code",
         ]
-        assert "required" not in normalized["properties"]["server"]["properties"]["stock_code"]
-        assert "required" not in normalized["properties"]["server"]["properties"]["market"]
+        assert (
+            "required"
+            not in normalized["properties"]["server"]["properties"]["stock_code"]
+        )
+        assert (
+            "required" not in normalized["properties"]["server"]["properties"]["market"]
+        )
 
 
 class TestMCPToolSchemaNormalization:
