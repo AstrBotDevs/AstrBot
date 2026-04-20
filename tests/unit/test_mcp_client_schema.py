@@ -76,6 +76,25 @@ class TestNormalizeMcpInputSchema:
             not in normalized["properties"]["server"]["properties"]["transport"]
         )
 
+    def test_ignores_non_boolean_required_values_and_non_dict_properties(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "server": "invalid-property-schema",
+                "market": {"type": "string", "required": "yes"},
+                "stock_code": {"type": "string", "required": True},
+            },
+        }
+
+        normalized = _normalize_mcp_input_schema(schema)
+
+        assert normalized["required"] == ["stock_code"]
+        assert normalized["properties"]["server"] == "invalid-property-schema"
+        assert normalized["properties"]["market"]["required"] == "yes"
+        assert "required" not in normalized["properties"]["stock_code"]
+        assert schema["properties"]["server"] == "invalid-property-schema"
+        assert schema["properties"]["market"]["required"] == "yes"
+
 
 class TestMCPToolSchemaNormalization:
     def test_mcp_tool_accepts_property_level_required_booleans(self):

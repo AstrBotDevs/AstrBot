@@ -372,12 +372,7 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
                         required_list.append(prop_name)
 
             if required_list:
-                seen: set[str] = set()
-                normalized["required"] = [
-                    name
-                    for name in required_list
-                    if not (name in seen or seen.add(name))
-                ]
+                normalized["required"] = list(dict.fromkeys(required_list))
             elif isinstance(required, list):
                 normalized.pop("required", None)
 
