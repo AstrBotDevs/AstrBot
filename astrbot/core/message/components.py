@@ -148,11 +148,14 @@ class Record(BaseMessageComponent):
         """
         url = self.url or self.file
         if not url:
-            raise Exception(f"not a valid file: {url}")
+            raise ValueError("No valid file or URL provided")
         if url.startswith("file:///"):
             return url[8:]
         if url.startswith("http"):
-            file_path = await download_image_by_url(url)
+            file_path = os.path.join(
+                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.amr"
+            )
+            await download_file(url, file_path)
             return os.path.abspath(file_path)
         if url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
@@ -176,11 +179,14 @@ class Record(BaseMessageComponent):
         """
         url = self.url or self.file
         if not url:
-            raise Exception(f"not a valid file: {url}")
+            raise ValueError("No valid file or URL provided")
         if url.startswith("file:///"):
             bs64_data = file_to_base64(url[8:])
         elif url.startswith("http"):
-            file_path = await download_image_by_url(url)
+            file_path = os.path.join(
+                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.amr"
+            )
+            await download_file(url, file_path)
             bs64_data = file_to_base64(file_path)
         elif url.startswith("base64://"):
             bs64_data = url
