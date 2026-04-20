@@ -85,6 +85,7 @@ def log_connection_failure(
 def create_proxy_client(
     provider_label: str,
     proxy: str | None = None,
+    headers: dict[str, str] | None = None,
 ) -> httpx.AsyncClient:
     """Create an httpx AsyncClient with proxy configuration if provided.
 
@@ -98,12 +99,13 @@ def create_proxy_client(
     Args:
         provider_label: The provider name for log prefix (e.g., "OpenAI", "Gemini")
         proxy: The proxy address (e.g., "http://127.0.0.1:7890"), or None/empty
+        headers: Optional custom headers to include in every request
 
     Returns:
-        An httpx.AsyncClient configured with the proxy and system SSL context
+        An httpx.AsyncClient created with the system SSL context; the proxy is applied only if one is provided.
     """
     ctx = ssl.create_default_context()
     if proxy:
         logger.info(f"[{provider_label}] 使用代理: {proxy}")
-        return httpx.AsyncClient(proxy=proxy, verify=ctx)
-    return httpx.AsyncClient(verify=ctx)
+        return httpx.AsyncClient(proxy=proxy, verify=ctx, headers=headers)
+    return httpx.AsyncClient(verify=ctx, headers=headers)
