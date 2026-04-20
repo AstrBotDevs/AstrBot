@@ -409,6 +409,7 @@ class ResultDecorateStage(Stage):
                 if (
                     self.reply_with_mention
                     and event.get_message_type() != MessageType.FRIEND_MESSAGE
+                    and event.can_be_mentioned()
                 ):
                     result.chain.insert(
                         0,
