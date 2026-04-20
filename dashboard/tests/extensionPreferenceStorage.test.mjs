@@ -33,6 +33,13 @@ test("readBooleanPreference parses stored boolean strings", () => {
   );
 });
 
+test("readBooleanPreference treats explicit null storage as unavailable", () => {
+  assert.equal(
+    readBooleanPreference(PIN_UPDATES_ON_TOP_STORAGE_KEY, true, null),
+    true,
+  );
+});
+
 test("writeBooleanPreference stores boolean strings and swallows storage errors", () => {
   const writes = [];
   const storage = {
@@ -46,4 +53,10 @@ test("writeBooleanPreference stores boolean strings and swallows storage errors"
     writeBooleanPreference(PIN_UPDATES_ON_TOP_STORAGE_KEY, true, storage),
   );
   assert.deepEqual(writes, [[PIN_UPDATES_ON_TOP_STORAGE_KEY, "true"]]);
+});
+
+test("writeBooleanPreference ignores explicit null storage", () => {
+  assert.doesNotThrow(() =>
+    writeBooleanPreference(PIN_UPDATES_ON_TOP_STORAGE_KEY, true, null),
+  );
 });

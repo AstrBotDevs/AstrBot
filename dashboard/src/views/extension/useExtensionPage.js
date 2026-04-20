@@ -441,17 +441,12 @@ export const useExtensionPage = () => {
         installedAtTimestamp: getInstalledAtTimestamp(plugin),
       }))
       .sort((left, right) => {
-        const fallbackNameCompare = compareInstalledPluginNames(
-          left.plugin,
-          right.plugin,
-        );
-        const fallbackResult =
-          fallbackNameCompare !== 0 ? fallbackNameCompare : left.index - right.index;
-
         if (
           pinUpdatesOnTop.value &&
           installedSortBy.value !== "update_status"
         ) {
+          // Pinning updates is a primary grouping; the selected sort order still
+          // applies within the "has update" and "no update" groups below.
           const leftHasUpdate = left.plugin?.has_update ? 1 : 0;
           const rightHasUpdate = right.plugin?.has_update ? 1 : 0;
           if (leftHasUpdate !== rightHasUpdate) {
@@ -459,12 +454,22 @@ export const useExtensionPage = () => {
           }
         }
 
+        const getFallbackResult = () => {
+          const fallbackNameCompare = compareInstalledPluginNames(
+            left.plugin,
+            right.plugin,
+          );
+          return fallbackNameCompare !== 0
+            ? fallbackNameCompare
+            : left.index - right.index;
+        };
+
         if (installedSortBy.value === "install_time") {
           const leftTimestamp = left.installedAtTimestamp;
           const rightTimestamp = right.installedAtTimestamp;
 
           if (leftTimestamp == null && rightTimestamp == null) {
-            return fallbackResult;
+            return getFallbackResult();
           }
           if (leftTimestamp == null) {
             return 1;
@@ -477,7 +482,7 @@ export const useExtensionPage = () => {
             installedSortOrder.value === "desc"
               ? rightTimestamp - leftTimestamp
               : leftTimestamp - rightTimestamp;
-          return timeDiff !== 0 ? timeDiff : fallbackResult;
+          return timeDiff !== 0 ? timeDiff : getFallbackResult();
         }
 
         if (installedSortBy.value === "name") {
@@ -500,7 +505,7 @@ export const useExtensionPage = () => {
               ? -authorCompare
               : authorCompare;
           }
-          return fallbackResult;
+          return getFallbackResult();
         }
 
         if (installedSortBy.value === "update_status") {
@@ -510,10 +515,10 @@ export const useExtensionPage = () => {
             installedSortOrder.value === "desc"
               ? rightHasUpdate - leftHasUpdate
               : leftHasUpdate - rightHasUpdate;
-          return updateDiff !== 0 ? updateDiff : fallbackResult;
+          return updateDiff !== 0 ? updateDiff : getFallbackResult();
         }
 
-        return fallbackResult;
+        return getFallbackResult();
       })
       .map((item) => item.plugin);
   };

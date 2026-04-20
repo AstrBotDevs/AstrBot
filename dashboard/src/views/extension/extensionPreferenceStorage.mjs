@@ -2,7 +2,14 @@ export const SHOW_RESERVED_PLUGINS_STORAGE_KEY = "showReservedPlugins";
 export const PLUGIN_LIST_VIEW_MODE_STORAGE_KEY = "pluginListViewMode";
 export const PIN_UPDATES_ON_TOP_STORAGE_KEY = "pinUpdatesOnTop";
 
+/**
+ * Resolve the storage backend for preference helpers.
+ * Pass `null` to explicitly disable storage access in callers/tests.
+ */
 const resolveStorage = (storage) => {
+  if (storage === null) {
+    return null;
+  }
   if (storage !== undefined) {
     return storage;
   }
