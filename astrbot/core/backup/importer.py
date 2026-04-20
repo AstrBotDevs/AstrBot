@@ -59,8 +59,6 @@ def _get_major_version(version_str: str) -> str:
     return "0.0"
 
 
-
-
 def _validate_path_within(target_path: Path, base_dir: Path) -> bool:
     """Validate that target_path is within base_dir after resolving symlinks.
 
@@ -73,6 +71,7 @@ def _validate_path_within(target_path: Path, base_dir: Path) -> bool:
         return resolved.is_relative_to(base_resolved)
     except (OSError, ValueError):
         return False
+
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 KB_PATH = get_astrbot_knowledge_base_path()
