@@ -1,15 +1,16 @@
-import logging
+from astrbot import logger
 
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 from ..register import register_provider_adapter
 
-logger = logging.getLogger(__name__)
-
 MINIMAX_TOKEN_PLAN_MODELS = [
     "MiniMax-M2.7",
+    "MiniMax-M2.7-highspeed",
     "MiniMax-M2.5",
+    "MiniMax-M2.5-highspeed",
     "MiniMax-M2.1",
+    "MiniMax-M2.1-highspeed",
     "MiniMax-M2",
 ]
 
