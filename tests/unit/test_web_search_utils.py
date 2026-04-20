@@ -121,7 +121,6 @@ def test_normalize_web_search_base_url_reports_invalid_value(
     [
         (" https://api.exa.ai/ ", "https://api.exa.ai"),
         ("https://proxy.example.com/exa/", "https://proxy.example.com/exa"),
-        ("https://api.exa.ai/search", "https://api.exa.ai/search"),
     ],
 )
 def test_normalize_web_search_base_url_accepts_proxy_paths(
@@ -134,3 +133,40 @@ def test_normalize_web_search_base_url_accepts_proxy_paths(
     )
 
     assert normalized == expected
+
+
+@pytest.mark.parametrize(
+    ("base_url", "provider_name", "disallowed_path_suffixes", "expected_message"),
+    [
+        (
+            "https://api.exa.ai/search",
+            "Exa",
+            ("search", "contents", "findSimilar"),
+            "Error: Exa API Base URL must be a base URL or proxy prefix, "
+            "not a specific endpoint path. Received: 'https://api.exa.ai/search'.",
+        ),
+        (
+            "https://api.tavily.com/extract",
+            "Tavily",
+            ("search", "extract"),
+            "Error: Tavily API Base URL must be a base URL or proxy prefix, "
+            "not a specific endpoint path. Received: "
+            "'https://api.tavily.com/extract'.",
+        ),
+    ],
+)
+def test_normalize_web_search_base_url_rejects_endpoint_paths(
+    base_url: str,
+    provider_name: str,
+    disallowed_path_suffixes: tuple[str, ...],
+    expected_message: str,
+):
+    with pytest.raises(ValueError) as exc_info:
+        normalize_web_search_base_url(
+            base_url,
+            default="https://api.exa.ai",
+            provider_name=provider_name,
+            disallowed_path_suffixes=disallowed_path_suffixes,
+        )
+
+    assert str(exc_info.value) == expected_message

@@ -18,6 +18,7 @@ def normalize_web_search_base_url(
     *,
     default: str,
     provider_name: str,
+    disallowed_path_suffixes: tuple[str, ...] = (),
 ) -> str:
     normalized = (base_url or "").strip()
     if not normalized:
@@ -29,6 +30,18 @@ def normalize_web_search_base_url(
         raise ValueError(
             f"Error: {provider_name} API Base URL must start with http:// or "
             f"https://. Proxy base paths are allowed. Received: {normalized!r}.",
+        )
+
+    last_path_segment = parsed.path.rstrip("/").rsplit("/", 1)[-1].lower()
+    invalid_suffixes = {
+        suffix.strip("/").lower()
+        for suffix in disallowed_path_suffixes
+        if suffix and suffix.strip("/")
+    }
+    if last_path_segment and last_path_segment in invalid_suffixes:
+        raise ValueError(
+            f"Error: {provider_name} API Base URL must be a base URL or proxy "
+            f"prefix, not a specific endpoint path. Received: {normalized!r}.",
         )
     return normalized
 

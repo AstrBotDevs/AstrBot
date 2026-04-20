@@ -46,6 +46,15 @@ _EXA_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "exa",
 }
+_EXA_SEARCH_TYPES = (
+    "auto",
+    "fast",
+    "deep",
+    "deep-lite",
+    "deep-reasoning",
+    "instant",
+    "neural",
+)
 
 
 @std_dataclass
@@ -149,6 +158,7 @@ def _get_tavily_base_url(provider_settings: dict) -> str:
         provider_settings.get("websearch_tavily_base_url"),
         default="https://api.tavily.com",
         provider_name="Tavily",
+        disallowed_path_suffixes=("search", "extract"),
     )
 
 
@@ -157,6 +167,7 @@ def _get_exa_base_url(provider_settings: dict) -> str:
         provider_settings.get("websearch_exa_base_url"),
         default="https://api.exa.ai",
         provider_name="Exa",
+        disallowed_path_suffixes=("search", "contents", "findSimilar"),
     )
 
 
@@ -645,7 +656,7 @@ class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
                 "search_type": {
                     "type": "string",
-                    "description": 'Optional. Search type. Must be one of "auto", "neural", "fast", "instant", "deep". Default is "auto".',
+                    "description": 'Optional. Search type. Must be one of "auto", "fast", "deep", "deep-lite", "deep-reasoning", "instant", "neural". Default is "auto".',
                 },
                 "category": {
                     "type": "string",
@@ -665,8 +676,8 @@ class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_exa_key", []):
             return "Error: Exa API key is not configured in AstrBot."
 
-        search_type = kwargs.get("search_type", "auto")
-        if search_type not in ("auto", "neural", "fast", "instant", "deep"):
+        search_type = str(kwargs.get("search_type", "auto")).strip().lower()
+        if search_type not in _EXA_SEARCH_TYPES:
             search_type = "auto"
 
         max_results = max(1, min(int(kwargs.get("max_results", 10)), 100))
@@ -794,7 +805,7 @@ class ExaFindSimilarTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
-@builtin_tool
+@builtin_tool(config=_BOCHA_WEB_SEARCH_TOOL_CONFIG)
 @pydantic_dataclass
 class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_bocha"

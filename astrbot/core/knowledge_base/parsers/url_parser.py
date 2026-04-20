@@ -28,6 +28,7 @@ class URLExtractor:
             tavily_base_url,
             default="https://api.tavily.com",
             provider_name="Tavily",
+            disallowed_path_suffixes=("search", "extract"),
         )
 
     async def _get_tavily_key(self) -> str:
