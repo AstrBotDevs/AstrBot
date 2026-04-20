@@ -6,8 +6,8 @@ import re
 import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Any, Generic
 from pathlib import Path, PureWindowsPath
+from typing import Any, Generic
 
 from tenacity import (
     before_sleep_log,
