@@ -66,7 +66,9 @@ class SubAgentRoute(Route):
             # 兼容旧格式：直接返回 subagent_orchestrator 的字段，同时附加 enhanced_subagent
             response_data = {
                 "main_enable": data.get("main_enable", False),
-                "remove_main_duplicate_tools": data.get("remove_main_duplicate_tools", False),
+                "remove_main_duplicate_tools": data.get(
+                    "remove_main_duplicate_tools", False
+                ),
                 "agents": data.get("agents", []),
                 "enhanced_subagent": enhanced_data,
             }
@@ -74,9 +76,7 @@ class SubAgentRoute(Route):
             return jsonify(Response().ok(data=response_data).__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())
-            return jsonify(
-                Response().error(f"获取 subagent 配置失败: {e!s}").__dict__
-            )
+            return jsonify(Response().error(f"获取 subagent 配置失败: {e!s}").__dict__)
 
     async def update_config(self):
         try:
