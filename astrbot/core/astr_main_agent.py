@@ -592,6 +592,33 @@ def _append_quoted_audio_attachment(req: ProviderRequest, audio_path: str) -> No
     )
 
 
+async def _append_video_attachment(
+    req: ProviderRequest,
+    video: Video,
+    *,
+    quoted: bool = False,
+) -> None:
+    try:
+        video_path = await video.convert_to_file_path()
+    except Exception as exc:  # noqa: BLE001
+        if quoted:
+            logger.error("Error processing quoted video attachment: %s", exc)
+        else:
+            logger.error("Error processing video attachment: %s", exc)
+        return
+
+    video_name = os.path.basename(video_path)
+    if quoted:
+        text = (
+            f"[Video Attachment in quoted message: "
+            f"name {video_name}, path {video_path}]"
+        )
+    else:
+        text = f"[Video Attachment: name {video_name}, path {video_path}]"
+
+    req.extra_user_content_parts.append(TextPart(text=text))
+
+
 def _get_quoted_message_parser_settings(
     provider_settings: dict[str, object] | None,
 ) -> QuotedMessageParserSettings:
@@ -1279,10 +1306,7 @@ async def build_main_agent(
                         )
                     )
                 elif isinstance(comp, Video):
-                    video_path = await comp.convert_to_file_path()
-                    req.extra_user_content_parts.append(
-                        TextPart(text=f"[Video Attachment: path {video_path}]")
-                    )
+                    await _append_video_attachment(req, comp)
             # quoted message attachments
             reply_comps = [
                 comp for comp in event.message_obj.message if isinstance(comp, Reply)
@@ -1322,12 +1346,7 @@ async def build_main_agent(
                                 )
                             )
                         elif isinstance(reply_comp, Video):
-                            video_path = await reply_comp.convert_to_file_path()
-                            req.extra_user_content_parts.append(
-                                TextPart(
-                                    text=f"[Video Attachment in quoted message: path {video_path}]"
-                                )
-                            )
+                            await _append_video_attachment(req, reply_comp, quoted=True)
 
                 # Fallback quoted image extraction for reply-id-only payloads, or when
                 # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
