@@ -68,8 +68,8 @@ def _validate_path_within(target_path: Path, base_dir: Path) -> bool:
     target path is relative to the resolved base directory.
     """
     try:
-        resolved = target_path.resolve()
-        base_resolved = base_dir.resolve()
+        resolved = target_path.resolve(strict=False)
+        base_resolved = base_dir.resolve(strict=False)
         return resolved.is_relative_to(base_resolved)
     except (OSError, ValueError):
         return False
