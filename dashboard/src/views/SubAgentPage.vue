@@ -533,7 +533,6 @@ type EnhancedSubagentConfig = {
   max_subagent_history: number
   execution_timeout: number
   tools_blacklist: string[]
-  tools_whitelist: string[]
   tools_inherent: string[]
 }
 
@@ -587,7 +586,6 @@ const enhancedCfg = ref<EnhancedSubagentConfig>({
   max_subagent_history: 500,
   execution_timeout: 600,
   tools_blacklist: [],
-  tools_whitelist: [],
   tools_inherent: []
 })
 
@@ -603,6 +601,9 @@ const hasUnsavedChanges = computed(() => {
 })
 
 function normalizeConfig(raw: any): SubAgentConfig {
+  // 兼容新旧格式：
+  // 新格式: raw 直接包含 main_enable, agents 等字段
+  // 旧格式: raw.subagent_orchestrator 包含这些字段
   const orchData = raw?.subagent_orchestrator || raw || {}
   const main_enable = !!orchData?.main_enable
   const remove_main_duplicate_tools = !!orchData?.remove_main_duplicate_tools
@@ -630,7 +631,6 @@ function normalizeEnhancedConfig(raw: any): EnhancedSubagentConfig {
     max_subagent_history: Number(raw?.max_subagent_history) || 500,
     execution_timeout: Number(raw?.execution_timeout) || 600,
     tools_blacklist: Array.isArray(raw?.tools_blacklist) ? raw.tools_blacklist : [],
-    tools_whitelist: Array.isArray(raw?.tools_whitelist) ? raw.tools_whitelist : [],
     tools_inherent: Array.isArray(raw?.tools_inherent) ? raw.tools_inherent : []
   }
 }
@@ -670,8 +670,9 @@ async function loadConfig() {
     const res = await axios.get('/api/subagent/config')
     if (res.data.status === 'ok') {
       const data = res.data.data
-      cfg.value = normalizeConfig(data.subagent_orchestrator)
-      enhancedCfg.value = normalizeEnhancedConfig(data.enhanced_subagent)
+      // 兼容新旧格式：data 可能直接包含字段，或通过 subagent_orchestrator 嵌套
+      cfg.value = normalizeConfig(data.subagent_orchestrator || data)
+      enhancedCfg.value = normalizeEnhancedConfig(data.enhanced_subagent || {})
       expandedAgents.value = Object.fromEntries(cfg.value.agents.map((agent) => [agent.__key, false]))
       initialSnapshot.value = serializeConfig(cfg.value)
       enhancedInitialSnapshot.value = serializeEnhancedConfig(enhancedCfg.value)
@@ -826,10 +827,6 @@ function addToolToList(toolName: string) {
 
 function removeToolFromBlacklist(idx: number) {
   enhancedCfg.value.tools_blacklist.splice(idx, 1)
-}
-
-function removeToolFromWhitelist(idx: number) {
-  enhancedCfg.value.tools_whitelist.splice(idx, 1)
 }
 
 function removeToolFromInherent(idx: number) {

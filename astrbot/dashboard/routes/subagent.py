@@ -63,20 +63,20 @@ class SubAgentRoute(Route):
             # 获取 enhanced_subagent 配置
             enhanced_data = cfg.get("enhanced_subagent", {})
 
-            # 合并返回
-            return jsonify(
-                Response()
-                .ok(
-                    data={
-                        "subagent_orchestrator": data,
-                        "enhanced_subagent": enhanced_data,
-                    }
-                )
-                .__dict__
-            )
+            # 兼容旧格式：直接返回 subagent_orchestrator 的字段，同时附加 enhanced_subagent
+            response_data = {
+                "main_enable": data.get("main_enable", False),
+                "remove_main_duplicate_tools": data.get("remove_main_duplicate_tools", False),
+                "agents": data.get("agents", []),
+                "enhanced_subagent": enhanced_data,
+            }
+
+            return jsonify(Response().ok(data=response_data).__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"获取 subagent 配置失败: {e!s}").__dict__)
+            return jsonify(
+                Response().error(f"获取 subagent 配置失败: {e!s}").__dict__
+            )
 
     async def update_config(self):
         try:
@@ -86,8 +86,11 @@ class SubAgentRoute(Route):
 
             cfg = self.core_lifecycle.astrbot_config
 
-            # 分别处理两个配置
+            # 兼容旧格式和新格式：
+            # 1. 新格式: {"subagent_orchestrator": {...}, "enhanced_subagent": {...}}
+            # 2. 旧格式: {"main_enable": ..., "agents": [...], ...}
             if "subagent_orchestrator" in data:
+                # 新格式
                 orch_data = data["subagent_orchestrator"]
                 cfg["subagent_orchestrator"] = orch_data
 
@@ -95,7 +98,16 @@ class SubAgentRoute(Route):
                 orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
                 if orch is not None:
                     await orch.reload_from_config(orch_data)
+            else:
+                # 旧格式：直接使用整个 data 作为 subagent_orchestrator
+                cfg["subagent_orchestrator"] = data
 
+                # Reload dynamic handoff tools if orchestrator exists
+                orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
+                if orch is not None:
+                    await orch.reload_from_config(data)
+
+            # 处理 enhanced_subagent（新格式专用）
             if "enhanced_subagent" in data:
                 cfg["enhanced_subagent"] = data["enhanced_subagent"]
 

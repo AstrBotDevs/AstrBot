@@ -42,7 +42,7 @@
     "agentSetup": "Agent 设置",
     "orchestratorTitle": "子代理编排",
     "orchestratorSubtitle": "配置子代理列表、主代理路由提示词等基础编排功能",
-    "enhancedSettings": "增强子代理设置",
+    "enhancedSettings": "动态子代理设置",
     "enhancedSettingsHint": "配置动态子代理的运行参数、资源限制和工具策略"
   },
   "cards": {
@@ -89,36 +89,36 @@
     "action": "创建第一个 Agent"
   },
   "enhancedSwitches": {
-    "enable": "启用增强子代理",
-    "enableHint": "启用动态子代理创建和管理能力。开启后可使用 create_dynamic_subagent 等工具。",
+    "enable": "启用动态子代理",
+    "enableHint": "启用动态子代理创建和管理能力。开启后由主LLM自主决定使用create_dynamic_subagent等工具动态创建。与普通子代理编排相互独立，可同时存在",
     "autoCleanup": "每轮自动清理",
-    "autoCleanupHint": "每轮对话结束后自动清理不活跃的子代理",
+    "autoCleanupHint": "每轮对话结束后自动清理未受保护的子代理",
     "sharedContext": "共享上下文",
-    "sharedContextHint": "子代理之间共享部分上下文信息"
+    "sharedContextHint": "动态子代理之间共享部分上下文信息"
   },
   "enhancedFields": {
-    "maxSubagentCount": "最大子代理数量",
-    "maxSubagentCountHint": "同时存在的最大子代理数量",
+    "maxSubagentCount": "最大动态子代理数量",
+    "maxSubagentCountHint": "同时存在的最大动态子代理数量",
     "sharedContextMaxlen": "共享上下文最大长度",
-    "sharedContextMaxlenHint": "共享上下文的最大 token 数量",
+    "sharedContextMaxlenHint": "共享上下文的最大长度（信息条数）",
     "maxSubagentHistory": "最大历史消息数",
-    "maxSubagentHistoryHint": "每个子代理保留的最大历史消息数量",
+    "maxSubagentHistoryHint": "每个子代理保留的最大历史消息条数",
     "executionTimeout": "执行超时时间(秒)",
     "executionTimeoutHint": "子代理执行任务的最大超时时间"
   },
   "enhancedSection": {
     "runtimeParams": "运行参数",
-    "runtimeParamsHint": "控制子代理的数量、历史和执行超时",
+    "runtimeParamsHint": "控制动态子代理的数量、历史和执行超时",
     "sharedContext": "共享上下文",
-    "sharedContextHint": "子代理之间的上下文共享策略",
+    "sharedContextHint": "动态子代理之间的上下文共享策略",
     "toolStrategy": "工具策略",
-    "toolStrategyHint": "控制子代理可使用哪些工具"
+    "toolStrategyHint": "控制动态子代理可使用哪些工具"
   },
   "enhancedTools": {
     "blacklist": "工具黑名单",
-    "blacklistHint": "子代理不可使用的工具列表。被加入黑名单的工具将不会分配给子代理。",
+    "blacklistHint": "动态子代理不可使用的工具列表。被加入黑名单的工具将不会分配给动态子代理。",
     "inherent": "固有工具名单",
-    "inherentHint": "子代理固有的工具名单，在该名单内的工具会确保分配给子代理。",
+    "inherentHint": "动态子代理固有的工具名单，在该名单内的工具会确保分配给动态子代理。",
     "selectTool": "选择工具",
     "addTool": "添加工具",
     "selectBlacklistTool": "添加工具到黑名单",
