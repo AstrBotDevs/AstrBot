@@ -1,5 +1,6 @@
 import base64
 import json
+import ssl
 from collections.abc import AsyncGenerator
 from typing import Literal
 
@@ -106,15 +107,16 @@ class ProviderAnthropic(Provider):
             http_client=self._create_http_client(provider_config),
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
-        """创建带代理的 HTTP 客户端"""
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
+        """创建带代理的 HTTP 客户端，使用系统 SSL 证书"""
+        ctx = ssl.create_default_context()
         proxy = provider_config.get("proxy", "")
         if proxy:
             logger.info(f"[Anthropic] 使用代理: {proxy}")
-            return httpx.AsyncClient(proxy=proxy, headers=self.custom_headers)
-        if self.custom_headers:
-            return httpx.AsyncClient(headers=self.custom_headers)
-        return None
+            return httpx.AsyncClient(
+                proxy=proxy, headers=self.custom_headers, verify=ctx
+            )
+        return httpx.AsyncClient(headers=self.custom_headers, verify=ctx)
 
     def _apply_thinking_config(self, payloads: dict) -> None:
         thinking_type = self.thinking_config.get("type", "")

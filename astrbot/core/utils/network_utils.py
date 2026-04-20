@@ -1,5 +1,7 @@
 """Network error handling utilities for providers."""
 
+import ssl
+
 import httpx
 
 from astrbot import logger
@@ -83,8 +85,12 @@ def log_connection_failure(
 def create_proxy_client(
     provider_label: str,
     proxy: str | None = None,
-) -> httpx.AsyncClient | None:
+) -> httpx.AsyncClient:
     """Create an httpx AsyncClient with proxy configuration if provided.
+
+    Uses the system SSL certificate store instead of certifi, which avoids
+    SSL verification failures for endpoints whose CA chain is not in certifi
+    but is trusted by the operating system.
 
     Note: The caller is responsible for closing the client when done.
     Consider using the client as a context manager or calling aclose() explicitly.
@@ -94,9 +100,10 @@ def create_proxy_client(
         proxy: The proxy address (e.g., "http://127.0.0.1:7890"), or None/empty
 
     Returns:
-        An httpx.AsyncClient configured with the proxy, or None if no proxy
+        An httpx.AsyncClient configured with the proxy and system SSL context
     """
+    ctx = ssl.create_default_context()
     if proxy:
         logger.info(f"[{provider_label}] 使用代理: {proxy}")
-        return httpx.AsyncClient(proxy=proxy)
-    return None
+        return httpx.AsyncClient(proxy=proxy, verify=ctx)
+    return httpx.AsyncClient(verify=ctx)
