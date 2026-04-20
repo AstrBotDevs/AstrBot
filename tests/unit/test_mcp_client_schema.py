@@ -53,6 +53,29 @@ class TestNormalizeMcpInputSchema:
             "required" not in normalized["properties"]["server"]["properties"]["market"]
         )
 
+    def test_preserves_parent_required_flag_for_nested_object_properties(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "server": {
+                    "type": "object",
+                    "required": True,
+                    "properties": {
+                        "transport": {"type": "string", "required": True},
+                    },
+                }
+            },
+        }
+
+        normalized = _normalize_mcp_input_schema(schema)
+
+        assert normalized["required"] == ["server"]
+        assert normalized["properties"]["server"]["required"] == ["transport"]
+        assert (
+            "required"
+            not in normalized["properties"]["server"]["properties"]["transport"]
+        )
+
 
 class TestMCPToolSchemaNormalization:
     def test_mcp_tool_accepts_property_level_required_booleans(self):
