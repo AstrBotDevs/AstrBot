@@ -1,6 +1,10 @@
+import logging
+
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 from ..register import register_provider_adapter
+
+logger = logging.getLogger(__name__)
 
 MINIMAX_TOKEN_PLAN_MODELS = [
     "MiniMax-M2.7",
@@ -43,9 +47,11 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
 
         configured_model = provider_config.get("model", "MiniMax-M2.7")
         if configured_model not in MINIMAX_TOKEN_PLAN_MODELS:
-            raise ValueError(
-                f"Unsupported model: {configured_model!r}. "
-                f"Supported models: {', '.join(MINIMAX_TOKEN_PLAN_MODELS)}"
+            logger.warning(
+                f"Configured model {configured_model!r} is not in the known Token Plan "
+                f"model list ({', '.join(MINIMAX_TOKEN_PLAN_MODELS)}). "
+                f"The model may still work if your plan supports it. "
+                f"If you encounter errors, please check your plan's model availability."
             )
 
         self.set_model(configured_model)
