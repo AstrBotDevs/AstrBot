@@ -113,6 +113,9 @@ class Main(star.Star):
         if self.ltm and self.ltm_enabled(event):
             # Skip recording if this response is from an active reply request
             if event.get_extra(LTM_ACTIVE_REPLY_IN_PROGRESS_KEY, False):
+                event.set_extra(
+                    LTM_ACTIVE_REPLY_IN_PROGRESS_KEY, False
+                )  # Clear immediately so subsequent responses are not affected
                 return
             # Only record if group_icl_enable is on, to keep session_chats consistent
             # (handle_message is also guarded by group_icl_enable)
