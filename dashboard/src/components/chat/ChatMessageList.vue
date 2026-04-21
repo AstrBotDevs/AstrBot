@@ -283,7 +283,7 @@
             <div v-if="messageRefs(msg).length" class="message-meta-refs">
               <ActionRef
                 :refs="resolvedMessageRefs(msg)"
-                @open-refs="openRefsSidebar"
+                @open-refs="handleOpenRefs"
               />
             </div>
           </div>
@@ -291,7 +291,11 @@
       </div>
     </div>
 
-    <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
+    <RefsSidebar
+      v-if="manageRefsSidebar"
+      v-model="refsSidebarOpen"
+      :refs="selectedRefs"
+    />
 
     <v-overlay
       v-model="imagePreview.visible"
@@ -347,6 +351,7 @@ const props = withDefaults(
     enableRegenerate?: boolean;
     enableThreadSelection?: boolean;
     enableCopy?: boolean;
+    manageRefsSidebar?: boolean;
     editingMessageId?: string | number | null;
     editDraft?: string;
     savingEdit?: boolean;
@@ -359,6 +364,7 @@ const props = withDefaults(
     enableRegenerate: false,
     enableThreadSelection: false,
     enableCopy: true,
+    manageRefsSidebar: true,
     editingMessageId: null,
     editDraft: "",
     savingEdit: false,
@@ -377,6 +383,7 @@ const emit = defineEmits<{
   ];
   selectBotText: [event: MouseEvent, message: ChatRecord];
   openThread: [thread: ChatThread];
+  openRefs: [refs: unknown];
 }>();
 
 setCustomComponents("chat-message", {
@@ -592,7 +599,11 @@ function normalizeRefItems(items: unknown[]) {
     .filter((item) => item.url);
 }
 
-function openRefsSidebar(refs: unknown) {
+function handleOpenRefs(refs: unknown) {
+  if (!props.manageRefsSidebar) {
+    emit("openRefs", refs);
+    return;
+  }
   selectedRefs.value =
     refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
@@ -953,6 +964,8 @@ function formatDuration(seconds: number) {
   background: transparent;
   color: inherit;
   font: inherit;
+  font-size: 12px;
+  line-height: 24px;
   cursor: pointer;
 }
 

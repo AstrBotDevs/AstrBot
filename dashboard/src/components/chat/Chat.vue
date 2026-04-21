@@ -358,6 +358,7 @@
               "
               enable-regenerate
               enable-thread-selection
+              :manage-refs-sidebar="false"
               :editing-message-id="editingMessage?.id || null"
               :saving-edit="savingMessageEdit"
               @open-edit="openMessageEdit"
@@ -367,6 +368,7 @@
               @regenerate-with-model="handleRegenerateMessage"
               @select-bot-text="handleBotTextSelection"
               @open-thread="openThreadPanel"
+              @open-refs="openRefsSidebar"
             />
           </div>
         </section>
@@ -465,6 +467,7 @@
       :deleting="deletingThread"
       @delete="deleteThread"
     />
+    <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
   </div>
 </template>
 
@@ -493,6 +496,7 @@ import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
+import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
   useMessages,
@@ -584,6 +588,8 @@ const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
 const deletingThread = ref(false);
+const refsSidebarOpen = ref(false);
+const selectedRefs = ref<Record<string, unknown> | null>(null);
 const threadSelection = reactive<{
   visible: boolean;
   left: number;
@@ -1142,6 +1148,12 @@ async function createThreadFromSelection() {
 function openThreadPanel(thread: ChatThread) {
   activeThread.value = thread;
   threadPanelOpen.value = true;
+}
+
+function openRefsSidebar(refs: unknown) {
+  selectedRefs.value =
+    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+  refsSidebarOpen.value = true;
 }
 
 async function deleteThread(thread: ChatThread) {
