@@ -3548,7 +3548,7 @@ CONFIG_METADATA_3 = {
                         },
                     },
                     "provider_settings.buffer_intermediate_messages": {
-                        "description": "合并 Agent 中间消息（非流式）",
+                        "description": "合并 Agent 中间消息",
                         "type": "bool",
                         "hint": "开启后，非流式模式下多步工具调用过程中产生的中间文本将缓冲，待 Agent 完成后合并为一条回复发送。",
                         "condition": {
