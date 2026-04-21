@@ -73,7 +73,7 @@ class FileProbe:
 
 @dataclass(frozen=True)
 class ParsedDocument:
-    kind: Literal["docx", "pdf"]
+    kind: Literal["docx", "epub", "pdf"]
     file_bytes: bytes
     text: str
 
@@ -371,6 +371,18 @@ def _is_docx_bytes(file_bytes: bytes) -> bool:
     return any(name.startswith("word/") for name in names)
 
 
+def _is_epub_bytes(file_bytes: bytes) -> bool:
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as archive:
+            names = set(archive.namelist())
+            with archive.open("mimetype") as mimetype_file:
+                mimetype = mimetype_file.read(64).decode("utf-8").strip()
+    except (KeyError, OSError, UnicodeDecodeError, zipfile.BadZipFile):
+        return False
+
+    return mimetype == "application/epub+zip" and "META-INF/container.xml" in names
+
+
 async def _parse_local_docx_text(file_bytes: bytes, file_name: str) -> str:
     from astrbot.core.knowledge_base.parsers.markitdown_parser import (
         MarkitdownParser,
@@ -387,22 +399,47 @@ async def _parse_local_pdf_text(file_bytes: bytes, file_name: str) -> str:
     return result.text
 
 
+async def _parse_local_epub_text(file_bytes: bytes, file_name: str) -> str:
+    from astrbot.core.knowledge_base.parsers.epub_parser import EpubParser
+
+    result = await EpubParser().parse(file_bytes, file_name)
+    return result.text
+
+
 async def _parse_local_supported_document(
     path: str,
     sample: bytes,
 ) -> ParsedDocument | None:
     file_name = Path(path).name
+    suffix = Path(path).suffix.lower()
     if _looks_like_pdf(path, sample):
         file_bytes = await _read_local_file_bytes(path)
         text = await _parse_local_pdf_text(file_bytes, file_name)
         return ParsedDocument(kind="pdf", file_bytes=file_bytes, text=text)
 
-    if Path(path).suffix.lower() == ".docx" or _looks_like_zip_container(sample):
+    if suffix == ".epub":
+        file_bytes = await _read_local_file_bytes(path)
+        if not _is_epub_bytes(file_bytes):
+            return None
+        text = await _parse_local_epub_text(file_bytes, file_name)
+        return ParsedDocument(kind="epub", file_bytes=file_bytes, text=text)
+
+    if suffix == ".docx":
         file_bytes = await _read_local_file_bytes(path)
         if not _is_docx_bytes(file_bytes):
             return None
         text = await _parse_local_docx_text(file_bytes, file_name)
         return ParsedDocument(kind="docx", file_bytes=file_bytes, text=text)
+
+    if _looks_like_zip_container(sample):
+        file_bytes = await _read_local_file_bytes(path)
+        if _is_epub_bytes(file_bytes):
+            text = await _parse_local_epub_text(file_bytes, file_name)
+            return ParsedDocument(kind="epub", file_bytes=file_bytes, text=text)
+        if _is_docx_bytes(file_bytes):
+            text = await _parse_local_docx_text(file_bytes, file_name)
+            return ParsedDocument(kind="docx", file_bytes=file_bytes, text=text)
+        return None
 
     return None
 
