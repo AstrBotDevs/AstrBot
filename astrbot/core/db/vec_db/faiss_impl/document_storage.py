@@ -187,7 +187,8 @@ class DocumentStorage:
         if "search_text" not in columns:
             return False, False
 
-        return True, "contentless_delete=1" in normalized_sql
+        normalized_sql_no_whitespace = "".join(normalized_sql.split())
+        return True, "contentless_delete=1" in normalized_sql_no_whitespace
 
     async def connect(self) -> None:
         """Connect to the SQLite database."""
