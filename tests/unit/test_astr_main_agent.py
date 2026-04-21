@@ -9,7 +9,7 @@ from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.message.components import File, Image, Plain, Reply
+from astrbot.core.message.components import File, Image, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
@@ -1066,6 +1066,146 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_with_video_attachment(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test building main agent with video attachments."""
+        module = ama
+        mock_video = Video(file="file:///path/to/video.mp4")
+        mock_event.message_obj.message = [mock_video]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert [
+            part.text for part in result.provider_request.extra_user_content_parts
+        ] == ["[Video Attachment: name video.mp4, path path/to/video.mp4]"]
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_with_quoted_video_attachment(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test building main agent with quoted video attachments."""
+        module = ama
+        mock_video = Video(file="file:///path/to/quoted-video.mp4")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[mock_video],
+            sender_nickname="",
+            message_str="quoted message",
+        )
+        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert (
+            "[Video Attachment in quoted message: "
+            "name quoted-video.mp4, path path/to/quoted-video.mp4]"
+        ) in [part.text for part in result.provider_request.extra_user_content_parts]
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_skips_video_attachment_when_conversion_fails(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test video attachment failures do not abort request construction."""
+        module = ama
+        mock_video = Video(file="file:///path/to/direct.mp4")
+        mock_quoted_video = Video(file="file:///path/to/quoted.mp4")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[mock_quoted_video],
+            sender_nickname="",
+            message_str="quoted message",
+        )
+        mock_event.message_obj.message = [mock_video, mock_reply]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        async def _raise_video_conversion_error(self):
+            if self.file.endswith("direct.mp4"):
+                raise RuntimeError("direct")
+            raise RuntimeError("quoted")
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch("astrbot.core.astr_main_agent.logger") as mock_logger,
+            patch.object(
+                Video,
+                "convert_to_file_path",
+                AsyncMock(side_effect=_raise_video_conversion_error),
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert not any(
+            "Video Attachment" in part.text
+            for part in result.provider_request.extra_user_content_parts
+        )
+        assert mock_logger.error.call_count == 2
+        assert (
+            "Error processing video attachment"
+            in mock_logger.error.call_args_list[0][0][0]
+        )
+        assert (
+            "Error processing quoted video attachment"
+            in mock_logger.error.call_args_list[1][0][0]
+        )
 
     @pytest.mark.asyncio
     async def test_build_main_agent_no_prompt_no_images(
