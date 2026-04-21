@@ -284,7 +284,7 @@ def register_platform_adapter_type(
     return decorator
 
 
-def register_regex(regex: str, **kwargs):
+def register_regex(regex: str | re.Pattern, **kwargs):
     """注册一个 Regex"""
 
     def decorator(awaitable):
