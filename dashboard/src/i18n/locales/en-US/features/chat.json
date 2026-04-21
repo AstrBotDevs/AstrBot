@@ -66,6 +66,7 @@
   "thread": {
     "title": "Thread",
     "askInThread": "Ask in thread",
+    "createFailed": "Failed to create thread",
     "delete": "Delete thread",
     "confirmDelete": "Delete this thread? This action cannot be undone.",
     "placeholder": "Ask about this excerpt..."

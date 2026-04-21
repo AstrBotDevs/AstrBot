@@ -66,6 +66,7 @@
   "thread": {
     "title": "分支",
     "askInThread": "在新分支中询问",
+    "createFailed": "创建分支失败",
     "delete": "删除分支",
     "confirmDelete": "确定要删除这个分支吗？此操作无法撤销。",
     "placeholder": "继续追问这段内容..."

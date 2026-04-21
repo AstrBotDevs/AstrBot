@@ -511,6 +511,7 @@ import {
 } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
+import { useToast } from "@/utils/toast";
 
 const props = withDefaults(defineProps<{ chatboxMode?: boolean }>(), {
   chatboxMode: false,
@@ -523,6 +524,7 @@ const customizer = useCustomizerStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
+const toast = useToast();
 const { languageOptions, currentLanguage, switchLanguage, locale } =
   useLanguageSwitcher();
 const {
@@ -1110,8 +1112,15 @@ async function createThreadFromSelection() {
       parent_message_id: message.id,
       selected_text: threadSelection.selectedText,
     });
+    if (response.data?.status !== "ok") {
+      toast.error(response.data?.message || tm("thread.createFailed"));
+      return;
+    }
     const thread = response.data?.data as ChatThread | undefined;
-    if (!thread) return;
+    if (!thread) {
+      toast.error(tm("thread.createFailed"));
+      return;
+    }
     message.threads = message.threads || [];
     if (!message.threads.some((item) => item.thread_id === thread.thread_id)) {
       message.threads.push(thread);
@@ -1119,6 +1128,11 @@ async function createThreadFromSelection() {
     openThreadPanel(thread);
     window.getSelection()?.removeAllRanges();
   } catch (error) {
+    toast.error(
+      axios.isAxiosError(error)
+        ? error.response?.data?.message || error.message
+        : tm("thread.createFailed"),
+    );
     console.error("Failed to create thread:", error);
   } finally {
     threadSelection.visible = false;
