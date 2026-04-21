@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from astrbot.core.db.vec_db.faiss_impl.document_storage import DocumentStorage
@@ -71,5 +73,31 @@ async def test_document_storage_fts_delete_skips_missing_fts_row(tmp_path):
     await storage.delete_document_by_doc_id("legacy-chunk")
 
     assert await storage.get_document_by_doc_id("legacy-chunk") is None
+
+    await storage.close()
+
+
+@pytest.mark.asyncio
+async def test_document_storage_fts_recovers_from_legacy_non_fts_table(tmp_path):
+    db_path = tmp_path / "doc.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE documents_fts (rowid INTEGER PRIMARY KEY)")
+    conn.commit()
+    conn.close()
+
+    storage = DocumentStorage(str(db_path))
+    await storage.initialize()
+
+    assert storage.fts5_available is True
+
+    await storage.insert_document(
+        doc_id="legacy-fix",
+        text="legacy fts recovery text",
+        metadata={"kb_doc_id": "doc-1", "kb_id": "kb-1", "chunk_index": 0},
+    )
+    results = await storage.search_sparse(["legacy"], limit=10)
+
+    assert results is not None
+    assert [result["doc_id"] for result in results] == ["legacy-fix"]
 
     await storage.close()
