@@ -91,70 +91,70 @@ class DynamicSubAgentManager:
     }
 
     _HEADER_TEMPLATE = """# Dynamic Sub-Agent Capability
-    You can dynamically create and manage sub-agents with isolated instructions, tools and skills.
-    {quota_info}
+You can dynamically create and manage sub-agents with isolated instructions, tools and skills.
+{quota_info}
 
-    ## When to create Sub-agents:
+## When to create Sub-agents:
 
-    - The task can be explicitly decomposed and parallel processed
-    - Processing very long contexts that exceeding the limitations of a single agent
+- The task can be explicitly decomposed and parallel processed
+- Processing very long contexts that exceeding the limitations of a single agent
 
-    ## Workflow
+## Workflow
 
-    1. **Plan**: Break down the user request → identify subtask dependencies → determine which can run in parallel
-    2. **Create**: Use `create_dynamic_subagent` for each subtask
-    3. **Delegate**: Use `transfer_to_<name>` to assign work
-    4. **Collect**: Gather results from all sub-agents
+1. **Plan**: Break down the user request → identify subtask dependencies → determine which can run in parallel
+2. **Create**: Use `create_dynamic_subagent` for each subtask
+3. **Delegate**: Use `transfer_to_<name>` to assign work
+4. **Collect**: Gather results from all sub-agents
     """
 
     _CREATE_GUIDE_PROMPT = """## Creating Sub-agents
 
-    Name: **letters, numbers, underscores only**, 3-32 chars, start with a letter.
+Name: **letters, numbers, underscores only**, 3-32 chars, start with a letter.
 
-    A well-designed sub-agent requires:
+A well-designed sub-agent requires:
 
-    ### 1. Character Definition
-    Define the role, expertise, and work style. Example:
-    ```
-    Name: data_analyst
-    Role: Senior Data Analyst specializing in exploratory analysis and statistical modeling
-    Style: Meticulous, detail-oriented, data-driven
-    ```
+### 1. Character Definition
+Define the role, expertise, and work style. Example:
+```
+Name: data_analyst
+Role: Senior Data Analyst specializing in exploratory analysis and statistical modeling
+Style: Meticulous, detail-oriented, data-driven
+```
 
-    ### 2. Task Context
-    - **Goal**: The user's ultimate objective
-    - **Your step**: Current step number and description
-    - **Teammates**: Other sub-agents and their responsibilities (if known)
+### 2. Task Context
+- **Goal**: The user's ultimate objective
+- **Your step**: Current step number and description
+- **Teammates**: Other sub-agents and their responsibilities (if known)
 
-    ### 3. Explicit Instructions
-    Step-by-step procedure with:
-    - Input: where to read data from
-    - Process: what transformations/analysis to perform
-    - Output: what to produce and where to save it
+### 3. Explicit Instructions
+Step-by-step procedure with:
+- Input: where to read data from
+- Process: what transformations/analysis to perform
+- Output: what to produce and where to save it
 
-    ### 2. Allocate available Tools and Skills
-    ### Tools & Skills
-    Only assign tools/skills the sub-agent actually needs. Unnecessary tools waste tokens and increase confusion.
+### 2. Allocate available Tools and Skills
+### Tools & Skills
+Only assign tools/skills the sub-agent actually needs. Unnecessary tools waste tokens and increase confusion.
     """
 
     _LIFECYCLE_PROMPT = """## Sub-agent Lifecycle
 
-    Sub-agents are **auto-cleaned** after each conversation turn.
-    Use `protect_subagent` to keep important ones across turns.
-    Use `unprotect_subagent` to remove protection."""
+Sub-agents are **auto-cleaned** after each conversation turn.
+Use `protect_subagent` to keep important ones across turns.
+Use `unprotect_subagent` to remove protection."""
 
     _BACKGROUND_TASK_PROMPT = """
-    ## Background Tasks
+## Background Tasks
 
-    For time-consuming tasks (web search, code execution), delegate with `background_task=True`:
-    ```
-    transfer_to_<name>(..., background_task=True)
-    ```
-    Then wait for results:
-    ```
-    wait_for_subagent(subagent_name="<name>", timeout=60)
-    ```
-    **Tip**: Execute independent tasks first, then wait — don't block on tasks you don't depend on.
+For time-consuming tasks (web search, code execution), delegate with `background_task=True`:
+```
+transfer_to_<name>(..., background_task=True)
+```
+Then wait for results:
+```
+wait_for_subagent(subagent_name="<name>", timeout=60)
+```
+**Tip**: Execute independent tasks first, then wait — don't block on tasks you don't depend on.
     """
 
     @classmethod
@@ -274,6 +274,10 @@ class DynamicSubAgentManager:
                 for name in cleaned:
                     cls.cleanup_shared_context_by_agent(session_id, name)
 
+        # 清理后若没有subagent，清理整个session
+        if not session.subagents and not session.protected_agents:
+            cls._sessions.pop(session_id, None)
+
         return {"status": "cleaned", "cleaned_agents": cleaned}
 
     @classmethod
@@ -316,7 +320,7 @@ class DynamicSubAgentManager:
                     msg["content"] = (
                         msg["content"][:_MAX_TOOL_RESULT_LEN] + "\n...[truncated]"
                     )
-                    filtered_messages.append(msg)
+                filtered_messages.append(msg)
 
         session.subagent_histories[agent_name].extend(filtered_messages)
         if cls._max_subagent_history < len(session.subagent_histories[agent_name]):
@@ -420,19 +424,22 @@ class DynamicSubAgentManager:
         """Clear conversation history for a subagent"""
         session = cls.get_session(session_id)
         if not session:
-            return f"__HISTORY_CLEARED_FAILED_: Session_id {session_id} does not exist."
-        if agent_name in session.subagent_histories:
-            session.subagent_histories.pop(agent_name, None)
-            # session.subagent_status.pop(agent_name, None)
-            # session.background_task_counters.pop(agent_name, None)
-            if session.shared_context_enabled:
-                cls.cleanup_shared_context_by_agent(session_id, agent_name)
-            logger.debug(
-                "[EnhancedSubAgent:History] Cleared history for: %s", agent_name
+            return (
+                f"__HISTORY_CLEARED_FAILED__: Session_id {session_id} does not exist."
             )
+        if agent_name in session.subagents:
+            if agent_name in session.subagent_histories:
+                session.subagent_histories.pop(agent_name, None)
+                # session.subagent_status.pop(agent_name, None)
+                # session.background_task_counters.pop(agent_name, None)
+                if session.shared_context_enabled:
+                    cls.cleanup_shared_context_by_agent(session_id, agent_name)
+                logger.debug(
+                    "[EnhancedSubAgent:History] Cleared history for: %s", agent_name
+                )
             return "__HISTORY_CLEARED__"
         else:
-            return f"__HISTORY_CLEARED_FAILED_: Agent name {agent_name} not found. Available names {list(session.subagents.keys())}"
+            return f"__HISTORY_CLEARED_FAILED__: Agent name {agent_name} not found. Available names {list(session.subagents.keys())}"
 
     @classmethod
     def add_shared_context(
@@ -554,8 +561,8 @@ class DynamicSubAgentManager:
                 content_text = msg["content"]
                 lines.append(f"[{ts}] System: {content_text}")
 
-        # === 3. 发送给当前 Agent 的消息 ===
         if agent_name:
+            # === 3. 发送给当前 Agent 的消息 ===
             to_me_msgs = [
                 m
                 for m in session.shared_context
@@ -573,34 +580,35 @@ class DynamicSubAgentManager:
                     )
 
             # === 4. 其他 Agent 之间的交互（仅显示最近10条）===
-        inter_agent_msgs = [
-            m
-            for m in session.shared_context
-            if m["type"] == "message"
-            and m["target"] != agent_name
-            and m["target"] != "all"
-            and m["sender"] != agent_name
-        ]
-        if inter_agent_msgs:
-            lines.append(
-                "\n## @OtherAgents - Communication among Other Agents (Last 10 messages)"
-            )
-            for msg in inter_agent_msgs[-10:]:
-                ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
-                content_text = msg["content"]
+            inter_agent_msgs = [
+                m
+                for m in session.shared_context
+                if m["type"] == "message"
+                and m["target"] != agent_name
+                and m["target"] != "all"
+                and m["sender"] != agent_name
+            ]
+            if inter_agent_msgs:
                 lines.append(
-                    f"[{ts}] {msg['sender']} -> {msg['target']}: {content_text}"
+                    "\n## @OtherAgents - Communication among Other Agents (Last 10 messages)"
                 )
+                for msg in inter_agent_msgs[-10:]:
+                    ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
+                    content_text = msg["content"]
+                    lines.append(
+                        f"[{ts}] {msg['sender']} -> {msg['target']}: {content_text}"
+                    )
 
-        # === 5. Status 更新 ===
-        status_msgs = [m for m in session.shared_context if m["type"] == "status"]
-        if status_msgs:
-            lines.append(
-                "\n## @Status - Task progress of each agent (Last 10 messages)"
-            )
-            for msg in status_msgs[-10:]:
-                ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
-                lines.append(f"[{ts}] {msg['sender']}: {msg['content']}")
+            # === 5. Status 更新 ===
+            status_msgs = [m for m in session.shared_context if m["type"] == "status"]
+            if status_msgs:
+                lines.append(
+                    "\n## @Status - Task progress of each agent (Last 10 messages)"
+                )
+                for msg in status_msgs[-10:]:
+                    ts = time.strftime("%H:%M:%S", time.localtime(msg["timestamp"]))
+                    lines.append(f"[{ts}] {msg['sender']}: {msg['content']}")
+
         lines.append("---")
         return "\n".join(lines)
 
@@ -711,18 +719,11 @@ class DynamicSubAgentManager:
     async def create_subagent(
         cls, session_id: str, config: DynamicSubAgentConfig
     ) -> tuple:
-        # Check max count limit
+
         session = cls._get_or_create_session(session_id)
-        if (
-            config.name not in session.subagents
-        ):  # Only count as new if not replacing existing
-            active_count = len(
-                [
-                    a
-                    for a in session.subagents.keys()
-                    if a not in session.protected_agents
-                ]
-            )
+        if config.name not in session.subagents:
+            # Check max count limit
+            active_count = len(session.subagents.keys())
             if active_count >= cls._max_subagent_count:
                 return (
                     f"Error: Maximum number of subagents ({cls._max_subagent_count}) reached. More subagents is not allowed.",
@@ -735,6 +736,8 @@ class DynamicSubAgentManager:
         if session.shared_context_enabled:
             cls.register_inherent_tool("send_shared_context")
 
+        if config.tools is None:
+            config.tools = set()
         # remove tools in backlist
         for tool_bl in cls._tools_blacklist:
             config.tools.discard(tool_bl)
@@ -797,7 +800,7 @@ class DynamicSubAgentManager:
                 for subagent_name in session.subagents.keys():
                     if session.subagent_status[subagent_name] == "RUNNING":
                         continue
-                    _remove_by_name(agent_name)
+                    _remove_by_name(subagent_name)
                     removed += 1
                 return f"__SUBAGENT_REMOVED__: Removed {removed} subagents. {len(session.subagents.keys())} subagents are reserved because they are still running."
             else:
@@ -879,9 +882,7 @@ class DynamicSubAgentManager:
 
     @staticmethod
     def _is_task_completed(result: SubAgentExecutionResult) -> bool:
-        return (
-            result.result != "" and result.result is not None
-        ) or result.completed_at > 0
+        return result.completed_at > 0 or result.error is not None
 
     @classmethod
     def get_pending_subagent_tasks(cls, session_id: str, agent_name: str) -> list[str]:
@@ -944,7 +945,7 @@ class DynamicSubAgentManager:
             # 如果没有指定task_id，尝试找最新的pending任务
             pending = cls.get_pending_subagent_tasks(session_id, agent_name)
             if pending:
-                task_id = pending[-1]  # 取最新的
+                task_id = pending[-1]
             else:
                 logger.warning(
                     f"[SubAgentResult] No task_id and no pending tasks for {agent_name}"
@@ -980,7 +981,7 @@ class DynamicSubAgentManager:
         Args:
             session_id: Session ID
             agent_name: SubAgent 名称
-            task_id: 任务ID，如果为None则获取最新的任务结果
+            task_id: 任务ID，如果为None则获取最新完成的任务结果
 
         Returns:
             SubAgentExecutionResult 或 None
@@ -1196,17 +1197,18 @@ class CreateDynamicSubAgentTool(FunctionTool):
         # 验证名称格式：只允许英文字母、数字和下划线，长度限制
         if not re.match(r"^[a-zA-Z][a-zA-Z0-9_]{0,31}$", name):
             return "Error: SubAgent name must start with letter, contain only letters/numbers/underscores, max 32 characters"
-        # 检查是否包含危险字符
-        dangerous_patterns = ["__"]
-        if any(p in name.lower() for p in dangerous_patterns):
-            return f"Error: SubAgent name cannot contain reserved words like {dangerous_patterns}"
+
+        if name.startswith("__") and name.endswith("__"):
+            return "Error: SubAgent name cannot start and end with double underscores"
 
         system_prompt = kwargs.get("system_prompt", "")
         tools = kwargs.get("tools", {})
         skills = kwargs.get("skills", {})
         workdir = kwargs.get("workdir")
         # 检查工作路径是否非法
-        if not self._check_path_safety(workdir):
+        if workdir is not None and self._check_path_safety(workdir):
+            pass
+        else:
             workdir = get_astrbot_temp_path()
 
         session_id = context.context.event.unified_msg_origin
@@ -1576,7 +1578,14 @@ parameter
             if pending_tasks:
                 # 使用最早的 pending 任务（先进先出）
                 task_id = pending_tasks[0]
-
+            else:
+                # 没有 pending 任务，检查是否有已完成的最新任务
+                latest = DynamicSubAgentManager.get_subagent_result(
+                    session_id, subagent_name
+                )
+                if latest:
+                    return f"SubAgent '{subagent_name}' has no pending tasks. Latest completed task: {latest.task_id}"
+                return f"Error: SubAgent '{subagent_name}' has no tasks."
         start_time = time.time()
 
         while time.time() - start_time < timeout:
@@ -1607,9 +1616,14 @@ parameter
                     session_id, subagent_name, task_id
                 )
                 if result and (result.result != "" or result.completed_at > 0):
-                    return f" SubAgent '{result.agent_name}' execution failed\n Task id: {result.task_id}\n Execution time: {result.execution_time:.1f}s\n"
+                    return (
+                        f"SubAgent '{result.agent_name}' execution failed\n"
+                        f"Task id: {result.task_id}\n"
+                        f"Execution time: {result.execution_time:.1f}s\n"
+                        f"Error: {result.error or 'Unknown error'}\n"
+                    )
                 else:
-                    return f"Error: SubAgent '{subagent_name}' failed task {task_id} with empty results."
+                    return f"SubAgent '{subagent_name}' failed task {task_id} with empty results. Error: {result.error or 'Unknown error'}"
             else:
                 pass
 

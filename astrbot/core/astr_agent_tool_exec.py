@@ -392,6 +392,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     _run_subagent(), timeout=execution_timeout
                 )
             except asyncio.TimeoutError:
+                # 若超时，保存已产生的部分历史
+                cls._save_subagent_history(agent_name, runner_messages, umo)
                 error_msg = f"SubAgent '{agent_name}' execution timeout after {execution_timeout:.1f} seconds."
                 logger.warning(f"[SubAgentTimeout] {error_msg}")
 
@@ -528,7 +530,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         is_enhanced = cls._is_enhanced_subagent(umo, agent_name)
         if is_enhanced:
             await cls._handle_enhanced_subagent_background_result(
-                cls=cls,
                 umo=umo,
                 agent_name=agent_name,
                 task_id=tool_args.get("subagent_task_id"),
@@ -917,7 +918,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         original_task_id: str,
         subagent_task_id: str | None,
     ) -> mcp.types.TextContent:
-        if subagent_task_id:
+        if subagent_task_id and not subagent_task_id.startswith(
+            "__PENDING_TASK_CREATE_FAILED__"
+        ):
             return mcp.types.TextContent(
                 type="text",
                 text=(
@@ -969,7 +972,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return True
         return False
 
-    @staticmethod
+    @classmethod
     async def _handle_enhanced_subagent_background_result(
         cls,
         *,
@@ -985,8 +988,20 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ) -> None:
         from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
 
+        success = error_text is None
+        status = "COMPLETED" if success else "FAILED"
         DynamicSubAgentManager.set_subagent_status(
-            session_id=umo, agent_name=agent_name, status="FAILED"
+            session_id=umo, agent_name=agent_name, status=status
+        )
+
+        DynamicSubAgentManager.store_subagent_result(
+            session_id=umo,
+            agent_name=agent_name,
+            success=success,
+            result=result_text,
+            task_id=task_id,
+            error=error_text,
+            execution_time=execution_time,
         )
 
         if not await cls._maybe_wake_main_agent_after_background(
@@ -1020,9 +1035,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 )
             else:
                 main_agent_is_running = False
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error("Failed to check main agent status: %s", e)
-            main_agent_is_running = True
+            main_agent_is_running = False  # 异常时尝试通知，避免结果丢失
 
         if main_agent_is_running:
             return False

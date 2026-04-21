@@ -1097,7 +1097,7 @@ def _apply_enhanced_subagent_tools(
                 "max_subagent_history", 500
             ),
             tools_blacklist=config.enhanced_subagent.get("tools_blacklist", None),
-            tools_whitelist=config.enhanced_subagent.get("tools_whitelist", None),
+            tools_inherent=config.enhanced_subagent.get("tools_inherent", None),
             execution_timeout=config.enhanced_subagent.get("execution_timeout", 600),
         )
 
@@ -1122,12 +1122,16 @@ def _apply_enhanced_subagent_tools(
         dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(
             session_id
         )
+        # Prevent duplication of name with the original subagent tool
+        existing_names = {t.name for t in req.func_tool.tools}
         for handoff in dynamic_handoffs:
-            req.func_tool.add_tool(handoff)
-
+            if handoff.name not in existing_names:
+                req.func_tool.add_tool(handoff)
+            else:
+                logger.warning(
+                    "[EnhancedSubAgent] Failed to create due to duplicate names between the enhanced sub agent and the original sub agent."
+                )
     except ImportError as e:
-        from astrbot import logger
-
         logger.warning(f"[EnhancedSubAgent] Cannot import module: {e}")
 
 
