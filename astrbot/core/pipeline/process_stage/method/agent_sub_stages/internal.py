@@ -8,6 +8,10 @@ from dataclasses import replace
 from astrbot.core import db_helper, logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.astr_agent_run_util import (
+    DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
+    normalize_config_repeat_reply_guard_threshold,
+)
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
@@ -64,6 +68,15 @@ class InternalAgentSubStage(Stage):
             self.tool_schema_mode = "full"
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 30
+        self.repeat_reply_guard_threshold: int = settings.get(
+            "repeat_reply_guard_threshold",
+            DEFAULT_REPEAT_REPLY_GUARD_THRESHOLD,
+        )
+        self.repeat_reply_guard_threshold = (
+            normalize_config_repeat_reply_guard_threshold(
+                self.repeat_reply_guard_threshold
+            )
+        )
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
         self.show_reasoning = settings.get("display_reasoning_text", False)
@@ -280,6 +293,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
+                                    repeat_reply_guard_threshold=self.repeat_reply_guard_threshold,
                                 ),
                             ),
                         )
@@ -310,6 +324,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
+                                    repeat_reply_guard_threshold=self.repeat_reply_guard_threshold,
                                 ),
                             ),
                         )
@@ -340,6 +355,7 @@ class InternalAgentSubStage(Stage):
                             self.show_tool_call_result,
                             stream_to_general,
                             show_reasoning=self.show_reasoning,
+                            repeat_reply_guard_threshold=self.repeat_reply_guard_threshold,
                         ):
                             yield
 
