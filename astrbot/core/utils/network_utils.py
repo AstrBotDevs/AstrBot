@@ -6,6 +6,8 @@ import httpx
 
 from astrbot import logger
 
+_SYSTEM_SSL_CTX = ssl.create_default_context()
+
 
 def is_connection_error(exc: BaseException) -> bool:
     """Check if an exception is a connection/network related error.
@@ -102,10 +104,9 @@ def create_proxy_client(
         headers: Optional custom headers to include in every request
 
     Returns:
-        An httpx.AsyncClient created with the system SSL context; the proxy is applied only if one is provided.
+        An httpx.AsyncClient created with the shared system SSL context; the proxy is applied only if one is provided.
     """
-    ctx = ssl.create_default_context()
     if proxy:
         logger.info(f"[{provider_label}] 使用代理: {proxy}")
-        return httpx.AsyncClient(proxy=proxy, verify=ctx, headers=headers)
-    return httpx.AsyncClient(verify=ctx, headers=headers)
+        return httpx.AsyncClient(proxy=proxy, verify=_SYSTEM_SSL_CTX, headers=headers)
+    return httpx.AsyncClient(verify=_SYSTEM_SSL_CTX, headers=headers)
