@@ -144,7 +144,8 @@
     "updated": "Last Updated",
     "updateStatus": "Update Status",
     "ascending": "Ascending",
-    "descending": "Descending"
+    "descending": "Descending",
+    "pinUpdatesOnTop": "Pin Updates on Top"
   },
   "tags": {
     "danger": "Danger"
