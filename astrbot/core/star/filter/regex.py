@@ -10,9 +10,9 @@ from . import HandlerFilter
 class RegexFilter(HandlerFilter):
     """正则表达式过滤器"""
 
-    def __init__(self, regex: str) -> None:
-        self.regex_str = regex
+    def __init__(self, regex: str | re.Pattern) -> None:
         self.regex = re.compile(regex)
+        self.regex_str = self.regex.pattern
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         return bool(self.regex.search(event.get_message_str().strip()))
