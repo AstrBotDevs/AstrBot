@@ -200,7 +200,85 @@ class ToolSet:
         """Get the list of function tools."""
         return self.tools
 
-    def openai_schema(self, omit_empty_parameter_field: bool = False) -> list[dict]:
+    @staticmethod
+    def _google_compatible_schema(schema: dict[str, Any]) -> dict[str, Any]:
+        """Convert schema to the subset accepted by Gemini function declarations."""
+        supported_types = {
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "array",
+            "object",
+            "null",
+        }
+        supported_formats = {
+            "string": {"enum", "date-time"},
+            "integer": {"int32", "int64"},
+            "number": {"float", "double"},
+        }
+
+        if "anyOf" in schema:
+            return {
+                "anyOf": [ToolSet._google_compatible_schema(s) for s in schema["anyOf"]]
+            }
+
+        result = {}
+
+        # Avoid side effects by not modifying the original schema.
+        origin_type = schema.get("type")
+        target_type = origin_type
+
+        # Gemini API expects 'type' to be a string, while JSON Schema allows lists.
+        if isinstance(origin_type, list):
+            target_type = next((t for t in origin_type if t != "null"), "string")
+
+        if target_type in supported_types:
+            result["type"] = target_type
+            if "format" in schema and schema["format"] in supported_formats.get(
+                result["type"],
+                set(),
+            ):
+                result["format"] = schema["format"]
+        else:
+            result["type"] = "null"
+
+        support_fields = {
+            "title",
+            "description",
+            "enum",
+            "minimum",
+            "maximum",
+            "maxItems",
+            "minItems",
+            "nullable",
+            "required",
+        }
+        result.update({k: schema[k] for k in support_fields if k in schema})
+
+        if "properties" in schema:
+            properties = {}
+            for key, value in schema["properties"].items():
+                properties[key] = ToolSet._google_compatible_schema(value)
+
+            if properties:
+                result["properties"] = properties
+
+        if target_type == "array":
+            items_schema = schema.get("items")
+            if isinstance(items_schema, dict):
+                result["items"] = ToolSet._google_compatible_schema(items_schema)
+            else:
+                # Gemini requires array schemas to include an `items` schema.
+                result["items"] = {"type": "string"}
+
+        return result
+
+    def openai_schema(
+        self,
+        omit_empty_parameter_field: bool = False,
+        gemini_compatible_schema: bool = False,
+    ) -> list[dict]:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
         for tool in self.tools:
@@ -212,7 +290,11 @@ class ToolSet:
                 if (
                     tool.parameters and tool.parameters.get("properties")
                 ) or not omit_empty_parameter_field:
-                    func_def["function"]["parameters"] = tool.parameters
+                    func_def["function"]["parameters"] = (
+                        self._google_compatible_schema(tool.parameters)
+                        if gemini_compatible_schema
+                        else tool.parameters
+                    )
 
             result.append(func_def)
         return result
@@ -233,95 +315,13 @@ class ToolSet:
 
     def google_schema(self) -> dict:
         """Convert tools to Google GenAI API format."""
-
-        def convert_schema(schema: dict) -> dict:
-            """Convert schema to Gemini API format."""
-            supported_types = {
-                "string",
-                "number",
-                "integer",
-                "boolean",
-                "array",
-                "object",
-                "null",
-            }
-            supported_formats = {
-                "string": {"enum", "date-time"},
-                "integer": {"int32", "int64"},
-                "number": {"float", "double"},
-            }
-
-            if "anyOf" in schema:
-                return {"anyOf": [convert_schema(s) for s in schema["anyOf"]]}
-
-            result = {}
-
-            # Avoid side effects by not modifying the original schema
-            origin_type = schema.get("type")
-            target_type = origin_type
-
-            # Compatibility fix: Gemini API expects 'type' to be a string (enum),
-            # but standard JSON Schema (MCP) allows lists (e.g. ["string", "null"]).
-            # We fallback to the first non-null type.
-            if isinstance(origin_type, list):
-                target_type = next((t for t in origin_type if t != "null"), "string")
-
-            if target_type in supported_types:
-                result["type"] = target_type
-                if "format" in schema and schema["format"] in supported_formats.get(
-                    result["type"],
-                    set(),
-                ):
-                    result["format"] = schema["format"]
-            else:
-                result["type"] = "null"
-
-            support_fields = {
-                "title",
-                "description",
-                "enum",
-                "minimum",
-                "maximum",
-                "maxItems",
-                "minItems",
-                "nullable",
-                "required",
-            }
-            result.update({k: schema[k] for k in support_fields if k in schema})
-
-            if "properties" in schema:
-                properties = {}
-                for key, value in schema["properties"].items():
-                    prop_value = convert_schema(value)
-                    if "default" in prop_value:
-                        del prop_value["default"]
-                    # see #5217
-                    if "additionalProperties" in prop_value:
-                        del prop_value["additionalProperties"]
-                    properties[key] = prop_value
-
-                if properties:
-                    result["properties"] = properties
-
-            if target_type == "array":
-                items_schema = schema.get("items")
-                if isinstance(items_schema, dict):
-                    result["items"] = convert_schema(items_schema)
-                else:
-                    # Gemini requires array schemas to include an `items` schema.
-                    # JSON Schema allows omitting it, so fall back to a permissive
-                    # string item schema instead of emitting an invalid declaration.
-                    result["items"] = {"type": "string"}
-
-            return result
-
         tools = []
         for tool in self.tools:
             d: dict[str, Any] = {"name": tool.name}
             if tool.description:
                 d["description"] = tool.description
             if tool.parameters:
-                d["parameters"] = convert_schema(tool.parameters)
+                d["parameters"] = self._google_compatible_schema(tool.parameters)
             tools.append(d)
 
         declarations = {}
@@ -330,8 +330,15 @@ class ToolSet:
         return declarations
 
     @deprecated(reason="Use openai_schema() instead", version="4.0.0")
-    def get_func_desc_openai_style(self, omit_empty_parameter_field: bool = False):
-        return self.openai_schema(omit_empty_parameter_field)
+    def get_func_desc_openai_style(
+        self,
+        omit_empty_parameter_field: bool = False,
+        gemini_compatible_schema: bool = False,
+    ):
+        return self.openai_schema(
+            omit_empty_parameter_field,
+            gemini_compatible_schema=gemini_compatible_schema,
+        )
 
     @deprecated(reason="Use anthropic_schema() instead", version="4.0.0")
     def get_func_desc_anthropic_style(self):

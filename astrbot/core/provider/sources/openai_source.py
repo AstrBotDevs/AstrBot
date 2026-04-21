@@ -522,9 +522,10 @@ class ProviderOpenAIOfficial(Provider):
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
-            omit_empty_param_field = "gemini" in model
+            is_gemini_model = "gemini" in model
             tool_list = tools.get_func_desc_openai_style(
-                omit_empty_parameter_field=omit_empty_param_field,
+                omit_empty_parameter_field=is_gemini_model,
+                gemini_compatible_schema=is_gemini_model,
             )
             if tool_list:
                 payloads["tools"] = tool_list
@@ -594,9 +595,10 @@ class ProviderOpenAIOfficial(Provider):
         """流式查询API，逐步返回结果"""
         if tools:
             model = payloads.get("model", "").lower()
-            omit_empty_param_field = "gemini" in model
+            is_gemini_model = "gemini" in model
             tool_list = tools.get_func_desc_openai_style(
-                omit_empty_parameter_field=omit_empty_param_field,
+                omit_empty_parameter_field=is_gemini_model,
+                gemini_compatible_schema=is_gemini_model,
             )
             if tool_list:
                 payloads["tools"] = tool_list
