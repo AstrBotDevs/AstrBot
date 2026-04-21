@@ -96,36 +96,29 @@ class DocumentStorage:
 
     async def _initialize_fts5(self, executor) -> None:
         try:
-            try:
-                await executor.execute(
-                    text(
-                        f"""
-                        CREATE VIRTUAL TABLE IF NOT EXISTS {FTS_TABLE_NAME}
-                        USING fts5(
-                            search_text,
-                            content='',
-                            contentless_delete=1,
-                            tokenize='unicode61'
-                        )
-                        """,
-                    ),
+            await self._create_fts5_table(executor, if_not_exists=True)
+
+            is_valid_fts5, has_contentless_delete = await self._inspect_fts5_table(
+                executor,
+            )
+            if not is_valid_fts5:
+                logger.warning(
+                    f"Detected incompatible legacy table `{FTS_TABLE_NAME}` in "
+                    f"{self.db_path}; recreating FTS5 table.",
                 )
-                self._fts_contentless_delete = True
-            except Exception:
-                await executor.execute(
-                    text(
-                        f"""
-                        CREATE VIRTUAL TABLE IF NOT EXISTS {FTS_TABLE_NAME}
-                        USING fts5(
-                            search_text,
-                            content='',
-                            tokenize='unicode61'
-                        )
-                        """,
-                    ),
+                await executor.execute(text(f"DROP TABLE IF EXISTS {FTS_TABLE_NAME}"))
+                await self._create_fts5_table(executor, if_not_exists=False)
+
+                is_valid_fts5, has_contentless_delete = await self._inspect_fts5_table(
+                    executor,
                 )
-                self._fts_contentless_delete = False
+                if not is_valid_fts5:
+                    raise RuntimeError(
+                        f"Failed to create a valid FTS5 table `{FTS_TABLE_NAME}`",
+                    )
+
             self.fts5_available = True
+            self._fts_contentless_delete = has_contentless_delete
         except Exception as e:
             self.fts5_available = False
             self._fts_contentless_delete = False
@@ -133,6 +126,68 @@ class DocumentStorage:
                 f"SQLite FTS5 is unavailable for document storage {self.db_path}; "
                 f"falling back to in-memory BM25 sparse retrieval: {e}",
             )
+
+    async def _create_fts5_table(self, executor, if_not_exists: bool) -> None:
+        create_clause = (
+            "CREATE VIRTUAL TABLE IF NOT EXISTS"
+            if if_not_exists
+            else "CREATE VIRTUAL TABLE"
+        )
+        try:
+            await executor.execute(
+                text(
+                    f"""
+                    {create_clause} {FTS_TABLE_NAME}
+                    USING fts5(
+                        search_text,
+                        content='',
+                        contentless_delete=1,
+                        tokenize='unicode61'
+                    )
+                    """,
+                ),
+            )
+        except Exception:
+            await executor.execute(
+                text(
+                    f"""
+                    {create_clause} {FTS_TABLE_NAME}
+                    USING fts5(
+                        search_text,
+                        content='',
+                        tokenize='unicode61'
+                    )
+                    """,
+                ),
+            )
+
+    async def _inspect_fts5_table(self, executor) -> tuple[bool, bool]:
+        schema_result = await executor.execute(
+            text(
+                """
+                SELECT sql
+                FROM sqlite_master
+                WHERE type='table' AND name=:table_name
+                """,
+            ),
+            {"table_name": FTS_TABLE_NAME},
+        )
+        create_sql = schema_result.scalar_one_or_none()
+        if not create_sql:
+            return False, False
+
+        normalized_sql = create_sql.lower()
+        if "virtual table" not in normalized_sql or "using fts5" not in normalized_sql:
+            return False, False
+
+        pragma_result = await executor.execute(
+            text(f"PRAGMA table_info({FTS_TABLE_NAME})"),
+        )
+        columns = {row[1] for row in pragma_result.fetchall()}
+        if "search_text" not in columns:
+            return False, False
+
+        return True, "contentless_delete=1" in normalized_sql
 
     async def connect(self) -> None:
         """Connect to the SQLite database."""
