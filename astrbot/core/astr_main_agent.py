@@ -1424,10 +1424,8 @@ async def build_main_agent(
     if not req.session_id:
         req.session_id = event.unified_msg_origin
 
-    _modalities_fix(provider, req)
     _plugin_tool_fix(event, req)
     await _apply_web_search_tools(event, req, plugin_context)
-    _sanitize_context_by_modalities(config, provider, req)
 
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
@@ -1454,6 +1452,9 @@ async def build_main_agent(
                 SendMessageToUserTool
             )
         )
+
+    _modalities_fix(provider, req)
+    _sanitize_context_by_modalities(config, provider, req)
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()
