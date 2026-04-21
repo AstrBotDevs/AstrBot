@@ -424,6 +424,7 @@ CONFIG_METADATA_2 = {
                         "webhook_uuid": "",
                         "lark_encrypt_key": "",
                         "lark_verification_token": "",
+                        "lark_auto_thread": False,
                     },
                     "钉钉(DingTalk)": {
                         "id": "dingtalk",
@@ -554,6 +555,11 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "options": ["socket", "webhook"],
                         "labels": ["长连接模式", "推送至服务器模式"],
+                    },
+                    "lark_auto_thread": {
+                        "description": "自动创建话题",
+                        "type": "bool",
+                        "hint": "开启后，机器人回复消息时会自动创建话题（Thread），每条对话的上下文独立隔离。仅对飞书平台生效。",
                     },
                     "lark_encrypt_key": {
                         "description": "Encrypt Key",

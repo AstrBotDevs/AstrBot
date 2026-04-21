@@ -461,7 +461,7 @@ class ProviderAnthropic(Provider):
                         # 解析完整的工具调用
                         tool_info = tool_use_buffer[event.index]
                         try:
-                            if "input_json" in tool_info:
+                            if isinstance(tool_info.get("input_json"), str) and tool_info["input_json"]:
                                 tool_info["input"] = json.loads(tool_info["input_json"])
 
                             # 添加到最终结果
