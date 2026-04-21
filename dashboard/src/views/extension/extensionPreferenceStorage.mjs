@@ -2,33 +2,56 @@ export const SHOW_RESERVED_PLUGINS_STORAGE_KEY = "showReservedPlugins";
 export const PLUGIN_LIST_VIEW_MODE_STORAGE_KEY = "pluginListViewMode";
 export const PIN_UPDATES_ON_TOP_STORAGE_KEY = "pinUpdatesOnTop";
 
-const hasStorageMethod = (storage, methodName) =>
-  storage != null && typeof storage[methodName] === "function";
-
 /**
- * Resolve the storage backend for preference helpers.
+ * Resolve the storage backend for reading preferences.
  * Pass `null` to explicitly disable storage access in callers/tests.
  */
-const resolveStorage = (storage, methodName) => {
-  if (storage === null) {
+const getStorageForRead = (storageOverride) => {
+  if (storageOverride === null) {
     return null;
   }
-  if (storage !== undefined) {
-    return hasStorageMethod(storage, methodName) ? storage : null;
+  if (storageOverride !== undefined) {
+    return typeof storageOverride?.getItem === "function"
+      ? storageOverride
+      : null;
   }
   if (typeof window === "undefined") {
     return null;
   }
   try {
     const localStorage = window.localStorage ?? null;
-    return hasStorageMethod(localStorage, methodName) ? localStorage : null;
+    return typeof localStorage?.getItem === "function" ? localStorage : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Resolve the storage backend for writing preferences.
+ * Pass `null` to explicitly disable storage access in callers/tests.
+ */
+const getStorageForWrite = (storageOverride) => {
+  if (storageOverride === null) {
+    return null;
+  }
+  if (storageOverride !== undefined) {
+    return typeof storageOverride?.setItem === "function"
+      ? storageOverride
+      : null;
+  }
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const localStorage = window.localStorage ?? null;
+    return typeof localStorage?.setItem === "function" ? localStorage : null;
   } catch {
     return null;
   }
 };
 
 export const readBooleanPreference = (key, fallback, storage) => {
-  const targetStorage = resolveStorage(storage, "getItem");
+  const targetStorage = getStorageForRead(storage);
   if (!targetStorage) {
     return fallback;
   }
@@ -48,7 +71,7 @@ export const readBooleanPreference = (key, fallback, storage) => {
 };
 
 export const writeBooleanPreference = (key, value, storage) => {
-  const targetStorage = resolveStorage(storage, "setItem");
+  const targetStorage = getStorageForWrite(storage);
   if (!targetStorage) {
     return;
   }
