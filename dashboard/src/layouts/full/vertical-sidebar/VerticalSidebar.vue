@@ -145,7 +145,7 @@ function toggleIframe() {
 
 function openIframeLink(url) {
   if (typeof window !== 'undefined') {
-    let url_ = url || "https://astrbot.app";
+    let url_ = url || "https://docs.astrbot.app";
     window.open(url_, "_blank");
   }
 }
@@ -352,7 +352,7 @@ function openChangelogDialog() {
       <div style="display: flex; gap: 8px;">
         <v-btn
           icon
-          @click.stop="openIframeLink('https://astrbot.app')"
+          @click.stop="openIframeLink('https://docs.astrbot.app')"
           @mousedown.stop
           :style="{ borderRadius: '8px', border: frameBorder }"
         >
@@ -369,7 +369,7 @@ function openChangelogDialog() {
       </div>
     </div>
     <iframe
-      src="https://astrbot.app"
+      src="https://docs.astrbot.app"
       :style="iframeInnerStyle"
       ></iframe>
   </div>

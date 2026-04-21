@@ -28,7 +28,7 @@ class HtmlRenderer:
 
         @return: 图片 URL 或者文件路径，取决于 return_url 参数。
 
-        @example: 参见 https://astrbot.app 插件开发部分。
+        @example: 参见 https://docs.astrbot.app 插件开发部分。
         """
         return await self.network_strategy.render_custom_template(
             tmpl_str,
