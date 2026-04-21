@@ -433,6 +433,17 @@ export const useExtensionPage = () => {
     return Number.isFinite(parsed) ? parsed : null;
   };
 
+  const compareInstalledFallback = (left, right) => {
+    const nameCompare = compareInstalledPluginNames(left.plugin, right.plugin);
+    return nameCompare !== 0 ? nameCompare : left.index - right.index;
+  };
+
+  const compareInstalledUpdatePinning = (left, right) => {
+    const leftHasUpdate = left.plugin?.has_update ? 1 : 0;
+    const rightHasUpdate = right.plugin?.has_update ? 1 : 0;
+    return rightHasUpdate - leftHasUpdate;
+  };
+
   const sortInstalledPlugins = (plugins) => {
     return plugins
       .map((plugin, index) => ({
@@ -447,29 +458,18 @@ export const useExtensionPage = () => {
         ) {
           // Pinning updates is a primary grouping; the selected sort order still
           // applies within the "has update" and "no update" groups below.
-          const leftHasUpdate = left.plugin?.has_update ? 1 : 0;
-          const rightHasUpdate = right.plugin?.has_update ? 1 : 0;
-          if (leftHasUpdate !== rightHasUpdate) {
-            return rightHasUpdate - leftHasUpdate;
+          const pinCompare = compareInstalledUpdatePinning(left, right);
+          if (pinCompare !== 0) {
+            return pinCompare;
           }
         }
-
-        const getFallbackResult = () => {
-          const fallbackNameCompare = compareInstalledPluginNames(
-            left.plugin,
-            right.plugin,
-          );
-          return fallbackNameCompare !== 0
-            ? fallbackNameCompare
-            : left.index - right.index;
-        };
 
         if (installedSortBy.value === "install_time") {
           const leftTimestamp = left.installedAtTimestamp;
           const rightTimestamp = right.installedAtTimestamp;
 
           if (leftTimestamp == null && rightTimestamp == null) {
-            return getFallbackResult();
+            return compareInstalledFallback(left, right);
           }
           if (leftTimestamp == null) {
             return 1;
@@ -482,7 +482,9 @@ export const useExtensionPage = () => {
             installedSortOrder.value === "desc"
               ? rightTimestamp - leftTimestamp
               : leftTimestamp - rightTimestamp;
-          return timeDiff !== 0 ? timeDiff : getFallbackResult();
+          return timeDiff !== 0
+            ? timeDiff
+            : compareInstalledFallback(left, right);
         }
 
         if (installedSortBy.value === "name") {
@@ -492,7 +494,7 @@ export const useExtensionPage = () => {
               ? -nameCompare
               : nameCompare;
           }
-          return left.index - right.index;
+          return compareInstalledFallback(left, right);
         }
 
         if (installedSortBy.value === "author") {
@@ -505,20 +507,20 @@ export const useExtensionPage = () => {
               ? -authorCompare
               : authorCompare;
           }
-          return getFallbackResult();
+          return compareInstalledFallback(left, right);
         }
 
         if (installedSortBy.value === "update_status") {
-          const leftHasUpdate = left.plugin?.has_update ? 1 : 0;
-          const rightHasUpdate = right.plugin?.has_update ? 1 : 0;
           const updateDiff =
             installedSortOrder.value === "desc"
-              ? rightHasUpdate - leftHasUpdate
-              : leftHasUpdate - rightHasUpdate;
-          return updateDiff !== 0 ? updateDiff : getFallbackResult();
+              ? compareInstalledUpdatePinning(left, right)
+              : compareInstalledUpdatePinning(right, left);
+          return updateDiff !== 0
+            ? updateDiff
+            : compareInstalledFallback(left, right);
         }
 
-        return getFallbackResult();
+        return compareInstalledFallback(left, right);
       })
       .map((item) => item.plugin);
   };
