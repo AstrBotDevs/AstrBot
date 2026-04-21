@@ -109,6 +109,31 @@ except (ModuleNotFoundError, ImportError):
         "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
     )
 
+try:
+    import httpx as _httpx
+
+    def _create_no_verify_httpx_client(
+        headers: dict[str, str] | None = None,
+        timeout: _httpx.Timeout | None = None,
+        auth: _httpx.Auth | None = None,
+    ) -> _httpx.AsyncClient:
+        kwargs: dict[str, Any] = {
+            "follow_redirects": True,
+            "verify": False,
+        }
+        if timeout is None:
+            kwargs["timeout"] = _httpx.Timeout(30, read=300)
+        else:
+            kwargs["timeout"] = timeout
+        if headers is not None:
+            kwargs["headers"] = headers
+        if auth is not None:
+            kwargs["auth"] = auth
+        return _httpx.AsyncClient(**kwargs)
+
+except (ModuleNotFoundError, ImportError):
+    _create_no_verify_httpx_client = None
+
 
 def _prepare_config(config: dict) -> dict:
     """Prepare configuration, handle nested format"""
@@ -439,14 +464,22 @@ class MCPClient:
             else:
                 raise Exception("MCP connection config missing transport or type field")
 
+            _http_client_kwargs: dict[str, Any] = {
+                "url": cfg["url"],
+                "headers": cfg.get("headers", {}),
+            }
+            if _create_no_verify_httpx_client is not None:
+                _http_client_kwargs["httpx_client_factory"] = (
+                    _create_no_verify_httpx_client
+                )
+
             if transport_type != "streamable_http":
                 # SSE transport method
-                self._streams_context = sse_client(
-                    url=cfg["url"],
-                    headers=cfg.get("headers", {}),
-                    timeout=cfg.get("timeout", 5),
-                    sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
+                _http_client_kwargs["timeout"] = cfg.get("timeout", 5)
+                _http_client_kwargs["sse_read_timeout"] = cfg.get(
+                    "sse_read_timeout", 60 * 5
                 )
+                self._streams_context = sse_client(**_http_client_kwargs)
                 streams = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
@@ -461,17 +494,16 @@ class MCPClient:
                     ),
                 )
             else:
-                timeout = timedelta(seconds=cfg.get("timeout", 30))
-                sse_read_timeout = timedelta(
+                _http_client_kwargs["timeout"] = timedelta(
+                    seconds=cfg.get("timeout", 30)
+                )
+                _http_client_kwargs["sse_read_timeout"] = timedelta(
                     seconds=cfg.get("sse_read_timeout", 60 * 5),
                 )
-                self._streams_context = streamablehttp_client(
-                    url=cfg["url"],
-                    headers=cfg.get("headers", {}),
-                    timeout=timeout,
-                    sse_read_timeout=sse_read_timeout,
-                    terminate_on_close=cfg.get("terminate_on_close", True),
+                _http_client_kwargs["terminate_on_close"] = cfg.get(
+                    "terminate_on_close", True
                 )
+                self._streams_context = streamablehttp_client(**_http_client_kwargs)
                 read_s, write_s, _ = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
