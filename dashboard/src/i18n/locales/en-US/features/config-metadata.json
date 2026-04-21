@@ -166,6 +166,14 @@
           "booter": {
             "description": "Sandbox Environment Driver"
           },
+          "bwrap_rw_binds": {
+            "description": "Bubblewrap Read & Write Binds",
+            "hint": "Additional read-write mount directories for the Bubblewrap sandbox (press Enter to add, multiple can be added. /tmp and /var/tmp are read-write by default)."
+          },
+          "bwrap_ro_binds": {
+            "description": "Bubblewrap Read Only Binds",
+            "hint": "Additional read-only mount directories for the Bubblewrap sandbox (press Enter to add, multiple can be added. Host system directories /usr, /etc, /opt are mounted read-only at the same location by default)."
+          },
           "shipyard_neo_endpoint": {
             "description": "Shipyard Neo API Endpoint",
             "hint": "Bay API address, default http://127.0.0.1:8114."
@@ -197,6 +205,10 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Max Sessions",
             "hint": "Maximum number of Shipyard sessions an instance can handle."
+          },
+          "bwrap_rw_binds": {
+            "description": "Bubblewrap RW Binds",
+            "hint": "Extra read-write mount directories for Bubblewrap sandbox (press Enter to add, multiple allowed. /tmp and /var/tmp are RW by default, and the entire host system is mounted RO in the same location by default)."
           }
         }
       }
