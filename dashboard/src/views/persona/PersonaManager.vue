@@ -32,6 +32,10 @@
                             rounded="lg">
                             {{ tm('buttons.create') }}
                         </v-btn>
+                        <v-btn color="purple" variant="tonal" prepend-icon="mdi-star-cog" @click="openCreateAdvancedPersonaDialog"
+                            rounded="lg">
+                            {{ tm('buttons.createAdvanced') }}
+                        </v-btn>
                         <v-btn variant="outlined" prepend-icon="mdi-folder-plus" @click="showCreateFolderDialog = true"
                             rounded="lg">
                             {{ tm('folder.createButton') }}
@@ -421,7 +425,15 @@ export default defineComponent({
             this.showPersonaDialog = true;
         },
 
+        openCreateAdvancedPersonaDialog() {
+            this.$router.push('/persona/advanced');
+        },
+
         editPersona(persona: Persona) {
+            if (persona.is_advanced) {
+                this.$router.push(`/persona/advanced/${encodeURIComponent(persona.persona_id)}`);
+                return;
+            }
             this.editingPersona = persona;
             this.showPersonaDialog = true;
         },
@@ -433,6 +445,11 @@ export default defineComponent({
 
         openEditFromViewDialog() {
             if (!this.viewingPersona) return;
+            if (this.viewingPersona.is_advanced) {
+                this.showViewDialog = false;
+                this.$router.push(`/persona/advanced/${encodeURIComponent(this.viewingPersona.persona_id)}`);
+                return;
+            }
             this.editingPersona = this.viewingPersona;
             this.showViewDialog = false;
             this.showPersonaDialog = true;

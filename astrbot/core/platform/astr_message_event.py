@@ -95,6 +95,9 @@ class AstrMessageEvent(abc.ABC):
         self.plugins_name: list[str] | None = None
         """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
 
+        self.is_advanced_persona: bool = False
+        """是否使用高级人格。高级人格具有自主思考、主动发言等能力。"""
+
         # back_compability
         self.platform = platform_meta
 

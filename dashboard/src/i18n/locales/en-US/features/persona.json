@@ -4,6 +4,7 @@
   },
   "buttons": {
     "create": "Create Persona",
+    "createAdvanced": "Advanced Persona (Beta)",
     "createFirst": "Create First Persona",
     "edit": "Edit",
     "delete": "Delete",
@@ -143,5 +144,99 @@
     "description": "Select a destination folder for \"{name}\"",
     "success": "Moved successfully",
     "error": "Failed to move"
+  },
+  "advancedPersona": {
+    "back": "Back",
+    "createTitle": "Create Advanced Persona",
+    "editTitle": "Edit Advanced Persona",
+    "subtitle": "Configure advanced persona settings",
+    "betaTag": "Beta",
+    "basicInfo": "Basic Info",
+    "fillDefault": "Fill MaiBot Default Config",
+    "form": {
+      "personaId": "Persona ID",
+      "systemPrompt": "System Prompt",
+      "customErrorMessage": "Custom Error Reply Message"
+    },
+    "tools": {
+      "title": "Tool Selection",
+      "all": "Use All Tools",
+      "select": "Select Specific Tools",
+      "search": "Search Tools"
+    },
+    "skills": {
+      "title": "Skills Selection",
+      "all": "Use All Skills",
+      "select": "Select Specific Skills",
+      "search": "Search Skills",
+      "noSkillsAvailable": "No skills available",
+      "noSkillsFound": "No matching skills found",
+      "loading": "Loading skills..."
+    },
+    "tabs": {
+      "personality": "Personality",
+      "chat": "Chat Settings",
+      "robot": "Robot Account",
+      "dialogs": "Preset Dialogs"
+    },
+    "personality": {
+      "traits": "Personality Traits",
+      "traitsHint": "Describe personality traits, e.g., gentle, introverted, lively",
+      "expressionStyle": "Expression Style",
+      "expressionStyleHint": "Describe the bot's speaking style, e.g., concise, humorous, formal",
+      "recognitionRules": "Recognition Rules",
+      "recognitionRulesHint": "Define image recognition and processing rules",
+      "moodTags": "Mood Tags",
+      "moodTagsHint": "Set mood tags and their usage weights, total should be 100%",
+      "addMoodTag": "Add Tag",
+      "tagName": "Tag Name",
+      "tagWeight": "Weight",
+      "totalWeight": "Total Weight",
+      "weightWarning": "Total weight should be 100%"
+    },
+    "chat": {
+      "chatFrequency": "Chat Frequency",
+      "chatFrequencyHint": "Control how often the bot initiates chats",
+      "dynamicFrequency": "Dynamic Response Frequency",
+      "dynamicFrequencyHint": "Dynamically adjust response frequency based on context",
+      "timeBasedMode": "Time-based Mode",
+      "timeBasedModeHint": "Select different response strategies based on current time",
+      "messageLength": "Message Length",
+      "messageLengthHint": "Control the length of generated messages",
+      "frequencyOptions": {
+        "silent": "Silent",
+        "low": "Low",
+        "normal": "Normal",
+        "high": "High",
+        "veryHigh": "Very High"
+      },
+      "dynamicOptions": {
+        "auto": "Auto",
+        "fixed": "Fixed",
+        "random": "Random"
+      },
+      "lengthOptions": {
+        "short": "Short",
+        "normal": "Normal",
+        "long": "Long",
+        "adaptive": "Adaptive"
+      }
+    },
+    "robot": {
+      "nickname": "Nickname",
+      "nicknameHint": "Bot's display nickname",
+      "aliases": "Aliases",
+      "aliasesHint": "Other names for the bot, separated by enter",
+      "addAlias": "Add Alias",
+      "alias": "Alias",
+      "platforms": "Enabled Platforms",
+      "platformsHint": "Select platforms the bot should respond to"
+    },
+    "dialogs": {
+      "help": "Add preset dialogs to help the bot better understand the role settings",
+      "userMessage": "User Message",
+      "assistantMessage": "Assistant Message",
+      "addPair": "Add Dialog Pair"
+    }
   }
 }

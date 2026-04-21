@@ -48,6 +48,12 @@ class SQLiteDatabase(BaseDatabase):
 
     async def initialize(self) -> None:
         """Initialize the database by creating tables if they do not exist."""
+        # 延迟导入 MindSim 记忆模型，避免循环导入
+        from astrbot.core.mind_sim.memory.models import (  # noqa: F401
+            MindSimChatMemory,
+            MindSimPersonMemory,
+        )
+
         async with self.engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
             await conn.execute(text("PRAGMA journal_mode=WAL"))
@@ -60,6 +66,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
+            await self._ensure_persona_advanced_columns(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -102,6 +109,44 @@ class SQLiteDatabase(BaseDatabase):
         if "custom_error_message" not in columns:
             await conn.execute(
                 text("ALTER TABLE personas ADD COLUMN custom_error_message TEXT")
+            )
+
+    async def _ensure_persona_advanced_columns(self, conn) -> None:
+        """确保 personas 表有高级人格配置列（前向兼容）。
+
+        新增列：
+        - personality_config: JSON - 人格特质、表达风格、识别规则、心情标签等
+        - chat_config: JSON - 聊天频率、动态频率、消息长度等
+        - robot_config: JSON - 昵称、别名、平台等
+        - llm_model_config: JSON - 模型配置（功能模型、回复模型、思考模型）
+        - is_advanced: INTEGER - 是否为高级人格
+        """
+        result = await conn.execute(text("PRAGMA table_info(personas)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "personality_config" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE personas ADD COLUMN personality_config JSON DEFAULT NULL"
+                )
+            )
+        if "chat_config" not in columns:
+            await conn.execute(
+                text("ALTER TABLE personas ADD COLUMN chat_config JSON DEFAULT NULL")
+            )
+        if "robot_config" not in columns:
+            await conn.execute(
+                text("ALTER TABLE personas ADD COLUMN robot_config JSON DEFAULT NULL")
+            )
+        if "llm_model_config" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE personas ADD COLUMN llm_model_config JSON DEFAULT NULL"
+                )
+            )
+        if "is_advanced" not in columns:
+            await conn.execute(
+                text("ALTER TABLE personas ADD COLUMN is_advanced INTEGER DEFAULT 0")
             )
 
     # ====
@@ -735,6 +780,11 @@ class SQLiteDatabase(BaseDatabase):
         custom_error_message=None,
         folder_id=None,
         sort_order=0,
+        personality_config=None,
+        chat_config=None,
+        robot_config=None,
+        llm_model_config=None,
+        is_advanced=False,
     ):
         """Insert a new persona record."""
         async with self.get_db() as session:
@@ -749,6 +799,11 @@ class SQLiteDatabase(BaseDatabase):
                     custom_error_message=custom_error_message,
                     folder_id=folder_id,
                     sort_order=sort_order,
+                    personality_config=personality_config,
+                    chat_config=chat_config,
+                    robot_config=robot_config,
+                    llm_model_config=llm_model_config,
+                    is_advanced=is_advanced,
                 )
                 session.add(new_persona)
                 await session.flush()
@@ -779,6 +834,11 @@ class SQLiteDatabase(BaseDatabase):
         tools=NOT_GIVEN,
         skills=NOT_GIVEN,
         custom_error_message=NOT_GIVEN,
+        personality_config=NOT_GIVEN,
+        chat_config=NOT_GIVEN,
+        robot_config=NOT_GIVEN,
+        llm_model_config=NOT_GIVEN,
+        is_advanced=NOT_GIVEN,
     ):
         """Update a persona's system prompt or begin dialogs."""
         async with self.get_db() as session:
@@ -796,6 +856,16 @@ class SQLiteDatabase(BaseDatabase):
                     values["skills"] = skills
                 if custom_error_message is not NOT_GIVEN:
                     values["custom_error_message"] = custom_error_message
+                if personality_config is not NOT_GIVEN:
+                    values["personality_config"] = personality_config
+                if chat_config is not NOT_GIVEN:
+                    values["chat_config"] = chat_config
+                if robot_config is not NOT_GIVEN:
+                    values["robot_config"] = robot_config
+                if llm_model_config is not NOT_GIVEN:
+                    values["llm_model_config"] = llm_model_config
+                if is_advanced is not NOT_GIVEN:
+                    values["is_advanced"] = is_advanced
                 if not values:
                     return None
                 query = query.values(**values)

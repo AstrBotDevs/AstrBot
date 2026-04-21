@@ -156,6 +156,16 @@ class Persona(TimestampMixin, SQLModel, table=True):
     """所属文件夹ID，NULL 表示在根目录"""
     sort_order: int = Field(default=0)
     """排序顺序"""
+    personality_config: dict | None = Field(default=None, sa_type=JSON)
+    """高级人格配置：人格特质、表达风格、识别规则、心情标签等"""
+    chat_config: dict | None = Field(default=None, sa_type=JSON)
+    """高级人格配置：聊天频率、动态频率、消息长度等"""
+    robot_config: dict | None = Field(default=None, sa_type=JSON)
+    """高级人格配置：昵称、别名、平台等"""
+    llm_model_config: dict | None = Field(default=None, sa_type=JSON)
+    """高级人格配置：模型配置（功能模型、回复模型、思考模型）"""
+    is_advanced: bool | None = Field(default=False)
+    """是否为高级人格"""
 
     __table_args__ = (
         UniqueConstraint(
@@ -500,6 +510,16 @@ class Personality(TypedDict):
     """Skills 列表。None 表示使用所有 Skills，空列表表示不使用任何 Skills"""
     custom_error_message: str | None
     """可选的人格自定义报错回复信息。配置后将优先发送给最终用户。"""
+    personality_config: dict | None
+    """高级人格配置：人格特质、表达风格、识别规则、心情标签等"""
+    chat_config: dict | None
+    """高级人格配置：聊天频率、动态频率、消息长度等"""
+    robot_config: dict | None
+    """高级人格配置：昵称、别名、平台等"""
+    llm_model_config: dict | None
+    """高级人格配置：模型配置（功能模型、回复模型、思考模型）"""
+    is_advanced: bool
+    """是否为高级人格"""
 
     # cache
     _begin_dialogs_processed: list[dict]
