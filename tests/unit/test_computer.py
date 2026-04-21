@@ -5,6 +5,7 @@ filesystem operations, Python execution, shell execution, and security restricti
 """
 
 import sys
+import subprocess
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -224,6 +225,25 @@ class TestLocalPythonComponent:
         python = LocalPythonComponent()
         result = await python.exec("result = 1 + 1\nprint(result)")
         assert "2" in result["data"]["output"]["text"]
+
+    @pytest.mark.asyncio
+    async def test_exec_decodes_non_utf8_stdout_with_fallback(self):
+        """Test Python execution decodes captured bytes with fallback encodings."""
+        python = LocalPythonComponent()
+
+        def fake_run(*args, **kwargs):
+            assert kwargs.get("text") is False
+            return subprocess.CompletedProcess(
+                args=args[0],
+                returncode=0,
+                stdout="中文输出\n".encode("gbk"),
+                stderr=b"",
+            )
+
+        with patch("astrbot.core.computer.booters.local.subprocess.run", fake_run):
+            result = await python.exec("print('中文输出')")
+
+        assert result["data"]["output"]["text"] == "中文输出\n"
 
 
 class TestLocalFileSystemComponent:

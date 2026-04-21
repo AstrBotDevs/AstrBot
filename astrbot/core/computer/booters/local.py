@@ -83,6 +83,10 @@ def _decode_shell_output(output: bytes | None) -> str:
     return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
 
 
+def _normalize_python_output(output: str) -> str:
+    return output.replace("\r\n", "\n").replace("\r", "\n")
+
+
 @dataclass
 class LocalShellComponent(ShellComponent):
     async def exec(
@@ -150,10 +154,18 @@ class LocalPythonComponent(PythonComponent):
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
                     timeout=timeout,
                     capture_output=True,
-                    text=True,
+                    text=False,
                 )
-                stdout = "" if silent else result.stdout
-                stderr = result.stderr if result.returncode != 0 else ""
+                stdout = (
+                    ""
+                    if silent
+                    else _normalize_python_output(_decode_shell_output(result.stdout))
+                )
+                stderr = (
+                    _normalize_python_output(_decode_shell_output(result.stderr))
+                    if result.returncode != 0
+                    else ""
+                )
                 return {
                     "data": {
                         "output": {"text": stdout, "images": []},
