@@ -8,6 +8,41 @@ from astrbot.core.knowledge_base.parsers.url_parser import URLExtractor
 from astrbot.core.tools.web_search_tools import ExaWebSearchTool
 
 
+class _FakeResponse:
+    def __init__(self, payload: dict):
+        self.status = 200
+        self._payload = payload
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def json(self):
+        return self._payload
+
+    async def text(self):
+        return ""
+
+
+class _FakeSession:
+    def __init__(self, payload: dict, captured: dict[str, object]):
+        self._payload = payload
+        self._captured = captured
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    def post(self, url: str, **kwargs):
+        self._captured["url"] = url
+        self._captured["kwargs"] = kwargs
+        return _FakeResponse(self._payload)
+
+
 def _make_tool_context(provider_settings: dict) -> SimpleNamespace:
     cfg = {"provider_settings": provider_settings}
     return SimpleNamespace(
@@ -110,3 +145,54 @@ def test_bocha_builtin_config_statuses_are_registered():
             "message": None,
         }
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("helper_name", "payload"),
+    [
+        (
+            "_exa_search",
+            {"query": "AstrBot"},
+        ),
+        (
+            "_exa_find_similar",
+            {"url": "https://example.com"},
+        ),
+    ],
+)
+async def test_exa_helpers_preserve_favicon(
+    monkeypatch: pytest.MonkeyPatch,
+    helper_name: str,
+    payload: dict,
+):
+    captured: dict[str, object] = {}
+    response_payload = {
+        "results": [
+            {
+                "title": "Example",
+                "url": "https://example.com",
+                "text": "Snippet",
+                "favicon": "https://example.com/favicon.ico",
+            }
+        ]
+    }
+
+    async def fake_get(provider_settings: dict) -> str:
+        return "test-key"
+
+    monkeypatch.setattr(web_search_tools._EXA_KEY_ROTATOR, "get", fake_get)
+    monkeypatch.setattr(
+        web_search_tools.aiohttp,
+        "ClientSession",
+        lambda **kwargs: _FakeSession(response_payload, captured),
+    )
+
+    helper = getattr(web_search_tools, helper_name)
+    results = await helper(
+        {"websearch_exa_key": ["test-key"]},
+        payload,
+    )
+
+    assert captured["url"]
+    assert results[0].favicon == "https://example.com/favicon.ico"

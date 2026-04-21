@@ -24,6 +24,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.web_search_utils import build_web_search_refs
 
+from .message_events import build_message_saved_event
 from .route import Response, Route, RouteContext
 
 # SSE heartbeat message to keep the connection alive during long-running operations
@@ -465,15 +466,10 @@ class ChatRoute(Route):
                             )
                             # 发送保存的消息信息给前端
                             if saved_record and not client_disconnected:
-                                saved_info = {
-                                    "type": "message_saved",
-                                    "data": {
-                                        "id": saved_record.id,
-                                        "created_at": to_utc_isoformat(
-                                            saved_record.created_at
-                                        ),
-                                    },
-                                }
+                                saved_info = build_message_saved_event(
+                                    saved_record,
+                                    refs,
+                                )
                                 try:
                                     yield f"data: {json.dumps(saved_info, ensure_ascii=False)}\n\n"
                                 except Exception:

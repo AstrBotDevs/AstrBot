@@ -416,6 +416,7 @@ async def _exa_search(
                     title=item.get("title", ""),
                     url=item.get("url", ""),
                     snippet=(item.get("text") or "")[:500],
+                    favicon=item.get("favicon"),
                 )
                 for item in data.get("results", [])
             ]
@@ -489,6 +490,7 @@ async def _exa_find_similar(
                     title=item.get("title", ""),
                     url=item.get("url", ""),
                     snippet=(item.get("text") or "")[:500],
+                    favicon=item.get("favicon"),
                 )
                 for item in data.get("results", [])
             ]

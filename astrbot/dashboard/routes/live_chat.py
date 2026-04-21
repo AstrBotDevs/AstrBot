@@ -20,9 +20,9 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
-from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.web_search_utils import build_web_search_refs
 
+from .message_events import build_message_saved_event
 from .route import Route, RouteContext
 
 
@@ -580,16 +580,11 @@ class LiveChatRoute(Route):
                     if saved_record:
                         await self._send_chat_payload(
                             session,
-                            {
-                                "ct": "chat",
-                                "type": "message_saved",
-                                "data": {
-                                    "id": saved_record.id,
-                                    "created_at": to_utc_isoformat(
-                                        saved_record.created_at
-                                    ),
-                                },
-                            },
+                            build_message_saved_event(
+                                saved_record,
+                                refs,
+                                chat_mode=True,
+                            ),
                         )
 
                     accumulated_parts = []
