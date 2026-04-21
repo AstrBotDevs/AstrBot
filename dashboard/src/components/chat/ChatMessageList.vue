@@ -249,6 +249,37 @@
                 </div>
               </v-card>
             </v-menu>
+            <StyledMenu
+              v-if="messageThreads(msg).length"
+              location="bottom"
+              transition="none"
+              no-border
+            >
+              <template #activator="{ props: threadMenuProps }">
+                <button
+                  v-bind="threadMenuProps"
+                  class="message-thread-meta"
+                  type="button"
+                >
+                  <v-icon size="14">mdi-source-branch</v-icon>
+                  <span>{{ threadCountLabel(messageThreads(msg).length) }}</span>
+                </button>
+              </template>
+              <v-list-item
+                v-for="thread in messageThreads(msg)"
+                :key="thread.thread_id"
+                class="styled-menu-item thread-menu-item"
+                rounded="md"
+                @click="emit('openThread', thread)"
+              >
+                <template #prepend>
+                  <v-icon size="16">mdi-source-branch</v-icon>
+                </template>
+                <v-list-item-title class="thread-menu-title">
+                  {{ threadPreview(thread) }}
+                </v-list-item-title>
+              </v-list-item>
+            </StyledMenu>
             <div v-if="messageRefs(msg).length" class="message-meta-refs">
               <ActionRef
                 :refs="resolvedMessageRefs(msg)"
@@ -297,6 +328,7 @@ import ThreadNode from "@/components/chat/message_list_comps/ThreadNode.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
 import type {
   ChatContent,
   ChatRecord,
@@ -451,6 +483,14 @@ function handleMouseUp(event: MouseEvent, message: ChatRecord) {
 
 function messageThreads(message: ChatRecord) {
   return message.threads || [];
+}
+
+function threadCountLabel(count: number) {
+  return tm("thread.count", { count });
+}
+
+function threadPreview(thread: ChatThread) {
+  return truncate(thread.selected_text || tm("thread.title"), 48);
 }
 
 function partUrl(part: MessagePart) {
@@ -900,6 +940,36 @@ function formatDuration(seconds: number) {
 .message-meta-refs {
   display: flex;
   align-items: center;
+}
+
+.message-thread-meta {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.message-thread-meta:hover {
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.thread-menu-item {
+  max-width: min(320px, 72vw);
+}
+
+.thread-menu-title {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
 }
 
 .from-user .message-meta {

@@ -66,6 +66,7 @@
   "thread": {
     "title": "Thread",
     "askInThread": "Спросить в ветке",
+    "count": "Веток: {count}",
     "createFailed": "Не удалось создать ветку",
     "delete": "Удалить ветку",
     "confirmDelete": "Удалить эту ветку? Это действие необратимо.",
