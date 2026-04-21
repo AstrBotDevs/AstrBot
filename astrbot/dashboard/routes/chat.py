@@ -1325,6 +1325,20 @@ class ChatRoute(Route):
         if content.get("type") != "user":
             return Response().error("Only user messages can be edited").__dict__
 
+        platform_history = await self._get_sorted_platform_history(session)
+        latest_user_record = next(
+            (
+                item
+                for item in reversed(platform_history)
+                if isinstance(item.content, dict) and item.content.get("type") == "user"
+            ),
+            None,
+        )
+        if not latest_user_record or latest_user_record.id != message_id:
+            return (
+                Response().error("Only the latest user message can be edited").__dict__
+            )
+
         checkpoint_id = record.llm_checkpoint_id
         if not checkpoint_id:
             await self.platform_history_mgr.update(
@@ -1357,6 +1371,8 @@ class ChatRoute(Route):
         turn_range = self._find_turn_range(history, checkpoint_id)
         if not conversation_id or not turn_range:
             return Response().error("Linked checkpoint not found").__dict__
+        if not self._is_latest_checkpoint(history, checkpoint_id):
+            return Response().error("Only the latest turn can be edited").__dict__
 
         start, _end = turn_range
 

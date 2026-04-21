@@ -199,7 +199,7 @@
           <div v-if="showMessageMeta(msg, msgIndex)" class="message-meta">
             <span v-if="msg.created_at">{{ formatTime(msg.created_at) }}</span>
             <v-btn
-              v-if="canEditMessage(msg)"
+              v-if="canEditMessage(msg, msgIndex)"
               icon="mdi-pencil-outline"
               size="x-small"
               variant="text"
@@ -394,13 +394,28 @@ function isEditingMessage(message: ChatRecord) {
   );
 }
 
-function canEditMessage(message: ChatRecord) {
+function canEditMessage(message: ChatRecord, messageIndex: number) {
   return (
     props.enableEdit &&
     isUserMessage(message) &&
+    messageIndex === latestEditableUserIndex() &&
     message.id != null &&
     !String(message.id).startsWith("local-")
   );
+}
+
+function latestEditableUserIndex() {
+  for (let index = props.messages.length - 1; index >= 0; index -= 1) {
+    const message = props.messages[index];
+    if (
+      isUserMessage(message) &&
+      message.id != null &&
+      !String(message.id).startsWith("local-")
+    ) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function canRegenerateMessage(message: ChatRecord, messageIndex: number) {
