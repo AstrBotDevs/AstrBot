@@ -1341,27 +1341,9 @@ class ChatRoute(Route):
 
         checkpoint_id = record.llm_checkpoint_id
         if not checkpoint_id:
-            await self.platform_history_mgr.update(
-                message_id=message_id, content=content
-            )
-            deleted_message_ids = await self._delete_platform_history_after(
-                session, message_id
-            )
-            thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
-                session_id,
-                deleted_message_ids,
-            )
-            await self._delete_threads_by_ids(thread_ids, username)
-            updated = await self.db.get_platform_message_history_by_id(message_id)
             return (
                 Response()
-                .ok(
-                    data={
-                        "message": updated.model_dump() if updated else None,
-                        "needs_regenerate": False,
-                        "truncated_after_message": True,
-                    }
-                )
+                .error("This message is not linked to LLM history and cannot be edited")
                 .__dict__
             )
 
@@ -1486,6 +1468,17 @@ class ChatRoute(Route):
         if not source_user_record:
             return Response().error("Linked user display message not found").__dict__
 
+        old_bot_record_ids = [
+            item.id
+            for item in platform_history
+            if item.id is not None
+            and item.llm_checkpoint_id == checkpoint_id
+            and isinstance(item.content, dict)
+            and item.content.get("type") == "bot"
+        ]
+        if not old_bot_record_ids:
+            return Response().error("Linked bot display message not found").__dict__
+
         new_checkpoint_id = str(uuid.uuid4())
         # The WebChat send path adds the current user message from the prompt.
         # Remove the whole old turn here to avoid duplicating that user message.
@@ -1497,10 +1490,11 @@ class ChatRoute(Route):
         )
         thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
             session_id,
-            [message_id],
+            old_bot_record_ids,
         )
         await self._delete_threads_by_ids(thread_ids, username)
-        await self.platform_history_mgr.delete_by_id(message_id)
+        for old_bot_record_id in old_bot_record_ids:
+            await self.platform_history_mgr.delete_by_id(old_bot_record_id)
         await self.platform_history_mgr.update(
             message_id=source_user_record.id,
             llm_checkpoint_id=new_checkpoint_id,
