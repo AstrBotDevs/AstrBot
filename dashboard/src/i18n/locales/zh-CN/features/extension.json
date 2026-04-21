@@ -147,7 +147,8 @@
     "updated": "更新时间",
     "updateStatus": "更新状态",
     "ascending": "升序",
-    "descending": "降序"
+    "descending": "降序",
+    "pinUpdatesOnTop": "有更新置顶"
   },
   "tags": {
     "danger": "危险"
