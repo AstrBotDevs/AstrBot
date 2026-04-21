@@ -14,6 +14,7 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai._base_client import httpx as _openai_httpx
 from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
@@ -439,9 +440,13 @@ class ProviderOpenAIOfficial(Provider):
         )
 
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
-        """创建带代理的 HTTP 客户端"""
+        """创建带代理的 HTTP 客户端
+
+        使用 openai 库内部引用的 httpx 模块来创建客户端实例，
+        避免打包后 httpx 被重复收集导致 isinstance 校验失败。
+        """
         proxy = provider_config.get("proxy", "")
-        return create_proxy_client("OpenAI", proxy)
+        return create_proxy_client("OpenAI", proxy, httpx_module=_openai_httpx)
 
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)

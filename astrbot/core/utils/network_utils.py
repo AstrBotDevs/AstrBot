@@ -1,6 +1,7 @@
 """Network error handling utilities for providers."""
 
 import ssl
+import types
 
 import httpx
 
@@ -89,6 +90,7 @@ def create_proxy_client(
     proxy: str | None = None,
     headers: dict[str, str] | None = None,
     verify: ssl.SSLContext | str | bool | None = None,
+    httpx_module: types.ModuleType | None = None,
 ) -> httpx.AsyncClient:
     """Create an httpx AsyncClient with proxy configuration if provided.
 
@@ -105,12 +107,19 @@ def create_proxy_client(
         headers: Optional custom headers to include in every request
         verify: Optional override for TLS verification. Defaults to the shared
             system SSL context when not provided.
+        httpx_module: Optional httpx module to use for creating the client.
+            In packaged environments (PyInstaller, Nuitka, etc.), the packaging
+            tool may collect httpx as two separate copies. When the caller needs
+            the created client to pass isinstance checks inside another library
+            (e.g., openai), pass that library's own ``httpx`` module here so
+            the client is created from the same class object.
 
     Returns:
         An httpx.AsyncClient created with the shared system SSL context; the proxy is applied only if one is provided.
     """
+    _httpx = httpx_module or httpx
     resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
     if proxy:
         logger.info(f"[{provider_label}] 使用代理: {proxy}")
-        return httpx.AsyncClient(proxy=proxy, verify=resolved_verify, headers=headers)
-    return httpx.AsyncClient(verify=resolved_verify, headers=headers)
+        return _httpx.AsyncClient(proxy=proxy, verify=resolved_verify, headers=headers)
+    return _httpx.AsyncClient(verify=resolved_verify, headers=headers)
