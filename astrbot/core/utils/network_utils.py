@@ -88,6 +88,7 @@ def create_proxy_client(
     provider_label: str,
     proxy: str | None = None,
     headers: dict[str, str] | None = None,
+    verify: ssl.SSLContext | str | bool | None = None,
 ) -> httpx.AsyncClient:
     """Create an httpx AsyncClient with proxy configuration if provided.
 
@@ -102,11 +103,14 @@ def create_proxy_client(
         provider_label: The provider name for log prefix (e.g., "OpenAI", "Gemini")
         proxy: The proxy address (e.g., "http://127.0.0.1:7890"), or None/empty
         headers: Optional custom headers to include in every request
+        verify: Optional override for TLS verification. Defaults to the shared
+            system SSL context when not provided.
 
     Returns:
         An httpx.AsyncClient created with the shared system SSL context; the proxy is applied only if one is provided.
     """
+    resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
     if proxy:
         logger.info(f"[{provider_label}] 使用代理: {proxy}")
-        return httpx.AsyncClient(proxy=proxy, verify=_SYSTEM_SSL_CTX, headers=headers)
-    return httpx.AsyncClient(verify=_SYSTEM_SSL_CTX, headers=headers)
+        return httpx.AsyncClient(proxy=proxy, verify=resolved_verify, headers=headers)
+    return httpx.AsyncClient(verify=resolved_verify, headers=headers)
