@@ -117,6 +117,10 @@
           "description": "Tavily API Key",
           "hint": "Multiple keys can be added for rotation."
         },
+        "websearch_tavily_base_url": {
+          "description": "Tavily API Base URL",
+          "hint": "Default: https://api.tavily.com. Change to use a proxy or self-hosted instance."
+        },
         "websearch_bocha_key": {
           "description": "BoCha API Key",
           "hint": "Multiple keys can be added for rotation."
@@ -128,6 +132,14 @@
         "websearch_baidu_app_builder_key": {
           "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
           "hint": "Reference: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
+        },
+        "websearch_exa_key": {
+          "description": "Exa API Key",
+          "hint": "Multiple keys can be added for rotation."
+        },
+        "websearch_exa_base_url": {
+          "description": "Exa API Base URL",
+          "hint": "Default: https://api.exa.ai. Change to use a proxy or self-hosted instance."
         },
         "web_search_link": {
           "description": "Display Source Citations"

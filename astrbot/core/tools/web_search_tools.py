@@ -12,6 +12,9 @@ from astrbot.core import logger, sp
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.tools.registry import builtin_tool
+from astrbot.core.utils.web_search_utils import normalize_web_search_base_url
+
+MIN_WEB_SEARCH_TIMEOUT = 30
 
 WEB_SEARCH_TOOL_NAMES = [
     "web_search_baidu",
@@ -19,6 +22,9 @@ WEB_SEARCH_TOOL_NAMES = [
     "tavily_extract_web_page",
     "web_search_bocha",
     "web_search_brave",
+    "web_search_exa",
+    "exa_extract_web_page",
+    "exa_find_similar",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -36,6 +42,19 @@ _BAIDU_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "baidu_ai_search",
 }
+_EXA_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "exa",
+}
+_EXA_SEARCH_TYPES = (
+    "auto",
+    "fast",
+    "deep",
+    "deep-lite",
+    "deep-reasoning",
+    "instant",
+    "neural",
+)
 
 
 @std_dataclass
@@ -69,6 +88,7 @@ class _KeyRotator:
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
 _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
+_EXA_KEY_ROTATOR = _KeyRotator("websearch_exa_key", "Exa")
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -91,6 +111,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_tavily_key",
         "websearch_bocha_key",
         "websearch_brave_key",
+        "websearch_exa_key",
     ):
         value = provider_settings.get(setting_name)
         if isinstance(value, str):
@@ -109,13 +130,49 @@ def _get_runtime(context) -> tuple[dict, dict, str]:
     return cfg, provider_settings, event.unified_msg_origin
 
 
+def _normalize_timeout(timeout: int | float | str | None) -> aiohttp.ClientTimeout:
+    try:
+        timeout_value = int(timeout) if timeout is not None else MIN_WEB_SEARCH_TIMEOUT
+    except (TypeError, ValueError):
+        timeout_value = MIN_WEB_SEARCH_TIMEOUT
+    return aiohttp.ClientTimeout(total=max(timeout_value, MIN_WEB_SEARCH_TIMEOUT))
+
+
 def _cache_favicon(url: str, favicon: str | None) -> None:
     if favicon:
         sp.temporary_cache["_ws_favicon"][url] = favicon
 
 
+def _format_provider_request_error(
+    provider_name: str, action: str, url: str, reason: str, status: int
+) -> str:
+    return (
+        f"{provider_name} {action} failed for URL {url}: {reason}, status: {status}. "
+        "If you configured an API Base URL, make sure it is a base URL or proxy "
+        "prefix rather than a specific endpoint path."
+    )
+
+
+def _get_tavily_base_url(provider_settings: dict) -> str:
+    return normalize_web_search_base_url(
+        provider_settings.get("websearch_tavily_base_url"),
+        default="https://api.tavily.com",
+        provider_name="Tavily",
+        disallowed_path_suffixes=("search", "extract"),
+    )
+
+
+def _get_exa_base_url(provider_settings: dict) -> str:
+    return normalize_web_search_base_url(
+        provider_settings.get("websearch_exa_base_url"),
+        default="https://api.exa.ai",
+        provider_name="Exa",
+        disallowed_path_suffixes=("search", "contents", "findSimilar"),
+    )
+
+
 def _search_result_payload(results: list[SearchResult]) -> str:
-    ref_uuid = str(uuid.uuid4())[:4]
+    ref_uuid = uuid.uuid4().hex
     ret_ls = []
     for idx, result in enumerate(results, 1):
         index = f"{ref_uuid}.{idx}"
@@ -134,22 +191,31 @@ def _search_result_payload(results: list[SearchResult]) -> str:
 async def _tavily_search(
     provider_settings: dict,
     payload: dict,
+    timeout: int = MIN_WEB_SEARCH_TIMEOUT,
 ) -> list[SearchResult]:
     tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
+    url = f"{_get_tavily_base_url(provider_settings)}/search"
     header = {
         "Authorization": f"Bearer {tavily_key}",
         "Content-Type": "application/json",
     }
     async with aiohttp.ClientSession(trust_env=True) as session:
         async with session.post(
-            "https://api.tavily.com/search",
+            url,
             json=payload,
             headers=header,
+            timeout=_normalize_timeout(timeout),
         ) as response:
             if response.status != 200:
                 reason = await response.text()
                 raise Exception(
-                    f"Tavily web search failed: {reason}, status: {response.status}",
+                    _format_provider_request_error(
+                        "Tavily",
+                        "web search",
+                        url,
+                        reason,
+                        response.status,
+                    )
                 )
             data = await response.json()
             return [
@@ -163,22 +229,34 @@ async def _tavily_search(
             ]
 
 
-async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
+async def _tavily_extract(
+    provider_settings: dict,
+    payload: dict,
+    timeout: int = MIN_WEB_SEARCH_TIMEOUT,
+) -> list[dict]:
     tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
+    url = f"{_get_tavily_base_url(provider_settings)}/extract"
     header = {
         "Authorization": f"Bearer {tavily_key}",
         "Content-Type": "application/json",
     }
     async with aiohttp.ClientSession(trust_env=True) as session:
         async with session.post(
-            "https://api.tavily.com/extract",
+            url,
             json=payload,
             headers=header,
+            timeout=_normalize_timeout(timeout),
         ) as response:
             if response.status != 200:
                 reason = await response.text()
                 raise Exception(
-                    f"Tavily web search failed: {reason}, status: {response.status}",
+                    _format_provider_request_error(
+                        "Tavily",
+                        "content extraction",
+                        url,
+                        reason,
+                        response.status,
+                    )
                 )
             data = await response.json()
             results: list[dict] = data.get("results", [])
@@ -192,6 +270,7 @@ async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
 async def _bocha_search(
     provider_settings: dict,
     payload: dict,
+    timeout: int = MIN_WEB_SEARCH_TIMEOUT,
 ) -> list[SearchResult]:
     bocha_key = await _BOCHA_KEY_ROTATOR.get(provider_settings)
     header = {
@@ -207,11 +286,12 @@ async def _bocha_search(
             "https://api.bochaai.com/v1/web-search",
             json=payload,
             headers=header,
+            timeout=_normalize_timeout(timeout),
         ) as response:
             if response.status != 200:
                 reason = await response.text()
                 raise Exception(
-                    f"BoCha web search failed: {reason}, status: {response.status}",
+                    f"BoCha web search failed: {reason}, status: {response.status}"
                 )
             data = await response.json()
             rows = data["data"]["webPages"]["value"]
@@ -229,6 +309,7 @@ async def _bocha_search(
 async def _brave_search(
     provider_settings: dict,
     payload: dict,
+    timeout: int = MIN_WEB_SEARCH_TIMEOUT,
 ) -> list[SearchResult]:
     brave_key = await _BRAVE_KEY_ROTATOR.get(provider_settings)
     header = {
@@ -240,11 +321,12 @@ async def _brave_search(
             "https://api.search.brave.com/res/v1/web/search",
             params=payload,
             headers=header,
+            timeout=_normalize_timeout(timeout),
         ) as response:
             if response.status != 200:
                 reason = await response.text()
                 raise Exception(
-                    f"Brave web search failed: {reason}, status: {response.status}",
+                    f"Brave web search failed: {reason}, status: {response.status}"
                 )
             data = await response.json()
             rows = data.get("web", {}).get("results", [])
@@ -261,6 +343,7 @@ async def _brave_search(
 async def _baidu_search(
     provider_settings: dict,
     payload: dict,
+    timeout: int = MIN_WEB_SEARCH_TIMEOUT,
 ) -> list[SearchResult]:
     api_key = provider_settings.get("websearch_baidu_app_builder_key", "")
     if not api_key:
@@ -271,16 +354,18 @@ async def _baidu_search(
         "X-Appbuilder-Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+    url = "https://qianfan.baidubce.com/v2/ai_search/web_search"
     async with aiohttp.ClientSession(trust_env=True) as session:
         async with session.post(
-            "https://qianfan.baidubce.com/v2/ai_search/web_search",
+            url,
             json=payload,
             headers=headers,
+            timeout=_normalize_timeout(timeout),
         ) as response:
             if response.status != 200:
                 reason = await response.text()
                 raise Exception(
-                    f"Baidu AI Search failed: {reason}, status: {response.status}",
+                    f"Baidu AI Search failed: {reason}, status: {response.status}"
                 )
             data = await response.json()
             references = data.get("references", [])
@@ -293,6 +378,121 @@ async def _baidu_search(
                 )
                 for item in references
                 if item.get("url")
+            ]
+
+
+async def _exa_search(
+    provider_settings: dict,
+    payload: dict,
+    timeout: int = MIN_WEB_SEARCH_TIMEOUT,
+) -> list[SearchResult]:
+    exa_key = await _EXA_KEY_ROTATOR.get(provider_settings)
+    url = f"{_get_exa_base_url(provider_settings)}/search"
+    header = {
+        "x-api-key": exa_key,
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            url,
+            json=payload,
+            headers=header,
+            timeout=_normalize_timeout(timeout),
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    _format_provider_request_error(
+                        "Exa",
+                        "web search",
+                        url,
+                        reason,
+                        response.status,
+                    )
+                )
+            data = await response.json()
+            return [
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("url", ""),
+                    snippet=(item.get("text") or "")[:500],
+                    favicon=item.get("favicon"),
+                )
+                for item in data.get("results", [])
+            ]
+
+
+async def _exa_extract(
+    provider_settings: dict,
+    payload: dict,
+    timeout: int = MIN_WEB_SEARCH_TIMEOUT,
+) -> list[dict]:
+    exa_key = await _EXA_KEY_ROTATOR.get(provider_settings)
+    url = f"{_get_exa_base_url(provider_settings)}/contents"
+    header = {
+        "x-api-key": exa_key,
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            url,
+            json=payload,
+            headers=header,
+            timeout=_normalize_timeout(timeout),
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    _format_provider_request_error(
+                        "Exa",
+                        "content extraction",
+                        url,
+                        reason,
+                        response.status,
+                    )
+                )
+            data = await response.json()
+            return data.get("results", [])
+
+
+async def _exa_find_similar(
+    provider_settings: dict,
+    payload: dict,
+    timeout: int = MIN_WEB_SEARCH_TIMEOUT,
+) -> list[SearchResult]:
+    exa_key = await _EXA_KEY_ROTATOR.get(provider_settings)
+    url = f"{_get_exa_base_url(provider_settings)}/findSimilar"
+    header = {
+        "x-api-key": exa_key,
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            url,
+            json=payload,
+            headers=header,
+            timeout=_normalize_timeout(timeout),
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    _format_provider_request_error(
+                        "Exa",
+                        "find similar",
+                        url,
+                        reason,
+                        response.status,
+                    )
+                )
+            data = await response.json()
+            return [
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("url", ""),
+                    snippet=(item.get("text") or "")[:500],
+                    favicon=item.get("favicon"),
+                )
+                for item in data.get("results", [])
             ]
 
 
@@ -337,6 +537,10 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
                     "type": "string",
                     "description": "Optional. The end date for the search results in the format YYYY-MM-DD.",
                 },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional. Request timeout in seconds. Minimum is 30. Default is 30.",
+                },
             },
             "required": ["query"],
         }
@@ -373,7 +577,11 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         if kwargs.get("end_date"):
             payload["end_date"] = kwargs["end_date"]
 
-        results = await _tavily_search(provider_settings, payload)
+        results = await _tavily_search(
+            provider_settings,
+            payload,
+            timeout=kwargs.get("timeout", MIN_WEB_SEARCH_TIMEOUT),
+        )
         if not results:
             return "Error: Tavily web searcher does not return any results."
         return _search_result_payload(results)
@@ -396,6 +604,10 @@ class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
                     "type": "string",
                     "description": 'Optional. The depth of the extraction, must be one of "basic", "advanced". Default is "basic".',
                 },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional. Request timeout in seconds. Minimum is 30. Default is 30.",
+                },
             },
             "required": ["url"],
         }
@@ -417,6 +629,7 @@ class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
         results = await _tavily_extract(
             provider_settings,
             {"urls": [url], "extract_depth": extract_depth},
+            timeout=kwargs.get("timeout", MIN_WEB_SEARCH_TIMEOUT),
         )
         ret_ls = []
         for result in results:
@@ -424,6 +637,174 @@ class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
             ret_ls.append(f"Content: {result.get('raw_content', 'No content')}")
         ret = "\n".join(ret_ls)
         return ret or "Error: Tavily web searcher does not return any results."
+
+
+@builtin_tool(config=_EXA_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "web_search_exa"
+    description: str = (
+        "A semantic web search tool based on Exa. Use it for general search, "
+        "vertical search, and concept-oriented retrieval."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "max_results": {
+                    "type": "integer",
+                    "description": "Optional. Maximum number of results to return. Default is 10. Range is 1-100.",
+                },
+                "search_type": {
+                    "type": "string",
+                    "description": 'Optional. Search type. Must be one of "auto", "fast", "deep", "deep-lite", "deep-reasoning", "instant", "neural". Default is "auto".',
+                },
+                "category": {
+                    "type": "string",
+                    "description": 'Optional. Vertical search category. Supported values: "company", "people", "research paper", "news", "personal site", "financial report".',
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional. Request timeout in seconds. Minimum is 30. Default is 30.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_exa_key", []):
+            return "Error: Exa API key is not configured in AstrBot."
+
+        search_type = str(kwargs.get("search_type", "auto")).strip().lower()
+        if search_type not in _EXA_SEARCH_TYPES:
+            search_type = "auto"
+
+        max_results = max(1, min(int(kwargs.get("max_results", 10)), 100))
+        payload = {
+            "query": kwargs["query"],
+            "numResults": max_results,
+            "type": search_type,
+            "contents": {"text": {"maxCharacters": 500}},
+        }
+
+        category = str(kwargs.get("category", "")).strip()
+        if category in (
+            "company",
+            "people",
+            "research paper",
+            "news",
+            "personal site",
+            "financial report",
+        ):
+            payload["category"] = category
+
+        results = await _exa_search(
+            provider_settings,
+            payload,
+            timeout=kwargs.get("timeout", MIN_WEB_SEARCH_TIMEOUT),
+        )
+        if not results:
+            return "Error: Exa web searcher does not return any results."
+        return _search_result_payload(results)
+
+
+@builtin_tool(config=_EXA_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class ExaExtractWebPageTool(FunctionTool[AstrAgentContext]):
+    name: str = "exa_extract_web_page"
+    description: str = "Extract the content of a web page using Exa."
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Required. A URL to extract content from.",
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional. Request timeout in seconds. Minimum is 30. Default is 30.",
+                },
+            },
+            "required": ["url"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_exa_key", []):
+            return "Error: Exa API key is not configured in AstrBot."
+
+        url = str(kwargs.get("url", "")).strip()
+        if not url:
+            return "Error: url must be a non-empty string."
+
+        results = await _exa_extract(
+            provider_settings,
+            {"urls": [url], "text": True},
+            timeout=kwargs.get("timeout", MIN_WEB_SEARCH_TIMEOUT),
+        )
+        if not results:
+            return "Error: Exa content extraction does not return any results."
+
+        ret_ls = []
+        for result in results:
+            ret_ls.append(f"URL: {result.get('url', 'No URL')}")
+            ret_ls.append(f"Content: {result.get('text', 'No content')}")
+        ret = "\n".join(ret_ls)
+        return ret or "Error: Exa content extraction does not return any results."
+
+
+@builtin_tool(config=_EXA_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class ExaFindSimilarTool(FunctionTool[AstrAgentContext]):
+    name: str = "exa_find_similar"
+    description: str = "Find semantically similar pages to a given URL using Exa."
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Required. The URL to find similar content for.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Optional. Maximum number of results to return. Default is 10. Range is 1-100.",
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional. Request timeout in seconds. Minimum is 30. Default is 30.",
+                },
+            },
+            "required": ["url"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_exa_key", []):
+            return "Error: Exa API key is not configured in AstrBot."
+
+        url = str(kwargs.get("url", "")).strip()
+        if not url:
+            return "Error: url must be a non-empty string."
+
+        results = await _exa_find_similar(
+            provider_settings,
+            {
+                "url": url,
+                "numResults": max(1, min(int(kwargs.get("max_results", 10)), 100)),
+                "contents": {"text": {"maxCharacters": 500}},
+            },
+            timeout=kwargs.get("timeout", MIN_WEB_SEARCH_TIMEOUT),
+        )
+        if not results:
+            return "Error: Exa find similar does not return any results."
+        return _search_result_payload(results)
 
 
 @builtin_tool(config=_BOCHA_WEB_SEARCH_TOOL_CONFIG)
@@ -462,6 +843,10 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
                     "type": "integer",
                     "description": "Optional. Number of search results to return. Range: 1-50.",
                 },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional. Request timeout in seconds. Minimum is 30. Default is 30.",
+                },
             },
             "required": ["query"],
         }
@@ -484,7 +869,11 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
         if kwargs.get("exclude"):
             payload["exclude"] = kwargs["exclude"]
 
-        results = await _bocha_search(provider_settings, payload)
+        results = await _bocha_search(
+            provider_settings,
+            payload,
+            timeout=kwargs.get("timeout", MIN_WEB_SEARCH_TIMEOUT),
+        )
         if not results:
             return "Error: BoCha web searcher does not return any results."
         return _search_result_payload(results)
@@ -516,6 +905,10 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
                     "type": "string",
                     "description": 'Optional. One of "day", "week", "month", "year".',
                 },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional. Request timeout in seconds. Minimum is 30. Default is 30.",
+                },
             },
             "required": ["query"],
         }
@@ -542,7 +935,11 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
         if freshness in ["day", "week", "month", "year"]:
             payload["freshness"] = freshness
 
-        results = await _brave_search(provider_settings, payload)
+        results = await _brave_search(
+            provider_settings,
+            payload,
+            timeout=kwargs.get("timeout", MIN_WEB_SEARCH_TIMEOUT),
+        )
         if not results:
             return "Error: Brave web searcher does not return any results."
         return _search_result_payload(results)
@@ -572,6 +969,10 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
                 "site": {
                     "type": "string",
                     "description": "Optional. Restrict search to specific sites, separated by commas.",
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional. Request timeout in seconds. Minimum is 30. Default is 30.",
                 },
             },
             "required": ["query"],
@@ -605,7 +1006,11 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
             if sites:
                 payload["search_filter"] = {"match": {"site": sites[:100]}}
 
-        results = await _baidu_search(provider_settings, payload)
+        results = await _baidu_search(
+            provider_settings,
+            payload,
+            timeout=kwargs.get("timeout", MIN_WEB_SEARCH_TIMEOUT),
+        )
         if not results:
             return "Error: Baidu AI Search does not return any results."
         return _search_result_payload(results)
@@ -615,6 +1020,9 @@ __all__ = [
     "BaiduWebSearchTool",
     "BochaWebSearchTool",
     "BraveWebSearchTool",
+    "ExaExtractWebPageTool",
+    "ExaFindSimilarTool",
+    "ExaWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",

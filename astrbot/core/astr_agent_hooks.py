@@ -9,6 +9,7 @@ from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.pipeline.context_utils import call_event_hook
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.web_search_utils import WEB_SEARCH_REFERENCE_TOOLS
 
 
 class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
@@ -74,13 +75,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         platform_name = run_context.context.event.get_platform_name()
         if (
             platform_name == "webchat"
-            and tool.name
-            in [
-                "web_search_baidu",
-                "web_search_tavily",
-                "web_search_bocha",
-                "web_search_brave",
-            ]
+            and tool.name in WEB_SEARCH_REFERENCE_TOOLS
             and len(run_context.messages) > 0
             and tool_result
             and len(tool_result.content)

@@ -613,12 +613,18 @@ class KBHelper:
                 "Error: Tavily API key is not configured in provider_settings."
             )
 
+        tavily_base_url = config.get("provider_settings", {}).get(
+            "websearch_tavily_base_url", "https://api.tavily.com"
+        )
+
         # 阶段1: 从 URL 提取内容
         if progress_callback:
             await progress_callback("extracting", 0, 100)
 
         try:
-            text_content = await extract_text_from_url(url, tavily_keys)
+            text_content = await extract_text_from_url(
+                url, tavily_keys, tavily_base_url
+            )
         except Exception as e:
             logger.error(f"Failed to extract content from URL {url}: {e}")
             raise OSError(f"Failed to extract content from URL {url}: {e}") from e

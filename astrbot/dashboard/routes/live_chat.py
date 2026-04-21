@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import re
 import time
 import uuid
 import wave
@@ -21,8 +20,9 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
-from astrbot.core.utils.datetime_utils import to_utc_isoformat
+from astrbot.core.utils.web_search_utils import build_web_search_refs
 
+from .message_events import build_message_saved_event
 from .route import Route, RouteContext
 
 
@@ -198,54 +198,12 @@ class LiveChatRoute(Route):
         self, accumulated_text: str, accumulated_parts: list
     ) -> dict:
         """从消息中提取 web_search 引用。"""
-        supported = [
-            "web_search_baidu",
-            "web_search_tavily",
-            "web_search_bocha",
-            "web_search_brave",
-        ]
-        web_search_results = {}
-        tool_call_parts = [
-            p
-            for p in accumulated_parts
-            if p.get("type") == "tool_call" and p.get("tool_calls")
-        ]
-
-        for part in tool_call_parts:
-            for tool_call in part["tool_calls"]:
-                if tool_call.get("name") not in supported or not tool_call.get(
-                    "result"
-                ):
-                    continue
-                try:
-                    result_data = json.loads(tool_call["result"])
-                    for item in result_data.get("results", []):
-                        if idx := item.get("index"):
-                            web_search_results[idx] = {
-                                "url": item.get("url"),
-                                "title": item.get("title"),
-                                "snippet": item.get("snippet"),
-                            }
-                except (json.JSONDecodeError, KeyError):
-                    pass
-
-        if not web_search_results:
-            return {}
-
-        ref_indices = {
-            m.strip() for m in re.findall(r"<ref>(.*?)</ref>", accumulated_text)
-        }
-
-        used_refs = []
-        for ref_index in ref_indices:
-            if ref_index not in web_search_results:
-                continue
-            payload = {"index": ref_index, **web_search_results[ref_index]}
-            if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
-                payload["favicon"] = favicon
-            used_refs.append(payload)
-
-        return {"used": used_refs} if used_refs else {}
+        favicon_cache = sp.temporary_cache.get("_ws_favicon", {})
+        return build_web_search_refs(
+            accumulated_text,
+            accumulated_parts,
+            favicon_cache,
+        )
 
     async def _save_bot_message(
         self,
@@ -622,16 +580,11 @@ class LiveChatRoute(Route):
                     if saved_record:
                         await self._send_chat_payload(
                             session,
-                            {
-                                "ct": "chat",
-                                "type": "message_saved",
-                                "data": {
-                                    "id": saved_record.id,
-                                    "created_at": to_utc_isoformat(
-                                        saved_record.created_at
-                                    ),
-                                },
-                            },
+                            build_message_saved_event(
+                                saved_record,
+                                refs,
+                                chat_mode=True,
+                            ),
                         )
 
                     accumulated_parts = []

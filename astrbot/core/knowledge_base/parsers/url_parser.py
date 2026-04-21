@@ -2,16 +2,21 @@ import asyncio
 
 import aiohttp
 
+from astrbot.core.utils.web_search_utils import normalize_web_search_base_url
+
 
 class URLExtractor:
     """URL 内容提取器，封装了 Tavily API 调用和密钥管理"""
 
-    def __init__(self, tavily_keys: list[str]) -> None:
+    def __init__(
+        self, tavily_keys: list[str], tavily_base_url: str = "https://api.tavily.com"
+    ) -> None:
         """
         初始化 URL 提取器
 
         Args:
             tavily_keys: Tavily API 密钥列表
+            tavily_base_url: Tavily API 基础 URL
         """
         if not tavily_keys:
             raise ValueError("Error: Tavily API keys are not configured.")
@@ -19,6 +24,12 @@ class URLExtractor:
         self.tavily_keys = tavily_keys
         self.tavily_key_index = 0
         self.tavily_key_lock = asyncio.Lock()
+        self.tavily_base_url = normalize_web_search_base_url(
+            tavily_base_url,
+            default="https://api.tavily.com",
+            provider_name="Tavily",
+            disallowed_path_suffixes=("search", "extract"),
+        )
 
     async def _get_tavily_key(self) -> str:
         """并发安全的从列表中获取并轮换Tavily API密钥。"""
@@ -47,7 +58,7 @@ class URLExtractor:
             raise ValueError("Error: url must be a non-empty string.")
 
         tavily_key = await self._get_tavily_key()
-        api_url = "https://api.tavily.com/extract"
+        api_url = f"{self.tavily_base_url}/extract"
         headers = {
             "Authorization": f"Bearer {tavily_key}",
             "Content-Type": "application/json",
@@ -69,7 +80,10 @@ class URLExtractor:
                     if response.status != 200:
                         reason = await response.text()
                         raise OSError(
-                            f"Tavily web extraction failed: {reason}, status: {response.status}"
+                            f"Tavily web extraction failed for URL {api_url}: "
+                            f"{reason}, status: {response.status}. If you configured "
+                            "a Tavily API Base URL, make sure it is a base URL or "
+                            "proxy prefix rather than a specific endpoint path."
                         )
 
                     data = await response.json()
@@ -88,16 +102,19 @@ class URLExtractor:
 
 
 # 为了向后兼容，提供一个简单的函数接口
-async def extract_text_from_url(url: str, tavily_keys: list[str]) -> str:
+async def extract_text_from_url(
+    url: str, tavily_keys: list[str], tavily_base_url: str = "https://api.tavily.com"
+) -> str:
     """
     简单的函数接口，用于从 URL 提取文本内容
 
     Args:
         url: 要提取内容的网页 URL
         tavily_keys: Tavily API 密钥列表
+        tavily_base_url: Tavily API 基础 URL
 
     Returns:
         提取的文本内容
     """
-    extractor = URLExtractor(tavily_keys)
+    extractor = URLExtractor(tavily_keys, tavily_base_url)
     return await extractor.extract_text_from_url(url)
