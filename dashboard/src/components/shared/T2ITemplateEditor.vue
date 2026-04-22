@@ -78,6 +78,18 @@
         </div>
       </v-card-title>
 
+      <v-alert
+        v-if="showSyntaxMigrationHint"
+        type="warning"
+        variant="tonal"
+        closable
+        @click:close="dismissMigrationHint"
+      >
+        <div class="d-flex align-center">
+          <span>{{ tm('t2iTemplateEditor.syntaxMigrationHint') }}</span>
+        </div>
+      </v-alert>
+
       <v-card-text class="pa-0">
         <v-row no-gutters style="height: 70vh;">
           <!-- 左侧编辑器 -->
@@ -271,6 +283,9 @@ const applyAndCloseDialog = ref(false)
 
 const previewFrame = ref(null)
 
+const syntaxHintDismissed = ref(false)
+const showSyntaxMigrationHint = ref(false)
+
 // --- 编辑器配置 ---
 const editorTheme = computed(() => 'vs-light')
 const editorOptions = {
@@ -296,21 +311,38 @@ const syncPreviewVersion = async () => {
   }
 }
 
+const shikiRuntime = ref('')
+const syncShikiRuntime = async () => { 
+  try {
+    const res = await axios.get('/api/t2i/shiki-runtime')
+    shikiRuntime.value = res?.data?.data?.runtime || res?.data?.runtime
+  } catch (error) {
+    console.warn('Failed to fetch shiki runtime:', error)
+  }
+}
+
 const previewData = computed(() => ({
   text: tm('t2iTemplateEditor.previewText') || '这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。',
-  version: previewVersion.value 
+  version: previewVersion.value,
+  shikiRuntime: shikiRuntime.value 
 }))
 
 const previewContent = computed(() => {
   try {
     let content = templateContent.value
-    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, previewData.value.text)
+    content = content.replace(/\{\{\s*text_base64\s*\}\}/g, btoa(String.fromCharCode(...new TextEncoder().encode(previewData.value.text))))
     content = content.replace(/\{\{\s*version\s*\}\}/g, previewData.value.version)
+    content = content.replace(/\{\{\s*shiki_runtime\s*|\s*safe\s*\}\}/g, previewData.value.shikiRuntime)
     return content
   } catch (error) {
     return `<div style="color: red; padding: 20px;">模板渲染错误: ${error.message}</div>`
   }
 })
+
+const dismissMigrationHint = () => {
+  showSyntaxMigrationHint.value = false
+  syntaxHintDismissed.value = true
+}
 
 // --- API 调用方法 ---
 const loadInitialData = async () => {
@@ -458,11 +490,15 @@ const newTemplate = () => {
   <title>New Template</title>
 </head>
 <body>
-  <!-- 从这里开始编辑 -->
-  <article>{{ text | safe }}</article>
+  <article id="content"></article>
+  
+  <scr` + `ipt>
+    document.getElementById('content').textContent = new TextDecoder().decode(Uint8Array.from(atob('{{ text_base64 }}'), c => c.charCodeAt(0)));
+  </scr` + `ipt>
 </body>
 </html>
 `
+
 }
 
 const promptDelete = () => {
@@ -519,6 +555,12 @@ watch(selectedTemplate, (newName) => {
   if (newName) {
     isCreatingNew.value = false
     loadTemplateContent(newName)
+  }
+})
+
+watch(templateContent, (newContent) => {
+  if (!syntaxHintDismissed.value) {
+    showSyntaxMigrationHint.value = /\{\{\s*text\s*\|\s*safe\s*\}\}/.test(newContent)
   }
 })
 

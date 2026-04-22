@@ -7,6 +7,9 @@ from quart import jsonify, request
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.utils.t2i.template_manager import TemplateManager
+from astrbot.core.utils.t2i.network_strategy import (
+    get_shiki_runtime as _get_shiki_runtime,
+)
 
 from .route import Response, Route, RouteContext
 
@@ -26,6 +29,7 @@ class T2iRoute(Route):
             ("/t2i/templates/create", ("POST", self.create_template)),
             ("/t2i/templates/reset_default", ("POST", self.reset_default_template)),
             ("/t2i/templates/set_active", ("POST", self.set_active_template)),
+            ("/t2i/shiki_runtime", ("GET", self.get_shiki_runtime)),
             # 动态路由应该在静态路由之后注册
             (
                 "/t2i/templates/<name>",
@@ -232,6 +236,17 @@ class T2iRoute(Route):
             return response
         except Exception as e:
             logger.error("Error in reset_default_template", exc_info=True)
+            response = jsonify(asdict(Response().error(str(e))))
+            response.status_code = 500
+            return response
+
+    async def get_shiki_runtime(self):
+        """获取T2I Shiki运行时"""
+        try:
+            runtime = _get_shiki_runtime()
+            return jsonify(asdict(Response().ok(data={"runtime": runtime})))
+        except Exception as e:
+            logger.error("Error in get_shiki_runtime", exc_info=True)
             response = jsonify(asdict(Response().error(str(e))))
             response.status_code = 500
             return response
