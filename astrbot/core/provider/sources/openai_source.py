@@ -519,41 +519,6 @@ class ProviderOpenAIOfficial(Provider):
         except NotFoundError as e:
             raise Exception(f"获取模型列表失败：{e}")
 
-    @staticmethod
-    def _filter_empty_assistant_messages(payloads: dict) -> None:
-        """Filter or fix empty assistant messages to prevent 400 errors on strict APIs.
-
-        Some APIs (e.g. DeepSeek, Moonshot) reject assistant messages where both
-        ``content`` and ``tool_calls`` are absent or empty.  This can happen when a
-        reasoning model returns only ``reasoning_content`` with no completion text,
-        causing the serialised ``content`` field to be an empty string or empty list.
-
-        Three cases are handled in-place:
-        1. Empty content **and** no tool_calls → drop the message entirely.
-        2. Empty-string content **with** tool_calls → set content to ``None``.
-        3. Empty-list content **with** tool_calls → set content to ``None``.
-        """
-        if not isinstance(payloads.get("messages"), list):
-            return
-        cleaned: list = []
-        for idx, msg in enumerate(payloads["messages"]):
-            if msg.get("role") == "assistant":
-                content = msg.get("content")
-                tool_calls = msg.get("tool_calls")
-                empty_content = (
-                    content == ""
-                    or content is None
-                    or content == []
-                    or (isinstance(content, list) and len(content) == 0)
-                )
-                if not tool_calls and empty_content:
-                    logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
-                    continue
-                if tool_calls and empty_content:
-                    msg["content"] = None
-            cleaned.append(msg)
-        payloads["messages"] = cleaned
-
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
@@ -581,9 +546,28 @@ class ProviderOpenAIOfficial(Provider):
             extra_body.update(custom_extra_body)
         self._apply_provider_specific_extra_body_overrides(extra_body)
 
-        model = payloads.get("model", "").lower()
+        # 在调用 self.client.chat.completions.create 之前添加清理逻辑
+        if "messages" in payloads and isinstance(payloads["messages"], list):
+            cleaned_messages = []
+            for idx, msg in enumerate(payloads["messages"]):
+                if msg.get("role") == "assistant":
+                    content = msg.get("content")
+                    tool_calls = msg.get("tool_calls")
 
-        self._filter_empty_assistant_messages(payloads)
+                    # 空内容：空字符串、None 或空列表
+                    empty_content = content in ("", None, [])
+                    if not tool_calls and empty_content:
+                        # 无 tool_calls 且内容为空 -> 过滤掉，避免 400 错误
+                        logger.debug(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
+                        continue
+
+                    # 有 tool_calls 但 content 为空 -> 设为 None（API 可接受）
+                    if empty_content and tool_calls:
+                        msg["content"] = None
+
+                cleaned_messages.append(msg)
+
+            payloads["messages"] = cleaned_messages
 
         completion = await self.client.chat.completions.create(
             **payloads,
@@ -621,11 +605,6 @@ class ProviderOpenAIOfficial(Provider):
         # 不在默认参数中的参数放在 extra_body 中
         extra_body = {}
 
-        # 读取并合并 custom_extra_body 配置
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(custom_extra_body)
-
         to_del = []
         for key in payloads:
             if key not in self.default_params:
@@ -633,9 +612,35 @@ class ProviderOpenAIOfficial(Provider):
                 to_del.append(key)
         for key in to_del:
             del payloads[key]
+
+        # 读取并合并 custom_extra_body 配置（custom 优先级高于 payload 中的扩展参数）
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if isinstance(custom_extra_body, dict):
+            extra_body.update(custom_extra_body)
         self._apply_provider_specific_extra_body_overrides(extra_body)
 
-        self._filter_empty_assistant_messages(payloads)
+        # 在调用 self.client.chat.completions.create 之前添加清理逻辑（与非流式 _query 方法保持一致）
+        if "messages" in payloads and isinstance(payloads["messages"], list):
+            cleaned_messages = []
+            for idx, msg in enumerate(payloads["messages"]):
+                if msg.get("role") == "assistant":
+                    content = msg.get("content")
+                    tool_calls = msg.get("tool_calls")
+
+                    # 空内容：空字符串、None 或空列表
+                    empty_content = content in ("", None, [])
+                    if not tool_calls and empty_content:
+                        # 无 tool_calls 且内容为空 -> 过滤掉，避免 400 错误
+                        logger.debug(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
+                        continue
+
+                    # 有 tool_calls 但 content 为空 -> 设为 None（API 可接受）
+                    if empty_content and tool_calls:
+                        msg["content"] = None
+
+                cleaned_messages.append(msg)
+
+            payloads["messages"] = cleaned_messages
 
         stream = await self.client.chat.completions.create(
             **payloads,
@@ -872,24 +877,26 @@ class ProviderOpenAIOfficial(Provider):
                     # 工具集未提供
                     # Should be unreachable
                     raise Exception("工具集未提供")
-                for tool in tools.func_list:
-                    if (
-                        tool_call.type == "function"
-                        and tool.name == tool_call.function.name
-                    ):
-                        # workaround for #1454
-                        if isinstance(tool_call.function.arguments, str):
-                            args = json.loads(tool_call.function.arguments)
-                        else:
-                            args = tool_call.function.arguments
-                        args_ls.append(args)
-                        func_name_ls.append(tool_call.function.name)
-                        tool_call_ids.append(tool_call.id)
 
-                        # gemini-2.5 / gemini-3 series extra_content handling
-                        extra_content = getattr(tool_call, "extra_content", None)
-                        if extra_content is not None:
-                            tool_call_extra_content_dict[tool_call.id] = extra_content
+                if tool_call.type == "function":
+                    # workaround for #1454
+                    if isinstance(tool_call.function.arguments, str):
+                        try:
+                            args = json.loads(tool_call.function.arguments)
+                        except json.JSONDecodeError as e:
+                            logger.error(f"解析参数失败: {e}")
+                            args = {}
+                    else:
+                        args = tool_call.function.arguments
+                    args_ls.append(args)
+                    func_name_ls.append(tool_call.function.name)
+                    tool_call_ids.append(tool_call.id)
+
+                    # gemini-2.5 / gemini-3 series extra_content handling
+                    extra_content = getattr(tool_call, "extra_content", None)
+                    if extra_content is not None:
+                        tool_call_extra_content_dict[tool_call.id] = extra_content
+
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
