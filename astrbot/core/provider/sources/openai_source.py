@@ -185,7 +185,8 @@ class ProviderOpenAIOfficial(Provider):
         self, error: Exception
     ) -> bool:
         candidates = [
-            candidate.lower() for candidate in self._extract_error_text_candidates(error)
+            candidate.lower()
+            for candidate in self._extract_error_text_candidates(error)
         ]
         exact_messages = (
             "tool_choice 'required' is incompatible with thinking enabled",
@@ -196,9 +197,8 @@ class ProviderOpenAIOfficial(Provider):
                 return True
 
         for candidate in candidates:
-            has_tool_choice = (
-                "tool_choice" in candidate
-                and ("'required'" in candidate or '"required"' in candidate)
+            has_tool_choice = "tool_choice" in candidate and (
+                "'required'" in candidate or '"required"' in candidate
             )
             if (
                 has_tool_choice
