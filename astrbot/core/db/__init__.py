@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from deprecated import deprecated
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from astrbot.core.db.po import (
     ApiKey,
@@ -42,11 +43,19 @@ class BaseDatabase(abc.ABC):
         # write bursts from concurrent agent/metrics/session operations.
         is_sqlite = "sqlite" in self.DATABASE_URL
         connect_args = {"timeout": 30} if is_sqlite else {}
+        engine_kwargs = {
+            "echo": False,
+            "future": True,
+            "connect_args": connect_args,
+        }
+        if is_sqlite:
+            # Keep SQLite async engines off SQLAlchemy's default async queue
+            # pool so packaged runtimes don't depend on dialect-specific pool
+            # event support.
+            engine_kwargs["poolclass"] = NullPool
         self.engine = create_async_engine(
             self.DATABASE_URL,
-            echo=False,
-            future=True,
-            connect_args=connect_args,
+            **engine_kwargs,
         )
         self.AsyncSessionLocal = async_sessionmaker(
             self.engine,

@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlalchemy import Column, Text, bindparam
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
 
 from astrbot.core import logger
@@ -60,8 +61,7 @@ class DocumentStorage:
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
         await self.connect()
         async with self.engine.begin() as conn:  # type: ignore
-            # Create tables using SQLModel
-            await conn.run_sync(BaseDocModel.metadata.create_all)
+            await self._ensure_documents_table(conn)
 
             try:
                 await conn.execute(
@@ -93,6 +93,23 @@ class DocumentStorage:
 
             await self._initialize_fts5(conn)
             await conn.commit()
+
+    async def _ensure_documents_table(self, executor) -> None:
+        """Create the document table using raw SQL for packaged-runtime stability."""
+        await executor.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    doc_id TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    metadata TEXT,
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+                """,
+            ),
+        )
 
     async def _initialize_fts5(self, executor) -> None:
         try:
@@ -197,6 +214,7 @@ class DocumentStorage:
                 self.DATABASE_URL,
                 echo=False,
                 future=True,
+                poolclass=NullPool,
             )
             self.async_session_maker = sessionmaker(
                 self.engine,  # type: ignore

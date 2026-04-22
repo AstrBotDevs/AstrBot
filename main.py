@@ -25,6 +25,7 @@ from astrbot.core.utils.io import (  # noqa: E402
     download_dashboard,
     get_dashboard_version,
 )
+from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime  # noqa: E402
 
 # 将父目录添加到 sys.path
 sys.path.append(Path(__file__).parent.as_posix())
@@ -50,7 +51,10 @@ def check_env() -> None:
         sys.path.insert(0, astrbot_root)
 
     site_packages_path = get_astrbot_site_packages_path()
-    if site_packages_path not in sys.path:
+    if not is_packaged_desktop_runtime() and site_packages_path not in sys.path:
+        # Packaged desktop runtime keeps shared plugin dependencies out of the
+        # global import path so bundled core libraries don't mix with user-
+        # installed wheels from ~/.astrbot/data/site-packages.
         sys.path.append(site_packages_path)
 
     os.makedirs(get_astrbot_config_path(), exist_ok=True)

@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from sqlmodel import col, desc
 
 from astrbot.core import logger
@@ -42,6 +43,7 @@ class KBSQLiteDatabase:
             echo=False,
             pool_pre_ping=True,
             pool_recycle=3600,
+            poolclass=NullPool,
         )
 
         # 创建会话工厂
