@@ -732,15 +732,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     chain=MessageChain().message(llm_resp.completion_text),
                 ),
             )
-        if llm_resp.reasoning_content:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(
-                    chain=MessageChain(type="reasoning").message(
-                        llm_resp.reasoning_content,
-                    ),
-                ),
-            )
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
@@ -760,15 +751,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             type="llm_result",
                             data=AgentResponseData(
                                 chain=MessageChain().message(llm_resp.completion_text),
-                            ),
-                        )
-                    if llm_resp.reasoning_content:
-                        yield AgentResponse(
-                            type="llm_result",
-                            data=AgentResponseData(
-                                chain=MessageChain(type="reasoning").message(
-                                    llm_resp.reasoning_content,
-                                ),
                             ),
                         )
                     await self._complete_with_assistant_response(llm_resp)
@@ -944,10 +926,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
                     # so we need to get the tool from the raw tool set
                     func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
-                    available_tools = self._skill_like_raw_tool_set.names()
                 else:
                     func_tool = req.func_tool.get_tool(func_tool_name)
-                    available_tools = req.func_tool.names()
 
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
@@ -955,7 +935,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
                     _append_tool_call_result(
                         func_tool_id,
-                        f"error: Tool {func_tool_name} not found. Available tools are: {', '.join(available_tools)}",
+                        f"error: Tool {func_tool_name} not found.",
                     )
                     continue
 
