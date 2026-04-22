@@ -640,7 +640,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
-                # update ttft
                 if self.stats.time_to_first_token == 0:
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
 
@@ -649,7 +648,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         type="streaming_delta",
                         data=AgentResponseData(chain=llm_response.result_chain),
                     )
-                if llm_response.completion_text:
+                elif llm_response.completion_text:
                     yield AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
@@ -723,7 +722,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 type="llm_result",
                 data=AgentResponseData(chain=llm_resp.result_chain),
             )
-        if llm_resp.completion_text:
+        elif llm_resp.completion_text:
             yield AgentResponse(
                 type="llm_result",
                 data=AgentResponseData(
@@ -753,7 +752,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             type="llm_result",
                             data=AgentResponseData(chain=llm_resp.result_chain),
                         )
-                    if llm_resp.completion_text:
+                    elif llm_resp.completion_text:
                         yield AgentResponse(
                             type="llm_result",
                             data=AgentResponseData(
