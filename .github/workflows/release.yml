@@ -58,17 +58,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '24.13.0'
+          node-version: "24.13.0"
           cache: "pnpm"
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Build dashboard dist
         shell: bash
+        working-directory: dashboard
         run: |
-          pnpm --dir dashboard install --frozen-lockfile
-          pnpm --dir dashboard run build
-          echo "${{ steps.tag.outputs.tag }}" > dashboard/dist/assets/version
-          cd dashboard
+          pnpm install --frozen-lockfile
+          pnpm run build
+          echo "${{ steps.tag.outputs.tag }}" > dist/assets/version
           zip -r "AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" dist
 
       - name: Upload dashboard artifact
@@ -138,7 +138,6 @@ jobs:
         with:
           name: Dashboard-${{ steps.tag.outputs.tag }}
           path: release-assets
-
 
       - name: Resolve release notes
         id: notes

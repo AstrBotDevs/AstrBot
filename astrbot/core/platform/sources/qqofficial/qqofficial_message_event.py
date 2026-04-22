@@ -44,6 +44,22 @@ def _patch_qq_botpy_formdata() -> None:
 
 _patch_qq_botpy_formdata()
 
+# Retry decorator for QQ Official API transient errors (HTTP 500/504)
+_qqofficial_retry = retry(
+    retry=retry_if_exception_type(
+        (
+            botpy.errors.ServerError,
+            botpy.errors.SequenceNumberError,
+            OSError,
+            asyncio.TimeoutError,
+        )
+    ),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
+
 
 class QQOfficialMessageEvent(AstrMessageEvent):
     MARKDOWN_NOT_ALLOWED_ERROR = "不允许发送原生 markdown"
@@ -465,6 +481,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_info=result["file_info"],
                     ttl=result.get("ttl", 0),
                 )
+        except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
+            logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
             logger.error(f"上传请求错误: {e}")
         return None

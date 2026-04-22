@@ -6,9 +6,6 @@ from .commands import (
     AlterCmdCommands,
     ConversationCommands,
     HelpCommand,
-    LLMCommands,
-    PersonaCommands,
-    PluginCommands,
     ProviderCommands,
     SetUnsetCommands,
     SIDCommand,
@@ -26,9 +23,8 @@ class Main(star.Star):
         self.plugin_c = PluginCommands(self.context)
         self.admin_c = AdminCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
+        self.help_c = HelpCommand(self.context)
         self.provider_c = ProviderCommands(self.context)
-        self.persona_c = PersonaCommands(self.context)
-        self.alter_cmd_c = AlterCmdCommands(self.context)
         self.setunset_c = SetUnsetCommands(self.context)
         self.t2i_c = T2ICommand(self.context)
         self.tts_c = TTSCommand(self.context)
@@ -163,41 +159,15 @@ class Main(star.Star):
         await self.conversation_c.new_conv(message)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("groupnew")
-    async def groupnew_conv(self, message: AstrMessageEvent, sid: str) -> None:
-        """创建新群聊对话"""
-        await self.conversation_c.groupnew_conv(message, sid)
-
-    @filter.command("switch")
-    async def switch_conv(
+    @filter.command("provider")
+    async def provider(
         self,
-        message: AstrMessageEvent,
-        index: int | None = None,
+        event: AstrMessageEvent,
+        idx: str | int | None = None,
+        idx2: int | None = None,
     ) -> None:
-        """通过 /ls 前面的序号切换对话"""
-        await self.conversation_c.switch_conv(message, index)
-
-    @filter.command("rename")
-    async def rename_conv(self, message: AstrMessageEvent, new_name: str) -> None:
-        """重命名对话"""
-        await self.conversation_c.rename_conv(message, new_name)
-
-    @filter.command("del")
-    async def del_conv(self, message: AstrMessageEvent) -> None:
-        """删除当前对话"""
-        await self.conversation_c.del_conv(message)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("key")
-    async def key(self, message: AstrMessageEvent, index: int | None = None) -> None:
-        """查看或者切换 Key"""
-        await self.provider_c.key(message, index)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("persona")
-    async def persona(self, message: AstrMessageEvent) -> None:
-        """查看或者切换 Persona"""
-        await self.persona_c.persona(message)
+        """View or switch LLM Provider"""
+        await self.provider_c.provider(event, idx, idx2)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dashboard_update")

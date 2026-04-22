@@ -13,7 +13,7 @@
         variant="text"
         size="small"
         color="grey"
-        href="https://astrbot.app/use/knowledge-base.html"
+        href="https://docs.astrbot.app/use/knowledge-base.html"
         target="_blank"
       />
     </div>

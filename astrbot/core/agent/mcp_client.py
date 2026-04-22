@@ -14,13 +14,15 @@ This file exists solely for backward compatibility and will be removed in a futu
 """
 
 import asyncio
+import copy
 import logging
 import os
 import sys
 import warnings
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Any, Generic, TextIO
+from pathlib import Path, PureWindowsPath
+from typing import Any, Generic
 
 from tenacity import (
     before_sleep_log,
@@ -177,6 +179,61 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"Connection timeout: {timeout} seconds"
     except Exception as e:
         return False, f"{e!s}"
+
+
+def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Normalize common non-standard MCP JSON Schema variants.
+
+    Some MCP servers incorrectly mark required properties with a boolean
+    `required: true` on the property schema itself. Draft 2020-12 requires the
+    parent object to declare `required` as an array of property names instead.
+    We lift those booleans to the parent object so the schema remains usable
+    without disabling validation entirely.
+    """
+
+    def _normalize(node: Any) -> Any:
+        if isinstance(node, list):
+            return [_normalize(item) for item in node]
+
+        if not isinstance(node, dict):
+            return node
+
+        normalized = {key: _normalize(value) for key, value in node.items()}
+
+        properties = normalized.get("properties")
+        if isinstance(properties, dict):
+            original_properties = (
+                node.get("properties")
+                if isinstance(node.get("properties"), dict)
+                else {}
+            )
+            required = normalized.get("required")
+            required_list = required[:] if isinstance(required, list) else []
+
+            for prop_name, prop_schema in properties.items():
+                if not isinstance(prop_schema, dict):
+                    continue
+
+                original_prop_schema = original_properties.get(prop_name, {})
+                prop_required = (
+                    original_prop_schema.get("required")
+                    if isinstance(original_prop_schema, dict)
+                    else None
+                )
+                if isinstance(prop_required, bool):
+                    if prop_schema.get("required") is prop_required:
+                        prop_schema.pop("required", None)
+                    if prop_required:
+                        required_list.append(prop_name)
+
+            if required_list:
+                normalized["required"] = list(dict.fromkeys(required_list))
+            elif isinstance(required, list):
+                normalized.pop("required", None)
+
+        return normalized
+
+    return _normalize(copy.deepcopy(schema))
 
 
 class MCPClient:
@@ -494,7 +551,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
         super().__init__(
             name=mcp_tool.name,
             description=mcp_tool.description or "",
-            parameters=mcp_tool.inputSchema,
+            parameters=_normalize_mcp_input_schema(mcp_tool.inputSchema),
         )
         self.mcp_tool = mcp_tool
         self.mcp_client = mcp_client

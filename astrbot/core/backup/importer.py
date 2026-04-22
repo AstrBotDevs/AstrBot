@@ -61,6 +61,20 @@ def _get_major_version(version_str: str) -> str:
     return "0.0"
 
 
+def _validate_path_within(target_path: Path, base_dir: Path) -> bool:
+    """Validate that target_path is within base_dir after resolving symlinks.
+
+    Prevents path traversal attacks (CWE-22) by ensuring the resolved
+    target path is relative to the resolved base directory.
+    """
+    try:
+        resolved = target_path.resolve(strict=False)
+        base_resolved = base_dir.resolve(strict=False)
+        return resolved.is_relative_to(base_resolved)
+    except (OSError, ValueError):
+        return False
+
+
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 KB_PATH = get_astrbot_knowledge_base_path()
 DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = 5
@@ -777,14 +791,13 @@ class AstrBotImporter:
                     try:
                         rel_path = name[len(media_prefix) :]
                         target_path = kb_dir / rel_path
-                        await anyio.Path(target_path.parent).mkdir(
-                            parents=True,
-                            exist_ok=True,
-                        )
-                        with zf.open(name) as src:
-                            content = src.read()
-                        async with await anyio.open_file(target_path, "wb") as dst:
-                            await dst.write(content)
+                        # Validate path is within kb directory (CWE-22)
+                        if not _validate_path_within(target_path, kb_dir):
+                            logger.warning(f"媒体文件路径越界，已跳过: {target_path}")
+                            continue
+                        target_path.parent.mkdir(parents=True, exist_ok=True)
+                        with zf.open(name) as src, open(target_path, "wb") as dst:
+                            dst.write(src.read())
                     except Exception as e:
                         result.add_warning(f"导入媒体文件 {name} 失败: {e}")
 
@@ -844,14 +857,14 @@ class AstrBotImporter:
                     else:
                         target_path = attachments_dir / os.path.basename(name)
 
-                    await anyio.Path(target_path.parent).mkdir(
-                        parents=True,
-                        exist_ok=True,
-                    )
-                    with zf.open(name) as src:
-                        content = src.read()
-                    async with await anyio.open_file(target_path, "wb") as dst:
-                        await dst.write(content)
+                    # Validate path is within attachments directory (CWE-22)
+                    if not _validate_path_within(target_path, attachments_dir):
+                        logger.warning(f"附件路径越界，已跳过: {target_path}")
+                        continue
+
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open(name) as src, open(target_path, "wb") as dst:
+                        dst.write(src.read())
                     count += 1
                 except Exception as e:
                     logger.warning(f"导入附件 {name} 失败: {e}")
@@ -927,10 +940,11 @@ class AstrBotImporter:
                             continue
 
                         target_path = target_dir / rel_path
-                        await anyio.Path(target_path.parent).mkdir(
-                            parents=True,
-                            exist_ok=True,
-                        )
+                        # Validate path is within target directory (CWE-22)
+                        if not _validate_path_within(target_path, target_dir):
+                            result.add_warning(f"文件路径越界，已跳过: {name}")
+                            continue
+                        target_path.parent.mkdir(parents=True, exist_ok=True)
 
                         with zf.open(name) as src:
                             content = src.read()

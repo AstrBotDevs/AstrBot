@@ -4,13 +4,14 @@ import os
 import re
 import uuid
 from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import Any
+from copy import deepcopy
+from typing import cast
 
 import anyio
 from quart import g, make_response, request, send_file
 
 from astrbot.core import logger, sp
+from astrbot.core.agent.message import get_checkpoint_id, is_checkpoint_message
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.message_type import MessageType
@@ -80,6 +81,12 @@ class ChatRoute(Route):
                 "POST",
                 self.update_session_display_name,
             ),
+            "/chat/message/edit": ("POST", self.update_message),
+            "/chat/message/regenerate": ("POST", self.regenerate_message),
+            "/chat/thread/create": ("POST", self.create_thread),
+            "/chat/thread/get": ("GET", self.get_thread),
+            "/chat/thread/send": ("POST", self.send_thread_message),
+            "/chat/thread/delete": ("POST", self.delete_thread),
             "/chat/get_file": ("GET", self.get_file),
             "/chat/get_attachment": ("GET", self.get_attachment),
             "/chat/post_file": ("POST", self.post_file),
@@ -260,6 +267,238 @@ class ChatRoute(Route):
             used_refs.append(payload)
         return {"used": used_refs} if used_refs else {}
 
+    def _sanitize_message_content(self, content: dict) -> dict:
+        """Normalize editable WebChat message content before persisting."""
+        if not isinstance(content, dict):
+            raise ValueError("Missing key: content")
+
+        normalized = deepcopy(content)
+        message_type = normalized.get("type")
+        if message_type not in {"user", "bot"}:
+            raise ValueError("Invalid key: content.type")
+
+        message_parts = normalized.get("message")
+        if not isinstance(message_parts, list):
+            raise ValueError("Missing key: content.message")
+        normalized["message"] = strip_message_parts_path_fields(message_parts)
+        return normalized
+
+    def _extract_platform_message_text(self, content: dict | None) -> str:
+        if not isinstance(content, dict):
+            return ""
+        message_parts = content.get("message")
+        if not isinstance(message_parts, list):
+            return ""
+        texts: list[str] = []
+        for part in message_parts:
+            if isinstance(part, dict) and part.get("type") == "plain":
+                text = part.get("text")
+                if isinstance(text, str):
+                    texts.append(text)
+        return "".join(texts)
+
+    def _build_webchat_unified_msg_origin(self, session) -> str:
+        message_type = (
+            MessageType.GROUP_MESSAGE.value
+            if session.is_group
+            else MessageType.FRIEND_MESSAGE.value
+        )
+        return (
+            f"{session.platform_id}:{message_type}:"
+            f"{session.platform_id}!{session.creator}!{session.session_id}"
+        )
+
+    def _build_thread_unified_msg_origin(self, creator: str, thread_id: str) -> str:
+        return (
+            f"webchat:{MessageType.FRIEND_MESSAGE.value}:webchat!{creator}!{thread_id}"
+        )
+
+    def _serialize_thread(self, thread) -> dict:
+        return {
+            "thread_id": thread.thread_id,
+            "parent_session_id": thread.parent_session_id,
+            "parent_message_id": thread.parent_message_id,
+            "base_checkpoint_id": thread.base_checkpoint_id,
+            "selected_text": thread.selected_text,
+            "created_at": to_utc_isoformat(thread.created_at),
+            "updated_at": to_utc_isoformat(thread.updated_at),
+        }
+
+    async def _delete_threads_by_ids(self, thread_ids: list[str], creator: str) -> None:
+        for thread_id in thread_ids:
+            unified_msg_origin = self._build_thread_unified_msg_origin(
+                creator, thread_id
+            )
+            active_event_registry.request_agent_stop_all(unified_msg_origin)
+            await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
+            await self.platform_history_mgr.delete(
+                platform_id="webchat_thread",
+                user_id=thread_id,
+                offset_sec=99999999,
+            )
+            webchat_queue_mgr.remove_queues(thread_id)
+            self.running_convs.pop(thread_id, None)
+
+    async def _load_current_conversation_history(self, session) -> tuple[str, list]:
+        unified_msg_origin = self._build_webchat_unified_msg_origin(session)
+        conversation_id = await self.conv_mgr.get_curr_conversation_id(
+            unified_msg_origin
+        )
+        if not conversation_id:
+            return "", []
+
+        conversation = await self.conv_mgr.get_conversation(
+            unified_msg_origin=unified_msg_origin,
+            conversation_id=conversation_id,
+        )
+        if not conversation:
+            return "", []
+
+        try:
+            history = json.loads(conversation.history or "[]")
+        except json.JSONDecodeError:
+            return "", []
+        return conversation_id, history if isinstance(history, list) else []
+
+    def _find_checkpoint_index(
+        self, history: list[dict], checkpoint_id: str
+    ) -> int | None:
+        for index, message in enumerate(history):
+            if get_checkpoint_id(message) == checkpoint_id:
+                return index
+        return None
+
+    def _find_turn_range(
+        self, history: list[dict], checkpoint_id: str
+    ) -> tuple[int, int] | None:
+        checkpoint_index = self._find_checkpoint_index(history, checkpoint_id)
+        if checkpoint_index is None:
+            return None
+
+        start = 0
+        for index in range(checkpoint_index - 1, -1, -1):
+            if is_checkpoint_message(history[index]):
+                start = index + 1
+                break
+        return start, checkpoint_index
+
+    def _is_latest_checkpoint(self, history: list[dict], checkpoint_id: str) -> bool:
+        for message in reversed(history):
+            current_checkpoint_id = get_checkpoint_id(message)
+            if current_checkpoint_id:
+                return current_checkpoint_id == checkpoint_id
+        return False
+
+    def _replace_user_conversation_content(self, original_content, edited_text: str):
+        if isinstance(original_content, str):
+            return edited_text
+        if not isinstance(original_content, list):
+            return edited_text
+
+        result: list[dict] = []
+        inserted_text = False
+        for part in original_content:
+            if not isinstance(part, dict):
+                result.append(part)
+                continue
+            if part.get("type") != "text":
+                result.append(part)
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text.startswith("<system_reminder>"):
+                result.append(part)
+                continue
+            if not inserted_text and edited_text:
+                result.append({"type": "text", "text": edited_text})
+                inserted_text = True
+
+        if not inserted_text and edited_text:
+            result.insert(0, {"type": "text", "text": edited_text})
+        return result
+
+    def _replace_assistant_conversation_content(
+        self,
+        original_content,
+        edited_text: str,
+        reasoning: str,
+    ):
+        if isinstance(original_content, str):
+            return edited_text
+        if not isinstance(original_content, list):
+            return [{"type": "text", "text": edited_text}] if edited_text else []
+
+        result: list[dict] = []
+        inserted_text = False
+        inserted_think = False
+        for part in original_content:
+            if not isinstance(part, dict):
+                result.append(part)
+                continue
+            if part.get("type") == "text":
+                if not inserted_text and edited_text:
+                    result.append({"type": "text", "text": edited_text})
+                    inserted_text = True
+                continue
+            if part.get("type") == "think":
+                if not inserted_think and reasoning:
+                    result.append({"type": "think", "think": reasoning})
+                    inserted_think = True
+                continue
+            result.append(part)
+
+        if reasoning and not inserted_think:
+            result.insert(0, {"type": "think", "think": reasoning})
+        if edited_text and not inserted_text:
+            result.append({"type": "text", "text": edited_text})
+        return result
+
+    def _find_turn_user_index(
+        self, history: list[dict], start: int, end: int
+    ) -> int | None:
+        for index in range(start, end):
+            message = history[index]
+            if isinstance(message, dict) and message.get("role") == "user":
+                return index
+        return None
+
+    def _find_turn_final_assistant_index(
+        self, history: list[dict], start: int, end: int
+    ) -> int | None:
+        for index in range(end - 1, start - 1, -1):
+            message = history[index]
+            if not isinstance(message, dict) or message.get("role") != "assistant":
+                continue
+            if message.get("tool_calls") and not message.get("content"):
+                continue
+            return index
+        return None
+
+    async def _get_sorted_platform_history(self, session) -> list:
+        history_list = await self.platform_history_mgr.get(
+            platform_id=session.platform_id,
+            user_id=session.session_id,
+            page=1,
+            page_size=100000,
+        )
+        history_list.sort(key=lambda item: (item.created_at, item.id))
+        return history_list
+
+    async def _delete_platform_history_after(
+        self, session, message_id: int
+    ) -> list[int]:
+        history_list = await self._get_sorted_platform_history(session)
+        should_delete = False
+        deleted_ids: list[int] = []
+        for item in history_list:
+            if should_delete:
+                if item.id is not None:
+                    deleted_ids.append(item.id)
+                    await self.platform_history_mgr.delete_by_id(item.id)
+                continue
+            if item.id == message_id:
+                should_delete = True
+        return deleted_ids
+
     async def _save_bot_message(
         self,
         webchat_conv_id: str,
@@ -268,6 +507,8 @@ class ChatRoute(Route):
         reasoning: str,
         agent_stats: dict,
         refs: dict,
+        llm_checkpoint_id: str | None = None,
+        platform_history_id: str = "webchat",
     ):
         """保存 bot 消息到历史记录,返回保存的记录"""
         bot_message_parts = []
@@ -282,11 +523,12 @@ class ChatRoute(Route):
         if refs:
             new_his["refs"] = refs
         record = await self.platform_history_mgr.insert(
-            platform_id="webchat",
+            platform_id=platform_history_id,
             user_id=webchat_conv_id,
             content=new_his,
             sender_id="bot",
             sender_name="bot",
+            llm_checkpoint_id=llm_checkpoint_id,
         )
         return record
 
@@ -307,6 +549,9 @@ class ChatRoute(Route):
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
+        platform_history_id = post_data.get("_platform_history_id") or "webchat"
+        thread_selected_text = post_data.get("_thread_selected_text")
+
         if not session_id:
             return Response().error("session_id is empty").to_json()
         webchat_conv_id = session_id
@@ -318,10 +563,13 @@ class ChatRoute(Route):
                 .to_json()
             )
         message_id = str(uuid.uuid4())
+        llm_checkpoint_id = post_data.get("_llm_checkpoint_id") or str(uuid.uuid4())
+        skip_user_history = bool(post_data.get("_skip_user_history"))
         back_queue = webchat_queue_mgr.get_or_create_back_queue(
             message_id,
             webchat_conv_id,
         )
+        saved_user_record = None
 
         async def stream():
             client_disconnected = False
@@ -338,6 +586,19 @@ class ChatRoute(Route):
                     "session_id": webchat_conv_id,
                 }
                 yield f"data: {json.dumps(session_info, ensure_ascii=False)}\n\n"
+                if saved_user_record and not client_disconnected:
+                    user_saved_info = {
+                        "type": "user_message_saved",
+                        "data": {
+                            "id": saved_user_record.id,
+                            "created_at": to_utc_isoformat(
+                                saved_user_record.created_at
+                            ),
+                            "llm_checkpoint_id": llm_checkpoint_id,
+                        },
+                    }
+                    yield f"data: {json.dumps(user_saved_info, ensure_ascii=False)}\n\n"
+
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
                         result, should_break = await _poll_webchat_stream_result(
@@ -462,6 +723,8 @@ class ChatRoute(Route):
                                 accumulated_reasoning,
                                 agent_stats,
                                 refs,
+                                llm_checkpoint_id,
+                                platform_history_id,
                             )
                             if saved_record and (not client_disconnected):
                                 saved_info = {
@@ -471,6 +734,7 @@ class ChatRoute(Route):
                                         "created_at": to_utc_isoformat(
                                             saved_record.created_at,
                                         ),
+                                        "llm_checkpoint_id": llm_checkpoint_id,
                                     },
                                 }
                                 try:
@@ -498,25 +762,34 @@ class ChatRoute(Route):
                     "selected_model": selected_model,
                     "enable_streaming": enable_streaming,
                     "message_id": message_id,
+                    "llm_checkpoint_id": llm_checkpoint_id,
+                    "thread_selected_text": thread_selected_text,
                 },
             ),
         )
         message_parts_for_storage = strip_message_parts_path_fields(message_parts)
-        await self.platform_history_mgr.insert(
-            platform_id="webchat",
-            user_id=webchat_conv_id,
-            content={"type": "user", "message": message_parts_for_storage},
-            sender_id=username,
-            sender_name=username,
-        )
-        response = await make_response(
-            stream(),
-            {
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache",
-                "Transfer-Encoding": "chunked",
-                "Connection": "keep-alive",
-            },
+
+        if not skip_user_history:
+            saved_user_record = await self.platform_history_mgr.insert(
+                platform_id=platform_history_id,
+                user_id=webchat_conv_id,
+                content={"type": "user", "message": message_parts_for_storage},
+                sender_id=username,
+                sender_name=username,
+                llm_checkpoint_id=llm_checkpoint_id,
+            )
+
+        response = cast(
+            QuartResponse,
+            await make_response(
+                stream(),
+                {
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "Transfer-Encoding": "chunked",
+                    "Connection": "keep-alive",
+                },
+            ),
         )
         response.timeout = None
         return response
@@ -568,6 +841,10 @@ class ChatRoute(Route):
             user_id=session_id,
             offset_sec=99999999,
         )
+        thread_ids = await self.db.delete_webchat_threads_by_parent_session(session_id)
+        await self._delete_threads_by_ids(thread_ids, username)
+
+        # 删除与会话关联的配置路由
         try:
             router = self.umop_config_router
             assert router is not None
@@ -739,8 +1016,14 @@ class ChatRoute(Route):
             page_size=1000,
         )
         history_res = [history.model_dump() for history in history_ls]
-        response_data: dict[str, Any] = {
+        threads = await self.db.get_webchat_threads_by_parent_session(
+            parent_session_id=session_id,
+            creator=username,
+        )
+
+        response_data = {
             "history": history_res,
+            "threads": [self._serialize_thread(thread) for thread in threads],
             "is_running": self.running_convs.get(session_id, False),
         }
         if project_info:
@@ -750,6 +1033,396 @@ class ChatRoute(Route):
                 "emoji": project_info.emoji,
             }
         return Response().ok(data=response_data).to_json()
+
+    async def create_thread(self):
+        """Create or reuse a side thread from a selected assistant message."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = post_data.get("session_id")
+        parent_message_id = post_data.get("parent_message_id")
+        selected_text = str(post_data.get("selected_text") or "").strip()
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if parent_message_id is None:
+            return Response().error("Missing key: parent_message_id").__dict__
+        if not selected_text:
+            return Response().error("Missing key: selected_text").__dict__
+
+        try:
+            parent_message_id = int(parent_message_id)
+        except (TypeError, ValueError):
+            return Response().error("Invalid key: parent_message_id").__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        parent_record = await self.db.get_platform_message_history_by_id(
+            parent_message_id
+        )
+        if (
+            not parent_record
+            or parent_record.platform_id != session.platform_id
+            or parent_record.user_id != session_id
+        ):
+            return Response().error("Parent message not found").__dict__
+        if not isinstance(parent_record.content, dict):
+            return Response().error("Invalid parent message content").__dict__
+        if parent_record.content.get("type") != "bot":
+            return Response().error("Only bot messages can create threads").__dict__
+
+        checkpoint_id = parent_record.llm_checkpoint_id
+        if not checkpoint_id:
+            return (
+                Response().error("Parent message is not linked to LLM history").__dict__
+            )
+
+        existing = await self.db.get_webchat_thread_by_parent_message_and_text(
+            parent_session_id=session_id,
+            parent_message_id=parent_message_id,
+            selected_text=selected_text,
+            creator=username,
+        )
+        if existing:
+            return Response().ok(data=self._serialize_thread(existing)).__dict__
+
+        conversation_id, history = await self._load_current_conversation_history(
+            session
+        )
+        turn_range = self._find_turn_range(history, checkpoint_id)
+        if not conversation_id or not turn_range:
+            return Response().error("Linked checkpoint not found").__dict__
+
+        _start, end = turn_range
+        base_history = history[: end + 1]
+        thread = await self.db.create_webchat_thread(
+            creator=username,
+            parent_session_id=session_id,
+            parent_message_id=parent_message_id,
+            base_checkpoint_id=checkpoint_id,
+            selected_text=selected_text,
+        )
+        await self.conv_mgr.new_conversation(
+            unified_msg_origin=self._build_thread_unified_msg_origin(
+                username,
+                thread.thread_id,
+            ),
+            platform_id="webchat",
+            content=base_history,
+        )
+        return Response().ok(data=self._serialize_thread(thread)).__dict__
+
+    async def get_thread(self):
+        """Get a side thread and its message history."""
+        thread_id = request.args.get("thread_id")
+        if not thread_id:
+            return Response().error("Missing key: thread_id").__dict__
+
+        username = g.get("username", "guest")
+        thread = await self.db.get_webchat_thread_by_id(thread_id)
+        if not thread:
+            return Response().error(f"Thread {thread_id} not found").__dict__
+        if thread.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        history_ls = await self.platform_history_mgr.get(
+            platform_id="webchat_thread",
+            user_id=thread_id,
+            page=1,
+            page_size=1000,
+        )
+        return (
+            Response()
+            .ok(
+                data={
+                    "thread": self._serialize_thread(thread),
+                    "history": [history.model_dump() for history in history_ls],
+                    "is_running": self.running_convs.get(thread_id, False),
+                }
+            )
+            .__dict__
+        )
+
+    async def send_thread_message(self):
+        """Send a message inside a WebChat side thread."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        thread_id = post_data.get("thread_id")
+        if not thread_id:
+            return Response().error("Missing key: thread_id").__dict__
+
+        username = g.get("username", "guest")
+        thread = await self.db.get_webchat_thread_by_id(thread_id)
+        if not thread:
+            return Response().error(f"Thread {thread_id} not found").__dict__
+        if thread.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        return await self.chat(
+            {
+                "session_id": thread.thread_id,
+                "message": post_data.get("message", []),
+                "enable_streaming": post_data.get("enable_streaming", True),
+                "selected_provider": post_data.get("selected_provider"),
+                "selected_model": post_data.get("selected_model"),
+                "_platform_history_id": "webchat_thread",
+                "_thread_selected_text": thread.selected_text,
+            }
+        )
+
+    async def delete_thread(self):
+        """Delete a WebChat side thread and its isolated history."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        thread_id = post_data.get("thread_id")
+        if not thread_id:
+            return Response().error("Missing key: thread_id").__dict__
+
+        username = g.get("username", "guest")
+        thread = await self.db.get_webchat_thread_by_id(thread_id)
+        if not thread:
+            return Response().error(f"Thread {thread_id} not found").__dict__
+        if thread.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        await self.db.delete_webchat_thread(thread_id)
+        await self._delete_threads_by_ids([thread_id], username)
+        return Response().ok(data={"thread_id": thread_id}).__dict__
+
+    async def update_message(self):
+        """Update a persisted WebChat message and its linked LLM turn."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = post_data.get("session_id")
+        message_id = post_data.get("message_id")
+        content = post_data.get("content")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if message_id is None:
+            return Response().error("Missing key: message_id").__dict__
+
+        try:
+            message_id = int(message_id)
+            content = self._sanitize_message_content(content)
+        except (TypeError, ValueError) as exc:
+            return Response().error(str(exc)).__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        record = await self.db.get_platform_message_history_by_id(message_id)
+        if not record:
+            return Response().error(f"Message {message_id} not found").__dict__
+        if record.platform_id != session.platform_id or record.user_id != session_id:
+            return Response().error("Message does not belong to the session").__dict__
+        if not isinstance(record.content, dict):
+            return Response().error("Invalid message content").__dict__
+        if record.content.get("type") != content.get("type"):
+            return Response().error("Message type cannot be changed").__dict__
+        if content.get("type") != "user":
+            return Response().error("Only user messages can be edited").__dict__
+
+        platform_history = await self._get_sorted_platform_history(session)
+        latest_user_record = next(
+            (
+                item
+                for item in reversed(platform_history)
+                if isinstance(item.content, dict) and item.content.get("type") == "user"
+            ),
+            None,
+        )
+        if not latest_user_record or latest_user_record.id != message_id:
+            return (
+                Response().error("Only the latest user message can be edited").__dict__
+            )
+
+        checkpoint_id = record.llm_checkpoint_id
+        if not checkpoint_id:
+            return (
+                Response()
+                .error("This message is not linked to LLM history and cannot be edited")
+                .__dict__
+            )
+
+        conversation_id, history = await self._load_current_conversation_history(
+            session
+        )
+        turn_range = self._find_turn_range(history, checkpoint_id)
+        if not conversation_id or not turn_range:
+            return Response().error("Linked checkpoint not found").__dict__
+        if not self._is_latest_checkpoint(history, checkpoint_id):
+            return Response().error("Only the latest turn can be edited").__dict__
+
+        start, _end = turn_range
+
+        target_index = self._find_turn_user_index(history, start, _end)
+        if target_index is None:
+            return Response().error("Linked user message not found").__dict__
+
+        new_checkpoint_id = str(uuid.uuid4())
+        truncated_history = history[:start]
+        await self.platform_history_mgr.update(
+            message_id=message_id,
+            content=content,
+            llm_checkpoint_id=new_checkpoint_id,
+        )
+        deleted_message_ids = await self._delete_platform_history_after(
+            session, message_id
+        )
+        thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
+            session_id,
+            deleted_message_ids,
+        )
+        await self._delete_threads_by_ids(thread_ids, username)
+        await self.conv_mgr.update_conversation(
+            unified_msg_origin=self._build_webchat_unified_msg_origin(session),
+            conversation_id=conversation_id,
+            history=truncated_history,
+        )
+        await self.db.update_platform_session(session_id=session_id)
+        updated = await self.db.get_platform_message_history_by_id(message_id)
+        return (
+            Response()
+            .ok(
+                data={
+                    "message": updated.model_dump() if updated else None,
+                    "needs_regenerate": True,
+                    "truncated_after_message": True,
+                }
+            )
+            .__dict__
+        )
+
+    async def regenerate_message(self):
+        """Regenerate the latest bot message linked to an LLM checkpoint."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = post_data.get("session_id")
+        message_id = post_data.get("message_id")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if message_id is None:
+            return Response().error("Missing key: message_id").__dict__
+
+        try:
+            message_id = int(message_id)
+        except (TypeError, ValueError):
+            return Response().error("Invalid key: message_id").__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        target_record = await self.db.get_platform_message_history_by_id(message_id)
+        if not target_record:
+            return Response().error(f"Message {message_id} not found").__dict__
+        if (
+            target_record.platform_id != session.platform_id
+            or target_record.user_id != session_id
+        ):
+            return Response().error("Message does not belong to the session").__dict__
+        if not isinstance(target_record.content, dict):
+            return Response().error("Invalid message content").__dict__
+        if target_record.content.get("type") != "bot":
+            return Response().error("Only bot messages can be regenerated").__dict__
+
+        checkpoint_id = target_record.llm_checkpoint_id
+        if not checkpoint_id:
+            return Response().error("Message is not linked to LLM history").__dict__
+
+        conversation_id, history = await self._load_current_conversation_history(
+            session
+        )
+        turn_range = self._find_turn_range(history, checkpoint_id)
+        if not conversation_id or not turn_range:
+            return Response().error("Linked checkpoint not found").__dict__
+        if not self._is_latest_checkpoint(history, checkpoint_id):
+            return (
+                Response().error("Regenerating older turns requires branching").__dict__
+            )
+
+        start, end = turn_range
+        user_index = self._find_turn_user_index(history, start, end)
+        if user_index is None:
+            return Response().error("Linked user message not found").__dict__
+
+        platform_history = await self._get_sorted_platform_history(session)
+        source_user_record = next(
+            (
+                item
+                for item in reversed(platform_history)
+                if item.llm_checkpoint_id == checkpoint_id
+                and isinstance(item.content, dict)
+                and item.content.get("type") == "user"
+            ),
+            None,
+        )
+        if not source_user_record:
+            return Response().error("Linked user display message not found").__dict__
+
+        old_bot_record_ids = [
+            item.id
+            for item in platform_history
+            if item.id is not None
+            and item.llm_checkpoint_id == checkpoint_id
+            and isinstance(item.content, dict)
+            and item.content.get("type") == "bot"
+        ]
+        if not old_bot_record_ids:
+            return Response().error("Linked bot display message not found").__dict__
+
+        new_checkpoint_id = str(uuid.uuid4())
+        # The WebChat send path adds the current user message from the prompt.
+        # Remove the whole old turn here to avoid duplicating that user message.
+        new_history = history[:start] + history[end + 1 :]
+        await self.conv_mgr.update_conversation(
+            unified_msg_origin=self._build_webchat_unified_msg_origin(session),
+            conversation_id=conversation_id,
+            history=new_history,
+        )
+        thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
+            session_id,
+            old_bot_record_ids,
+        )
+        await self._delete_threads_by_ids(thread_ids, username)
+        for old_bot_record_id in old_bot_record_ids:
+            await self.platform_history_mgr.delete_by_id(old_bot_record_id)
+        await self.platform_history_mgr.update(
+            message_id=source_user_record.id,
+            llm_checkpoint_id=new_checkpoint_id,
+        )
+
+        return await self.chat(
+            {
+                "session_id": session_id,
+                "message": source_user_record.content.get("message", []),
+                "enable_streaming": post_data.get("enable_streaming", True),
+                "selected_provider": post_data.get("selected_provider"),
+                "selected_model": post_data.get("selected_model"),
+                "_skip_user_history": True,
+                "_llm_checkpoint_id": new_checkpoint_id,
+            }
+        )
 
     async def update_session_display_name(self):
         """Update a Platform session's display name."""

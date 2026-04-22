@@ -133,14 +133,16 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 14px 16px 8px;
   flex-shrink: 0;
 }
 
 .sidebar-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--v-theme-primaryText);
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.4;
+  margin: 0;
 }
 
 .refs-list {
@@ -176,7 +178,6 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 .ref-item-favicon {

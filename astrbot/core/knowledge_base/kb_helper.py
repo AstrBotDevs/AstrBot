@@ -102,6 +102,10 @@ Text chunk to process:
     return [chunk]
 
 
+def _compact_chunks(chunks: list[str]) -> list[str]:
+    return [chunk.strip() for chunk in chunks if chunk and chunk.strip()]
+
+
 class KBHelper:
     vec_db: FaissVecDB | None
     kb: KnowledgeBase
@@ -250,8 +254,8 @@ class KBHelper:
             saved_media: list[KBMedia] = []
 
             if pre_chunked_text is not None:
-                # 如果提供了预分块文本,直接使用
-                chunks_text = pre_chunked_text
+                # 如果提供了预分块文本，直接使用
+                chunks_text = _compact_chunks(pre_chunked_text)
                 file_size = sum(len(chunk) for chunk in chunks_text)
                 logger.info(f"使用预分块文本进行上传,共 {len(chunks_text)} 个块｡")
             else:
@@ -294,11 +298,41 @@ class KBHelper:
                 if progress_callback:
                     await progress_callback("chunking", 0, 100)
 
-                chunks_text = await self.chunker.chunk(
-                    text_content,
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap,
-                )
+                try:
+                    chunks_text = await self.chunker.chunk(
+                        text_content,
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                    )
+                    chunks_text = _compact_chunks(chunks_text)
+                except KnowledgeBaseUploadError:
+                    raise
+                except Exception as exc:
+                    raise KnowledgeBaseUploadError(
+                        stage="chunking",
+                        user_message=(
+                            "分块失败：文档内容在切分文本块时发生错误。"
+                            "请稍后重试，或调整分块参数后再次上传。"
+                        ),
+                        details={"file_name": file_name},
+                    ) from exc
+
+            if not chunks_text or not any(chunk.strip() for chunk in chunks_text):
+                if pre_chunked_text is not None:
+                    raise KnowledgeBaseUploadError(
+                        stage="validation",
+                        user_message=("预分块文本为空，未提供任何可索引文本块。"),
+                        details={"file_name": file_name},
+                    )
+                else:
+                    raise KnowledgeBaseUploadError(
+                        stage="chunking",
+                        user_message=(
+                            "分块失败：文档内容为空，未生成任何可索引文本块。"
+                        ),
+                        details={"file_name": file_name},
+                    )
+
             contents = []
             metadatas = []
             for idx, chunk_text in enumerate(chunks_text):
@@ -656,6 +690,8 @@ class KBHelper:
                     final_chunks.append(initial_chunks[i])
                 elif isinstance(result, list):
                     final_chunks.extend(result)
+
+            final_chunks = _compact_chunks(final_chunks)
 
             logger.info(
                 f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块｡",

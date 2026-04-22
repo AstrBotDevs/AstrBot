@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -147,6 +148,25 @@ class MockErrProvider(MockProvider):
         return LLMResponse(
             role="err",
             completion_text="primary provider returned error",
+        )
+
+
+class CapturingProvider(MockProvider):
+    def __init__(self, modalities: list[str]):
+        super().__init__()
+        self.provider_config["modalities"] = modalities
+        self.received_contexts = []
+        self.received_func_tools = []
+        self.should_call_tools = False
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        self.received_contexts.append(kwargs.get("contexts"))
+        self.received_func_tools.append(kwargs.get("func_tool"))
+        return LLMResponse(
+            role="assistant",
+            completion_text="final",
+            usage=TokenUsage(input_other=10, output=5),
         )
 
 
@@ -607,6 +627,99 @@ async def test_tool_result_includes_all_calltoolresult_content(
             "mime_type": "image/png",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_runner_replaces_runtime_image_context_before_provider_call(
+    runner, provider_request, mock_hooks
+):
+    provider = CapturingProvider(modalities=["tool_use"])
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    runner.run_context.messages.append(
+        Message(
+            role="user",
+            content=[
+                TextPart(text="Review this image"),
+                ImageURLPart(
+                    image_url=ImageURLPart.ImageURL(
+                        url="data:image/png;base64,dGVzdA=="
+                    )
+                ),
+            ],
+        )
+    )
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    assert provider.received_contexts
+    sent_context = provider.received_contexts[0]
+    assert sent_context[-1]["content"] == [
+        {"type": "text", "text": "Review this image"},
+        {"type": "text", "text": "[Image]"},
+    ]
+    assert len(runner.run_context.messages[-2].content) == 2
+
+
+@pytest.mark.asyncio
+async def test_runner_builds_placeholder_for_unsupported_request_image(
+    runner, mock_hooks, tool_set
+):
+    provider = CapturingProvider(modalities=["tool_use"])
+    request = ProviderRequest(
+        prompt="Describe it",
+        image_urls=["/path/that/should/not/be/read.jpg"],
+        func_tool=tool_set,
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    sent_context = provider.received_contexts[0]
+    assert sent_context[-1]["content"] == [
+        {"type": "text", "text": "Describe it"},
+        {"type": "text", "text": "[Image]"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_runner_clears_tools_for_provider_without_tool_use(
+    runner, provider_request, mock_hooks, mock_tool_executor
+):
+    provider = CapturingProvider(modalities=["text"])
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    assert provider.received_func_tools == [None]
 
 
 @pytest.mark.asyncio

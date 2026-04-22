@@ -2,6 +2,7 @@ import asyncio
 import base64
 import random
 import time
+import traceback
 import zlib
 
 import aiohttp
@@ -57,11 +58,17 @@ class KookClient:
 
     @property
     def bot_nickname(self):
+        """机器人昵称"""
         return self._bot_nickname
 
     @property
     def bot_username(self):
+        """机器人名称"""
         return self._bot_username
+
+    @property
+    def http_client(self):
+        return self._http_client
 
     async def get_bot_info(self) -> None:
         """获取机器人账号信息"""
@@ -153,7 +160,6 @@ class KookClient:
                 sn=self.last_sn,
                 session_id=self.session_id,
             )
-            await self.get_bot_info()
 
             if not gateway_url:
                 return False
@@ -217,8 +223,8 @@ class KookClient:
                 except websockets.exceptions.ConnectionClosed:
                     logger.warning("[KOOK] WebSocket连接已关闭")
                     break
-                except Exception as e:
-                    logger.error(f"[KOOK] 消息处理异常: {e}")
+                except Exception:
+                    logger.error(f"[KOOK] 消息处理异常: {traceback.format_exc()}")
                     break
 
         except Exception as e:
@@ -238,11 +244,15 @@ class KookClient:
                 await self.event_callback(data)
 
             case KookMessageSignal.HELLO:
-                assert isinstance(data, KookHelloEventData)
+                assert isinstance(data, KookHelloEventData), (
+                    f"期望 data 为 {KookHelloEventData.__name__}, 实际为 {type(data).__name__}，"
+                )
                 await self._handle_hello(data)
 
             case KookMessageSignal.RESUME_ACK:
-                assert isinstance(data, KookResumeAckEventData)
+                assert isinstance(data, KookResumeAckEventData), (
+                    f"期望 data 为 {KookResumeAckEventData.__name__}, 实际为 {type(data).__name__}，"
+                )
                 await self._handle_resume_ack(data)
 
             case KookMessageSignal.PONG:

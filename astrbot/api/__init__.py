@@ -12,9 +12,6 @@ Modules:
 
 from astrbot import logger
 
-# Tool API
-from astrbot._internal.tools.base import FunctionTool, ToolSet
-
 # MCP API
 from astrbot.api.mcp import (
     MCPClient,

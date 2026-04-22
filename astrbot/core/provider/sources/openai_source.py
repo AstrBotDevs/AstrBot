@@ -439,7 +439,7 @@ class ProviderOpenAIOfficial(Provider):
             image_fallback_used,
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
         return create_proxy_client("OpenAI", proxy)
@@ -860,29 +860,26 @@ class ProviderOpenAIOfficial(Provider):
                     # 工具集未提供
                     # Should be unreachable
                     raise Exception("工具集未提供")
-                for tool in tools.list_tools():
-                    # Safely access function attribute (ChatCompletionMessageCustomToolCall doesn't have it)
-                    tool_call_function = getattr(tool_call, "function", None)
-                    if not tool_call_function:
-                        continue
-                    if (
-                        tool_call.type == "function"
-                        and tool_call_function.name == tool.name
-                    ):
-                        # workaround for #1454
-                        arguments = tool_call_function.arguments
-                        if isinstance(arguments, str):
-                            args = json.loads(arguments)
-                        else:
-                            args = arguments
-                        args_ls.append(args)
-                        func_name_ls.append(tool_call_function.name)
-                        tool_call_ids.append(tool_call.id)
+
+                if tool_call.type == "function":
+                    # workaround for #1454
+                    if isinstance(tool_call.function.arguments, str):
+                        try:
+                            args = json.loads(tool_call.function.arguments)
+                        except json.JSONDecodeError as e:
+                            logger.error(f"解析参数失败: {e}")
+                            args = {}
+                    else:
+                        args = tool_call.function.arguments
+                    args_ls.append(args)
+                    func_name_ls.append(tool_call.function.name)
+                    tool_call_ids.append(tool_call.id)
 
                     # gemini-2.5 / gemini-3 series extra_content handling
                     extra_content = getattr(tool_call, "extra_content", None)
                     if extra_content is not None:
                         tool_call_extra_content_dict[tool_call.id] = extra_content
+
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls

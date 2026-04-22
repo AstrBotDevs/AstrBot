@@ -51,6 +51,7 @@ chroma
 venv/*
 pytest.ini
 IFLOW.md
+CLAUDE.md
 
 # genie_tts data
 CharacterModels/
@@ -89,3 +90,4 @@ node_modules
 *pinokio*
 dashboard/pnpm-lock.yaml
 .obsidian
+dashboard/.codex

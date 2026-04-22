@@ -230,6 +230,11 @@ class WebChatAdapter(Platform):
             payload.get("enable_streaming", True),
         )
         message_event.set_extra("action_type", payload.get("action_type"))
+        message_event.set_extra("llm_checkpoint_id", payload.get("llm_checkpoint_id"))
+        message_event.set_extra(
+            "thread_selected_text", payload.get("thread_selected_text")
+        )
+
         self.commit_event(message_event)
 
     async def terminate(self) -> None:

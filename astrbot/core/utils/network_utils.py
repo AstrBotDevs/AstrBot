@@ -1,8 +1,12 @@
 """Network error handling utilities for providers."""
 
+import ssl
+
 import httpx
 
 from astrbot import logger
+
+_SYSTEM_SSL_CTX = ssl.create_default_context()
 
 
 def is_connection_error(exc: BaseException) -> bool:
@@ -86,8 +90,14 @@ def log_connection_failure(
 def create_proxy_client(
     provider_label: str,
     proxy: str | None = None,
-) -> httpx.AsyncClient | None:
+    headers: dict[str, str] | None = None,
+    verify: ssl.SSLContext | str | bool | None = None,
+) -> httpx.AsyncClient:
     """Create an httpx AsyncClient with proxy configuration if provided.
+
+    Uses the system SSL certificate store instead of certifi, which avoids
+    SSL verification failures for endpoints whose CA chain is not in certifi
+    but is trusted by the operating system.
 
     Note: The caller is responsible for closing the client when done.
     Consider using the client as a context manager or calling aclose() explicitly.
@@ -95,12 +105,15 @@ def create_proxy_client(
     Args:
         provider_label: The provider name for log prefix (e.g., "OpenAI", "Gemini")
         proxy: The proxy address (e.g., "http://127.0.0.1:7890"), or None/empty
+        headers: Optional custom headers to include in every request
+        verify: Optional override for TLS verification. Defaults to the shared
+            system SSL context when not provided.
 
     Returns:
-        An httpx.AsyncClient configured with the proxy, or None if no proxy
-
+        An httpx.AsyncClient created with the shared system SSL context; the proxy is applied only if one is provided.
     """
+    resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
     if proxy:
         logger.info(f"[{provider_label}] 使用代理: {proxy}")
-        return httpx.AsyncClient(proxy=proxy)
-    return None
+        return httpx.AsyncClient(proxy=proxy, verify=resolved_verify, headers=headers)
+    return httpx.AsyncClient(verify=resolved_verify, headers=headers)

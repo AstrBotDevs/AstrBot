@@ -323,8 +323,9 @@ class LiveChatRoute(Route):
         text: str,
         media_parts: list,
         reasoning: str,
-        agent_stats: dict[str, Any],
-        refs: dict[str, Any],
+        agent_stats: dict,
+        refs: dict,
+        llm_checkpoint_id: str | None = None,
     ):
         """保存 bot 消息到历史记录｡"""
         bot_message_parts = []
@@ -348,6 +349,7 @@ class LiveChatRoute(Route):
             content=new_his,
             sender_id="bot",
             sender_name="bot",
+            llm_checkpoint_id=llm_checkpoint_id,
         )
 
     async def _send_chat_payload(self, session: LiveChatSession, payload: dict) -> None:
@@ -531,6 +533,7 @@ class LiveChatRoute(Route):
         session.is_processing = True
         session.should_interrupt = False
         back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
+        llm_checkpoint_id = str(uuid.uuid4())
 
         try:
             chat_queue = webchat_queue_mgr.get_or_create_queue(session_id)
@@ -548,19 +551,31 @@ class LiveChatRoute(Route):
                         "show_reasoning": show_reasoning,
                         "enable_streaming": enable_streaming,
                         "message_id": message_id,
+                        "llm_checkpoint_id": llm_checkpoint_id,
                     },
                 ),
             )
 
             message_parts_for_storage = strip_message_parts_path_fields(message_parts)
-            mgr = self.platform_history_mgr
-            assert mgr is not None
-            await mgr.insert(
+            saved_user_record = await self.platform_history_mgr.insert(
                 platform_id="webchat",
                 user_id=session_id,
                 content={"type": "user", "message": message_parts_for_storage},
                 sender_id=session.username,
                 sender_name=session.username,
+                llm_checkpoint_id=llm_checkpoint_id,
+            )
+            await self._send_chat_payload(
+                session,
+                {
+                    "ct": "chat",
+                    "type": "user_message_saved",
+                    "data": {
+                        "id": saved_user_record.id,
+                        "created_at": to_utc_isoformat(saved_user_record.created_at),
+                        "llm_checkpoint_id": llm_checkpoint_id,
+                    },
+                },
             )
 
             accumulated_parts = []
@@ -702,6 +717,7 @@ class LiveChatRoute(Route):
                         accumulated_reasoning,
                         agent_stats,
                         refs,
+                        llm_checkpoint_id,
                     )
                     if saved_record:
                         await self._send_chat_payload(
@@ -714,6 +730,7 @@ class LiveChatRoute(Route):
                                     "created_at": to_utc_isoformat(
                                         saved_record.created_at,
                                     ),
+                                    "llm_checkpoint_id": llm_checkpoint_id,
                                 },
                             },
                         )

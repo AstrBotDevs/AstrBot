@@ -141,7 +141,6 @@
                   @delete-provider="deleteProvider"
                   @add-model-provider="addModelProvider"
                 />
-                >>>>>>> origin =======
                 <ProviderModelsPanel
                   v-model:model-search="modelSearch"
                   :entries="filteredMergedModelEntries"
@@ -185,7 +184,6 @@
                   @delete-provider="deleteProvider"
                   @add-model-provider="addModelProvider"
                 />
-                >>>>>>> origin
               </div>
             </div>
             <div

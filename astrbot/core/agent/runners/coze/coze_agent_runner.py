@@ -18,6 +18,11 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.provider.provider import Provider
 
+from ...hooks import BaseAgentRunHooks
+from ...message import is_checkpoint_message
+from ...response import AgentResponseData
+from ...run_context import ContextWrapper, TContext
+from ..base import AgentResponse, AgentState, BaseAgentRunner
 from .coze_api_client import CozeAPIClient
 
 if sys.version_info >= (3, 12):
@@ -160,6 +165,8 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         # 处理历史上下文
         if not self.auto_save_history and contexts:
             for ctx in contexts:
+                if is_checkpoint_message(ctx):
+                    continue
                 if isinstance(ctx, dict) and "role" in ctx and "content" in ctx:
                     # 处理上下文中的图片
                     content = ctx["content"]
