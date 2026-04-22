@@ -76,6 +76,9 @@ class InternalAgentSubStage(Stage):
             False,
         )
         self.show_reasoning = settings.get("display_reasoning_text", False)
+        self.save_failed_agent_history: bool = settings.get(
+            "save_failed_agent_history", False
+        )
         self.sanitize_context_by_modalities: bool = settings.get(
             "sanitize_context_by_modalities",
             False,
@@ -306,6 +309,7 @@ class InternalAgentSubStage(Stage):
                                 agent_runner.run_context.messages,
                                 agent_runner.stats,
                                 user_aborted=agent_runner.was_aborted(),
+                                save_failed_history=self.save_failed_agent_history,
                             )
 
                     elif streaming_response and not stream_to_general:
@@ -381,6 +385,7 @@ class InternalAgentSubStage(Stage):
                             agent_runner.run_context.messages,
                             agent_runner.stats,
                             user_aborted=agent_runner.was_aborted(),
+                            save_failed_history=self.save_failed_agent_history,
                         )
 
                     asyncio.create_task(
@@ -424,6 +429,7 @@ class InternalAgentSubStage(Stage):
         all_messages: list[Message],
         runner_stats: AgentStats | None,
         user_aborted: bool = False,
+        save_failed_history: bool = False,
     ) -> None:
         if not req or not req.conversation:
             return
@@ -445,9 +451,21 @@ class InternalAgentSubStage(Stage):
             not llm_response.completion_text
             and not req.tool_calls_result
             and not user_aborted
+            and not save_failed_history
         ):
             logger.debug("LLM 响应为空，不保存记录。")
             return
+
+        if save_failed_history and not llm_response.completion_text:
+            logger.info(
+                "Saving failed agent history as save_failed_agent_history is enabled."
+            )
+            all_messages.append(
+                Message(
+                    role="assistant",
+                    content="[Agent run failed. History saved for debugging.]",
+                )
+            )
 
         messages_to_save: list[Message] = []
         skipped_initial_system = False
