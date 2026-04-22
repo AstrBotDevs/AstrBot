@@ -40,6 +40,7 @@ from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.computer_tools import (
     AnnotateExecutionTool,
@@ -980,33 +981,49 @@ def _sanitize_context_by_modalities(
     req.contexts = sanitized_contexts
 
 
-def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
+async def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
     """根据事件中的插件设置，过滤请求中的工具列表。
 
     注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
     因为它们不属于任何插件，不应被插件过滤逻辑影响。
     """
-    if event.plugins_name is not None and req.func_tool:
-        new_tool_set = ToolSet()
-        for tool in req.func_tool.tools:
-            if isinstance(tool, MCPTool):
-                # 保留 MCP 工具
-                new_tool_set.add_tool(tool)
-                continue
-            mp = tool.handler_module_path
-            if not mp:
-                # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
-                # 不应受到会话插件过滤影响。
-                new_tool_set.add_tool(tool)
-                continue
-            plugin = star_map.get(mp)
-            if not plugin:
-                # 无法解析插件归属时，保守保留工具，避免误过滤。
-                new_tool_set.add_tool(tool)
-                continue
-            if plugin.name in event.plugins_name or plugin.reserved:
-                new_tool_set.add_tool(tool)
-        req.func_tool = new_tool_set
+    if not req.func_tool:
+        return
+
+    session_config = await SessionPluginManager.get_session_plugin_config(
+        event.unified_msg_origin
+    )
+    new_tool_set = ToolSet()
+    for tool in req.func_tool.tools:
+        if isinstance(tool, MCPTool):
+            # 保留 MCP 工具
+            new_tool_set.add_tool(tool)
+            continue
+        mp = tool.handler_module_path
+        if not mp:
+            # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
+            # 不应受到会话插件过滤影响。
+            new_tool_set.add_tool(tool)
+            continue
+        plugin = star_map.get(mp)
+        if not plugin:
+            # 无法解析插件归属时，保守保留工具，避免误过滤。
+            new_tool_set.add_tool(tool)
+            continue
+        if (
+            event.plugins_name is not None
+            and not plugin.reserved
+            and plugin.name not in event.plugins_name
+        ):
+            continue
+        if not SessionPluginManager.is_plugin_enabled_for_session_config(
+            plugin.name,
+            session_config,
+            reserved=plugin.reserved,
+        ):
+            continue
+        new_tool_set.add_tool(tool)
+    req.func_tool = new_tool_set
 
 
 async def _handle_webchat(
@@ -1425,7 +1442,7 @@ async def build_main_agent(
         req.session_id = event.unified_msg_origin
 
     _modalities_fix(provider, req)
-    _plugin_tool_fix(event, req)
+    await _plugin_tool_fix(event, req)
     await _apply_web_search_tools(event, req, plugin_context)
     _sanitize_context_by_modalities(config, provider, req)
 

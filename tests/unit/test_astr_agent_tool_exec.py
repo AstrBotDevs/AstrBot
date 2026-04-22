@@ -1,9 +1,11 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import mcp
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
 
@@ -270,6 +272,44 @@ async def test_collect_handoff_image_urls_filters_extensionless_missing_event_fi
     )
 
     assert image_urls == []
+
+
+@pytest.mark.asyncio
+async def test_build_handoff_toolset_filters_session_disabled_plugin_tool():
+    plugin_tool = FunctionTool(
+        name="memorix_tool",
+        description="memorix tool",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="test_plugin",
+        active=True,
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(
+            event=_DummyEvent([]),
+            context=SimpleNamespace(
+                get_config=lambda **_kwargs: {"provider_settings": {"computer_use_runtime": "none"}}
+            ),
+        )
+    )
+
+    with patch(
+        "astrbot.core.astr_agent_tool_exec.SessionPluginManager.get_session_plugin_config",
+        new=AsyncMock(return_value={"disabled_plugins": ["astrbot_plugin_memorix"]}),
+    ) as mock_get_config, patch(
+        "astrbot.core.astr_agent_tool_exec.llm_tools"
+    ) as mock_llm_tools, patch(
+        "astrbot.core.astr_agent_tool_exec.star_map"
+    ) as mock_star_map:
+        mock_llm_tools.func_list = [plugin_tool]
+        mock_plugin = MagicMock()
+        mock_plugin.name = "astrbot_plugin_memorix"
+        mock_plugin.reserved = False
+        mock_star_map.get.return_value = mock_plugin
+
+        toolset = await FunctionToolExecutor._build_handoff_toolset(run_context, None)
+
+    mock_get_config.assert_awaited_once()
+    assert toolset is None
 
 
 @pytest.mark.asyncio
