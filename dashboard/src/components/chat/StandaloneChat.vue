@@ -304,7 +304,7 @@ async function sendCurrentMessage() {
   const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
 
   draft.value = "";
-  clearStaged();
+  clearStaged({ revokeUrls: false });
   scrollToBottom();
 
   sendMessageStream({
