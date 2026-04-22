@@ -182,12 +182,15 @@ class ProviderOpenAIOfficial(Provider):
         return False
 
     def _is_tool_choice_required_incompatible_with_thinking_error(
-        self, error: Exception
+        self,
+        error: Exception,
+        candidates: list[str] | None = None,
     ) -> bool:
-        candidates = [
-            candidate.lower()
-            for candidate in self._extract_error_text_candidates(error)
-        ]
+        if candidates is None:
+            candidates = [
+                candidate.lower()
+                for candidate in self._extract_error_text_candidates(error)
+            ]
         exact_messages = (
             "tool_choice 'required' is incompatible with thinking enabled",
             'tool_choice "required" is incompatible with thinking enabled',
@@ -196,12 +199,9 @@ class ProviderOpenAIOfficial(Provider):
             if any(message in candidate for message in exact_messages):
                 return True
 
-        for candidate in candidates:
-            has_tool_choice = "tool_choice" in candidate and (
-                "'required'" in candidate or '"required"' in candidate
-            )
             if (
-                has_tool_choice
+                "tool_choice" in candidate
+                and re.search(r"\brequired\b", candidate)
                 and "thinking enabled" in candidate
                 and "incompatible" in candidate
             ):
@@ -1105,35 +1105,33 @@ class ProviderOpenAIOfficial(Provider):
                 image_fallback_used=True,
             )
         required_tool_choice = payloads.get("tool_choice") == "required"
-        thinking_conflict_error = (
-            required_tool_choice
-            and self._is_tool_choice_required_incompatible_with_thinking_error(e)
-        )
-        if thinking_conflict_error:
-            provider_name = self.provider_config.get("provider", "unknown")
-            logger.info(
-                "触发工具调用策略降级：检测到 thinking 模式不兼容，"
-                f"provider={provider_name}，tool_choice=required->auto"
-            )
-            logger.warning(
-                "检测到 `tool_choice=required` 与 thinking 模式不兼容，"
-                f"自动降级为 `auto` 并重试，provider={provider_name}"
-            )
-            retry_payloads = {**payloads, "tool_choice": "auto"}
-            return (
-                False,
-                chosen_key,
-                available_api_keys,
-                retry_payloads,
-                context_query,
-                func_tool,
-                image_fallback_used,
-            )
         if required_tool_choice:
             candidates = [
                 candidate.lower()
                 for candidate in self._extract_error_text_candidates(e)
             ]
+            thinking_conflict_error = (
+                self._is_tool_choice_required_incompatible_with_thinking_error(
+                    e,
+                    candidates,
+                )
+            )
+            if thinking_conflict_error:
+                provider_name = self.provider_config.get("provider", "unknown")
+                logger.warning(
+                    "检测到 `tool_choice=required` 与 thinking 模式不兼容，"
+                    f"自动降级为 `auto` 并重试，provider={provider_name}"
+                )
+                retry_payloads = {**payloads, "tool_choice": "auto"}
+                return (
+                    False,
+                    chosen_key,
+                    available_api_keys,
+                    retry_payloads,
+                    context_query,
+                    func_tool,
+                    image_fallback_used,
+                )
             has_related_keywords = any(
                 "tool_choice" in candidate and "thinking" in candidate
                 for candidate in candidates

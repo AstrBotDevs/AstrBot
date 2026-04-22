@@ -676,6 +676,50 @@ async def test_handle_api_error_required_thinking_conflict_uses_payload_copy():
 
 
 @pytest.mark.asyncio
+async def test_handle_api_error_required_thinking_conflict_without_quotes_still_retries():
+    provider = _make_provider({"provider": "moonshot"})
+    try:
+        payloads = {
+            "tool_choice": "required",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        }
+        context_query = payloads["messages"]
+        err = _ErrorWithBody(
+            "upstream error",
+            {
+                "error": {
+                    "message": "tool_choice required is incompatible with thinking enabled",
+                    "type": "invalid_request_error",
+                }
+            },
+        )
+
+        (
+            success,
+            _chosen_key,
+            _available_api_keys,
+            updated_payloads,
+            _updated_contexts,
+            _updated_tool,
+            _img_flag,
+        ) = await provider._handle_api_error(
+            err,
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        assert updated_payloads["tool_choice"] == "auto"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_handle_api_error_required_thinking_conflict_emits_fallback_log(
     monkeypatch,
 ):
@@ -696,15 +740,15 @@ async def test_handle_api_error_required_thinking_conflict_emits_fallback_log(
             },
         )
 
-        info_logs: list[str] = []
+        warning_logs: list[str] = []
 
-        def _capture_info(message, *args, **kwargs):
+        def _capture_warning(message, *args, **kwargs):
             del args, kwargs
-            info_logs.append(str(message))
+            warning_logs.append(str(message))
 
         monkeypatch.setattr(
-            "astrbot.core.provider.sources.openai_source.logger.info",
-            _capture_info,
+            "astrbot.core.provider.sources.openai_source.logger.warning",
+            _capture_warning,
         )
 
         await provider._handle_api_error(
@@ -718,7 +762,8 @@ async def test_handle_api_error_required_thinking_conflict_emits_fallback_log(
             max_retries=10,
         )
 
-        assert any("tool_choice=required->auto" in log for log in info_logs)
+        assert any("tool_choice=required" in log for log in warning_logs)
+        assert any("auto" in log for log in warning_logs)
     finally:
         await provider.terminate()
 
