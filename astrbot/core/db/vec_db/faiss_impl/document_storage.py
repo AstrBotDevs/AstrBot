@@ -101,7 +101,7 @@ class DocumentStorage:
                 """
                 CREATE TABLE IF NOT EXISTS documents (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    doc_id TEXT NOT NULL,
+                    doc_id TEXT NOT NULL UNIQUE,
                     text TEXT NOT NULL,
                     metadata TEXT,
                     created_at DATETIME,
