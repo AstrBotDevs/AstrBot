@@ -9,7 +9,7 @@ from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.message.components import File, Image, Plain, Reply
+from astrbot.core.message.components import File, Image, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
@@ -713,144 +713,6 @@ class TestDecorateLlmRequest:
         assert req.prompt == "Hello"
 
 
-class TestModalitiesFix:
-    """Tests for _modalities_fix function."""
-
-    def test_modalities_fix_image_not_supported(self, mock_provider):
-        """Test modality fix when image is not supported."""
-        module = ama
-        mock_provider.provider_config = {"modalities": ["text"]}
-        req = ProviderRequest(prompt="Hello", image_urls=["/path/to/image.jpg"])
-
-        module._modalities_fix(mock_provider, req)
-
-        assert "[Image]" in req.prompt
-        assert req.image_urls == []
-
-    def test_modalities_fix_tool_not_supported(self, mock_provider):
-        """Test modality fix when tool is not supported."""
-        module = ama
-        mock_provider.provider_config = {"modalities": ["text", "image"]}
-        req = ProviderRequest(prompt="Hello")
-        req.func_tool = ToolSet()
-        req.func_tool.add_tool(
-            FunctionTool(
-                name="dummy_tool",
-                description="dummy",
-                parameters={"type": "object", "properties": {}},
-            )
-        )
-
-        module._modalities_fix(mock_provider, req)
-
-        assert req.func_tool is None
-
-    def test_modalities_fix_all_supported(self, mock_provider):
-        """Test modality fix when all features are supported."""
-        module = ama
-        mock_provider.provider_config = {"modalities": ["image", "tool_use"]}
-        tool_set = ToolSet()
-        tool_set.add_tool(
-            FunctionTool(
-                name="dummy_tool",
-                description="dummy",
-                parameters={"type": "object", "properties": {}},
-            )
-        )
-        req = ProviderRequest(
-            prompt="Hello",
-            image_urls=["/path/to/image.jpg"],
-            func_tool=tool_set,
-        )
-
-        module._modalities_fix(mock_provider, req)
-
-        assert req.prompt == "Hello"
-        assert len(req.image_urls) == 1
-        assert req.func_tool is not None
-
-
-class TestSanitizeContextByModalities:
-    """Tests for _sanitize_context_by_modalities function."""
-
-    def test_sanitize_no_op(self, mock_provider):
-        """Test sanitize when disabled or modalities support everything."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, sanitize_context_by_modalities=False
-        )
-        mock_provider.provider_config = {"modalities": ["image", "tool_use"]}
-        req = ProviderRequest(contexts=[{"role": "user", "content": "Hello"}])
-
-        module._sanitize_context_by_modalities(config, mock_provider, req)
-
-        assert len(req.contexts) == 1
-
-    def test_sanitize_removes_tool_messages(self, mock_provider):
-        """Test sanitize removes tool messages when tool_use not supported."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, sanitize_context_by_modalities=True
-        )
-        mock_provider.provider_config = {"modalities": ["image"]}
-        req = ProviderRequest(
-            contexts=[
-                {"role": "user", "content": "Hello"},
-                {"role": "tool", "content": "Tool result"},
-            ]
-        )
-
-        module._sanitize_context_by_modalities(config, mock_provider, req)
-
-        assert len(req.contexts) == 1
-        assert req.contexts[0]["role"] == "user"
-
-    def test_sanitize_removes_tool_calls(self, mock_provider):
-        """Test sanitize removes tool_calls from assistant messages."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, sanitize_context_by_modalities=True
-        )
-        mock_provider.provider_config = {"modalities": ["image"]}
-        req = ProviderRequest(
-            contexts=[
-                {
-                    "role": "assistant",
-                    "content": "Response",
-                    "tool_calls": [{"name": "tool"}],
-                }
-            ]
-        )
-
-        module._sanitize_context_by_modalities(config, mock_provider, req)
-
-        assert "tool_calls" not in req.contexts[0]
-
-    def test_sanitize_removes_image_blocks(self, mock_provider):
-        """Test sanitize removes image blocks when image not supported."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, sanitize_context_by_modalities=True
-        )
-        mock_provider.provider_config = {"modalities": ["tool_use"]}
-        req = ProviderRequest(
-            contexts=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Hello"},
-                        {"type": "image_url", "url": "image.jpg"},
-                    ],
-                }
-            ]
-        )
-
-        module._sanitize_context_by_modalities(config, mock_provider, req)
-
-        assert len(req.contexts[0]["content"]) == 1
-        assert req.contexts[0]["content"][0]["type"] == "text"
-
-
 class TestPluginToolFix:
     """Tests for _plugin_tool_fix function."""
 
@@ -1066,6 +928,146 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_with_video_attachment(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test building main agent with video attachments."""
+        module = ama
+        mock_video = Video(file="file:///path/to/video.mp4")
+        mock_event.message_obj.message = [mock_video]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert [
+            part.text for part in result.provider_request.extra_user_content_parts
+        ] == ["[Video Attachment: name video.mp4, path path/to/video.mp4]"]
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_with_quoted_video_attachment(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test building main agent with quoted video attachments."""
+        module = ama
+        mock_video = Video(file="file:///path/to/quoted-video.mp4")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[mock_video],
+            sender_nickname="",
+            message_str="quoted message",
+        )
+        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert (
+            "[Video Attachment in quoted message: "
+            "name quoted-video.mp4, path path/to/quoted-video.mp4]"
+        ) in [part.text for part in result.provider_request.extra_user_content_parts]
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_skips_video_attachment_when_conversion_fails(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test video attachment failures do not abort request construction."""
+        module = ama
+        mock_video = Video(file="file:///path/to/direct.mp4")
+        mock_quoted_video = Video(file="file:///path/to/quoted.mp4")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[mock_quoted_video],
+            sender_nickname="",
+            message_str="quoted message",
+        )
+        mock_event.message_obj.message = [mock_video, mock_reply]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        async def _raise_video_conversion_error(self):
+            if self.file.endswith("direct.mp4"):
+                raise RuntimeError("direct")
+            raise RuntimeError("quoted")
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch("astrbot.core.astr_main_agent.logger") as mock_logger,
+            patch.object(
+                Video,
+                "convert_to_file_path",
+                AsyncMock(side_effect=_raise_video_conversion_error),
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert not any(
+            "Video Attachment" in part.text
+            for part in result.provider_request.extra_user_content_parts
+        )
+        assert mock_logger.error.call_count == 2
+        assert (
+            "Error processing video attachment"
+            in mock_logger.error.call_args_list[0][0][0]
+        )
+        assert (
+            "Error processing quoted video attachment"
+            in mock_logger.error.call_args_list[1][0][0]
+        )
 
     @pytest.mark.asyncio
     async def test_build_main_agent_no_prompt_no_images(

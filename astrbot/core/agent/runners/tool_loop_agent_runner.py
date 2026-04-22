@@ -7,7 +7,7 @@ import typing as T
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from mcp.types import (
@@ -41,6 +41,10 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
     ToolCallsResult,
+)
+from astrbot.core.provider.modalities import (
+    log_context_sanitize_stats,
+    sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
 
@@ -300,8 +304,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # append existing messages in the run context
         messages = bind_checkpoint_messages(request.contexts or [])
-        if request.prompt is not None:
-            m = await request.assemble_context()
+        if (
+            request.prompt is not None
+            or request.image_urls
+            or request.audio_urls
+            or request.extra_user_content_parts
+        ):
+            m = await self._assemble_request_context_for_provider(request)
             messages.append(Message.model_validate(m))
         if request.system_prompt:
             messages.insert(
@@ -317,6 +326,42 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if self.read_tool is not None:
             return f"`{self.read_tool.name}`"
         return "the available file-read tool"
+
+    async def _assemble_request_context_for_provider(
+        self,
+        request: ProviderRequest,
+    ) -> dict[str, T.Any]:
+        modalities = self.provider.provider_config.get("modalities", None)
+        if not isinstance(modalities, list):
+            return await request.assemble_context()
+
+        supports_image = "image" in modalities
+        supports_audio = "audio" in modalities
+        if supports_image and supports_audio:
+            return await request.assemble_context()
+
+        adjusted_request = replace(
+            request,
+            image_urls=request.image_urls if supports_image else [],
+            audio_urls=request.audio_urls if supports_audio else [],
+        )
+        context = await adjusted_request.assemble_context()
+        content = context.get("content")
+        if isinstance(content, str):
+            content_blocks: list[dict[str, T.Any]] = [{"type": "text", "text": content}]
+        elif isinstance(content, list):
+            content_blocks = content
+        else:
+            content_blocks = []
+
+        if not supports_image:
+            for _ in request.image_urls:
+                content_blocks.append({"type": "text", "text": "[Image]"})
+        if not supports_audio:
+            for _ in request.audio_urls:
+                content_blocks.append({"type": "text", "text": "[Audio]"})
+
+        return {"role": "user", "content": content_blocks}
 
     async def _write_tool_result_overflow_file(
         self,
@@ -415,8 +460,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
         payload = {
-            "contexts": self.run_context.messages,  # list[Message]
-            "func_tool": self.req.func_tool,
+            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
+            "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
             "abort_signal": self._abort_signal,
@@ -531,6 +576,35 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             role="err",
             completion_text="All available chat models are unavailable.",
         )
+
+    def _sanitize_contexts_for_provider(
+        self,
+        contexts: list[Message] | list[dict[str, T.Any]],
+    ) -> list[Message] | list[dict[str, T.Any]]:
+        if not self._should_fix_modalities_for_provider():
+            return contexts
+        sanitized_contexts, stats = sanitize_contexts_by_modalities(
+            contexts,
+            self.provider.provider_config.get("modalities", None),
+        )
+        log_context_sanitize_stats(stats)
+        return sanitized_contexts
+
+    def _should_fix_modalities_for_provider(self) -> bool:
+        modalities = self.provider.provider_config.get("modalities", None)
+        return isinstance(modalities, list)
+
+    def _func_tool_for_provider(self) -> ToolSet | None:
+        if not self.req.func_tool:
+            return None
+        modalities = self.provider.provider_config.get("modalities", None)
+        if isinstance(modalities, list) and "tool_use" not in modalities:
+            logger.debug(
+                "Provider %s does not support tool_use, clearing tools for request.",
+                self.provider,
+            )
+            return None
+        return self.req.func_tool
 
     def _simple_print_message_role(self, tag: str = ""):
         roles = []
@@ -924,8 +998,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
                     # so we need to get the tool from the raw tool set
                     func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
+                    available_tools = self._skill_like_raw_tool_set.names()
                 else:
                     func_tool = req.func_tool.get_tool(func_tool_name)
+                    available_tools = req.func_tool.names()
 
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
@@ -933,7 +1009,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
                     _append_tool_call_result(
                         func_tool_id,
-                        f"error: Tool {func_tool_name} not found.",
+                        f"error: Tool {func_tool_name} not found. Available tools are: {', '.join(available_tools)}",
                     )
                     continue
 
@@ -1194,7 +1270,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if param_subset.tools and tool_names:
                 contexts = self._build_tool_requery_context(tool_names)
                 requery_resp = await self.provider.text_chat(
-                    contexts=contexts,
+                    contexts=self._sanitize_contexts_for_provider(contexts),
                     func_tool=param_subset,
                     model=self.req.model,
                     session_id=self.req.session_id,
@@ -1220,7 +1296,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
                     repair_resp = await self.provider.text_chat(
-                        contexts=repair_contexts,
+                        contexts=self._sanitize_contexts_for_provider(repair_contexts),
                         func_tool=param_subset,
                         model=self.req.model,
                         session_id=self.req.session_id,

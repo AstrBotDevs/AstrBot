@@ -55,6 +55,7 @@ const {
   installedStatusFilter,
   installedSortBy,
   installedSortOrder,
+  pinUpdatesOnTop,
   loading_,
   currentPage,
   dangerConfirmDialog,
@@ -353,6 +354,15 @@ const pinnedPlugins = computed(() => {
                       :descending-label="tm('sort.descending')"
                       :show-order="installedSortUsesOrder"
                       @update:order="installedSortOrder = $event"
+                    />
+                    <v-switch
+                      v-model="pinUpdatesOnTop"
+                      :label="tm('sort.pinUpdatesOnTop')"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      class="ml-4"
+                      style="max-width: 200px"
                     />
                   </div>
                 </div>
