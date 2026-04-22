@@ -262,13 +262,57 @@ def validate_mcp_stdio_config(config: dict) -> None:
         raise ValueError("MCP stdio env keys and values must be strings.")
 
 
+def _get_certifi_ca_bundle() -> str | None:
+    """Try to locate the certifi CA bundle for SSL_CERT_FILE."""
+    try:
+        import certifi
+
+        return certifi.where()
+    except ImportError:
+        pass
+    # Fallback: look for certifi in common locations
+    for candidate in (
+        os.path.join(
+            os.path.dirname(sys.executable),
+            "Lib",
+            "site-packages",
+            "certifi",
+            "cacert.pem",
+        ),
+        os.path.join(
+            os.path.dirname(sys.executable),
+            "..",
+            "Lib",
+            "site-packages",
+            "certifi",
+            "cacert.pem",
+        ),
+    ):
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
 def _prepare_stdio_env(config: dict) -> dict:
-    """Preserve Windows executable resolution for stdio subprocesses."""
-    if sys.platform != "win32":
-        return config
+    """Prepare environment variables for stdio subprocesses.
+
+    On Windows:
+    - Merges system environment variables (case-insensitive handling).
+    - For uv/uvx commands, sets SSL_CERT_FILE from certifi to avoid
+      ``invalid peer certificate: UnknownIssuer`` errors caused by
+      uv's bundled TLS not trusting the system certificate store.
+    """
     prepared = config.copy()
     env = dict(prepared.get("env") or {})
     env = _merge_environment_variables(env)
+
+    if sys.platform == "win32":
+        command_name = _normalize_stdio_command_name(config.get("command", ""))
+        if command_name in ("uv", "uvx") and "SSL_CERT_FILE" not in env:
+            ca_bundle = _get_certifi_ca_bundle()
+            if ca_bundle:
+                env["SSL_CERT_FILE"] = ca_bundle
+
     prepared["env"] = env
     return prepared
 
