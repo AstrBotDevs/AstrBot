@@ -13,7 +13,6 @@ from typing import Any, cast
 import botpy
 import botpy.message
 from botpy import Client
-from botpy.gateway import BotWebSocket
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -38,36 +37,10 @@ for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 
 
-class ManagedBotWebSocket(BotWebSocket):
-    def __init__(self, session, connection: Any, client: botClient):
-        super().__init__(session, connection)
-        self._client = client
-
-    async def on_closed(self, close_status_code, close_msg):
-        if self._client.is_shutting_down:
-            logger.debug("[QQOfficial] Ignore websocket reconnect during shutdown.")
-            return
-        await super().on_closed(close_status_code, close_msg)
-
-    async def close(self) -> None:
-        self._can_reconnect = False
-        if self._conn is not None and not self._conn.closed:
-            await self._conn.close()
-
-
 # QQ 机器人官方框架
 class botClient(Client):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._shutting_down = False
-        self._active_websockets: set[ManagedBotWebSocket] = set()
-
     def set_platform(self, platform: QQOfficialPlatformAdapter) -> None:
         self.platform = platform
-
-    @property
-    def is_shutting_down(self) -> bool:
-        return self._shutting_down or self.is_closed()
 
     # 收到群消息
     async def on_group_at_message_create(
@@ -124,32 +97,10 @@ class botClient(Client):
                 self.platform.meta(),
                 abm.session_id,
                 self.platform.client,
+                appid=self.platform.appid,
+                secret=self.platform.secret,
             ),
         )
-
-    async def bot_connect(self, session) -> None:
-        logger.info("[QQOfficial] Websocket session starting.")
-
-        websocket = ManagedBotWebSocket(session, self._connection, self)
-        self._active_websockets.add(websocket)
-        try:
-            await websocket.ws_connect()
-        except Exception as e:
-            if not self.is_shutting_down:
-                await websocket.on_error(e)
-        finally:
-            self._active_websockets.discard(websocket)
-
-    async def shutdown(self) -> None:
-        if self.is_shutting_down:
-            return
-
-        self._shutting_down = True
-        await asyncio.gather(
-            *(websocket.close() for websocket in list(self._active_websockets)),
-            return_exceptions=True,
-        )
-        await self.close()
 
 
 @register_platform_adapter("qq_official", "QQ 机器人官方 API 适配器")
@@ -183,6 +134,8 @@ class QQOfficialPlatformAdapter(Platform):
             bot_log=False,
             timeout=20,
         )
+        self.client._appid = self.appid
+        self.client._secret = self.secret
 
         self.client.set_platform(self)
 
@@ -205,8 +158,7 @@ class QQOfficialPlatformAdapter(Platform):
     ) -> None:
         (
             plain_text,
-            image_base64,
-            image_path,
+            image_source,
             record_file_path,
             video_file_source,
             file_source,
@@ -214,8 +166,7 @@ class QQOfficialPlatformAdapter(Platform):
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_chain)
         if (
             not plain_text
-            and not image_path
-            and not image_base64
+            and not image_source
             and not record_file_path
             and not video_file_source
             and not file_source
@@ -238,15 +189,16 @@ class QQOfficialPlatformAdapter(Platform):
             scene = self._session_scene.get(session.session_id)
             if scene == "group":
                 payload["msg_seq"] = random.randint(1, 10000)
-                if image_base64:
+                if image_source:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
                         send_helper,  # type: ignore
-                        image_base64,
+                        image_source,
                         QQOfficialMessageEvent.IMAGE_FILE_TYPE,
                         group_openid=session.session_id,
                     )
-                    payload["media"] = media
-                    payload["msg_type"] = 7
+                    if media:
+                        payload["media"] = media
+                        payload["msg_type"] = 7
                 if record_file_path:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                         send_helper,  # type: ignore
@@ -285,8 +237,11 @@ class QQOfficialPlatformAdapter(Platform):
                     **payload,
                 )
             else:
-                if image_path:
-                    payload["file_image"] = image_path
+                if image_source:
+                    if os.path.exists(image_source):
+                        payload["file_image"] = image_source
+                    elif image_source.startswith("http"):
+                        payload["image_url"] = image_source
                 ret = await self.client.api.post_message(
                     channel_id=session.session_id,
                     **payload,
@@ -297,15 +252,16 @@ class QQOfficialPlatformAdapter(Platform):
             # msg_id 缺失时认为是主动推送，而似乎至少在私聊上主动推送是没有被限制的，这里直接移除 msg_id 可以避免越权或 msg_id 不可用的bug
             payload.pop("msg_id", None)
             payload["msg_seq"] = random.randint(1, 10000)
-            if image_base64:
+            if image_source:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
                     send_helper,  # type: ignore
-                    image_base64,
+                    image_source,
                     QQOfficialMessageEvent.IMAGE_FILE_TYPE,
                     openid=session.session_id,
                 )
-                payload["media"] = media
-                payload["msg_type"] = 7
+                if media:
+                    payload["media"] = media
+                    payload["msg_type"] = 7
             if record_file_path:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                     send_helper,  # type: ignore
@@ -593,5 +549,5 @@ class QQOfficialPlatformAdapter(Platform):
         return self.client
 
     async def terminate(self) -> None:
-        await self.client.shutdown()
-        logger.info("QQ 官方机器人接口 适配器已被关闭")
+        await self.client.close()
+        logger.info("QQ 官方机器人接口 适配器已被优雅地关闭")
