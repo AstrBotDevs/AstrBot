@@ -91,7 +91,7 @@ print(
     json.dumps(
         {{
             "size_bytes": path.stat().st_size,
-            "sample_b64": base64.b64encode(sample).decode("ascii"),
+            "sample_b64": base64.b64encode(sample).decode("utf-8"),
         }}
     )
 )
@@ -140,7 +140,7 @@ print(
     json.dumps(
         {{
             "size_bytes": len(data),
-            "base64": base64.b64encode(data).decode("ascii"),
+            "base64": base64.b64encode(data).decode("utf-8"),
         }}
     )
 )
@@ -278,7 +278,7 @@ async def _probe_local_file(path: str) -> dict[str, str | int]:
             sample = file_obj.read(_FILE_SNIFF_BYTES)
         return {
             "size_bytes": file_path.stat().st_size,
-            "sample_b64": base64.b64encode(sample).decode("ascii"),
+            "sample_b64": base64.b64encode(sample).decode("utf-8"),
         }
 
     return await to_thread(_run)
@@ -289,7 +289,7 @@ async def _read_local_image_base64(path: str) -> dict[str, str | int]:
         data = Path(path).read_bytes()
         return {
             "size_bytes": len(data),
-            "base64": base64.b64encode(data).decode("ascii"),
+            "base64": base64.b64encode(data).decode("utf-8"),
         }
 
     return await to_thread(_run)
@@ -319,7 +319,7 @@ async def _compress_image_bytes_to_base64(data: bytes) -> dict[str, str | int]:
 
         return {
             "size_bytes": len(compressed_bytes),
-            "base64": base64.b64encode(compressed_bytes).decode("ascii"),
+            "base64": base64.b64encode(compressed_bytes).decode("utf-8"),
             "mime_type": "image/jpeg",
         }
 
@@ -659,14 +659,14 @@ async def read_file_tool_result(
             return "Error reading file: image payload is empty."
         raw_bytes = base64.b64decode(raw_base64_data)
         compressed_payload = await _compress_image_bytes_to_base64(raw_bytes)
-        base64_data = str(compressed_payload.get("base64", "") or "")
-        if not base64_data:
+        compressed_base64_data = str(compressed_payload.get("base64", "") or "")
+        if not compressed_base64_data:
             return "Error reading file: compressed image payload is empty."
         return mcp.types.CallToolResult(
             content=[
                 mcp.types.ImageContent(
                     type="image",
-                    data=base64_data,
+                    data=compressed_base64_data,
                     mimeType=str(
                         compressed_payload.get("mime_type", "") or "image/jpeg"
                     ),
