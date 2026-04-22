@@ -193,8 +193,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.completion_text:
             parts.append(TextPart(text=llm_resp.completion_text))
         if len(parts) == 0:
-            logger.warning("LLM returned empty assistant message with no tool calls.")
-        self.run_context.messages.append(Message(role="assistant", content=parts))
+            logger.warning("LLM returned empty assistant message with no tool calls. Skipping message.")
+            # 不添加空消息到上下文，避免严格 API（如 DeepSeek R1）返回 400 错误
+        else:
+            self.run_context.messages.append(Message(role="assistant", content=parts))
 
         try:
             await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
