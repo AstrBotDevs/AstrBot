@@ -58,10 +58,12 @@ _qqofficial_retry = retry(
         (
             botpy.errors.ServerError,
             botpy.errors.SequenceNumberError,
+            ConnectionError,
+            OSError,
         )
     ),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=10),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
     before_sleep=before_sleep_log(logger, logging.WARNING),
     reraise=True,
 )
