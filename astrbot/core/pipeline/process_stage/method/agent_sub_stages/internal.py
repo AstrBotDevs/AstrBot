@@ -456,29 +456,35 @@ class InternalAgentSubStage(Stage):
             logger.debug("LLM 响应为空，不保存记录。")
             return
 
-        if save_failed_history and not llm_response.completion_text:
-            logger.info(
+        if (
+            save_failed_history
+            and not llm_response.completion_text
+            and not req.tool_calls_result
+        ):
+            logger.debug(
                 "Saving failed agent history as save_failed_agent_history is enabled."
             )
-            all_messages.append(
+            messages_to_save = all_messages + [
                 Message(
                     role="assistant",
                     content="[Agent run failed. History saved for debugging.]",
                 )
-            )
+            ]
+        else:
+            messages_to_save = all_messages
 
-        messages_to_save: list[Message] = []
+        message_to_save: list[dict] = []
         skipped_initial_system = False
-        for message in all_messages:
+        for message in messages_to_save:
             if message.role == "system" and not skipped_initial_system:
                 skipped_initial_system = True
                 continue
-            if message.role in ["assistant", "user"] and message._no_save:
-                continue
-            messages_to_save.append(message)
+            skip = message.role in ["assistant", "user"] and message._no_save
+            if not skip:
+                message_to_save.append(message.model_dump())
 
         checkpoint_id = event.get_extra("llm_checkpoint_id")
-        message_to_save = dump_messages_with_checkpoints(messages_to_save)
+        message_to_save = dump_messages_with_checkpoints(message_to_save)
         if isinstance(checkpoint_id, str) and checkpoint_id:
             message_to_save.append(
                 CheckpointMessageSegment(
