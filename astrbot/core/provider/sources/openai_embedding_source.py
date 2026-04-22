@@ -1,7 +1,10 @@
-import httpx
 from openai import AsyncOpenAI
 
+# 使用 openai 库内部引用的 httpx 模块，避免打包后 isinstance 校验失败
+from openai._base_client import httpx as _openai_httpx
+
 from astrbot import logger
+from astrbot.core.utils.network_utils import create_proxy_client
 
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
@@ -18,12 +21,12 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         super().__init__(provider_config, provider_settings)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
-        proxy = provider_config.get("proxy", "")
         provider_id = provider_config.get("id", "unknown_id")
-        http_client = None
-        if proxy:
-            logger.info(f"[OpenAI Embedding] {provider_id} Using proxy: {proxy}")
-            http_client = httpx.AsyncClient(proxy=proxy)
+        http_client = create_proxy_client(
+            "OpenAI Embedding",
+            provider_config.get("proxy", ""),
+            httpx_module=_openai_httpx,
+        )
         api_base = (
             provider_config.get("embedding_api_base", "https://api.openai.com/v1")
             .strip()
@@ -65,9 +68,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def _embedding_kwargs(self) -> dict:
         """构建嵌入请求的可选参数"""
         kwargs = {}
-        if "embedding_dimensions" in self.provider_config:
+        dim_val = self.provider_config.get("embedding_dimensions")
+        if dim_val not in (None, ""):
             try:
-                kwargs["dimensions"] = int(self.provider_config["embedding_dimensions"])
+                kwargs["dimensions"] = int(dim_val)
             except (ValueError, TypeError):
                 logger.warning(
                     f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."
@@ -76,12 +80,13 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     def get_dim(self) -> int:
         """获取向量的维度"""
-        if "embedding_dimensions" in self.provider_config:
+        dim_val = self.provider_config.get("embedding_dimensions")
+        if dim_val not in (None, ""):
             try:
-                return int(self.provider_config["embedding_dimensions"])
+                return int(dim_val)
             except (ValueError, TypeError):
                 logger.warning(
-                    f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."
+                    f"embedding_dimensions in embedding configs is not a valid integer: '{dim_val}', ignored."
                 )
         return 0
 

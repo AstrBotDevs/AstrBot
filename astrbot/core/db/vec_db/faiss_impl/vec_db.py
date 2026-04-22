@@ -35,6 +35,12 @@ class FaissVecDB(BaseVecDB):
 
     async def initialize(self) -> None:
         await self.document_storage.initialize()
+        # 如果维度未配置（为 0），通过实际请求自动探测
+        if self.embedding_storage.dimension == 0:
+            vec = await self.embedding_provider.get_embedding("probe")
+            dim = len(vec)
+            logger.info(f"自动探测到嵌入模型维度: {dim}")
+            self.embedding_storage = EmbeddingStorage(dim, self.index_store_path)
 
     async def insert(
         self,
