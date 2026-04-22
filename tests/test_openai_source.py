@@ -1618,3 +1618,325 @@ async def test_query_does_not_filter_user_or_system_messages(monkeypatch):
         assert messages[2] == {"role": "user", "content": "hello"}
     finally:
         await provider.terminate()
+
+
+# ---------------------------------------------------------------------------
+# Tests for _filter_empty_assistant_messages (unit tests for the shared helper)
+# ---------------------------------------------------------------------------
+
+
+def test_filter_empty_assistant_messages_removes_empty_string_content():
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": ""},
+            {"role": "user", "content": "world"},
+        ]
+    }
+    ProviderOpenAIOfficial._filter_empty_assistant_messages(payloads)
+    assert len(payloads["messages"]) == 2
+    assert payloads["messages"][0]["role"] == "user"
+    assert payloads["messages"][1]["role"] == "user"
+
+
+def test_filter_empty_assistant_messages_removes_none_content():
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": None},
+            {"role": "user", "content": "world"},
+        ]
+    }
+    ProviderOpenAIOfficial._filter_empty_assistant_messages(payloads)
+    assert len(payloads["messages"]) == 2
+
+
+def test_filter_empty_assistant_messages_removes_empty_list_content():
+    """content == [] should also be treated as empty and filtered out."""
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": []},
+            {"role": "user", "content": "world"},
+        ]
+    }
+    ProviderOpenAIOfficial._filter_empty_assistant_messages(payloads)
+    assert len(payloads["messages"]) == 2
+
+
+def test_filter_empty_assistant_messages_sets_empty_list_to_none_with_tool_calls():
+    """content == [] with tool_calls should be set to None, not dropped."""
+    tool_calls = [
+        {"id": "c1", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+    ]
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": [], "tool_calls": tool_calls},
+            {"role": "user", "content": "world"},
+        ]
+    }
+    ProviderOpenAIOfficial._filter_empty_assistant_messages(payloads)
+    assert len(payloads["messages"]) == 3
+    assert payloads["messages"][1]["content"] is None
+    assert payloads["messages"][1]["tool_calls"] is not None
+
+
+def test_filter_empty_assistant_messages_keeps_valid_messages():
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "I'm here"},
+            {"role": "user", "content": "world"},
+        ]
+    }
+    ProviderOpenAIOfficial._filter_empty_assistant_messages(payloads)
+    assert len(payloads["messages"]) == 3
+
+
+def test_filter_empty_assistant_messages_noop_on_missing_messages():
+    payloads: dict = {}
+    ProviderOpenAIOfficial._filter_empty_assistant_messages(payloads)
+    assert payloads == {}
+
+
+# ---------------------------------------------------------------------------
+# Tests for _query_stream: verify filtering is applied before streaming
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_query_stream_filters_empty_assistant_message(monkeypatch):
+    """_query_stream should filter empty assistant messages just like _query."""
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+        chunks = [
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": "ok"},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                }
+            ),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            ),
+        ]
+
+        async def fake_stream():
+            for chunk in chunks:
+                yield chunk
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": ""},  # Should be filtered
+                {"role": "user", "content": "world"},
+            ],
+        }
+
+        [r async for r in provider._query_stream(payloads=payloads, tools=None)]
+
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 2
+        assert messages[0] == {"role": "user", "content": "hello"}
+        assert messages[1] == {"role": "user", "content": "world"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_filters_empty_list_content_assistant_message(monkeypatch):
+    """_query_stream should filter assistant messages with content == []."""
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+        chunks = [
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": "ok"},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                }
+            ),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            ),
+        ]
+
+        async def fake_stream():
+            for chunk in chunks:
+                yield chunk
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": []},  # Should be filtered
+                {"role": "user", "content": "world"},
+            ],
+        }
+
+        [r async for r in provider._query_stream(payloads=payloads, tools=None)]
+
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 2
+        assert messages[0] == {"role": "user", "content": "hello"}
+        assert messages[1] == {"role": "user", "content": "world"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_converts_empty_list_content_to_none_with_tool_calls(
+    monkeypatch,
+):
+    """_query_stream: content==[] with tool_calls should become None, not be dropped."""
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+        chunks = [
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": "ok"},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                }
+            ),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            ),
+        ]
+
+        async def fake_stream():
+            for chunk in chunks:
+                yield chunk
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        tool_calls = [
+            {
+                "id": "c1",
+                "type": "function",
+                "function": {"name": "f", "arguments": "{}"},
+            }
+        ]
+        payloads = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": [], "tool_calls": tool_calls},
+                {"role": "user", "content": "world"},
+            ],
+        }
+
+        [r async for r in provider._query_stream(payloads=payloads, tools=None)]
+
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 3
+        assert messages[1]["content"] is None
+        assert messages[1]["tool_calls"] is not None
+    finally:
+        await provider.terminate()
