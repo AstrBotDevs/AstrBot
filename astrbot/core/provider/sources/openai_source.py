@@ -892,14 +892,13 @@ class ProviderOpenAIOfficial(Provider):
                     func_name_ls.append(
                         self._deduplicate_self_repeating(tool_call.function.name)
                     )
-                    tool_call_ids.append(self._deduplicate_self_repeating(tool_call.id))
+                    deduped_id = self._deduplicate_self_repeating(tool_call.id)
+                    tool_call_ids.append(deduped_id)
 
                     # gemini-2.5 / gemini-3 series extra_content handling
                     extra_content = getattr(tool_call, "extra_content", None)
-                    if extra_content is not None:
-                        deduped_id = self._deduplicate_self_repeating(tool_call.id)
-                        if deduped_id is not None:
-                            tool_call_extra_content_dict[deduped_id] = extra_content
+                    if extra_content is not None and deduped_id is not None:
+                        tool_call_extra_content_dict[deduped_id] = extra_content
 
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
