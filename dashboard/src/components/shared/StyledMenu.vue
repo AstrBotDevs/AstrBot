@@ -4,7 +4,12 @@
       <slot name="activator" :props="activatorProps"></slot>
     </template>
     
-    <v-card class="styled-menu-card" elevation="8" rounded="lg">
+    <v-card
+      class="styled-menu-card"
+      :class="{ 'styled-menu-card-borderless': noBorder }"
+      elevation="8"
+      rounded="lg"
+    >
       <v-list density="compact" class="styled-menu-list pa-1">
         <slot></slot>
       </v-list>
@@ -19,8 +24,10 @@ defineOptions({
 
 withDefaults(defineProps<{
   closeOnContentClick?: boolean
+  noBorder?: boolean
 }>(), {
-  closeOnContentClick: true
+  closeOnContentClick: true,
+  noBorder: false
 })
 </script>
 
@@ -31,6 +38,10 @@ withDefaults(defineProps<{
   border: 1px solid rgba(var(--v-theme-primary), 0.15) !important;
   background: rgba(var(--v-theme-surface), 0.98) !important;
   backdrop-filter: blur(10px);
+}
+
+.styled-menu-card-borderless {
+  border: 0 !important;
 }
 
 .styled-menu-list {
@@ -60,6 +71,10 @@ withDefaults(defineProps<{
 .v-theme--PurpleThemeDark .styled-menu-card {
   background: rgba(var(--v-theme-surface), 0.98) !important;
   border: 1px solid rgba(var(--v-theme-primary), 0.2) !important;
+}
+
+.v-theme--PurpleThemeDark .styled-menu-card-borderless {
+  border: 0 !important;
 }
 
 /* 深色模式下的列表项悬停效果 */

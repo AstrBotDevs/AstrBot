@@ -39,6 +39,9 @@
   "actions": {
     "copy": "Copy",
     "regenerate": "Regenerate",
+    "retry": "Retry",
+    "retryWithModel": "Use another model",
+    "noAvailableModels": "No available models",
     "like": "Like",
     "dislike": "Dislike",
     "share": "Share",
@@ -59,6 +62,15 @@
   "toolStatus": {
     "done": "Done",
     "running": "Running"
+  },
+  "thread": {
+    "title": "Thread",
+    "askInThread": "Ask in thread",
+    "count": "{count} threads",
+    "createFailed": "Failed to create thread",
+    "delete": "Delete thread",
+    "confirmDelete": "Delete this thread? This action cannot be undone.",
+    "placeholder": "Ask about this excerpt..."
   },
   "conversation": {
     "newConversation": "New Conversation",

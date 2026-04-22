@@ -53,7 +53,12 @@ from ..context.config import ContextConfig
 from ..context.manager import ContextManager
 from ..context.token_counter import EstimateTokenCounter, TokenCounter
 from ..hooks import BaseAgentRunHooks
-from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
+from ..message import (
+    AssistantMessageSegment,
+    Message,
+    ToolCallMessageSegment,
+    bind_checkpoint_messages,
+)
 from ..response import AgentResponseData, AgentStats
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
@@ -297,13 +302,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # MODIFIE the req.func_tool to use light tool schemas
             self.req.func_tool = light_set
 
-        messages = []
         # append existing messages in the run context
-        for msg in request.contexts:
-            m = Message.model_validate(msg)
-            if isinstance(msg, dict) and msg.get("_no_save"):
-                m._no_save = True
-            messages.append(m)
+        messages = bind_checkpoint_messages(request.contexts or [])
         if (
             request.prompt is not None
             or request.image_urls

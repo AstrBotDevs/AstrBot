@@ -6,7 +6,12 @@ from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot.core import db_helper, logger
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import (
+    CheckpointData,
+    CheckpointMessageSegment,
+    Message,
+    dump_messages_with_checkpoints,
+)
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
@@ -444,7 +449,7 @@ class InternalAgentSubStage(Stage):
             logger.debug("LLM 响应为空，不保存记录。")
             return
 
-        message_to_save = []
+        messages_to_save: list[Message] = []
         skipped_initial_system = False
         for message in all_messages:
             if message.role == "system" and not skipped_initial_system:
@@ -452,7 +457,16 @@ class InternalAgentSubStage(Stage):
                 continue
             if message.role in ["assistant", "user"] and message._no_save:
                 continue
-            message_to_save.append(message.model_dump())
+            messages_to_save.append(message)
+
+        checkpoint_id = event.get_extra("llm_checkpoint_id")
+        message_to_save = dump_messages_with_checkpoints(messages_to_save)
+        if isinstance(checkpoint_id, str) and checkpoint_id:
+            message_to_save.append(
+                CheckpointMessageSegment(
+                    content=CheckpointData(id=checkpoint_id),
+                ).model_dump()
+            )
 
         # if user_aborted:
         #     message_to_save.append(
