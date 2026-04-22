@@ -714,7 +714,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
-                # update ttft
                 if self.stats.time_to_first_token == 0:
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
 
@@ -730,7 +729,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             chain=MessageChain().message(llm_response.completion_text),
                         ),
                     )
-                elif llm_response.reasoning_content:
+                if llm_response.reasoning_content:
                     yield AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
@@ -804,6 +803,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     chain=MessageChain().message(llm_resp.completion_text),
                 ),
             )
+        if llm_resp.reasoning_content:
+            yield AgentResponse(
+                type="llm_result",
+                data=AgentResponseData(
+                    chain=MessageChain(type="reasoning").message(
+                        llm_resp.reasoning_content,
+                    ),
+                ),
+            )
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
@@ -823,6 +831,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             type="llm_result",
                             data=AgentResponseData(
                                 chain=MessageChain().message(llm_resp.completion_text),
+                            ),
+                        )
+                    if llm_resp.reasoning_content:
+                        yield AgentResponse(
+                            type="llm_result",
+                            data=AgentResponseData(
+                                chain=MessageChain(type="reasoning").message(
+                                    llm_resp.reasoning_content,
+                                ),
                             ),
                         )
                     await self._complete_with_assistant_response(llm_resp)
