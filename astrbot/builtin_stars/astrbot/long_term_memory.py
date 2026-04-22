@@ -34,6 +34,10 @@ class LongTermMemory:
         image_caption_provider_id = cfg["provider_ltm_settings"].get(
             "image_caption_provider_id"
         )
+        if not image_caption_provider_id:
+            image_caption_provider_id = cfg["provider_settings"].get(
+                "default_image_caption_provider_id"
+            )
         image_caption = cfg["provider_ltm_settings"]["image_caption"] and bool(
             image_caption_provider_id
         )
@@ -70,7 +74,7 @@ class LongTermMemory:
         image_caption_prompt: str,
     ) -> str:
         if not image_caption_provider_id:
-            image_caption_provider_id = self.ctx.astrbot_config[
+            image_caption_provider_id = self.context.get_config()[
                 "provider_settings"
             ].get("default_image_caption_provider_id")
         if not image_caption_provider_id:
