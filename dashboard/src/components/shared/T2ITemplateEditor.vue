@@ -314,7 +314,7 @@ const syncPreviewVersion = async () => {
 const shikiRuntime = ref('')
 const syncShikiRuntime = async () => { 
   try {
-    const res = await axios.get('/api/t2i/shiki-runtime')
+    const res = await axios.get('/api/t2i/shiki_runtime')
     shikiRuntime.value = res?.data?.data?.runtime || res?.data?.runtime
   } catch (error) {
     console.warn('Failed to fetch shiki runtime:', error)
@@ -332,7 +332,7 @@ const previewContent = computed(() => {
     let content = templateContent.value
     content = content.replace(/\{\{\s*text_base64\s*\}\}/g, btoa(String.fromCharCode(...new TextEncoder().encode(previewData.value.text))))
     content = content.replace(/\{\{\s*version\s*\}\}/g, previewData.value.version)
-    content = content.replace(/\{\{\s*shiki_runtime\s*|\s*safe\s*\}\}/g, previewData.value.shikiRuntime)
+    content = content.replace(/\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}/g, previewData.value.shikiRuntime)
     return content
   } catch (error) {
     return `<div style="color: red; padding: 20px;">模板渲染错误: ${error.message}</div>`
