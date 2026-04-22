@@ -72,6 +72,18 @@
     "confirmDelete": "Delete this thread? This action cannot be undone.",
     "placeholder": "Ask about this excerpt..."
   },
+  "workspace": {
+    "title": "Workspace",
+    "open": "Open workspace",
+    "root": "Root",
+    "refresh": "Refresh",
+    "empty": "No files",
+    "preview": "Preview",
+    "selectFile": "Select a text file to preview",
+    "noSession": "Open a session first",
+    "loadFailed": "Failed to load workspace",
+    "previewFailed": "Failed to read file"
+  },
   "conversation": {
     "newConversation": "New Conversation",
     "noHistory": "No conversation history",

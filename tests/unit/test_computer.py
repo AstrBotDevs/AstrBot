@@ -77,14 +77,16 @@ class TestLocalBooterUploadDownload:
         )
 
     @pytest.mark.asyncio
-    async def test_download_file_not_supported(self):
-        """Test LocalBooter download_file raises NotImplementedError."""
+    async def test_download_file_copies_local_file(self, tmp_path):
+        """Test LocalBooter download_file copies a local file."""
         booter = LocalBooter()
-        with pytest.raises(NotImplementedError) as exc_info:
-            await booter.download_file("remote_path", "local_path")
-        assert "LocalBooter does not support download_file operation" in str(
-            exc_info.value
-        )
+        source = tmp_path / "source.txt"
+        target = tmp_path / "nested" / "target.txt"
+        source.write_text("content", encoding="utf-8")
+
+        await booter.download_file(str(source), str(target))
+
+        assert target.read_text(encoding="utf-8") == "content"
 
 
 class TestSecurityRestrictions:

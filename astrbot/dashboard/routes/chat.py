@@ -5,6 +5,7 @@ import re
 import uuid
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from pathlib import Path
 from typing import cast
 
 from quart import Response as QuartResponse
@@ -12,6 +13,7 @@ from quart import g, make_response, request, send_file
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.message import get_checkpoint_id, is_checkpoint_message
+from astrbot.core.computer.computer_client import get_local_booter
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.message_type import MessageType
@@ -22,6 +24,7 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     webchat_message_parts_have_content,
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
+from astrbot.core.tools.computer_tools.util import workspace_root
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
@@ -30,6 +33,34 @@ from .route import Response, Route, RouteContext
 
 # SSE heartbeat message to keep the connection alive during long-running operations
 SSE_HEARTBEAT = ": heartbeat\n\n"
+WORKSPACE_TEXT_EXTENSIONS = {
+    ".css",
+    ".csv",
+    ".html",
+    ".js",
+    ".json",
+    ".jsonl",
+    ".jsx",
+    ".log",
+    ".markdown",
+    ".md",
+    ".py",
+    ".rst",
+    ".sass",
+    ".scss",
+    ".sh",
+    ".sql",
+    ".toml",
+    ".ts",
+    ".tsx",
+    ".txt",
+    ".vue",
+    ".xml",
+    ".yaml",
+    ".yml",
+}
+WORKSPACE_MAX_PREVIEW_BYTES = 1024 * 1024
+WORKSPACE_MAX_LIST_ITEMS = 500
 
 
 @asynccontextmanager
@@ -87,6 +118,8 @@ class ChatRoute(Route):
             "/chat/get_file": ("GET", self.get_file),
             "/chat/get_attachment": ("GET", self.get_attachment),
             "/chat/post_file": ("POST", self.post_file),
+            "/chat/workspace/list_files": ("GET", self.list_workspace_files),
+            "/chat/workspace/download_file": ("GET", self.download_workspace_file),
         }
         self.core_lifecycle = core_lifecycle
         self.register_routes()
@@ -199,6 +232,120 @@ class ChatRoute(Route):
             )
             .__dict__
         )
+
+    async def list_workspace_files(self):
+        """List files in the local computer workspace for a webchat session."""
+        username = g.get("username", "guest")
+        session_id = request.args.get("session_id")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+
+        try:
+            session = await self._get_owned_webchat_session(session_id, username)
+            root = workspace_root(self._build_webchat_unified_msg_origin(session))
+            root.mkdir(parents=True, exist_ok=True)
+            target = self._resolve_workspace_path(root, request.args.get("path"))
+            if not target.exists():
+                return Response().error("Workspace path not found").__dict__
+            if not target.is_dir():
+                return Response().error("Workspace path is not a directory").__dict__
+
+            result = await get_local_booter().fs.list_dir(
+                str(target), show_hidden=False
+            )
+            if not result.get("success", False):
+                return Response().error("Failed to list workspace files").__dict__
+
+            entries: list[dict] = []
+            for name in result.get("entries", [])[:WORKSPACE_MAX_LIST_ITEMS]:
+                if not isinstance(name, str):
+                    continue
+                entry = target / name
+                if not entry.exists():
+                    continue
+                resolved_entry = entry.resolve(strict=False)
+                if resolved_entry != root and not resolved_entry.is_relative_to(root):
+                    continue
+                entries.append(self._serialize_workspace_entry(root, entry))
+
+            entries.sort(key=lambda item: (item["type"] != "directory", item["name"]))
+            return (
+                Response()
+                .ok(
+                    data={
+                        "path": self._workspace_relative_path(root, target),
+                        "entries": entries,
+                        "truncated": len(result.get("entries", []))
+                        > WORKSPACE_MAX_LIST_ITEMS,
+                    }
+                )
+                .__dict__
+            )
+        except PermissionError as exc:
+            return Response().error(str(exc)).__dict__
+        except ValueError as exc:
+            return Response().error(str(exc)).__dict__
+        except OSError as exc:
+            logger.error(f"Error listing workspace files: {exc}")
+            return Response().error("File access error").__dict__
+
+    async def download_workspace_file(self):
+        """Read a text file from the local computer workspace for preview."""
+        username = g.get("username", "guest")
+        session_id = request.args.get("session_id")
+        raw_path = request.args.get("path")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if not raw_path:
+            return Response().error("Missing key: path").__dict__
+
+        try:
+            session = await self._get_owned_webchat_session(session_id, username)
+            root = workspace_root(self._build_webchat_unified_msg_origin(session))
+            target = self._resolve_workspace_path(root, raw_path)
+            if not target.exists():
+                return Response().error("Workspace file not found").__dict__
+            if not target.is_file():
+                return Response().error("Workspace path is not a file").__dict__
+            if target.suffix.lower() not in WORKSPACE_TEXT_EXTENSIONS:
+                return Response().error("This file type cannot be previewed").__dict__
+
+            stat = target.stat()
+            if stat.st_size > WORKSPACE_MAX_PREVIEW_BYTES:
+                return (
+                    Response()
+                    .error(
+                        "File is too large to preview. "
+                        f"Maximum size is {WORKSPACE_MAX_PREVIEW_BYTES} bytes."
+                    )
+                    .__dict__
+                )
+
+            result = await get_local_booter().fs.read_file(str(target))
+            if not result.get("success", False):
+                return Response().error("Failed to read workspace file").__dict__
+
+            return (
+                Response()
+                .ok(
+                    data={
+                        "name": target.name,
+                        "path": self._workspace_relative_path(root, target),
+                        "content": result.get("content", ""),
+                        "size": stat.st_size,
+                        "modified_at": stat.st_mtime,
+                        "extension": target.suffix.lower(),
+                    }
+                )
+                .__dict__
+            )
+        except PermissionError as exc:
+            return Response().error(str(exc)).__dict__
+        except ValueError as exc:
+            return Response().error(str(exc)).__dict__
+        except OSError as exc:
+            logger.error(f"Error reading workspace file: {exc}")
+            return Response().error("File access error").__dict__
 
     async def _build_user_message_parts(self, message: str | list) -> list[dict]:
         """构建用户消息的部分列表。"""
@@ -324,6 +471,54 @@ class ChatRoute(Route):
             f"{session.platform_id}:{message_type}:"
             f"{session.platform_id}!{session.creator}!{session.session_id}"
         )
+
+    async def _get_owned_webchat_session(self, session_id: str, username: str):
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+        if session.creator != username:
+            raise PermissionError("Permission denied")
+        return session
+
+    def _resolve_workspace_path(self, root: Path, raw_path: str | None) -> Path:
+        normalized = (raw_path or "").strip().replace("\\", "/")
+        if normalized in {"", ".", "/"}:
+            candidate = root
+        else:
+            relative_path = Path(normalized)
+            if relative_path.is_absolute():
+                raise ValueError("Invalid workspace path")
+            candidate = root / relative_path
+
+        resolved_root = root.resolve(strict=False)
+        resolved_candidate = candidate.resolve(strict=False)
+        if (
+            resolved_candidate != resolved_root
+            and not resolved_candidate.is_relative_to(resolved_root)
+        ):
+            raise ValueError("Invalid workspace path")
+        return resolved_candidate
+
+    def _workspace_relative_path(self, root: Path, path: Path) -> str:
+        resolved_root = root.resolve(strict=False)
+        resolved_path = path.resolve(strict=False)
+        if resolved_path == resolved_root:
+            return ""
+        return resolved_path.relative_to(resolved_root).as_posix()
+
+    def _serialize_workspace_entry(self, root: Path, entry: Path) -> dict:
+        stat = entry.stat()
+        is_dir = entry.is_dir()
+        suffix = entry.suffix.lower()
+        return {
+            "name": entry.name,
+            "path": self._workspace_relative_path(root, entry),
+            "type": "directory" if is_dir else "file",
+            "size": stat.st_size if not is_dir else None,
+            "modified_at": stat.st_mtime,
+            "extension": suffix,
+            "previewable": (not is_dir) and suffix in WORKSPACE_TEXT_EXTENSIONS,
+        }
 
     def _build_thread_unified_msg_origin(self, creator: str, thread_id: str) -> str:
         return (

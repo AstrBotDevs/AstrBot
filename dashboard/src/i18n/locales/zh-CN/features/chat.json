@@ -72,6 +72,18 @@
     "confirmDelete": "确定要删除这个分支吗？此操作无法撤销。",
     "placeholder": "继续追问这段内容..."
   },
+  "workspace": {
+    "title": "工作区",
+    "open": "打开工作区",
+    "root": "根目录",
+    "refresh": "刷新",
+    "empty": "暂无文件",
+    "preview": "预览",
+    "selectFile": "选择一个文本文件进行预览",
+    "noSession": "请先打开一个会话",
+    "loadFailed": "加载工作区失败",
+    "previewFailed": "读取文件失败"
+  },
   "conversation": {
     "newConversation": "新的聊天",
     "noHistory": "暂无对话历史",

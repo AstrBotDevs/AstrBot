@@ -334,9 +334,15 @@ class LocalBooter(ComputerBooter):
         )
 
     async def download_file(self, remote_path: str, local_path: str) -> None:
-        raise NotImplementedError(
-            "LocalBooter does not support download_file operation. Use shell instead."
-        )
+        def _run() -> None:
+            source = os.path.abspath(remote_path)
+            destination = os.path.abspath(local_path)
+            if not os.path.isfile(source):
+                raise FileNotFoundError(source)
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            shutil.copyfile(source, destination)
+
+        await asyncio.to_thread(_run)
 
     async def available(self) -> bool:
         return True

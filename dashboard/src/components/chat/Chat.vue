@@ -282,6 +282,16 @@
           !selectedProject && !loadingMessages && !activeMessages.length,
       }"
     >
+      <div v-if="currSessionId && !workspacePanelOpen" class="chat-main-actions">
+        <v-btn
+          icon="mdi-folder-open-outline"
+          size="small"
+          variant="text"
+          :title="tm('workspace.open')"
+          @click="workspacePanelOpen = true"
+        />
+      </div>
+
       <ProjectView
         v-if="selectedProject"
         :project="selectedProject"
@@ -467,6 +477,10 @@
       :deleting="deletingThread"
       @delete="deleteThread"
     />
+    <WorkspacePanel
+      v-model="workspacePanelOpen"
+      :session-id="currSessionId || null"
+    />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
   </div>
 </template>
@@ -496,6 +510,7 @@ import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
+import WorkspacePanel from "@/components/chat/WorkspacePanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
@@ -588,6 +603,7 @@ const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
 const deletingThread = ref(false);
+const workspacePanelOpen = ref(false);
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
 const threadSelection = reactive<{
@@ -933,7 +949,7 @@ async function sendCurrentMessage() {
 
     draft.value = "";
     replyTarget.value = null;
-    clearStaged({ revokeUrls: false });
+    clearStaged();
     scrollToBottom();
 
     sendMessageStream({
@@ -1466,6 +1482,22 @@ function toggleTheme() {
   justify-content: center;
 }
 
+.chat-main-actions {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--chat-muted);
+}
+
+.chat-main-actions :deep(.v-btn) {
+  background: rgba(var(--v-theme-surface), 0.86);
+  backdrop-filter: blur(8px);
+}
+
 .messages-panel {
   flex: 1;
   min-height: 0;
@@ -1585,6 +1617,11 @@ kbd {
 }
 
 @media (max-width: 760px) {
+  .chat-main-actions {
+    top: 10px;
+    right: 10px;
+  }
+
   .messages-panel {
     padding: 18px 14px;
   }
