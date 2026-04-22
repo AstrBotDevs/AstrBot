@@ -351,6 +351,18 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"{e!s}"
 
 
+_NONSTANDARD_TYPE_MAP: dict[str, str] = {
+    "int": "integer",
+    "float": "number",
+    "double": "number",
+    "decimal": "number",
+    "bool": "boolean",
+    "str": "string",
+    "dict": "object",
+    "list": "array",
+}
+
+
 def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Normalize common non-standard MCP JSON Schema variants.
 
@@ -359,6 +371,9 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
     parent object to declare `required` as an array of property names instead.
     We lift those booleans to the parent object so the schema remains usable
     without disabling validation entirely.
+
+    Also normalizes non-standard type names (e.g. ``"int"`` → ``"integer"``,
+    ``"str"`` → ``"string"``) that some MCP servers emit.
     """
 
     def _normalize(node: Any) -> Any:
@@ -369,6 +384,16 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
             return node
 
         normalized = {key: _normalize(value) for key, value in node.items()}
+
+        # Normalize non-standard type names
+        type_val = normalized.get("type")
+        if isinstance(type_val, str) and type_val in _NONSTANDARD_TYPE_MAP:
+            normalized["type"] = _NONSTANDARD_TYPE_MAP[type_val]
+        elif isinstance(type_val, list):
+            normalized["type"] = [
+                _NONSTANDARD_TYPE_MAP.get(t, t) if isinstance(t, str) else t
+                for t in type_val
+            ]
 
         properties = normalized.get("properties")
         if isinstance(properties, dict):
