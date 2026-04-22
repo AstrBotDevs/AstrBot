@@ -916,6 +916,26 @@ class FunctionToolManager:
             logger.error(f"保存 MCP 配置失败: {e}")
             return False
 
+    async def _detect_mcp_transport(self, url: str) -> str:
+        """通过探测 URL 的响应 Content-Type 自动判断 MCP 传输类型。
+
+        - SSE 端点返回 ``text/event-stream``
+        - Streamable HTTP 端点返回 ``application/json`` 或其他非 SSE 类型
+        """
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers={"Accept": "application/json, text/event-stream"},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    content_type = resp.headers.get("Content-Type", "")
+                    if "text/event-stream" in content_type:
+                        return "sse"
+        except Exception:
+            pass
+        return "streamable_http"
+
     async def sync_modelscope_mcp_servers(self, access_token: str) -> None:
         """从 ModelScope 平台同步 MCP 服务器配置"""
         base_url = "https://www.modelscope.cn/openapi/v1"
@@ -946,10 +966,14 @@ class FunctionToolManager:
                             server_url = url_info.get("url")
                             if not server_url:
                                 continue
+                            # 自动检测传输类型
+                            transport = await self._detect_mcp_transport(
+                                server_url,
+                            )
                             # 添加到配置中(同名会覆盖)
                             local_mcp_config["mcpServers"][server_name] = {
                                 "url": server_url,
-                                "transport": "sse",
+                                "transport": transport,
                                 "active": True,
                                 "provider": "modelscope",
                             }
