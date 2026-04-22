@@ -187,12 +187,22 @@ class ProviderOpenAIOfficial(Provider):
         candidates = [
             candidate.lower() for candidate in self._extract_error_text_candidates(error)
         ]
+        exact_messages = (
+            "tool_choice 'required' is incompatible with thinking enabled",
+            'tool_choice "required" is incompatible with thinking enabled',
+        )
         for candidate in candidates:
-            has_tool_choice = "tool_choice" in candidate or "tool choice" in candidate
+            if any(message in candidate for message in exact_messages):
+                return True
+
+        for candidate in candidates:
+            has_tool_choice = (
+                "tool_choice" in candidate
+                and ("'required'" in candidate or '"required"' in candidate)
+            )
             if (
                 has_tool_choice
-                and "required" in candidate
-                and "thinking" in candidate
+                and "thinking enabled" in candidate
                 and "incompatible" in candidate
             ):
                 return True
@@ -1103,12 +1113,12 @@ class ProviderOpenAIOfficial(Provider):
                 "Detected `tool_choice=required` incompatible with thinking mode. "
                 f"Downgrading to `auto` and retrying. provider={provider_name}"
             )
-            payloads["tool_choice"] = "auto"
+            retry_payloads = {**payloads, "tool_choice": "auto"}
             return (
                 False,
                 chosen_key,
                 available_api_keys,
-                payloads,
+                retry_payloads,
                 context_query,
                 func_tool,
                 image_fallback_used,

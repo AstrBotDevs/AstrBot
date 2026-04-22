@@ -630,6 +630,52 @@ async def test_text_chat_retries_with_auto_when_required_incompatible_with_think
 
 
 @pytest.mark.asyncio
+async def test_handle_api_error_required_thinking_conflict_uses_payload_copy():
+    provider = _make_provider({"provider": "moonshot"})
+    try:
+        payloads = {
+            "tool_choice": "required",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        }
+        context_query = payloads["messages"]
+        err = _ErrorWithBody(
+            "upstream error",
+            {
+                "error": {
+                    "message": "tool_choice 'required' is incompatible with thinking enabled",
+                    "type": "invalid_request_error",
+                }
+            },
+        )
+
+        (
+            success,
+            _chosen_key,
+            _available_api_keys,
+            updated_payloads,
+            _updated_contexts,
+            _updated_tool,
+            _img_flag,
+        ) = await provider._handle_api_error(
+            err,
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        assert payloads["tool_choice"] == "required"
+        assert updated_payloads["tool_choice"] == "auto"
+        assert updated_payloads is not payloads
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeypatch):
     provider = _make_provider()
     try:
