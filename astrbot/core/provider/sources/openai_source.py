@@ -63,6 +63,17 @@ class ProviderOpenAIOfficial(Provider):
         return text[: cls._ERROR_TEXT_CANDIDATE_MAX_CHARS]
 
     @staticmethod
+    def _deduplicate_self_repeating(value: str) -> str:
+        """If string is a self-repeating pattern like 'abcabc', return 'abc'.
+        This handles streaming chunk duplication issues (e.g. 'call_xxxcall_xxx')."""
+        if not value or len(value) < 4:
+            return value
+        half = len(value) // 2
+        if value[:half] == value[half:]:
+            return value[:half]
+        return value
+
+    @staticmethod
     def _safe_json_dump(value: Any) -> str | None:
         try:
             return json.dumps(value, ensure_ascii=False, default=str)
@@ -866,13 +877,18 @@ class ProviderOpenAIOfficial(Provider):
                     else:
                         args = tool_call.function.arguments
                     args_ls.append(args)
-                    func_name_ls.append(tool_call.function.name)
-                    tool_call_ids.append(tool_call.id)
+                    func_name_ls.append(
+                        cls._deduplicate_self_repeating(tool_call.function.name)
+                    )
+                    tool_call_ids.append(
+                        cls._deduplicate_self_repeating(tool_call.id or "")
+                    )
 
                     # gemini-2.5 / gemini-3 series extra_content handling
                     extra_content = getattr(tool_call, "extra_content", None)
                     if extra_content is not None:
-                        tool_call_extra_content_dict[tool_call.id] = extra_content
+                        deduped_id = cls._deduplicate_self_repeating(tool_call.id or "")
+                        tool_call_extra_content_dict[deduped_id] = extra_content
 
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
