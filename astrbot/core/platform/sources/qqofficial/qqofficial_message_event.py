@@ -53,7 +53,7 @@ def _patch_qq_botpy_formdata() -> None:
 _patch_qq_botpy_formdata()
 
 # Retry decorator for QQ Official API transient errors (HTTP 500/504)
-_qqo_official_retry = retry(
+_qqofficial_retry = retry(
     retry=retry_if_exception_type(
         (
             botpy.errors.ServerError,
