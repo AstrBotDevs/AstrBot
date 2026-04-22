@@ -4,8 +4,9 @@ from astrbot.core.agent.message import (
     CheckpointData,
     CheckpointMessageSegment,
     Message,
+    bind_checkpoint_messages,
+    dump_messages_with_checkpoints,
     get_checkpoint_id,
-    merge_existing_checkpoint_messages,
     strip_checkpoint_messages,
 )
 from astrbot.core.provider.provider import Provider
@@ -45,23 +46,38 @@ def test_strip_checkpoint_messages():
     ]
 
 
-def test_merge_existing_checkpoint_messages_restores_boundaries():
-    existing = [
+def test_bind_and_dump_checkpoint_messages_preserves_boundaries():
+    history = [
         {"role": "user", "content": "old user"},
         {"role": "assistant", "content": "old bot"},
         {"role": "_checkpoint", "content": {"id": "cp-1"}},
-    ]
-    provider_messages = [
-        {"role": "user", "content": "new user"},
-        {"role": "assistant", "content": "new bot"},
         {"role": "user", "content": "next user"},
     ]
 
-    assert merge_existing_checkpoint_messages(existing, provider_messages) == [
-        {"role": "user", "content": "new user"},
-        {"role": "assistant", "content": "new bot"},
+    messages = bind_checkpoint_messages(history)
+
+    assert len(messages) == 3
+    assert messages[1]._checkpoint_after == CheckpointData(id="cp-1")
+    assert dump_messages_with_checkpoints(messages) == [
+        {"role": "user", "content": "old user"},
+        {"role": "assistant", "content": "old bot"},
         {"role": "_checkpoint", "content": {"id": "cp-1"}},
         {"role": "user", "content": "next user"},
+    ]
+
+
+def test_dump_checkpoint_messages_drops_checkpoint_when_message_is_dropped():
+    history = [
+        {"role": "user", "content": "old user"},
+        {"role": "assistant", "content": "old bot"},
+        {"role": "_checkpoint", "content": {"id": "cp-1"}},
+        {"role": "user", "content": "latest user"},
+    ]
+
+    messages = bind_checkpoint_messages(history)
+
+    assert dump_messages_with_checkpoints(messages[2:]) == [
+        {"role": "user", "content": "latest user"},
     ]
 
 

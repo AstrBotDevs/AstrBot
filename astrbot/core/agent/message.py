@@ -7,6 +7,7 @@ from pydantic import (
     BaseModel,
     GetCoreSchemaHandler,
     PrivateAttr,
+    ValidationError,
     model_serializer,
     model_validator,
 )
@@ -195,6 +196,7 @@ class Message(BaseModel):
     """The ID of the tool call."""
 
     _no_save: bool = PrivateAttr(default=False)
+    _checkpoint_after: CheckpointData | None = PrivateAttr(default=None)
 
     @model_validator(mode="after")
     def check_content_required(self):
@@ -255,7 +257,7 @@ class CheckpointMessageSegment(Message):
     """Internal checkpoint segment for persisted conversation history."""
 
     role: Literal["_checkpoint"] = "_checkpoint"
-    content: CheckpointData
+    content: CheckpointData | None = None
 
 
 def is_checkpoint_message(message: Message | dict) -> bool:
@@ -288,26 +290,48 @@ def strip_checkpoint_messages(history: list[dict]) -> list[dict]:
     return [message for message in history if not is_checkpoint_message(message)]
 
 
-def merge_existing_checkpoint_messages(
-    existing_history: list[dict],
-    provider_messages: list[dict],
-) -> list[dict]:
-    """Merge existing checkpoint messages back into provider-facing history.
+def _get_checkpoint_data(message: Message | dict) -> CheckpointData | None:
+    if not is_checkpoint_message(message):
+        return None
 
-    Agent runners operate on provider messages only. When saving the updated
-    history back, this restores persisted checkpoint boundaries by their
-    original positions among non-checkpoint messages.
-    """
-    merged: list[dict] = []
-    provider_index = 0
+    content = (
+        message.content if isinstance(message, Message) else message.get("content")
+    )
+    if isinstance(content, CheckpointData):
+        return content
+    if isinstance(content, dict):
+        try:
+            return CheckpointData.model_validate(content)
+        except ValidationError:
+            return None
+    return None
 
-    for existing in existing_history:
-        if is_checkpoint_message(existing):
-            merged.append(existing)
+
+def bind_checkpoint_messages(history: list[dict]) -> list[Message]:
+    """Load persisted history and bind checkpoint segments to prior messages."""
+    messages: list[Message] = []
+    for item in history:
+        if is_checkpoint_message(item):
+            checkpoint = _get_checkpoint_data(item)
+            if checkpoint is not None and messages:
+                messages[-1]._checkpoint_after = checkpoint
             continue
-        if provider_index < len(provider_messages):
-            merged.append(provider_messages[provider_index])
-            provider_index += 1
 
-    merged.extend(provider_messages[provider_index:])
-    return merged
+        message = Message.model_validate(item)
+        if item.get("_no_save"):
+            message._no_save = True
+        messages.append(message)
+
+    return messages
+
+
+def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
+    """Dump runtime messages and reinsert bound checkpoint segments."""
+    dumped: list[dict] = []
+    for message in messages:
+        dumped.append(message.model_dump())
+        if message._checkpoint_after is not None:
+            dumped.append(
+                CheckpointMessageSegment(content=message._checkpoint_after).model_dump()
+            )
+    return dumped
