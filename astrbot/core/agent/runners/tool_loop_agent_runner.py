@@ -649,14 +649,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         type="streaming_delta",
                         data=AgentResponseData(chain=llm_response.result_chain),
                     )
-                elif llm_response.completion_text:
+                if llm_response.completion_text:
                     yield AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
                             chain=MessageChain().message(llm_response.completion_text),
                         ),
                     )
-                elif llm_response.reasoning_content:
+                if llm_response.reasoning_content:
                     yield AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
@@ -723,11 +723,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 type="llm_result",
                 data=AgentResponseData(chain=llm_resp.result_chain),
             )
-        elif llm_resp.completion_text:
+        if llm_resp.completion_text:
             yield AgentResponse(
                 type="llm_result",
                 data=AgentResponseData(
                     chain=MessageChain().message(llm_resp.completion_text),
+                ),
+            )
+        if llm_resp.reasoning_content:
+            yield AgentResponse(
+                type="llm_result",
+                data=AgentResponseData(
+                    chain=MessageChain(type="reasoning").message(
+                        llm_resp.reasoning_content,
+                    ),
                 ),
             )
 
@@ -744,11 +753,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             type="llm_result",
                             data=AgentResponseData(chain=llm_resp.result_chain),
                         )
-                    elif llm_resp.completion_text:
+                    if llm_resp.completion_text:
                         yield AgentResponse(
                             type="llm_result",
                             data=AgentResponseData(
                                 chain=MessageChain().message(llm_resp.completion_text),
+                            ),
+                        )
+                    if llm_resp.reasoning_content:
+                        yield AgentResponse(
+                            type="llm_result",
+                            data=AgentResponseData(
+                                chain=MessageChain(type="reasoning").message(
+                                    llm_resp.reasoning_content,
+                                ),
                             ),
                         )
                     await self._complete_with_assistant_response(llm_resp)
