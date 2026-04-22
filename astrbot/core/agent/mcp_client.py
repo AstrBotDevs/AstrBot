@@ -7,7 +7,6 @@ import copy
 import logging
 import os
 import sys
-import warnings
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Any, Generic, TextIO

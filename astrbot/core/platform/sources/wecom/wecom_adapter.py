@@ -141,10 +141,10 @@ class WecomPlatformAdapter(Platform):
         # prefer required access for fields we expect to exist
         self.settingss = platform_settings
         api_base_url = platform_config.get(
-            "api_base_url", "https://qyapi.weixin.qq.com/cgi-bin/"
+            "api_base_url", "https://qyapi.weixin.qq.com/cgi-bin/",
         )
         self.unified_webhook_mode = bool(
-            platform_config.get("unified_webhook_mode", False)
+            platform_config.get("unified_webhook_mode", False),
         )
         if not api_base_url:
             api_base_url = "https://qyapi.weixin.qq.com/cgi-bin/"
@@ -371,7 +371,7 @@ class WecomPlatformAdapter(Platform):
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         else:
-            logger.warning(f"暂未实现的事件: {str(getattr(msg, 'type', ''))}")
+            logger.warning(f"暂未实现的事件: {getattr(msg, 'type', '')!s}")
             return None
         # preserve last-seen agent id
         self.agent_id = abm.self_id

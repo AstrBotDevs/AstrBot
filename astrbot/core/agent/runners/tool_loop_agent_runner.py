@@ -389,6 +389,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             or "tool_call"
         )
         file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"
+
         def _run() -> str:
             normalized_overflow_dir = os.path.abspath(overflow_dir)
             overflow_path = os.path.join(normalized_overflow_dir, file_name)

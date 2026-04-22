@@ -278,7 +278,6 @@ class AstrBotCoreLifecycle:
 
         # Leave other runtime initializations (plugin reload, provider init, etc.)
         # to `bootstrap_runtime`.
-        return
 
     async def bootstrap_runtime(self) -> None:
         """Compatibility method for runtime bootstrap (deferred initialization).
@@ -332,42 +331,42 @@ class AstrBotCoreLifecycle:
             try:
                 # attempt graceful termination of partial runtime subsystems
                 if getattr(self, "plugin_manager", None) and hasattr(
-                    self.plugin_manager, "cleanup_loaded_plugins"
+                    self.plugin_manager, "cleanup_loaded_plugins",
                 ):
                     await self.plugin_manager.cleanup_loaded_plugins()
             except Exception:
                 logger.error(
-                    "Failed cleaning up plugins after runtime bootstrap failure"
+                    "Failed cleaning up plugins after runtime bootstrap failure",
                 )
 
             try:
                 if getattr(self, "provider_manager", None) and hasattr(
-                    self.provider_manager, "terminate"
+                    self.provider_manager, "terminate",
                 ):
                     await self.provider_manager.terminate()
             except Exception:
                 logger.error(
-                    "Failed terminating provider_manager after runtime bootstrap failure"
+                    "Failed terminating provider_manager after runtime bootstrap failure",
                 )
 
             try:
                 if getattr(self, "platform_manager", None) and hasattr(
-                    self.platform_manager, "terminate"
+                    self.platform_manager, "terminate",
                 ):
                     await self.platform_manager.terminate()
             except Exception:
                 logger.error(
-                    "Failed terminating platform_manager after runtime bootstrap failure"
+                    "Failed terminating platform_manager after runtime bootstrap failure",
                 )
 
             try:
                 if getattr(self, "kb_manager", None) and hasattr(
-                    self.kb_manager, "terminate"
+                    self.kb_manager, "terminate",
                 ):
                     await self.kb_manager.terminate()
             except Exception:
                 logger.error(
-                    "Failed terminating kb_manager after runtime bootstrap failure"
+                    "Failed terminating kb_manager after runtime bootstrap failure",
                 )
 
             raise
@@ -640,7 +639,7 @@ class AstrBotCoreLifecycle:
 
         # Terminate plugins if plugin_manager and context exist
         if getattr(self, "plugin_manager", None) and getattr(
-            self.plugin_manager, "context", None
+            self.plugin_manager, "context", None,
         ):
             try:
                 for plugin in self.plugin_manager.context.get_all_stars():
@@ -650,7 +649,7 @@ class AstrBotCoreLifecycle:
                         logger.exception("Failed to terminate plugin")
             except Exception:
                 logger.exception(
-                    "Error iterating plugin_manager.context.get_all_stars()"
+                    "Error iterating plugin_manager.context.get_all_stars()",
                 )
 
         # Terminate other managers if present

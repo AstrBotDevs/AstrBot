@@ -438,7 +438,9 @@ class AiocqhttpAdapter(Platform):
                                 action="get_msg",
                                 message_id=int(reply_message_id),
                             )
-                            reply_event_payload = _normalize_object_dict(reply_event_data)
+                            reply_event_payload = _normalize_object_dict(
+                                reply_event_data,
+                            )
                             if reply_event_payload is None:
                                 logger.error(
                                     "无法识别的回复消息数据: %s",

@@ -1,5 +1,4 @@
-"""
-QQ 官方机器人 API 适配器（类型安全版本）
+"""QQ 官方机器人 API 适配器（类型安全版本）
 
 本文件对原有实现做了两点关键修正以消除类型不匹配：
 - 在需要调用 QQOfficialMessageEvent 的实例方法时，创建真实的
@@ -18,7 +17,7 @@ import random
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import botpy
 import botpy.message
@@ -48,7 +47,7 @@ for handler in logging.root.handlers[:]:
 
 
 class botClient(Client):
-    def set_platform(self, platform: "QQOfficialPlatformAdapter") -> None:
+    def set_platform(self, platform: QQOfficialPlatformAdapter) -> None:
         # keep a typed reference back to adapter for callbacks to use
         self.platform = platform
 
@@ -150,7 +149,7 @@ class QQOfficialPlatformAdapter(Platform):
 
         # typed client
         self.client: botClient = botClient(
-            intents=self.intents, bot_log=False, timeout=20
+            intents=self.intents, bot_log=False, timeout=20,
         )
         self.client.set_platform(self)
         self._session_last_message_id: dict[str, str] = {}
@@ -200,7 +199,7 @@ class QQOfficialPlatformAdapter(Platform):
 
         # Build initial payload
         payload: dict[str, Any] = {"content": plain_text, "msg_id": msg_id}
-        ret: Optional[Any] = None
+        ret: Any | None = None
 
         # Create a real QQOfficialMessageEvent helper so instance methods are typed correctly.
         # Provide a minimal AstrBotMessage and platform meta; these values are placeholders and
@@ -336,7 +335,7 @@ class QQOfficialPlatformAdapter(Platform):
             return
         self._session_scene[session_id] = scene
 
-    def _extract_message_id(self, ret: Any) -> Optional[str]:
+    def _extract_message_id(self, ret: Any) -> str | None:
         # support both dict and botpy Message objects
         if isinstance(ret, dict):
             message_id = ret.get("id")
@@ -353,7 +352,7 @@ class QQOfficialPlatformAdapter(Platform):
         )
 
     @staticmethod
-    def _normalize_attachment_url(url: Optional[str]) -> str:
+    def _normalize_attachment_url(url: str | None) -> str:
         if not url:
             return ""
         if url.startswith("http://") or url.startswith("https://"):
@@ -367,7 +366,7 @@ class QQOfficialPlatformAdapter(Platform):
         ext = Path(filename).suffix.lower()
         source_ext = ext or ".audio"
         source_path = os.path.join(
-            temp_dir, f"qqofficial_{uuid.uuid4().hex}{source_ext}"
+            temp_dir, f"qqofficial_{uuid.uuid4().hex}{source_ext}",
         )
         await download_file(url, source_path)
         return Record(file=source_path, url=source_path)
@@ -375,7 +374,7 @@ class QQOfficialPlatformAdapter(Platform):
     @staticmethod
     async def _append_attachments(
         msg: list[BaseMessageComponent],
-        attachments: Optional[list],
+        attachments: list | None,
     ) -> None:
         if not attachments:
             return
@@ -402,8 +401,8 @@ class QQOfficialPlatformAdapter(Platform):
                     try:
                         msg.append(
                             await QQOfficialPlatformAdapter._prepare_audio_attachment(
-                                url, filename
-                            )
+                                url, filename,
+                            ),
                         )
                     except Exception as e:
                         logger.warning(
@@ -431,12 +430,13 @@ class QQOfficialPlatformAdapter(Platform):
 
         Returns:
             Content with face tags replaced by readable emoji descriptions.
+
         """
         import base64
         import json
         import re
 
-        def replace_face(match: "re.Match[str]") -> str:
+        def replace_face(match: re.Match[str]) -> str:
             face_tag = match.group(0)
             ext_match = re.search(r'ext="([^"]*)"', face_tag)
             if ext_match:
@@ -461,8 +461,7 @@ class QQOfficialPlatformAdapter(Platform):
         | botpy.message.C2CMessage,
         message_type: MessageType,
     ) -> AstrBotMessage:
-        """
-        Normalize incoming botpy message into AstrBotMessage with safe string fields.
+        """Normalize incoming botpy message into AstrBotMessage with safe string fields.
         """
         abm = AstrBotMessage()
         abm.type = message_type
@@ -485,7 +484,7 @@ class QQOfficialPlatformAdapter(Platform):
                 abm.group_id = str(getattr(message, "group_openid", "") or "")
             else:
                 abm.sender = MessageMember(
-                    str(getattr(message.author, "user_openid", "") or ""), ""
+                    str(getattr(message.author, "user_openid", "") or ""), "",
                 )
             abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
                 (getattr(message, "content", "") or "").strip(),
@@ -516,7 +515,7 @@ class QQOfficialPlatformAdapter(Platform):
                 abm.self_id = ""
             content_raw = getattr(message, "content", "") or ""
             plain_content = QQOfficialPlatformAdapter._parse_face_message(
-                content_raw.replace(f"<@!{abm.self_id}>", "").strip()
+                content_raw.replace(f"<@!{abm.self_id}>", "").strip(),
             )
             await QQOfficialPlatformAdapter._append_attachments(
                 msg,
