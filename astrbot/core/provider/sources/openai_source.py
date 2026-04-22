@@ -438,7 +438,7 @@ class ProviderOpenAIOfficial(Provider):
             image_fallback_used,
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
         return create_proxy_client("OpenAI", proxy)
@@ -519,6 +519,41 @@ class ProviderOpenAIOfficial(Provider):
         except NotFoundError as e:
             raise Exception(f"获取模型列表失败：{e}")
 
+    @staticmethod
+    def _filter_empty_assistant_messages(payloads: dict) -> None:
+        """Filter or fix empty assistant messages to prevent 400 errors on strict APIs.
+
+        Some APIs (e.g. DeepSeek, Moonshot) reject assistant messages where both
+        ``content`` and ``tool_calls`` are absent or empty.  This can happen when a
+        reasoning model returns only ``reasoning_content`` with no completion text,
+        causing the serialised ``content`` field to be an empty string or empty list.
+
+        Three cases are handled in-place:
+        1. Empty content **and** no tool_calls → drop the message entirely.
+        2. Empty-string content **with** tool_calls → set content to ``None``.
+        3. Empty-list content **with** tool_calls → set content to ``None``.
+        """
+        if not isinstance(payloads.get("messages"), list):
+            return
+        cleaned: list = []
+        for idx, msg in enumerate(payloads["messages"]):
+            if msg.get("role") == "assistant":
+                content = msg.get("content")
+                tool_calls = msg.get("tool_calls")
+                empty_content = (
+                    content == ""
+                    or content is None
+                    or content == []
+                    or (isinstance(content, list) and len(content) == 0)
+                )
+                if not tool_calls and empty_content:
+                    logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
+                    continue
+                if tool_calls and empty_content:
+                    msg["content"] = None
+            cleaned.append(msg)
+        payloads["messages"] = cleaned
+
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
@@ -548,26 +583,7 @@ class ProviderOpenAIOfficial(Provider):
 
         model = payloads.get("model", "").lower()
 
-        if "messages" in payloads and isinstance(payloads["messages"], list):
-            cleaned_messages = []
-            for idx, msg in enumerate(payloads["messages"]):
-                # 过滤空的 assistant 消息，防止严格 API（如 Moonshot）返回 400 错误
-                if msg.get("role") == "assistant":
-                    content = msg.get("content")
-                    tool_calls = msg.get("tool_calls")
-
-                    # 情况1: 空/null content 且无 tool_calls -> 过滤掉
-                    if not tool_calls and (content == "" or content is None):
-                        logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
-                        continue
-
-                    # 情况2: 空 content 但有 tool_calls -> 设为 None (符合 OpenAI 规范)
-                    if content == "" and tool_calls:
-                        msg["content"] = None
-
-                cleaned_messages.append(msg)
-
-            payloads["messages"] = cleaned_messages
+        self._filter_empty_assistant_messages(payloads)
 
         completion = await self.client.chat.completions.create(
             **payloads,
@@ -618,6 +634,8 @@ class ProviderOpenAIOfficial(Provider):
         for key in to_del:
             del payloads[key]
         self._apply_provider_specific_extra_body_overrides(extra_body)
+
+        self._filter_empty_assistant_messages(payloads)
 
         stream = await self.client.chat.completions.create(
             **payloads,
@@ -854,26 +872,24 @@ class ProviderOpenAIOfficial(Provider):
                     # 工具集未提供
                     # Should be unreachable
                     raise Exception("工具集未提供")
-
-                if tool_call.type == "function":
-                    # workaround for #1454
-                    if isinstance(tool_call.function.arguments, str):
-                        try:
+                for tool in tools.func_list:
+                    if (
+                        tool_call.type == "function"
+                        and tool.name == tool_call.function.name
+                    ):
+                        # workaround for #1454
+                        if isinstance(tool_call.function.arguments, str):
                             args = json.loads(tool_call.function.arguments)
-                        except json.JSONDecodeError as e:
-                            logger.error(f"解析参数失败: {e}")
-                            args = {}
-                    else:
-                        args = tool_call.function.arguments
-                    args_ls.append(args)
-                    func_name_ls.append(tool_call.function.name)
-                    tool_call_ids.append(tool_call.id)
+                        else:
+                            args = tool_call.function.arguments
+                        args_ls.append(args)
+                        func_name_ls.append(tool_call.function.name)
+                        tool_call_ids.append(tool_call.id)
 
-                    # gemini-2.5 / gemini-3 series extra_content handling
-                    extra_content = getattr(tool_call, "extra_content", None)
-                    if extra_content is not None:
-                        tool_call_extra_content_dict[tool_call.id] = extra_content
-
+                        # gemini-2.5 / gemini-3 series extra_content handling
+                        extra_content = getattr(tool_call, "extra_content", None)
+                        if extra_content is not None:
+                            tool_call_extra_content_dict[tool_call.id] = extra_content
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
