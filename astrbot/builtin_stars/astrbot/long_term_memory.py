@@ -70,8 +70,10 @@ class LongTermMemory:
         image_caption_prompt: str,
     ) -> str:
         if not image_caption_provider_id:
-            image_caption_provider_id = self.ctx.astrbot_config["provider_settings"].get(
-                "default_image_caption_provider_id"
+            image_caption_provider_id = (
+                self.ctx.astrbot_config["provider_settings"].get(
+                    "default_image_caption_provider_id"
+                )
             )
         if not image_caption_provider_id:
             provider = self.context.get_using_provider()
