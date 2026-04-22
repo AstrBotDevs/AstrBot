@@ -73,8 +73,8 @@ export function getProviderIcon(type) {
       "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/bailian-color.svg",
     volcengine:
       "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine-color.svg",
-  }
   };
+
   return icons[type] || "";
 }
 

@@ -7,7 +7,6 @@ import io
 import sys
 import time
 import uuid
-from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -452,7 +451,8 @@ class WeixinOCAdapter(Platform):
             self._context_tokens = self._normalize_context_tokens(raw_context_tokens)
 
     def _normalize_context_tokens(
-        self, raw_context_tokens: Mapping[object, object]
+        self,
+        raw_context_tokens: Mapping[object, object],
     ) -> dict[str, str]:
         normalized_context_tokens: dict[str, str] = {}
         for user_id, context_token in raw_context_tokens.items():
@@ -470,7 +470,6 @@ class WeixinOCAdapter(Platform):
         self.config["weixin_oc_sync_buf"] = self._sync_buf
         self.config["weixin_oc_base_url"] = self.base_url
         self.config["weixin_oc_context_tokens"] = normalized_context_tokens
-
 
         for platform in astrbot_config.get("platform", []):
             if not isinstance(platform, dict):
@@ -1072,7 +1071,6 @@ class WeixinOCAdapter(Platform):
         if data.get("get_updates_buf"):
             self._sync_buf = str(data.get("get_updates_buf"))
             should_save_state = True
-
 
         for msg in data.get("msgs", []) if isinstance(data.get("msgs"), list) else []:
             if self._shutdown_event.is_set():

@@ -26,8 +26,6 @@ if TYPE_CHECKING:
 class CronJobSchedulingError(Exception):
     """Raised when a cron job fails to be scheduled."""
 
-    pass
-
 
 class CronJobManager:
     """Central scheduler for BasicCronJob and ActiveAgentCronJob."""

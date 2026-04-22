@@ -6,6 +6,8 @@ from .commands import (
     AlterCmdCommands,
     ConversationCommands,
     HelpCommand,
+    LLMCommands,
+    PluginCommands,
     ProviderCommands,
     SetUnsetCommands,
     SIDCommand,
@@ -23,12 +25,12 @@ class Main(star.Star):
         self.plugin_c = PluginCommands(self.context)
         self.admin_c = AdminCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
-        self.help_c = HelpCommand(self.context)
         self.provider_c = ProviderCommands(self.context)
         self.setunset_c = SetUnsetCommands(self.context)
         self.t2i_c = T2ICommand(self.context)
         self.tts_c = TTSCommand(self.context)
         self.sid_c = SIDCommand(self.context)
+        self.alter_cmd_c = AlterCmdCommands(self.context)
 
     @filter.command("help")
     async def help(self, event: AstrMessageEvent) -> None:
@@ -157,17 +159,6 @@ class Main(star.Star):
     async def new_conv(self, message: AstrMessageEvent) -> None:
         """创建新对话"""
         await self.conversation_c.new_conv(message)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("provider")
-    async def provider(
-        self,
-        event: AstrMessageEvent,
-        idx: str | int | None = None,
-        idx2: int | None = None,
-    ) -> None:
-        """View or switch LLM Provider"""
-        await self.provider_c.provider(event, idx, idx2)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dashboard_update")

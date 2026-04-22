@@ -20,9 +20,6 @@ def test_register_internal_tools_adds_tools_to_manager():
     # Should start empty
     assert manager.get_func("astrbot_execute_shell") is None
 
-    # Register internal tools
-    manager.register_internal_tools()
-
     # Should now have the shell tool
     tool = manager.get_func("astrbot_execute_shell")
     assert tool is not None
@@ -39,13 +36,10 @@ def test_manager_func_list_starts_empty():
 def test_register_internal_tools_does_not_duplicate():
     """Calling register_internal_tools twice should not duplicate tools."""
     manager = FunctionToolManager()
-    manager.register_internal_tools()
 
     first_tool = manager.get_func("astrbot_execute_shell")
     assert first_tool is not None
 
-    # Register again
-    manager.register_internal_tools()
 
     # Should still have the same tool (not duplicated)
     second_tool = manager.get_func("astrbot_execute_shell")

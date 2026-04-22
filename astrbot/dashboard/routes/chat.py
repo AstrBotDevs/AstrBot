@@ -5,6 +5,7 @@ import re
 import uuid
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from pathlib import Path
 from typing import cast
 
 import anyio
@@ -327,7 +328,8 @@ class ChatRoute(Route):
     async def _delete_threads_by_ids(self, thread_ids: list[str], creator: str) -> None:
         for thread_id in thread_ids:
             unified_msg_origin = self._build_thread_unified_msg_origin(
-                creator, thread_id
+                creator,
+                thread_id,
             )
             active_event_registry.request_agent_stop_all(unified_msg_origin)
             await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
@@ -342,7 +344,7 @@ class ChatRoute(Route):
     async def _load_current_conversation_history(self, session) -> tuple[str, list]:
         unified_msg_origin = self._build_webchat_unified_msg_origin(session)
         conversation_id = await self.conv_mgr.get_curr_conversation_id(
-            unified_msg_origin
+            unified_msg_origin,
         )
         if not conversation_id:
             return "", []
@@ -361,7 +363,9 @@ class ChatRoute(Route):
         return conversation_id, history if isinstance(history, list) else []
 
     def _find_checkpoint_index(
-        self, history: list[dict], checkpoint_id: str
+        self,
+        history: list[dict],
+        checkpoint_id: str,
     ) -> int | None:
         for index, message in enumerate(history):
             if get_checkpoint_id(message) == checkpoint_id:
@@ -369,7 +373,9 @@ class ChatRoute(Route):
         return None
 
     def _find_turn_range(
-        self, history: list[dict], checkpoint_id: str
+        self,
+        history: list[dict],
+        checkpoint_id: str,
     ) -> tuple[int, int] | None:
         checkpoint_index = self._find_checkpoint_index(history, checkpoint_id)
         if checkpoint_index is None:
@@ -453,7 +459,10 @@ class ChatRoute(Route):
         return result
 
     def _find_turn_user_index(
-        self, history: list[dict], start: int, end: int
+        self,
+        history: list[dict],
+        start: int,
+        end: int,
     ) -> int | None:
         for index in range(start, end):
             message = history[index]
@@ -462,7 +471,10 @@ class ChatRoute(Route):
         return None
 
     def _find_turn_final_assistant_index(
-        self, history: list[dict], start: int, end: int
+        self,
+        history: list[dict],
+        start: int,
+        end: int,
     ) -> int | None:
         for index in range(end - 1, start - 1, -1):
             message = history[index]
@@ -484,7 +496,9 @@ class ChatRoute(Route):
         return history_list
 
     async def _delete_platform_history_after(
-        self, session, message_id: int
+        self,
+        session,
+        message_id: int,
     ) -> list[int]:
         history_list = await self._get_sorted_platform_history(session)
         should_delete = False
@@ -592,7 +606,7 @@ class ChatRoute(Route):
                         "data": {
                             "id": saved_user_record.id,
                             "created_at": to_utc_isoformat(
-                                saved_user_record.created_at
+                                saved_user_record.created_at,
                             ),
                             "llm_checkpoint_id": llm_checkpoint_id,
                         },
@@ -780,7 +794,7 @@ class ChatRoute(Route):
             )
 
         response = cast(
-            QuartResponse,
+            "QuartResponse",
             await make_response(
                 stream(),
                 {
@@ -1063,7 +1077,7 @@ class ChatRoute(Route):
             return Response().error("Permission denied").__dict__
 
         parent_record = await self.db.get_platform_message_history_by_id(
-            parent_message_id
+            parent_message_id,
         )
         if (
             not parent_record
@@ -1092,7 +1106,7 @@ class ChatRoute(Route):
             return Response().ok(data=self._serialize_thread(existing)).__dict__
 
         conversation_id, history = await self._load_current_conversation_history(
-            session
+            session,
         )
         turn_range = self._find_turn_range(history, checkpoint_id)
         if not conversation_id or not turn_range:
@@ -1143,7 +1157,7 @@ class ChatRoute(Route):
                     "thread": self._serialize_thread(thread),
                     "history": [history.model_dump() for history in history_ls],
                     "is_running": self.running_convs.get(thread_id, False),
-                }
+                },
             )
             .__dict__
         )
@@ -1174,7 +1188,7 @@ class ChatRoute(Route):
                 "selected_model": post_data.get("selected_model"),
                 "_platform_history_id": "webchat_thread",
                 "_thread_selected_text": thread.selected_text,
-            }
+            },
         )
 
     async def delete_thread(self):
@@ -1260,7 +1274,7 @@ class ChatRoute(Route):
             )
 
         conversation_id, history = await self._load_current_conversation_history(
-            session
+            session,
         )
         turn_range = self._find_turn_range(history, checkpoint_id)
         if not conversation_id or not turn_range:
@@ -1282,7 +1296,8 @@ class ChatRoute(Route):
             llm_checkpoint_id=new_checkpoint_id,
         )
         deleted_message_ids = await self._delete_platform_history_after(
-            session, message_id
+            session,
+            message_id,
         )
         thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
             session_id,
@@ -1303,7 +1318,7 @@ class ChatRoute(Route):
                     "message": updated.model_dump() if updated else None,
                     "needs_regenerate": True,
                     "truncated_after_message": True,
-                }
+                },
             )
             .__dict__
         )
@@ -1351,7 +1366,7 @@ class ChatRoute(Route):
             return Response().error("Message is not linked to LLM history").__dict__
 
         conversation_id, history = await self._load_current_conversation_history(
-            session
+            session,
         )
         turn_range = self._find_turn_range(history, checkpoint_id)
         if not conversation_id or not turn_range:
@@ -1421,7 +1436,7 @@ class ChatRoute(Route):
                 "selected_model": post_data.get("selected_model"),
                 "_skip_user_history": True,
                 "_llm_checkpoint_id": new_checkpoint_id,
-            }
+            },
         )
 
     async def update_session_display_name(self):

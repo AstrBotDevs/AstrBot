@@ -148,7 +148,7 @@ class ToolsRoute(Route):
                     await self.tool_mgr.enable_mcp_server(
                         name,
                         server_config,
-                        init_timeout=30,
+                        timeout=30,
                     )
                 except TimeoutError:
                     rollback_ok = self._rollback_mcp_server(name)
@@ -225,7 +225,7 @@ class ToolsRoute(Route):
                         try:
                             await self.tool_mgr.disable_mcp_server(
                                 old_name,
-                                shutdown_timeout=10,
+                                timeout=10,
                             )
                         except TimeoutError as e:
                             return (
@@ -248,7 +248,7 @@ class ToolsRoute(Route):
                         await self.tool_mgr.enable_mcp_server(
                             name,
                             config["mcpServers"][name],
-                            init_timeout=30,
+                            timeout=30,
                         )
                     except TimeoutError:
                         return (
@@ -382,16 +382,15 @@ class ToolsRoute(Route):
                 elif source == "internal":
                     origin = "internal"
                     origin_name = "AstrBot"
-                elif getattr(tool, "handler_module_path", None) and star_map.get(
-                    getattr(tool, "handler_module_path", None),
-                ):
-                    handler_path = getattr(tool, "handler_module_path", None)
-                    star = star_map[handler_path]
-                    origin = "plugin"
-                    origin_name = star.name
                 else:
-                    origin = "unknown"
-                    origin_name = "unknown"
+                    handler_path = getattr(tool, "handler_module_path", None)
+                    if isinstance(handler_path, str) and star_map.get(handler_path):
+                        star = star_map[handler_path]
+                        origin = "plugin"
+                        origin_name = star.name
+                    else:
+                        origin = "unknown"
+                        origin_name = "unknown"
                 tool_info = {
                     "name": tool.name,
                     "description": tool.description,
@@ -424,7 +423,7 @@ class ToolsRoute(Route):
                     return Response().error("内置工具不支持手动启用/停用").to_json()
             if action:
                 try:
-                    ok = self.tool_mgr.activate_llm_tool(tool_name)
+                    ok = self.tool_mgr.activate_llm_tool(tool_name, star_map)
                 except ValueError as e:
                     return Response().error(f"Failed to activate tool: {e!s}").to_json()
             else:

@@ -183,7 +183,7 @@
           <!-- <v-btn @click="$emit('openLiveMode')"
                         icon
                         variant="text"
-                        color="purple" 
+                        color="purple"
                         size="small"
                     >
                         <v-icon icon="mdi-phone-in-talk" variant="text" plain></v-icon>
@@ -580,7 +580,8 @@ defineExpose({
 
 <style scoped>
 /* Dark mode input container glass */
-.v-theme--bluebusinessdarktheme :deep(.input-container) {
+.v-theme--bluebusinessdarktheme :deep(.input-container),
+.v-theme--bluebusinessdarktheme ::v-deep(.input-container) {
   background: rgba(15, 15, 22, 0.6) !important;
   backdrop-filter: blur(16px) saturate(1.2) !important;
   border: 1px solid rgba(0, 242, 255, 0.08) !important;
@@ -588,7 +589,8 @@ defineExpose({
 }
 
 /* Light mode: clean white frosted glass */
-.v-theme--bluebusinesstheme :deep(.input-container) {
+.v-theme--bluebusinesstheme :deep(.input-container),
+.v-theme--bluebusinesstheme ::v-deep(.input-container) {
   background: rgba(255, 255, 255, 0.9) !important;
   backdrop-filter: blur(20px) saturate(1.1) !important;
   border: 1px solid rgba(0, 49, 83, 0.1) !important;

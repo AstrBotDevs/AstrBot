@@ -107,15 +107,15 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(
                 text(
                     "ALTER TABLE platform_message_history "
-                    "ADD COLUMN llm_checkpoint_id VARCHAR DEFAULT NULL"
-                )
+                    "ADD COLUMN llm_checkpoint_id VARCHAR DEFAULT NULL",
+                ),
             )
             await conn.execute(
                 text(
                     "CREATE INDEX IF NOT EXISTS "
                     "ix_platform_message_history_llm_checkpoint_id "
-                    "ON platform_message_history (llm_checkpoint_id)"
-                )
+                    "ON platform_message_history (llm_checkpoint_id)",
+                ),
             )
 
     # ====
@@ -500,7 +500,7 @@ class SQLiteDatabase(BaseDatabase):
                 await session.execute(
                     update(PlatformMessageHistory)
                     .where(PlatformMessageHistory.id == message_id)
-                    .values(**values)
+                    .values(**values),
                 )
 
     async def delete_platform_message_history_by_id(self, message_id: int) -> None:
@@ -510,8 +510,8 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     delete(PlatformMessageHistory).where(
-                        PlatformMessageHistory.id == message_id
-                    )
+                        PlatformMessageHistory.id == message_id,
+                    ),
                 )
 
     async def delete_platform_message_offset(
@@ -691,7 +691,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             result = await session.execute(
-                select(WebChatThread).where(WebChatThread.thread_id == thread_id)
+                select(WebChatThread).where(WebChatThread.thread_id == thread_id),
             )
             return result.scalar_one_or_none()
 
@@ -704,7 +704,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             query = select(WebChatThread).where(
-                WebChatThread.parent_session_id == parent_session_id
+                WebChatThread.parent_session_id == parent_session_id,
             )
             if creator is not None:
                 query = query.where(WebChatThread.creator == creator)
@@ -738,7 +738,7 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 await session.execute(
-                    delete(WebChatThread).where(WebChatThread.thread_id == thread_id)
+                    delete(WebChatThread).where(WebChatThread.thread_id == thread_id),
                 )
 
     async def delete_webchat_threads_by_parent_session(
@@ -755,8 +755,8 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     delete(WebChatThread).where(
-                        col(WebChatThread.thread_id).in_(thread_ids)
-                    )
+                        col(WebChatThread.thread_id).in_(thread_ids),
+                    ),
                 )
         return thread_ids
 
@@ -774,7 +774,7 @@ class SQLiteDatabase(BaseDatabase):
                 select(WebChatThread.thread_id).where(
                     WebChatThread.parent_session_id == parent_session_id,
                     col(WebChatThread.parent_message_id).in_(parent_message_ids),
-                )
+                ),
             )
             thread_ids = list(result.scalars().all())
         if not thread_ids:
@@ -784,8 +784,8 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     delete(WebChatThread).where(
-                        col(WebChatThread.thread_id).in_(thread_ids)
-                    )
+                        col(WebChatThread.thread_id).in_(thread_ids),
+                    ),
                 )
         return thread_ids
 

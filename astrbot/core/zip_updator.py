@@ -53,7 +53,10 @@ class RepoZipUpdator:
         return body[:max_len] + "...[truncated]"
 
     async def _download_file(
-        self, url: str, path: str, timeout: float = 1800.0
+        self,
+        url: str,
+        path: str,
+        timeout: float = 1800.0,
     ) -> None:
         target_path = Path(path)
         target_path.parent.mkdir(parents=True, exist_ok=True)

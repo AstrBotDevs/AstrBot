@@ -257,4 +257,3 @@ def get_astrbot_system_tmp_path() -> str:
 def get_astrbot_workspaces_path() -> str:
     """获取Astrbot工作区目录路径"""
     return os.path.realpath(os.path.join(get_astrbot_data_path(), "workspaces"))
-

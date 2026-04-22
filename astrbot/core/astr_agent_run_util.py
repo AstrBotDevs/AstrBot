@@ -413,7 +413,7 @@ async def run_live_agent(
             show_tool_call_result,
             show_reasoning,
             buffer_intermediate_messages,
-        )
+        ),
     )
 
     # 2. 启动 TTS 任务:负责从 text_queue 读取文本并生成音频到 audio_queue

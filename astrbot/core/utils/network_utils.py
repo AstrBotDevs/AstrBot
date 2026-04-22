@@ -111,6 +111,7 @@ def create_proxy_client(
 
     Returns:
         An httpx.AsyncClient created with the shared system SSL context; the proxy is applied only if one is provided.
+
     """
     resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
     if proxy:

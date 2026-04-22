@@ -56,4 +56,11 @@ Runs on `http://localhost:3000` by default.
 ## PR instructions
 
 1. Title format: use conventional commit messages
-2. Use English to write PR title and descriptions./<
+2. Use English to write PR title and descriptions.
+
+---
+
+Agent reminder (important)
+- When implementing or modifying frontend/dashboard code, always use the project's custom request module `@/utils/request` for HTTP calls (import it as `import axios, { resolveApiUrl } from '@/utils/request'`).
+- For fetch or SSE URLs, use `resolveApiUrl('/api/your-path')` so the configured `VITE_API_BASE` and dev proxy rules are respected.
+- Do not import the plain `axios` package directly in dashboard source files — using the custom request wrapper ensures baseURL normalization, Authorization and Accept-Language headers, and consistent timeout/interceptors across the app.

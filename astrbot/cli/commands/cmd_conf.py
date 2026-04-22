@@ -243,8 +243,8 @@ def set_config(key: str, value: str) -> None:
         click.echo(f"Config updated: {key}")
         click.echo(f"  Old value: {old_value}")
         click.echo(f"  New value: {validated_value}")
-    except KeyError:
-        raise click.ClickException(f"Unknown config key: {key}")
+    except KeyError as e:
+        raise click.ClickException(f"Unknown config key: {key}") from e
     except click.ClickException:
         raise
     except Exception as e:
@@ -263,8 +263,8 @@ def get_config(key: str | None = None) -> None:
             if key == "dashboard.password":
                 value = "********"
             click.echo(f"{key}: {value}")
-        except KeyError:
-            raise click.ClickException(f"Unknown config key: {key}")
+        except KeyError as e:
+            raise click.ClickException(f"Unknown config key: {key}") from e
         except Exception as e:
             raise click.UsageError(f"Failed to get config: {e!s}") from e
     else:

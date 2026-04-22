@@ -26,7 +26,8 @@ class KookApiPaths:
 
 class KookMentionTagName(str, Enum):
     """用来匹配 `(tagName)value(tagName)` 格式里的tagName , 例如: `(met)all(met)`
-    定义参见KMarkdown语法文档: https://developer.kookapp.cn/doc/kmarkdown"""
+    定义参见KMarkdown语法文档: https://developer.kookapp.cn/doc/kmarkdown
+    """
 
     MENTION = "met"
     ROLE = "rol"
@@ -116,7 +117,8 @@ class KookBaseReceiveDataClass(BaseModel):
         exclude_unset=True,
     ) -> dict:
         """默认配置预期场景为尽量原样输出,若需要使用此数据类发送json数据,
-        请`exclude_none=True, exclude_unset=False`"""
+        请`exclude_none=True, exclude_unset=False`
+        """
         return self.model_dump(
             by_alias=by_alias,
             exclude_none=exclude_none,
@@ -133,7 +135,8 @@ class KookBaseReceiveDataClass(BaseModel):
         exclude_unset=True,
     ) -> str:
         """默认配置预期场景为尽量原样输出,若需要使用此数据类发送json数据,
-        请`exclude_none=True, exclude_unset=False`"""
+        请`exclude_none=True, exclude_unset=False`
+        """
         return self.model_dump_json(
             indent=indent,
             ensure_ascii=ensure_ascii,
@@ -154,7 +157,8 @@ class KookBaseSendDataClass(KookBaseReceiveDataClass):
         exclude_unset=False,
     ) -> dict:
         """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
-        请`exclude_none=False, exclude_unset=True`"""
+        请`exclude_none=False, exclude_unset=True`
+        """
         return self.model_dump(
             by_alias=by_alias,
             exclude_none=exclude_none,
@@ -171,7 +175,8 @@ class KookBaseSendDataClass(KookBaseReceiveDataClass):
         exclude_unset=False,
     ) -> str:
         """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
-        请`exclude_none=False, exclude_unset=True`"""
+        请`exclude_none=False, exclude_unset=True`
+        """
         return self.model_dump_json(
             indent=indent,
             ensure_ascii=ensure_ascii,
@@ -389,7 +394,8 @@ class KookCardMessageContainer(list[KookCardMessage]):
         exclude_unset=False,
     ) -> list[dict]:
         """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
-        请`exclude_none=False, exclude_unset=True`"""
+        请`exclude_none=False, exclude_unset=True`
+        """
         return [
             i.to_dict(
                 by_alias=by_alias,
@@ -408,7 +414,8 @@ class KookCardMessageContainer(list[KookCardMessage]):
         exclude_unset=False,
     ) -> str:
         """默认配置预期场景为发送数据,若需要使用此数据类接收数据并尽量原样json输出,
-        请`exclude_none=False, exclude_unset=True`"""
+        请`exclude_none=False, exclude_unset=True`
+        """
         return json.dumps(
             [
                 i.to_dict(
@@ -436,7 +443,8 @@ class OrderMessage(BaseModel):
 
 class KookMessageSignal(IntEnum):
     """KOOK WebSocket 信令类型
-    ws文档: https://developer.kookapp.cn/doc/websocket"""
+    ws文档: https://developer.kookapp.cn/doc/websocket
+    """
 
     MESSAGE = 0
     """server->client  消息(s包含聊天和通知消息)"""
@@ -474,9 +482,7 @@ class KookAuthor(KookBaseReceiveDataClass):
 
 
 class KookMarkdownMentionPart(KookBaseReceiveDataClass):
-    """
-    文档参考: https://developer.kookapp.cn/doc/event/message
-    """
+    """文档参考: https://developer.kookapp.cn/doc/event/message"""
 
     id: str
     username: str
@@ -485,9 +491,7 @@ class KookMarkdownMentionPart(KookBaseReceiveDataClass):
 
 
 class KookMarkdownMentionRolePart(KookBaseReceiveDataClass):
-    """
-    文档参考: https://developer.kookapp.cn/doc/event/message
-    """
+    """文档参考: https://developer.kookapp.cn/doc/event/message"""
 
     role_id: int
     name: str
@@ -519,8 +523,7 @@ class KookRole(KookBaseReceiveDataClass):
 
 
 class KookRoleEventBody(KookBaseReceiveDataClass):
-    """
-    服务器角色相关事件 (added_role, updated_role, deleted_role) 的 Body 部分
+    """服务器角色相关事件 (added_role, updated_role, deleted_role) 的 Body 部分
     文档参考: https://developer.kookapp.cn/doc/event/guild-role
     """
 
@@ -537,7 +540,8 @@ class KookRoleEventBody(KookBaseReceiveDataClass):
 
 class KookExtra(KookBaseReceiveDataClass):
     """事件结构定义
-    文档参考 : https://developer.kookapp.cn/doc/event/event-introduction"""
+    文档参考 : https://developer.kookapp.cn/doc/event/event-introduction
+    """
 
     type: KookRoleExtraType | str | int
     """当 type 非系统消息(255)时, type为int

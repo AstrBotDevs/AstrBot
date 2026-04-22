@@ -7,7 +7,19 @@ import aiofiles
 import anthropic
 import httpx
 from anthropic import AsyncAnthropic
-from anthropic.types import Message
+from anthropic.types import (
+    InputJSONDelta,
+    Message,
+    RawContentBlockDeltaEvent,
+    RawContentBlockStartEvent,
+    RawContentBlockStopEvent,
+    RawMessageDeltaEvent,
+    RawMessageStartEvent,
+    SignatureDelta,
+    TextDelta,
+    ThinkingDelta,
+    ToolUseBlock,
+)
 from anthropic.types.message_delta_usage import MessageDeltaUsage
 from anthropic.types.usage import Usage
 
@@ -410,13 +422,12 @@ class ProviderAnthropic(Provider):
         ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
-                if event.type == "message_start":
-                    # the usage contains input token usage
+                if isinstance(event, RawMessageStartEvent):
                     id = event.message.id
                     usage = self._extract_usage(event.message.usage)
-                if event.type == "content_block_start":
-                    if event.content_block.type == "text":
-                        # 文本块开始
+                elif isinstance(event, RawContentBlockStartEvent):
+                    content_block = event.content_block
+                    if content_block.type == "text":
                         yield LLMResponse(
                             role="assistant",
                             completion_text="",
@@ -424,28 +435,25 @@ class ProviderAnthropic(Provider):
                             usage=usage,
                             id=id,
                         )
-                    elif event.content_block.type == "tool_use":
-                        # 工具使用块开始,初始化缓冲区
+                    elif isinstance(content_block, ToolUseBlock):
                         tool_use_buffer[event.index] = {
-                            "id": event.content_block.id,
-                            "name": event.content_block.name,
+                            "id": content_block.id,
+                            "name": content_block.name,
                             "input": {},
                         }
-
-                elif event.type == "content_block_delta":
-                    if event.delta.type == "text_delta":
-                        # 文本增量
-                        final_text += event.delta.text
+                elif isinstance(event, RawContentBlockDeltaEvent):
+                    delta = event.delta
+                    if isinstance(delta, TextDelta):
+                        final_text += delta.text
                         yield LLMResponse(
                             role="assistant",
-                            completion_text=event.delta.text,
+                            completion_text=delta.text,
                             is_chunk=True,
                             usage=usage,
                             id=id,
                         )
-                    elif event.delta.type == "thinking_delta":
-                        # 思考增量
-                        reasoning = event.delta.thinking
+                    elif isinstance(delta, ThinkingDelta):
+                        reasoning = delta.thinking
                         if reasoning:
                             yield LLMResponse(
                                 role="assistant",
@@ -456,15 +464,13 @@ class ProviderAnthropic(Provider):
                                 reasoning_signature=reasoning_signature or None,
                             )
                             reasoning_content += reasoning
-                    elif event.delta.type == "signature_delta":
-                        reasoning_signature = event.delta.signature
-                    elif event.delta.type == "input_json_delta":
-                        # 工具调用参数增量
+                    elif isinstance(delta, SignatureDelta):
+                        reasoning_signature = delta.signature
+                    elif isinstance(delta, InputJSONDelta):
                         if event.index in tool_use_buffer:
-                            # 累积 JSON 输入
                             if "input_json" not in tool_use_buffer[event.index]:
                                 tool_use_buffer[event.index]["input_json"] = ""
-                            partial_json = event.delta.partial_json
+                            partial_json = delta.partial_json
                             partial_json_chunk = (
                                 partial_json
                                 if isinstance(partial_json, str)
@@ -473,17 +479,13 @@ class ProviderAnthropic(Provider):
                             tool_use_buffer[event.index]["input_json"] += (
                                 partial_json_chunk
                             )
-
-                elif event.type == "content_block_stop":
-                    # 内容块结束
+                elif isinstance(event, RawContentBlockStopEvent):
                     if event.index in tool_use_buffer:
-                        # 解析完整的工具调用
                         tool_info = tool_use_buffer[event.index]
                         try:
                             if "input_json" in tool_info:
                                 tool_info["input"] = json.loads(tool_info["input_json"])
 
-                            # 添加到最终结果
                             final_tool_calls.append(
                                 {
                                     "id": tool_info["id"],
@@ -503,13 +505,10 @@ class ProviderAnthropic(Provider):
                                 id=id,
                             )
                         except json.JSONDecodeError:
-                            # JSON 解析失败,跳过这个工具调用
                             logger.warning(f"工具调用参数 JSON 解析失败: {tool_info}")
 
-                        # 清理缓冲区
                         del tool_use_buffer[event.index]
-
-                elif event.type == "message_delta":
+                elif isinstance(event, RawMessageDeltaEvent):
                     if event.usage:
                         self._update_usage(usage, event.usage)
 

@@ -39,12 +39,18 @@ def _normalize_alter_cmd_config(value: object) -> dict[str, AlterCmdPluginConfig
     for plugin_name, raw_plugin_config in value.items():
         if not isinstance(plugin_name, str) or not isinstance(raw_plugin_config, dict):
             continue
+        normalized_plugin_config = {
+            key: item for key, item in raw_plugin_config.items() if isinstance(key, str)
+        }
         plugin_config: AlterCmdPluginConfig = {}
-        raw_reset = raw_plugin_config.get("reset")
+        raw_reset = normalized_plugin_config.get("reset")
         if isinstance(raw_reset, dict):
+            normalized_reset = {
+                key: item for key, item in raw_reset.items() if isinstance(key, str)
+            }
             reset_config: ResetPermissionConfig = {}
             for key in ("group_unique_on", "group_unique_off", "private"):
-                permission = raw_reset.get(key)
+                permission = normalized_reset.get(key)
                 if isinstance(permission, str):
                     reset_config[key] = permission
             if reset_config:

@@ -334,6 +334,8 @@ def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
         dumped.append(message.model_dump())
         if message._checkpoint_after is not None:
             dumped.append(
-                CheckpointMessageSegment(content=message._checkpoint_after).model_dump()
+                CheckpointMessageSegment(
+                    content=message._checkpoint_after
+                ).model_dump(),
             )
     return dumped

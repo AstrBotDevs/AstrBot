@@ -40,10 +40,12 @@ else:
 
 
 class WecomServer:
-    def __init__(self, event_queue: asyncio.Queue, config: dict) -> None:
+    def __init__(self, event_queue: asyncio.Queue, config: dict[str, Any]) -> None:
         self.server = quart.Quart(__name__)
-        self.port = int(config.get("port"))
-        self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
+        # Use required access to ensure mypy/ty don't treat as Optional
+        # and normalize values with explicit conversions.
+        self.port = int(str(config["port"]))
+        self.callback_server_host = str(config.get("callback_server_host", "0.0.0.0"))
         self.server.add_url_rule(
             "/callback/command",
             view_func=self.verify,
@@ -55,11 +57,14 @@ class WecomServer:
             methods=["POST"],
         )
         self.event_queue = event_queue
-        self.crypto = WeChatCrypto(
-            config["token"].strip(),
-            config["encoding_aes_key"].strip(),
-            config["corpid"].strip(),
-        )
+
+        # required keys, normalize to str
+        token = str(config["token"]).strip()
+        encoding_aes_key = str(config["encoding_aes_key"]).strip()
+        corpid = str(config["corpid"]).strip()
+        self.crypto = WeChatCrypto(token, encoding_aes_key, corpid)
+
+        # callback expects BaseMessage
         self.callback: Callable[[BaseMessage], Awaitable[None]] | None = None
         self.shutdown_event = asyncio.Event()
 
@@ -68,18 +73,11 @@ class WecomServer:
         return await self.handle_verify(quart.request)
 
     async def handle_verify(self, request) -> str:
-        """处理验证请求,可被统一 webhook 入口复用
-
-        Args:
-            request: Quart 请求对象
-
-        Returns:
-            验证响应
-
-        """
+        """处理验证请求,可被统一 webhook 入口复用"""
         logger.info(f"验证请求有效性: {request.args}")
         args = request.args
         try:
+            # wechatpy expects strings; args.get() returns Optional[str]
             echo_str = self.crypto.check_signature(
                 args.get("msg_signature"),
                 args.get("timestamp"),
@@ -87,7 +85,8 @@ class WecomServer:
                 args.get("echostr"),
             )
             logger.info("验证请求有效性成功｡")
-            return echo_str
+            # check_signature returns str in wechatpy; ensure return type is str
+            return str(echo_str)
         except InvalidSignatureException:
             logger.error("验证请求有效性失败,签名异常,请检查配置｡")
             raise
@@ -97,26 +96,20 @@ class WecomServer:
         return await self.handle_callback(quart.request)
 
     async def handle_callback(self, request) -> str:
-        """处理回调请求,可被统一 webhook 入口复用
-
-        Args:
-            request: Quart 请求对象
-
-        Returns:
-            响应内容
-
-        """
+        """处理回调请求,可被统一 webhook 入口复用"""
         data = await request.get_data()
         msg_signature = request.args.get("msg_signature")
         timestamp = request.args.get("timestamp")
         nonce = request.args.get("nonce")
         try:
+            # decrypt_message may return bytes/str; pass typed values
             xml = self.crypto.decrypt_message(data, msg_signature, timestamp, nonce)
         except InvalidSignatureException:
             logger.error("解密失败,签名异常,请检查配置｡")
             raise
         else:
-            msg = parse_message(xml)
+            # parse_message returns a BaseMessage (wechatpy). Keep a typed reference.
+            msg: BaseMessage = parse_message(xml)  # type: ignore[assignment]
             logger.info(f"解析成功: {msg}")
             if self.callback:
                 await self.callback(msg)
@@ -140,49 +133,72 @@ class WecomServer:
 class WecomPlatformAdapter(Platform):
     def __init__(
         self,
-        platform_config: dict,
-        platform_settings: dict,
+        platform_config: dict[str, Any],
+        platform_settings: dict[str, Any],
         event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
+        # prefer required access for fields we expect to exist
         self.settingss = platform_settings
-        self.api_base_url = platform_config.get(
-            "api_base_url",
-            "https://qyapi.weixin.qq.com/cgi-bin/",
+        api_base_url = platform_config.get(
+            "api_base_url", "https://qyapi.weixin.qq.com/cgi-bin/"
         )
-        self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
-        if not self.api_base_url:
-            self.api_base_url = "https://qyapi.weixin.qq.com/cgi-bin/"
-        self.api_base_url = self.api_base_url.removesuffix("/")
-        if not self.api_base_url.endswith("/cgi-bin"):
-            self.api_base_url += "/cgi-bin"
-        if not self.api_base_url.endswith("/"):
-            self.api_base_url += "/"
+        self.unified_webhook_mode = bool(
+            platform_config.get("unified_webhook_mode", False)
+        )
+        if not api_base_url:
+            api_base_url = "https://qyapi.weixin.qq.com/cgi-bin/"
+        # normalize url consistently
+        api_base_url = api_base_url.removesuffix("/")
+        if not api_base_url.endswith("/cgi-bin"):
+            api_base_url += "/cgi-bin"
+        if not api_base_url.endswith("/"):
+            api_base_url += "/"
+        self.api_base_url = api_base_url
+
+        # require config keys to avoid Optional types and normalize them
+        corpid = str(self.config["corpid"]).strip()
+        secret = str(self.config["secret"]).strip()
+
+        # server expects port and other required keys
         self.server = WecomServer(self._event_queue, self.config)
         self.agent_id: str | None = None
-        self.client = WeChatClient(
-            self.config["corpid"].strip(),
-            self.config["secret"].strip(),
-        )
+        self.client: WeChatClient = WeChatClient(corpid, secret)
+
+        # normalize kf handling: use explicit check and typed assignments
         self.kf_name = self.config.get("kf_name", None)
         if self.kf_name:
             self.wechat_kf_api = WeChatKF(client=self.client)
             self.wechat_kf_message_api = WeChatKFMessage(self.client)
-            self.client.__setattr__("kf", self.wechat_kf_api)
-            self.client.__setattr__("kf_message", self.wechat_kf_message_api)
-        self.client.__setattr__("API_BASE_URL", self.api_base_url)
+            # attach runtime attributes onto client for use at runtime
+            # assign runtime-only attributes directly; signal to type-checkers that these attributes may not be
+            # statically declared on WeChatClient with a precise attr-defined ignore instead of blanket ignores.
+            self.client.kf = self.wechat_kf_api  # type: ignore[attr-defined]
+            self.client.kf_message = self.wechat_kf_message_api  # type: ignore[attr-defined]
+        # ensure API_BASE_URL is set as string (assign directly, it's a runtime extension)
+        self.client.API_BASE_URL = self.api_base_url  # type: ignore[attr-defined]
 
         async def callback(msg: BaseMessage) -> None:
-            if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
+            # parse_message may yield messages with .type and ._data; normalize _data to dict
+            msg_data = getattr(msg, "_data", {}) or {}
+            if not isinstance(msg_data, dict):
+                msg_data = {}
+
+            # handle wechat kf special event type
+            if (
+                getattr(msg, "type", "") == "unknown"
+                and msg_data.get("Event") == "kf_msg_or_event"
+            ):
 
                 def get_latest_msg_item() -> dict | None:
-                    token = msg._data["Token"]
-                    kfid = msg._data["OpenKfId"]
+                    token = str(msg_data.get("Token", "") or "")
+                    kfid = str(msg_data.get("OpenKfId", "") or "")
                     has_more = 1
-                    ret = {}
+                    ret: dict[str, Any] = {}
                     while has_more:
+                        # sync_msg is synchronous in this wrapper; run in executor
                         ret = self.wechat_kf_api.sync_msg(token, kfid)
-                        has_more = ret["has_more"]
+                        has_more = ret.get("has_more", 0)
                     msg_list = ret.get("msg_list", [])
                     if msg_list:
                         return msg_list[-1]
@@ -247,8 +263,9 @@ class WecomPlatformAdapter(Platform):
     @override
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
-        if self.kf_name:
+        if getattr(self, "kf_name", None):
             try:
+                # run in executor to avoid blocking loop for sync API
                 acc_list = (
                     await loop.run_in_executor(
                         None,
@@ -263,6 +280,7 @@ class WecomPlatformAdapter(Platform):
                     open_kfid = acc.get("open_kfid", None)
                     if not open_kfid:
                         logger.error("获取微信客服失败,open_kfid 为空｡")
+                        continue
                     logger.debug(f"Found open_kfid: {open_kfid!s}")
                     kf_url = (
                         await loop.run_in_executor(
@@ -291,79 +309,95 @@ class WecomPlatformAdapter(Platform):
         return await self.server.handle_callback(request)
 
     async def convert_message(self, msg: BaseMessage) -> AstrBotMessage | None:
+        # ensure msg is treated as BaseMessage for typing; normalize fields using str()/int()
         abm = AstrBotMessage()
         if isinstance(msg, TextMessage):
-            abm.message_str = msg.content
-            abm.self_id = str(msg.agent)
-            abm.message = [Plain(msg.content)]
+            # TextMessage.content, .agent, .source, .id, .time
+            abm.message_str = str(getattr(msg, "content", "") or "")
+            abm.self_id = str(getattr(msg, "agent", "") or "")
+            abm.message = [Plain(str(getattr(msg, "content", "") or ""))]
             abm.type = MessageType.FRIEND_MESSAGE
-            abm.sender = MessageMember(msg.source, msg.source)
-            abm.message_id = str(msg.id)
-            abm.timestamp = int(msg.time)
+            abm.sender = MessageMember(
+                str(getattr(msg, "source", "") or ""),
+                str(getattr(msg, "source", "") or ""),
+            )
+            abm.message_id = str(getattr(msg, "id", "") or "")
+            # normalize timestamp: allow numeric or string
+            abm.timestamp = int(str(getattr(msg, "time", 0) or 0))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         elif isinstance(msg, ImageMessage):
             abm.message_str = "[图片]"
-            abm.self_id = str(msg.agent)
-            abm.message = [Image(file=msg.image, url=msg.image)]
+            abm.self_id = str(getattr(msg, "agent", "") or "")
+            image_url = str(getattr(msg, "image", "") or "")
+            abm.message = [Image(file=image_url, url=image_url)]
             abm.type = MessageType.FRIEND_MESSAGE
-            abm.sender = MessageMember(msg.source, msg.source)
-            abm.message_id = str(msg.id)
-            abm.timestamp = int(msg.time)
+            abm.sender = MessageMember(
+                str(getattr(msg, "source", "") or ""),
+                str(getattr(msg, "source", "") or ""),
+            )
+            abm.message_id = str(getattr(msg, "id", "") or "")
+            abm.timestamp = int(str(getattr(msg, "time", 0) or 0))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         elif isinstance(msg, VoiceMessage):
             resp = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.client.media.download,
-                msg.media_id,
+                str(getattr(msg, "media_id", "") or ""),
             )
             temp_dir = get_astrbot_temp_path()
-            path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
+            media_id = str(getattr(msg, "media_id", "") or "")
+            path = os.path.join(temp_dir, f"wecom_{media_id}.amr")
             async with aiofiles.open(path, "wb") as f:
                 await f.write(resp.content)
             try:
-                path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
+                path_wav = os.path.join(temp_dir, f"wecom_{media_id}.wav")
                 path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
                 logger.error(f"转换音频失败: {e}｡如果没有安装 ffmpeg 请先安装｡")
-                path_wav = path
+                # return None to indicate failure to convert/handle voice message
                 return None
             abm.message_str = ""
-            abm.self_id = str(msg.agent)
+            abm.self_id = str(getattr(msg, "agent", "") or "")
             abm.message = [Record(file=path_wav, url=path_wav)]
             abm.type = MessageType.FRIEND_MESSAGE
-            abm.sender = MessageMember(msg.source, msg.source)
-            abm.message_id = str(msg.id)
-            abm.timestamp = int(msg.time)
+            abm.sender = MessageMember(
+                str(getattr(msg, "source", "") or ""),
+                str(getattr(msg, "source", "") or ""),
+            )
+            abm.message_id = str(getattr(msg, "id", "") or "")
+            abm.timestamp = int(str(getattr(msg, "time", 0) or 0))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         else:
-            logger.warning(f"暂未实现的事件: {msg.type}")
+            logger.warning(f"暂未实现的事件: {str(getattr(msg, 'type', ''))}")
             return None
+        # preserve last-seen agent id
         self.agent_id = abm.self_id
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
         return abm
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
-        msgtype = msg.get("msgtype")
-        external_userid = msg.get("external_userid")
+        msgtype = str(msg.get("msgtype", "") or "")
+        external_userid = str(msg.get("external_userid", "") or "")
         abm = AstrBotMessage()
         abm.raw_message = msg
-        abm.raw_message["_wechat_kf_flag"] = None
-        abm.self_id = msg["open_kfid"]
+        # normalized flag field to avoid typed union confusion
+        abm.raw_message["_wechat_kf_flag"] = True
+        abm.self_id = str(msg.get("open_kfid", "") or "")
         abm.sender = MessageMember(external_userid, external_userid)
         abm.session_id = external_userid
         abm.type = MessageType.FRIEND_MESSAGE
-        abm.message_id = msg.get("msgid", uuid.uuid4().hex[:8])
+        abm.message_id = str(msg.get("msgid", uuid.uuid4().hex[:8]) or "")
         abm.message_str = ""
         if msgtype == "text":
-            text = msg.get("text", {}).get("content", "").strip()
+            text = str(msg.get("text", {}).get("content", "") or "").strip()
             abm.message = [Plain(text=text)]
             abm.message_str = text
         elif msgtype == "image":
-            media_id = msg.get("image", {}).get("media_id", "")
+            media_id = str(msg.get("image", {}).get("media_id", "") or "")
             resp = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.client.media.download,
@@ -375,7 +409,7 @@ class WecomPlatformAdapter(Platform):
                 await f.write(resp.content)
             abm.message = [Image(file=path, url=path)]
         elif msgtype == "voice":
-            media_id = msg.get("voice", {}).get("media_id", "")
+            media_id = str(msg.get("voice", {}).get("media_id", "") or "")
             resp = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.client.media.download,
@@ -390,7 +424,6 @@ class WecomPlatformAdapter(Platform):
                 path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
                 logger.error(f"转换音频失败: {e}｡如果没有安装 ffmpeg 请先安装｡")
-                path_wav = path
                 return None
             abm.message = [Record(file=path_wav, url=path_wav)]
         else:
@@ -413,9 +446,11 @@ class WecomPlatformAdapter(Platform):
         return self.client
 
     async def terminate(self) -> None:
+        # signal server shutdown
         self.server.shutdown_event.set()
         try:
             await self.server.server.shutdown()
-        except Exception as _:
+        except Exception:
+            # best-effort shutdown; no-op on failure
             pass
         logger.info("企业微信 适配器已被关闭")

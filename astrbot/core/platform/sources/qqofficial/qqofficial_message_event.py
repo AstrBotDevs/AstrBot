@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import logging
 import os
 import random
 import uuid
@@ -16,6 +17,13 @@ from botpy import Client
 from botpy.http import Route
 from botpy.types import message
 from botpy.types.message import MarkdownPayload, Media
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -37,7 +45,7 @@ def _patch_qq_botpy_formdata() -> None:
         from botpy.http import _FormData
 
         if not hasattr(_FormData, "_is_processed"):
-            _FormData._is_processed = False
+            type.__setattr__(_FormData, "_is_processed", False)
     except Exception:
         logger.debug("[QQOfficial] Skip botpy FormData patch.")
 
@@ -52,7 +60,7 @@ _qqofficial_retry = retry(
             botpy.errors.SequenceNumberError,
             OSError,
             asyncio.TimeoutError,
-        )
+        ),
     ),
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=2, min=2, max=30),
@@ -502,7 +510,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         markdown: message.MarkdownPayload | None = None,
         keyboard: message.Keyboard | None = None,
         stream: dict | None = None,
-    ) -> message.Message | None:
+    ) -> message.Message | dict[str, object] | None:
         payload = locals()
         payload.pop("self", None)
         if "stream" in payload and payload["stream"] is not None:
@@ -518,7 +526,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         if not isinstance(result, dict):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None
-        return message.Message(**result)
+        return result
 
     @staticmethod
     async def _parse_to_qqofficial(message: MessageChain):

@@ -1,12 +1,14 @@
 import asyncio
 import copy
+import os
 import sys
 import time
 import traceback
-from collections.abc import AsyncGenerator, AsyncIterator
+import typing as T
+import uuid
+from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 
 from mcp.types import (
     BlobResourceContents,
@@ -16,26 +18,31 @@ from mcp.types import (
     TextContent,
     TextResourceContents,
 )
+from tenacity import (
+    AsyncRetrying,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from astrbot import logger
-from astrbot.core.agent.context.compressor import ContextCompressor
 from astrbot.core.agent.context.config import ContextConfig
 from astrbot.core.agent.context.manager import ContextManager
-from astrbot.core.agent.context.token_counter import TokenCounter
+from astrbot.core.agent.context.token_counter import EstimateTokenCounter
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
-    ContentPart,
     ImageURLPart,
     Message,
     TextPart,
     ThinkPart,
     ToolCallMessageSegment,
+    bind_checkpoint_messages,
 )
-from astrbot.core.agent.response import AgentResponseData, AgentStats
+from astrbot.core.agent.response import AgentResponse, AgentResponseData, AgentStats
 from astrbot.core.agent.run_context import ContextWrapper, TContext
-from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgentRunner
-from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.runners.base import AgentState, BaseAgentRunner
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -57,22 +64,6 @@ from astrbot.core.provider.modalities import (
 )
 from astrbot.core.provider.provider import Provider
 
-from ..context.compressor import ContextCompressor
-from ..context.config import ContextConfig
-from ..context.manager import ContextManager
-from ..context.token_counter import EstimateTokenCounter, TokenCounter
-from ..hooks import BaseAgentRunHooks
-from ..message import (
-    AssistantMessageSegment,
-    Message,
-    ToolCallMessageSegment,
-    bind_checkpoint_messages,
-)
-from ..response import AgentResponseData, AgentStats
-from ..run_context import ContextWrapper, TContext
-from ..tool_executor import BaseFunctionToolExecutor
-from .base import AgentResponse, AgentState, BaseAgentRunner
-
 if sys.version_info >= (3, 12):
     from typing import override
 else:
@@ -81,10 +72,10 @@ else:
 
 @dataclass(slots=True)
 class _HandleFunctionToolsResult:
-    kind: Literal["message_chain", "tool_call_result_blocks", "cached_image"]
+    kind: T.Literal["message_chain", "tool_call_result_blocks", "cached_image"]
     message_chain: MessageChain | None = None
     tool_call_result_blocks: list[ToolCallMessageSegment] | None = None
-    cached_image: Any = None
+    cached_image: T.Any = None
 
     @classmethod
     def from_message_chain(cls, chain: MessageChain) -> "_HandleFunctionToolsResult":
@@ -98,7 +89,7 @@ class _HandleFunctionToolsResult:
         return cls(kind="tool_call_result_blocks", tool_call_result_blocks=blocks)
 
     @classmethod
-    def from_cached_image(cls, image: Any) -> "_HandleFunctionToolsResult":
+    def from_cached_image(cls, image: T.Any) -> "_HandleFunctionToolsResult":
         return cls(kind="cached_image", cached_image=image)
 
 
@@ -114,10 +105,12 @@ class _ToolExecutionInterrupted(Exception):
     """Raised when a running tool call is interrupted by a stop request."""
 
 
-ToolExecutorResultT = TypeVar("ToolExecutorResultT")
+ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
+    TOOL_RESULT_MAX_ESTIMATED_TOKENS = 27_500
+    TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 7000
     EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
     EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
@@ -172,11 +165,43 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         "Otherwise, change strategy, adjust arguments, or explain the limitation "
         "to the user."
     )
+    TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE = (
+        "Truncated tool output preview shown above. "
+        "The tool output was too large to include directly and was written to "
+        "`{overflow_path}`. Use {read_tool_hint} to inspect it. "
+        "Use a narrower window when reading large files."
+    )
 
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
         event = getattr(self.run_context.context, "event", None)
         return extract_persona_custom_error_message_from_event(event)
+
+    async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> None:
+        """Finalize the current step as a plain assistant response with no tool calls."""
+        self.final_llm_resp = llm_resp
+        self._transition_state(AgentState.DONE)
+        self.stats.end_time = time.time()
+
+        parts = []
+        if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+            parts.append(
+                ThinkPart(
+                    think=llm_resp.reasoning_content,
+                    encrypted=llm_resp.reasoning_signature,
+                ),
+            )
+        if llm_resp.completion_text:
+            parts.append(TextPart(text=llm_resp.completion_text))
+        if len(parts) == 0:
+            logger.warning("LLM returned empty assistant message with no tool calls.")
+        self.run_context.messages.append(Message(role="assistant", content=parts))
+
+        try:
+            await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+        except Exception as e:
+            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+        self._resolve_unconsumed_follow_ups()
 
     @override
     async def reset(
@@ -197,13 +222,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # truncate by turns compressor
         truncate_turns: int = 1,
         # customize
-        custom_token_counter: TokenCounter | None = None,
-        custom_compressor: ContextCompressor | None = None,
+        custom_token_counter: T.Any = None,
+        custom_compressor: T.Any = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
         provider_config: dict | None = None,
-        **kwargs: Any,
+        **kwargs: T.Any,
     ) -> None:
+        raw_tool_result_overflow_dir = kwargs.get("tool_result_overflow_dir")
+        tool_result_overflow_dir = (
+            raw_tool_result_overflow_dir
+            if isinstance(raw_tool_result_overflow_dir, str)
+            else None
+        )
+        raw_read_tool = kwargs.get("read_tool")
+        read_tool = raw_read_tool if isinstance(raw_read_tool, FunctionTool) else None
         self.req = request
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
@@ -213,16 +246,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.truncate_turns = truncate_turns
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
+        self.tool_result_overflow_dir = tool_result_overflow_dir
+        self.read_tool = read_tool
+        self._tool_result_token_counter = EstimateTokenCounter()
         # we will do compress when:
         # 1. before requesting LLM
         # TODO: 2. after LLM output a tool call
         self.context_config = ContextConfig(
             # <=0 will never do compress
-            max_context_tokens=provider.provider_config.get("max_context_tokens", 4096),
+            max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
             # enforce max turns before compression
-            enforce_max_turns=self.enforce_max_turns
-            if self.enforce_max_turns != -1
-            else 15,
+            enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
@@ -244,7 +278,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.fallback_providers.append(fallback_provider)
             if fallback_id:
                 seen_provider_ids.add(fallback_id)
-        self.final_llm_resp: LLMResponse | None = None
+        self.final_llm_resp = None
         self._state = AgentState.IDLE
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
@@ -259,18 +293,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # These two are used for tool schema mode handling
         # We now have two modes:
         # - "full": use full tool schema for LLM calls, default.
-        # - "lazy_load": use light tool schema for LLM calls, and re-query with param-only schema when needed.
+        # - "skills_like": use light tool schema for LLM calls, and re-query with param-only schema when needed.
         #   Light tool schema does not include tool parameters.
         #   This can reduce token usage when tools have large descriptions.
         # See #4681
         self.tool_schema_mode = tool_schema_mode
         self._tool_schema_param_set = None
-        self._lazy_load_raw_tool_set = None
-        if tool_schema_mode == "lazy_load":
+        self._skill_like_raw_tool_set = None
+        if tool_schema_mode == "skills_like":
             tool_set = self.req.func_tool
             if not tool_set:
                 return
-            self._lazy_load_raw_tool_set = tool_set
+            self._skill_like_raw_tool_set = tool_set
             light_set = tool_set.get_light_tool_set()
             self._tool_schema_param_set = tool_set.get_param_only_tool_set()
             # MODIFIE the req.func_tool to use light tool schemas
@@ -346,7 +380,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if self.tool_result_overflow_dir is None:
             raise ValueError("tool_result_overflow_dir is not configured")
 
-        overflow_dir = Path(self.tool_result_overflow_dir).resolve(strict=False)
+        overflow_dir = self.tool_result_overflow_dir
         safe_tool_call_id = (
             "".join(
                 ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
@@ -355,12 +389,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             or "tool_call"
         )
         file_name = f"{safe_tool_call_id}_{uuid.uuid4().hex[:8]}.txt"
-        overflow_path = overflow_dir / file_name
-
         def _run() -> str:
-            overflow_dir.mkdir(parents=True, exist_ok=True)
-            overflow_path.write_text(content, encoding="utf-8")
-            return str(overflow_path)
+            normalized_overflow_dir = os.path.abspath(overflow_dir)
+            overflow_path = os.path.join(normalized_overflow_dir, file_name)
+            os.makedirs(normalized_overflow_dir, exist_ok=True)
+            with open(overflow_path, "w", encoding="utf-8") as file:
+                file.write(content)
+            return overflow_path
 
         return await asyncio.to_thread(_run)
 
@@ -374,7 +409,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return content
 
         estimated_tokens = self._tool_result_token_counter.count_tokens(
-            [Message(role="tool", content=content, tool_call_id=tool_call_id)]
+            [Message(role="tool", content=content, tool_call_id=tool_call_id)],
         )
         if estimated_tokens <= self.TOOL_RESULT_MAX_ESTIMATED_TOKENS:
             return content
@@ -419,7 +454,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         preview = content
         while preview:
             estimated_tokens = self._tool_result_token_counter.count_tokens(
-                [Message(role="tool", content=preview, tool_call_id=tool_call_id)]
+                [Message(role="tool", content=preview, tool_call_id=tool_call_id)],
             )
             if estimated_tokens <= self.TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS:
                 return preview
@@ -433,28 +468,35 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         *,
         include_model: bool = True,
-    ) -> AsyncGenerator[LLMResponse, None]:
+    ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
-        payload = {
-            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
-            "func_tool": self._func_tool_for_provider(),
-            "session_id": self.req.session_id,
-            "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
-            "abort_signal": self._abort_signal,
-        }
-        if include_model:
-            # For primary provider we keep explicit model selection if provided.
-            payload["model"] = self.req.model
+        contexts = self._sanitize_contexts_for_provider(self.run_context.messages)
+        func_tool = self._func_tool_for_provider()
+        model = self.req.model if include_model else None
         if self.streaming:
-            stream = self.provider.text_chat_stream(**payload)
+            stream = self.provider.text_chat_stream(
+                contexts=contexts,
+                func_tool=func_tool,
+                session_id=self.req.session_id,
+                extra_user_content_parts=self.req.extra_user_content_parts,
+                model=model,
+                abort_signal=self._abort_signal,
+            )
             async for resp in stream:
                 yield resp
         else:
-            yield await self.provider.text_chat(**payload)
+            yield await self.provider.text_chat(
+                contexts=contexts,
+                func_tool=func_tool,
+                session_id=self.req.session_id,
+                extra_user_content_parts=self.req.extra_user_content_parts,
+                model=model,
+                abort_signal=self._abort_signal,
+            )
 
     async def _iter_llm_responses_with_fallback(
         self,
-    ) -> AsyncGenerator[LLMResponse, None]:
+    ) -> T.AsyncGenerator[LLMResponse, None]:
         """Wrap _iter_llm_responses with provider fallback handling."""
         candidates = [self.provider, *self.fallback_providers]
         total_candidates = len(candidates)
@@ -471,90 +513,62 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     candidate_id,
                 )
             self.provider = candidate
-            has_stream_output = False
             try:
-                async for resp in self._iter_llm_responses(include_model=idx == 0):
-                    if resp.is_chunk:
-                        has_stream_output = True
-                        yield resp
-                        continue
+                retrying = AsyncRetrying(
+                    retry=retry_if_exception_type(EmptyModelOutputError),
+                    stop=stop_after_attempt(self.EMPTY_OUTPUT_RETRY_ATTEMPTS),
+                    wait=wait_exponential(
+                        multiplier=1,
+                        min=self.EMPTY_OUTPUT_RETRY_WAIT_MIN_S,
+                        max=self.EMPTY_OUTPUT_RETRY_WAIT_MAX_S,
+                    ),
+                    reraise=True,
+                )
 
-                    if (
-                        resp.role == "err"
-                        and not has_stream_output
-                        and (not is_last_candidate)
-                    ):
-                        last_err_response = resp
-                        logger.warning(
-                            "Chat Model %s returns error response, trying fallback to next provider.",
-                            candidate_id,
-                        )
-                        break
-
-                    yield resp
-                    return
-
-                if has_stream_output:
-                    return
-            except EmptyModelOutputError as exc:
-                last_exception = exc
-                # Retry on the same provider for empty output errors
-                retry_count = 0
-                should_retry = True
-                while (
-                    retry_count < self.EMPTY_OUTPUT_RETRY_ATTEMPTS - 1 and should_retry
-                ):
-                    retry_count += 1
-                    wait_time = min(
-                        self.EMPTY_OUTPUT_RETRY_WAIT_MIN_S
-                        + (
-                            self.EMPTY_OUTPUT_RETRY_WAIT_MAX_S
-                            - self.EMPTY_OUTPUT_RETRY_WAIT_MIN_S
-                        )
-                        * (
-                            (retry_count - 1)
-                            / max(self.EMPTY_OUTPUT_RETRY_ATTEMPTS - 1, 1)
-                        ),
-                        self.EMPTY_OUTPUT_RETRY_WAIT_MAX_S,
-                    )
-                    logger.warning(
-                        "Chat Model %s returned empty output (attempt %d/%d). Retrying in %.1fs...",
-                        candidate_id,
-                        retry_count,
-                        self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
-                        wait_time,
-                    )
-                    if self._is_stop_requested():
-                        should_retry = False
-                        break
-                    await asyncio.sleep(wait_time)
-                    try:
-                        async for resp in self._iter_llm_responses(
-                            include_model=idx == 0,
-                        ):
-                            if resp.is_chunk:
-                                has_stream_output = True
-                                yield resp
-                                continue
-                            if (
-                                resp.role == "err"
-                                and not has_stream_output
-                                and (not is_last_candidate)
+                async for attempt in retrying:
+                    has_stream_output = False
+                    with attempt:
+                        try:
+                            async for resp in self._iter_llm_responses(
+                                include_model=idx == 0,
                             ):
-                                last_err_response = resp
-                                should_retry = False
-                                break
-                            yield resp
-                            return
-                        if has_stream_output:
-                            return
-                    except EmptyModelOutputError as retry_exc:
-                        last_exception = retry_exc
-                        if retry_count >= self.EMPTY_OUTPUT_RETRY_ATTEMPTS:
-                            should_retry = False
-                # All retries exhausted, move to fallback
-                continue
-            except Exception as exc:
+                                if resp.is_chunk:
+                                    has_stream_output = True
+                                    yield resp
+                                    continue
+
+                                if (
+                                    resp.role == "err"
+                                    and not has_stream_output
+                                    and (not is_last_candidate)
+                                ):
+                                    last_err_response = resp
+                                    logger.warning(
+                                        "Chat Model %s returns error response, trying fallback to next provider.",
+                                        candidate_id,
+                                    )
+                                    break
+
+                                yield resp
+                                return
+
+                            if has_stream_output:
+                                return
+                        except EmptyModelOutputError:
+                            if has_stream_output:
+                                logger.warning(
+                                    "Chat Model %s returned empty output after streaming started; skipping empty-output retry.",
+                                    candidate_id,
+                                )
+                            else:
+                                logger.warning(
+                                    "Chat Model %s returned empty output on attempt %s/%s.",
+                                    candidate_id,
+                                    attempt.retry_state.attempt_number,
+                                    self.EMPTY_OUTPUT_RETRY_ATTEMPTS,
+                                )
+                            raise
+            except Exception as exc:  # noqa: BLE001
                 last_exception = exc
                 logger.warning(
                     "Chat Model %s request error: %s",
@@ -704,7 +718,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             except Exception as e:
                 logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
 
-        # 开始处理,转换到运行状态
+        # 开始处理，转换到运行状态
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
@@ -775,7 +789,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp = llm_resp_result
 
         if llm_resp.role == "err":
-            # 如果 LLM 响应错误,转换到错误状态
+            # 如果 LLM 响应错误，转换到错误状态
             self.final_llm_resp = llm_resp
             self.stats.end_time = time.time()
             self._transition_state(AgentState.ERROR)
@@ -793,34 +807,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
 
         if not llm_resp.tools_call_name:
-            # 如果没有工具调用,转换到完成状态
-            self.final_llm_resp = llm_resp
-            self._transition_state(AgentState.DONE)
-            self.stats.end_time = time.time()
-
-            # record the final assistant message
-            parts = []
-            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
-                parts.append(
-                    ThinkPart(
-                        think=llm_resp.reasoning_content,
-                        encrypted=llm_resp.reasoning_signature,
-                    ),
-                )
-            if llm_resp.completion_text:
-                parts.append(TextPart(text=llm_resp.completion_text))
-            if len(parts) == 0:
-                logger.warning(
-                    "LLM returned empty assistant message with no tool calls.",
-                )
-            self.run_context.messages.append(Message(role="assistant", content=parts))
-
-            # call the on_agent_done hook
-            try:
-                await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
-            except Exception as e:
-                logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
-            self._resolve_unconsumed_follow_ups()
+            await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
         if llm_resp.result_chain:
@@ -845,13 +832,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
-        # 如果有工具调用,还需处理工具调用
+        # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
-            if self.tool_schema_mode == "lazy_load":
+            if self.tool_schema_mode == "skills_like":
                 llm_resp, _ = await self._resolve_tool_exec(llm_resp)
                 if not llm_resp.tools_call_name:
                     logger.warning(
-                        "skills_like tool re-query returned no tool calls; fallback to assistant response."
+                        "skills_like tool re-query returned no tool calls; fallback to assistant response.",
                     )
                     if llm_resp.result_chain:
                         yield AgentResponse(
@@ -968,16 +955,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             self.req.append_tool_calls_result(tool_calls_result)
 
-    async def step_until_done(self, max_step: int):
+    async def step_until_done(
+        self,
+        max_step: int,
+    ) -> T.AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
         step_count = 0
-        max_step = min(max_step, 3)
         while not self.done() and step_count < max_step:
             step_count += 1
             async for resp in self.step():
                 yield resp
 
-        #  如果循环结束了但是 agent 还没有完成,说明是达到了 max_step
+        #  如果循环结束了但是 agent 还没有完成，说明是达到了 max_step
         if not self.done():
             logger.warning(
                 f"Agent reached max steps ({max_step}), forcing a final response.",
@@ -1000,8 +989,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         req: ProviderRequest,
         llm_response: LLMResponse,
-    ) -> AsyncGenerator[_HandleFunctionToolsResult, None]:
-        """处理函数工具调用｡"""
+    ) -> T.AsyncGenerator[_HandleFunctionToolsResult, None]:
+        """处理函数工具调用。"""
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
 
@@ -1014,37 +1003,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
-        def _handle_image_content(
-            base64_data: str,
-            mime_type: str,
-            tool_call_id: str,
-            tool_name: str,
-            content_index: int,
-        ) -> _HandleFunctionToolsResult:
-            """Helper to cache image and return result for LLM visibility."""
-            cached_img = tool_image_cache.save_image(
-                base64_data=base64_data,
-                tool_call_id=tool_call_id,
-                tool_name=tool_name,
-                index=content_index,
-                mime_type=mime_type,
-            )
-            _append_tool_call_result(
-                tool_call_id,
-                (
-                    f"Image returned and cached at path='{cached_img.file_path}'. "
-                    f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                    f"with type='image' and path='{cached_img.file_path}'."
-                ),
-            )
-            return _HandleFunctionToolsResult.from_cached_image(cached_img)
-
         # 执行函数调用
         for func_tool_name, func_tool_args, func_tool_id in zip(
             llm_response.tools_call_name,
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
-            strict=True,
+            strict=False,
         ):
             tool_call_streak = self._track_tool_call_streak(func_tool_name)
             yield _HandleFunctionToolsResult.from_message_chain(
@@ -1067,10 +1031,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     return
 
                 if (
-                    self.tool_schema_mode == "lazy_load"
-                    and self._lazy_load_raw_tool_set
+                    self.tool_schema_mode == "skills_like"
+                    and self._skill_like_raw_tool_set
                 ):
-                    # in 'lazy_load' mode, raw.func_tool is light schema, does not have handler
+                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
                     # so we need to get the tool from the raw tool set
                     func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
                     available_tools = self._skill_like_raw_tool_set.names()
@@ -1078,17 +1042,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     func_tool = req.func_tool.get_tool(func_tool_name)
                     available_tools = req.func_tool.names()
 
-                logger.info(f"使用工具:{func_tool_name},参数:{func_tool_args}")
+                logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
                 if not func_tool:
-                    logger.warning(f"未找到指定的工具: {func_tool_name},将跳过｡")
+                    logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
                     _append_tool_call_result(
                         func_tool_id,
                         f"error: Tool {func_tool_name} not found. Available tools are: {', '.join(available_tools)}",
                     )
                     continue
 
-                valid_params = {}  # 参数过滤:只传递函数实际需要的参数
+                valid_params = {}  # 参数过滤：只传递函数实际需要的参数
 
                 # 获取实际的 handler 函数
                 if func_tool.handler:
@@ -1113,7 +1077,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             f"工具 {func_tool_name} 忽略非期望参数: {ignored_params}",
                         )
                 else:
-                    # 如果没有 handler(如 MCP 工具),使用所有参数
+                    # 如果没有 handler（如 MCP 工具），使用所有参数
                     valid_params = func_tool_args
 
                 try:
@@ -1128,14 +1092,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 executor = self.tool_executor.execute(
                     tool=func_tool,
                     run_context=self.run_context,
-                    session_manager=self.run_context.session_manager,
                     **valid_params,  # 只传递有效的参数
                 )
 
                 _final_resp: CallToolResult | None = None
-                async for resp in self._iter_tool_executor_results(executor):
+                async for resp in self._iter_tool_executor_results(executor):  # type: ignore
                     if isinstance(resp, CallToolResult):
-                        res: CallToolResult = resp
+                        res = resp
                         _final_resp = resp
                         if not res.content:
                             _append_tool_call_result(
@@ -1197,9 +1160,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         "The tool has returned a data type that is not supported.",
                                     )
                         if result_parts:
+                            inline_result = "\n\n".join(result_parts)
+                            inline_result = await self._materialize_large_tool_result(
+                                tool_call_id=func_tool_id,
+                                content=inline_result,
+                            )
                             _append_tool_call_result(
                                 func_tool_id,
-                                "\n\n".join(result_parts)
+                                inline_result
                                 + self._build_repeated_tool_call_guidance(
                                     func_tool_name,
                                     tool_call_streak,
@@ -1211,7 +1179,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         # 这里我们将直接结束 Agent Loop
                         # 发送消息逻辑在 ToolExecutor 中处理了
                         logger.warning(
-                            f"{func_tool_name} 没有返回值,或者已将结果直接发送给用户｡",
+                            f"{func_tool_name} 没有返回值，或者已将结果直接发送给用户。",
                         )
                         self._transition_state(AgentState.DONE)
                         self.stats.end_time = time.time()
@@ -1226,7 +1194,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     else:
                         # 不应该出现其他类型
                         logger.warning(
-                            f"Tool 返回了不支持的类型: {type(resp)}｡",
+                            f"Tool 返回了不支持的类型: {type(resp)}。",
                         )
                         _append_tool_call_result(
                             func_tool_id,
@@ -1288,12 +1256,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         tool_names: list[str],
         extra_instruction: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, T.Any]]:
         """Build contexts for re-querying LLM with param-only tool schemas."""
-        contexts: list[dict[str, Any]] = []
+        contexts: list[dict[str, T.Any]] = []
         for msg in self.run_context.messages:
             if hasattr(msg, "model_dump"):
-                contexts.append(msg.model_dump())
+                contexts.append(msg.model_dump())  # type: ignore[call-arg]
             elif isinstance(msg, dict):
                 contexts.append(copy.deepcopy(msg))
         instruction = self.SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE.format(
@@ -1308,6 +1276,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             contexts.insert(0, {"role": "system", "content": instruction})
         return contexts
 
+    @staticmethod
+    def _has_meaningful_assistant_reply(llm_resp: LLMResponse) -> bool:
+        text = (llm_resp.completion_text or "").strip()
+        return bool(text)
+
     def _build_tool_subset(self, tool_set: ToolSet, tool_names: list[str]) -> ToolSet:
         """Build a subset of tools from the given tool set based on tool names."""
         subset = ToolSet()
@@ -1321,7 +1294,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         llm_resp: LLMResponse,
     ) -> tuple[LLMResponse, ToolSet | None]:
-        """Used in 'lazy_load' tool schema mode to re-query LLM with param-only tool schemas."""
+        """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
         tool_names = llm_resp.tools_call_name
         if not tool_names:
             return llm_resp, self.req.func_tool
@@ -1346,6 +1319,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     model=self.req.model,
                     session_id=self.req.session_id,
                     extra_user_content_parts=self.req.extra_user_content_parts,
+                    tool_choice="required",
                     abort_signal=self._abort_signal,
                 )
                 if requery_resp:
@@ -1412,7 +1386,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
 
-        parts: list[ContentPart] = []
+        parts = []
         if llm_resp.reasoning_content or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
@@ -1436,7 +1410,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             data=AgentResponseData(chain=MessageChain(type="aborted")),
         )
 
-    async def _close_executor(self, executor: Any) -> None:
+    async def _close_executor(self, executor: T.Any) -> None:
         close_executor = getattr(executor, "aclose", None)
         if close_executor is None:
             return
@@ -1446,7 +1420,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _iter_tool_executor_results(
         self,
         executor: AsyncIterator[ToolExecutorResultT],
-    ) -> AsyncGenerator[ToolExecutorResultT, None]:
+    ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
+        async def _get_next_result() -> ToolExecutorResultT:
+            return await anext(executor)
+
         while True:
             if self._is_stop_requested():
                 await self._close_executor(executor)
@@ -1454,15 +1431,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "Tool execution interrupted before reading the next tool result.",
                 )
 
-            async def _get_next():
-                return await anext(executor)
-
-            next_result_task = asyncio.create_task(_get_next())
+            next_result_task = asyncio.create_task(_get_next_result())
             abort_task = asyncio.create_task(self._abort_signal.wait())
-            self.tasks.add(next_result_task)
-            self.tasks.add(abort_task)
-            next_result_task.add_done_callback(self.tasks.discard)
-            abort_task.add_done_callback(self.tasks.discard)
             try:
                 done, _ = await asyncio.wait(
                     {next_result_task, abort_task},

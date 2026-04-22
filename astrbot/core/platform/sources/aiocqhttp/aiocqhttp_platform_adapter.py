@@ -5,14 +5,22 @@ import logging
 import time
 import uuid
 from collections.abc import Awaitable, Coroutine
-from typing import Any
+from typing import Any, TypedDict
 
 from aiocqhttp import CQHttp, Event
 from aiocqhttp.exceptions import ActionFailed
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, ComponentTypes, File, Plain, Poke, Reply
+from astrbot.api.message_components import (
+    At,
+    BaseMessageComponent,
+    ComponentTypes,
+    File,
+    Plain,
+    Poke,
+    Reply,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     Group,
@@ -25,6 +33,121 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.register import register_platform_adapter
 
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
+
+
+class OneBotSenderPayload(TypedDict, total=False):
+    user_id: str | int
+    card: str
+    nickname: str
+
+
+class OneBotMessageSegmentData(TypedDict, total=False):
+    text: str
+    url: str
+    file_name: str
+    name: str
+    file: str
+    file_id: str | int
+    id: str | int
+    qq: str | int
+    markdown: str
+    content: str
+
+
+class OneBotMessageSegment(TypedDict):
+    type: str
+    data: OneBotMessageSegmentData
+
+
+def _normalize_object_dict(raw: object) -> dict[str, object] | None:
+    if not isinstance(raw, dict):
+        return None
+    return {key: value for key, value in raw.items() if isinstance(key, str)}
+
+
+def _normalize_sender(raw: object) -> OneBotSenderPayload | None:
+    raw_sender = _normalize_object_dict(raw)
+    if raw_sender is None:
+        return None
+
+    sender: OneBotSenderPayload = {}
+    user_id = raw_sender.get("user_id")
+    if isinstance(user_id, str | int):
+        sender["user_id"] = user_id
+    card = raw_sender.get("card")
+    if isinstance(card, str):
+        sender["card"] = card
+    nickname = raw_sender.get("nickname")
+    if isinstance(nickname, str):
+        sender["nickname"] = nickname
+    return sender if "user_id" in sender else None
+
+
+def _normalize_segment_data(raw: object) -> OneBotMessageSegmentData:
+    raw_data = _normalize_object_dict(raw) or {}
+    data: OneBotMessageSegmentData = {}
+
+    text = raw_data.get("text")
+    if isinstance(text, str):
+        data["text"] = text
+    url = raw_data.get("url")
+    if isinstance(url, str):
+        data["url"] = url
+    file_name = raw_data.get("file_name")
+    if isinstance(file_name, str):
+        data["file_name"] = file_name
+    name = raw_data.get("name")
+    if isinstance(name, str):
+        data["name"] = name
+    file = raw_data.get("file")
+    if isinstance(file, str):
+        data["file"] = file
+    file_id = raw_data.get("file_id")
+    if isinstance(file_id, str | int):
+        data["file_id"] = file_id
+    reply_id = raw_data.get("id")
+    if isinstance(reply_id, str | int):
+        data["id"] = reply_id
+    qq = raw_data.get("qq")
+    if isinstance(qq, str | int):
+        data["qq"] = qq
+    markdown = raw_data.get("markdown")
+    if isinstance(markdown, str):
+        data["markdown"] = markdown
+    content = raw_data.get("content")
+    if isinstance(content, str):
+        data["content"] = content
+
+    return data
+
+
+def _normalize_segment(raw: object) -> OneBotMessageSegment | None:
+    raw_segment = _normalize_object_dict(raw)
+    if raw_segment is None:
+        return None
+
+    segment_type = raw_segment.get("type")
+    if not isinstance(segment_type, str):
+        return None
+
+    return {
+        "type": segment_type,
+        "data": _normalize_segment_data(raw_segment.get("data")),
+    }
+
+
+def _get_optional_str(mapping: dict[str, object] | None, key: str) -> str | None:
+    if mapping is None:
+        return None
+    value = mapping.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _instantiate_component(
+    factory: Any,
+    data: OneBotMessageSegmentData,
+) -> BaseMessageComponent:
+    return factory(**data)
 
 
 @register_platform_adapter(
@@ -43,10 +166,11 @@ class AiocqhttpAdapter(Platform):
         self.settings = platform_settings
         self.host = platform_config["ws_reverse_host"]
         self.port = platform_config["ws_reverse_port"]
+        platform_id = self.config.get("id")
         self.metadata = PlatformMetadata(
             name="aiocqhttp",
             description="适用于 OneBot 标准的消息平台适配器,支持反向 WebSockets｡",
-            id=self.config.get("id"),
+            id=str(platform_id) if platform_id is not None else "",
             support_streaming_message=False,
         )
         self.bot = CQHttp(
@@ -197,12 +321,14 @@ class AiocqhttpAdapter(Platform):
         @param event: 事件对象
         @param get_reply: 是否获取回复消息｡这个参数是为了防止多个回复嵌套｡
         """
-        assert event.sender is not None
+        sender = _normalize_sender(event.sender)
+        if sender is None:
+            raise ValueError("aiocqhttp: sender payload is missing or invalid")
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
-            str(event.sender["user_id"]),
-            event.sender.get("card") or event.sender.get("nickname", "N/A"),
+            str(sender["user_id"]),
+            sender.get("card") or sender.get("nickname") or "N/A",
         )
         if event["message_type"] == "group":
             abm.type = MessageType.GROUP_MESSAGE
@@ -227,10 +353,20 @@ class AiocqhttpAdapter(Platform):
             except BaseException as e:
                 logger.error(f"回复消息失败: {e}")
             raise ValueError(err)
-        for t, m_group in itertools.groupby(event.message, key=lambda x: x["type"]):
+        normalized_segments = [
+            segment
+            for raw_segment in event.message
+            if (segment := _normalize_segment(raw_segment)) is not None
+        ]
+        for t, m_group in itertools.groupby(
+            normalized_segments,
+            key=lambda segment: segment["type"],
+        ):
             a = None
             if t == "text":
-                current_text = "".join(m["data"]["text"] for m in m_group).strip()
+                current_text = "".join(
+                    segment["data"].get("text", "") for segment in m_group
+                ).strip()
                 if not current_text:
                     continue
                 message_str += current_text
@@ -238,61 +374,82 @@ class AiocqhttpAdapter(Platform):
                 abm.message.append(a)
             elif t == "file":
                 for m in m_group:
-                    if m["data"].get("url") and m["data"].get("url").startswith("http"):
+                    data = m["data"]
+                    file_url = data.get("url")
+                    if file_url and file_url.startswith("http"):
                         logger.info("guessing lagrange")
                         file_name = (
-                            m["data"].get("file_name", "")
-                            or m["data"].get("name", "")
-                            or m["data"].get("file", "")
+                            data.get("file_name", "")
+                            or data.get("name", "")
+                            or data.get("file", "")
                             or "file"
                         )
-                        abm.message.append(File(name=file_name, url=m["data"]["url"]))
+                        abm.message.append(File(name=file_name, url=file_url))
                     else:
                         try:
-                            ret = None
+                            file_id = data.get("file_id")
+                            if file_id is None:
+                                logger.error("文件消息缺少 file_id: %s", data)
+                                continue
+                            ret_data: dict[str, object] | None = None
                             if abm.type == MessageType.GROUP_MESSAGE:
                                 ret = await self.bot.call_action(
                                     action="get_group_file_url",
-                                    file_id=event.message[0]["data"]["file_id"],
+                                    file_id=file_id,
                                     group_id=event.group_id,
                                 )
+                                ret_data = _normalize_object_dict(ret)
                             elif abm.type == MessageType.FRIEND_MESSAGE:
                                 ret = await self.bot.call_action(
                                     action="get_private_file_url",
-                                    file_id=event.message[0]["data"]["file_id"],
+                                    file_id=file_id,
                                 )
-                            if ret and "url" in ret:
-                                file_url = ret["url"]
+                                ret_data = _normalize_object_dict(ret)
+                            resolved_url = _get_optional_str(ret_data, "url")
+                            if resolved_url:
                                 file_name = (
-                                    ret.get("file_name", "")
-                                    or ret.get("name", "")
-                                    or m["data"].get("file", "")
-                                    or m["data"].get("file_name", "")
+                                    _get_optional_str(ret_data, "file_name")
+                                    or _get_optional_str(ret_data, "name")
+                                    or data.get("file", "")
+                                    or data.get("file_name", "")
+                                    or "file"
                                 )
-                                a = File(name=file_name, url=file_url)
+                                a = File(name=file_name, url=resolved_url)
                                 abm.message.append(a)
                             else:
-                                logger.error(f"获取文件失败: {ret}")
+                                logger.error(f"获取文件失败: {ret_data}")
                         except ActionFailed as e:
                             logger.error(f"获取文件失败: {e},此消息段将被忽略｡")
                         except BaseException as e:
                             logger.error(f"获取文件失败: {e},此消息段将被忽略｡")
             elif t == "reply":
                 for m in m_group:
+                    data = m["data"]
                     if not get_reply:
-                        a = ComponentTypes[t](**m["data"])
+                        a = _instantiate_component(ComponentTypes[t], data)
                         abm.message.append(a)
                     else:
                         try:
+                            reply_message_id = data.get("id")
+                            if reply_message_id is None:
+                                logger.error("回复消息缺少 id: %s", data)
+                                continue
                             reply_event_data = await self.bot.call_action(
                                 action="get_msg",
-                                message_id=int(m["data"]["id"]),
+                                message_id=int(reply_message_id),
                             )
-                            reply_event_data["post_type"] = "message"
-                            new_event = Event.from_payload(reply_event_data)
+                            reply_event_payload = _normalize_object_dict(reply_event_data)
+                            if reply_event_payload is None:
+                                logger.error(
+                                    "无法识别的回复消息数据: %s",
+                                    reply_event_data,
+                                )
+                                continue
+                            reply_event_payload["post_type"] = "message"
+                            new_event = Event.from_payload(reply_event_payload)
                             if not new_event:
                                 logger.error(
-                                    f"无法从回复消息数据构造 Event 对象: {reply_event_data}",
+                                    f"无法从回复消息数据构造 Event 对象: {reply_event_payload}",
                                 )
                                 continue
                             abm_reply = await self._convert_handle_message_event(
@@ -312,42 +469,53 @@ class AiocqhttpAdapter(Platform):
                             abm.message.append(reply_seg)
                         except BaseException as e:
                             logger.error(f"获取引用消息失败: {e}｡")
-                            a = ComponentTypes[t](**m["data"])
+                            a = _instantiate_component(ComponentTypes[t], data)
                             abm.message.append(a)
             elif t == "at":
                 first_at_self_processed = False
                 at_parts = []
                 for m in m_group:
+                    data = m["data"]
                     try:
-                        if m["data"]["qq"] == "all":
+                        qq = data.get("qq")
+                        if qq is None:
+                            logger.error("At 消息缺少 qq: %s", data)
+                            continue
+                        qq_str = str(qq)
+                        if qq_str == "all":
                             abm.message.append(At(qq="all", name="全体成员"))
                             continue
                         at_info = await self.bot.call_action(
                             action="get_group_member_info",
                             group_id=event.group_id,
-                            user_id=int(m["data"]["qq"]),
+                            user_id=int(qq),
                             no_cache=False,
                         )
-                        if at_info:
-                            nickname = at_info.get("card", "")
+                        at_info_data = _normalize_object_dict(at_info)
+                        if at_info_data:
+                            nickname = _get_optional_str(at_info_data, "card") or ""
                             if nickname == "":
                                 at_info = await self.bot.call_action(
                                     action="get_stranger_info",
-                                    user_id=int(m["data"]["qq"]),
+                                    user_id=int(qq),
                                     no_cache=False,
                                 )
-                                nickname = at_info.get("nick", "") or at_info.get(
+                                at_info_data = _normalize_object_dict(at_info)
+                                nickname = _get_optional_str(
+                                    at_info_data,
+                                    "nick",
+                                ) or _get_optional_str(
+                                    at_info_data,
                                     "nickname",
-                                    "",
                                 )
-                            is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
-                            abm.message.append(At(qq=m["data"]["qq"], name=nickname))
+                            is_at_self = qq_str in {abm.self_id, "all"}
+                            abm.message.append(At(qq=qq_str, name=nickname or ""))
                             if is_at_self and (not first_at_self_processed):
                                 first_at_self_processed = True
                             else:
-                                at_parts.append(f" @{nickname}({m['data']['qq']}) ")
+                                at_parts.append(f" @{nickname}({qq_str}) ")
                         else:
-                            abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
+                            abm.message.append(At(qq=qq_str, name=""))
                     except ActionFailed as e:
                         logger.error(f"获取 @ 用户信息失败: {e},此消息段将被忽略｡")
                     except BaseException as e:
@@ -355,22 +523,24 @@ class AiocqhttpAdapter(Platform):
                 message_str += "".join(at_parts)
             elif t == "markdown":
                 for m in m_group:
-                    text = m["data"].get("markdown") or m["data"].get("content", "")
+                    data = m["data"]
+                    text = data.get("markdown") or data.get("content", "")
                     abm.message.append(Plain(text=text))
                     message_str += text
             else:
                 for m in m_group:
+                    data = m["data"]
                     try:
                         if t not in ComponentTypes:
                             logger.warning(
-                                f"不支持的消息段类型,已忽略: {t}, data={m['data']}",
+                                f"不支持的消息段类型,已忽略: {t}, data={data}",
                             )
                             continue
-                        a = ComponentTypes[t](**m["data"])
+                        a = _instantiate_component(ComponentTypes[t], data)
                         abm.message.append(a)
                     except Exception as e:
                         logger.exception(
-                            f"消息段解析失败: type={t}, data={m['data']}. {e}",
+                            f"消息段解析失败: type={t}, data={data}. {e}",
                         )
                         continue
         abm.timestamp = int(time.time())

@@ -744,7 +744,7 @@ class DocumentStorage:
 
         result = await session.execute(
             text(
-                f"SELECT rowid FROM {FTS_TABLE_NAME} WHERE rowid IN :rowids"
+                f"SELECT rowid FROM {FTS_TABLE_NAME} WHERE rowid IN :rowids",
             ).bindparams(bindparam("rowids", expanding=True)),
             {"rowids": rowids},
         )

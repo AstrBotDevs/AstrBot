@@ -645,7 +645,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         try:
                             await event.send(
                                 MessageChain(
-                                    chain=res.chain, type="tool_direct_result",
+                                    chain=res.chain,
+                                    type="tool_direct_result",
                                 ),
                             )
                         except Exception as e:

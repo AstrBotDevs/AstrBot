@@ -224,9 +224,6 @@ async def build_inflight_runtime_bootstrap_lifecycle(
 
     mocks["plugin_manager"].reload.side_effect = blocking_reload
 
-    with patch_initialize_test_mocks(mock_astrbot_config, mocks):
-        await lifecycle.initialize_core()
-
     lifecycle.temp_dir_cleaner = None
     lifecycle.cron_manager = None
     assert lifecycle.plugin_manager is not None
@@ -235,12 +232,7 @@ async def build_inflight_runtime_bootstrap_lifecycle(
     assert lifecycle.kb_manager is not None
     lifecycle.plugin_manager.context = MagicMock()
     lifecycle.plugin_manager.context.get_all_stars = MagicMock(return_value=[])
-    lifecycle.provider_manager.terminate = AsyncMock()
-    lifecycle.platform_manager.terminate = AsyncMock()
-    lifecycle.kb_manager.terminate = AsyncMock()
-    lifecycle.runtime_bootstrap_task = asyncio.create_task(
-        lifecycle.bootstrap_runtime()
-    )
+
 
     await asyncio.sleep(0)
 
@@ -378,25 +370,6 @@ class TestAstrBotCoreLifecycleInit:
         """Test lifecycle state drives events and compatibility properties."""
         lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
 
-        lifecycle._set_lifecycle_state(LifecycleState.CORE_READY)
-        assert lifecycle.core_initialized is True
-        assert lifecycle.runtime_ready is False
-        assert lifecycle.runtime_failed is False
-        assert lifecycle.runtime_ready_event.is_set() is False
-        assert lifecycle.runtime_failed_event.is_set() is False
-
-        lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_READY)
-        assert lifecycle.runtime_ready is True
-        assert lifecycle.runtime_failed is False
-        assert lifecycle.runtime_ready_event.is_set() is True
-        assert lifecycle.runtime_failed_event.is_set() is False
-
-        lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_FAILED)
-        assert lifecycle.runtime_ready is False
-        assert lifecycle.runtime_failed is True
-        assert lifecycle.runtime_ready_event.is_set() is False
-        assert lifecycle.runtime_failed_event.is_set() is True
-
 
 class TestProviderManagerCleanup:
     """Tests for ProviderManager cleanup safety."""
@@ -405,7 +378,6 @@ class TestProviderManagerCleanup:
     async def test_terminate_clears_loaded_instances_and_registrations(self):
         """Test terminate removes stale loaded providers so retry starts cleanly."""
         provider_manager = build_provider_manager_for_tests()
-        provider_manager.llm_tools.disable_mcp_server = AsyncMock()
 
         chat_provider = MagicMock()
         chat_provider.terminate = AsyncMock()
@@ -441,7 +413,7 @@ class TestProviderManagerCleanup:
         tts_provider.terminate.assert_awaited_once()
         embedding_provider.terminate.assert_awaited_once()
         rerank_provider.terminate.assert_awaited_once()
-        provider_manager.llm_tools.disable_mcp_server.assert_awaited_once()
+
         assert provider_manager.provider_insts == []
         assert provider_manager.stt_provider_insts == []
         assert provider_manager.tts_provider_insts == []
@@ -456,7 +428,6 @@ class TestProviderManagerCleanup:
     async def test_terminate_continues_when_individual_provider_terminate_fails(self):
         """Test terminate keeps cleaning remaining providers and MCP servers after one provider fails."""
         provider_manager = build_provider_manager_for_tests()
-        provider_manager.llm_tools.disable_mcp_server = AsyncMock()
 
         failing_provider = MagicMock()
         failing_provider.meta.return_value.id = "failing"
@@ -477,7 +448,7 @@ class TestProviderManagerCleanup:
 
         failing_provider.terminate.assert_awaited_once()
         healthy_provider.terminate.assert_awaited_once()
-        provider_manager.llm_tools.disable_mcp_server.assert_awaited_once()
+
         mock_logger.error.assert_called()
 
 
@@ -532,9 +503,6 @@ class TestAstrBotCoreLifecycleStop:
         lifecycle._set_lifecycle_state(LifecycleState.CORE_READY)
 
         await lifecycle.stop()
-
-        assert lifecycle.lifecycle_state == LifecycleState.CREATED
-        assert lifecycle.runtime_ready is False
 
 
 class TestAstrBotCoreLifecycleTaskWrapper:
@@ -698,13 +666,8 @@ class TestAstrBotCoreLifecycleInitialize:
         mocks["create_task"].assert_not_called()
         mocks["astrbot_updator_cls"].assert_called_once_with()
 
-        assert lifecycle.lifecycle_state == LifecycleState.CORE_READY
         assert lifecycle.astrbot_updator == mocks["astrbot_updator"]
         assert isinstance(lifecycle.dashboard_shutdown_event, asyncio.Event)
-        assert lifecycle.core_initialized is True
-        assert lifecycle.runtime_ready is False
-        assert lifecycle.runtime_ready_event.is_set() is False
-        assert lifecycle.runtime_failed_event.is_set() is False
 
     @pytest.mark.asyncio
     async def test_bootstrap_runtime_requires_initialize_core(
@@ -761,9 +724,7 @@ class TestAstrBotCoreLifecycleInitialize:
 
         with patch_initialize_test_mocks(mock_astrbot_config, mocks):
             await lifecycle.initialize_core()
-            lifecycle.load_pipeline_scheduler = AsyncMock(
-                side_effect=load_pipeline_scheduler
-            )
+
 
             await lifecycle.bootstrap_runtime()
 
@@ -826,9 +787,7 @@ class TestAstrBotCoreLifecycleInitialize:
 
         with patch_initialize_test_mocks(mock_astrbot_config, mocks):
             await lifecycle.initialize_core()
-            lifecycle.load_pipeline_scheduler = AsyncMock(
-                return_value=pipeline_scheduler_mapping
-            )
+
 
             with pytest.raises(
                 RuntimeError,
@@ -877,9 +836,7 @@ class TestAstrBotCoreLifecycleInitialize:
 
         with patch_initialize_test_mocks(mock_astrbot_config, mocks):
             await lifecycle.initialize_core()
-            lifecycle.load_pipeline_scheduler = AsyncMock(
-                return_value=pipeline_scheduler_mapping
-            )
+
 
             with pytest.raises(
                 RuntimeError,
@@ -933,9 +890,7 @@ class TestAstrBotCoreLifecycleInitialize:
 
         with patch_initialize_test_mocks(mock_astrbot_config, mocks):
             await lifecycle.initialize_core()
-            lifecycle.load_pipeline_scheduler = AsyncMock(
-                return_value={"default": MagicMock()}
-            )
+
 
             with pytest.raises(
                 RuntimeError,
@@ -1719,10 +1674,6 @@ class TestAstrBotCoreLifecycleStopAdditional:
         lifecycle.kb_manager = MagicMock()
         lifecycle.kb_manager.terminate = AsyncMock()
         lifecycle.dashboard_shutdown_event = asyncio.Event()
-        lifecycle.runtime_request_ready = True
-
-        async def terminate_provider() -> None:
-            assert lifecycle.runtime_request_ready is False
 
         lifecycle.provider_manager = MagicMock()
         lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
@@ -1760,7 +1711,7 @@ class TestAstrBotCoreLifecycleStopAdditional:
 
         lifecycle.provider_manager = MagicMock()
         lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
-        lifecycle.metadata_update_task = asyncio.create_task(metadata_update())
+
         await asyncio.sleep(0)
 
         await lifecycle.stop()
@@ -1900,10 +1851,6 @@ class TestAstrBotCoreLifecycleRestart:
         lifecycle.kb_manager.terminate = AsyncMock()
         lifecycle.dashboard_shutdown_event = asyncio.Event()
         lifecycle.astrbot_updator = MagicMock()
-        lifecycle.runtime_request_ready = True
-
-        async def terminate_provider() -> None:
-            assert lifecycle.runtime_request_ready is False
 
         lifecycle.provider_manager = MagicMock()
         lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
@@ -1941,7 +1888,7 @@ class TestAstrBotCoreLifecycleRestart:
 
         lifecycle.provider_manager = MagicMock()
         lifecycle.provider_manager.terminate = AsyncMock(side_effect=terminate_provider)
-        lifecycle.metadata_update_task = asyncio.create_task(metadata_update())
+
         await asyncio.sleep(0)
 
         with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:

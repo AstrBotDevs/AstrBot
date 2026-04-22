@@ -5,11 +5,24 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.tools.cron_tools import (
     CreateActiveCronTool,
     DeleteCronJobTool,
     ListCronJobsTool,
 )
+
+
+def _make_context(cron_manager: object | None = None) -> ContextWrapper:
+    return ContextWrapper(
+        context=SimpleNamespace(
+            context=SimpleNamespace(cron_manager=cron_manager),
+            event=SimpleNamespace(
+                unified_msg_origin="test:private:session",
+                get_sender_id=lambda: "user-1",
+            ),
+        )
+    )
 
 
 def test_create_future_task_tool_has_correct_name():
@@ -55,15 +68,7 @@ def test_list_future_tasks_tool_name():
 async def test_delete_future_task_requires_job_id():
     """Delete should require job_id."""
     tool = DeleteCronJobTool()
-    context = SimpleNamespace(
-        context=SimpleNamespace(
-            context=SimpleNamespace(cron_manager=SimpleNamespace()),
-            event=SimpleNamespace(
-                unified_msg_origin="test:private:session",
-                get_sender_id=lambda: "user-1",
-            ),
-        )
-    )
+    context = _make_context(SimpleNamespace())
 
     result = await tool.call(context, job_id=None)
 
@@ -75,21 +80,17 @@ async def test_delete_future_task_verifies_ownership():
     """Delete should verify the job belongs to current umo."""
     tool = DeleteCronJobTool()
     cron_mgr = SimpleNamespace(
-        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=SimpleNamespace(
-            job_id="job-1",
-            name="test job",
-            payload={"session": "other:private:session"},
-        ))),
+        db=SimpleNamespace(
+            get_cron_job=AsyncMock(
+                return_value=SimpleNamespace(
+                    job_id="job-1",
+                    name="test job",
+                    payload={"session": "other:private:session"},
+                )
+            )
+        ),
     )
-    context = SimpleNamespace(
-        context=SimpleNamespace(
-            context=SimpleNamespace(cron_manager=cron_mgr),
-            event=SimpleNamespace(
-                unified_msg_origin="test:private:session",
-                get_sender_id=lambda: "user-1",
-            ),
-        )
-    )
+    context = _make_context(cron_mgr)
 
     result = await tool.call(context, job_id="job-1")
 
@@ -101,22 +102,18 @@ async def test_delete_future_task_success():
     """Delete should successfully delete job and return message."""
     tool = DeleteCronJobTool()
     cron_mgr = SimpleNamespace(
-        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=SimpleNamespace(
-            job_id="job-1",
-            name="test job",
-            payload={"session": "test:private:session"},
-        ))),
+        db=SimpleNamespace(
+            get_cron_job=AsyncMock(
+                return_value=SimpleNamespace(
+                    job_id="job-1",
+                    name="test job",
+                    payload={"session": "test:private:session"},
+                )
+            )
+        ),
         delete_job=AsyncMock(return_value=True),
     )
-    context = SimpleNamespace(
-        context=SimpleNamespace(
-            context=SimpleNamespace(cron_manager=cron_mgr),
-            event=SimpleNamespace(
-                unified_msg_origin="test:private:session",
-                get_sender_id=lambda: "user-1",
-            ),
-        )
-    )
+    context = _make_context(cron_mgr)
 
     result = await tool.call(context, job_id="job-1")
 
@@ -129,27 +126,21 @@ async def test_list_future_tasks_returns_jobs():
     """List should return formatted job list."""
     tool = ListCronJobsTool()
     cron_mgr = SimpleNamespace(
-        list_jobs=AsyncMock(return_value=[
-            SimpleNamespace(
-                job_id="job-1",
-                name="test job",
-                job_type="active_agent",
-                run_once=False,
-                enabled=True,
-                next_run_time="2026-04-16T08:00:00",
-                payload={"session": "test:private:session"},
-            ),
-        ]),
+        list_jobs=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    job_id="job-1",
+                    name="test job",
+                    job_type="active_agent",
+                    run_once=False,
+                    enabled=True,
+                    next_run_time="2026-04-16T08:00:00",
+                    payload={"session": "test:private:session"},
+                ),
+            ]
+        ),
     )
-    context = SimpleNamespace(
-        context=SimpleNamespace(
-            context=SimpleNamespace(cron_manager=cron_mgr),
-            event=SimpleNamespace(
-                unified_msg_origin="test:private:session",
-                get_sender_id=lambda: "user-1",
-            ),
-        )
-    )
+    context = _make_context(cron_mgr)
 
     result = await tool.call(context)
 
@@ -164,15 +155,7 @@ async def test_list_future_tasks_empty():
     cron_mgr = SimpleNamespace(
         list_jobs=AsyncMock(return_value=[]),
     )
-    context = SimpleNamespace(
-        context=SimpleNamespace(
-            context=SimpleNamespace(cron_manager=cron_mgr),
-            event=SimpleNamespace(
-                unified_msg_origin="test:private:session",
-                get_sender_id=lambda: "user-1",
-            ),
-        )
-    )
+    context = _make_context(cron_mgr)
 
     result = await tool.call(context)
 

@@ -324,14 +324,11 @@ class KBHelper:
                         user_message=("预分块文本为空，未提供任何可索引文本块。"),
                         details={"file_name": file_name},
                     )
-                else:
-                    raise KnowledgeBaseUploadError(
-                        stage="chunking",
-                        user_message=(
-                            "分块失败：文档内容为空，未生成任何可索引文本块。"
-                        ),
-                        details={"file_name": file_name},
-                    )
+                raise KnowledgeBaseUploadError(
+                    stage="chunking",
+                    user_message=("分块失败：文档内容为空，未生成任何可索引文本块。"),
+                    details={"file_name": file_name},
+                )
 
             contents = []
             metadatas = []

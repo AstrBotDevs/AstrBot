@@ -50,11 +50,14 @@ def get_temp_dir() -> Path:
 
 
 def create_http_client(timeout: int | None, proxy: str) -> httpx.AsyncClient:
-    client_kwargs: dict[str, object] = {"timeout": timeout, "follow_redirects": True}
     if proxy:
         logger.info("[MiMo API] Using proxy: %s", proxy)
-        client_kwargs["proxy"] = proxy
-    return httpx.AsyncClient(**client_kwargs)
+        return httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=True,
+            proxy=proxy,
+        )
+    return httpx.AsyncClient(timeout=timeout, follow_redirects=True)
 
 
 def build_api_url(api_base: str) -> str:

@@ -91,3 +91,4 @@ node_modules
 dashboard/pnpm-lock.yaml
 .obsidian
 dashboard/.codex
+.codex

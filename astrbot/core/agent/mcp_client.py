@@ -1,15 +1,4 @@
-"""MCP client - DEPRECATED
-
-.. deprecated::
-    This module has been moved to :mod:`astrbot._internal.mcp`.
-    Please update your imports accordingly.
-
-    Old import (deprecated):
-        from astrbot.core.agent.mcp_client import MCPClient, MCPTool
-
-    New import:
-        from astrbot._internal.mcp import MCPClient, MCPTool
-
+"""MCP client
 This file exists solely for backward compatibility and will be removed in a future version.
 """
 
@@ -21,8 +10,7 @@ import sys
 import warnings
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from pathlib import Path, PureWindowsPath
-from typing import Any, Generic
+from typing import Any, Generic, TextIO
 
 from tenacity import (
     before_sleep_log,
@@ -40,12 +28,6 @@ from .tool import FunctionTool
 
 logger = logging.getLogger("astrbot")
 
-warnings.warn(
-    "astrbot.core.agent.mcp_client has been moved to astrbot._internal.mcp. "
-    "Please update your imports.",
-    DeprecationWarning,
-    stacklevel=2,
-)
 try:
     import anyio
     import mcp

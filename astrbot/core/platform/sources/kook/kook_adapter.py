@@ -110,12 +110,12 @@ class KookPlatformAdapter(Platform):
                     # 此时 target_id 就是频道id(guild_id)
                     guild_id = event.target_id
                     logger.info(
-                        f'[KOOK] 收到频道"{guild_id}"的角色更新通知, 类型为"{event.extra.type.value}", 刷新角色id缓存'
+                        f'[KOOK] 收到频道"{guild_id}"的角色更新通知, 类型为"{event.extra.type.value}", 刷新角色id缓存',
                     )
                     self._roles_cache.clear_guild_roles_cache(int(guild_id))
                 case _:
                     logger.debug(
-                        f'[KOOK] 判断此消息为"{event.extra.type}"类型的系统通知, 因未实现此消息的处理流程而忽略此消息, 原始消息数据: {event.to_json()}'
+                        f'[KOOK] 判断此消息为"{event.extra.type}"类型的系统通知, 因未实现此消息的处理流程而忽略此消息, 原始消息数据: {event.to_json()}',
                     )
 
     async def run(self):
@@ -273,7 +273,7 @@ class KookPlatformAdapter(Platform):
                                 At(
                                     qq=bot_id,
                                     name=role_mention_name,  # 保留角色名称
-                                )
+                                ),
                             )
                             continue
                 if not mention_target.isdigit() and role_id == 0:
@@ -287,7 +287,8 @@ class KookPlatformAdapter(Platform):
                     continue
 
                 if not await self._roles_cache.has_role_in_channel(
-                    role_id, int(guild_id)
+                    role_id,
+                    int(guild_id),
                 ):
                     continue
 
@@ -295,7 +296,7 @@ class KookPlatformAdapter(Platform):
                     At(
                         qq=bot_id,
                         name=role_mention_name,  # 保留角色名称
-                    )
+                    ),
                 )
 
             elif mention_target:
@@ -336,7 +337,8 @@ class KookPlatformAdapter(Platform):
         return components, message_str
 
     async def _parse_kmarkdown_message(
-        self, data: KookMessageEventData
+        self,
+        data: KookMessageEventData,
     ) -> tuple[list[BaseMessageComponent], str]:
         kmarkdown = data.extra.kmarkdown
         guild_id = data.extra.guild_id
@@ -347,7 +349,7 @@ class KookPlatformAdapter(Platform):
         content = str(data.content) or ""
         if kmarkdown is None:
             logger.error(
-                f'[KOOK] 无法转换"{KookMessageType.KMARKDOWN.name}"消息, 消息中找不到kmarkdown字段'
+                f'[KOOK] 无法转换"{KookMessageType.KMARKDOWN.name}"消息, 消息中找不到kmarkdown字段',
             )
             logger.error(f"[KOOK] 原始消息内容: {data.to_json()}")
             return [], ""
@@ -363,11 +365,16 @@ class KookPlatformAdapter(Platform):
             mention_name_map[str(mention_id)] = str(item.username)
 
         return await self._convert_text_message_to_component(
-            content, raw_content, mention_role_part, guild_id, mention_name_map
+            content,
+            raw_content,
+            mention_role_part,
+            guild_id,
+            mention_name_map,
         )
 
     async def _parse_card_message(
-        self, data: KookMessageEventData
+        self,
+        data: KookMessageEventData,
     ) -> tuple[list[BaseMessageComponent], str]:
         content = data.content
         if not isinstance(content, str):
@@ -407,7 +414,9 @@ class KookPlatformAdapter(Platform):
 
         if text:
             component_parts, text = await self._convert_text_message_to_component(
-                text, text, guild_id=guild_id
+                text,
+                text,
+                guild_id=guild_id,
             )
             message.extend(component_parts)
 
