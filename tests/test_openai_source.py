@@ -676,6 +676,54 @@ async def test_handle_api_error_required_thinking_conflict_uses_payload_copy():
 
 
 @pytest.mark.asyncio
+async def test_handle_api_error_required_thinking_conflict_emits_fallback_log(
+    monkeypatch,
+):
+    provider = _make_provider({"provider": "moonshot"})
+    try:
+        payloads = {
+            "tool_choice": "required",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+        }
+        context_query = payloads["messages"]
+        err = _ErrorWithBody(
+            "upstream error",
+            {
+                "error": {
+                    "message": "tool_choice 'required' is incompatible with thinking enabled",
+                    "type": "invalid_request_error",
+                }
+            },
+        )
+
+        info_logs: list[str] = []
+
+        def _capture_info(message, *args, **kwargs):
+            del args, kwargs
+            info_logs.append(str(message))
+
+        monkeypatch.setattr(
+            "astrbot.core.provider.sources.openai_source.logger.info",
+            _capture_info,
+        )
+
+        await provider._handle_api_error(
+            err,
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert any("tool_choice=required->auto" in log for log in info_logs)
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeypatch):
     provider = _make_provider()
     try:

@@ -1104,14 +1104,20 @@ class ProviderOpenAIOfficial(Provider):
                 "invalid_attachment",
                 image_fallback_used=True,
             )
-        if (
-            payloads.get("tool_choice") == "required"
+        required_tool_choice = payloads.get("tool_choice") == "required"
+        thinking_conflict_error = (
+            required_tool_choice
             and self._is_tool_choice_required_incompatible_with_thinking_error(e)
-        ):
+        )
+        if thinking_conflict_error:
             provider_name = self.provider_config.get("provider", "unknown")
+            logger.info(
+                "触发工具调用策略降级：检测到 thinking 模式不兼容，"
+                f"provider={provider_name}，tool_choice=required->auto"
+            )
             logger.warning(
-                "Detected `tool_choice=required` incompatible with thinking mode. "
-                f"Downgrading to `auto` and retrying. provider={provider_name}"
+                "检测到 `tool_choice=required` 与 thinking 模式不兼容，"
+                f"自动降级为 `auto` 并重试，provider={provider_name}"
             )
             retry_payloads = {**payloads, "tool_choice": "auto"}
             return (
@@ -1123,6 +1129,20 @@ class ProviderOpenAIOfficial(Provider):
                 func_tool,
                 image_fallback_used,
             )
+        if required_tool_choice:
+            candidates = [
+                candidate.lower()
+                for candidate in self._extract_error_text_candidates(e)
+            ]
+            has_related_keywords = any(
+                "tool_choice" in candidate and "thinking" in candidate
+                for candidate in candidates
+            )
+            if has_related_keywords:
+                logger.debug(
+                    "检测到 tool_choice/thinking 相关错误，但未命中降级模式，"
+                    "保持 tool_choice=required"
+                )
 
         if (
             "Function calling is not enabled" in str(e)
