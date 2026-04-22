@@ -181,6 +181,23 @@ class ProviderOpenAIOfficial(Provider):
             return True
         return False
 
+    def _is_tool_choice_required_incompatible_with_thinking_error(
+        self, error: Exception
+    ) -> bool:
+        candidates = [
+            candidate.lower() for candidate in self._extract_error_text_candidates(error)
+        ]
+        for candidate in candidates:
+            has_tool_choice = "tool_choice" in candidate or "tool choice" in candidate
+            if (
+                has_tool_choice
+                and "required" in candidate
+                and "thinking" in candidate
+                and "incompatible" in candidate
+            ):
+                return True
+        return False
+
     @classmethod
     def _encode_image_file_to_data_url(
         cls,
@@ -1076,6 +1093,25 @@ class ProviderOpenAIOfficial(Provider):
                 func_tool,
                 "invalid_attachment",
                 image_fallback_used=True,
+            )
+        if (
+            payloads.get("tool_choice") == "required"
+            and self._is_tool_choice_required_incompatible_with_thinking_error(e)
+        ):
+            provider_name = self.provider_config.get("provider", "unknown")
+            logger.warning(
+                "Detected `tool_choice=required` incompatible with thinking mode. "
+                f"Downgrading to `auto` and retrying. provider={provider_name}"
+            )
+            payloads["tool_choice"] = "auto"
+            return (
+                False,
+                chosen_key,
+                available_api_keys,
+                payloads,
+                context_query,
+                func_tool,
+                image_fallback_used,
             )
 
         if (

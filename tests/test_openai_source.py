@@ -6,6 +6,7 @@ from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 
@@ -582,6 +583,48 @@ async def test_handle_api_error_invalid_attachment_after_fallback_raises():
                 max_retries=10,
                 image_fallback_used=True,
             )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_text_chat_retries_with_auto_when_required_incompatible_with_thinking(
+    monkeypatch,
+):
+    provider = _make_provider({"provider": "moonshot"})
+    try:
+        tool_choice_history: list[str] = []
+
+        async def fake_query(payloads: dict, _tools):
+            tool_choice_history.append(str(payloads.get("tool_choice")))
+            if len(tool_choice_history) == 1:
+                raise _ErrorWithBody(
+                    "upstream error",
+                    {
+                        "error": {
+                            "message": "tool_choice 'required' is incompatible with thinking enabled",
+                            "type": "invalid_request_error",
+                        }
+                    },
+                )
+            return LLMResponse(role="assistant", completion_text="ok")
+
+        monkeypatch.setattr(provider, "_query", fake_query)
+
+        class _NonEmptyToolSet:
+            @staticmethod
+            def empty() -> bool:
+                return False
+
+        result = await provider.text_chat(
+            prompt="hello",
+            contexts=[],
+            func_tool=_NonEmptyToolSet(),
+            tool_choice="required",
+        )
+
+        assert result.completion_text == "ok"
+        assert tool_choice_history == ["required", "auto"]
     finally:
         await provider.terminate()
 
