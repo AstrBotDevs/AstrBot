@@ -56,22 +56,60 @@ export function useMediaHandling() {
         }
     }
 
+    async function compressImageFile(file: File, options: { maxEdge?: number; quality?: number } = {}) {
+        if (!file.type.startsWith('image/') || file.type === 'image/gif') {
+            return file;
+        }
+
+        const { maxEdge = 512, quality = 0.82 } = options;
+        const image = await createImageBitmap(file);
+        const scale = Math.min(1, maxEdge / Math.max(image.width, image.height));
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return file;
+        ctx.drawImage(image, 0, 0, width, height);
+        image.close();
+
+        const blob = await new Promise<Blob | null>((resolve) => {
+            canvas.toBlob(resolve, 'image/jpeg', quality);
+        });
+        if (!blob) return file;
+
+        const basename = file.name.replace(/\.[^.]+$/, '') || 'image';
+        return new File([blob], `${basename}.jpg`, {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+        });
+    }
+
+    async function uploadFile(file: File) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await axios.post('/api/chat/post_file', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+        return response.data.data as {
+            attachment_id: string;
+            filename: string;
+            type: string;
+        };
+    }
+
     async function uploadStagedFile(file: File) {
         const signature = await getFileSignature(file);
         if (isDuplicateFile(signature)) return;
 
         pendingFileSignatures.add(signature);
-        const formData = new FormData();
-        formData.append('file', file);
 
         try {
-            const response = await axios.post('/api/chat/post_file', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
-
-            const { attachment_id, filename, type } = response.data.data;
+            const { attachment_id, filename, type } = await uploadFile(file);
             stagedFiles.value.push({
                 attachment_id,
                 filename,
@@ -88,11 +126,20 @@ export function useMediaHandling() {
     }
 
     async function processAndUploadImage(file: File) {
-        await uploadStagedFile(file);
+        await uploadStagedFile(await compressImageFile(file));
     }
 
     async function processAndUploadFile(file: File) {
         await uploadStagedFile(file);
+    }
+
+    async function uploadImageAttachment(file: File) {
+        const compressed = await compressImageFile(file);
+        const uploaded = await uploadFile(compressed);
+        return {
+            ...uploaded,
+            url: URL.createObjectURL(compressed),
+        };
     }
 
     async function handlePaste(event: ClipboardEvent) {
@@ -188,6 +235,8 @@ export function useMediaHandling() {
         stagedFiles,
         stagedNonImageFiles,
         getMediaFile,
+        compressImageFile,
+        uploadImageAttachment,
         processAndUploadImage,
         processAndUploadFile,
         handlePaste,

@@ -141,6 +141,33 @@
     "noSessions": "该项目暂无对话",
     "confirmDelete": "确定要删除项目 \"{title}\" 吗？项目中的对话不会被删除。"
   },
+  "group": {
+    "title": "群聊",
+    "create": "创建群聊",
+    "defaultName": "群聊",
+    "name": "群名",
+    "description": "群介绍",
+    "panelTitle": "群信息",
+    "bots": "Bot 列表",
+    "members": "群成员",
+    "botBadge": "Bot",
+    "addBot": "添加 Bot",
+    "addBotHint": "添加 Bot 后，使用 @名称 触发回复。",
+    "availableBots": "已有 Bot",
+    "addExisting": "添加已有",
+    "createNewBot": "新建 Bot",
+    "noExistingBots": "暂无已有 Bot",
+    "deleteBot": "删除 Bot",
+    "added": "已添加",
+    "typing": "{name} 正在输入",
+    "botName": "名称",
+    "platform": "平台适配器",
+    "createPlatform": "自动创建新适配器",
+    "config": "配置文件",
+    "avatar": "头像 URL",
+    "uploadAvatar": "上传头像",
+    "mentionRequired": "请先在群聊中 @ 一个 Bot。"
+  },
   "time": {
     "today": "今天",
     "yesterday": "昨天"

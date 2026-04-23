@@ -6,9 +6,12 @@ import uuid
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Json, Plain, Record
+from astrbot.api.message_components import At, File, Image, Json, Plain, Record
+from astrbot.core import db_helper
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
+from .message_parts_helper import message_chain_to_storage_message_parts
 from .webchat_queue_mgr import webchat_queue_mgr
 
 attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
@@ -17,10 +20,16 @@ attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
 def _extract_conversation_id(session_id: str) -> str:
     """Extract raw webchat conversation id from event/session id."""
     if session_id.startswith("webchat!"):
-        parts = session_id.split("!", 2)
-        if len(parts) == 3:
+        parts = session_id.split("!")
+        if len(parts) >= 3:
             return parts[2]
     return session_id
+
+
+def _sender_payload(sender_id: str | None) -> dict:
+    if not sender_id or sender_id == "webchat":
+        return {}
+    return {"sender_id": sender_id}
 
 
 class WebChatMessageEvent(AstrMessageEvent):
@@ -35,6 +44,8 @@ class WebChatMessageEvent(AstrMessageEvent):
         session_id: str,
         streaming: bool = False,
         emit_complete: bool = False,
+        sender_id: str | None = None,
+        compact_chain: bool = False,
     ) -> str | None:
         request_id = str(message_id)
         conversation_id = _extract_conversation_id(session_id)
@@ -49,11 +60,47 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "data": "",
                     "streaming": False,
                     "message_id": message_id,
+                    **_sender_payload(sender_id),
                 },  # end means this request is finished
             )
             return
 
+        if compact_chain:
+            message_parts = await message_chain_to_storage_message_parts(
+                message,
+                insert_attachment=db_helper.insert_attachment,
+                attachments_dir=attachments_dir,
+            )
+            data = "".join(
+                str(part.get("text") or "")
+                for part in message_parts
+                if part.get("type") == "plain"
+            )
+            await web_chat_back_queue.put(
+                {
+                    "type": "chain",
+                    "data": message_parts,
+                    "streaming": False,
+                    "chain_type": message.type,
+                    "message_id": message_id,
+                    **_sender_payload(sender_id),
+                },
+            )
+            if emit_complete:
+                await web_chat_back_queue.put(
+                    {
+                        "type": "complete",
+                        "data": data,
+                        "streaming": False,
+                        "chain_type": message.type,
+                        "message_id": message_id,
+                        **_sender_payload(sender_id),
+                    },
+                )
+            return data
+
         data = ""
+        sender_payload = _sender_payload(sender_id)
         for comp in message.chain:
             if isinstance(comp, Plain):
                 data = comp.text
@@ -64,6 +111,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "streaming": streaming,
                         "chain_type": message.type,
                         "message_id": message_id,
+                        **sender_payload,
                     },
                 )
             elif isinstance(comp, Json):
@@ -74,6 +122,20 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "streaming": streaming,
                         "chain_type": message.type,
                         "message_id": message_id,
+                        **sender_payload,
+                    },
+                )
+            elif isinstance(comp, At):
+                await web_chat_back_queue.put(
+                    {
+                        "type": "at",
+                        "data": {
+                            "target": str(comp.qq or ""),
+                            "name": str(comp.name or ""),
+                        },
+                        "streaming": streaming,
+                        "message_id": message_id,
+                        **sender_payload,
                     },
                 )
             elif isinstance(comp, Image):
@@ -90,6 +152,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "data": data,
                         "streaming": streaming,
                         "message_id": message_id,
+                        **sender_payload,
                     },
                 )
             elif isinstance(comp, Record):
@@ -106,6 +169,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "data": data,
                         "streaming": streaming,
                         "message_id": message_id,
+                        **sender_payload,
                     },
                 )
             elif isinstance(comp, File):
@@ -123,6 +187,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "data": data,
                         "streaming": streaming,
                         "message_id": message_id,
+                        **sender_payload,
                     },
                 )
             else:
@@ -136,6 +201,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "streaming": streaming,
                     "chain_type": message.type,
                     "message_id": message_id,
+                    **sender_payload,
                 },
             )
 
@@ -143,8 +209,64 @@ class WebChatMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain | None) -> None:
         message_id = self.message_obj.message_id
-        await WebChatMessageEvent._send(message_id, message, session_id=self.session_id)
+        await WebChatMessageEvent._send(
+            message_id,
+            message,
+            session_id=self.session_id,
+            sender_id=self.message_obj.self_id,
+            compact_chain=self.message_obj.type == MessageType.GROUP_MESSAGE,
+        )
         await super().send(MessageChain([]))
+
+    async def send_typing(self) -> None:
+        message_id = self.message_obj.message_id
+        conversation_id = _extract_conversation_id(self.session_id)
+        _, _, payload = self.message_obj.raw_message  # type: ignore
+        sender_id = str(
+            self.message_obj.self_id or payload.get("target_bot_id") or "bot"
+        )
+        sender_name = str(payload.get("target_bot_name") or sender_id)
+        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(
+            str(message_id),
+            conversation_id,
+        )
+        await web_chat_back_queue.put(
+            {
+                "type": "typing",
+                "data": {
+                    "typing": True,
+                    "sender_id": sender_id,
+                    "sender_name": sender_name,
+                },
+                "streaming": False,
+                "message_id": message_id,
+            }
+        )
+
+    async def stop_typing(self) -> None:
+        message_id = self.message_obj.message_id
+        conversation_id = _extract_conversation_id(self.session_id)
+        _, _, payload = self.message_obj.raw_message  # type: ignore
+        sender_id = str(
+            self.message_obj.self_id or payload.get("target_bot_id") or "bot"
+        )
+        sender_name = str(payload.get("target_bot_name") or sender_id)
+        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(
+            str(message_id),
+            conversation_id,
+        )
+        await web_chat_back_queue.put(
+            {
+                "type": "typing",
+                "data": {
+                    "typing": False,
+                    "sender_id": sender_id,
+                    "sender_name": sender_name,
+                },
+                "streaming": False,
+                "message_id": message_id,
+            }
+        )
 
     async def send_streaming(self, generator, use_fallback: bool = False) -> None:
         final_data = ""
@@ -156,6 +278,9 @@ class WebChatMessageEvent(AstrMessageEvent):
             request_id,
             conversation_id,
         )
+        _, _, payload = self.message_obj.raw_message  # type: ignore
+        group_final_only = bool(payload.get("is_group"))
+        group_final_message = MessageChain()
         async for chain in generator:
             # 处理音频流（Live Mode）
             if chain.type == "audio_chunk":
@@ -193,26 +318,57 @@ class WebChatMessageEvent(AstrMessageEvent):
             #     final_data = ""
             #     continue
 
+            if group_final_only and chain.type == "reasoning":
+                continue
+
+            if group_final_only:
+                group_final_message.chain.extend(chain.chain)
+                group_final_message.type = chain.type
+                continue
+
             r = await WebChatMessageEvent._send(
                 message_id=message_id,
                 message=chain,
                 session_id=self.session_id,
-                streaming=True,
+                streaming=not group_final_only,
+                emit_complete=group_final_only,
+                sender_id=self.message_obj.self_id,
+                compact_chain=group_final_only,
             )
             if not r:
                 continue
-            if chain.type == "reasoning":
+            if not group_final_only and chain.type == "reasoning":
                 reasoning_content += chain.get_plain_text()
-            else:
+            elif not group_final_only:
                 final_data += r
 
+        if group_final_only:
+            await WebChatMessageEvent._send(
+                message_id=message_id,
+                message=group_final_message,
+                session_id=self.session_id,
+                streaming=False,
+                emit_complete=True,
+                sender_id=self.message_obj.self_id,
+                compact_chain=True,
+            )
+        else:
+            await web_chat_back_queue.put(
+                {
+                    "type": "complete",  # complete means we return the final result
+                    "data": final_data,
+                    "reasoning": reasoning_content,
+                    "streaming": True,
+                    "message_id": message_id,
+                },
+            )
         await web_chat_back_queue.put(
             {
-                "type": "complete",  # complete means we return the final result
-                "data": final_data,
-                "reasoning": reasoning_content,
-                "streaming": True,
+                "type": "end",
+                "data": "",
+                "streaming": False,
                 "message_id": message_id,
+                **_sender_payload(self.message_obj.self_id),
             },
         )
         await super().send_streaming(generator, use_fallback)

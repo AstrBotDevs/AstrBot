@@ -108,33 +108,54 @@
         </div>
       </transition>
 
-      <textarea
-        ref="inputField"
-        v-model="localPrompt"
-        @keydown="handleKeyDown"
-        :disabled="disabled"
-        placeholder="Ask AstrBot..."
-        class="chat-textarea"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="sentences"
-        spellcheck="false"
-        style="
-          width: 100%;
-          resize: none;
-          outline: none;
-          border: 1px solid var(--v-theme-border);
-          border-radius: 12px;
-          padding: 12px 18px;
-          min-height: 34px;
-          max-height: 200px;
-          overflow-y: auto;
-          font-family: inherit;
-          font-size: 16px;
-          background-color: var(--v-theme-surface);
-          transition: height 0.16s ease;
-        "
-      ></textarea>
+      <div class="textarea-shell">
+        <div
+          ref="highlightLayer"
+          class="textarea-highlight"
+          :class="{ 'is-composing': isComposing }"
+          aria-hidden="true"
+        >
+          <template v-for="(segment, index) in highlightedPrompt" :key="index">
+            <span :class="{ 'textarea-mention': segment.mention }">{{
+              segment.text
+            }}</span>
+          </template>
+        </div>
+        <textarea
+          ref="inputField"
+          v-model="localPrompt"
+          :class="{ 'is-composing': isComposing }"
+          @input="handlePromptInput"
+          @scroll="syncHighlightScroll"
+          @keydown="handleKeyDown"
+          @compositionstart="isComposing = true"
+          @compositionend="handleCompositionEnd"
+          :disabled="disabled"
+          placeholder="Ask AstrBot..."
+          class="chat-textarea"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="sentences"
+          spellcheck="false"
+        ></textarea>
+      </div>
+      <div v-if="mentionMenuOpen" class="mention-menu">
+        <button
+          v-for="(bot, index) in filteredMentionBots"
+          :key="bot.bot_id"
+          class="mention-option"
+          :class="{ active: index === activeMentionIndex }"
+          type="button"
+          @mousedown.prevent="selectMentionBot(bot)"
+        >
+          <v-avatar size="24" rounded="lg">
+            <img v-if="bot.avatar" :src="bot.avatar" alt="" />
+            <span v-else>{{ bot.name.slice(0, 1).toUpperCase() }}</span>
+          </v-avatar>
+          <span class="mention-option-name">{{ bot.name }}</span>
+          <v-chip size="x-small" variant="tonal">Bot</v-chip>
+        </button>
+      </div>
       <div
         style="
           display: flex;
@@ -214,7 +235,7 @@
 
           <!-- Provider/Model Selector Menu -->
           <ProviderModelMenu
-            v-if="showProviderSelector"
+            v-if="showProviderSelector && !sessionIsGroup"
             ref="providerModelMenuRef"
           />
         </div>
@@ -271,7 +292,7 @@
           </v-btn>
           <v-btn
             icon
-            v-if="isRunning && !canSend"
+            v-if="showStopButton"
             @click="$emit('stop')"
             variant="tonal"
             class="send-btn input-action-btn"
@@ -325,6 +346,13 @@ interface ReplyInfo {
   selectedText?: string;
 }
 
+interface MentionableBot {
+  bot_id: string;
+  name: string;
+  avatar?: string;
+  conf_id?: string;
+}
+
 interface Props {
   prompt: string;
   stagedImagesUrl: string[];
@@ -339,6 +367,7 @@ interface Props {
   configId?: string | null;
   replyTo?: ReplyInfo | null;
   sendShortcut?: "enter" | "shift_enter";
+  mentionableBots?: MentionableBot[];
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -348,6 +377,7 @@ const props = withDefaults(defineProps<Props>(), {
   stagedFiles: () => [],
   replyTo: null,
   sendShortcut: "shift_enter",
+  mentionableBots: () => [],
 });
 
 const emit = defineEmits<{
@@ -372,6 +402,7 @@ const isDark = computed(
 );
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
+const highlightLayer = ref<HTMLDivElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
   null,
@@ -379,6 +410,12 @@ const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
 const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
 const isDragging = ref(false);
+const selectedMentions = ref<MentionableBot[]>([]);
+const mentionMenuOpen = ref(false);
+const mentionQuery = ref("");
+const mentionStartIndex = ref(-1);
+const activeMentionIndex = ref(0);
+const isComposing = ref(false);
 let dragLeaveTimeout: number | null = null;
 
 const localPrompt = computed({
@@ -399,6 +436,53 @@ const canSend = computed(() => {
     (props.stagedFiles && props.stagedFiles.length > 0)
   );
 });
+
+const highlightedPrompt = computed(() => {
+  const text = localPrompt.value;
+  if (!text) return [];
+  const mentionNames = props.mentionableBots
+    .map((bot) => bot.name)
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  if (!mentionNames.length) return [{ text, mention: false }];
+
+  const pattern = new RegExp(
+    `(^|\\s)@(${mentionNames.map(escapeRegExp).join("|")})(?=\\s|$)`,
+    "gi",
+  );
+  const segments: Array<{ text: string; mention: boolean }> = [];
+  let cursor = 0;
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    const prefix = match[1] || "";
+    const mentionStart = index + prefix.length;
+    if (mentionStart > cursor) {
+      segments.push({ text: text.slice(cursor, mentionStart), mention: false });
+    }
+    segments.push({ text: `@${match[2]}`, mention: true });
+    cursor = mentionStart + match[2].length + 1;
+  }
+  if (cursor < text.length) {
+    segments.push({ text: text.slice(cursor), mention: false });
+  }
+  return segments;
+});
+
+const filteredMentionBots = computed(() => {
+  const query = mentionQuery.value.toLowerCase();
+  return props.mentionableBots
+    .filter(
+      (bot) =>
+        !selectedMentions.value.some((item) => item.bot_id === bot.bot_id),
+    )
+    .filter((bot) => bot.name.toLowerCase().includes(query))
+    .slice(0, 6);
+});
+
+const isGroupInput = computed(() => props.mentionableBots.length > 0);
+const showStopButton = computed(
+  () => props.isRunning && !canSend.value && !isGroupInput.value,
+);
 
 const hasStagedAttachments = computed(() => {
   return (
@@ -496,7 +580,51 @@ watch(localPrompt, () => {
   nextTick(autoResize);
 });
 
+watch(
+  () => props.mentionableBots,
+  (bots) => {
+    if (!bots.length) {
+      selectedMentions.value = [];
+      closeMentionMenu();
+      return;
+    }
+    const botIds = new Set(bots.map((bot) => bot.bot_id));
+    selectedMentions.value = selectedMentions.value.filter((bot) =>
+      botIds.has(bot.bot_id),
+    );
+  },
+);
+
 function handleKeyDown(e: KeyboardEvent) {
+  if (mentionMenuOpen.value) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      activeMentionIndex.value =
+        (activeMentionIndex.value + 1) %
+        Math.max(filteredMentionBots.value.length, 1);
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const length = Math.max(filteredMentionBots.value.length, 1);
+      activeMentionIndex.value = (activeMentionIndex.value - 1 + length) % length;
+      return;
+    }
+    if (e.key === "Enter" || e.key === "Tab") {
+      const bot = filteredMentionBots.value[activeMentionIndex.value];
+      if (bot) {
+        e.preventDefault();
+        selectMentionBot(bot);
+        return;
+      }
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeMentionMenu();
+      return;
+    }
+  }
+
   const isEnter = e.key === "Enter";
   if (!isEnter) {
     // Ctrl+B 录音
@@ -533,6 +661,78 @@ function handleKeyDown(e: KeyboardEvent) {
   }
 }
 
+function handlePromptInput() {
+  if (isComposing.value) return;
+  syncSelectedMentionsFromText();
+  updateMentionMenu();
+}
+
+function handleCompositionEnd() {
+  isComposing.value = false;
+  handlePromptInput();
+}
+
+function syncSelectedMentionsFromText() {
+  const text = localPrompt.value;
+  selectedMentions.value = selectedMentions.value.filter((bot) =>
+    new RegExp(`(^|\\s)@${escapeRegExp(bot.name)}(?=\\s|$)`, "i").test(text),
+  );
+}
+
+function updateMentionMenu() {
+  const el = inputField.value;
+  if (!el || !props.mentionableBots.length) {
+    closeMentionMenu();
+    return;
+  }
+  const caret = el.selectionStart ?? localPrompt.value.length;
+  const beforeCaret = localPrompt.value.slice(0, caret);
+  const match = /(^|\s)@([^\s@]*)$/.exec(beforeCaret);
+  if (!match) {
+    closeMentionMenu();
+    return;
+  }
+  mentionStartIndex.value = beforeCaret.length - match[2].length - 1;
+  mentionQuery.value = match[2];
+  activeMentionIndex.value = 0;
+  mentionMenuOpen.value = filteredMentionBots.value.length > 0;
+}
+
+function selectMentionBot(bot: MentionableBot) {
+  if (!selectedMentions.value.some((item) => item.bot_id === bot.bot_id)) {
+    selectedMentions.value.push(bot);
+  }
+  const el = inputField.value;
+  const start = mentionStartIndex.value;
+  if (el && start >= 0) {
+    const caret = el.selectionStart ?? localPrompt.value.length;
+    const before = localPrompt.value.slice(0, start);
+    const after = localPrompt.value.slice(caret);
+    const needsLeadingSpace = before.length > 0 && !/\s$/.test(before);
+    const nextText = `${before}${needsLeadingSpace ? " " : ""}@${bot.name} ${after.replace(
+      /^\s+/,
+      "",
+    )}`;
+    localPrompt.value = nextText;
+    nextTick(() => {
+      const nextCaret =
+        before.length + (needsLeadingSpace ? 1 : 0) + bot.name.length + 2;
+      el.focus();
+      el.setSelectionRange(nextCaret, nextCaret);
+      autoResize();
+      syncHighlightScroll();
+    });
+  }
+  closeMentionMenu();
+}
+
+function closeMentionMenu() {
+  mentionMenuOpen.value = false;
+  mentionQuery.value = "";
+  mentionStartIndex.value = -1;
+  activeMentionIndex.value = 0;
+}
+
 function handleKeyUp(e: KeyboardEvent) {
   if (e.keyCode === 66) {
     ctrlKeyDown.value = false;
@@ -546,6 +746,18 @@ function handleKeyUp(e: KeyboardEvent) {
       emit("stopRecording");
     }
   }
+}
+
+function syncHighlightScroll() {
+  const input = inputField.value;
+  const layer = highlightLayer.value;
+  if (!input || !layer) return;
+  layer.scrollTop = input.scrollTop;
+  layer.scrollLeft = input.scrollLeft;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function handlePaste(e: ClipboardEvent) {
@@ -618,6 +830,34 @@ function getCurrentSelection() {
   return providerModelMenuRef.value?.getCurrentSelection();
 }
 
+function consumeMentions() {
+  const mentions = mentionBotsFromText(localPrompt.value);
+  selectedMentions.value = [];
+  closeMentionMenu();
+  return mentions;
+}
+
+function mentionBotsFromText(text: string) {
+  const found = new Map<string, MentionableBot>();
+  for (const bot of props.mentionableBots) {
+    const pattern = new RegExp(
+      `(^|\\s)@${escapeRegExp(bot.name)}(?=\\s|$)`,
+      "gi",
+    );
+    if (pattern.test(text)) {
+      found.set(bot.bot_id, bot);
+    }
+  }
+  for (const bot of selectedMentions.value) {
+    if (
+      new RegExp(`(^|\\s)@${escapeRegExp(bot.name)}(?=\\s|$)`, "i").test(text)
+    ) {
+      found.set(bot.bot_id, bot);
+    }
+  }
+  return Array.from(found.values());
+}
+
 function focusInput() {
   if (!inputField.value) return;
   inputField.value.focus();
@@ -639,6 +879,7 @@ onBeforeUnmount(() => {
 
 defineExpose({
   getCurrentSelection,
+  consumeMentions,
   focusInput,
 });
 </script>
@@ -704,6 +945,122 @@ defineExpose({
 .input-outline-control:hover {
   border-color: rgba(var(--v-theme-on-surface), 0.34) !important;
   background: rgba(var(--v-theme-on-surface), 0.04) !important;
+}
+
+.textarea-shell {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--v-theme-border);
+  border-radius: 12px;
+  background-color: var(--v-theme-surface);
+}
+
+.chat-textarea,
+.textarea-highlight {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 34px;
+  max-height: 200px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: normal;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-textarea {
+  position: relative;
+  z-index: 1;
+  display: block;
+  resize: none;
+  outline: none;
+  overflow-y: auto;
+  background: transparent;
+  color: transparent;
+  caret-color: rgb(var(--v-theme-on-surface));
+  transition: height 0.16s ease;
+}
+
+.chat-textarea::placeholder {
+  color: rgba(var(--v-theme-on-surface), 0.42);
+  opacity: 1;
+}
+
+.chat-textarea.is-composing {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.textarea-highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.textarea-highlight.is-composing {
+  opacity: 0;
+}
+
+.textarea-mention {
+  color: rgb(var(--v-theme-primary));
+  font-weight: 500;
+}
+
+.mention-menu {
+  position: absolute;
+  left: 18px;
+  bottom: calc(100% - 8px);
+  z-index: 12;
+  display: grid;
+  gap: 4px;
+  width: min(280px, calc(100% - 36px));
+  max-height: 220px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-border-color), 0.16);
+  border-radius: 10px;
+  background: rgb(var(--v-theme-surface));
+}
+
+.mention-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  text-align: left;
+}
+
+.mention-option:hover,
+.mention-option.active {
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.mention-option img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mention-option-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .input-area.is-dark .input-neutral-btn {
@@ -1016,7 +1373,8 @@ defineExpose({
   }
 
   .input-area textarea,
-  .chat-textarea {
+  .chat-textarea,
+  .textarea-highlight {
     min-height: 28px !important;
     max-height: 140px !important;
     font-size: 16px !important;

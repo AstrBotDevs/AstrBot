@@ -59,11 +59,21 @@
           @delete-project="handleDeleteProject"
           @select-project="selectProject"
         />
+
+        <GroupList
+          v-if="!isSidebarCollapsed"
+          :sessions="groupSessions"
+          :selected-session-id="currSessionId"
+          @create-group="startNewGroupChat"
+          @select-session="selectProjectSession"
+          @edit-session-title="editSidebarSessionTitle"
+          @delete-session="deleteSidebarSession"
+        />
       </div>
 
       <div v-if="!isSidebarCollapsed" class="session-list">
         <div
-          v-for="session in sessions"
+          v-for="session in privateSessions"
           :key="session.session_id"
           class="session-item"
           :class="{ active: currSessionId === session.session_id }"
@@ -282,13 +292,24 @@
           !selectedProject && !loadingMessages && !activeMessages.length,
       }"
     >
-      <div v-if="currSessionId && !workspacePanelOpen" class="chat-main-actions">
+      <div
+        v-if="currSessionId && !workspacePanelOpen && !groupPanelOpen"
+        class="chat-main-actions"
+      >
         <v-btn
           icon="mdi-folder-open-outline"
           size="small"
           variant="text"
           :title="tm('workspace.open')"
           @click="workspacePanelOpen = true"
+        />
+        <v-btn
+          v-if="isGroupSession"
+          icon="mdi-forum"
+          size="small"
+          variant="text"
+          :title="tm('group.panelTitle')"
+          @click="groupPanelOpen = true"
         />
       </div>
 
@@ -301,6 +322,14 @@
         @delete-session="deleteProjectSession"
       >
         <section class="project-composer-shell">
+          <div v-if="currentTypingText" class="chat-typing-indicator">
+            <span>{{ currentTypingText }}</span>
+            <span class="typing-dots" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </div>
           <ChatInput
             ref="inputRef"
             v-model:prompt="draft"
@@ -317,6 +346,7 @@
             :current-session="currentSession"
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
+            :mentionable-bots="isGroupSession ? currentGroupBots : []"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
             @toggle-streaming="toggleStreaming"
@@ -336,6 +366,7 @@
         <section
           ref="messagesContainer"
           class="messages-panel"
+          :class="{ 'is-group-chat': isGroupSession }"
           @scroll="handleMessagesScroll"
         >
           <div v-if="loadingMessages" class="center-state">
@@ -355,6 +386,7 @@
           <div
             v-if="!loadingMessages && activeMessages.length"
             class="messages-list-shell"
+            :class="{ 'is-group-chat': isGroupSession }"
           >
             <ChatMessageList
               v-model:edit-draft="messageEditDraft"
@@ -364,13 +396,18 @@
                 Boolean(currSessionId && isSessionRunning(currSessionId))
               "
               :enable-edit="
+                !isGroupSession &&
                 !Boolean(currSessionId && isSessionRunning(currSessionId))
               "
-              enable-regenerate
+              :enable-regenerate="!isGroupSession"
               enable-thread-selection
               :manage-refs-sidebar="false"
               :editing-message-id="editingMessage?.id || null"
               :saving-edit="savingMessageEdit"
+              :show-sender-names="isGroupSession"
+              :use-default-bot-avatar="isGroupSession"
+              :bot-avatars="currentGroupBotAvatars"
+              :hide-loading-bot-message="isGroupSession"
               @open-edit="openMessageEdit"
               @cancel-edit="cancelMessageEdit"
               @save-edit="saveMessageEdit"
@@ -384,6 +421,14 @@
         </section>
 
         <section class="composer-shell">
+          <div v-if="currentTypingText" class="chat-typing-indicator">
+            <span>{{ currentTypingText }}</span>
+            <span class="typing-dots" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </div>
           <ChatInput
             ref="inputRef"
             v-model:prompt="draft"
@@ -400,6 +445,7 @@
             :current-session="currentSession"
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
+            :mentionable-bots="isGroupSession ? currentGroupBots : []"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
             @toggle-streaming="toggleStreaming"
@@ -439,6 +485,192 @@
       :project="editingProject"
       @save="saveProject"
     />
+    <v-dialog v-model="groupDialogOpen" max-width="500">
+      <v-card>
+        <v-card-title class="text-h6">{{ tm("group.create") }}</v-card-title>
+        <v-card-text class="group-dialog-body">
+          <v-text-field
+            v-model="groupNameDraft"
+            :label="tm('group.name')"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            autofocus
+            @keydown.enter="createGroupFromDialog"
+          />
+          <div class="avatar-upload-row">
+            <v-avatar size="44" rounded="lg">
+              <img :src="groupAvatarDraft || defaultGroupAvatar" alt="" />
+            </v-avatar>
+            <v-btn
+              variant="tonal"
+              prepend-icon="mdi-upload"
+              :loading="uploadingGroupAvatar"
+              @click="groupAvatarInputRef?.click()"
+            >
+              {{ tm("group.uploadAvatar") }}
+            </v-btn>
+            <input
+              ref="groupAvatarInputRef"
+              class="avatar-upload-input"
+              type="file"
+              accept="image/*"
+              @change="handleGroupAvatarSelected"
+            />
+          </div>
+          <v-textarea
+            v-model="groupDescriptionDraft"
+            :label="tm('group.description')"
+            variant="outlined"
+            density="comfortable"
+            rows="3"
+            auto-grow
+            hide-details
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="groupDialogOpen = false">
+            {{ t("core.common.cancel") }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="savingGroup"
+            @click="createGroupFromDialog"
+          >
+            {{ t("core.common.save") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <v-dialog v-model="groupBotDialogOpen" max-width="460">
+      <v-card>
+        <v-card-title class="text-h6">{{ tm("group.addBot") }}</v-card-title>
+        <v-card-text class="group-bot-dialog-body">
+          <v-btn-toggle
+            v-model="groupBotDialogMode"
+            mandatory
+            density="comfortable"
+            class="group-bot-mode-toggle"
+          >
+            <v-btn value="existing">
+              {{ tm("group.addExisting") }}
+            </v-btn>
+            <v-btn value="new">
+              {{ tm("group.createNewBot") }}
+            </v-btn>
+          </v-btn-toggle>
+          <div
+            v-if="groupBotDialogMode === 'existing'"
+            class="group-bot-platform-list"
+          >
+            <div class="group-bot-platform-list-title">
+              {{ tm("group.availableBots") }}
+            </div>
+            <div
+              v-for="platform in existingGroupBotPlatformOptions"
+              :key="platform.id"
+              class="group-bot-platform-item"
+              :class="{
+                selected: groupBotPlatformId === platform.id,
+                disabled: isGroupBotPlatformInUse(platform.id),
+              }"
+              role="button"
+              tabindex="0"
+              :aria-disabled="isGroupBotPlatformInUse(platform.id)"
+              @click="selectGroupBotPlatform(platform)"
+              @keydown.enter.prevent="selectGroupBotPlatform(platform)"
+              @keydown.space.prevent="selectGroupBotPlatform(platform)"
+            >
+              <v-avatar size="28" rounded="lg">
+                <img :src="platform.avatar || defaultGroupAvatar" alt="" />
+              </v-avatar>
+              <span class="group-bot-platform-name">{{ platform.name }}</span>
+              <span class="group-bot-platform-id">{{ platform.id }}</span>
+              <v-chip
+                v-if="isGroupBotPlatformInUse(platform.id)"
+                size="x-small"
+                variant="tonal"
+              >
+                {{ tm("group.added") }}
+              </v-chip>
+              <v-btn
+                v-if="platform.session_id && platform.bot_id"
+                icon="mdi-delete-outline"
+                size="x-small"
+                variant="text"
+                :aria-label="tm('group.deleteBot')"
+                @click.stop="deleteExistingGroupBot(platform)"
+              />
+            </div>
+            <div
+              v-if="!existingGroupBotPlatformOptions.length"
+              class="group-bot-empty-state"
+            >
+              {{ tm("group.noExistingBots") }}
+            </div>
+          </div>
+
+          <template v-else>
+            <v-text-field
+              v-model="groupBotName"
+              :label="tm('group.botName')"
+              variant="outlined"
+              density="comfortable"
+              hide-details
+              autofocus
+              @keydown.enter="createGroupBotFromDialog"
+            />
+            <v-select
+              v-model="groupBotConfId"
+              :items="abconfOptions"
+              item-title="name"
+              item-value="id"
+              :label="tm('group.config')"
+              variant="outlined"
+              density="comfortable"
+              hide-details
+            />
+            <div class="avatar-upload-row">
+              <v-avatar size="40" rounded="lg">
+                <img :src="groupBotAvatar || defaultGroupAvatar" alt="" />
+              </v-avatar>
+              <v-btn
+                variant="tonal"
+                prepend-icon="mdi-upload"
+                :loading="uploadingGroupBotAvatar"
+                @click="groupBotAvatarInputRef?.click()"
+              >
+                {{ tm("group.uploadAvatar") }}
+              </v-btn>
+              <input
+                ref="groupBotAvatarInputRef"
+                class="avatar-upload-input"
+                type="file"
+                accept="image/*"
+                @change="handleGroupBotAvatarSelected"
+              />
+            </div>
+          </template>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="groupBotDialogOpen = false">
+            {{ t("core.common.cancel") }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="savingGroupBot"
+            :disabled="!canSubmitGroupBotDialog"
+            @click="createGroupBotFromDialog"
+          >
+            {{ t("core.common.save") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <v-dialog v-model="sessionTitleDialogOpen" max-width="420">
       <v-card>
         <v-card-title class="text-h6">
@@ -481,6 +713,14 @@
       v-model="workspacePanelOpen"
       :session-id="currSessionId || null"
     />
+    <GroupPanel
+      v-model="groupPanelOpen"
+      :group="currentGroupProfile"
+      :bots="currentGroupBots"
+      :fallback-name="currentSessionTitle || tm('group.defaultName')"
+      @add-bot="openGroupBotDialog"
+      @delete-bot="deleteGroupBot"
+    />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
   </div>
 </template>
@@ -505,18 +745,22 @@ import ProjectDialog, {
   type ProjectFormData,
 } from "@/components/chat/ProjectDialog.vue";
 import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
+import GroupList from "@/components/chat/GroupList.vue";
 import ProjectView from "@/components/chat/ProjectView.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import WorkspacePanel from "@/components/chat/WorkspacePanel.vue";
+import GroupPanel from "@/components/chat/GroupPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
   useMessages,
   type ChatRecord,
   type ChatThread,
+  type GroupBot,
+  type GroupProfile,
   type MessagePart,
   type TransportMode,
 } from "@/composables/useMessages";
@@ -531,6 +775,7 @@ import {
 import type { Locale } from "@/i18n/types";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import { useToast } from "@/utils/toast";
+import defaultGroupAvatar from "@/assets/images/chatui-group-default-avatar.png";
 
 const props = withDefaults(defineProps<{ chatboxMode?: boolean }>(), {
   chatboxMode: false,
@@ -573,6 +818,7 @@ const {
   stagedNonImageFiles,
   processAndUploadImage,
   processAndUploadFile,
+  uploadImageAttachment,
   handlePaste,
   removeImage,
   removeAudio,
@@ -584,6 +830,48 @@ const {
 const sidebarCollapsed = ref(false);
 const providerDialog = ref(false);
 const projectDialogOpen = ref(false);
+const groupDialogOpen = ref(false);
+const savingGroup = ref(false);
+const groupNameDraft = ref("");
+const groupAvatarDraft = ref("");
+const groupAvatarAttachmentId = ref("");
+const uploadingGroupAvatar = ref(false);
+const groupAvatarInputRef = ref<HTMLInputElement | null>(null);
+const groupDescriptionDraft = ref("");
+const groupBotDialogOpen = ref(false);
+const savingGroupBot = ref(false);
+const groupBotName = ref("");
+const groupBotAvatar = ref("");
+const groupBotAvatarAttachmentId = ref("");
+const uploadingGroupBotAvatar = ref(false);
+const groupBotAvatarInputRef = ref<HTMLInputElement | null>(null);
+const groupBotConfId = ref("default");
+const abconfOptions = ref<Array<{ id: string; name?: string }>>([]);
+const groupBotDialogMode = ref<"existing" | "new">("existing");
+const groupBotPlatformId = ref("");
+type GroupBotPlatformOption = {
+  id: string;
+  name: string;
+  session_id?: string;
+  avatar?: string;
+  avatar_attachment_id?: string;
+  bot_id?: string;
+  conf_id?: string;
+  platform_id?: string;
+};
+const groupBotPlatformOptions = ref<GroupBotPlatformOption[]>([]);
+const existingGroupBotPlatformOptions = computed(() =>
+  groupBotPlatformOptions.value.filter((option) => option.id),
+);
+const canSubmitGroupBotDialog = computed(() => {
+  if (groupBotDialogMode.value === "existing") {
+    return Boolean(
+      groupBotPlatformId.value &&
+        !isGroupBotPlatformInUse(groupBotPlatformId.value),
+    );
+  }
+  return Boolean(groupBotName.value.trim());
+});
 const editingProject = ref<Project | null>(null);
 const sessionTitleDialogOpen = ref(false);
 const sessionTitleDraft = ref("");
@@ -598,12 +886,14 @@ const loadingSessions = ref(false);
 const draft = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
+const avatarObjectUrls = new Set<string>();
 const shouldStickToBottom = ref(true);
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
 const deletingThread = ref(false);
 const workspacePanelOpen = ref(false);
+const groupPanelOpen = ref(false);
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
 const threadSelection = reactive<{
@@ -639,11 +929,16 @@ const {
   sending,
   loadedSessions,
   sessionProjects,
+  groupBotsBySession,
+  groupProfilesBySession,
+  typingBySession,
   activeMessages,
   isSessionRunning,
   isUserMessage,
   messageParts,
   loadSessionMessages,
+  ensurePersistentChatConnection,
+  closePersistentChatConnections,
   createLocalExchange,
   sendMessageStream,
   editMessage,
@@ -695,6 +990,38 @@ const currentSession = computed(
     ) ||
     null,
 );
+const privateSessions = computed(() =>
+  sessions.value.filter((session) => Number(session.is_group || 0) !== 1),
+);
+const groupSessions = computed(() =>
+  sessions.value.filter((session) => Number(session.is_group || 0) === 1),
+);
+const isGroupSession = computed(() => Number(currentSession.value?.is_group || 0) === 1);
+const currentGroupBots = computed<GroupBot[]>(() =>
+  currSessionId.value ? groupBotsBySession[currSessionId.value] || [] : [],
+);
+const currentGroupBotAvatars = computed<Record<string, string>>(() => {
+  const avatars: Record<string, string> = {};
+  for (const bot of currentGroupBots.value) {
+    if (bot.avatar) avatars[bot.bot_id] = bot.avatar;
+  }
+  return avatars;
+});
+const currentGroupProfile = computed<GroupProfile | null>(() =>
+  currSessionId.value ? groupProfilesBySession[currSessionId.value] || null : null,
+);
+const currentTypingNames = computed(() =>
+  isGroupSession.value && currSessionId.value
+    ? (typingBySession[currSessionId.value] || []).map(
+        (item) => item.sender_name || item.sender_id,
+      )
+    : [],
+);
+const currentTypingText = computed(() =>
+  currentTypingNames.value.length
+    ? tm("group.typing", { name: currentTypingNames.value.join(", ") })
+    : "",
+);
 const sessionProject = computed(() =>
   currSessionId.value ? sessionProjects[currSessionId.value] : null,
 );
@@ -733,6 +1060,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   cleanupMediaCache();
+  avatarObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+  avatarObjectUrls.clear();
 });
 
 watch(
@@ -744,6 +1073,7 @@ watch(
       await selectSession(routeSessionId, false);
     } else if (!routeSessionId && currSessionId.value) {
       currSessionId.value = "";
+      closePersistentChatConnections();
     }
   },
 );
@@ -778,6 +1108,48 @@ async function startNewChat() {
   replyTarget.value = null;
   newChat();
   closeMobileSidebar();
+}
+
+async function startNewGroupChat() {
+  groupNameDraft.value = "";
+  groupAvatarDraft.value = defaultGroupAvatar;
+  groupAvatarAttachmentId.value = "";
+  groupDescriptionDraft.value = "";
+  groupDialogOpen.value = true;
+}
+
+async function createGroupFromDialog() {
+  const groupName = groupNameDraft.value.trim() || tm("group.defaultName");
+  savingGroup.value = true;
+  try {
+    selectedProjectId.value = null;
+    replyTarget.value = null;
+    transportMode.value = "websocket";
+    const avatarForStorage = groupAvatarAttachmentId.value
+      ? ""
+      : groupAvatarDraft.value.trim() || defaultGroupAvatar;
+    const sessionId = await newSession({
+      isGroup: true,
+      displayName: groupName,
+      avatar: avatarForStorage,
+      avatarAttachmentId: groupAvatarAttachmentId.value || undefined,
+      description: groupDescriptionDraft.value.trim(),
+    });
+    groupProfilesBySession[sessionId] = {
+      session_id: sessionId,
+      name: groupName,
+      avatar: groupAvatarDraft.value.trim() || defaultGroupAvatar,
+      avatar_attachment_id: groupAvatarAttachmentId.value,
+      description: groupDescriptionDraft.value.trim(),
+    };
+    groupBotsBySession[sessionId] = [];
+    closePersistentChatConnections(sessionId);
+    ensurePersistentChatConnection(sessionId);
+    groupDialogOpen.value = false;
+    closeMobileSidebar();
+  } finally {
+    savingGroup.value = false;
+  }
 }
 
 function openCreateProjectDialog() {
@@ -908,12 +1280,22 @@ async function selectSession(sessionId: string, pushRoute = true) {
   if (!loadedSessions[sessionId]) {
     await loadSessionMessages(sessionId);
   }
+  await resolveGroupResourceAvatars(sessionId);
+  if (Number(currentSession.value?.is_group || 0) === 1) {
+    closePersistentChatConnections(sessionId);
+    ensurePersistentChatConnection(sessionId);
+  } else {
+    closePersistentChatConnections();
+  }
   scrollToBottom();
   closeMobileSidebar();
 }
 
 async function sendCurrentMessage() {
-  if (!canSend.value) return;
+  const selectedMentionBots = isGroupSession.value
+    ? ((inputRef.value?.consumeMentions?.() || []) as GroupBot[])
+    : [];
+  if (!canSend.value && !selectedMentionBots.length) return;
 
   sending.value = true;
   try {
@@ -937,14 +1319,24 @@ async function sendCurrentMessage() {
     }
 
     const text = draft.value.trim();
+    const targetBots = isGroupSession.value
+      ? resolveTargetGroupBots(text, currentGroupBots.value, selectedMentionBots)
+      : [];
+    const targetBot = targetBots[0] || null;
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    const outgoingParts = buildOutgoingParts(text);
+    const outgoingParts = buildOutgoingParts(text, targetBots);
+    if (!hasOutgoingContent(outgoingParts)) return;
     const selection = inputRef.value?.getCurrentSelection();
     const { userRecord, botRecord } = createLocalExchange({
       sessionId,
       messageId,
       parts: outgoingParts,
+      includeBot: !isGroupSession.value,
     });
+    if (isGroupSession.value) {
+      userRecord.sender_id = getDashboardUsername();
+      userRecord.sender_name = getDashboardUsername();
+    }
     updateTitleFromText(sessionId, text);
 
     draft.value = "";
@@ -956,10 +1348,14 @@ async function sendCurrentMessage() {
       sessionId,
       messageId,
       parts: outgoingParts,
-      transport: transportMode.value,
-      enableStreaming: enableStreaming.value,
+      transport: isGroupSession.value ? "websocket" : transportMode.value,
+      enableStreaming: isGroupSession.value ? false : enableStreaming.value,
       selectedProvider: selection?.providerId || "",
       selectedModel: selection?.modelName || "",
+      targetBotId: targetBot?.bot_id || "",
+      senderId: isGroupSession.value ? getDashboardUsername() : "",
+      senderName: isGroupSession.value ? getDashboardUsername() : "",
+      usePersistentWebSocket: isGroupSession.value,
       userRecord,
       botRecord,
     });
@@ -970,7 +1366,7 @@ async function sendCurrentMessage() {
   }
 }
 
-function buildOutgoingParts(text: string): MessagePart[] {
+function buildOutgoingParts(text: string, targetBots: GroupBot[] = []): MessagePart[] {
   const parts: MessagePart[] = [];
   if (replyTarget.value?.id != null) {
     parts.push({
@@ -979,8 +1375,12 @@ function buildOutgoingParts(text: string): MessagePart[] {
       selected_text: "",
     });
   }
-  if (text) {
-    parts.push({ type: "plain", text });
+  for (const bot of targetBots) {
+    parts.push({ type: "at", target: bot.bot_id, name: bot.name });
+  }
+  const plainText = targetBots.length ? stripMentionText(text, targetBots) : text;
+  if (plainText) {
+    parts.push({ type: "plain", text: plainText });
   }
   stagedFiles.value.forEach((file) => {
     parts.push({
@@ -991,6 +1391,252 @@ function buildOutgoingParts(text: string): MessagePart[] {
     });
   });
   return parts;
+}
+
+function hasOutgoingContent(parts: MessagePart[]) {
+  return parts.some((part) => {
+    if (part.type === "plain") return Boolean(part.text?.trim());
+    if (part.type === "at") return Boolean(part.target || part.bot_id || part.name);
+    if (["image", "record", "video", "file"].includes(part.type)) {
+      return Boolean(part.attachment_id || part.filename);
+    }
+    return false;
+  });
+}
+
+function resolveTargetGroupBots(
+  text: string,
+  bots: GroupBot[],
+  selectedBots: GroupBot[] = [],
+) {
+  const resolved = new Map<string, GroupBot>();
+  for (const bot of selectedBots) {
+    resolved.set(bot.bot_id, bot);
+  }
+  const folded = text.toLowerCase();
+  for (const bot of bots) {
+    if (folded.includes(`@${bot.name.toLowerCase()}`)) {
+      resolved.set(bot.bot_id, bot);
+    }
+  }
+  return Array.from(resolved.values());
+}
+
+function stripMentionText(text: string, bots: GroupBot[]) {
+  return bots
+    .reduce((result, bot) => {
+      const pattern = new RegExp(
+        `(^|\\s)@${escapeRegExp(bot.name)}(?=\\s|$)`,
+        "gi",
+      );
+      return result.replace(pattern, " ");
+    }, text)
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function uploadAvatarFile(file: File) {
+  const uploaded = await uploadImageAttachment(file);
+  avatarObjectUrls.add(uploaded.url);
+  return uploaded;
+}
+
+async function handleGroupAvatarSelected(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  uploadingGroupAvatar.value = true;
+  try {
+    const uploaded = await uploadAvatarFile(file);
+    groupAvatarDraft.value = uploaded.url;
+    groupAvatarAttachmentId.value = uploaded.attachment_id;
+  } finally {
+    uploadingGroupAvatar.value = false;
+  }
+}
+
+async function handleGroupBotAvatarSelected(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  uploadingGroupBotAvatar.value = true;
+  try {
+    const uploaded = await uploadAvatarFile(file);
+    groupBotAvatar.value = uploaded.url;
+    groupBotAvatarAttachmentId.value = uploaded.attachment_id;
+  } finally {
+    uploadingGroupBotAvatar.value = false;
+  }
+}
+
+async function resolveAttachmentAvatar(attachmentId?: string) {
+  if (!attachmentId) return "";
+  const response = await axios.get("/api/chat/get_attachment", {
+    params: { attachment_id: attachmentId },
+    responseType: "blob",
+  });
+  const url = URL.createObjectURL(response.data);
+  avatarObjectUrls.add(url);
+  return url;
+}
+
+async function resolveGroupResourceAvatars(sessionId: string) {
+  const group = groupProfilesBySession[sessionId];
+  if (group?.avatar_attachment_id && !group.avatar?.startsWith("blob:")) {
+    group.avatar = await resolveAttachmentAvatar(group.avatar_attachment_id);
+  }
+
+  const bots = groupBotsBySession[sessionId] || [];
+  await Promise.all(
+    bots.map(async (bot) => {
+      if (bot.avatar_attachment_id && !bot.avatar?.startsWith("blob:")) {
+        bot.avatar = await resolveAttachmentAvatar(bot.avatar_attachment_id);
+      }
+    }),
+  );
+}
+
+function getDashboardUsername() {
+  try {
+    return localStorage.getItem("user")?.trim() || "guest";
+  } catch {
+    return "guest";
+  }
+}
+
+async function openGroupBotDialog() {
+  groupBotName.value = "";
+  groupBotAvatar.value = defaultGroupAvatar;
+  groupBotAvatarAttachmentId.value = "";
+  groupBotConfId.value = "default";
+  groupBotPlatformId.value = "";
+  groupBotDialogMode.value = "existing";
+  groupBotDialogOpen.value = true;
+  if (!abconfOptions.value.length) {
+    const response = await axios.get("/api/config/abconfs");
+    abconfOptions.value = response.data?.data?.info_list || [];
+  }
+  const platformResponse = await axios.get("/api/chat/group/bot/platforms");
+  groupBotPlatformOptions.value = await Promise.all(
+    (platformResponse.data?.data?.platforms || []).map(
+      async (platform: GroupBotPlatformOption) => {
+        const platformId = platform.platform_id || platform.id;
+        const avatar =
+          platform.avatar_attachment_id && !platform.avatar?.startsWith("blob:")
+            ? await resolveAttachmentAvatar(platform.avatar_attachment_id)
+            : platform.avatar || "";
+        return {
+          ...platform,
+          id: platformId,
+          platform_id: platformId,
+          avatar,
+        };
+      },
+    ),
+  );
+  if (!existingGroupBotPlatformOptions.value.length) {
+    groupBotDialogMode.value = "new";
+  }
+}
+
+function isGroupBotPlatformInUse(platformId: string) {
+  return currentGroupBots.value.some((bot) => bot.platform_id === platformId);
+}
+
+function selectGroupBotPlatform(platform: GroupBotPlatformOption) {
+  if (isGroupBotPlatformInUse(platform.id)) return;
+  groupBotPlatformId.value = platform.id;
+  if (!groupBotName.value.trim()) {
+    groupBotName.value = platform.name;
+  }
+}
+
+async function deleteExistingGroupBot(platform: GroupBotPlatformOption) {
+  if (!platform.session_id || !platform.bot_id) return;
+  await axios.post("/api/chat/group/bot/delete", {
+    session_id: platform.session_id,
+    bot_id: platform.bot_id,
+  });
+  groupBotPlatformOptions.value = groupBotPlatformOptions.value.filter(
+    (item) => item.id !== platform.id,
+  );
+  if (groupBotPlatformId.value === platform.id) {
+    groupBotPlatformId.value = "";
+  }
+  if (currSessionId.value && platform.session_id === currSessionId.value) {
+    groupBotsBySession[currSessionId.value] = currentGroupBots.value.filter(
+      (item) => item.bot_id !== platform.bot_id,
+    );
+  }
+}
+
+async function createGroupBotFromDialog() {
+  if (!currSessionId.value || !canSubmitGroupBotDialog.value) return;
+  savingGroupBot.value = true;
+  try {
+    const selectedPlatform = existingGroupBotPlatformOptions.value.find(
+      (platform) => platform.id === groupBotPlatformId.value,
+    );
+    const botName =
+      groupBotDialogMode.value === "existing"
+        ? selectedPlatform?.name || groupBotPlatformId.value
+        : groupBotName.value.trim();
+    const avatarAttachmentId =
+      groupBotDialogMode.value === "existing"
+        ? selectedPlatform?.avatar_attachment_id || ""
+        : groupBotAvatarAttachmentId.value;
+    const avatarValue =
+      groupBotDialogMode.value === "existing"
+        ? selectedPlatform?.avatar || ""
+        : groupBotAvatar.value.trim();
+    const avatarForStorage = avatarAttachmentId
+      ? ""
+      : avatarValue || defaultGroupAvatar;
+    const response = await axios.post("/api/chat/group/bot/create", {
+      session_id: currSessionId.value,
+      name: botName,
+      avatar: avatarAttachmentId ? "" : avatarForStorage,
+      avatar_attachment_id: avatarAttachmentId || undefined,
+      conf_id:
+        groupBotDialogMode.value === "existing"
+          ? selectedPlatform?.conf_id || "default"
+          : groupBotConfId.value || "default",
+      platform_id:
+        groupBotDialogMode.value === "existing"
+          ? groupBotPlatformId.value
+          : undefined,
+    });
+    const bot = response.data?.data?.bot;
+    if (bot) {
+      bot.avatar = avatarValue || defaultGroupAvatar;
+      bot.avatar_attachment_id =
+        avatarAttachmentId || bot.avatar_attachment_id || "";
+      groupBotsBySession[currSessionId.value] = [
+        ...currentGroupBots.value,
+        bot,
+      ];
+    }
+    groupBotDialogOpen.value = false;
+  } finally {
+    savingGroupBot.value = false;
+  }
+}
+
+async function deleteGroupBot(bot: GroupBot) {
+  if (!currSessionId.value) return;
+  await axios.post("/api/chat/group/bot/delete", {
+    session_id: currSessionId.value,
+    bot_id: bot.bot_id,
+  });
+  groupBotsBySession[currSessionId.value] = currentGroupBots.value.filter(
+    (item) => item.bot_id !== bot.bot_id,
+  );
 }
 
 function updateTitleFromText(sessionId: string, text: string) {
@@ -1505,6 +2151,17 @@ function toggleTheme() {
   padding: 24px max(24px, calc((100% - 980px) / 2)) 18px;
 }
 
+.messages-panel.is-group-chat {
+  padding-right: 16px;
+  padding-left: 16px;
+}
+
+.messages-list-shell.is-group-chat {
+  width: 85%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
 .empty-chat .messages-panel {
   flex: 0 0 auto;
   min-height: auto;
@@ -1555,6 +2212,99 @@ function toggleTheme() {
   white-space: nowrap;
 }
 
+.group-dialog-body,
+.group-bot-dialog-body {
+  display: grid;
+  gap: 14px;
+}
+
+.group-bot-platform-list {
+  display: grid;
+  gap: 6px;
+}
+
+.group-bot-platform-list-title {
+  font-size: 12px;
+  color: var(--chat-muted);
+}
+
+.group-bot-mode-toggle {
+  width: fit-content;
+}
+
+.group-bot-platform-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 6px 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.group-bot-platform-item.selected {
+  border-color: rgba(var(--v-theme-primary), 0.6);
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+
+.group-bot-platform-item.disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.group-bot-platform-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.group-bot-platform-name,
+.group-bot-platform-id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-bot-platform-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.group-bot-platform-id {
+  font-size: 11px;
+  color: var(--chat-muted);
+}
+
+.group-bot-empty-state {
+  padding: 10px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 8px;
+  color: var(--chat-muted);
+  font-size: 13px;
+}
+
+.avatar-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar-upload-row img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.avatar-upload-input {
+  display: none;
+}
+
 .thread-selection-action {
   position: fixed;
   z-index: 1200;
@@ -1601,6 +2351,56 @@ function toggleTheme() {
   border-top: 0;
 }
 
+.chat-typing-indicator {
+  width: 85%;
+  max-width: 900px;
+  margin: 0 auto 4px;
+  padding: 0 18px;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 1px;
+}
+
+.typing-dots span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentcolor;
+  animation: typing-dot-pulse 1.1s infinite ease-in-out;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typing-dot-pulse {
+  0%,
+  70%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+
+  35% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
 .empty-chat .composer-shell {
   padding-bottom: 0;
 }
@@ -1624,6 +2424,11 @@ kbd {
 
   .messages-panel {
     padding: 18px 14px;
+  }
+
+  .messages-list-shell.is-group-chat {
+    width: 100%;
+    max-width: 100%;
   }
 
   .composer-shell,

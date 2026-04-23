@@ -151,6 +151,9 @@ watch(
   () => [props.modelValue, props.sessionId],
   ([open, sessionId]) => {
     if (open && sessionId) {
+      currentPath.value = "";
+      selectedFile.value = null;
+      previewContent.value = "";
       loadFiles(currentPath.value);
     }
   },

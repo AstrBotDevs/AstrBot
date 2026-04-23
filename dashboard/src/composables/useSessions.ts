@@ -47,16 +47,25 @@ export function useSessions(chatboxMode: boolean = false) {
         }
     }
 
-    async function newSession() {
+    async function newSession(options: { isGroup?: boolean; displayName?: string; avatar?: string; avatarAttachmentId?: string; description?: string } = {}) {
         try {
             const selectedConfigId = getStoredSelectedChatConfigId();
-            const response = await axios.get('/api/chat/new_session');
+            const response = await axios.get('/api/chat/new_session', {
+                params: {
+                    is_group: options.isGroup ? 1 : 0,
+                    display_name: options.displayName || undefined,
+                    avatar: options.avatar || undefined,
+                    avatar_attachment_id: options.avatarAttachmentId || undefined,
+                    description: options.description || undefined,
+                }
+            });
             const sessionId = response.data.data.session_id;
             const platformId = response.data.data.platform_id;
+            const isGroup = Number(response.data.data.is_group || 0) === 1;
 
             currSessionId.value = sessionId;
 
-            if (selectedConfigId && selectedConfigId !== 'default' && platformId === 'webchat') {
+            if (selectedConfigId && selectedConfigId !== 'default' && platformId === 'webchat' && !isGroup) {
                 try {
                     const umoDetails = buildWebchatUmoDetails(sessionId, false);
                     await axios.post('/api/config/umo_abconf_route/update', {

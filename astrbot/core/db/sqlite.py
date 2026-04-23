@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import typing as T
+import uuid
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
@@ -26,6 +27,8 @@ from astrbot.core.db.po import (
     ProviderStat,
     SessionProjectRelation,
     SQLModel,
+    WebChatGroup,
+    WebChatGroupBot,
     WebChatThread,
 )
 from astrbot.core.db.po import (
@@ -62,6 +65,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_platform_message_history_checkpoint_column(conn)
+            await self._ensure_webchat_group_avatar_attachment_columns(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -125,6 +129,33 @@ class SQLiteDatabase(BaseDatabase):
                     "ON platform_message_history (llm_checkpoint_id)"
                 )
             )
+
+    async def _ensure_webchat_group_avatar_attachment_columns(self, conn) -> None:
+        """Ensure ChatUI group tables have newly added columns."""
+        for table_name in ("webchat_groups", "webchat_group_bots"):
+            result = await conn.execute(text(f"PRAGMA table_info({table_name})"))
+            columns = {row[1] for row in result.fetchall()}
+            if columns and "avatar_attachment_id" not in columns:
+                await conn.execute(
+                    text(
+                        f"ALTER TABLE {table_name} "
+                        "ADD COLUMN avatar_attachment_id VARCHAR(36) DEFAULT NULL"
+                    )
+                )
+            if table_name == "webchat_group_bots" and "platform_id" not in columns:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE webchat_group_bots "
+                        "ADD COLUMN platform_id VARCHAR(255) DEFAULT NULL"
+                    )
+                )
+                await conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS "
+                        "ix_webchat_group_bots_platform_id "
+                        "ON webchat_group_bots (platform_id)"
+                    )
+                )
 
     # ====
     # Platform Statistics
@@ -756,6 +787,163 @@ class SQLiteDatabase(BaseDatabase):
                     )
                 )
         return thread_ids
+
+    async def create_webchat_group(
+        self,
+        session_id: str,
+        creator: str,
+        name: str,
+        avatar: str | None = None,
+        avatar_attachment_id: str | None = None,
+        description: str | None = None,
+    ) -> WebChatGroup:
+        """Create metadata for a ChatUI pseudo group."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                group = WebChatGroup(
+                    session_id=session_id,
+                    creator=creator,
+                    name=name,
+                    avatar=avatar,
+                    avatar_attachment_id=avatar_attachment_id,
+                    description=description,
+                )
+                session.add(group)
+                await session.flush()
+                await session.refresh(group)
+                return group
+
+    async def get_webchat_group_by_session(
+        self, session_id: str
+    ) -> WebChatGroup | None:
+        """Get a ChatUI pseudo group by platform session ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(WebChatGroup).where(WebChatGroup.session_id == session_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def delete_webchat_group_by_session(self, session_id: str) -> None:
+        """Delete ChatUI pseudo group metadata without deleting bot resources."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(WebChatGroup).where(WebChatGroup.session_id == session_id)
+                )
+
+    async def create_webchat_group_bot(
+        self,
+        session_id: str,
+        name: str,
+        avatar: str | None = None,
+        avatar_attachment_id: str | None = None,
+        conf_id: str = "default",
+        bot_id: str | None = None,
+        platform_id: str | None = None,
+    ) -> WebChatGroupBot:
+        """Create a bot member in a ChatUI pseudo group."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                bot = WebChatGroupBot(
+                    session_id=session_id,
+                    bot_id=bot_id or uuid.uuid4().hex[:8],
+                    name=name,
+                    avatar=avatar,
+                    avatar_attachment_id=avatar_attachment_id,
+                    conf_id=conf_id,
+                    platform_id=platform_id,
+                )
+                session.add(bot)
+                await session.flush()
+                await session.refresh(bot)
+                return bot
+
+    async def get_webchat_group_bots(self, session_id: str) -> list[WebChatGroupBot]:
+        """List bot members in a ChatUI pseudo group."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(WebChatGroupBot)
+                .where(WebChatGroupBot.session_id == session_id)
+                .order_by(WebChatGroupBot.created_at)
+            )
+            return list(result.scalars().all())
+
+    async def get_all_webchat_group_bots(self) -> list[WebChatGroupBot]:
+        """List all ChatUI pseudo group bot resources."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(WebChatGroupBot).order_by(WebChatGroupBot.created_at)
+            )
+            return list(result.scalars().all())
+
+    async def get_webchat_group_bot(
+        self, session_id: str, bot_id: str
+    ) -> WebChatGroupBot | None:
+        """Get a bot member in a ChatUI pseudo group."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(WebChatGroupBot).where(
+                    WebChatGroupBot.session_id == session_id,
+                    WebChatGroupBot.bot_id == bot_id,
+                )
+            )
+            return result.scalar_one_or_none()
+
+    async def update_webchat_group_bot(
+        self,
+        session_id: str,
+        bot_id: str,
+        name: str | None = None,
+        avatar: str | None = None,
+        avatar_attachment_id: str | None = None,
+        conf_id: str | None = None,
+        platform_id: str | None = None,
+    ) -> WebChatGroupBot | None:
+        """Update a bot member in a ChatUI pseudo group."""
+        values: dict[str, T.Any] = {"updated_at": datetime.now(timezone.utc)}
+        if name is not None:
+            values["name"] = name
+        if avatar is not None:
+            values["avatar"] = avatar
+        if avatar_attachment_id is not None:
+            values["avatar_attachment_id"] = avatar_attachment_id
+        if conf_id is not None:
+            values["conf_id"] = conf_id
+        if platform_id is not None:
+            values["platform_id"] = platform_id
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    update(WebChatGroupBot)
+                    .where(
+                        WebChatGroupBot.session_id == session_id,
+                        WebChatGroupBot.bot_id == bot_id,
+                    )
+                    .values(**values)
+                )
+            return await self.get_webchat_group_bot(session_id, bot_id)
+
+    async def delete_webchat_group_bot(self, session_id: str, bot_id: str) -> bool:
+        """Delete a bot member in a ChatUI pseudo group."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    delete(WebChatGroupBot).where(
+                        WebChatGroupBot.session_id == session_id,
+                        WebChatGroupBot.bot_id == bot_id,
+                    )
+                )
+                return bool(result.rowcount)
 
     async def insert_attachment(self, path, type, mime_type):
         """Insert a new attachment record."""

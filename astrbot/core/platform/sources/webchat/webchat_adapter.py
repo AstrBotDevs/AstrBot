@@ -11,6 +11,7 @@ from astrbot.core.db.po import PlatformMessageHistory
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -31,30 +32,38 @@ from .webchat_queue_mgr import WebChatQueueMgr, webchat_queue_mgr
 def _extract_conversation_id(session_id: str) -> str:
     """Extract raw webchat conversation id from event/session id."""
     if session_id.startswith("webchat!"):
-        parts = session_id.split("!", 2)
-        if len(parts) == 3:
+        parts = session_id.split("!")
+        if len(parts) >= 3:
             return parts[2]
     return session_id
+
+
+def _bot_id_from_platform_id(platform_id: str) -> str:
+    if platform_id.startswith("webchat-"):
+        return platform_id.removeprefix("webchat-")
+    return ""
 
 
 class QueueListener:
     def __init__(
         self,
         webchat_queue_mgr: WebChatQueueMgr,
+        platform_id: str,
         callback: Callable,
         stop_event: asyncio.Event,
     ) -> None:
         self.webchat_queue_mgr = webchat_queue_mgr
+        self.platform_id = platform_id
         self.callback = callback
         self.stop_event = stop_event
 
     async def run(self) -> None:
         """Register callback and keep adapter task alive."""
-        self.webchat_queue_mgr.set_listener(self.callback)
+        self.webchat_queue_mgr.set_listener(self.platform_id, self.callback)
         try:
             await self.stop_event.wait()
         finally:
-            await self.webchat_queue_mgr.clear_listener()
+            await self.webchat_queue_mgr.clear_listener(self.platform_id)
 
 
 @register_platform_adapter("webchat", "webchat")
@@ -73,10 +82,11 @@ class WebChatAdapter(Platform):
         os.makedirs(self.imgs_dir, exist_ok=True)
         self.attachments_dir.mkdir(parents=True, exist_ok=True)
 
+        platform_id = platform_config.get("id") or "webchat"
         self.metadata = PlatformMetadata(
             name="webchat",
             description="webchat",
-            id="webchat",
+            id=platform_id,
             support_proactive_message=True,
         )
         self._shutdown_event = asyncio.Event()
@@ -91,10 +101,23 @@ class WebChatAdapter(Platform):
         active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
             conversation_id
         )
+        sender_id = (
+            _bot_id_from_platform_id(self.metadata.id)
+            if session.message_type == MessageType.GROUP_MESSAGE
+            else None
+        )
+        if sender_id:
+            sender_request_ids = self._webchat_queue_mgr.list_back_request_ids(
+                conversation_id,
+                sender_id=sender_id,
+            )
+            if sender_request_ids:
+                active_request_ids = sender_request_ids
         stream_request_ids = [
             req_id for req_id in active_request_ids if not req_id.startswith("ws_sub_")
         ]
         target_request_ids = stream_request_ids or active_request_ids
+        is_group_message = session.message_type == MessageType.GROUP_MESSAGE
 
         if not target_request_ids:
             # No active streams to consume this proactive message.
@@ -114,8 +137,10 @@ class WebChatAdapter(Platform):
                 request_id,
                 message_chain,
                 session.session_id,
-                streaming=True,
+                streaming=not is_group_message,
                 emit_complete=True,
+                sender_id=sender_id,
+                compact_chain=is_group_message,
             )
 
         # If only passive subscription queues exist for this conversation,
@@ -146,7 +171,7 @@ class WebChatAdapter(Platform):
             return
 
         await db_helper.insert_platform_message_history(
-            platform_id="webchat",
+            platform_id=self.metadata.id,
             user_id=conversation_id,
             content={"type": "bot", "message": message_parts},
             sender_id="bot",
@@ -202,14 +227,29 @@ class WebChatAdapter(Platform):
 
     async def convert_message(self, data: tuple) -> AstrBotMessage:
         username, cid, payload = data
+        sender_id = str(payload.get("sender_id") or username)
+        sender_name = str(payload.get("sender_name") or sender_id)
+        is_group = bool(payload.get("is_group"))
+        target_bot_id = str(payload.get("target_bot_id") or "").strip()
+        session_creator = str(payload.get("session_creator") or username)
 
         abm = AstrBotMessage()
-        abm.self_id = "webchat"
-        abm.sender = MessageMember(username, username)
+        abm.self_id = (
+            target_bot_id
+            or (_bot_id_from_platform_id(self.metadata.id) if is_group else "")
+            or "webchat"
+        )
+        abm.sender = MessageMember(sender_id, sender_name)
 
-        abm.type = MessageType.FRIEND_MESSAGE
+        abm.type = MessageType.GROUP_MESSAGE if is_group else MessageType.FRIEND_MESSAGE
 
-        abm.session_id = f"webchat!{username}!{cid}"
+        if is_group:
+            abm.group = Group(
+                group_id=cid, group_name=str(payload.get("group_name") or cid)
+            )
+            abm.session_id = f"webchat!{session_creator}!{cid}"
+        else:
+            abm.session_id = f"webchat!{username}!{cid}"
 
         abm.message_id = payload.get("message_id")
 
@@ -229,7 +269,12 @@ class WebChatAdapter(Platform):
             abm = await self.convert_message(data)
             await self.handle_msg(abm)
 
-        bot = QueueListener(self._webchat_queue_mgr, callback, self._shutdown_event)
+        bot = QueueListener(
+            self._webchat_queue_mgr,
+            self.metadata.id,
+            callback,
+            self._shutdown_event,
+        )
         return bot.run()
 
     def meta(self) -> PlatformMetadata:
@@ -246,6 +291,8 @@ class WebChatAdapter(Platform):
         _, _, payload = message.raw_message  # type: ignore
         message_event.set_extra("selected_provider", payload.get("selected_provider"))
         message_event.set_extra("selected_model", payload.get("selected_model"))
+        message_event.set_extra("target_bot_id", payload.get("target_bot_id"))
+        message_event.set_extra("target_bot_name", payload.get("target_bot_name"))
         message_event.set_extra(
             "enable_streaming", payload.get("enable_streaming", True)
         )
@@ -254,6 +301,9 @@ class WebChatAdapter(Platform):
         message_event.set_extra(
             "thread_selected_text", payload.get("thread_selected_text")
         )
+
+        if message.type == MessageType.GROUP_MESSAGE:
+            await asyncio.sleep(0.5)
 
         self.commit_event(message_event)
 

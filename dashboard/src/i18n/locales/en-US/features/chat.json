@@ -141,6 +141,33 @@
     "noSessions": "No conversations in this project",
     "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
   },
+  "group": {
+    "title": "Groups",
+    "create": "Create Group",
+    "defaultName": "Group Chat",
+    "name": "Group Name",
+    "description": "Group Description",
+    "panelTitle": "Group Info",
+    "bots": "Bots",
+    "members": "Members",
+    "botBadge": "Bot",
+    "addBot": "Add Bot",
+    "addBotHint": "Add a bot, then mention it with @name.",
+    "availableBots": "Existing Bots",
+    "addExisting": "Add Existing",
+    "createNewBot": "New Bot",
+    "noExistingBots": "No existing bots",
+    "deleteBot": "Delete Bot",
+    "added": "Added",
+    "typing": "{name} is typing",
+    "botName": "Name",
+    "platform": "Platform adapter",
+    "createPlatform": "Create a new adapter",
+    "config": "Config",
+    "avatar": "Avatar URL",
+    "uploadAvatar": "Upload Avatar",
+    "mentionRequired": "Mention a bot in this group chat first."
+  },
   "time": {
     "today": "Today",
     "yesterday": "Yesterday"

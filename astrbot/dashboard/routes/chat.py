@@ -17,6 +17,10 @@ from astrbot.core.computer.computer_client import get_local_booter
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.sources.webchat.group_bots import (
+    serialize_group,
+    serialize_group_bot,
+)
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
     create_attachment_part_from_existing_file,
@@ -109,6 +113,11 @@ class ChatRoute(Route):
                 "POST",
                 self.update_session_display_name,
             ),
+            "/chat/group/bots": ("GET", self.get_group_bots),
+            "/chat/group/bot/platforms": ("GET", self.get_group_bot_platforms),
+            "/chat/group/bot/create": ("POST", self.create_group_bot),
+            "/chat/group/bot/update": ("POST", self.update_group_bot),
+            "/chat/group/bot/delete": ("POST", self.delete_group_bot),
             "/chat/message/edit": ("POST", self.update_message),
             "/chat/message/regenerate": ("POST", self.regenerate_message),
             "/chat/thread/create": ("POST", self.create_thread),
@@ -193,7 +202,8 @@ class ChatRoute(Route):
             return Response().error("Missing key: file").__dict__
 
         file = post_data["file"]
-        filename = file.filename or f"{uuid.uuid4()!s}"
+        original_filename = file.filename or "upload"
+        filename = f"{uuid.uuid4().hex}_{os.path.basename(original_filename)}"
         content_type = file.content_type or "application/octet-stream"
 
         # 根据 content_type 判断文件类型并添加扩展名
@@ -1087,6 +1097,14 @@ class ChatRoute(Route):
         if attachment_ids:
             await self._delete_attachments(attachment_ids)
 
+        if session.is_group:
+            group_resource_attachment_ids = []
+            group = await self.db.get_webchat_group_by_session(session_id)
+            if group and group.avatar_attachment_id:
+                group_resource_attachment_ids.append(group.avatar_attachment_id)
+            if group_resource_attachment_ids:
+                await self._delete_attachments(group_resource_attachment_ids)
+
         # 删除消息历史
         await self.platform_history_mgr.delete(
             platform_id=session.platform_id,
@@ -1109,6 +1127,8 @@ class ChatRoute(Route):
         # 清理队列（仅对 webchat）
         if session.platform_id == "webchat":
             webchat_queue_mgr.remove_queues(session_id)
+            if session.is_group:
+                await self.db.delete_webchat_group_by_session(session_id)
 
         # 删除会话
         await self.db.delete_platform_session(session_id)
@@ -1218,13 +1238,30 @@ class ChatRoute(Route):
 
         # 获取可选的 platform_id 参数，默认为 webchat
         platform_id = request.args.get("platform_id", "webchat")
+        is_group = (
+            1 if request.args.get("is_group", "0").lower() in {"1", "true"} else 0
+        )
+        display_name = request.args.get("display_name")
+        group_avatar = request.args.get("avatar", "")
+        group_avatar_attachment_id = request.args.get("avatar_attachment_id") or None
+        group_description = request.args.get("description", "")
 
         # 创建新会话
         session = await self.db.create_platform_session(
             creator=username,
             platform_id=platform_id,
-            is_group=0,
+            display_name=display_name,
+            is_group=is_group,
         )
+        if is_group:
+            await self.db.create_webchat_group(
+                session_id=session.session_id,
+                creator=username,
+                name=(display_name or "Group Chat"),
+                avatar=group_avatar,
+                avatar_attachment_id=group_avatar_attachment_id,
+                description=group_description,
+            )
 
         return (
             Response()
@@ -1232,10 +1269,204 @@ class ChatRoute(Route):
                 data={
                     "session_id": session.session_id,
                     "platform_id": session.platform_id,
+                    "is_group": session.is_group,
                 }
             )
             .__dict__
         )
+
+    async def _get_owned_group_session(self, session_id: str, username: str):
+        session = await self._get_owned_webchat_session(session_id, username)
+        if not session.is_group:
+            raise ValueError("Session is not a group chat")
+        return session
+
+    async def get_group_bots(self):
+        session_id = request.args.get("session_id")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+
+        username = g.get("username", "guest")
+        try:
+            await self._get_owned_group_session(session_id, username)
+        except PermissionError as exc:
+            return Response().error(str(exc)).__dict__
+        except ValueError as exc:
+            return Response().error(str(exc)).__dict__
+
+        bots = await self.db.get_webchat_group_bots(session_id)
+        return (
+            Response()
+            .ok(data={"bots": [serialize_group_bot(bot) for bot in bots]})
+            .__dict__
+        )
+
+    async def get_group_bot_platforms(self):
+        bot_by_platform_id = {
+            bot.platform_id or f"webchat-{bot.bot_id}": bot
+            for bot in await self.db.get_all_webchat_group_bots()
+        }
+        platforms = []
+        for platform_config in self.core_lifecycle.astrbot_config.get("platform", []):
+            if not isinstance(platform_config, dict):
+                continue
+            if platform_config.get("type") != "webchat":
+                continue
+            platform_id = str(platform_config.get("id") or "")
+            if not platform_id or platform_id == "webchat":
+                continue
+            bot = bot_by_platform_id.get(platform_id)
+            if bot:
+                platforms.append(serialize_group_bot(bot))
+                continue
+            platforms.append(
+                {
+                    "id": platform_id,
+                    "name": platform_config.get("name") or platform_id,
+                    "avatar": "",
+                    "avatar_attachment_id": "",
+                    "bot_id": platform_id.removeprefix("webchat-")[:8]
+                    if platform_id.startswith("webchat-")
+                    else "",
+                    "conf_id": "default",
+                    "platform_id": platform_id,
+                    "enable": bool(platform_config.get("enable", True)),
+                }
+            )
+        return Response().ok(data={"platforms": platforms}).__dict__
+
+    async def create_group_bot(self):
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+        session_id = post_data.get("session_id")
+        name = str(post_data.get("name") or "").strip()
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if not name:
+            return Response().error("Missing key: name").__dict__
+
+        username = g.get("username", "guest")
+        try:
+            await self._get_owned_group_session(session_id, username)
+        except PermissionError as exc:
+            return Response().error(str(exc)).__dict__
+        except ValueError as exc:
+            return Response().error(str(exc)).__dict__
+
+        bot_id = uuid.uuid4().hex[:8]
+        platform_id = str(post_data.get("platform_id") or "").strip()
+        if platform_id:
+            if platform_id == "webchat":
+                return (
+                    Response()
+                    .error("Default webchat cannot be used as a group bot")
+                    .__dict__
+                )
+            platform_config = self.core_lifecycle.platform_manager.get_platform_config(
+                platform_id
+            )
+            if not platform_config or platform_config.get("type") != "webchat":
+                return Response().error("WebChat platform not found").__dict__
+            if platform_id.startswith("webchat-") and len(platform_id) > 8:
+                bot_id = platform_id.removeprefix("webchat-")[:8]
+        else:
+            platform_id = f"webchat-{bot_id}"
+
+        await self._ensure_group_bot_platform(platform_id)
+
+        bot = await self.db.create_webchat_group_bot(
+            session_id=session_id,
+            bot_id=bot_id,
+            name=name,
+            avatar=str(post_data.get("avatar") or ""),
+            avatar_attachment_id=post_data.get("avatar_attachment_id"),
+            conf_id=str(post_data.get("conf_id") or "default"),
+            platform_id=platform_id,
+        )
+        await self.umop_config_router.update_route(
+            self._build_platform_wide_umop(platform_id),
+            bot.conf_id,
+        )
+        return Response().ok(data={"bot": serialize_group_bot(bot)}).__dict__
+
+    async def update_group_bot(self):
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+        session_id = post_data.get("session_id")
+        bot_id = str(post_data.get("bot_id") or "").strip()
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if not bot_id:
+            return Response().error("Missing key: bot_id").__dict__
+
+        username = g.get("username", "guest")
+        try:
+            await self._get_owned_group_session(session_id, username)
+        except PermissionError as exc:
+            return Response().error(str(exc)).__dict__
+        except ValueError as exc:
+            return Response().error(str(exc)).__dict__
+
+        bot = await self.db.update_webchat_group_bot(
+            session_id=session_id,
+            bot_id=bot_id,
+            name=post_data.get("name"),
+            avatar=post_data.get("avatar"),
+            avatar_attachment_id=post_data.get("avatar_attachment_id"),
+            conf_id=post_data.get("conf_id"),
+            platform_id=post_data.get("platform_id"),
+        )
+        if not bot:
+            return Response().error("Bot not found").__dict__
+        if bot.platform_id:
+            await self._ensure_group_bot_platform(bot.platform_id)
+            await self.umop_config_router.update_route(
+                self._build_platform_wide_umop(bot.platform_id),
+                bot.conf_id,
+            )
+        return Response().ok(data={"bot": serialize_group_bot(bot)}).__dict__
+
+    async def delete_group_bot(self):
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+        session_id = post_data.get("session_id")
+        bot_id = str(post_data.get("bot_id") or "").strip()
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if not bot_id:
+            return Response().error("Missing key: bot_id").__dict__
+
+        username = g.get("username", "guest")
+        try:
+            await self._get_owned_group_session(session_id, username)
+        except PermissionError as exc:
+            return Response().error(str(exc)).__dict__
+        except ValueError as exc:
+            return Response().error(str(exc)).__dict__
+
+        bot = await self.db.get_webchat_group_bot(session_id, bot_id)
+        deleted = await self.db.delete_webchat_group_bot(session_id, bot_id)
+        if not deleted:
+            return Response().error("Bot not found").__dict__
+        if bot and bot.avatar_attachment_id:
+            await self._delete_attachments([bot.avatar_attachment_id])
+        return Response().ok(data={"bot_id": bot_id}).__dict__
+
+    async def _ensure_group_bot_platform(self, platform_id: str) -> None:
+        await self.core_lifecycle.platform_manager.ensure_platform(
+            {
+                "id": platform_id,
+                "type": "webchat",
+                "enable": True,
+            }
+        )
+
+    @staticmethod
+    def _build_platform_wide_umop(platform_id: str) -> str:
+        return f"{platform_id}::"
 
     async def get_sessions(self):
         """Get all Platform sessions for the current user."""
@@ -1305,7 +1536,18 @@ class ChatRoute(Route):
             "history": history_res,
             "threads": [self._serialize_thread(thread) for thread in threads],
             "is_running": self.running_convs.get(session_id, False),
+            "session": {
+                "session_id": session.session_id if session else session_id,
+                "platform_id": platform_id,
+                "is_group": session.is_group if session else 0,
+                "display_name": session.display_name if session else None,
+            },
         }
+        if session and session.is_group:
+            group = await self.db.get_webchat_group_by_session(session_id)
+            bots = await self.db.get_webchat_group_bots(session_id)
+            response_data["group"] = serialize_group(group)
+            response_data["group_bots"] = [serialize_group_bot(bot) for bot in bots]
 
         # 如果会话属于项目，添加项目信息
         if project_info:
@@ -1507,6 +1749,8 @@ class ChatRoute(Route):
             return Response().error(f"Session {session_id} not found").__dict__
         if session.creator != username:
             return Response().error("Permission denied").__dict__
+        if session.is_group:
+            return Response().error("Group chat messages cannot be edited").__dict__
 
         record = await self.db.get_platform_message_history_by_id(message_id)
         if not record:
@@ -1615,6 +1859,10 @@ class ChatRoute(Route):
             return Response().error(f"Session {session_id} not found").__dict__
         if session.creator != username:
             return Response().error("Permission denied").__dict__
+        if session.is_group:
+            return (
+                Response().error("Group chat messages cannot be regenerated").__dict__
+            )
 
         target_record = await self.db.get_platform_message_history_by_id(message_id)
         if not target_record:

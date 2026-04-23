@@ -8,6 +8,7 @@ from typing import Any
 
 from astrbot.core.db.po import Attachment
 from astrbot.core.message.components import (
+    At,
     File,
     Image,
     Json,
@@ -28,14 +29,41 @@ ReplyHistoryGetter = Callable[
 MEDIA_PART_TYPES = {"image", "record", "file", "video"}
 
 
+def merge_adjacent_plain_parts(message_parts: list[dict]) -> list[dict]:
+    """Merge neighboring plain parts so streamed chunks become normal text."""
+    merged: list[dict] = []
+    for part in message_parts:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") != "plain":
+            merged.append(part)
+            continue
+        text = str(part.get("text") or "")
+        if not text:
+            continue
+        if merged and merged[-1].get("type") == "plain":
+            merged[-1]["text"] = f"{merged[-1].get('text', '')}{text}"
+        else:
+            merged.append({**part, "text": text})
+    return merged
+
+
 def strip_message_parts_path_fields(message_parts: list[dict]) -> list[dict]:
-    return [{k: v for k, v in part.items() if k != "path"} for part in message_parts]
+    return merge_adjacent_plain_parts(
+        [{k: v for k, v in part.items() if k != "path"} for part in message_parts]
+    )
 
 
 def webchat_message_parts_have_content(message_parts: list[dict]) -> bool:
     return any(
-        part.get("type") in ("plain", "image", "record", "file", "video")
-        and (part.get("text") or part.get("attachment_id") or part.get("filename"))
+        (
+            part.get("type") in ("plain", "image", "record", "file", "video")
+            and (part.get("text") or part.get("attachment_id") or part.get("filename"))
+        )
+        or (
+            part.get("type") == "at"
+            and (part.get("target") or part.get("bot_id") or part.get("name"))
+        )
         for part in message_parts
     )
 
@@ -61,7 +89,9 @@ async def parse_webchat_message_parts(
     text_parts: list[str] = []
     has_content = False
 
-    for part in message_parts:
+    for part in merge_adjacent_plain_parts(
+        [part for part in message_parts if isinstance(part, dict)]
+    ):
         if not isinstance(part, dict):
             if strict:
                 raise ValueError("message part must be an object")
@@ -74,6 +104,14 @@ async def parse_webchat_message_parts(
                 components.append(Plain(text=text))
                 text_parts.append(text)
             if text:
+                has_content = True
+            continue
+
+        if part_type == "at":
+            target = str(part.get("target") or part.get("bot_id") or "").strip()
+            name = str(part.get("name") or "").strip()
+            if target or name:
+                components.append(At(qq=target or name, name=name))
                 has_content = True
             continue
 
@@ -190,6 +228,19 @@ async def build_webchat_message_parts(
                 message_parts.append({"type": "plain", "text": text})
             continue
 
+        if part_type == "at":
+            target = str(part.get("target") or part.get("bot_id") or "").strip()
+            name = str(part.get("name") or "").strip()
+            if target or name:
+                message_parts.append(
+                    {
+                        "type": "at",
+                        "target": target,
+                        "name": name,
+                    }
+                )
+            continue
+
         if part_type == "reply":
             message_id = part.get("message_id")
             if message_id is None:
@@ -232,7 +283,7 @@ async def build_webchat_message_parts(
             }
         )
 
-    return message_parts
+    return merge_adjacent_plain_parts(message_parts)
 
 
 def webchat_message_parts_to_message_chain(
@@ -243,7 +294,7 @@ def webchat_message_parts_to_message_chain(
     components = []
     has_content = False
 
-    for part in message_parts:
+    for part in merge_adjacent_plain_parts(message_parts):
         if not isinstance(part, dict):
             if strict:
                 raise ValueError("message part must be an object")
@@ -255,6 +306,13 @@ def webchat_message_parts_to_message_chain(
             if text:
                 components.append(Plain(text=text))
                 has_content = True
+            continue
+
+        if part_type == "at":
+            target = str(part.get("target") or part.get("bot_id") or "").strip()
+            name = str(part.get("name") or "").strip()
+            if target or name:
+                components.append(At(qq=target or name, name=name))
             continue
 
         if part_type == "reply":
@@ -381,6 +439,13 @@ async def message_chain_to_storage_message_parts(
             )
             continue
 
+        if isinstance(comp, At):
+            target = str(comp.qq or "").strip()
+            name = str(comp.name or "").strip()
+            if target or name:
+                parts.append({"type": "at", "target": target, "name": name})
+            continue
+
         if isinstance(comp, Image):
             file_path = await comp.convert_to_file_path()
             attachment_part = await _copy_file_to_attachment_part(
@@ -430,7 +495,7 @@ async def message_chain_to_storage_message_parts(
                 parts.append(attachment_part)
             continue
 
-    return parts
+    return merge_adjacent_plain_parts(parts)
 
 
 async def _copy_file_to_attachment_part(

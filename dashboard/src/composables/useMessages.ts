@@ -6,6 +6,9 @@ export type TransportMode = "sse" | "websocket";
 export interface MessagePart {
   type: string;
   text?: string;
+  target?: string;
+  bot_id?: string;
+  name?: string;
   message_id?: string | number;
   selected_text?: string;
   embedded_url?: string;
@@ -61,6 +64,29 @@ export interface ChatSessionProject {
   emoji?: string;
 }
 
+export interface GroupBot {
+  bot_id: string;
+  session_id?: string;
+  name: string;
+  avatar?: string;
+  avatar_attachment_id?: string;
+  conf_id: string;
+  platform_id?: string;
+}
+
+export interface GroupProfile {
+  session_id: string;
+  name: string;
+  avatar?: string;
+  avatar_attachment_id?: string;
+  description?: string;
+}
+
+export interface TypingState {
+  sender_id: string;
+  sender_name: string;
+}
+
 interface ActiveConnection {
   sessionId: string;
   messageId: string;
@@ -77,8 +103,12 @@ interface SendMessageStreamOptions {
   enableStreaming?: boolean;
   selectedProvider?: string;
   selectedModel?: string;
+  targetBotId?: string;
+  senderId?: string;
+  senderName?: string;
+  usePersistentWebSocket?: boolean;
   userRecord?: ChatRecord;
-  botRecord: ChatRecord;
+  botRecord?: ChatRecord;
   skipUserHistory?: boolean;
   llmCheckpointId?: string | null;
 }
@@ -95,6 +125,25 @@ interface CreateLocalExchangeOptions {
   sessionId: string;
   messageId: string;
   parts: MessagePart[];
+  includeBot?: boolean;
+}
+
+interface ActiveBotRecordState {
+  current?: ChatRecord;
+  startNewAfterSave: boolean;
+}
+
+interface PendingChatRequest {
+  botState: ActiveBotRecordState;
+  userRecord?: ChatRecord;
+}
+
+interface PersistentChatConnection {
+  sessionId: string;
+  ws: WebSocket;
+  openPromise: Promise<void>;
+  pending: Record<string, PendingChatRequest>;
+  subscriptionBotStates: Record<string, ActiveBotRecordState>;
 }
 
 interface UseMessagesOptions {
@@ -111,6 +160,12 @@ export function useMessages(options: UseMessagesOptions) {
   const activeConnections = reactive<Record<string, ActiveConnection>>({});
   const attachmentBlobCache = new Map<string, Promise<string>>();
   const sessionProjects = reactive<Record<string, ChatSessionProject | null>>(
+    {},
+  );
+  const groupBotsBySession = reactive<Record<string, GroupBot[]>>({});
+  const groupProfilesBySession = reactive<Record<string, GroupProfile | null>>({});
+  const typingBySession = reactive<Record<string, TypingState[]>>({});
+  const persistentChatConnections = reactive<Record<string, PersistentChatConnection>>(
     {},
   );
 
@@ -130,6 +185,24 @@ export function useMessages(options: UseMessagesOptions) {
 
   function isSessionRunning(sessionId: string) {
     return Boolean(activeConnections[sessionId]);
+  }
+
+  function setTypingState(sessionId: string, data: unknown) {
+    const payload = data && typeof data === "object" ? data as Record<string, unknown> : {};
+    const senderId = String(payload.sender_id || "");
+    const senderName = String(payload.sender_name || senderId);
+    if (!senderId) return;
+    const current = typingBySession[sessionId] || [];
+    if (payload.typing) {
+      typingBySession[sessionId] = [
+        ...current.filter((item) => item.sender_id !== senderId),
+        { sender_id: senderId, sender_name: senderName },
+      ];
+      return;
+    }
+    typingBySession[sessionId] = current.filter(
+      (item) => item.sender_id !== senderId,
+    );
   }
 
   function isUserMessage(msg: ChatRecord) {
@@ -212,6 +285,8 @@ export function useMessages(options: UseMessagesOptions) {
       await resolveRecordMedia(records);
       messagesBySession[sessionId] = records;
       sessionProjects[sessionId] = normalizeSessionProject(payload.project);
+      groupBotsBySession[sessionId] = normalizeGroupBots(payload.group_bots);
+      groupProfilesBySession[sessionId] = normalizeGroupProfile(payload.group);
       loadedSessions[sessionId] = true;
     } catch (error) {
       console.error("Failed to load session messages:", error);
@@ -225,6 +300,7 @@ export function useMessages(options: UseMessagesOptions) {
     sessionId,
     messageId,
     parts,
+    includeBot = true,
   }: CreateLocalExchangeOptions) {
     loadedSessions[sessionId] = true;
     messagesBySession[sessionId] = messagesBySession[sessionId] || [];
@@ -238,23 +314,32 @@ export function useMessages(options: UseMessagesOptions) {
       },
     };
 
-    const botRecord: ChatRecord = {
-      id: `local-bot-${messageId}`,
-      created_at: new Date().toISOString(),
-      content: {
-        type: "bot",
-        message: [{ type: "plain", text: "" }],
-        reasoning: "",
-        isLoading: true,
-      },
-    };
+    let botRecord: ChatRecord | undefined;
+    if (includeBot) {
+      botRecord = {
+        id: `local-bot-${messageId}`,
+        created_at: new Date().toISOString(),
+        content: {
+          type: "bot",
+          message: [{ type: "plain", text: "" }],
+          reasoning: "",
+          isLoading: true,
+        },
+      };
+    }
 
-    messagesBySession[sessionId].push(userRecord, botRecord);
+    messagesBySession[sessionId].push(
+      ...([userRecord, botRecord].filter(Boolean) as ChatRecord[]),
+    );
 
     const sessionMessages = messagesBySession[sessionId];
     return {
-      userRecord: sessionMessages[sessionMessages.length - 2],
-      botRecord: sessionMessages[sessionMessages.length - 1],
+      userRecord: includeBot
+        ? sessionMessages[sessionMessages.length - 2]
+        : sessionMessages[sessionMessages.length - 1],
+      botRecord: includeBot
+        ? sessionMessages[sessionMessages.length - 1]
+        : undefined,
     };
   }
 
@@ -266,12 +351,34 @@ export function useMessages(options: UseMessagesOptions) {
     enableStreaming = true,
     selectedProvider = "",
     selectedModel = "",
+    targetBotId = "",
+    senderId = "",
+    senderName = "",
+    usePersistentWebSocket = false,
     botRecord,
     userRecord,
     skipUserHistory = false,
     llmCheckpointId = null,
   }: SendMessageStreamOptions) {
     if (transport === "websocket") {
+      if (usePersistentWebSocket) {
+        const connection = ensurePersistentChatConnection(sessionId);
+        sendPersistentChatMessage(
+          connection,
+          sessionId,
+          messageId,
+          parts,
+          botRecord,
+          userRecord,
+          enableStreaming,
+          selectedProvider,
+          selectedModel,
+          targetBotId,
+          senderId,
+          senderName,
+        );
+        return;
+      }
       startWebSocketStream(
         sessionId,
         messageId,
@@ -281,6 +388,9 @@ export function useMessages(options: UseMessagesOptions) {
         enableStreaming,
         selectedProvider,
         selectedModel,
+        targetBotId,
+        senderId,
+        senderName,
       );
       return;
     }
@@ -293,6 +403,9 @@ export function useMessages(options: UseMessagesOptions) {
       enableStreaming,
       selectedProvider,
       selectedModel,
+      targetBotId,
+      senderId,
+      senderName,
       skipUserHistory,
       llmCheckpointId,
     );
@@ -368,6 +481,9 @@ export function useMessages(options: UseMessagesOptions) {
       enableStreaming,
       selectedProvider,
       selectedModel,
+      "",
+      "",
+      "",
       true,
       sourceRecord.llm_checkpoint_id || null,
     );
@@ -422,8 +538,9 @@ export function useMessages(options: UseMessagesOptions) {
         const payload = await response.json().catch(() => null);
         throw new Error(payload?.message || "Regenerate failed.");
       }
+      const botState = createBotRecordState(botRecord);
       await readSseStream(response.body, (payload) => {
-        processStreamPayload(botRecord, payload);
+        processStreamPayload(botState, payload, undefined, sessionId);
         options.onStreamUpdate?.(sessionId);
       });
     } catch (error) {
@@ -447,6 +564,76 @@ export function useMessages(options: UseMessagesOptions) {
       connection.abort?.abort();
       connection.ws?.close();
     });
+    Object.values(persistentChatConnections).forEach((connection) => {
+      connection.ws.close();
+    });
+  }
+
+  function closePersistentChatConnections(exceptSessionId = "") {
+    Object.entries(persistentChatConnections).forEach(([sessionId, connection]) => {
+      if (sessionId === exceptSessionId) return;
+      connection.ws.close();
+      delete persistentChatConnections[sessionId];
+    });
+  }
+
+  function ensurePersistentChatConnection(sessionId: string) {
+    const existing = persistentChatConnections[sessionId];
+    if (
+      existing &&
+      (existing.ws.readyState === WebSocket.CONNECTING ||
+        existing.ws.readyState === WebSocket.OPEN)
+    ) {
+      return existing;
+    }
+
+    const token = encodeURIComponent(localStorage.getItem("token") || "");
+    const ws = createUnifiedChatWebSocket(token);
+    let didOpen = false;
+    let resolveOpen: () => void = () => {};
+    let rejectOpen: (error: Event) => void = () => {};
+    const openPromise = new Promise<void>((resolve, reject) => {
+      resolveOpen = resolve;
+      rejectOpen = reject;
+    });
+    const connection: PersistentChatConnection = {
+      sessionId,
+      ws,
+      openPromise,
+      pending: {},
+      subscriptionBotStates: {},
+    };
+    persistentChatConnections[sessionId] = connection;
+
+    ws.onopen = () => {
+      didOpen = true;
+      ws.send(JSON.stringify({ ct: "chat", t: "bind", session_id: sessionId }));
+      resolveOpen();
+    };
+    ws.onmessage = (event) => {
+      handlePersistentChatPayload(connection, event.data);
+    };
+    ws.onerror = (event) => {
+      rejectOpen(event);
+      Object.values(connection.pending).forEach((pending) => {
+        if (pending.botState.current) {
+          appendPlain(pending.botState.current, "\n\nWebSocket connection failed.");
+        }
+      });
+    };
+    ws.onclose = async () => {
+      if (!didOpen) rejectOpen(new Event("close"));
+      if (persistentChatConnections[sessionId] === connection) {
+        delete persistentChatConnections[sessionId];
+      }
+      Object.keys(connection.pending).forEach((messageId) => {
+        delete activeConnections[sessionId];
+        delete connection.pending[messageId];
+      });
+      await options.onSessionsChanged?.();
+    };
+
+    return connection;
   }
 
   function normalizeHistoryRecord(record: any): ChatRecord {
@@ -495,11 +682,14 @@ export function useMessages(options: UseMessagesOptions) {
     sessionId: string,
     messageId: string,
     parts: MessagePart[],
-    botRecord: ChatRecord,
+    botRecord: ChatRecord | undefined,
     userRecord: ChatRecord | undefined,
     enableStreaming: boolean,
     selectedProvider: string,
     selectedModel: string,
+    targetBotId: string,
+    senderId: string,
+    senderName: string,
     skipUserHistory = false,
     llmCheckpointId: string | null = null,
   ) {
@@ -523,6 +713,9 @@ export function useMessages(options: UseMessagesOptions) {
         enable_streaming: enableStreaming,
         selected_provider: selectedProvider,
         selected_model: selectedModel,
+        target_bot_id: targetBotId || undefined,
+        sender_id: senderId || undefined,
+        sender_name: senderName || undefined,
         _skip_user_history: skipUserHistory,
         _llm_checkpoint_id: llmCheckpointId || undefined,
       }),
@@ -532,14 +725,17 @@ export function useMessages(options: UseMessagesOptions) {
         if (!response.ok || !response.body) {
           throw new Error(`SSE connection failed: ${response.status}`);
         }
+        const botState = createBotRecordState(botRecord);
         await readSseStream(response.body, (payload) => {
-          processStreamPayload(botRecord, payload, userRecord);
+          processStreamPayload(botState, payload, userRecord, sessionId);
           options.onStreamUpdate?.(sessionId);
         });
       })
       .catch((error) => {
         if (abort.signal.aborted) return;
-        appendPlain(botRecord, `\n\n${String(error?.message || error)}`);
+        if (botRecord) {
+          appendPlain(botRecord, `\n\n${String(error?.message || error)}`);
+        }
         console.error("SSE chat failed:", error);
       })
       .finally(async () => {
@@ -552,17 +748,17 @@ export function useMessages(options: UseMessagesOptions) {
     sessionId: string,
     messageId: string,
     parts: MessagePart[],
-    botRecord: ChatRecord,
+    botRecord: ChatRecord | undefined,
     userRecord: ChatRecord | undefined,
     enableStreaming: boolean,
     selectedProvider: string,
     selectedModel: string,
+    targetBotId: string,
+    senderId: string,
+    senderName: string,
   ) {
     const token = encodeURIComponent(localStorage.getItem("token") || "");
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(
-      `${protocol}//${window.location.host}/api/unified_chat/ws?token=${token}`,
-    );
+    const ws = createUnifiedChatWebSocket(token);
 
     activeConnections[sessionId] = {
       sessionId,
@@ -582,13 +778,17 @@ export function useMessages(options: UseMessagesOptions) {
           enable_streaming: enableStreaming,
           selected_provider: selectedProvider,
           selected_model: selectedModel,
+          target_bot_id: targetBotId || undefined,
+          sender_id: senderId || undefined,
+          sender_name: senderName || undefined,
         }),
       );
     };
+    const botState = createBotRecordState(botRecord);
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        processStreamPayload(botRecord, payload, userRecord);
+        processStreamPayload(botState, payload, userRecord, sessionId);
         options.onStreamUpdate?.(sessionId);
         if (payload.type === "end" || payload.t === "end") {
           ws.close();
@@ -598,7 +798,9 @@ export function useMessages(options: UseMessagesOptions) {
       }
     };
     ws.onerror = () => {
-      appendPlain(botRecord, "\n\nWebSocket connection failed.");
+      if (botRecord) {
+        appendPlain(botRecord, "\n\nWebSocket connection failed.");
+      }
     };
     ws.onclose = async () => {
       delete activeConnections[sessionId];
@@ -606,10 +808,154 @@ export function useMessages(options: UseMessagesOptions) {
     };
   }
 
+  function sendPersistentChatMessage(
+    connection: PersistentChatConnection,
+    sessionId: string,
+    messageId: string,
+    parts: MessagePart[],
+    botRecord: ChatRecord | undefined,
+    userRecord: ChatRecord | undefined,
+    enableStreaming: boolean,
+    selectedProvider: string,
+    selectedModel: string,
+    targetBotId: string,
+    senderId: string,
+    senderName: string,
+  ) {
+    connection.pending[messageId] = {
+      botState: createBotRecordState(botRecord),
+      userRecord,
+    };
+    activeConnections[sessionId] = {
+      sessionId,
+      messageId,
+      transport: "websocket",
+    };
+
+    connection.openPromise
+      .then(() => {
+        if (connection.ws.readyState !== WebSocket.OPEN) {
+          throw new Error("WebSocket connection is not open.");
+        }
+        connection.ws.send(
+          JSON.stringify({
+            ct: "chat",
+            t: "send",
+            session_id: sessionId,
+            message_id: messageId,
+            message: parts.map(partToPayload),
+            enable_streaming: enableStreaming,
+            selected_provider: selectedProvider,
+            selected_model: selectedModel,
+            target_bot_id: targetBotId || undefined,
+            sender_id: senderId || undefined,
+            sender_name: senderName || undefined,
+          }),
+        );
+      })
+      .catch((error) => {
+        delete activeConnections[sessionId];
+        delete connection.pending[messageId];
+        if (botRecord) {
+          appendPlain(botRecord, `\n\n${String(error?.message || error)}`);
+        }
+        console.error("Persistent WebSocket chat failed:", error);
+      });
+  }
+
+  function handlePersistentChatPayload(
+    connection: PersistentChatConnection,
+    rawPayload: string,
+  ) {
+    let payload: any;
+    try {
+      payload = JSON.parse(rawPayload);
+    } catch (error) {
+      console.error("Failed to parse WebSocket payload:", error);
+      return;
+    }
+
+    const normalized =
+      payload?.ct === "chat"
+        ? { ...payload, type: payload.type || payload.t }
+        : payload;
+    const msgType = normalized?.type || normalized?.t;
+    if (msgType === "session_bound") return;
+
+    const messageId = String(normalized?.message_id || "");
+    const pending = messageId ? connection.pending[messageId] : undefined;
+    if (pending) {
+      if (
+        isGroupChatSession(connection.sessionId) &&
+        msgType !== "user_message_saved"
+      ) {
+        processSubscriptionPayload(connection, normalized, msgType);
+        options.onStreamUpdate?.(connection.sessionId);
+        return;
+      }
+      processStreamPayload(
+        pending.botState,
+        normalized,
+        pending.userRecord,
+        connection.sessionId,
+      );
+      if (msgType === "end") {
+        delete activeConnections[connection.sessionId];
+        delete connection.pending[messageId];
+        void options.onSessionsChanged?.();
+      }
+      options.onStreamUpdate?.(connection.sessionId);
+      return;
+    }
+
+    processSubscriptionPayload(connection, normalized, msgType);
+    options.onStreamUpdate?.(connection.sessionId);
+  }
+
+  function processSubscriptionPayload(
+    connection: PersistentChatConnection,
+    normalized: any,
+    msgType: string | undefined,
+  ) {
+    const subscriptionStateKey = getSubscriptionStateKey(normalized);
+    const subscriptionState =
+      connection.subscriptionBotStates[subscriptionStateKey] ||
+      createBotRecordState(undefined);
+    connection.subscriptionBotStates[subscriptionStateKey] = subscriptionState;
+    ensureSubscriptionBotRecord(subscriptionState, connection.sessionId, normalized);
+    processStreamPayload(
+      subscriptionState,
+      normalized,
+      undefined,
+      connection.sessionId,
+    );
+    if (msgType === "complete" || msgType === "end") {
+      delete connection.subscriptionBotStates[subscriptionStateKey];
+      void options.onSessionsChanged?.();
+    }
+  }
+
+  function getSubscriptionStateKey(payload: any) {
+    const messageId = String(payload?.message_id || "");
+    if (messageId) return messageId;
+    const senderId = String(payload?.sender_id || payload?.data?.sender_id || "");
+    return senderId ? `sender:${senderId}` : "__default__";
+  }
+
+  function ensureSubscriptionBotRecord(
+    state: ActiveBotRecordState,
+    sessionId: string,
+    payload: any,
+  ) {
+    if (state.current || !startsNewBotRecord(payload)) return;
+    state.current = appendFollowupBotRecord(sessionId);
+  }
+
   function processStreamPayload(
-    botRecord: ChatRecord,
+    botState: ActiveBotRecordState,
     payload: any,
     userRecord?: ChatRecord,
+    sessionId = options.currentSessionId.value,
   ) {
     const normalized =
       payload?.ct === "chat"
@@ -620,6 +966,10 @@ export function useMessages(options: UseMessagesOptions) {
     const data = normalized?.data ?? "";
 
     if (msgType === "session_id" || msgType === "session_bound") return;
+    if (msgType === "typing") {
+      setTypingState(sessionId, data);
+      return;
+    }
     if (msgType === "user_message_saved") {
       if (userRecord) {
         userRecord.id = data?.id || userRecord.id;
@@ -629,15 +979,33 @@ export function useMessages(options: UseMessagesOptions) {
       }
       return;
     }
+    const botRecord = getCurrentBotRecord(botState, sessionId, normalized);
+    if (!botRecord) return;
+    if (normalized.sender_id) {
+      botRecord.sender_id = String(normalized.sender_id);
+    }
+    if (normalized.sender_name) {
+      botRecord.sender_name = String(normalized.sender_name);
+    }
     if (msgType === "message_saved") {
+      if (data?.sender_id) {
+        setTypingState(sessionId, {
+          typing: false,
+          sender_id: data.sender_id,
+          sender_name: data.sender_name,
+        });
+      }
       markMessageStarted(botRecord);
       botRecord.id = data?.id || botRecord.id;
       botRecord.created_at = data?.created_at || botRecord.created_at;
       botRecord.llm_checkpoint_id =
         data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
+      botRecord.sender_id = data?.sender_id || botRecord.sender_id;
+      botRecord.sender_name = data?.sender_name || botRecord.sender_name;
       if (data?.refs) {
         messageContent(botRecord).refs = data.refs;
       }
+      botState.startNewAfterSave = true;
       return;
     }
     if (msgType === "agent_stats" || chainType === "agent_stats") {
@@ -652,6 +1020,9 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (msgType === "complete" || msgType === "break") {
       markMessageStarted(botRecord);
+      if (typeof normalized.reasoning === "string" && normalized.reasoning) {
+        messageContent(botRecord).reasoning = normalized.reasoning;
+      }
       const finalText = payloadText(data);
       if (finalText && !hasPlainText(botRecord)) {
         appendPlain(botRecord, finalText, false);
@@ -659,19 +1030,33 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
     if (msgType === "end") {
+      if (botRecord.sender_id) {
+        setTypingState(sessionId, {
+          typing: false,
+          sender_id: botRecord.sender_id,
+          sender_name: botRecord.sender_name,
+        });
+      }
       markMessageStarted(botRecord);
       return;
     }
 
     if (msgType === "plain") {
       markMessageStarted(botRecord);
+      if (botRecord.sender_id) {
+        setTypingState(sessionId, {
+          typing: false,
+          sender_id: botRecord.sender_id,
+          sender_name: botRecord.sender_name,
+        });
+      }
       if (chainType === "reasoning") {
         messageContent(botRecord).reasoning = `${
           messageContent(botRecord).reasoning || ""
         }${payloadText(data)}`;
         return;
       }
-      if (chainType === "tool_call") {
+      if (chainType === "tool_call" && !isGroupChatSession(sessionId)) {
         upsertToolCall(botRecord, parseJsonSafe(data));
         return;
       }
@@ -679,7 +1064,30 @@ export function useMessages(options: UseMessagesOptions) {
         finishToolCall(botRecord, parseJsonSafe(data));
         return;
       }
-      appendPlain(botRecord, payloadText(data), normalized.streaming !== false);
+      appendPlain(
+        botRecord,
+        payloadText(data),
+        isGroupChatSession(sessionId) || normalized.streaming !== false,
+      );
+      return;
+    }
+
+    if (msgType === "chain") {
+      markMessageStarted(botRecord);
+      const parts = Array.isArray(data) ? data : [];
+      for (const part of parts) {
+        if (!part || typeof part !== "object") continue;
+        if (isGroupChatSession(sessionId) && part.type === "tool_call") continue;
+        if (part.type === "plain") {
+          appendPlain(
+            botRecord,
+            String(part.text || ""),
+            isGroupChatSession(sessionId) || normalized.streaming !== false,
+          );
+        } else {
+          messageContent(botRecord).message.push({ ...part });
+        }
+      }
       return;
     }
 
@@ -700,6 +1108,68 @@ export function useMessages(options: UseMessagesOptions) {
         messageContent(botRecord).message.push(mediaPart);
       }
     }
+
+    if (msgType === "at") {
+      markMessageStarted(botRecord);
+      const mention = parseJsonSafe(data);
+      if (!mention || typeof mention !== "object") return;
+      const target = String(
+        mention.target || mention.bot_id || mention.qq || "",
+      );
+      const name = String(mention.name || "");
+      if (!target && !name) return;
+      messageContent(botRecord).message.push({ type: "at", target, name });
+    }
+  }
+
+  function createBotRecordState(
+    botRecord: ChatRecord | undefined,
+  ): ActiveBotRecordState {
+    return { current: botRecord, startNewAfterSave: false };
+  }
+
+  function getCurrentBotRecord(
+    state: ActiveBotRecordState,
+    sessionId: string,
+    payload: any,
+  ) {
+    if (state.startNewAfterSave && startsNewBotRecord(payload)) {
+      state.current = appendFollowupBotRecord(sessionId, state.current);
+      state.startNewAfterSave = false;
+    }
+    return state.current;
+  }
+
+  function startsNewBotRecord(payload: any) {
+    const msgType = payload?.type || payload?.t;
+    if (msgType === "plain") return true;
+    if (msgType === "chain") return true;
+    if (msgType === "message_saved") return true;
+    if (msgType === "at") return true;
+    if (msgType === "error") return true;
+    return ["image", "record", "file", "video"].includes(msgType);
+  }
+
+  function isGroupChatSession(sessionId: string) {
+    return Boolean(groupProfilesBySession[sessionId]);
+  }
+
+  function appendFollowupBotRecord(sessionId: string, previous?: ChatRecord) {
+    messagesBySession[sessionId] = messagesBySession[sessionId] || [];
+    const record: ChatRecord = {
+      id: `local-bot-${crypto.randomUUID?.() || Date.now()}`,
+      created_at: new Date().toISOString(),
+      sender_id: previous?.sender_id,
+      sender_name: previous?.sender_name,
+      content: {
+        type: "bot",
+        message: [{ type: "plain", text: "" }],
+        reasoning: "",
+        isLoading: true,
+      },
+    };
+    messagesBySession[sessionId].push(record);
+    return messagesBySession[sessionId][messagesBySession[sessionId].length - 1];
   }
 
   return {
@@ -708,6 +1178,9 @@ export function useMessages(options: UseMessagesOptions) {
     messagesBySession,
     loadedSessions,
     sessionProjects,
+    groupBotsBySession,
+    groupProfilesBySession,
+    typingBySession,
     activeMessages,
     isSessionRunning,
     isUserMessage,
@@ -715,6 +1188,8 @@ export function useMessages(options: UseMessagesOptions) {
     messageContent,
     messageParts,
     loadSessionMessages,
+    ensurePersistentChatConnection,
+    closePersistentChatConnections,
     createLocalExchange,
     sendMessageStream,
     editMessage,
@@ -756,6 +1231,13 @@ function stripUploadOnlyFields(part: MessagePart): MessagePart {
   return copied;
 }
 
+function createUnifiedChatWebSocket(token: string) {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return new WebSocket(
+    `${protocol}//${window.location.host}/api/unified_chat/ws?token=${token}`,
+  );
+}
+
 function normalizeSessionProject(value: unknown): ChatSessionProject | null {
   if (!value || typeof value !== "object") return null;
   const project = value as Record<string, unknown>;
@@ -775,6 +1257,13 @@ function normalizeSessionProject(value: unknown): ChatSessionProject | null {
 
 function partToPayload(part: MessagePart) {
   if (part.type === "plain") return { type: "plain", text: part.text || "" };
+  if (part.type === "at") {
+    return {
+      type: "at",
+      target: part.target || part.bot_id || "",
+      name: part.name || "",
+    };
+  }
   if (part.type === "reply") {
     return {
       type: "reply",
@@ -786,6 +1275,45 @@ function partToPayload(part: MessagePart) {
     type: part.type,
     attachment_id: part.attachment_id,
     filename: part.filename,
+  };
+}
+
+function normalizeGroupBots(value: unknown): GroupBot[] {
+  if (!Array.isArray(value)) return [];
+  const bots: GroupBot[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const bot = item as Record<string, unknown>;
+    if (typeof bot.bot_id !== "string" || typeof bot.name !== "string") {
+      continue;
+    }
+    bots.push({
+      bot_id: bot.bot_id,
+      name: bot.name,
+      avatar: typeof bot.avatar === "string" ? bot.avatar : "",
+      avatar_attachment_id:
+        typeof bot.avatar_attachment_id === "string" ? bot.avatar_attachment_id : "",
+      conf_id: typeof bot.conf_id === "string" ? bot.conf_id : "default",
+      platform_id: typeof bot.platform_id === "string" ? bot.platform_id : "",
+    });
+  }
+  return bots;
+}
+
+function normalizeGroupProfile(value: unknown): GroupProfile | null {
+  if (!value || typeof value !== "object") return null;
+  const group = value as Record<string, unknown>;
+  if (typeof group.session_id !== "string" || typeof group.name !== "string") {
+    return null;
+  }
+  return {
+    session_id: group.session_id,
+    name: group.name,
+    avatar: typeof group.avatar === "string" ? group.avatar : "",
+    avatar_attachment_id:
+      typeof group.avatar_attachment_id === "string" ? group.avatar_attachment_id : "",
+    description:
+      typeof group.description === "string" ? group.description : "",
   };
 }
 
@@ -846,10 +1374,20 @@ function finishToolCall(record: ChatRecord, result: any) {
     const tool = part.tool_calls.find((item) => item.id === targetId);
     if (tool) {
       tool.result = result.result;
-      tool.finished_ts = result.ts || Date.now() / 1000;
+      tool.finished_ts = result.finished_ts || result.ts || Date.now() / 1000;
       return;
     }
   }
+  record.content.message.push({
+    type: "tool_call",
+    tool_calls: [
+      {
+        ...result,
+        result: result.result,
+        finished_ts: result.finished_ts || result.ts || Date.now() / 1000,
+      },
+    ],
+  });
 }
 
 function markMessageStarted(record: ChatRecord) {

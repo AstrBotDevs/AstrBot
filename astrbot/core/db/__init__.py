@@ -24,6 +24,8 @@ from astrbot.core.db.po import (
     ProviderStat,
     SessionProjectRelation,
     Stats,
+    WebChatGroup,
+    WebChatGroupBot,
     WebChatThread,
 )
 
@@ -314,6 +316,81 @@ class BaseDatabase(abc.ABC):
         parent_message_ids: list[int],
     ) -> list[str]:
         """Delete side threads linked to parent message IDs."""
+        ...
+
+    @abc.abstractmethod
+    async def create_webchat_group(
+        self,
+        session_id: str,
+        creator: str,
+        name: str,
+        avatar: str | None = None,
+        avatar_attachment_id: str | None = None,
+        description: str | None = None,
+    ) -> WebChatGroup:
+        """Create metadata for a ChatUI pseudo group."""
+        ...
+
+    @abc.abstractmethod
+    async def get_webchat_group_by_session(
+        self, session_id: str
+    ) -> WebChatGroup | None:
+        """Get a ChatUI pseudo group by platform session ID."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_webchat_group_by_session(self, session_id: str) -> None:
+        """Delete ChatUI pseudo group metadata without deleting bot resources."""
+        ...
+
+    @abc.abstractmethod
+    async def create_webchat_group_bot(
+        self,
+        session_id: str,
+        name: str,
+        avatar: str | None = None,
+        avatar_attachment_id: str | None = None,
+        conf_id: str = "default",
+        bot_id: str | None = None,
+        platform_id: str | None = None,
+    ) -> WebChatGroupBot:
+        """Create a bot member in a ChatUI pseudo group."""
+        ...
+
+    @abc.abstractmethod
+    async def get_webchat_group_bots(self, session_id: str) -> list[WebChatGroupBot]:
+        """List bot members in a ChatUI pseudo group."""
+        ...
+
+    @abc.abstractmethod
+    async def get_all_webchat_group_bots(self) -> list[WebChatGroupBot]:
+        """List all ChatUI pseudo group bot resources."""
+        ...
+
+    @abc.abstractmethod
+    async def get_webchat_group_bot(
+        self, session_id: str, bot_id: str
+    ) -> WebChatGroupBot | None:
+        """Get a bot member in a ChatUI pseudo group."""
+        ...
+
+    @abc.abstractmethod
+    async def update_webchat_group_bot(
+        self,
+        session_id: str,
+        bot_id: str,
+        name: str | None = None,
+        avatar: str | None = None,
+        avatar_attachment_id: str | None = None,
+        conf_id: str | None = None,
+        platform_id: str | None = None,
+    ) -> WebChatGroupBot | None:
+        """Update a bot member in a ChatUI pseudo group."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_webchat_group_bot(self, session_id: str, bot_id: str) -> bool:
+        """Delete a bot member in a ChatUI pseudo group."""
         ...
 
     @abc.abstractmethod

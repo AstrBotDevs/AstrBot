@@ -13,9 +13,14 @@ from quart import websocket
 from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.platform.sources.webchat.group_bots import (
+    resolve_mentioned_bots,
+    serialize_group_bot,
+)
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
     create_attachment_part_from_existing_file,
+    merge_adjacent_plain_parts,
     strip_message_parts_path_fields,
     webchat_message_parts_have_content,
 )
@@ -256,6 +261,8 @@ class LiveChatRoute(Route):
         agent_stats: dict,
         refs: dict,
         llm_checkpoint_id: str | None = None,
+        sender_id: str = "bot",
+        sender_name: str = "bot",
     ):
         """保存 bot 消息到历史记录。"""
         bot_message_parts = []
@@ -275,10 +282,81 @@ class LiveChatRoute(Route):
             platform_id="webchat",
             user_id=webchat_conv_id,
             content=new_his,
-            sender_id="bot",
-            sender_name="bot",
+            sender_id=sender_id,
+            sender_name=sender_name,
             llm_checkpoint_id=llm_checkpoint_id,
         )
+
+    async def _ensure_group_bot_platform(self, bot: dict) -> None:
+        platform_id = bot.get("platform_id")
+        if not platform_id:
+            return
+
+        await self.core_lifecycle.platform_manager.ensure_platform(
+            {
+                "id": platform_id,
+                "type": "webchat",
+                "enable": True,
+            }
+        )
+        await self.core_lifecycle.umop_config_router.update_route(
+            f"{platform_id}::",
+            str(bot.get("conf_id") or "default"),
+        )
+
+    async def _broadcast_group_bot_message(
+        self,
+        *,
+        chat_queue: asyncio.Queue,
+        back_queue: asyncio.Queue,
+        session: LiveChatSession,
+        session_id: str,
+        platform_session: Any,
+        message_parts: list[dict],
+        sender_id: str,
+        sender_name: str,
+        target_bots: list[dict],
+        active_message_ids: set[str],
+    ) -> int:
+        if not target_bots or not webchat_message_parts_have_content(message_parts):
+            return 0
+
+        platform_ids = [
+            str(bot.get("platform_id") or "")
+            for bot in target_bots
+            if bot.get("platform_id")
+        ]
+        if not platform_ids:
+            return 0
+
+        broadcast_message_id = str(uuid.uuid4())
+        active_message_ids.add(broadcast_message_id)
+        webchat_queue_mgr.bind_back_queue(
+            broadcast_message_id,
+            back_queue,
+            session_id,
+        )
+        for target_bot in target_bots:
+            await self._ensure_group_bot_platform(target_bot)
+
+        await chat_queue.put(
+            (
+                session.username,
+                session_id,
+                {
+                    "message": message_parts,
+                    "message_id": broadcast_message_id,
+                    "is_group": True,
+                    "session_creator": platform_session.creator,
+                    "sender_id": sender_id,
+                    "sender_name": sender_name,
+                    "group_name": platform_session.display_name,
+                    "broadcast_adapters": True,
+                    "broadcast_platform_ids": platform_ids,
+                },
+            ),
+        )
+        return len(platform_ids)
 
     async def _send_chat_payload(self, session: LiveChatSession, payload: dict) -> None:
         async with session.ws_send_lock:
@@ -422,6 +500,8 @@ class LiveChatRoute(Route):
         persona_prompt = message.get("persona_prompt")
         show_reasoning = message.get("show_reasoning")
         enable_streaming = message.get("enable_streaming", True)
+        sender_id = str(message.get("sender_id") or session.username)
+        sender_name = str(message.get("sender_name") or sender_id)
 
         if not isinstance(payload, list):
             await self._send_chat_payload(
@@ -449,41 +529,114 @@ class LiveChatRoute(Route):
             )
             return
 
+        platform_session = await self.db.get_platform_session_by_id(session_id)
+        if not platform_session:
+            await self._send_chat_payload(
+                session,
+                {
+                    "ct": "chat",
+                    "t": "error",
+                    "data": f"Session {session_id} not found",
+                    "code": "SESSION_NOT_FOUND",
+                },
+            )
+            return
+        if platform_session.creator != session.username:
+            await self._send_chat_payload(
+                session,
+                {
+                    "ct": "chat",
+                    "t": "error",
+                    "data": "Permission denied",
+                    "code": "PERMISSION_DENIED",
+                },
+            )
+            return
+
+        target_bots: list[dict | None] = [None]
+        group_bots_by_id: dict[str, dict] = {}
+        if platform_session.is_group:
+            bots = [
+                serialize_group_bot(bot)
+                for bot in await self.db.get_webchat_group_bots(session_id)
+            ]
+            group_bots_by_id = {bot["bot_id"]: bot for bot in bots}
+            resolved_bots: dict[str, dict] = {}
+            target_bot_id = str(message.get("target_bot_id") or "").strip()
+            if target_bot_id and target_bot_id in group_bots_by_id:
+                resolved_bots[target_bot_id] = group_bots_by_id[target_bot_id]
+            for bot in resolve_mentioned_bots(message_parts, bots):
+                resolved_bots[bot["bot_id"]] = bot
+            target_bots = list(resolved_bots.values()) or bots or [None]
+
         await self._ensure_chat_subscription(session, session_id)
 
         session.is_processing = True
         session.should_interrupt = False
         back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
+        active_message_ids = {message_id}
         llm_checkpoint_id = str(uuid.uuid4())
 
         try:
             chat_queue = webchat_queue_mgr.get_or_create_queue(session_id)
-            await chat_queue.put(
-                (
-                    session.username,
-                    session_id,
-                    {
-                        "message": message_parts,
-                        "selected_provider": selected_provider,
-                        "selected_model": selected_model,
-                        "selected_stt_provider": selected_stt_provider,
-                        "selected_tts_provider": selected_tts_provider,
-                        "persona_prompt": persona_prompt,
-                        "show_reasoning": show_reasoning,
-                        "enable_streaming": enable_streaming,
-                        "message_id": message_id,
-                        "llm_checkpoint_id": llm_checkpoint_id,
-                    },
-                ),
-            )
+            for target_bot in target_bots:
+                if target_bot:
+                    await self._ensure_group_bot_platform(target_bot)
+                target_message_id = (
+                    str(uuid.uuid4()) if platform_session.is_group else message_id
+                )
+                if target_message_id != message_id:
+                    active_message_ids.add(target_message_id)
+                    webchat_queue_mgr.bind_back_queue(
+                        target_message_id,
+                        back_queue,
+                        session_id,
+                    )
+                if target_bot:
+                    webchat_queue_mgr.bind_request_sender(
+                        target_message_id,
+                        target_bot.get("bot_id"),
+                    )
+                await chat_queue.put(
+                    (
+                        session.username,
+                        session_id,
+                        {
+                            "message": message_parts,
+                            "selected_provider": selected_provider,
+                            "selected_model": selected_model,
+                            "selected_stt_provider": selected_stt_provider,
+                            "selected_tts_provider": selected_tts_provider,
+                            "persona_prompt": persona_prompt,
+                            "show_reasoning": show_reasoning,
+                            "enable_streaming": enable_streaming,
+                            "message_id": target_message_id,
+                            "llm_checkpoint_id": llm_checkpoint_id,
+                            "is_group": bool(platform_session.is_group),
+                            "session_creator": platform_session.creator,
+                            "sender_id": sender_id,
+                            "sender_name": sender_name,
+                            "group_name": platform_session.display_name,
+                            "target_bot_id": (
+                                target_bot.get("bot_id") if target_bot else None
+                            ),
+                            "target_platform_id": (
+                                target_bot.get("platform_id") if target_bot else None
+                            ),
+                            "target_bot_name": (
+                                target_bot.get("name") if target_bot else None
+                            ),
+                        },
+                    ),
+                )
 
             message_parts_for_storage = strip_message_parts_path_fields(message_parts)
             saved_user_record = await self.platform_history_mgr.insert(
                 platform_id="webchat",
                 user_id=session_id,
                 content={"type": "user", "message": message_parts_for_storage},
-                sender_id=session.username,
-                sender_name=session.username,
+                sender_id=sender_id,
+                sender_name=sender_name,
                 llm_checkpoint_id=llm_checkpoint_id,
             )
             await self._send_chat_payload(
@@ -505,6 +658,9 @@ class LiveChatRoute(Route):
             tool_calls = {}
             agent_stats = {}
             refs = {}
+            last_saved_bot_record = None
+            completed_targets = 0
+            expected_targets = max(1, len(target_bots))
 
             while True:
                 if session.should_interrupt:
@@ -518,58 +674,126 @@ class LiveChatRoute(Route):
 
                 if not result:
                     continue
-                if result.get("message_id") and result.get("message_id") != message_id:
+                result_message_id = result.get("message_id")
+                if result_message_id and result_message_id not in active_message_ids:
                     continue
 
                 result_text = result.get("data", "")
                 msg_type = result.get("type")
                 streaming = result.get("streaming", False)
                 chain_type = result.get("chain_type")
+                result_sender_id = str(result.get("sender_id") or "").strip()
+                if not result_sender_id:
+                    result_sender_id = "bot"
+                result_sender_name = group_bots_by_id.get(result_sender_id, {}).get(
+                    "name", result_sender_id
+                )
+                result_sender_is_group_bot = result_sender_id in group_bots_by_id
+                if (
+                    not platform_session.is_group
+                    and msg_type in ("complete", "break")
+                    and isinstance(result.get("reasoning"), str)
+                    and result["reasoning"]
+                ):
+                    accumulated_reasoning += result["reasoning"]
+                if platform_session.is_group and chain_type == "reasoning":
+                    continue
+                if platform_session.is_group and chain_type == "tool_call":
+                    continue
+                if msg_type == "typing":
+                    await self._send_chat_payload(session, {"ct": "chat", **result})
+                    continue
                 if chain_type == "agent_stats":
                     try:
                         parsed_agent_stats = json.loads(result_text)
-                        agent_stats = parsed_agent_stats
+                        if (
+                            last_saved_bot_record
+                            and not accumulated_parts
+                            and not accumulated_text
+                            and not accumulated_reasoning
+                        ):
+                            updated_content = dict(last_saved_bot_record.content or {})
+                            updated_content["agent_stats"] = parsed_agent_stats
+                            await self.platform_history_mgr.update(
+                                last_saved_bot_record.id,
+                                content=updated_content,
+                            )
+                            last_saved_bot_record.content = updated_content
+                        else:
+                            agent_stats = parsed_agent_stats
                         await self._send_chat_payload(
                             session,
                             {
                                 "ct": "chat",
                                 "type": "agent_stats",
                                 "data": parsed_agent_stats,
+                                "sender_id": result_sender_id,
+                                "sender_name": result_sender_name,
                             },
                         )
                     except Exception:
                         pass
                     continue
 
-                outgoing = {"ct": "chat", **result}
-                await self._send_chat_payload(session, outgoing)
+                should_forward = not (
+                    platform_session.is_group
+                    and (
+                        msg_type in ("end", "complete", "break")
+                        or (
+                            msg_type == "plain"
+                            and chain_type in ("tool_call", "tool_call_result")
+                        )
+                        or (msg_type == "chain" and chain_type == "tool_call")
+                    )
+                )
+                if should_forward:
+                    outgoing = {
+                        "ct": "chat",
+                        **result,
+                        "sender_id": result_sender_id,
+                        "sender_name": result_sender_name,
+                    }
+                    await self._send_chat_payload(session, outgoing)
 
                 if msg_type == "plain":
                     if chain_type == "tool_call":
                         try:
                             tool_call = json.loads(result_text)
-                            tool_calls[tool_call.get("id")] = tool_call
-                            if accumulated_text:
-                                accumulated_parts.append(
-                                    {"type": "plain", "text": accumulated_text}
-                                )
-                                accumulated_text = ""
+                            tool_calls[(result_sender_id, tool_call.get("id"))] = (
+                                tool_call
+                            )
                         except Exception:
                             pass
                     elif chain_type == "tool_call_result":
                         try:
                             tcr = json.loads(result_text)
                             tc_id = tcr.get("id")
-                            if tc_id in tool_calls:
-                                tool_calls[tc_id]["result"] = tcr.get("result")
-                                tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
-                                accumulated_parts.append(
+                            tool_key = (result_sender_id, tc_id)
+                            tool_call = dict(tool_calls.get(tool_key, {"id": tc_id}))
+                            tool_call["id"] = tool_call.get("id") or tc_id
+                            tool_call["result"] = tcr.get("result")
+                            tool_call["finished_ts"] = tcr.get("ts")
+                            accumulated_parts.append(
+                                {"type": "tool_call", "tool_calls": [tool_call]}
+                            )
+                            if platform_session.is_group:
+                                await self._send_chat_payload(
+                                    session,
                                     {
-                                        "type": "tool_call",
-                                        "tool_calls": [tool_calls[tc_id]],
-                                    }
+                                        "ct": "chat",
+                                        "type": "plain",
+                                        "chain_type": "tool_call_result",
+                                        "data": json.dumps(
+                                            tool_call, ensure_ascii=False
+                                        ),
+                                        "message_id": result_message_id or message_id,
+                                        "streaming": False,
+                                        "sender_id": result_sender_id,
+                                        "sender_name": result_sender_name,
+                                    },
                                 )
-                                tool_calls.pop(tc_id, None)
+                            if tool_key in tool_calls:
+                                tool_calls.pop(tool_key, None)
                         except Exception:
                             pass
                     elif chain_type == "reasoning":
@@ -598,25 +822,39 @@ class LiveChatRoute(Route):
                     part = await self._create_attachment_from_file(filename, "video")
                     if part:
                         accumulated_parts.append(part)
+                elif msg_type == "at":
+                    at_payload = result_text if isinstance(result_text, dict) else {}
+                    accumulated_parts.append(
+                        {
+                            "type": "at",
+                            "target": str(
+                                at_payload.get("target")
+                                or at_payload.get("bot_id")
+                                or ""
+                            ),
+                            "name": str(at_payload.get("name") or ""),
+                        }
+                    )
+                elif msg_type == "chain":
+                    chain_parts = result_text if isinstance(result_text, list) else []
+                    accumulated_parts.extend(
+                        part for part in chain_parts if isinstance(part, dict)
+                    )
 
                 should_save = False
+                has_bot_content = bool(
+                    accumulated_parts
+                    or accumulated_text
+                    or accumulated_reasoning
+                    or refs
+                )
                 if msg_type == "end":
-                    should_save = bool(
-                        accumulated_parts
-                        or accumulated_text
-                        or accumulated_reasoning
-                        or refs
-                        or agent_stats
-                    )
+                    should_save = has_bot_content
                 elif (streaming and msg_type == "complete") or not streaming:
-                    if chain_type not in (
-                        "tool_call",
-                        "tool_call_result",
-                        "agent_stats",
-                    ):
-                        should_save = True
+                    should_save = has_bot_content
 
                 if should_save:
+                    accumulated_parts = merge_adjacent_plain_parts(accumulated_parts)
                     try:
                         refs = self._extract_web_search_refs(
                             accumulated_text,
@@ -636,21 +874,60 @@ class LiveChatRoute(Route):
                         agent_stats,
                         refs,
                         llm_checkpoint_id,
+                        sender_id=result_sender_id,
+                        sender_name=result_sender_name,
                     )
                     if saved_record:
+                        last_saved_bot_record = saved_record
                         await self._send_chat_payload(
                             session,
                             {
                                 "ct": "chat",
                                 "type": "message_saved",
+                                "message_id": result_message_id or message_id,
                                 "data": {
                                     "id": saved_record.id,
                                     "created_at": to_utc_isoformat(
                                         saved_record.created_at
                                     ),
                                     "llm_checkpoint_id": llm_checkpoint_id,
+                                    "sender_id": saved_record.sender_id,
+                                    "sender_name": saved_record.sender_name,
                                 },
                             },
+                        )
+
+                    if platform_session.is_group and result_sender_is_group_bot:
+                        broadcast_source_parts = [
+                            part
+                            for part in accumulated_parts
+                            if isinstance(part, dict)
+                            and part.get("type")
+                            in ("plain", "at", "image", "record", "file", "video")
+                        ]
+                        if accumulated_text:
+                            broadcast_source_parts.append(
+                                {"type": "plain", "text": accumulated_text}
+                            )
+                        broadcast_parts = await self._build_chat_message_parts(
+                            broadcast_source_parts
+                        )
+                        broadcast_targets = [
+                            bot
+                            for bot_id, bot in group_bots_by_id.items()
+                            if bot_id != result_sender_id
+                        ]
+                        expected_targets += await self._broadcast_group_bot_message(
+                            chat_queue=chat_queue,
+                            back_queue=back_queue,
+                            session=session,
+                            session_id=session_id,
+                            platform_session=platform_session,
+                            message_parts=broadcast_parts,
+                            sender_id=result_sender_id,
+                            sender_name=result_sender_name,
+                            target_bots=broadcast_targets,
+                            active_message_ids=active_message_ids,
                         )
 
                     accumulated_parts = []
@@ -660,6 +937,9 @@ class LiveChatRoute(Route):
                     refs = {}
 
                 if msg_type == "end":
+                    completed_targets += 1
+                    if completed_targets < expected_targets:
+                        continue
                     break
 
         except Exception as e:
@@ -675,7 +955,8 @@ class LiveChatRoute(Route):
             )
         finally:
             session.is_processing = False
-            webchat_queue_mgr.remove_back_queue(message_id)
+            for active_message_id in list(active_message_ids):
+                webchat_queue_mgr.remove_back_queue(active_message_id)
 
     async def _build_chat_message_parts(self, message: list[dict]) -> list[dict]:
         """构建 chat websocket 用户消息段（复用 webchat 逻辑）"""

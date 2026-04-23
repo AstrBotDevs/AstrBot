@@ -227,6 +227,30 @@ class PlatformManager:
             except Exception:
                 logger.error(traceback.format_exc())
 
+    def get_platform_config(self, platform_id: str) -> dict | None:
+        for platform_config in self.platforms_config:
+            if platform_config.get("id") == platform_id:
+                return platform_config
+        return None
+
+    async def ensure_platform(self, platform_config: dict) -> None:
+        platform_id = platform_config.get("id")
+        if not platform_id:
+            raise ValueError("platform id is required")
+
+        existing_config = self.get_platform_config(platform_id)
+        if existing_config is None:
+            self.platforms_config.append(platform_config)
+            existing_config = platform_config
+            self.astrbot_config.save_config()
+        elif not existing_config.get("enable", True):
+            existing_config["enable"] = True
+            self.astrbot_config.save_config()
+
+        if platform_id in self._inst_map:
+            return
+        await self.load_platform(existing_config)
+
     async def _task_wrapper(
         self, task: asyncio.Task, platform: Platform | None = None
     ) -> None:

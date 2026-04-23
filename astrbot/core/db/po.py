@@ -277,6 +277,62 @@ class WebChatThread(TimestampMixin, SQLModel, table=True):
     )
 
 
+class WebChatGroup(TimestampMixin, SQLModel, table=True):
+    """Metadata for a pseudo group chat in ChatUI."""
+
+    __tablename__: str = "webchat_groups"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    session_id: str = Field(nullable=False, unique=True, index=True)
+    creator: str = Field(nullable=False, index=True)
+    name: str = Field(default="Group Chat", max_length=255, nullable=False)
+    avatar: str | None = Field(default=None, max_length=1024)
+    avatar_attachment_id: str | None = Field(default=None, max_length=36)
+    description: str | None = Field(default=None, sa_type=Text)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            name="uix_webchat_group_session_id",
+        ),
+    )
+
+
+class WebChatGroupBot(TimestampMixin, SQLModel, table=True):
+    """A bot member in a pseudo WebChat group."""
+
+    __tablename__: str = "webchat_group_bots"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    bot_id: str = Field(
+        max_length=8,
+        nullable=False,
+        unique=True,
+        default_factory=lambda: uuid.uuid4().hex[:8],
+    )
+    session_id: str = Field(nullable=False, index=True)
+    name: str = Field(nullable=False, max_length=255)
+    avatar: str | None = Field(default=None, max_length=1024)
+    avatar_attachment_id: str | None = Field(default=None, max_length=36)
+    conf_id: str = Field(default="default", nullable=False, max_length=255)
+    platform_id: str | None = Field(default=None, max_length=255, index=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "bot_id",
+            name="uix_webchat_group_bot_id",
+        ),
+    )
+
+
 class PlatformSession(TimestampMixin, SQLModel, table=True):
     """Platform session table for managing user sessions across different platforms.
 

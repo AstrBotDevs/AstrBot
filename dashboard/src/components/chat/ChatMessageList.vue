@@ -2,27 +2,60 @@
   <div
     ref="listRoot"
     class="chat-message-list"
-    :class="[`variant-${variant}`, { 'is-dark': isDark }]"
+    :class="[
+      `variant-${variant}`,
+      { 'is-dark': isDark, 'is-group-chat': useDefaultBotAvatar },
+    ]"
   >
     <div class="messages-list">
       <div
         v-for="(msg, msgIndex) in messages"
         :key="msg.id || `${msgIndex}-${msg.created_at || ''}`"
+        v-show="shouldRenderMessage(msg)"
         class="message-row"
-        :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
+        :class="[
+          isUserMessage(msg) ? 'from-user' : 'from-bot',
+          { 'is-continuation': isContinuationMessage(msg, msgIndex) },
+        ]"
       >
-        <v-avatar v-if="!isUserMessage(msg)" class="bot-avatar" :size="avatarSize">
+        <v-avatar
+          v-if="!isUserMessage(msg) && !isContinuationMessage(msg, msgIndex)"
+          class="bot-avatar"
+          :size="avatarSize"
+        >
           <v-progress-circular
-            v-if="isMessageStreaming(msg, msgIndex)"
+            v-if="!useDefaultBotAvatar && isMessageStreaming(msg, msgIndex)"
             class="bot-streaming-spinner"
             indeterminate
             size="22"
             width="2"
           />
+          <img v-else-if="botAvatar(msg)" :src="botAvatar(msg)" alt="" />
+          <img v-else-if="useDefaultBotAvatar" :src="defaultBotAvatar" alt="" />
           <span v-else class="bot-avatar-symbol" aria-hidden="true">✦</span>
         </v-avatar>
+        <div
+          v-else-if="!isUserMessage(msg)"
+          class="bot-avatar-spacer"
+          :style="{ width: `${avatarSize}px` }"
+        ></div>
 
         <div class="message-stack">
+          <div
+            v-if="showSenderName(msg) && !isContinuationMessage(msg, msgIndex)"
+            class="message-sender-name"
+          >
+            <span>{{ msg.sender_name || msg.sender_id }}</span>
+            <span v-if="isGroupChat && msg.created_at" class="group-message-time">
+              {{ formatTime(msg.created_at) }}
+            </span>
+          </div>
+          <div
+            v-if="isContinuationMessage(msg, msgIndex) && msg.created_at"
+            class="group-continuation-time"
+          >
+            {{ formatTime(msg.created_at) }}
+          </div>
           <div
             v-if="isUserMessage(msg) && userAttachmentParts(msg).length"
             class="sent-attachments"
@@ -148,6 +181,10 @@
                 >
                   {{ part.text || "" }}
                 </div>
+
+                <span v-else-if="part.type === 'at'" class="mention-part">
+                  @{{ mentionName(part) }}
+                </span>
 
                 <div
                   v-else-if="part.type === 'plain' && messageThreads(msg).length"
@@ -381,6 +418,7 @@ import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import defaultBotAvatar from "@/assets/images/chatui-group-default-avatar.png";
 import type {
   ChatContent,
   ChatRecord,
@@ -403,6 +441,10 @@ const props = withDefaults(
     editingMessageId?: string | number | null;
     editDraft?: string;
     savingEdit?: boolean;
+    showSenderNames?: boolean;
+    useDefaultBotAvatar?: boolean;
+    botAvatars?: Record<string, string>;
+    hideLoadingBotMessage?: boolean;
   }>(),
   {
     isDark: false,
@@ -416,6 +458,10 @@ const props = withDefaults(
     editingMessageId: null,
     editDraft: "",
     savingEdit: false,
+    showSenderNames: false,
+    useDefaultBotAvatar: false,
+    botAvatars: () => ({}),
+    hideLoadingBotMessage: false,
   },
 );
 
@@ -448,10 +494,83 @@ const imagePreview = reactive({ visible: false, url: "" });
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
 const listRoot = ref<HTMLElement | null>(null);
-const avatarSize = computed(() => (props.variant === "thread" ? 36 : 56));
+const isGroupChat = computed(() => props.useDefaultBotAvatar);
+const avatarSize = computed(() => {
+  if (props.variant === "thread") return 36;
+  return props.useDefaultBotAvatar ? 40 : 56;
+});
 
 function isUserMessage(message: ChatRecord) {
   return messageContent(message).type === "user";
+}
+
+function shouldRenderMessage(message: ChatRecord) {
+  return !(
+    props.hideLoadingBotMessage &&
+    !isUserMessage(message) &&
+    messageContent(message).isLoading &&
+    !hasNonReasoningContent(message)
+  );
+}
+
+function isContinuationMessage(message: ChatRecord, index: number) {
+  if (!isGroupChat.value) return false;
+  if (isUserMessage(message)) return false;
+  const sender = senderKey(message);
+  if (!sender) return false;
+  const previous = previousVisibleBotMessage(index);
+  if (!previous || senderKey(previous.message) !== sender) return false;
+  const groupStart = groupStartMessage(previous.index);
+  return isWithinGroupWindow(groupStart, message);
+}
+
+function senderKey(message: ChatRecord) {
+  return message.sender_id || message.sender_name || "";
+}
+
+function previousVisibleBotMessage(index: number) {
+  for (let prevIndex = index - 1; prevIndex >= 0; prevIndex -= 1) {
+    const previous = props.messages[prevIndex];
+    if (!previous || !shouldRenderMessage(previous)) continue;
+    if (isUserMessage(previous)) return null;
+    return { message: previous, index: prevIndex };
+  }
+  return null;
+}
+
+function groupStartMessage(index: number): ChatRecord {
+  const message = props.messages[index];
+  const previous = previousVisibleBotMessage(index);
+  if (
+    previous &&
+    senderKey(previous.message) === senderKey(message) &&
+    isContinuationMessage(message, index)
+  ) {
+    return groupStartMessage(previous.index);
+  }
+  return message;
+}
+
+function isWithinGroupWindow(first: ChatRecord, message: ChatRecord) {
+  if (!first.created_at || !message.created_at) return true;
+  const firstTime = new Date(first.created_at).getTime();
+  const messageTime = new Date(message.created_at).getTime();
+  if (Number.isNaN(firstTime) || Number.isNaN(messageTime)) return true;
+  return messageTime - firstTime <= 5 * 60 * 1000;
+}
+
+function showSenderName(message: ChatRecord) {
+  if (!props.showSenderNames) return false;
+  if (isUserMessage(message)) return false;
+  const sender = message.sender_name || message.sender_id;
+  if (!sender) return false;
+  if (sender === "bot") return false;
+  return true;
+}
+
+function botAvatar(message: ChatRecord) {
+  const senderId = message.sender_id || "";
+  return senderId ? props.botAvatars[senderId] || "" : "";
 }
 
 function messageContent(message: ChatRecord): ChatContent {
@@ -480,6 +599,10 @@ function hasImageOnlyAttachments(message: ChatRecord) {
     attachments.length > 0 &&
     attachments.every((part) => part.type === "image")
   );
+}
+
+function mentionName(part: MessagePart) {
+  return part.name || part.target || part.bot_id || "";
 }
 
 function bubbleParts(message: ChatRecord) {
@@ -547,6 +670,7 @@ function canRegenerateMessage(message: ChatRecord, messageIndex: number) {
 }
 
 function showMessageMeta(message: ChatRecord, messageIndex: number) {
+  if (isGroupChat.value) return false;
   return (
     !messageContent(message).isLoading &&
     !isMessageStreaming(message, messageIndex)
@@ -890,11 +1014,22 @@ function formatDuration(seconds: number) {
   max-width: 100%;
 }
 
+.is-group-chat .message-row {
+  margin-right: -8px;
+  margin-left: -8px;
+  padding: 2px 8px;
+}
+
+.is-group-chat .message-row.is-continuation {
+  margin-top: -14px;
+}
+
 .message-row.from-user {
   justify-content: flex-end;
 }
 
 .message-stack {
+  position: relative;
   display: flex;
   flex-direction: column;
   max-width: min(760px, 82%);
@@ -903,6 +1038,44 @@ function formatDuration(seconds: number) {
 .from-user .message-stack {
   align-items: flex-end;
   max-width: 60%;
+}
+
+.message-sender-name {
+  max-width: 100%;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  font-size: 12px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.is-group-chat .message-sender-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.group-message-time,
+.group-continuation-time {
+  color: rgba(var(--v-theme-on-surface), 0.38);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.group-continuation-time {
+  position: absolute;
+  left: -52px;
+  top: 8px;
+  width: 40px;
+  text-align: right;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.message-row.is-continuation:hover .group-continuation-time {
+  opacity: 1;
 }
 
 .sent-attachments {
@@ -1000,6 +1173,16 @@ function formatDuration(seconds: number) {
   user-select: none;
 }
 
+.bot-avatar-spacer {
+  flex: 0 0 auto;
+}
+
+.bot-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .bot-streaming-spinner {
   margin-top: -4px;
 }
@@ -1008,7 +1191,7 @@ function formatDuration(seconds: number) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 30px;
+  font-size: 26px;
   margin-top: -2px;
   line-height: 0;
   pointer-events: none;
@@ -1036,8 +1219,24 @@ function formatDuration(seconds: number) {
   padding-left: 0;
 }
 
+.is-group-chat .message-bubble.bot {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
 .plain-content {
+  display: inline;
   white-space: pre-wrap;
+}
+
+.mention-part {
+  display: inline;
+  width: auto;
+  max-width: 100%;
+  margin-right: 4px;
+  color: rgb(var(--v-theme-primary));
+  font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .inline-message-editor {
@@ -1085,6 +1284,10 @@ function formatDuration(seconds: number) {
 
 .chat-message-list :deep(.markdown-content p) {
   margin: 0.25rem 0;
+}
+
+.chat-message-list :deep(.hr-node) {
+  margin: 24px 0;
 }
 
 .unknown-part {
@@ -1280,7 +1483,7 @@ function formatDuration(seconds: number) {
 }
 
 .variant-thread .bot-avatar-symbol {
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .variant-thread .from-bot .bot-avatar {

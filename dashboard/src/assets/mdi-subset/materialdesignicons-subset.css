@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 247 icons */
+/* Auto-generated MDI subset – 258 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -236,6 +236,10 @@
   content: "\F0167";
 }
 
+.mdi-code-braces::before {
+  content: "\F0169";
+}
+
 .mdi-code-json::before {
   content: "\F0626";
 }
@@ -396,6 +400,10 @@
   content: "\F022E";
 }
 
+.mdi-file-delimited-outline::before {
+  content: "\F0EA5";
+}
+
 .mdi-file-document::before {
   content: "\F0219";
 }
@@ -416,6 +424,10 @@
   content: "\F021C";
 }
 
+.mdi-file-music-outline::before {
+  content: "\F0E2A";
+}
+
 .mdi-file-outline::before {
   content: "\F0224";
 }
@@ -434,6 +446,10 @@
 
 .mdi-file-upload::before {
   content: "\F0A4D";
+}
+
+.mdi-file-video-outline::before {
+  content: "\F0E2C";
 }
 
 .mdi-file-word-box::before {
@@ -482,6 +498,10 @@
 
 .mdi-format-list-bulleted::before {
   content: "\F0279";
+}
+
+.mdi-forum::before {
+  content: "\F028C";
 }
 
 .mdi-frequently-asked-questions::before {
@@ -564,8 +584,36 @@
   content: "\F0315";
 }
 
+.mdi-language-css3::before {
+  content: "\F031C";
+}
+
+.mdi-language-html5::before {
+  content: "\F031D";
+}
+
+.mdi-language-java::before {
+  content: "\F0B37";
+}
+
+.mdi-language-javascript::before {
+  content: "\F031E";
+}
+
 .mdi-language-markdown::before {
   content: "\F0354";
+}
+
+.mdi-language-markdown-outline::before {
+  content: "\F0F5B";
+}
+
+.mdi-language-python::before {
+  content: "\F0320";
+}
+
+.mdi-language-typescript::before {
+  content: "\F06E6";
 }
 
 .mdi-layers-outline::before {
@@ -810,10 +858,6 @@
 
 .mdi-robot-outline::before {
   content: "\F167A";
-}
-
-.mdi-send::before {
-  content: "\F048A";
 }
 
 .mdi-server::before {
