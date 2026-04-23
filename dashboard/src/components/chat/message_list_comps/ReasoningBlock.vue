@@ -1,59 +1,32 @@
 <template>
   <div class="reasoning-block" :class="{ 'reasoning-block--dark': isDark }">
-    <button class="reasoning-header" type="button" @click="toggleExpanded">
+    <button
+      class="reasoning-header"
+      :class="{ 'reasoning-header--trigger': openInSidebar }"
+      type="button"
+      @click="handlePrimaryAction"
+    >
       <span class="reasoning-title">
         {{ tm("reasoning.thinking") }}
       </span>
       <v-icon
         size="22"
         class="reasoning-icon"
-        :class="{ 'rotate-90': isExpanded }"
+        :class="{ 'rotate-90': !openInSidebar && isExpanded }"
       >
         mdi-chevron-right
       </v-icon>
     </button>
 
-    <div v-if="isExpanded" class="reasoning-content animate-fade-in">
-      <template v-for="(part, partIndex) in renderParts" :key="reasoningPartKey(part, partIndex)">
-        <MarkdownRender
-          v-if="part.type === 'think'"
-          :key="`reasoning-${partIndex}-${isDark ? 'dark' : 'light'}`"
-          :content="String(part.think || '')"
-          class="reasoning-text markdown-content"
-          :typewriter="false"
-          :is-dark="isDark"
-        />
-
-        <div v-else-if="part.type === 'tool_call'" class="reasoning-tool-call-block">
-          <template
-            v-for="tool in part.tool_calls || []"
-            :key="String(tool.id || tool.name || partIndex)"
-          >
-            <ToolCallItem v-if="isIPythonToolCall(tool)" :is-dark="isDark">
-              <template #label>
-                <v-icon size="16">mdi-code-json</v-icon>
-                <span>{{ tool.name || "python" }}</span>
-                <span class="tool-call-inline-status">
-                  {{ toolCallStatusText(tool) }}
-                </span>
-              </template>
-              <template #details>
-                <IPythonToolBlock
-                  :tool-call="normalizeToolCall(tool)"
-                  :is-dark="isDark"
-                  :show-header="false"
-                  :force-expanded="true"
-                />
-              </template>
-            </ToolCallItem>
-            <ToolCallCard
-              v-else
-              :tool-call="normalizeToolCall(tool)"
-              :is-dark="isDark"
-            />
-          </template>
-        </div>
-      </template>
+    <div
+      v-if="!openInSidebar && isExpanded"
+      class="reasoning-content animate-fade-in"
+    >
+      <ReasoningTimeline
+        :parts="renderParts"
+        :reasoning="reasoning"
+        :is-dark="isDark"
+      />
     </div>
 
     <transition :name="previewTransitionName" mode="out-in">
@@ -66,12 +39,9 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { MarkdownRender } from "markstream-vue";
-import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
-import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
-import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import type { MessagePart } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
+import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
 
 const props = defineProps<{
   parts?: MessagePart[];
@@ -80,6 +50,11 @@ const props = defineProps<{
   initialExpanded?: boolean;
   isStreaming?: boolean;
   hasNonReasoningContent?: boolean;
+  openInSidebar?: boolean;
+}>();
+
+const emit = defineEmits<{
+  open: [];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -97,6 +72,8 @@ const renderParts = computed<MessagePart[]>(() => {
   return [];
 });
 
+const openInSidebar = computed(() => Boolean(props.openInSidebar));
+
 const thinkingText = computed(() =>
   renderParts.value
     .filter((part) => part.type === "think")
@@ -107,7 +84,7 @@ const thinkingText = computed(() =>
 const showStreamingPreview = computed(
   () =>
     props.isStreaming &&
-    !isExpanded.value &&
+    (openInSidebar.value || !isExpanded.value) &&
     !props.hasNonReasoningContent &&
     previewText.value,
 );
@@ -118,16 +95,12 @@ const previewTransitionName = computed(() =>
     : "reasoning-preview-fade",
 );
 
-function toggleExpanded() {
-  isExpanded.value = !isExpanded.value;
-}
-
-function reasoningPartKey(part: MessagePart, index: number) {
-  if (part.type === "tool_call") {
-    const tool = Array.isArray(part.tool_calls) ? part.tool_calls[0] : null;
-    return `${part.type}-${tool?.id || tool?.name || index}`;
+function handlePrimaryAction() {
+  if (openInSidebar.value) {
+    emit("open");
+    return;
   }
-  return `${part.type}-${index}`;
+  isExpanded.value = !isExpanded.value;
 }
 
 function latestReasoningPreview() {
@@ -165,11 +138,19 @@ function startPreviewTimer() {
 }
 
 function syncPreviewTimer() {
-  if (props.isStreaming && !isExpanded.value && !props.hasNonReasoningContent) {
+  if (
+    props.isStreaming &&
+    (openInSidebar.value || !isExpanded.value) &&
+    !props.hasNonReasoningContent
+  ) {
     if (!previewTimer && !previewStartTimer) {
       previewStartTimer = setTimeout(() => {
         previewStartTimer = null;
-        if (props.isStreaming && !isExpanded.value && !props.hasNonReasoningContent) {
+        if (
+          props.isStreaming &&
+          (openInSidebar.value || !isExpanded.value) &&
+          !props.hasNonReasoningContent
+        ) {
           startPreviewTimer();
         }
       }, 2000);
@@ -184,38 +165,14 @@ function syncPreviewTimer() {
   }
 }
 
-function normalizeToolCall(tool: Record<string, unknown>) {
-  const normalized = { ...tool };
-  normalized.args = parseJsonSafe(normalized.args ?? normalized.arguments ?? {});
-  normalized.result = parseJsonSafe(normalized.result);
-  normalized.ts = normalized.ts ?? Date.now() / 1000;
-  if (normalized.result && typeof normalized.result === "object") {
-    normalized.result = JSON.stringify(normalized.result, null, 2);
-  }
-  return normalized;
-}
-
-function isIPythonToolCall(tool: Record<string, unknown>) {
-  const name = String(tool.name || "").toLowerCase();
-  return name.includes("python") || name.includes("ipython");
-}
-
-function toolCallStatusText(tool: Record<string, unknown>) {
-  if (tool.finished_ts) return tm("toolStatus.done");
-  return tm("toolStatus.running");
-}
-
-function parseJsonSafe(value: unknown) {
-  if (typeof value !== "string") return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
-
 watch(
-  () => [props.isStreaming, isExpanded.value, props.hasNonReasoningContent, thinkingText.value],
+  () => [
+    props.isStreaming,
+    isExpanded.value,
+    props.hasNonReasoningContent,
+    thinkingText.value,
+    openInSidebar.value,
+  ],
   syncPreviewTimer,
   {
     immediate: true,
@@ -256,6 +213,10 @@ onBeforeUnmount(() => {
   color: rgba(var(--v-theme-on-surface), 0.88);
 }
 
+.reasoning-header--trigger {
+  align-items: flex-start;
+}
+
 .reasoning-icon {
   color: currentcolor;
   transition: transform 0.2s ease;
@@ -270,15 +231,13 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-content {
-  margin-top: 8px;
-  padding: 0;
-  color: rgba(var(--v-theme-on-surface), 0.7);
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 18px;
+  background: rgb(var(--v-theme-surface));
+  color: rgba(var(--v-theme-on-surface), 0.72);
   animation: fadeIn 0.2s ease-in-out;
-  font-style: italic;
-}
-
-.reasoning-tool-call-block {
-  margin-top: 8px;
   font-style: normal;
 }
 
@@ -292,18 +251,9 @@ onBeforeUnmount(() => {
   -webkit-line-clamp: 3;
   white-space: pre-line;
   font: inherit;
-  font-style: italic;
-}
-
-.reasoning-text {
-  font-size: inherit;
-  line-height: inherit;
-  color: inherit;
-}
-
-.tool-call-inline-status {
-  margin-left: 4px;
-  color: rgba(var(--v-theme-on-surface), 0.48);
+  font-size: 14.5px;
+  line-height: 1.62;
+  font-style: normal;
 }
 
 .animate-fade-in {

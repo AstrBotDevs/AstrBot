@@ -368,6 +368,7 @@
               @regenerate-with-model="handleRegenerateMessage"
               @select-bot-text="handleBotTextSelection"
               @open-thread="openThreadPanel"
+              @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
             />
           </div>
@@ -467,6 +468,11 @@
       :deleting="deletingThread"
       @delete="deleteThread"
     />
+    <ReasoningSidebar
+      v-model="reasoningPanelOpen"
+      :parts="activeReasoningParts"
+      :is-dark="isDark"
+    />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
   </div>
 </template>
@@ -495,10 +501,12 @@ import ProjectView from "@/components/chat/ProjectView.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
+import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
+  messageBlocks as buildMessageBlocks,
   useMessages,
   type ChatRecord,
   type ChatThread,
@@ -587,6 +595,11 @@ const shouldStickToBottom = ref(true);
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
+const reasoningPanelOpen = ref(false);
+const activeReasoningTarget = ref<{
+  message: ChatRecord;
+  blockIndex: number;
+} | null>(null);
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
@@ -617,6 +630,20 @@ const chatSidebarDrawer = computed({
 const isSidebarCollapsed = computed(() =>
   lgAndUp.value ? sidebarCollapsed.value : !customizer.chatSidebarOpen,
 );
+const activeReasoningParts = computed<MessagePart[]>(() => {
+  if (!activeReasoningTarget.value) return [];
+  const blocks = buildMessageBlocks(
+    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
+  );
+  const block = blocks[activeReasoningTarget.value.blockIndex];
+  return block?.kind === "thinking" ? block.parts : [];
+});
+
+watch(reasoningPanelOpen, (open) => {
+  if (!open) {
+    activeReasoningTarget.value = null;
+  }
+});
 
 const {
   loadingMessages,
@@ -1146,14 +1173,33 @@ async function createThreadFromSelection() {
 }
 
 function openThreadPanel(thread: ChatThread) {
+  reasoningPanelOpen.value = false;
+  activeReasoningTarget.value = null;
+  refsSidebarOpen.value = false;
   activeThread.value = thread;
   threadPanelOpen.value = true;
 }
 
 function openRefsSidebar(refs: unknown) {
+  threadPanelOpen.value = false;
+  activeThread.value = null;
+  reasoningPanelOpen.value = false;
+  activeReasoningTarget.value = null;
   selectedRefs.value =
     refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
+}
+
+function openReasoningPanel(payload: {
+  message: ChatRecord;
+  blockIndex: number;
+}) {
+  threadPanelOpen.value = false;
+  activeThread.value = null;
+  refsSidebarOpen.value = false;
+  selectedRefs.value = null;
+  activeReasoningTarget.value = payload;
+  reasoningPanelOpen.value = true;
 }
 
 async function deleteThread(thread: ChatThread) {
@@ -1582,6 +1628,23 @@ kbd {
   border-radius: 4px;
   background: rgba(var(--v-theme-on-surface), 0.08);
   font: inherit;
+}
+
+:deep(.hr-node) {
+    margin-top: 1.25rem;
+    margin-bottom: 1.25rem;
+    opacity: 0.5;
+    border-top-width: .3px;
+}
+
+:deep(.paragraph-node) {
+    margin: .5rem 0;
+    line-height: 1.7;
+}
+
+:deep(.list-node) {
+    margin-top: .5rem;
+    margin-bottom: .5rem;
 }
 
 @media (max-width: 760px) {

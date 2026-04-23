@@ -33,7 +33,8 @@ const toggleExpanded = () => {
 
 <style scoped>
 .tool-call-line {
-    font-size: 14px;
+    font: inherit;
+    line-height: inherit;
     color: var(--v-theme-secondaryText);
     opacity: 0.85;
     cursor: pointer;
@@ -55,6 +56,8 @@ const toggleExpanded = () => {
     border-left: 2px solid var(--v-theme-border);
     border-radius: 6px;
     background-color: rgba(0, 0, 0, 0.02);
+    font-size: inherit;
+    line-height: inherit;
 }
 
 .tool-call-inline-details.is-dark {

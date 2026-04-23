@@ -36,6 +36,11 @@ export interface ChatContent {
   refs?: any;
 }
 
+export interface MessageDisplayBlock {
+  kind: "thinking" | "content";
+  parts: MessagePart[];
+}
+
 export interface ChatRecord {
   id?: string | number;
   content: ChatContent;
@@ -790,38 +795,63 @@ export function extractReasoningText(
 }
 
 export function thinkingParts(content: ChatContent): MessagePart[] {
-  const parts = Array.isArray(content.message)
-    ? content.message
-    : normalizeMessageParts(content.message, content.reasoning || "");
-  const start = firstNonEmptyPartIndex(parts);
-  if (start < 0) return [];
-
-  let end = start;
-  while (end < parts.length && isThinkingPart(parts[end])) {
-    end += 1;
-  }
-
-  if (end > start) return parts.slice(start, end);
+  const firstThinkingBlock = messageBlocks(content).find(
+    (block) => block.kind === "thinking",
+  );
+  if (firstThinkingBlock) return firstThinkingBlock.parts;
 
   const fallbackReasoning = String(content.reasoning || "");
   return fallbackReasoning ? [{ type: "think", think: fallbackReasoning }] : [];
 }
 
 export function displayParts(content: ChatContent): MessagePart[] {
+  return messageBlocks(content)
+    .filter((block) => block.kind === "content")
+    .flatMap((block) => block.parts);
+}
+
+export function messageBlocks(content: ChatContent): MessageDisplayBlock[] {
   const parts = Array.isArray(content.message)
     ? content.message
     : normalizeMessageParts(content.message, content.reasoning || "");
-  const start = firstNonEmptyPartIndex(parts);
-  if (start < 0) return [];
 
-  let index = start;
-  while (index < parts.length && isThinkingPart(parts[index])) {
-    index += 1;
+  const blocks: MessageDisplayBlock[] = [];
+  let currentKind: MessageDisplayBlock["kind"] | null = null;
+  let currentParts: MessagePart[] = [];
+
+  for (const part of parts) {
+    if (isEmptyPlainPart(part)) continue;
+
+    const nextKind: MessageDisplayBlock["kind"] = isThinkingPart(part)
+      ? "thinking"
+      : "content";
+
+    if (currentKind !== nextKind) {
+      if (currentKind && currentParts.length) {
+        blocks.push({ kind: currentKind, parts: currentParts });
+      }
+      currentKind = nextKind;
+      currentParts = [{ ...part }];
+      continue;
+    }
+
+    currentParts.push({ ...part });
   }
 
-  return parts
-    .slice(index)
-    .filter((part) => !isEmptyPlainPart(part));
+  if (currentKind && currentParts.length) {
+    blocks.push({ kind: currentKind, parts: currentParts });
+  }
+
+  if (!blocks.length && content.reasoning) {
+    return [
+      {
+        kind: "thinking",
+        parts: [{ type: "think", think: String(content.reasoning) }],
+      },
+    ];
+  }
+
+  return blocks;
 }
 
 function partToPayload(part: MessagePart) {
