@@ -79,12 +79,15 @@ def _decode_bytes_with_fallback(
     return output.decode("utf-8", errors="replace")
 
 
-def _decode_shell_output(output: bytes | None) -> str:
-    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
-
-
-def _normalize_python_output(output: str) -> str:
-    return output.replace("\r\n", "\n").replace("\r", "\n")
+def _decode_process_output(
+    output: bytes | None,
+    *,
+    normalize_newlines: bool = False,
+) -> str:
+    decoded = _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
+    if normalize_newlines:
+        decoded = decoded.replace("\r\n", "\n")
+    return decoded
 
 
 @dataclass
@@ -131,8 +134,8 @@ class LocalShellComponent(ShellComponent):
                 capture_output=True,
             )
             return {
-                "stdout": _decode_shell_output(result.stdout),
-                "stderr": _decode_shell_output(result.stderr),
+                "stdout": _decode_process_output(result.stdout),
+                "stderr": _decode_process_output(result.stderr),
                 "exit_code": result.returncode,
             }
 
@@ -159,12 +162,14 @@ class LocalPythonComponent(PythonComponent):
                 stdout = (
                     ""
                     if silent
-                    else _normalize_python_output(_decode_shell_output(result.stdout))
+                    else _decode_process_output(
+                        result.stdout,
+                        normalize_newlines=True,
+                    )
                 )
-                stderr = (
-                    _normalize_python_output(_decode_shell_output(result.stderr))
-                    if result.returncode != 0
-                    else ""
+                stderr = _decode_process_output(
+                    result.stderr,
+                    normalize_newlines=True,
                 )
                 return {
                     "data": {

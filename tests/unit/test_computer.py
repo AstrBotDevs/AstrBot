@@ -245,6 +245,45 @@ class TestLocalPythonComponent:
 
         assert result["data"]["output"]["text"] == "中文输出\n"
 
+    @pytest.mark.asyncio
+    async def test_exec_preserves_lone_carriage_returns(self):
+        """Test Python execution preserves lone carriage returns used by progress output."""
+        python = LocalPythonComponent()
+
+        def fake_run(*args, **kwargs):
+            assert kwargs.get("text") is False
+            return subprocess.CompletedProcess(
+                args=args[0],
+                returncode=0,
+                stdout=b"progress 10%\rprogress 20%\r\ncomplete\r",
+                stderr=b"",
+            )
+
+        with patch("astrbot.core.computer.booters.local.subprocess.run", fake_run):
+            result = await python.exec("print('progress')")
+
+        assert result["data"]["output"]["text"] == "progress 10%\rprogress 20%\ncomplete\r"
+
+    @pytest.mark.asyncio
+    async def test_exec_keeps_success_stderr(self):
+        """Test Python execution keeps diagnostic stderr even on success."""
+        python = LocalPythonComponent()
+
+        def fake_run(*args, **kwargs):
+            assert kwargs.get("text") is False
+            return subprocess.CompletedProcess(
+                args=args[0],
+                returncode=0,
+                stdout=b"ok\n",
+                stderr=b"warning\r\n",
+            )
+
+        with patch("astrbot.core.computer.booters.local.subprocess.run", fake_run):
+            result = await python.exec("print('ok')")
+
+        assert result["data"]["output"]["text"] == "ok\n"
+        assert result["data"]["error"] == "warning\n"
+
 
 class TestLocalFileSystemComponent:
     """Tests for LocalFileSystemComponent."""
