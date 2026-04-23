@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from deprecated import deprecated
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -41,7 +42,8 @@ class BaseDatabase(abc.ABC):
         # second write is attempted.  Setting timeout=30 tells SQLite to
         # wait up to 30 s for the lock, which is enough to ride out brief
         # write bursts from concurrent agent/metrics/session operations.
-        is_sqlite = "sqlite" in self.DATABASE_URL
+        db_url = make_url(self.DATABASE_URL)
+        is_sqlite = db_url.get_backend_name() == "sqlite"
         connect_args = {"timeout": 30} if is_sqlite else {}
         engine_kwargs = {
             "echo": False,
