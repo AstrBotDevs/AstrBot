@@ -135,7 +135,7 @@ class Record(BaseMessageComponent):
     def fromURL(url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
             return Record(file=url, **_)
-        raise Exception("not a valid url")
+        raise ValueError("not a valid url")
 
     @staticmethod
     def fromBase64(bs64_data: str, **_):
@@ -146,6 +146,12 @@ class Record(BaseMessageComponent):
         suffix = Path(unquote(urlparse(url).path)).suffix
         return suffix or ".amr"
 
+    def _resolve_audio_source(self) -> str:
+        source = self.url or self.file
+        if not source:
+            raise ValueError("No valid file or URL provided")
+        return source
+
     async def _download_audio_url(self, url: str) -> str:
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
@@ -155,7 +161,16 @@ class Record(BaseMessageComponent):
         await download_file(url, str(file_path))
         if file_path.exists():
             return str(file_path.resolve())
-        raise Exception(f"download failed: {url}")
+        raise RuntimeError(f"download failed: {url}")
+
+    def _write_base64_audio_to_file(self, url: str) -> str:
+        bs64_data = url.removeprefix("base64://")
+        audio_bytes = base64.b64decode(bs64_data)
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        file_path = temp_dir / f"recordseg_{uuid.uuid4().hex}.amr"
+        file_path.write_bytes(audio_bytes)
+        return str(file_path.resolve())
 
     async def convert_to_file_path(self) -> str:
         """将这个语音统一转换为本地文件路径。这个方法避免了手动判断语音数据类型，直接返回语音数据的本地路径（如果是网络 URL, 则会自动进行下载）。
@@ -164,24 +179,16 @@ class Record(BaseMessageComponent):
             str: 语音的本地路径，以绝对路径表示。
 
         """
-        url = self.url or self.file
-        if not url:
-            raise Exception(f"not a valid file: {url}")
+        url = self._resolve_audio_source()
         if url.startswith("file:///"):
             return url[8:]
         if url.startswith("http"):
             return await self._download_audio_url(url)
         if url.startswith("base64://"):
-            bs64_data = url.removeprefix("base64://")
-            audio_bytes = base64.b64decode(bs64_data)
-            temp_dir = Path(get_astrbot_temp_path())
-            temp_dir.mkdir(parents=True, exist_ok=True)
-            file_path = temp_dir / f"recordseg_{uuid.uuid4().hex}.amr"
-            file_path.write_bytes(audio_bytes)
-            return str(file_path.resolve())
+            return self._write_base64_audio_to_file(url)
         if os.path.exists(url):
             return os.path.abspath(url)
-        raise Exception(f"not a valid file: {url}")
+        raise FileNotFoundError(f"not a valid file: {url}")
 
     async def convert_to_base64(self) -> str:
         """将语音统一转换为 base64 编码。这个方法避免了手动判断语音数据类型，直接返回语音数据的 base64 编码。
@@ -191,9 +198,7 @@ class Record(BaseMessageComponent):
 
         """
         # convert to base64
-        url = self.url or self.file
-        if not url:
-            raise Exception(f"not a valid file: {url}")
+        url = self._resolve_audio_source()
         if url.startswith("file:///"):
             bs64_data = file_to_base64(url[8:])
         elif url.startswith("http"):
@@ -204,7 +209,7 @@ class Record(BaseMessageComponent):
         elif os.path.exists(url):
             bs64_data = file_to_base64(url)
         else:
-            raise Exception(f"not a valid file: {url}")
+            raise FileNotFoundError(f"not a valid file: {url}")
         bs64_data = bs64_data.removeprefix("base64://")
         return bs64_data
 
