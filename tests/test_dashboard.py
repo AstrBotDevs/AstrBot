@@ -1326,6 +1326,7 @@ async def test_get_embedding_models_unsupported_returns_error(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "error"
+    assert data["message"] == "当前提供商暂不支持自动获取模型列表，请手动填写模型 ID"
     assert _UnsupportedEmbeddingProvider.terminate_calls == 1
 
 
