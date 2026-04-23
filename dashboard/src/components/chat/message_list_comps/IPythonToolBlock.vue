@@ -115,6 +115,8 @@ onMounted(async () => {
 .ipython-tool-block {
     margin-bottom: 12px;
     margin-top: 6px;
+    font-size: inherit;
+    line-height: inherit;
 }
 
 .ipython-tool-block.compact {
@@ -133,7 +135,7 @@ onMounted(async () => {
 .code-highlighted {
     border-radius: 6px;
     overflow: hidden;
-    font-size: 14px;
+    font-size: 12px;
     line-height: 1.5;
     overflow-x: auto;
 }
@@ -157,7 +159,7 @@ onMounted(async () => {
     padding: 12px;
     border-radius: 6px;
     overflow-x: auto;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.5;
     background-color: #f5f5f5;
 }
@@ -183,7 +185,7 @@ onMounted(async () => {
     padding: 12px;
     border-radius: 6px;
     overflow-x: auto;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.5;
     background-color: #f5f5f5;
     max-height: 300px;

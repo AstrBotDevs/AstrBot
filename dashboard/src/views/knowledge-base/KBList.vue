@@ -7,7 +7,7 @@
         <p class="text-subtitle-1 text-medium-emphasis">{{ t('list.subtitle') }}</p>
       </div>
       <v-btn icon="mdi-information-outline" variant="text" size="small" color="grey"
-        href="https://astrbot.app/use/knowledge-base.html" target="_blank" />
+        href="https://docs.astrbot.app/use/knowledge-base.html" target="_blank" />
     </div>
 
     <!-- 操作按钮栏 -->
