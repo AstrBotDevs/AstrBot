@@ -363,6 +363,10 @@ class ProviderManager:
                 )
             case "longcat_chat_completion":
                 from .sources.longcat_source import ProviderLongCat as ProviderLongCat
+            case "openai_oauth_chat_completion":
+                from .sources.openai_oauth_source import (
+                    ProviderOpenAIOAuth as ProviderOpenAIOAuth,
+                )
             case "minimax_token_plan":
                 from .sources.minimax_token_plan_source import (
                     ProviderMiniMaxTokenPlan as ProviderMiniMaxTokenPlan,
@@ -502,10 +506,29 @@ class ProviderManager:
                     break
 
             if provider_source:
-                # 合并配置，provider 的配置优先级更高
+                # 合并配置，provider 的业务字段优先，但 provider 类型应跟随 source。
                 merged_config = {**provider_source, **pc}
                 # 保持 id 为 provider 的 id，而不是 source 的 id
                 merged_config["id"] = pc["id"]
+                merged_config["type"] = provider_source.get(
+                    "type", merged_config.get("type")
+                )
+                merged_config["provider"] = provider_source.get(
+                    "provider", merged_config.get("provider")
+                )
+                merged_config["provider_type"] = provider_source.get(
+                    "provider_type", merged_config.get("provider_type")
+                )
+                if (
+                    merged_config.get("provider") == "openai"
+                    and merged_config.get("type") == "openai_oauth_chat_completion"
+                    and merged_config.get("auth_mode") == "openai_oauth"
+                ):
+                    access_token = (
+                        merged_config.get("oauth_access_token") or ""
+                    ).strip()
+                    if access_token:
+                        merged_config["key"] = [access_token]
                 pc = merged_config
         return pc
 
@@ -544,7 +567,7 @@ class ProviderManager:
                     if env_val is None:
                         provider_id = provider_config.get("id")
                         logger.warning(
-                            f"Provider {provider_id} 配置项 key[{idx}] 使用环境变量 {env_key} 但未设置。",
+                            f"Provider {provider_id} 配置项 key[{idx}] 使用的环境变量未设置。",
                         )
                         resolved_keys.append("")
                     else:

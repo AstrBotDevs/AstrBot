@@ -120,6 +120,36 @@
     },
     "labels": {
       "proxy": "Proxy"
+    },
+    "oauth": {
+      "title": "ChatGPT/Codex OAuth",
+      "description": "Bind this dedicated provider source to ChatGPT/Codex account OAuth. After binding, AstrBot will call the account-backed ChatGPT/Codex backend instead of treating the token like a normal OpenAI API key.",
+      "modeManual": "Using API key",
+      "modeOAuth": "Using account OAuth",
+      "manualHint": "You can start the local callback flow below, or paste a JSON credential payload directly.",
+      "connectedHint": "This source is bound to account OAuth and will call the ChatGPT/Codex backend-api path.",
+      "start": "Start Authorization",
+      "openAuthorize": "Open Authorization Page",
+      "copyAuthorize": "Copy Authorization URL",
+      "authorizeUrl": "Authorization URL",
+      "callbackInput": "Callback result or JSON credential",
+      "callbackHint": "Paste the full callback URL, code#state, or a JSON object containing access_token / refresh_token / account_id.",
+      "complete": "Complete Binding",
+      "refresh": "Refresh Token",
+      "disconnect": "Disconnect",
+      "startSuccess": "Account OAuth authorization URL created",
+      "startError": "Failed to create account OAuth authorization URL",
+      "copySuccess": "Authorization URL copied",
+      "copyError": "Failed to copy authorization URL",
+      "authInputRequired": "Paste the callback result or JSON credential first",
+      "completeSuccess": "Account OAuth binding completed",
+      "completeError": "Failed to complete account OAuth binding",
+      "refreshSuccess": "Account OAuth refreshed successfully",
+      "refreshError": "Failed to refresh account OAuth",
+      "disconnectSuccess": "Account OAuth disconnected",
+      "disconnectError": "Failed to disconnect account OAuth",
+      "boundAs": "Account {email}",
+      "expiresAtShort": "Expires {time}"
     }
   },
   "models": {
