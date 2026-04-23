@@ -851,136 +851,6 @@ async def _decorate_llm_request(
     _apply_workspace_extra_prompt(event, req)
 
 
-def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
-    if req.image_urls:
-        provider_cfg = provider.provider_config.get("modalities", ["image"])
-        if "image" not in provider_cfg:
-            logger.debug(
-                "Provider %s does not support image, using placeholder.", provider
-            )
-            image_count = len(req.image_urls)
-            placeholder = " ".join(["[Image]"] * image_count)
-            if req.prompt:
-                req.prompt = f"{placeholder} {req.prompt}"
-            else:
-                req.prompt = placeholder
-            req.image_urls = []
-    if req.audio_urls:
-        provider_cfg = provider.provider_config.get("modalities", ["audio"])
-        if "audio" not in provider_cfg:
-            logger.debug(
-                "Provider %s does not support audio, using placeholder.", provider
-            )
-            audio_count = len(req.audio_urls)
-            placeholder = " ".join(["[Audio]"] * audio_count)
-            if req.prompt:
-                req.prompt = f"{placeholder} {req.prompt}"
-            else:
-                req.prompt = placeholder
-            req.audio_urls = []
-    if req.func_tool:
-        provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
-        if "tool_use" not in provider_cfg:
-            logger.debug(
-                "Provider %s does not support tool_use, clearing tools.", provider
-            )
-            req.func_tool = None
-
-
-def _sanitize_context_by_modalities(
-    config: MainAgentBuildConfig,
-    provider: Provider,
-    req: ProviderRequest,
-) -> None:
-    if not config.sanitize_context_by_modalities:
-        return
-    if not isinstance(req.contexts, list) or not req.contexts:
-        return
-    modalities = provider.provider_config.get("modalities", None)
-    if not modalities or not isinstance(modalities, list):
-        return
-    supports_image = bool("image" in modalities)
-    supports_audio = bool("audio" in modalities)
-    supports_tool_use = bool("tool_use" in modalities)
-    if supports_image and supports_audio and supports_tool_use:
-        return
-
-    sanitized_contexts: list[dict] = []
-    removed_image_blocks = 0
-    removed_audio_blocks = 0
-    removed_tool_messages = 0
-    removed_tool_calls = 0
-
-    for msg in req.contexts:
-        if not isinstance(msg, dict):
-            continue
-        role = msg.get("role")
-        if not role:
-            continue
-
-        new_msg = msg
-        if not supports_tool_use:
-            if role == "tool":
-                removed_tool_messages += 1
-                continue
-            if role == "assistant" and "tool_calls" in new_msg:
-                if "tool_calls" in new_msg:
-                    removed_tool_calls += 1
-                new_msg.pop("tool_calls", None)
-                new_msg.pop("tool_call_id", None)
-
-        if not supports_image or not supports_audio:
-            content = new_msg.get("content")
-            if isinstance(content, list):
-                filtered_parts: list = []
-                removed_any_multimodal = False
-                for part in content:
-                    if isinstance(part, dict):
-                        part_type = str(part.get("type", "")).lower()
-                        if not supports_image and part_type in {"image_url", "image"}:
-                            removed_any_multimodal = True
-                            removed_image_blocks += 1
-                            continue
-                        if not supports_audio and part_type in {
-                            "audio_url",
-                            "input_audio",
-                        }:
-                            removed_any_multimodal = True
-                            removed_audio_blocks += 1
-                            continue
-                    filtered_parts.append(part)
-                if removed_any_multimodal:
-                    new_msg["content"] = filtered_parts
-
-        if role == "assistant":
-            content = new_msg.get("content")
-            has_tool_calls = bool(new_msg.get("tool_calls"))
-            if not has_tool_calls:
-                if not content:
-                    continue
-                if isinstance(content, str) and not content.strip():
-                    continue
-
-        sanitized_contexts.append(new_msg)
-
-    if (
-        removed_image_blocks
-        or removed_audio_blocks
-        or removed_tool_messages
-        or removed_tool_calls
-    ):
-        logger.debug(
-            "sanitize_context_by_modalities applied: "
-            "removed_image_blocks=%s, removed_audio_blocks=%s, "
-            "removed_tool_messages=%s, removed_tool_calls=%s",
-            removed_image_blocks,
-            removed_audio_blocks,
-            removed_tool_messages,
-            removed_tool_calls,
-        )
-    req.contexts = sanitized_contexts
-
-
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
     """根据事件中的插件设置，过滤请求中的工具列表。
 
@@ -1501,6 +1371,17 @@ async def build_main_agent(
 
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
+    thread_selected_text = event.get_extra("thread_selected_text")
+    if isinstance(thread_selected_text, str) and thread_selected_text.strip():
+        req.extra_user_content_parts.append(
+            TextPart(
+                text=(
+                    "The user is asking in a side thread about this selected "
+                    "excerpt from the previous assistant answer:\n"
+                    f"<selected_excerpt>{thread_selected_text.strip()}</selected_excerpt>"
+                )
+            )
+        )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
 
@@ -1523,10 +1404,8 @@ async def build_main_agent(
     if not req.session_id:
         req.session_id = event.unified_msg_origin
 
-    _modalities_fix(provider, req)
     _plugin_tool_fix(event, req)
     await _apply_web_search_tools(event, req, plugin_context)
-    _sanitize_context_by_modalities(config, provider, req)
 
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
