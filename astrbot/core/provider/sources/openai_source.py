@@ -71,7 +71,9 @@ class ProviderOpenAIOfficial(Provider):
 
     @staticmethod
     def _is_empty_assistant_content(content: Any) -> bool:
-        return content is None or content == "" or content == []
+        if isinstance(content, str):
+            return content.strip() == ""
+        return content is None or content == []
 
     @classmethod
     def _clean_assistant_messages_for_provider(cls, payloads: dict) -> None:
@@ -86,7 +88,7 @@ class ProviderOpenAIOfficial(Provider):
                 tool_calls = msg.get("tool_calls")
 
                 if not tool_calls and cls._is_empty_assistant_content(content):
-                    logger.warning(
+                    logger.debug(
                         f"Filtered empty assistant message at index {idx} "
                         "(without tool calls)"
                     )

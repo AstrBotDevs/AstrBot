@@ -1331,7 +1331,9 @@ async def test_query_stream_filters_empty_assistant_messages(monkeypatch):
                 {"role": "assistant", "content": ""},
                 {"role": "assistant", "content": None},
                 {"role": "assistant", "content": []},
+                {"role": "assistant", "content": "   "},
                 {"role": "assistant", "content": "", "tool_calls": tool_calls},
+                {"role": "assistant", "content": "   ", "tool_calls": tool_calls},
                 {"role": "user", "content": "world"},
             ],
         }
@@ -1345,6 +1347,7 @@ async def test_query_stream_filters_empty_assistant_messages(monkeypatch):
         assert responses[-1].completion_text == "ok"
         assert messages == [
             {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": None, "tool_calls": tool_calls},
             {"role": "assistant", "content": None, "tool_calls": tool_calls},
             {"role": "user", "content": "world"},
         ]
@@ -1392,6 +1395,7 @@ async def test_query_filters_empty_assistant_message_without_tool_calls(monkeypa
             "messages": [
                 {"role": "user", "content": "hello"},
                 {"role": "assistant", "content": ""},  # Should be filtered
+                {"role": "assistant", "content": "   "},  # Should be filtered
                 {"role": "user", "content": "world"},
             ],
         }
