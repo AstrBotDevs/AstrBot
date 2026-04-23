@@ -32,6 +32,8 @@ from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
+from .routes.widget import ChatWidget
+from ..core.utils import api_package
 
 # Static assets shipped inside the wheel (built during `hatch build`).
 _BUNDLED_DIST = Path(__file__).parent / "dist"
@@ -139,6 +141,13 @@ class AstrBotDashboard:
         self.platform_route = PlatformRoute(self.context, core_lifecycle)
         self.backup_route = BackupRoute(self.context, db, core_lifecycle)
         self.live_chat_route = LiveChatRoute(self.context, db, core_lifecycle)
+        self.chat_widget = ChatWidget(
+            self.context,
+            db,
+            core_lifecycle,
+            self.chat_route,
+            self.open_api_route,
+        )
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -195,6 +204,35 @@ class AstrBotDashboard:
             g.username = f"api_key:{api_key.key_id}"
             await self.db.touch_api_key(api_key.key_id)
             return None
+
+        # 验证签名、解包参数
+        if request.path.startswith("/api/widget"):
+            try:
+                post_data = await request.get_json(silent=True) or {}
+                # 读取apikey
+                appid = post_data.get('appid')
+                if not appid:
+                    r = jsonify(Response().error("appid is empty").__dict__)
+                    r.status_code = 403
+                    return r
+                api_key = await self.db.get_api_key_by_id(str(appid))
+                if not api_key:
+                    r = jsonify(Response().error("Invalid API key").__dict__)
+                    r.status_code = 401
+                    return r
+                # 验证
+                g.api_package = api_package.de_package(
+                    api_key.key_hash,
+                    post_data.get('data').__str__(),
+                    post_data.get('noise').__str__(),
+                    post_data.get('expiry_date').__str__(),
+                    post_data.get('signature').__str__(),
+                )
+                return None
+            except Exception as err:
+                r = jsonify(Response().error(str(err)).__dict__)
+                r.status_code = 403
+                return r
 
         allowed_endpoints = [
             "/api/auth/login",

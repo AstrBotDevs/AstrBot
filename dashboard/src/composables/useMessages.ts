@@ -497,6 +497,82 @@ export function useMessages(options: UseMessagesOptions) {
     }
   }
 
+  function widgetStartSseStream(
+    sessionId: string,
+    messageId: string,
+    parts: MessagePart[],
+    botRecord: ChatRecord,
+    enableStreaming: boolean,
+    apiPackage: Record<any, any>,
+  ) {
+    const abort = new AbortController();
+    activeConnections[sessionId] = {
+      sessionId,
+      messageId,
+      transport: "sse",
+      abort,
+    };
+
+    fetch("/api/widget/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(
+          Object.assign({
+            message: parts.map(partToPayload),
+            enable_streaming: enableStreaming,
+          }, apiPackage)
+      ),
+      signal: abort.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok || !response.body) {
+          throw new Error(`SSE connection failed: ${response.status}`);
+        }
+        await readSseStream(response.body, (payload) => {
+          processStreamPayload(botRecord, payload);
+          options.onStreamUpdate?.(sessionId);
+        });
+      })
+      .catch((error) => {
+        if (abort.signal.aborted) return;
+        appendPlain(botRecord, `\n\n${String(error?.message || error)}`);
+        console.error("SSE chat failed:", error);
+      })
+      .finally(async () => {
+        delete activeConnections[sessionId];
+        await options.onSessionsChanged?.();
+      });
+  }
+
+  async function widgetLoadSessionMessages(sessionId: string, apiPackage: Record<any, any>,) {
+    if (!sessionId) return;
+    loadingMessages.value = true;
+    try {
+      const response = await axios({
+        url: '/api/widget/history',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        data: apiPackage
+      });
+      const payload = response.data?.data || {};
+      const history = payload.history || [];
+      const records = history.map(normalizeHistoryRecord);
+      await resolveRecordMedia(records);
+      messagesBySession[sessionId] = records;
+      sessionProjects[sessionId] = normalizeSessionProject(payload.project);
+      loadedSessions[sessionId] = true;
+    } catch (error) {
+      console.error("Failed to load session messages:", error);
+      messagesBySession[sessionId] = messagesBySession[sessionId] || [];
+    } finally {
+      loadingMessages.value = false;
+    }
+  }
+
   return {
     loadingMessages,
     sending,
@@ -514,6 +590,8 @@ export function useMessages(options: UseMessagesOptions) {
     sendMessageStream,
     stopSession,
     cleanupConnections,
+    widgetStartSseStream,
+    widgetLoadSessionMessages,
   };
 }
 

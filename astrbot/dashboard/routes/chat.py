@@ -807,9 +807,10 @@ class ChatRoute(Route):
 
         return Response().ok(data=sessions_data).__dict__
 
-    async def get_session(self):
+    async def get_session(self, session_id: str | None = None):
         """Get session information and message history by session_id."""
-        session_id = request.args.get("session_id")
+        if not session_id:
+            session_id = request.args.get("session_id")
         if not session_id:
             return Response().error("Missing key: session_id").__dict__
 

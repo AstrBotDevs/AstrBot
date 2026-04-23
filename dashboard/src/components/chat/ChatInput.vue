@@ -109,6 +109,7 @@
 
             <!-- Upload Files -->
             <v-list-item
+              v-if="!uploadFilesDisabled"
               class="styled-menu-item"
               rounded="md"
               @click="triggerImageInput"
@@ -123,6 +124,7 @@
 
             <!-- Config Selector in Menu -->
             <ConfigSelector
+              v-if="!configSelectorDisabled"
               :session-id="sessionId || null"
               :platform-id="sessionPlatformId"
               :is-group="sessionIsGroup"
@@ -151,7 +153,7 @@
 
           <!-- Provider/Model Selector Menu -->
           <ProviderModelMenu
-            v-if="showProviderSelector"
+            v-if="!providerModelMenuDisabled && showProviderSelector"
             ref="providerModelMenuRef"
           />
         </div>
@@ -190,6 +192,7 @@
                         </v-tooltip>
                     </v-btn> -->
           <v-btn
+            v-if="!recordDisabled"
             @click="handleRecordClick"
             icon
             variant="text"
@@ -337,6 +340,10 @@ interface Props {
   configId?: string | null;
   replyTo?: ReplyInfo | null;
   sendShortcut?: "enter" | "shift_enter";
+  configSelectorDisabled: boolean;
+  providerModelMenuDisabled: boolean;
+  uploadFilesDisabled: boolean;
+  recordDisabled: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -506,7 +513,7 @@ function handleDragLeave(e: DragEvent) {
 
 function handleDrop(e: DragEvent) {
   isDragging.value = false;
-
+  if (props.uploadFilesDisabled) return;
   const files = e.dataTransfer?.files;
   if (files && files.length > 0) {
     emit("fileSelect", files);
