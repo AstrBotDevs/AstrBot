@@ -233,6 +233,9 @@ class RepoZipUpdator:
 
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
         """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
+        if os.path.exists(target_dir) and not os.path.isdir(target_dir):
+            logger.warning(f"路径 {target_dir} 已存在但不是目录，正在清理。")
+            os.remove(target_dir)
         os.makedirs(target_dir, exist_ok=True)
         update_dir = ""
         with zipfile.ZipFile(zip_path, "r") as z:

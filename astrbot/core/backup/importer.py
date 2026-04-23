@@ -931,6 +931,13 @@ class AstrBotImporter:
                         if not _validate_path_within(target_path, target_dir):
                             result.add_warning(f"文件路径越界，已跳过: {name}")
                             continue
+
+                        if zf.getinfo(name).is_dir():
+                            if target_path.exists() and not target_path.is_dir():
+                                target_path.unlink()
+                            target_path.mkdir(parents=True, exist_ok=True)
+                            continue
+
                         target_path.parent.mkdir(parents=True, exist_ok=True)
 
                         with zf.open(name) as src, open(target_path, "wb") as dst:

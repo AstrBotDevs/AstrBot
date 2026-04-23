@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
+from astrbot.core import logger
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSesion
@@ -305,6 +306,11 @@ class StarTools:
         )
 
         try:
+            if data_dir.exists() and not data_dir.is_dir():
+                logger.warning(
+                    f"路径 {data_dir} 已存在但不是目录。正在尝试删除该文件并创建插件数据目录。",
+                )
+                data_dir.unlink()
             data_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             if isinstance(e, PermissionError):

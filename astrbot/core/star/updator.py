@@ -53,6 +53,9 @@ class PluginUpdator(RepoZipUpdator):
         return plugin_path
 
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
+        if os.path.exists(target_dir) and not os.path.isdir(target_dir):
+            logger.warning(f"路径 {target_dir} 已存在但不是目录，正在清理。")
+            os.remove(target_dir)
         os.makedirs(target_dir, exist_ok=True)
         update_dir = ""
         logger.info(f"正在解压压缩包: {zip_path}")
