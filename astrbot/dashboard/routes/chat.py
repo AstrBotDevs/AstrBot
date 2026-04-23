@@ -152,7 +152,7 @@ class BotMessageAccumulator:
         if streaming:
             self.pending_text += result_text
         else:
-            self.pending_text += result_text
+            self.pending_text = result_text
 
     def add_attachment(self, part: dict | None) -> None:
         if not part:
