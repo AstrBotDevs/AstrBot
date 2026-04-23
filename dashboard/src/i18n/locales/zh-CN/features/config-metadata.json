@@ -382,7 +382,7 @@
       },
       "appid": {
         "description": "appid",
-        "hint": "必填项。QQ 官方机器人平台的 appid。如何获取请参考文档。"
+        "hint": "必填项。当前消息平台的 AppID。如何获取请参考对应平台接入文档。"
       },
       "callback_server_host": {
         "description": "回调服务器主机",
