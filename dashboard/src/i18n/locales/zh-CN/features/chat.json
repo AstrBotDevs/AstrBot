@@ -113,7 +113,9 @@
     "title": "配置文件"
   },
   "reasoning": {
-    "thinking": "思考过程"
+    "thinking": "思考过程",
+    "think": "思考",
+    "toolUsed": "使用工具"
   },
   "reply": {
     "replyTo": "引用",

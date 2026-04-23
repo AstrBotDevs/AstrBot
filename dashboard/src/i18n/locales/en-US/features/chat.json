@@ -113,7 +113,9 @@
     "title": "Config"
   },
   "reasoning": {
-    "thinking": "Thinking Process"
+    "thinking": "Thinking Process",
+    "think": "Thinking",
+    "toolUsed": "Using Tool"
   },
   "reply": {
     "replyTo": "Reply to",

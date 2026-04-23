@@ -35,124 +35,133 @@
             </div>
 
             <template v-else>
-              <ReasoningBlock
-                v-if="messageContent(msg).reasoning"
-                :reasoning="messageContent(msg).reasoning || ''"
-                :is-dark="isDark"
-                :initial-expanded="false"
-                :is-streaming="isMessageStreaming(msgIndex)"
-                :has-non-reasoning-content="hasNonReasoningContent(msg)"
-              />
-
               <template
-                v-for="(part, partIndex) in messageParts(msg)"
-                :key="`${msgIndex}-${partIndex}-${part.type}`"
+                v-for="(block, blockIndex) in renderBlocks(msg)"
+                :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
               >
-                <button
-                  v-if="part.type === 'reply'"
-                  class="reply-quote"
-                  type="button"
-                  @click="scrollToMessage(part.message_id)"
-                >
-                  <v-icon size="15">mdi-reply</v-icon>
-                  <span>{{
-                    replyPreview(part.message_id, part.selected_text)
-                  }}</span>
-                </button>
-
-                <div
-                  v-else-if="part.type === 'plain' && isUserMessage(msg)"
-                  class="plain-content"
-                >
-                  {{ part.text || "" }}
-                </div>
-
-                <MarkdownMessagePart
-                  v-else-if="part.type === 'plain'"
-                  :content="part.text || ''"
-                  :refs="resolvedMessageRefs(msg)"
+                <ReasoningBlock
+                  v-if="block.kind === 'thinking'"
+                  :parts="block.parts"
                   :is-dark="isDark"
-                  :custom-html-tags="customMarkdownTags"
+                  :initial-expanded="false"
+                  :is-streaming="isMessageStreaming(msgIndex)"
+                  :has-non-reasoning-content="
+                    hasFollowingContentBlock(msg, blockIndex)
+                  "
                 />
 
-                <button
-                  v-else-if="part.type === 'image'"
-                  class="image-part"
-                  type="button"
-                  @click="openImage(partUrl(part))"
-                >
-                  <img :src="partUrl(part)" :alt="part.filename || 'image'" />
-                </button>
-
-                <audio
-                  v-else-if="part.type === 'record'"
-                  class="audio-part"
-                  controls
-                  :src="partUrl(part)"
-                />
-
-                <video
-                  v-else-if="part.type === 'video'"
-                  class="video-part"
-                  controls
-                  :src="partUrl(part)"
-                />
-
-                <div v-else-if="part.type === 'file'" class="file-part">
-                  <v-icon size="20">mdi-file-document-outline</v-icon>
-                  <span>{{ part.filename || "file" }}</span>
-                  <v-btn
-                    icon="mdi-download"
-                    size="x-small"
-                    variant="text"
-                    :loading="
-                      downloadingFiles.has(
-                        part.attachment_id || part.filename || '',
-                      )
-                    "
-                    @click="downloadPart(part)"
-                  />
-                </div>
-
-                <div
-                  v-else-if="part.type === 'tool_call'"
-                  class="tool-call-block"
-                >
+                <template v-else>
                   <template
-                    v-for="tool in part.tool_calls || []"
-                    :key="tool.id || tool.name"
+                    v-for="(part, partIndex) in block.parts"
+                    :key="`${msgIndex}-${blockIndex}-${partIndex}-${part.type}`"
                   >
-                    <ToolCallItem
-                      v-if="isIPythonToolCall(tool)"
-                      :is-dark="isDark"
+                    <button
+                      v-if="part.type === 'reply'"
+                      class="reply-quote"
+                      type="button"
+                      @click="scrollToMessage(part.message_id)"
                     >
-                      <template #label>
-                        <v-icon size="16">mdi-code-json</v-icon>
-                        <span>{{ tool.name || "python" }}</span>
-                        <span class="tool-call-inline-status">
-                          {{ toolCallStatusText(tool) }}
-                        </span>
-                      </template>
-                      <template #details>
-                        <IPythonToolBlock
+                      <v-icon size="15">mdi-reply</v-icon>
+                      <span>{{
+                        replyPreview(part.message_id, part.selected_text)
+                      }}</span>
+                    </button>
+
+                    <div
+                      v-else-if="part.type === 'plain' && isUserMessage(msg)"
+                      class="plain-content"
+                    >
+                      {{ part.text || "" }}
+                    </div>
+
+                    <MarkdownMessagePart
+                      v-else-if="part.type === 'plain'"
+                      :content="part.text || ''"
+                      :refs="resolvedMessageRefs(msg)"
+                      :is-dark="isDark"
+                      :custom-html-tags="customMarkdownTags"
+                    />
+
+                    <button
+                      v-else-if="part.type === 'image'"
+                      class="image-part"
+                      type="button"
+                      @click="openImage(partUrl(part))"
+                    >
+                      <img :src="partUrl(part)" :alt="part.filename || 'image'" />
+                    </button>
+
+                    <audio
+                      v-else-if="part.type === 'record'"
+                      class="audio-part"
+                      controls
+                      :src="partUrl(part)"
+                    />
+
+                    <video
+                      v-else-if="part.type === 'video'"
+                      class="video-part"
+                      controls
+                      :src="partUrl(part)"
+                    />
+
+                    <div v-else-if="part.type === 'file'" class="file-part">
+                      <v-icon size="20">mdi-file-document-outline</v-icon>
+                      <span>{{ part.filename || "file" }}</span>
+                      <v-btn
+                        icon="mdi-download"
+                        size="x-small"
+                        variant="text"
+                        :loading="
+                          downloadingFiles.has(
+                            part.attachment_id || part.filename || '',
+                          )
+                        "
+                        @click="downloadPart(part)"
+                      />
+                    </div>
+
+                    <div
+                      v-else-if="part.type === 'tool_call'"
+                      class="tool-call-block"
+                    >
+                      <template
+                        v-for="tool in part.tool_calls || []"
+                        :key="tool.id || tool.name"
+                      >
+                        <ToolCallItem
+                          v-if="isIPythonToolCall(tool)"
+                          :is-dark="isDark"
+                        >
+                          <template #label>
+                            <v-icon size="16">mdi-code-json</v-icon>
+                            <span>{{ tool.name || "python" }}</span>
+                            <span class="tool-call-inline-status">
+                              {{ toolCallStatusText(tool) }}
+                            </span>
+                          </template>
+                          <template #details>
+                            <IPythonToolBlock
+                              :tool-call="normalizeToolCall(tool)"
+                              :is-dark="isDark"
+                              :show-header="false"
+                              :force-expanded="true"
+                            />
+                          </template>
+                        </ToolCallItem>
+                        <ToolCallCard
+                          v-else
                           :tool-call="normalizeToolCall(tool)"
                           :is-dark="isDark"
-                          :show-header="false"
-                          :force-expanded="true"
                         />
                       </template>
-                    </ToolCallItem>
-                    <ToolCallCard
-                      v-else
-                      :tool-call="normalizeToolCall(tool)"
-                      :is-dark="isDark"
-                    />
-                  </template>
-                </div>
+                    </div>
 
-                <div v-else class="unknown-part">
-                  {{ formatJson(part) }}
-                </div>
+                    <div v-else class="unknown-part">
+                      {{ formatJson(part) }}
+                    </div>
+                  </template>
+                </template>
               </template>
             </template>
           </div>
@@ -248,6 +257,11 @@ import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue"
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import {
+  displayParts as displayMessageParts,
+  messageBlocks as buildMessageBlocks,
+  type MessageDisplayBlock,
+} from "@/composables/useMessages";
 import type {
   ChatContent,
   ChatRecord,
@@ -293,10 +307,7 @@ function messageContent(message: ChatRecord): ChatContent {
 }
 
 function messageParts(message: ChatRecord): MessagePart[] {
-  const parts = messageContent(message).message;
-  if (Array.isArray(parts)) return parts;
-  if (typeof parts === "string") return [{ type: "plain", text: parts }];
-  return [];
+  return displayMessageParts(messageContent(message));
 }
 
 function isMessageStreaming(messageIndex: number) {
@@ -304,11 +315,21 @@ function isMessageStreaming(messageIndex: number) {
 }
 
 function hasNonReasoningContent(message: ChatRecord) {
-  return messageParts(message).some((part) => {
-    if (part.type === "reply") return false;
-    if (part.type === "plain") return Boolean(String(part.text || "").trim());
-    return true;
-  });
+  return renderBlocks(message).some((block) => block.kind === "content");
+}
+
+function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
+  if (isUserMessage(message)) {
+    const parts = messageParts(message);
+    return parts.length ? [{ kind: "content", parts }] : [];
+  }
+  return buildMessageBlocks(messageContent(message));
+}
+
+function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
+  return renderBlocks(message)
+    .slice(blockIndex + 1)
+    .some((block) => block.kind === "content");
 }
 
 function partUrl(part: MessagePart) {

@@ -235,6 +235,12 @@ async def run_agent(
                         )
                         await astr_event.send(chain)
                     continue
+                elif resp.type == "llm_result":
+                    chain = resp.data["chain"]
+                    if chain.type == "reasoning":
+                        # For non-streaming mode, we handle reasoning in astrbot/core/astr_agent_hooks.py.
+                        # For streaming mode, we yield content immediately when received a reasoning chunk but not in here, see below.
+                        continue
 
                 if stream_to_general and resp.type == "streaming_delta":
                     continue
