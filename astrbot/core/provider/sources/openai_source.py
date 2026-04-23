@@ -63,7 +63,9 @@ class ProviderOpenAIOfficial(Provider):
         return text[: cls._ERROR_TEXT_CANDIDATE_MAX_CHARS]
 
     @staticmethod
-    def _deduplicate_self_repeating(value: str | None, min_length: int = 20) -> str | None:
+    def _deduplicate_self_repeating(
+        value: str | None, min_length: int = 20
+    ) -> str | None:
         """If string is a self-repeating pattern like 'astr_kb_searchastr_kb_search'
         (exactly 2 repetitions, min 20 chars), return the base unit.
         This handles streaming chunk duplication issues for tool names/IDs.
