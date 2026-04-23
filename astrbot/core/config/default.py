@@ -2141,6 +2141,7 @@ CONFIG_METADATA_2 = {
                         "description": "嵌入模型",
                         "type": "string",
                         "hint": "嵌入模型名称。",
+                        "_special": "get_embedding_models",
                     },
                     "embedding_api_key": {
                         "description": "API Key",

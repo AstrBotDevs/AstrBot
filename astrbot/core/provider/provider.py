@@ -334,6 +334,12 @@ class EmbeddingProvider(AbstractProvider):
         """获取向量的维度"""
         ...
 
+    async def get_models(self) -> list[str]:
+        """Optional model discovery for embedding providers."""
+        raise NotImplementedError(
+            "This embedding provider does not support model discovery",
+        )
+
     async def test(self) -> None:
         await self.get_embedding("astrbot")
 
