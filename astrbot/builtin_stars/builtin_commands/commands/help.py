@@ -6,6 +6,8 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.star import command_management
 from astrbot.core.utils.io import get_dashboard_version
 
+from ..i18n import t
+
 
 class HelpCommand:
     def __init__(self, context: star.Context) -> None:
@@ -77,7 +79,7 @@ class HelpCommand:
         commands_section = (
             "\n".join(command_lines)
             if command_lines
-            else "No enabled built-in commands."
+            else t(self.context, "help.no_enabled_builtin_commands")
         )
 
         msg_parts = [

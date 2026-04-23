@@ -9,6 +9,7 @@ from astrbot.core.agent.runners.deerflow.constants import (
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
 from astrbot.core.utils.active_event_registry import active_event_registry
 
+from ..i18n import t
 from .utils.rst_scene import RstScene
 
 THIRD_PARTY_AGENT_RUNNER_KEY = {
@@ -138,8 +139,12 @@ class ConversationCommands:
         if required_perm == "admin" and message.role != "admin":
             message.set_result(
                 MessageEventResult().message(
-                    f"Reset command requires admin permission in {scene.name} scenario, "
-                    f"you (ID {message.get_sender_id()}) are not admin, cannot perform this action.",
+                    t(
+                        self.context,
+                        "conversation.reset_admin_required",
+                        scene_name=t(self.context, f"scene.{scene.key}"),
+                        sender_id=message.get_sender_id(),
+                    ),
                 ),
             )
             return
@@ -153,14 +158,16 @@ class ConversationCommands:
                 agent_runner_type,
             )
             message.set_result(
-                MessageEventResult().message("✅ Conversation reset successfully.")
+                MessageEventResult().message(
+                    t(self.context, "conversation.reset_success"),
+                )
             )
             return
 
         if not self.context.get_using_provider(umo):
             message.set_result(
                 MessageEventResult().message(
-                    "😕 Cannot find any LLM provider. Configure one first."
+                    t(self.context, "conversation.no_provider"),
                 ),
             )
             return
@@ -170,7 +177,7 @@ class ConversationCommands:
         if not cid:
             message.set_result(
                 MessageEventResult().message(
-                    "😕 You are not in a conversation. Use /new to create one.",
+                    t(self.context, "conversation.no_conversation"),
                 ),
             )
             return
@@ -183,7 +190,7 @@ class ConversationCommands:
             [],
         )
 
-        ret = "✅ Conversation reset successfully."
+        ret = t(self.context, "conversation.reset_success")
 
         message.set_extra("_clean_ltm_session", True)
 
@@ -206,13 +213,19 @@ class ConversationCommands:
         if stopped_count > 0:
             message.set_result(
                 MessageEventResult().message(
-                    f"✅ Requested to stop {stopped_count} running tasks."
+                    t(
+                        self.context,
+                        "conversation.stop_requested",
+                        count=stopped_count,
+                    ),
                 )
             )
             return
 
         message.set_result(
-            MessageEventResult().message("✅ No running tasks in the current session.")
+            MessageEventResult().message(
+                t(self.context, "conversation.no_running_tasks"),
+            )
         )
 
     async def new_conv(self, message: AstrMessageEvent) -> None:
@@ -227,7 +240,9 @@ class ConversationCommands:
                 agent_runner_type,
             )
             message.set_result(
-                MessageEventResult().message("✅ New conversation created.")
+                MessageEventResult().message(
+                    t(self.context, "conversation.new_created")
+                )
             )
             return
 
@@ -243,6 +258,10 @@ class ConversationCommands:
 
         message.set_result(
             MessageEventResult().message(
-                f"✅ Switched to new conversation: {cid[:4]}。"
+                t(
+                    self.context,
+                    "conversation.switched_new",
+                    conversation_id=cid[:4],
+                ),
             ),
         )

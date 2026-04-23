@@ -25,6 +25,11 @@
     "step3SelectLabel": "Computer Access",
     "step3Allow": "Allow",
     "step3Deny": "Disallow",
+    "step4Title": "Choose Language",
+    "step4Desc": "Set AstrBot's preferred language.",
+    "step4SelectLabel": "Language",
+    "step4Chinese": "简体中文",
+    "step4English": "English",
     "configure": "Configure",
     "save": "Save",
     "skip": "Skip",
@@ -38,7 +43,10 @@
     "computerAccessUpdateFailed": "Failed to update Agent computer access",
     "computerAccessAllowed": "Agent is now allowed to access and use the computer",
     "computerAccessDenied": "Agent is no longer allowed to access and use the computer",
-    "step3HelpItem3": "For more detailed control, configure the Computer Access options under Settings -> General -> Computer Access."
+    "step3HelpItem3": "For more detailed control, configure the Computer Access options under Settings -> General -> Computer Access.",
+    "languageUpdateFailed": "Failed to update language settings",
+    "languageUpdated": "Language settings updated",
+    "languageRestartConfirm": "AstrBot needs to restart to apply the language change. Restart now?"
   },
   "resources": {
     "title": "Resources",

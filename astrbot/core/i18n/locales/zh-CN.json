@@ -1,0 +1,12 @@
+{
+  "pipeline": {
+    "filter_error": "插件 {plugin_name}: {error}",
+    "no_permission": "您(ID: {sender_id})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。",
+    "content_blocked": "你的消息或者大模型的响应中包含不适当的内容，已被屏蔽。",
+    "keyword_blocked_reason": "内容安全检查不通过，匹配到敏感词。",
+    "baidu_aip_violation_header": "百度审核服务发现 {count} 处违规：\n",
+    "baidu_aip_conclusion": "\n判断结果：{conclusion}",
+    "plugin_handler_error": ":(\n\n在调用插件 {plugin_name} 的处理函数 {handler_name} 时出现异常：{error}",
+    "reasoning_prefix": "🤔 思考: {reasoning_content}\n"
+  }
+}

@@ -3,6 +3,7 @@
 import os
 from typing import Any, TypedDict
 
+from astrbot.core.i18n import Language
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = "4.23.3"
@@ -53,6 +54,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 # 默认配置
 DEFAULT_CONFIG = {
     "config_version": 2,
+    "language": Language.ZH_CN.value,
     "platform_settings": {
         "unique_session": False,
         "rate_limit": {
@@ -4063,6 +4065,13 @@ CONFIG_METADATA_3_SYSTEM = {
                 "description": "系统配置",
                 "type": "object",
                 "items": {
+                    "language": {
+                        "description": "系统语言",
+                        "type": "string",
+                        "hint": "用于 AstrBot 运行时回复的语言。目前支持简体中文和英文。",
+                        "options": [Language.ZH_CN.value, Language.EN_US.value],
+                        "labels": ["简体中文", "English"],
+                    },
                     "t2i_strategy": {
                         "description": "文本转图像策略",
                         "type": "string",

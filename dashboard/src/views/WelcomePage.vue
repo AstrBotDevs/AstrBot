@@ -89,6 +89,29 @@
                   </div>
                 </div>
               </v-timeline-item>
+
+              <v-timeline-item :dot-color="languageStepState === 'completed' ? 'success' : 'primary'"
+                icon="mdi-numeric-4" fill-dot size="small">
+                <div class="pl-2">
+                  <div class="text-h6 font-weight-bold mb-1">{{ tm('onboard.step4Title') }}</div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step4Desc') }}</p>
+                  <div class="d-flex flex-wrap align-center ga-3">
+                    <v-select
+                      v-model="selectedLanguage"
+                      :items="languageOptions"
+                      item-title="title"
+                      item-value="value"
+                      :label="tm('onboard.step4SelectLabel')"
+                      :loading="savingLanguage"
+                      :disabled="savingLanguage"
+                      hide-details
+                      density="comfortable"
+                      variant="outlined"
+                      class="language-select"
+                    />
+                  </div>
+                </div>
+              </v-timeline-item>
             </v-timeline>
           </v-card>
 
@@ -188,6 +211,7 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+    <WaitingForRestart ref="wfr" />
   </div>
 </template>
 
@@ -195,23 +219,34 @@
 import { computed, ref, watch, onMounted } from 'vue';
 import axios from 'axios';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
+import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import type { Locale } from '@/i18n/types';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
+import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import { useToast } from '@/utils/toast';
 import { MarkdownRender } from 'markstream-vue';
 import 'markstream-vue/index.css';
 
 type StepState = 'pending' | 'completed' | 'skipped';
 type ComputerAccessRuntime = 'local' | 'none';
+type CoreLanguage = 'zh-CN' | 'en-US';
+type WaitingForRestartRef = {
+  check: (initialStartTime?: number | null) => void | Promise<void>;
+  stop?: () => void;
+};
 
 const { tm } = useModuleI18n('features/welcome');
-const { locale } = useI18n();
+const { locale, setLocale } = useI18n();
 const { success: showSuccess, error: showError } = useToast();
+const confirmDialog = useConfirmDialog();
 
 const showAddPlatformDialog = ref(false);
 const showProviderDialog = ref(false);
 const showComputerAccessHelpDialog = ref(false);
 const loadingPlatformDialog = ref(false);
+const wfr = ref<WaitingForRestartRef | null>(null);
 
 const platformMetadata = ref<Record<string, any>>({});
 const platformConfigData = ref<Record<string, any>>({});
@@ -224,6 +259,10 @@ const computerAccessStepState = ref<StepState>('pending');
 const computerAccessRuntime = ref<ComputerAccessRuntime>('none');
 const savedComputerAccessRuntime = ref<ComputerAccessRuntime>('none');
 const savingComputerAccess = ref(false);
+const languageStepState = ref<StepState>('pending');
+const selectedLanguage = ref<CoreLanguage>('zh-CN');
+const savedLanguage = ref<CoreLanguage>('zh-CN');
+const savingLanguage = ref(false);
 const welcomeAnnouncementRaw = ref<unknown>(null);
 
 function resolveWelcomeAnnouncement(raw: unknown, currentLocale: string) {
@@ -419,6 +458,11 @@ const computerAccessOptions = computed(() => [
   { title: tm('onboard.step3Deny'), value: 'none' }
 ]);
 
+const languageOptions = computed(() => [
+  { title: tm('onboard.step4Chinese'), value: 'zh-CN' },
+  { title: tm('onboard.step4English'), value: 'en-US' }
+]);
+
 async function saveComputerAccessRuntime() {
   savingComputerAccess.value = true;
   try {
@@ -450,6 +494,62 @@ async function saveComputerAccessRuntime() {
     showError(err?.response?.data?.message || err?.message || tm('onboard.computerAccessUpdateFailed'));
   } finally {
     savingComputerAccess.value = false;
+  }
+}
+
+function normalizeCoreLanguage(value: unknown): CoreLanguage {
+  return value === 'en-US' ? 'en-US' : 'zh-CN';
+}
+
+async function syncLanguage(configData: any) {
+  const normalizedLanguage = normalizeCoreLanguage(configData?.language);
+  selectedLanguage.value = normalizedLanguage;
+  savedLanguage.value = normalizedLanguage;
+  languageStepState.value = 'completed';
+
+  if (locale.value !== normalizedLanguage) {
+    await setLocale(normalizedLanguage as Locale);
+  }
+}
+
+async function promptRestartAfterLanguageChange() {
+  const shouldRestart = await askForConfirmation(
+    tm('onboard.languageRestartConfirm'),
+    confirmDialog
+  );
+  if (!shouldRestart) return;
+
+  try {
+    await restartAstrBotRuntime(wfr.value);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function saveLanguage() {
+  savingLanguage.value = true;
+  try {
+    const configData = await fetchDefaultConfig();
+    configData.language = selectedLanguage.value;
+
+    const updateRes = await axios.post('/api/config/astrbot/update', {
+      conf_id: 'default',
+      config: configData
+    });
+    if (updateRes.data.status !== 'ok') {
+      throw new Error(updateRes.data.message || tm('onboard.languageUpdateFailed'));
+    }
+
+    savedLanguage.value = selectedLanguage.value;
+    languageStepState.value = 'completed';
+    await setLocale(selectedLanguage.value as Locale);
+    showSuccess(tm('onboard.languageUpdated'));
+    await promptRestartAfterLanguageChange();
+  } catch (err: any) {
+    selectedLanguage.value = savedLanguage.value;
+    showError(err?.response?.data?.message || err?.message || tm('onboard.languageUpdateFailed'));
+  } finally {
+    savingLanguage.value = false;
   }
 }
 
@@ -487,6 +587,7 @@ onMounted(async () => {
   try {
     const defaultConfig = await fetchDefaultConfig();
     syncComputerAccessRuntime(defaultConfig);
+    await syncLanguage(defaultConfig);
   } catch (e) {
     console.error(e);
   }
@@ -552,6 +653,18 @@ watch(computerAccessRuntime, async (value, oldValue) => {
     computerAccessRuntime.value = savedComputerAccessRuntime.value;
   }
 });
+
+watch(selectedLanguage, async (value, oldValue) => {
+  if (value === oldValue) return;
+  if (value === savedLanguage.value) return;
+  if (savingLanguage.value) return;
+
+  try {
+    await saveLanguage();
+  } catch {
+    selectedLanguage.value = savedLanguage.value;
+  }
+});
 </script>
 
 <style scoped>
@@ -568,6 +681,11 @@ watch(computerAccessRuntime, async (value, oldValue) => {
 }
 
 .computer-access-select {
+  max-width: 240px;
+  min-width: 220px;
+}
+
+.language-select {
   max-width: 240px;
   min-width: 220px;
 }

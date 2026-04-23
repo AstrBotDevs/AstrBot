@@ -993,6 +993,14 @@
     "name": "系统配置",
     "system": {
       "description": "系统配置",
+      "language": {
+        "description": "系统语言",
+        "hint": "用于 AstrBot 运行时回复的语言。目前支持简体中文和英文。",
+        "labels": [
+          "简体中文",
+          "English"
+        ]
+      },
       "t2i_strategy": {
         "description": "文本转图像策略",
         "hint": "文本转图像策略。`remote` 为使用远程基于 HTML 的渲染服务,`local` 为使用 PIL 本地渲染。当使用 local 时,将 ttf 字体命名为 'font.ttf' 放在 data/ 目录下可自定义字体。"
