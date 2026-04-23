@@ -64,22 +64,16 @@ class ProviderOpenAIOfficial(Provider):
 
     @staticmethod
     def _deduplicate_self_repeating(value: str | None) -> str | None:
-        """If string is a self-repeating pattern like 'abcabc' or 'abcabcabc', return the base unit.
-        This handles streaming chunk duplication issues (e.g. 'call_xxxcall_xxx').
+        """If string is a self-repeating pattern like 'abcabc' (exactly 2 repetitions),
+        return the base unit. This handles streaming chunk duplication issues.
         Returns None unchanged."""
         if value is None:
             return None
         if not value or len(value) < 4:
             return value
-        # Handle arbitrary repetitions by finding the smallest repeating unit
         half = len(value) // 2
-        for unit_size in range(1, half + 1):
-            if len(value) % unit_size != 0:
-                continue
-            unit = value[:unit_size]
-            repetitions = len(value) // unit_size
-            if unit * repetitions == value and repetitions >= 2:
-                return unit
+        if value[:half] == value[half:]:
+            return value[:half]
         return value
 
     @staticmethod
