@@ -143,8 +143,8 @@ _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F]")
 
 
 def _is_windows_prompt_path(path: str) -> bool:
-    if os.name != "nt":
-        return False
+    # 检查路径本身是否是 Windows 路径（不依赖当前系统）
+    # 修复 #6477：支持 Linux 容器中映射的 Windows 路径
     return bool(_WINDOWS_DRIVE_PATH_RE.match(path) or _WINDOWS_UNC_PATH_RE.match(path))
 
 
@@ -182,12 +182,24 @@ def _sanitize_skill_display_name(name: str) -> str:
 def _build_skill_read_command_example(path: str) -> str:
     if path == "<skills_root>/<skill_name>/SKILL.md":
         return f"cat {path}"
-    if _is_windows_prompt_path(path):
+    
+    # 命令选择基于运行时 shell，而不是路径格式
+    # 修复 #6477：在 Linux 容器中，即使路径是 Windows 格式（挂载路径），
+    # 也应该使用 cat 命令，但需要转换路径格式（\ → /）
+    if os.name == "nt" and _is_windows_prompt_path(path):
+        # Windows 系统上的 Windows 路径：使用 type 命令
         command = "type"
         path_arg = f'"{os.path.normpath(path)}"'
     else:
+        # 非Windows 系统：使用 cat 命令
+        # 如果路径是 Windows 格式，转换反斜杠为正斜杠
         command = "cat"
-        path_arg = shlex.quote(path)
+        if _is_windows_prompt_path(path):
+            # 转换 Windows 路径格式：C:\path\to\file → C:/path/to/file
+            path_arg = shlex.quote(path.replace("\\", "/"))
+        else:
+            path_arg = shlex.quote(path)
+    
     return f"{command} {path_arg}"
 
 
