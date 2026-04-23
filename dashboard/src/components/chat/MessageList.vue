@@ -36,8 +36,8 @@
 
             <template v-else>
               <ReasoningBlock
-                v-if="messageContent(msg).reasoning"
-                :reasoning="messageContent(msg).reasoning || ''"
+                v-if="thinkingPartsForMessage(msg).length"
+                :parts="thinkingPartsForMessage(msg)"
                 :is-dark="isDark"
                 :initial-expanded="false"
                 :is-streaming="isMessageStreaming(msgIndex)"
@@ -248,6 +248,10 @@ import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue"
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import {
+  displayParts as displayMessageParts,
+  thinkingParts as extractThinkingParts,
+} from "@/composables/useMessages";
 import type {
   ChatContent,
   ChatRecord,
@@ -293,10 +297,7 @@ function messageContent(message: ChatRecord): ChatContent {
 }
 
 function messageParts(message: ChatRecord): MessagePart[] {
-  const parts = messageContent(message).message;
-  if (Array.isArray(parts)) return parts;
-  if (typeof parts === "string") return [{ type: "plain", text: parts }];
-  return [];
+  return displayMessageParts(messageContent(message));
 }
 
 function isMessageStreaming(messageIndex: number) {
@@ -309,6 +310,10 @@ function hasNonReasoningContent(message: ChatRecord) {
     if (part.type === "plain") return Boolean(String(part.text || "").trim());
     return true;
   });
+}
+
+function thinkingPartsForMessage(message: ChatRecord) {
+  return extractThinkingParts(messageContent(message));
 }
 
 function partUrl(part: MessagePart) {

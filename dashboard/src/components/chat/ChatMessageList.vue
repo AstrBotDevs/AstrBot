@@ -120,8 +120,8 @@
 
             <template v-else>
               <ReasoningBlock
-                v-if="messageContent(msg).reasoning"
-                :reasoning="messageContent(msg).reasoning || ''"
+                v-if="thinkingPartsForMessage(msg).length"
+                :parts="thinkingPartsForMessage(msg)"
                 :is-dark="isDark"
                 :initial-expanded="false"
                 :is-streaming="isMessageStreaming(msg, msgIndex)"
@@ -381,6 +381,10 @@ import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import {
+  displayParts as displayMessageParts,
+  thinkingParts as extractThinkingParts,
+} from "@/composables/useMessages";
 import type {
   ChatContent,
   ChatRecord,
@@ -483,7 +487,7 @@ function hasImageOnlyAttachments(message: ChatRecord) {
 }
 
 function bubbleParts(message: ChatRecord) {
-  if (!isUserMessage(message)) return messageParts(message);
+  if (!isUserMessage(message)) return displayMessageParts(messageContent(message));
   return messageParts(message).filter((part) => !isAttachmentPart(part));
 }
 
@@ -554,11 +558,15 @@ function showMessageMeta(message: ChatRecord, messageIndex: number) {
 }
 
 function hasNonReasoningContent(message: ChatRecord) {
-  return messageParts(message).some((part) => {
+  return bubbleParts(message).some((part) => {
     if (part.type === "reply") return false;
     if (part.type === "plain") return Boolean(String(part.text || "").trim());
     return true;
   });
+}
+
+function thinkingPartsForMessage(message: ChatRecord) {
+  return extractThinkingParts(messageContent(message));
 }
 
 const attachmentTypeStyles: Record<

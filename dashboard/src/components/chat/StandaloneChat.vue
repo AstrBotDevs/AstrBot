@@ -27,8 +27,8 @@
 
               <template v-else>
                 <ReasoningBlock
-                  v-if="messageContent(msg).reasoning"
-                  :reasoning="messageContent(msg).reasoning || ''"
+                  v-if="thinkingPartsForMessage(msg).length"
+                  :parts="thinkingPartsForMessage(msg)"
                   :is-dark="isDark"
                   :initial-expanded="false"
                   :is-streaming="isMessageStreaming(msg, msgIndex)"
@@ -36,7 +36,7 @@
                 />
 
                 <template
-                  v-for="(part, partIndex) in messageParts(msg)"
+                  v-for="(part, partIndex) in bubbleParts(msg)"
                   :key="`${msgIndex}-${partIndex}-${part.type}`"
                 >
                   <div
@@ -186,6 +186,8 @@ import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue"
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
+  displayParts as displayMessageParts,
+  thinkingParts as extractThinkingParts,
   useMessages,
   type ChatRecord,
   type MessagePart,
@@ -242,7 +244,6 @@ const {
   isMessageStreaming,
   isUserMessage,
   messageContent,
-  messageParts,
   createLocalExchange,
   sendMessageStream,
   stopSession,
@@ -336,11 +337,19 @@ function buildOutgoingParts(text: string): MessagePart[] {
 }
 
 function hasNonReasoningContent(message: ChatRecord) {
-  return messageParts(message).some((part) => {
+  return bubbleParts(message).some((part) => {
     if (part.type === "reply") return false;
     if (part.type === "plain") return Boolean(String(part.text || "").trim());
     return true;
   });
+}
+
+function bubbleParts(message: ChatRecord) {
+  return displayMessageParts(messageContent(message));
+}
+
+function thinkingPartsForMessage(message: ChatRecord) {
+  return extractThinkingParts(messageContent(message));
 }
 
 async function stopCurrentSession() {
