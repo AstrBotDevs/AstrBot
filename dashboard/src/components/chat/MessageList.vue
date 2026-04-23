@@ -446,10 +446,28 @@ function parseJsonSafe(value: unknown) {
   }
 }
 
+function tryFallbackCopy(text: string) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  Object.assign(textArea.style, {
+    position: "absolute",
+    opacity: "0",
+    zIndex: "-1",
+  });
+  document.body.appendChild(textArea);
+  textArea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textArea);
+}
+
 async function copyMessage(message: ChatRecord) {
   const text = plainTextFromMessage(message);
   if (!text) return;
-  await navigator.clipboard?.writeText(text);
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+  } else {
+    tryFallbackCopy(text);
+  }
 }
 
 async function downloadPart(part: MessagePart) {
