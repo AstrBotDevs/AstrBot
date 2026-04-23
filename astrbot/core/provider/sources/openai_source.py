@@ -652,6 +652,8 @@ class ProviderOpenAIOfficial(Provider):
             reasoning = self._extract_reasoning_content(chunk)
             _y = False
             llm_response.id = chunk.id
+            llm_response.reasoning_content = ""
+            llm_response.completion_text = ""
             if reasoning:
                 llm_response.reasoning_content = reasoning
                 _y = True
