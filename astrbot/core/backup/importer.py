@@ -25,6 +25,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
 )
+from astrbot.core.utils.io import ensure_dir
 from astrbot.core.utils.version_comparator import VersionComparator
 
 # 从共享常量模块导入
@@ -933,9 +934,7 @@ class AstrBotImporter:
                             continue
 
                         if zf.getinfo(name).is_dir():
-                            if target_path.exists() and not target_path.is_dir():
-                                target_path.unlink()
-                            target_path.mkdir(parents=True, exist_ok=True)
+                            ensure_dir(target_path)
                             continue
 
                         target_path.parent.mkdir(parents=True, exist_ok=True)

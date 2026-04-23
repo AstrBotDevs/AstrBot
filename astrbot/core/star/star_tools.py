@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
-from astrbot.core import logger
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSesion
@@ -38,6 +37,7 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import ensure_dir
 
 
 class StarTools:
@@ -306,12 +306,7 @@ class StarTools:
         )
 
         try:
-            if data_dir.exists() and not data_dir.is_dir():
-                logger.warning(
-                    f"路径 {data_dir} 已存在但不是目录。正在尝试删除该文件并创建插件数据目录。",
-                )
-                data_dir.unlink()
-            data_dir.mkdir(parents=True, exist_ok=True)
+            ensure_dir(data_dir)
         except OSError as e:
             if isinstance(e, PermissionError):
                 raise RuntimeError(f"无法创建目录 {data_dir}：权限不足") from e
