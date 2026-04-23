@@ -1149,126 +1149,125 @@ async def build_main_agent(
 
             req.prompt = event.message_str[len(config.provider_wake_prefix) :]
 
-            # media files attachments
-            for comp in event.message_obj.message:
-                if isinstance(comp, Image):
-                    path = await comp.convert_to_file_path()
-                    image_path = await _compress_image_for_provider(
-                        path,
-                        config.provider_settings,
-                    )
-                    if _is_generated_compressed_image_path(path, image_path):
-                        event.track_temporary_local_file(image_path)
-                    req.image_urls.append(image_path)
-                    req.extra_user_content_parts.append(
-                        TextPart(text=f"[Image Attachment: path {image_path}]")
-                    )
-                elif isinstance(comp, Record):
-                    audio_path = await comp.convert_to_file_path()
-                    req.audio_urls.append(audio_path)
-                    _append_audio_attachment(req, audio_path)
-                elif isinstance(comp, File):
-                    file_path = await comp.get_file()
-                    file_name = comp.name or os.path.basename(file_path)
-                    req.extra_user_content_parts.append(
-                        TextPart(
-                            text=f"[File Attachment: name {file_name}, path {file_path}]"
-                        )
-                    )
-                elif isinstance(comp, Video):
-                    await _append_video_attachment(req, comp)
-            # quoted message attachments
-            reply_comps = [
-                comp for comp in event.message_obj.message if isinstance(comp, Reply)
-            ]
-            quoted_message_settings = _get_quoted_message_parser_settings(
-                config.provider_settings
-            )
-            fallback_quoted_image_count = 0
-            for comp in reply_comps:
-                has_embedded_image = False
-                if comp.chain:
-                    for reply_comp in comp.chain:
-                        if isinstance(reply_comp, Image):
-                            has_embedded_image = True
-                            path = await reply_comp.convert_to_file_path()
-                            image_path = await _compress_image_for_provider(
-                                path,
-                                config.provider_settings,
-                            )
-                            if _is_generated_compressed_image_path(path, image_path):
-                                event.track_temporary_local_file(image_path)
-                            req.image_urls.append(image_path)
-                            _append_quoted_image_attachment(req, image_path)
-                        elif isinstance(reply_comp, Record):
-                            audio_path = await reply_comp.convert_to_file_path()
-                            req.audio_urls.append(audio_path)
-                            _append_quoted_audio_attachment(req, audio_path)
-                        elif isinstance(reply_comp, File):
-                            file_path = await reply_comp.get_file()
-                            file_name = reply_comp.name or os.path.basename(file_path)
-                            req.extra_user_content_parts.append(
-                                TextPart(
-                                    text=(
-                                        f"[File Attachment in quoted message: "
-                                        f"name {file_name}, path {file_path}]"
-                                    )
-                                )
-                            )
-                        elif isinstance(reply_comp, Video):
-                            await _append_video_attachment(req, reply_comp, quoted=True)
-
-                # Fallback quoted image extraction for reply-id-only payloads, or when
-                # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
-                if not has_embedded_image:
-                    try:
-                        fallback_images = normalize_and_dedupe_strings(
-                            await extract_quoted_message_images(
-                                event,
-                                comp,
-                                settings=quoted_message_settings,
-                            )
-                        )
-                        remaining_limit = max(
-                            config.max_quoted_fallback_images
-                            - fallback_quoted_image_count,
-                            0,
-                        )
-                        if remaining_limit <= 0 and fallback_images:
-                            logger.warning(
-                                "Skip quoted fallback images due to limit=%d for umo=%s",
-                                config.max_quoted_fallback_images,
-                                event.unified_msg_origin,
-                            )
-                            continue
-                        if len(fallback_images) > remaining_limit:
-                            logger.warning(
-                                "Truncate quoted fallback images for umo=%s, reply_id=%s from %d to %d",
-                                event.unified_msg_origin,
-                                getattr(comp, "id", None),
-                                len(fallback_images),
-                                remaining_limit,
-                            )
-                            fallback_images = fallback_images[:remaining_limit]
-                        for image_ref in fallback_images:
-                            if image_ref in req.image_urls:
-                                continue
-                            req.image_urls.append(image_ref)
-                            fallback_quoted_image_count += 1
-                            _append_quoted_image_attachment(req, image_ref)
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning(
-                            "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
-                            event.unified_msg_origin,
-                            getattr(comp, "id", None),
-                            exc,
-                            exc_info=True,
-                        )
-
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation
             req.contexts = json.loads(conversation.history)
             event.set_extra("provider_request", req)
+
+        # media files attachments (always process, regardless of req source)
+        for comp in event.message_obj.message:
+            if isinstance(comp, Image):
+                path = await comp.convert_to_file_path()
+                image_path = await _compress_image_for_provider(
+                    path,
+                    config.provider_settings,
+                )
+                if _is_generated_compressed_image_path(path, image_path):
+                    event.track_temporary_local_file(image_path)
+                req.image_urls.append(image_path)
+                req.extra_user_content_parts.append(
+                    TextPart(text=f"[Image Attachment: path {image_path}]")
+                )
+            elif isinstance(comp, Record):
+                audio_path = await comp.convert_to_file_path()
+                req.audio_urls.append(audio_path)
+                _append_audio_attachment(req, audio_path)
+            elif isinstance(comp, File):
+                file_path = await comp.get_file()
+                file_name = comp.name or os.path.basename(file_path)
+                req.extra_user_content_parts.append(
+                    TextPart(
+                        text=f"[File Attachment: name {file_name}, path {file_path}]"
+                    )
+                )
+            elif isinstance(comp, Video):
+                await _append_video_attachment(req, comp)
+        # quoted message attachments
+        reply_comps = [
+            comp for comp in event.message_obj.message if isinstance(comp, Reply)
+        ]
+        quoted_message_settings = _get_quoted_message_parser_settings(
+            config.provider_settings
+        )
+        fallback_quoted_image_count = 0
+        for comp in reply_comps:
+            has_embedded_image = False
+            if comp.chain:
+                for reply_comp in comp.chain:
+                    if isinstance(reply_comp, Image):
+                        has_embedded_image = True
+                        path = await reply_comp.convert_to_file_path()
+                        image_path = await _compress_image_for_provider(
+                            path,
+                            config.provider_settings,
+                        )
+                        if _is_generated_compressed_image_path(path, image_path):
+                            event.track_temporary_local_file(image_path)
+                        req.image_urls.append(image_path)
+                        _append_quoted_image_attachment(req, image_path)
+                    elif isinstance(reply_comp, Record):
+                        audio_path = await reply_comp.convert_to_file_path()
+                        req.audio_urls.append(audio_path)
+                        _append_quoted_audio_attachment(req, audio_path)
+                    elif isinstance(reply_comp, File):
+                        file_path = await reply_comp.get_file()
+                        file_name = reply_comp.name or os.path.basename(file_path)
+                        req.extra_user_content_parts.append(
+                            TextPart(
+                                text=(
+                                    f"[File Attachment in quoted message: "
+                                    f"name {file_name}, path {file_path}]"
+                                )
+                            )
+                        )
+                    elif isinstance(reply_comp, Video):
+                        await _append_video_attachment(req, reply_comp, quoted=True)
+
+            # Fallback quoted image extraction for reply-id-only payloads, or when
+            # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
+            if not has_embedded_image:
+                try:
+                    fallback_images = normalize_and_dedupe_strings(
+                        await extract_quoted_message_images(
+                            event,
+                            comp,
+                            settings=quoted_message_settings,
+                        )
+                    )
+                    remaining_limit = max(
+                        config.max_quoted_fallback_images - fallback_quoted_image_count,
+                        0,
+                    )
+                    if remaining_limit <= 0 and fallback_images:
+                        logger.warning(
+                            "Skip quoted fallback images due to limit=%d for umo=%s",
+                            config.max_quoted_fallback_images,
+                            event.unified_msg_origin,
+                        )
+                        continue
+                    if len(fallback_images) > remaining_limit:
+                        logger.warning(
+                            "Truncate quoted fallback images for umo=%s, reply_id=%s from %d to %d",
+                            event.unified_msg_origin,
+                            getattr(comp, "id", None),
+                            len(fallback_images),
+                            remaining_limit,
+                        )
+                        fallback_images = fallback_images[:remaining_limit]
+                    for image_ref in fallback_images:
+                        if image_ref in req.image_urls:
+                            continue
+                        req.image_urls.append(image_ref)
+                        fallback_quoted_image_count += 1
+                        _append_quoted_image_attachment(req, image_ref)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
+                        event.unified_msg_origin,
+                        getattr(comp, "id", None),
+                        exc,
+                        exc_info=True,
+                    )
 
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
