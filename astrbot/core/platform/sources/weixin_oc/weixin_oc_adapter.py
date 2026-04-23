@@ -169,6 +169,9 @@ class WeixinOCAdapter(Platform):
             1,
         )
         self._recent_messages: dict[str, WeixinOCRecentSessionCache] = {}
+        # 消息去重
+        self._seen_msg_ids: dict[str, float] = {}
+        self._DEDUP_TTL = 120  # 去重窗口，秒
         self._typing_keepalive_interval_s = max(
             1,
             int(platform_config.get("weixin_oc_typing_keepalive_interval", 5)),
@@ -1530,6 +1533,22 @@ class WeixinOCAdapter(Platform):
             components=cached_components,
             message_str=text,
         )
+
+        # 消息去重
+        now = time.monotonic()
+        expired = [
+            k for k, t in self._seen_msg_ids.items() if now - t > self._DEDUP_TTL
+        ]
+        for k in expired:
+            del self._seen_msg_ids[k]
+        if message_id in self._seen_msg_ids:
+            logger.debug(
+                "weixin_oc(%s): duplicate message %s, skipping.",
+                self.meta().id,
+                message_id,
+            )
+            return
+        self._seen_msg_ids[message_id] = now
 
         self.commit_event(
             WeixinOCMessageEvent(
