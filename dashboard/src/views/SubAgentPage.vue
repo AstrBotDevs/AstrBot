@@ -409,7 +409,7 @@
                   size="small"
                   variant="tonal"
                   color="primary"
-                  @click="showToolSelectorDialog = true; toolSelectorMode = 'blacklist'"
+                  @click="showToolSelectorDialog = true; toolSelectorMode = 'blacklist'; toolSelectorSearch = ''"
                 >
                   <v-icon start>mdi-plus</v-icon>
                   {{ tm('enhancedTools.addTool') }}
@@ -447,7 +447,7 @@
                   size="small"
                   variant="tonal"
                   color="success"
-                  @click="showToolSelectorDialog = true; toolSelectorMode = 'inherent'"
+                  @click="showToolSelectorDialog = true; toolSelectorMode = 'inherent'; toolSelectorSearch = ''"
                 >
                   <v-icon start>mdi-plus</v-icon>
                   {{ tm('enhancedTools.addTool') }}
@@ -466,23 +466,45 @@
           </v-card-title>
           <v-divider />
           <v-card-text style="max-height: 400px;">
-            <v-list>
-              <v-list-item
-                v-for="tool in availableTools"
-                :key="tool.name"
-                @click="addToolToList(tool.name)"
-                :disabled="isToolInTargetList(tool.name)"
-              >
-                <v-list-item-title>{{ tool.name }}</v-list-item-title>
-                <v-list-item-subtitle>{{ tool.description }}</v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
+            <v-combobox
+              v-model="toolSelectorSearch"
+              :items="availableToolNames"
+              :label="tm('enhancedTools.selectOrInputTool')"
+              variant="outlined"
+              density="comfortable"
+              hide-details="auto"
+              clearable
+              :menu-props="{ maxHeight: 240 }"
+              @keydown.enter.prevent="addToolFromCombobox"
+            />
+            <div class="mt-4">
+              <div class="dashboard-section-subtitle mb-2">{{ tm('enhancedTools.availableTools') }}</div>
+              <v-list density="compact">
+                <v-list-item
+                  v-for="tool in availableTools"
+                  :key="tool.name"
+                  @click="addToolToList(tool.name)"
+                  :disabled="isToolInTargetList(tool.name)"
+                >
+                  <v-list-item-title>{{ tool.name }}</v-list-item-title>
+                  <v-list-item-subtitle>{{ tool.description }}</v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
+            </div>
           </v-card-text>
           <v-divider />
           <v-card-actions>
             <v-spacer />
             <v-btn variant="text" @click="showToolSelectorDialog = false">
               {{ tm('actions.close') }}
+            </v-btn>
+            <v-btn
+              variant="tonal"
+              color="primary"
+              :disabled="!toolSelectorSearch"
+              @click="addToolFromCombobox"
+            >
+              {{ tm('enhancedTools.addTool') }}
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -565,7 +587,12 @@ const hasLoaded = ref(false)
 // 工具选择器相关
 const showToolSelectorDialog = ref(false)
 const toolSelectorMode = ref<'blacklist' | 'inherent'>('blacklist')
+const toolSelectorSearch = ref('')
 const availableTools = ref<AvailableTool[]>([])
+
+const availableToolNames = computed(() =>
+  availableTools.value.map((t) => t.name)
+)
 
 function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
   snackbar.value = { show: true, message, color }
@@ -813,16 +840,23 @@ function handleBeforeUnload(event: BeforeUnloadEvent) {
 
 // 工具列表操作
 function addToolToList(toolName: string) {
+  if (!toolName || !toolName.trim()) return
+  const name = toolName.trim()
   if (toolSelectorMode.value === 'blacklist') {
-    if (!enhancedCfg.value.tools_blacklist.includes(toolName)) {
-      enhancedCfg.value.tools_blacklist.push(toolName)
+    if (!enhancedCfg.value.tools_blacklist.includes(name)) {
+      enhancedCfg.value.tools_blacklist.push(name)
     }
   } else if (toolSelectorMode.value === 'inherent') {
-    if (!enhancedCfg.value.tools_inherent.includes(toolName)) {
-      enhancedCfg.value.tools_inherent.push(toolName)
+    if (!enhancedCfg.value.tools_inherent.includes(name)) {
+      enhancedCfg.value.tools_inherent.push(name)
     }
   }
-  showToolSelectorDialog.value = false
+  toolSelectorSearch.value = ''
+}
+
+function addToolFromCombobox() {
+  if (!toolSelectorSearch.value) return
+  addToolToList(toolSelectorSearch.value)
 }
 
 function removeToolFromBlacklist(idx: number) {

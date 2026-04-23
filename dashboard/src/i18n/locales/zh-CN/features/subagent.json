@@ -124,6 +124,8 @@
     "selectBlacklistTool": "添加工具到黑名单",
     "selectInherentTool": "添加工具到固有名单",
     "emptyBlacklist": "暂无黑名单工具",
-    "emptyInherent": "暂无固有工具"
+    "emptyInherent": "暂无固有工具",
+    "selectOrInputTool": "选择或输入工具名称",
+    "availableTools": "可用工具列表"
   }
 }

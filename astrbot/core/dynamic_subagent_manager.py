@@ -191,8 +191,8 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         shared_context_enabled: bool = False,
         shared_context_maxlen: int = 200,
         max_subagent_history: int = 500,
-        tools_blacklist: set[str] = None,
-        tools_inherent: set[str] = None,
+        tools_blacklist: list[str] = None,
+        tools_inherent: list[str] = None,
         execution_timeout: float = 600.0,
         **kwargs,
     ) -> None:
@@ -209,7 +209,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
                 "astrbot_execute_python",
             }
         else:
-            cls._tools_inherent = tools_inherent
+            cls._tools_inherent = set(tools_inherent)
         if tools_blacklist is None:
             cls._tools_blacklist = {
                 "send_shared_context_for_main_agent",
@@ -224,7 +224,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
                 "view_shared_context",
             }
         else:
-            cls._tools_blacklist = tools_blacklist
+            cls._tools_blacklist = set(tools_blacklist)
 
     @classmethod
     def get_execution_timeout(cls) -> float:
@@ -1570,21 +1570,21 @@ parameter
         if subagent_name not in session.subagents:
             return f"Error: SubAgent '{subagent_name}' not found. Available: {list(session.subagents.keys())}"
 
-        # 如果没有指定 task_id，尝试获取最早的 pending 任务
+        # 如果没有指定 task_id，尝试获取最新创建的 pending 任务
         if not task_id:
             pending_tasks = DynamicSubAgentManager.get_pending_subagent_tasks(
                 session_id, subagent_name
             )
             if pending_tasks:
-                # 使用最早的 pending 任务（先进先出）
-                task_id = pending_tasks[0]
+                # 使用最新的 pending 任务
+                task_id = pending_tasks[-1]
             else:
                 # 没有 pending 任务，检查是否有已完成的最新任务
                 latest = DynamicSubAgentManager.get_subagent_result(
                     session_id, subagent_name
                 )
                 if latest:
-                    return f"SubAgent '{subagent_name}' has no pending tasks. Latest completed task: {latest.task_id}"
+                    return f"SubAgent '{subagent_name}' has no pending tasks. Latest completed task id: {latest.task_id}. Task id {latest.task_id} Results:\n{latest.result}"
                 return f"Error: SubAgent '{subagent_name}' has no tasks."
         start_time = time.time()
 

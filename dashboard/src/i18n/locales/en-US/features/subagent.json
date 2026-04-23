@@ -124,6 +124,8 @@
     "selectBlacklistTool": "Add Tool to Blacklist",
     "selectInherentTool": "Add Tool to Inherent List",
     "emptyBlacklist": "No blacklisted tools",
-    "emptyInherent": "No inherent tools"
+    "emptyInherent": "No inherent tools",
+    "selectOrInputTool": "Select or type a tool name",
+    "availableTools": "Available Tools"
   }
 }
