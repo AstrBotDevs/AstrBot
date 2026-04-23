@@ -380,7 +380,7 @@
             },
             "appid": {
                 "description": "ID приложения",
-                "hint": "Обязательно для QQ Official Bot. См. документацию."
+                "hint": "Обязательно. App ID текущей платформы сообщений. См. документацию по интеграции платформы."
             },
             "callback_server_host": {
                 "description": "Хост callback-сервера",
