@@ -42,6 +42,7 @@
     "configure": "Configure",
     "viewInfo": "Handlers",
     "viewDocs": "Documentation",
+    "viewChangelog": "Changelog",
     "viewRepo": "Repository",
     "close": "Close",
     "save": "Save",

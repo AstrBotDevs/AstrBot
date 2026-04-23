@@ -379,6 +379,14 @@ const viewChangelog = () => {
               >
                 {{ extension.desc }}
               </div>
+
+              <div
+                v-if="extension.author"
+                class="extension-author text-caption text-medium-emphasis mt-1"
+              >
+                <v-icon icon="mdi-account" size="x-small" class="mr-1"></v-icon>
+                {{ extension.author }}
+              </div>
             </div>
           </div>
         </div>
@@ -397,6 +405,19 @@ const viewChangelog = () => {
               variant="tonal"
               color="info"
               @click="viewReadme"
+            ></v-btn>
+          </template>
+        </v-tooltip>
+
+        <v-tooltip location="top" :text="tm('buttons.viewChangelog')">
+          <template v-slot:activator="{ props: actionProps }">
+            <v-btn
+              v-bind="actionProps"
+              icon="mdi-update"
+              size="small"
+              variant="tonal"
+              color="info"
+              @click="viewChangelog"
             ></v-btn>
           </template>
         </v-tooltip>
