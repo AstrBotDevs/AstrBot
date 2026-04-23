@@ -380,7 +380,7 @@
       },
       "appid": {
         "description": "App ID",
-        "hint": "Required. App ID for the QQ Official Bot platform. See the docs for how to obtain it."
+        "hint": "Required. App ID for the current messaging platform. See the platform integration docs for how to obtain it."
       },
       "callback_server_host": {
         "description": "Callback Server Host",
