@@ -1,4 +1,4 @@
-from typing import cast
+from typing import Any, cast
 
 from google import genai
 from google.genai import types
@@ -78,6 +78,27 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         except APIError as e:
             raise Exception(f"Gemini Embedding API批量请求失败: {e.message}")
 
+    async def get_models(self) -> list[str]:
+        try:
+            models = await self.client.models.list()
+            all_model_ids: list[str] = []
+            embedding_model_ids: list[str] = []
+
+            for model in getattr(models, "page", []):
+                model_id = self._extract_model_id(model)
+                if not model_id:
+                    continue
+                all_model_ids.append(model_id)
+                if self._supports_embedding(model, model_id):
+                    embedding_model_ids.append(model_id)
+
+            all_model_ids = sorted(dict.fromkeys(all_model_ids))
+            embedding_model_ids = sorted(dict.fromkeys(embedding_model_ids))
+
+            return embedding_model_ids or all_model_ids
+        except Exception as e:
+            raise Exception(f"获取 Gemini 嵌入模型列表失败: {e!s}") from e
+
     def get_dim(self) -> int:
         """获取向量的维度"""
         return int(self.provider_config.get("embedding_dimensions", 768))
@@ -85,3 +106,30 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     async def terminate(self):
         if self.client:
             await self.client.aclose()
+
+    @staticmethod
+    def _extract_model_id(model: Any) -> str:
+        model_name = getattr(model, "name", "") or getattr(model, "model", "")
+        if not model_name:
+            return ""
+        return str(model_name).removeprefix("models/")
+
+    @classmethod
+    def _supports_embedding(cls, model: Any, model_id: str) -> bool:
+        supported_actions = getattr(model, "supported_actions", None) or getattr(
+            model, "supported_generation_methods", []
+        )
+        if isinstance(supported_actions, list):
+            normalized_actions = {
+                str(action).lower().replace("_", "").replace("-", "")
+                for action in supported_actions
+            }
+            if "embedcontent" in normalized_actions:
+                return True
+
+        return cls._looks_like_embedding_model(model_id)
+
+    @staticmethod
+    def _looks_like_embedding_model(model_id: str) -> bool:
+        normalized_model_id = model_id.lower()
+        return "embedding" in normalized_model_id or "embed" in normalized_model_id
