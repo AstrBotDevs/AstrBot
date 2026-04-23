@@ -80,11 +80,10 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
     async def get_models(self) -> list[str]:
         try:
-            models = await self.client.models.list()
             all_model_ids: list[str] = []
             embedding_model_ids: list[str] = []
 
-            for model in getattr(models, "page", []):
+            async for model in await self.client.models.list():
                 model_id = self._extract_model_id(model)
                 if not model_id:
                     continue

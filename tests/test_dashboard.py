@@ -1243,6 +1243,25 @@ class _UnsupportedEmbeddingProvider(EmbeddingProvider):
         type(self).terminate_calls += 1
 
 
+class _ErrorEmbeddingProvider(EmbeddingProvider):
+    terminate_calls = 0
+
+    async def get_embedding(self, text: str) -> list[float]:
+        return [0.1]
+
+    async def get_embeddings(self, text: list[str]) -> list[list[float]]:
+        return [[0.1] for _ in text]
+
+    def get_dim(self) -> int:
+        return 1
+
+    async def get_models(self) -> list[str]:
+        raise RuntimeError("boom")
+
+    async def terminate(self):
+        type(self).terminate_calls += 1
+
+
 @pytest.mark.asyncio
 async def test_get_embedding_models_success_and_terminate(
     app: Quart,
@@ -1308,3 +1327,37 @@ async def test_get_embedding_models_unsupported_returns_error(
     data = await response.get_json()
     assert data["status"] == "error"
     assert _UnsupportedEmbeddingProvider.terminate_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_get_embedding_models_runtime_error_returns_error_and_terminate(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    from astrbot.core.provider.register import provider_cls_map
+
+    _ErrorEmbeddingProvider.terminate_calls = 0
+    monkeypatch.setitem(
+        provider_cls_map,
+        "test_embedding_runtime_error",
+        SimpleNamespace(cls_type=_ErrorEmbeddingProvider),
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/config/provider/get_embedding_models",
+        headers=authenticated_header,
+        json={
+            "provider_config": {
+                "id": "test-embedding-provider",
+                "type": "test_embedding_runtime_error",
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "获取嵌入模型列表失败" in data["message"]
+    assert _ErrorEmbeddingProvider.terminate_calls == 1

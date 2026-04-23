@@ -9,7 +9,14 @@ from astrbot.core.provider.sources.gemini_embedding_source import (
 
 class _FakeModelsPager:
     def __init__(self, models) -> None:
-        self.page = models
+        self._models = models
+
+    def __aiter__(self):
+        async def _gen():
+            for model in self._models:
+                yield model
+
+        return _gen()
 
 
 class _FakeModelsAPI:
