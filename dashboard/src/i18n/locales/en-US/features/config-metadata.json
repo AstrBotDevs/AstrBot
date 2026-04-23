@@ -280,6 +280,10 @@
           "description": "Output Tool Call Results",
           "hint": "Only takes effect when \"Output Function Call Status\" is enabled, and shows at most 70 characters."
         },
+        "buffer_intermediate_messages": {
+          "description": "Merge Agent Intermediate Messages",
+          "hint": "When enabled, intermediate text generated during multi-step tool calls in non-streaming mode will be buffered and sent as a single merged reply after the Agent finishes."
+        },
         "sanitize_context_by_modalities": {
           "description": "Sanitize History by Modalities",
           "hint": "When enabled, sanitizes contexts before each LLM request by removing image blocks and tool-call structures that the current provider's modalities do not support (this changes what the model sees)."
@@ -376,7 +380,7 @@
       },
       "appid": {
         "description": "App ID",
-        "hint": "Required. App ID for the QQ Official Bot platform. See the docs for how to obtain it."
+        "hint": "Required. App ID for the current messaging platform. See the platform integration docs for how to obtain it."
       },
       "callback_server_host": {
         "description": "Callback Server Host",
