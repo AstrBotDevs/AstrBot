@@ -1,4 +1,4 @@
-# Admin Panel
+# WebUI
 
 The AstrBot admin panel features plugin management, log viewing, visual configuration, statistics viewing, and more.
 
@@ -14,6 +14,23 @@ After starting AstrBot, you can access the admin panel by visiting `http://local
 ## Login
 
 The default username and password are both `astrbot`.
+
+## ChatUI
+
+AstrBot includes a built-in ChatUI for talking to configured models directly in your browser.
+
+ChatUI supports these common workflows:
+
+- Create, rename, and delete conversations, and switch previous conversations from the sidebar.
+- Select the config profile, model provider, and model on the chat page; if Provider session separation is enabled, you can also choose a model for the current session only.
+- Send text, images, files, and voice input; uploaded attachments show previews and use file signature checks to help identify file types.
+- View model thinking, tool-call status, knowledge-base or web-search references, and per-message token and latency statistics.
+- Copy or regenerate existing replies, including regenerating with another model.
+- Edit a user message and continue generation from that point, or start a thread from a specific excerpt.
+- Switch between streaming/normal response modes and SSE/WebSocket transport modes.
+
+> [!NOTE]
+> To keep message delivery ordered, keep only one ChatUI page open for the same browser session. If you open chat in multiple tabs, the system may ask you to reconnect.
 
 ## Visual Configuration
 
