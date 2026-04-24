@@ -156,11 +156,23 @@ class LogQueueHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         log_entry = self.format(record)
+        exc_text = ""
+        if record.exc_info:
+            try:
+                exc_text = self.formatter.formatException(record.exc_info)
+            except Exception:
+                exc_text = ""
         self.log_broker.publish(
             {
                 "level": record.levelname,
                 "time": time.time(),
                 "data": log_entry,
+                "message": record.getMessage(),
+                "plugin_tag": getattr(record, "plugin_tag", ""),
+                "source_file": getattr(record, "source_file", ""),
+                "source_line": getattr(record, "source_line", 0),
+                "pathname": getattr(record, "pathname", ""),
+                "exc_text": exc_text,
             },
         )
 

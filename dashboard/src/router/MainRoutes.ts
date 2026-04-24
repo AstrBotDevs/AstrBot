@@ -92,6 +92,11 @@ const MainRoutes = {
       component: () => import('@/views/TracePage.vue')
     },
     {
+      name: 'ErrorAnalysis',
+      path: '/error-analysis',
+      component: () => import('@/views/ErrorAnalysisPage.vue')
+    },
+    {
       name: 'NativeKnowledgeBase',
       path: '/knowledge-base',
       component: () => import('@/views/knowledge-base/index.vue'),

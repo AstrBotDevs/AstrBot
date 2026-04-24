@@ -22,6 +22,7 @@
   "sessionManagement": "Custom Rules",
   "console": "Console",
   "trace": "Trace",
+  "errorAnalysis": "Error Diagnosis",
   "alkaid": "Alkaid Lab",
   "knowledgeBase": "Knowledge Base",
   "about": "About",
