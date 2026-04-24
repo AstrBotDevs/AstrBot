@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from 'vue-router';
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import axios from 'axios';
 import VerticalSidebarVue from './vertical-sidebar/VerticalSidebar.vue';
 import VerticalHeaderVue from './vertical-header/VerticalHeader.vue';
@@ -18,12 +18,18 @@ const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
 const isCurrentChatRoute = computed(() => route.path === '/chat' || route.path.startsWith('/chat/'));
-
+const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value)
 
 const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
 const showFirstNoticeDialog = ref(false);
+
+watch(isCurrentChatRoute, (isChatRoute) => {
+  if (isChatRoute) {
+    shouldMountChat.value = true;
+  }
+});
 
 const checkMigration = async (): Promise<boolean> => {
   try {
@@ -116,10 +122,14 @@ onMounted(() => {
             minHeight: isCurrentChatRoute ? 'unset' : undefined
           }">
           <div :style="{ height: '100%', width: '100%', overflow: isCurrentChatRoute ? 'hidden' : undefined }">
-            <div v-if="isCurrentChatRoute" style="height: 100%; width: 100%; overflow: hidden;">
-              <Chat />
+            <div
+              v-if="shouldMountChat"
+              v-show="isCurrentChatRoute"
+              style="height: 100%; width: 100%; overflow: hidden;"
+            >
+              <Chat :active="isCurrentChatRoute" />
             </div>
-            <RouterView v-else />
+            <RouterView v-if="!isCurrentChatRoute" />
           </div>
         </v-container>
       </v-main>
