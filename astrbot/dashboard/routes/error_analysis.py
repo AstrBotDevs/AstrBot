@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -144,8 +145,10 @@ class ErrorAnalysisRoute(Route):
 
         self.records_lock = asyncio.Lock()
         self.settings_lock = asyncio.Lock()
+        self.analysis_semaphore = asyncio.Semaphore(2)
         self.event_queues: list[asyncio.Queue] = []
         self.watcher_task: asyncio.Task | None = None
+        self._settings_cache: dict[str, Any] | None = None
 
         self.routes = {
             "/error-analysis/settings": [
@@ -388,17 +391,22 @@ class ErrorAnalysisRoute(Route):
         try:
             while True:
                 log_item = await queue.get()
-                await self._handle_log(log_item)
+                try:
+                    await self._handle_log(log_item)
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("[ErrorAnalysis] handle log failed: %s", exc)
         except asyncio.CancelledError:
             return
-        except Exception as exc:  # noqa: BLE001
-            logger.error("[ErrorAnalysis] log watcher stopped: %s", exc)
         finally:
             self.log_broker.unregister(queue)
 
     async def _handle_log(self, raw_log: dict[str, Any]):
+        level = str(raw_log.get("level") or "").upper()
+        if level not in ALLOWED_LEVELS:
+            return
+
         settings = await self._load_settings()
-        if str(raw_log.get("level") or "").upper() not in settings["levels"]:
+        if level not in settings["levels"]:
             return
         if not settings["passive_record"] and not settings["auto_analyze"]:
             return
@@ -430,7 +438,11 @@ class ErrorAnalysisRoute(Route):
                 await self._emit_event("record_updated", updated)
             return
 
-        asyncio.create_task(self._analyze_record(record["id"], provider_id))
+        asyncio.create_task(self._run_analysis_limited(record["id"], provider_id))
+
+    async def _run_analysis_limited(self, record_id: str, provider_id: str):
+        async with self.analysis_semaphore:
+            await self._analyze_record(record_id, provider_id)
 
     async def _create_record_from_log(
         self,
@@ -446,59 +458,60 @@ class ErrorAnalysisRoute(Route):
 
         now = time.time()
         fingerprint = self._build_fingerprint(raw_log)
-        records = await self._load_records()
-        if not force_create and self._find_duplicate_record(
-            records,
-            fingerprint=fingerprint,
-            dedupe_window_sec=settings["dedupe_window_sec"],
-            now=now,
-        ):
-            return None
+        async with self.records_lock:
+            records = self._load_records_unlocked()
+            if not force_create and self._find_duplicate_record(
+                records,
+                fingerprint=fingerprint,
+                dedupe_window_sec=settings["dedupe_window_sec"],
+                now=now,
+            ):
+                return None
 
-        record_id = self._generate_record_id(now)
-        record = {
-            "id": record_id,
-            "status": "analyzing" if settings["auto_analyze"] else "pending",
-            "source": source,
-            "created_at": now,
-            "updated_at": now,
-            "fingerprint": fingerprint,
-            "provider_id": str(settings.get("provider_id") or ""),
-            "target_type": record_meta["target_type"],
-            "target_name": record_meta["target_name"],
-            "severity": self._level_to_severity(str(raw_log.get("level") or "")),
-            "summary": "Analyzing...",
-            "log_level": str(raw_log.get("level") or ""),
-            "source_file": str(raw_log.get("source_file") or ""),
-            "source_line": int(raw_log.get("source_line") or 0),
-            "pathname": str(raw_log.get("pathname") or ""),
-            "log_excerpt": redact_sensitive_text(str(raw_log.get("data") or "")),
-            "message": redact_sensitive_text(str(raw_log.get("message") or "")),
-            "traceback": redact_sensitive_text(
-                str(raw_log.get("exc_text") or self._extract_traceback(raw_log))
-            ),
-            "related_files": [],
-            "plugin_info": self._build_plugin_info(record_meta["target_name"]),
-            "analysis": {
-                "who_caused": "Unknown",
-                "severity": "unknown",
-                "summary": "Pending analysis",
-                "reason": "",
-                "user_solution": "",
-                "developer_solution": "",
-                "risk": "",
-                "confidence": 0.0,
+            record_id = self._generate_record_id(now)
+            record = {
+                "id": record_id,
+                "status": "analyzing" if settings["auto_analyze"] else "pending",
+                "source": source,
+                "created_at": now,
+                "updated_at": now,
+                "fingerprint": fingerprint,
+                "provider_id": str(settings.get("provider_id") or ""),
+                "target_type": record_meta["target_type"],
+                "target_name": record_meta["target_name"],
+                "severity": self._level_to_severity(str(raw_log.get("level") or "")),
+                "summary": "Analyzing...",
+                "log_level": str(raw_log.get("level") or ""),
+                "source_file": str(raw_log.get("source_file") or ""),
+                "source_line": int(raw_log.get("source_line") or 0),
+                "pathname": str(raw_log.get("pathname") or ""),
+                "log_excerpt": redact_sensitive_text(str(raw_log.get("data") or "")),
+                "message": redact_sensitive_text(str(raw_log.get("message") or "")),
+                "traceback": redact_sensitive_text(
+                    str(raw_log.get("exc_text") or self._extract_traceback(raw_log))
+                ),
                 "related_files": [],
-            },
-            "raw_model_output": "",
-            "qa_messages": [],
-            "error_message": "",
-        }
+                "plugin_info": self._build_plugin_info(record_meta["target_name"]),
+                "analysis": {
+                    "who_caused": "Unknown",
+                    "severity": "unknown",
+                    "summary": "Pending analysis",
+                    "reason": "",
+                    "user_solution": "",
+                    "developer_solution": "",
+                    "risk": "",
+                    "confidence": 0.0,
+                    "related_files": [],
+                },
+                "raw_model_output": "",
+                "qa_messages": [],
+                "error_message": "",
+            }
 
-        records.append(record)
-        records = self._trim_records(records, int(settings["max_records"]))
-        await self._save_records(records)
-        return record
+            records.append(record)
+            records = self._trim_records(records, int(settings["max_records"]))
+            self._save_records_unlocked(records)
+            return record
 
     async def _analyze_record(
         self,
@@ -601,24 +614,38 @@ class ErrorAnalysisRoute(Route):
 
     async def _load_settings(self) -> dict[str, Any]:
         async with self.settings_lock:
-            if not self.settings_file.exists():
-                await self._save_settings(DEFAULT_SETTINGS.copy())
-                return DEFAULT_SETTINGS.copy()
-            try:
-                payload = json.loads(self.settings_file.read_text(encoding="utf-8"))
-                if not isinstance(payload, dict):
-                    raise ValueError("invalid settings payload")
-            except Exception:  # noqa: BLE001
-                payload = DEFAULT_SETTINGS.copy()
-                await self._save_settings(payload)
-            return self._sanitize_settings(payload)
+            payload = self._load_settings_unlocked()
+            return payload.copy()
 
     async def _save_settings(self, payload: dict[str, Any]):
+        async with self.settings_lock:
+            self._save_settings_unlocked(payload)
+
+    def _load_settings_unlocked(self) -> dict[str, Any]:
+        if self._settings_cache is not None:
+            return self._settings_cache.copy()
+        if not self.settings_file.exists():
+            sanitized = self._sanitize_settings(DEFAULT_SETTINGS.copy())
+            self._save_settings_unlocked(sanitized)
+            return sanitized.copy()
+        try:
+            payload = json.loads(self.settings_file.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("invalid settings payload")
+        except Exception:  # noqa: BLE001
+            payload = DEFAULT_SETTINGS.copy()
+        sanitized = self._sanitize_settings(payload)
+        self._save_settings_unlocked(sanitized)
+        return sanitized.copy()
+
+    def _save_settings_unlocked(self, payload: dict[str, Any]):
+        sanitized = self._sanitize_settings(payload)
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.settings_file.write_text(
-            json.dumps(self._sanitize_settings(payload), ensure_ascii=False, indent=2),
+            json.dumps(sanitized, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        self._settings_cache = sanitized.copy()
 
     def _sanitize_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
         data = DEFAULT_SETTINGS.copy()
@@ -657,30 +684,36 @@ class ErrorAnalysisRoute(Route):
 
     async def _load_records(self) -> list[dict[str, Any]]:
         async with self.records_lock:
-            if not self.records_file.exists():
-                return []
-            records: list[dict[str, Any]] = []
-            for line in self.records_file.read_text(
-                encoding="utf-8",
-                errors="replace",
-            ).splitlines():
-                text = line.strip()
-                if not text:
-                    continue
-                try:
-                    payload = json.loads(text)
-                    if isinstance(payload, dict):
-                        records.append(payload)
-                except json.JSONDecodeError:
-                    continue
-            return records
+            return self._load_records_unlocked()
 
     async def _save_records(self, records: list[dict[str, Any]]):
         async with self.records_lock:
-            self.base_dir.mkdir(parents=True, exist_ok=True)
-            with self.records_file.open("w", encoding="utf-8") as f:
-                for item in records:
-                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            self._save_records_unlocked(records)
+
+    def _load_records_unlocked(self) -> list[dict[str, Any]]:
+        if not self.records_file.exists():
+            return []
+        records: list[dict[str, Any]] = []
+        for line in self.records_file.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines():
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                payload = json.loads(text)
+                if isinstance(payload, dict):
+                    records.append(payload)
+            except json.JSONDecodeError:
+                continue
+        return records
+
+    def _save_records_unlocked(self, records: list[dict[str, Any]]):
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        with self.records_file.open("w", encoding="utf-8") as f:
+            for item in records:
+                f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
     async def _get_record(self, record_id: str) -> dict[str, Any] | None:
         records = await self._load_records()
@@ -694,21 +727,27 @@ class ErrorAnalysisRoute(Route):
         record_id: str,
         updates: dict[str, Any],
     ) -> dict[str, Any] | None:
-        records = await self._load_records()
-        updated: dict[str, Any] | None = None
-        for index, item in enumerate(records):
-            if item.get("id") != record_id:
-                continue
-            item = {**item, **updates}
-            records[index] = item
-            updated = item
-            break
-        if not updated:
-            return None
-        settings = await self._load_settings()
-        records = self._trim_records(records, int(settings["max_records"]))
-        await self._save_records(records)
-        return updated
+        async with self.records_lock:
+            records = self._load_records_unlocked()
+            updated: dict[str, Any] | None = None
+            for index, item in enumerate(records):
+                if item.get("id") != record_id:
+                    continue
+                item = {**item, **updates}
+                records[index] = item
+                updated = item
+                break
+            if not updated:
+                return None
+            max_records = int(
+                (self._settings_cache or DEFAULT_SETTINGS).get(
+                    "max_records",
+                    DEFAULT_SETTINGS["max_records"],
+                )
+            )
+            records = self._trim_records(records, max_records)
+            self._save_records_unlocked(records)
+            return updated
 
     async def _append_qa_message(
         self,
@@ -716,38 +755,39 @@ class ErrorAnalysisRoute(Route):
         question: str,
         answer: str,
     ) -> dict[str, Any] | None:
-        records = await self._load_records()
-        updated: dict[str, Any] | None = None
-        now = time.time()
-        for index, item in enumerate(records):
-            if item.get("id") != record_id:
-                continue
-            qa_messages = item.get("qa_messages")
-            if not isinstance(qa_messages, list):
-                qa_messages = []
-            qa_messages.append(
-                {
-                    "role": "user",
-                    "content": question,
-                    "timestamp": now,
-                }
-            )
-            qa_messages.append(
-                {
-                    "role": "assistant",
-                    "content": answer,
-                    "timestamp": now,
-                }
-            )
-            item["qa_messages"] = qa_messages[-30:]
-            item["updated_at"] = now
-            records[index] = item
-            updated = item
-            break
-        if not updated:
-            return None
-        await self._save_records(records)
-        return updated
+        async with self.records_lock:
+            records = self._load_records_unlocked()
+            updated: dict[str, Any] | None = None
+            now = time.time()
+            for index, item in enumerate(records):
+                if item.get("id") != record_id:
+                    continue
+                qa_messages = item.get("qa_messages")
+                if not isinstance(qa_messages, list):
+                    qa_messages = []
+                qa_messages.append(
+                    {
+                        "role": "user",
+                        "content": question,
+                        "timestamp": now,
+                    }
+                )
+                qa_messages.append(
+                    {
+                        "role": "assistant",
+                        "content": answer,
+                        "timestamp": now,
+                    }
+                )
+                item["qa_messages"] = qa_messages[-30:]
+                item["updated_at"] = now
+                records[index] = item
+                updated = item
+                break
+            if not updated:
+                return None
+            self._save_records_unlocked(records)
+            return updated
 
     async def _emit_event(self, event_type: str, record: dict[str, Any]):
         payload = {"type": event_type, "record_id": record.get("id"), "record": record}
@@ -784,7 +824,7 @@ class ErrorAnalysisRoute(Route):
         return response
 
     def _generate_record_id(self, ts: float) -> str:
-        return f"ea_{int(ts * 1000)}"
+        return f"ea_{int(ts * 1000)}_{uuid.uuid4().hex[:8]}"
 
     def _build_fingerprint(self, raw_log: dict[str, Any]) -> str:
         text = "|".join(
@@ -844,15 +884,26 @@ class ErrorAnalysisRoute(Route):
 
     def _classify_target(self, raw_log: dict[str, Any]) -> dict[str, str]:
         pathname = str(raw_log.get("pathname") or "")
-        message = f"{raw_log.get('message') or ''}\n{raw_log.get('data') or ''}".lower()
+        source_file = str(raw_log.get("source_file") or "")
+        evidence = "\n".join(
+            [
+                str(raw_log.get("exc_text") or ""),
+                str(raw_log.get("data") or ""),
+                str(raw_log.get("message") or ""),
+                pathname,
+                source_file,
+            ]
+        )
+        message = evidence.lower()
+        normalized_path = pathname.replace("\\", "/")
 
-        if plugin_match := PLUGIN_PATH_RE.search(pathname):
+        if plugin_match := PLUGIN_PATH_RE.search(evidence):
             plugin_dir = plugin_match.group(1)
             return {"target_type": "plugin", "target_name": plugin_dir}
-        if builtin_match := BUILTIN_PLUGIN_PATH_RE.search(pathname):
+        if builtin_match := BUILTIN_PLUGIN_PATH_RE.search(evidence):
             plugin_dir = builtin_match.group(1)
             return {"target_type": "plugin", "target_name": plugin_dir}
-        if "astrbot/core" in pathname.replace("\\", "/"):
+        if "astrbot/core" in normalized_path:
             return {"target_type": "core", "target_name": "AstrBot Core"}
         if any(key in message for key in ["401", "403", "429", "api key", "provider"]):
             return {"target_type": "provider", "target_name": "Provider"}
@@ -956,30 +1007,39 @@ class ErrorAnalysisRoute(Route):
             return None
 
         try:
-            raw = path.read_bytes()
+            half = max(10, context_lines // 2)
+            target_line = max(1, center_line)
+            start = max(1, target_line - half)
+            end = target_line + half
+
+            selected: list[tuple[int, str]] = []
+            used_bytes = 0
+            with path.open("r", encoding="utf-8", errors="replace") as f:
+                for index, line in enumerate(f, start=1):
+                    if index < start:
+                        continue
+                    if index > end:
+                        break
+                    encoded = line.encode("utf-8", errors="replace")
+                    if used_bytes + len(encoded) > max_bytes and selected:
+                        break
+                    selected.append((index, line.rstrip("\n")))
+                    used_bytes += len(encoded)
         except Exception:  # noqa: BLE001
             return None
 
-        read_bytes = min(len(raw), max_bytes)
-        text = raw[:read_bytes].decode("utf-8", errors="replace")
-        lines = text.splitlines()
-        if not lines:
+        if not selected:
             return None
 
-        safe_center = max(1, min(center_line, len(lines)))
-        half = max(10, context_lines // 2)
-        start = max(1, safe_center - half)
-        end = min(len(lines), safe_center + half)
-        line_content = "\n".join(
-            f"{index}: {line}"
-            for index, line in enumerate(lines[start - 1 : end], start=start)
-        )
+        line_content = "\n".join(f"{index}: {line}" for index, line in selected)
+        start_line = selected[0][0]
+        end_line = selected[-1][0]
         return {
             "path": str(path),
-            "start_line": start,
-            "end_line": end,
+            "start_line": start_line,
+            "end_line": end_line,
             "content": redact_sensitive_text(line_content),
-            "bytes": read_bytes,
+            "bytes": used_bytes,
         }
 
     def _is_path_allowed(self, path: Path) -> bool:

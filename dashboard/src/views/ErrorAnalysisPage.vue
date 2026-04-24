@@ -1,24 +1,24 @@
-<template>
+﻿<template>
   <div class="error-analysis-page">
     <v-container fluid class="pa-0">
       <v-row class="px-4 py-3 align-center">
         <v-col cols="12" md="8">
           <h1 class="text-h1 font-weight-bold mb-2">
-            <v-icon class="me-2">mdi-alert-decagram-outline</v-icon>报错诊断
+            <v-icon class="me-2">mdi-alert-decagram-outline</v-icon>鎶ラ敊璇婃柇
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-0">
-            自动记录 ERROR/CRITICAL 日志，结合源码上下文进行 AI 分析，并支持继续追问。
+            鑷姩璁板綍 ERROR/CRITICAL 鏃ュ織锛岀粨鍚堟簮鐮佷笂涓嬫枃杩涜 AI 鍒嗘瀽锛屽苟鏀寔缁х画杩介棶銆?
           </p>
         </v-col>
         <v-col cols="12" md="4" class="d-flex justify-end">
           <v-btn color="primary" prepend-icon="mdi-content-save-outline" :loading="savingSettings" @click="saveSettings">
-            保存设置
+            淇濆瓨璁剧疆
           </v-btn>
         </v-col>
       </v-row>
 
       <v-card class="mx-4 mb-4" elevation="0" variant="outlined">
-        <v-card-title>诊断设置</v-card-title>
+        <v-card-title>璇婃柇璁剧疆</v-card-title>
         <v-card-text>
           <v-row>
             <v-col cols="12" md="4">
@@ -27,7 +27,7 @@
                 :items="providerOptions"
                 item-title="title"
                 item-value="value"
-                label="分析模型"
+                label="鍒嗘瀽妯″瀷"
                 variant="solo-filled"
                 flat
                 clearable
@@ -39,7 +39,7 @@
                 :items="scopeOptions"
                 item-title="title"
                 item-value="value"
-                label="分析范围"
+                label="鍒嗘瀽鑼冨洿"
                 variant="solo-filled"
                 flat
               />
@@ -50,7 +50,7 @@
                 :items="pluginOptions"
                 item-title="title"
                 item-value="value"
-                label="指定插件"
+                label="鎸囧畾鎻掍欢"
                 multiple
                 chips
                 variant="solo-filled"
@@ -58,16 +58,16 @@
               />
             </v-col>
             <v-col cols="12" md="3">
-              <v-switch v-model="settings.auto_analyze" color="primary" label="自动分析" inset />
+              <v-switch v-model="settings.auto_analyze" color="primary" label="鑷姩鍒嗘瀽" inset />
             </v-col>
             <v-col cols="12" md="3">
-              <v-switch v-model="settings.passive_record" color="primary" label="主动记录" inset />
+              <v-switch v-model="settings.passive_record" color="primary" label="涓诲姩璁板綍" inset />
             </v-col>
             <v-col cols="12" md="3">
-              <v-switch v-model="settings.include_source_context" color="primary" label="包含源码上下文" inset />
+              <v-switch v-model="settings.include_source_context" color="primary" label="Include Source Context" inset />
             </v-col>
             <v-col cols="12" md="3">
-              <v-text-field v-model.number="settings.dedupe_window_sec" type="number" label="去重窗口(秒)" variant="solo-filled" flat />
+              <v-text-field v-model.number="settings.dedupe_window_sec" type="number" label="Dedupe Window (sec)" variant="solo-filled" flat />
             </v-col>
           </v-row>
         </v-card-text>
@@ -75,14 +75,14 @@
 
       <v-card class="mx-4 mb-4" elevation="0" variant="outlined">
         <v-card-title class="d-flex align-center">
-          问题卡片
+          闂鍗＄墖
           <v-spacer />
           <v-select
             v-model="statusFilter"
             :items="statusOptions"
             item-title="title"
             item-value="value"
-            label="状态筛选"
+            label="Status Filter"
             variant="solo-filled"
             flat
             clearable
@@ -109,23 +109,23 @@
                   <div class="text-body-2 text-medium-emphasis mb-3">{{ record.analysis?.reason || record.error_message || '' }}</div>
                   <div class="d-flex flex-wrap ga-2">
                     <v-btn size="small" variant="outlined" prepend-icon="mdi-file-document-outline" @click="openDetail(record)">
-                      查看详情
+                      鏌ョ湅璇︽儏
                     </v-btn>
                     <v-btn size="small" variant="outlined" prepend-icon="mdi-refresh" :loading="manualRunningId === record.id" @click="reanalyze(record)">
-                      重新分析
+                      閲嶆柊鍒嗘瀽
                     </v-btn>
                     <v-btn size="small" color="primary" variant="tonal" prepend-icon="mdi-chat-outline" @click="openAsk(record)">
-                      询问 AI
+                      璇㈤棶 AI
                     </v-btn>
                     <v-btn size="small" color="grey" variant="text" prepend-icon="mdi-eye-off-outline" @click="ignoreRecord(record)">
-                      忽略
+                      蹇界暐
                     </v-btn>
                   </div>
                 </v-card-text>
               </v-card>
             </v-col>
           </v-row>
-          <div v-else class="text-medium-emphasis">暂无诊断记录</div>
+          <div v-else class="text-medium-emphasis">鏆傛棤璇婃柇璁板綍</div>
         </v-card-text>
       </v-card>
     </v-container>
@@ -133,23 +133,23 @@
     <v-dialog v-model="detailDialog" max-width="1100">
       <v-card>
         <v-card-title class="d-flex align-center">
-          诊断详情
+          璇婃柇璇︽儏
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="detailDialog = false" />
         </v-card-title>
         <v-card-text v-if="activeRecord">
           <v-row>
             <v-col cols="12" md="6">
-              <v-textarea :model-value="activeRecord.log_excerpt || ''" label="原始日志" rows="8" variant="solo-filled" flat readonly />
+              <v-textarea :model-value="activeRecord.log_excerpt || ''" label="鍘熷鏃ュ織" rows="8" variant="solo-filled" flat readonly />
             </v-col>
             <v-col cols="12" md="6">
               <v-textarea :model-value="activeRecord.traceback || ''" label="Traceback" rows="8" variant="solo-filled" flat readonly />
             </v-col>
             <v-col cols="12">
-              <v-textarea :model-value="formatAnalysis(activeRecord.analysis)" label="AI 分析结果" rows="10" variant="solo-filled" flat readonly />
+              <v-textarea :model-value="formatAnalysis(activeRecord.analysis)" label="AI 鍒嗘瀽缁撴灉" rows="10" variant="solo-filled" flat readonly />
             </v-col>
             <v-col cols="12" v-if="activeRecord.related_files?.length">
-              <div class="text-subtitle-1 mb-2">相关源码片段</div>
+              <div class="text-subtitle-1 mb-2">鐩稿叧婧愮爜鐗囨</div>
               <v-expansion-panels variant="accordion">
                 <v-expansion-panel v-for="(file, index) in activeRecord.related_files" :key="`${file.path}-${index}`">
                   <v-expansion-panel-title>
@@ -169,7 +169,7 @@
     <v-dialog v-model="askDialog" max-width="900">
       <v-card>
         <v-card-title class="d-flex align-center">
-          追问 AI
+          杩介棶 AI
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="askDialog = false" />
         </v-card-title>
@@ -189,7 +189,7 @@
           </div>
           <v-textarea
             v-model="question"
-            label="继续提问"
+            label="缁х画鎻愰棶"
             rows="3"
             auto-grow
             variant="solo-filled"
@@ -198,8 +198,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="askDialog = false">关闭</v-btn>
-          <v-btn color="primary" :loading="asking" @click="askAI">发送</v-btn>
+          <v-btn variant="text" @click="askDialog = false">鍏抽棴</v-btn>
+          <v-btn color="primary" :loading="asking" @click="askAI">Send</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -231,6 +231,7 @@ const asking = ref(false)
 const qaMessages = ref([])
 const snackbar = ref({ show: false, message: '', color: 'success' })
 let eventSource = null
+let eventRetryTimer = null
 
 const settings = ref({
   auto_analyze: false,
@@ -244,18 +245,18 @@ const settings = ref({
 })
 
 const scopeOptions = [
-  { title: '全部', value: 'all' },
-  { title: '仅核心', value: 'core' },
-  { title: '全部插件', value: 'all_plugins' },
-  { title: '指定插件', value: 'selected_plugins' }
+  { title: 'All', value: 'all' },
+  { title: 'Core Only', value: 'core' },
+  { title: 'All Plugins', value: 'all_plugins' },
+  { title: 'Selected Plugins', value: 'selected_plugins' }
 ]
 
 const statusOptions = [
-  { title: '分析中', value: 'analyzing' },
-  { title: '等待分析', value: 'pending' },
-  { title: '已完成', value: 'done' },
-  { title: '失败', value: 'failed' },
-  { title: '已忽略', value: 'ignored' }
+  { title: 'Analyzing', value: 'analyzing' },
+  { title: 'Pending', value: 'pending' },
+  { title: 'Done', value: 'done' },
+  { title: 'Failed', value: 'failed' },
+  { title: 'Ignored', value: 'ignored' }
 ]
 
 function showMessage(message, color = 'success') {
@@ -320,12 +321,12 @@ async function saveSettings() {
     const res = await axios.post('/api/error-analysis/settings', settings.value)
     if (res.data.status === 'ok') {
       settings.value = { ...settings.value, ...res.data.data }
-      showMessage('设置已保存')
+      showMessage('Settings saved')
     } else {
-      showMessage(res.data.message || '保存失败', 'error')
+      showMessage(res.data.message || '淇濆瓨澶辫触', 'error')
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || '保存失败', 'error')
+    showMessage(err.response?.data?.message || err.message || '淇濆瓨澶辫触', 'error')
   } finally {
     savingSettings.value = false
   }
@@ -376,12 +377,12 @@ async function reanalyze(record) {
     })
     if (res.data.status === 'ok') {
       upsertRecord(res.data.data)
-      showMessage('已重新分析')
+      showMessage('Re-analyzed')
     } else {
-      showMessage(res.data.message || '分析失败', 'error')
+      showMessage(res.data.message || '鍒嗘瀽澶辫触', 'error')
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || '分析失败', 'error')
+    showMessage(err.response?.data?.message || err.message || '鍒嗘瀽澶辫触', 'error')
   } finally {
     manualRunningId.value = ''
   }
@@ -392,12 +393,12 @@ async function ignoreRecord(record) {
     const res = await axios.post('/api/error-analysis/ignore', { record_id: record.id })
     if (res.data.status === 'ok') {
       upsertRecord(res.data.data)
-      showMessage('已忽略')
+      showMessage('Ignored')
     } else {
-      showMessage(res.data.message || '操作失败', 'error')
+      showMessage(res.data.message || '鎿嶄綔澶辫触', 'error')
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || '操作失败', 'error')
+    showMessage(err.response?.data?.message || err.message || '鎿嶄綔澶辫触', 'error')
   }
 }
 
@@ -420,6 +421,7 @@ async function askAI() {
   }
   asking.value = true
   streamingAnswer.value = ''
+  let hadError = false
   try {
     const token = localStorage.getItem('token')
     const response = await fetch('/api/error-analysis/ask/stream', {
@@ -434,6 +436,9 @@ async function askAI() {
         provider_id: settings.value.provider_id || undefined
       })
     })
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
     const reader = response.body?.getReader()
     if (!reader) {
       throw new Error('No stream body')
@@ -455,23 +460,31 @@ async function askAI() {
         if (payload.type === 'delta') {
           streamingAnswer.value += payload.data || ''
         } else if (payload.type === 'done') {
+          if (hadError || !streamingAnswer.value.trim()) {
+            continue
+          }
           qaMessages.value.push({ role: 'user', content: question.value })
           qaMessages.value.push({ role: 'assistant', content: streamingAnswer.value })
           question.value = ''
           await loadRecords()
         } else if (payload.type === 'error') {
-          showMessage(payload.message || '追问失败', 'error')
+          hadError = true
+          showMessage(payload.message || '杩介棶澶辫触', 'error')
         }
       }
     }
   } catch (err) {
-    showMessage(err.message || '追问失败', 'error')
+    showMessage(err.message || '杩介棶澶辫触', 'error')
   } finally {
     asking.value = false
   }
 }
 
 function connectEvents() {
+  if (eventRetryTimer) {
+    clearTimeout(eventRetryTimer)
+    eventRetryTimer = null
+  }
   if (eventSource) {
     eventSource.close()
     eventSource = null
@@ -499,7 +512,7 @@ function connectEvents() {
       eventSource.close()
       eventSource = null
     }
-    setTimeout(connectEvents, 2000)
+    eventRetryTimer = setTimeout(connectEvents, 2000)
   }
 }
 
@@ -513,6 +526,10 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (eventRetryTimer) {
+    clearTimeout(eventRetryTimer)
+    eventRetryTimer = null
+  }
   if (eventSource) {
     eventSource.close()
     eventSource = null
@@ -546,3 +563,5 @@ onUnmounted(() => {
   padding: 12px;
 }
 </style>
+
+
