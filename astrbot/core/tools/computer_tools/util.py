@@ -17,6 +17,11 @@ def workspace_root(umo: str) -> Path:
     return (Path(get_astrbot_workspaces_path()) / normalized_umo).resolve(strict=False)
 
 
+def format_exception_message(exc: BaseException) -> str:
+    message = str(exc).strip()
+    return message or exc.__class__.__name__
+
+
 def is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
     cfg = context.context.context.get_config(
         umo=context.context.event.unified_msg_origin
