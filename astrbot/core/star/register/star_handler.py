@@ -414,6 +414,46 @@ def register_on_waiting_llm_request(**kwargs):
     return decorator
 
 
+def register_on_prompt_assembly(**kwargs):
+    """当 Prompt Assembly 组装完成、渲染回 ProviderRequest 之前触发。
+
+    此时核心拥有的所有 prompt block 已注册完毕，插件可通过
+    ``mutation`` 参数向各通道追加内容。
+
+    可用方法：
+
+    - ``add_system(text, source, order)`` — 追加到 system prompt 末尾
+    - ``add_user_text(text, source, order)`` — 追加到用户消息中
+    - ``add_context_prefix(messages, source, order)`` — 插入到对话历史最前面
+    - ``add_context_suffix(messages, source, order)`` — 追加到对话历史末尾
+
+    Note:
+        ``add_context_prefix`` 会改变对话历史的开头，会**降低** LLM 服务端对
+        KV cache 前缀的复用率。只有确实需要这些内容参与多轮推理时才建议使用。
+
+        ``add_system``、``add_user_text`` 和 ``add_context_suffix`` 不会改变
+        对话历史的前缀，因此不会以同样的方式破坏历史前缀缓存，但它们依然会改变
+        最终请求内容。
+
+    Example:
+    ```py
+    @on_prompt_assembly()
+    async def add_prompt_block(self, event, mutation) -> None:
+        mutation.add_system(
+            "\\n[Plugin Policy]\\nKeep answers brief.\\n",
+            source="plugin:my_plugin",
+            order=950,
+        )
+    ```
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnPromptAssemblyEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
 def register_on_llm_request(**kwargs):
     """当有 LLM 请求时的事件
 

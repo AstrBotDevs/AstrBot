@@ -85,6 +85,7 @@ class PluginRoute(Route):
             EventType.OnCallingFuncToolEvent: "函数工具",
             EventType.OnAfterMessageSentEvent: "发送消息后",
             EventType.OnPluginErrorEvent: "插件报错时",
+            EventType.OnPromptAssemblyEvent: "Prompt Assembly 渲染前",
         }
 
         self._logo_cache = {}

@@ -1,5 +1,6 @@
 """Tests for astr_main_agent module."""
 
+import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,8 +13,16 @@ from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.prompt import (
+    PromptAssembly,
+    render_prompt_assembly,
+)
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
+
+
+def _render_assembly(req: ProviderRequest, assembly: PromptAssembly) -> None:
+    render_prompt_assembly(req, assembly)
 
 
 @pytest.fixture
@@ -311,7 +320,9 @@ class TestApplyKb:
             "astrbot.core.astr_main_agent.retrieve_knowledge_base",
             AsyncMock(return_value="KB result"),
         ):
-            await module._apply_kb(mock_event, req, mock_context, config)
+            assembly_kb = module.PromptAssembly()
+            await module._apply_kb(mock_event, req, mock_context, config, assembly_kb)
+            _render_assembly(req, assembly_kb)
 
         assert "[Related Knowledge Base Results]:" in req.system_prompt
         assert "KB result" in req.system_prompt
@@ -323,7 +334,7 @@ class TestApplyKb:
         req = ProviderRequest(prompt="test question")
         config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=True)
 
-        await module._apply_kb(mock_event, req, mock_context, config)
+        await module._apply_kb(mock_event, req, mock_context, config, module.PromptAssembly())
 
         assert req.func_tool is not None
 
@@ -336,7 +347,7 @@ class TestApplyKb:
             tool_call_timeout=60, kb_agentic_mode=False
         )
 
-        await module._apply_kb(mock_event, req, mock_context, config)
+        await module._apply_kb(mock_event, req, mock_context, config, module.PromptAssembly())
 
         assert req.system_prompt == "System"
 
@@ -353,7 +364,7 @@ class TestApplyKb:
             "astrbot.core.astr_main_agent.retrieve_knowledge_base",
             AsyncMock(return_value=None),
         ):
-            await module._apply_kb(mock_event, req, mock_context, config)
+            await module._apply_kb(mock_event, req, mock_context, config, module.PromptAssembly())
 
         assert req.system_prompt == "System"
 
@@ -365,7 +376,7 @@ class TestApplyKb:
         req = ProviderRequest(prompt="test", func_tool=existing_tools)
         config = module.MainAgentBuildConfig(tool_call_timeout=60, kb_agentic_mode=True)
 
-        await module._apply_kb(mock_event, req, mock_context, config)
+        await module._apply_kb(mock_event, req, mock_context, config, module.PromptAssembly())
 
         assert req.func_tool is not None
 
@@ -435,7 +446,9 @@ class TestApplyFileExtract:
         ) as mock_extract:
             mock_extract.return_value = "File content"
 
-            await module._apply_file_extract(mock_event, req, sample_config)
+            assembly_fe = module.PromptAssembly()
+        await module._apply_file_extract(mock_event, req, sample_config, assembly_fe)
+        _render_assembly(req, assembly_fe)
 
         assert len(req.contexts) == 1
         assert "File Extract Results" in req.contexts[0]["content"]
@@ -447,7 +460,9 @@ class TestApplyFileExtract:
         mock_event.message_obj.message = [Plain(text="Hello")]
         req = ProviderRequest(prompt="Hello")
 
-        await module._apply_file_extract(mock_event, req, sample_config)
+        assembly_fe = module.PromptAssembly()
+        await module._apply_file_extract(mock_event, req, sample_config, assembly_fe)
+        _render_assembly(req, assembly_fe)
 
         assert len(req.contexts) == 0
 
@@ -469,7 +484,9 @@ class TestApplyFileExtract:
         ) as mock_extract:
             mock_extract.return_value = "Reply content"
 
-            await module._apply_file_extract(mock_event, req, sample_config)
+            assembly_fe = module.PromptAssembly()
+        await module._apply_file_extract(mock_event, req, sample_config, assembly_fe)
+        _render_assembly(req, assembly_fe)
 
         assert len(req.contexts) == 1
 
@@ -489,7 +506,9 @@ class TestApplyFileExtract:
         ) as mock_extract:
             mock_extract.return_value = "Content"
 
-            await module._apply_file_extract(mock_event, req, sample_config)
+            assembly_fe = module.PromptAssembly()
+        await module._apply_file_extract(mock_event, req, sample_config, assembly_fe)
+        _render_assembly(req, assembly_fe)
 
         assert req.prompt == "总结一下文件里面讲了什么？"
 
@@ -509,7 +528,7 @@ class TestApplyFileExtract:
 
         req = ProviderRequest(prompt="Summarize")
 
-        await module._apply_file_extract(mock_event, req, config)
+        await module._apply_file_extract(mock_event, req, config, module.PromptAssembly())
 
         assert len(req.contexts) == 0
 
@@ -1415,7 +1434,9 @@ class TestApplyLlmSafetyMode:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        module._apply_llm_safety_mode(config, req)
+        assembly_safety = module.PromptAssembly()
+        module._apply_llm_safety_mode(config, req, assembly_safety)
+        _render_assembly(req, assembly_safety)
 
         assert "You are running in Safe Mode" in req.system_prompt
         assert "Original prompt" in req.system_prompt
@@ -1429,7 +1450,9 @@ class TestApplyLlmSafetyMode:
         )
         req = ProviderRequest(prompt="Test", system_prompt="My custom prompt")
 
-        module._apply_llm_safety_mode(config, req)
+        assembly_safety = module.PromptAssembly()
+        module._apply_llm_safety_mode(config, req, assembly_safety)
+        _render_assembly(req, assembly_safety)
 
         assert req.system_prompt.startswith("You are running in Safe Mode")
         assert "My custom prompt" in req.system_prompt
@@ -1443,7 +1466,9 @@ class TestApplyLlmSafetyMode:
         )
         req = ProviderRequest(prompt="Test", system_prompt=None)
 
-        module._apply_llm_safety_mode(config, req)
+        assembly_safety = module.PromptAssembly()
+        module._apply_llm_safety_mode(config, req, assembly_safety)
+        _render_assembly(req, assembly_safety)
 
         assert "You are running in Safe Mode" in req.system_prompt
 
@@ -1457,7 +1482,9 @@ class TestApplyLlmSafetyMode:
         req = ProviderRequest(prompt="Test", system_prompt="Original")
 
         with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_llm_safety_mode(config, req)
+            assembly_safety = module.PromptAssembly()
+            module._apply_llm_safety_mode(config, req, assembly_safety)
+        _render_assembly(req, assembly_safety)
 
         mock_logger.warning.assert_called_once()
         assert (
@@ -1475,7 +1502,9 @@ class TestApplyLlmSafetyMode:
         )
         req = ProviderRequest(prompt="Test", system_prompt="")
 
-        module._apply_llm_safety_mode(config, req)
+        assembly_safety = module.PromptAssembly()
+        module._apply_llm_safety_mode(config, req, assembly_safety)
+        _render_assembly(req, assembly_safety)
 
         assert "You are running in Safe Mode" in req.system_prompt
 
@@ -1493,7 +1522,8 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        assembly_sb = module.PromptAssembly()
+        module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
 
         assert req.func_tool is not None
         assert isinstance(req.func_tool, ToolSet)
@@ -1508,7 +1538,8 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        assembly_sb = module.PromptAssembly()
+        module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
 
         tool_names = req.func_tool.names()
         assert "astrbot_execute_shell" in tool_names
@@ -1526,7 +1557,9 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        assembly_sb = module.PromptAssembly()
+        module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
+        _render_assembly(req, assembly_sb)
 
         assert "sandboxed environment" in req.system_prompt
 
@@ -1547,7 +1580,8 @@ class TestApplySandboxTools:
         monkeypatch.delenv("SHIPYARD_ENDPOINT", raising=False)
         monkeypatch.delenv("SHIPYARD_ACCESS_TOKEN", raising=False)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        assembly_sb = module.PromptAssembly()
+        module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
 
         assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
         assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
@@ -1567,7 +1601,8 @@ class TestApplySandboxTools:
         req = ProviderRequest(prompt="Test", func_tool=None)
 
         with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123")
+            assembly_sb = module.PromptAssembly()
+        module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
 
         mock_logger.error.assert_called_once()
         assert (
@@ -1590,7 +1625,8 @@ class TestApplySandboxTools:
         req = ProviderRequest(prompt="Test", func_tool=None)
 
         with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123")
+            assembly_sb = module.PromptAssembly()
+        module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
 
         mock_logger.error.assert_called_once()
 
@@ -1608,7 +1644,8 @@ class TestApplySandboxTools:
         existing_toolset.add_tool(existing_tool)
         req = ProviderRequest(prompt="Test", func_tool=existing_toolset)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        assembly_sb = module.PromptAssembly()
+        module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
 
         assert "existing_tool" in req.func_tool.names()
         assert "astrbot_execute_shell" in req.func_tool.names()
@@ -1623,7 +1660,9 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        assembly_sb = module.PromptAssembly()
+        module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
+        _render_assembly(req, assembly_sb)
 
         assert req.system_prompt.startswith("Base prompt")
         assert "sandboxed environment" in req.system_prompt
@@ -1638,7 +1677,267 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        assembly_sb = module.PromptAssembly()
+        module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
+        _render_assembly(req, assembly_sb)
 
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
+
+
+class TestPromptAssemblyIntegration:
+    """Tests for PromptAssembly integration in build_main_agent."""
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_prompt_assembly_ordering(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test that prompt assembly blocks are rendered in correct order."""
+        module = ama
+        mock_event.platform_meta.support_proactive_message = False
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        conversation = _setup_conversation_for_build(mock_context.conversation_manager)
+        conversation.persona_id = "persona-1"
+        conversation.history = json.dumps([{"role": "user", "content": "history"}])
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(
+                "persona-1",
+                {
+                    "prompt": "PERSONA_BLOCK",
+                    "skills": None,
+                    "tools": None,
+                    "_begin_dialogs_processed": None,
+                },
+                None,
+                False,
+            )
+        )
+        tool_manager = MagicMock()
+        tool_manager.get_full_tool_set.return_value = ToolSet()
+        tool_manager.func_list = []
+        mock_context.get_llm_tool_manager.return_value = tool_manager
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    llm_safety_mode=False,
+                    computer_use_runtime="local",
+                    add_cron_tools=False,
+                ),
+            )
+
+        assert result is not None
+        sp = result.provider_request.system_prompt
+        # Persona should come before runtime
+        persona_idx = sp.find("PERSONA_BLOCK")
+        runtime_idx = sp.find("host local environment")
+        assert persona_idx < runtime_idx
+
+        core_trace = next(
+            call
+            for call in mock_event.trace.record.call_args_list
+            if call.args and call.args[0] == "core_prompt_assembly"
+        )
+        assert [item["source"] for item in core_trace.kwargs["system_blocks"]] == [
+            "persona",
+            "runtime:local",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_prepends_persona_begin_dialogs(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test that persona begin_dialogs are prepended to context."""
+        module = ama
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        conversation = _setup_conversation_for_build(mock_context.conversation_manager)
+        conversation.persona_id = "persona-1"
+        conversation.history = json.dumps([{"role": "user", "content": "history"}])
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(
+                "persona-1",
+                {
+                    "prompt": "PERSONA_BLOCK",
+                    "skills": None,
+                    "tools": None,
+                    "_begin_dialogs_processed": [
+                        {"role": "assistant", "content": "example"}
+                    ],
+                },
+                None,
+                False,
+            )
+        )
+        tool_manager = MagicMock()
+        tool_manager.get_full_tool_set.return_value = ToolSet()
+        tool_manager.func_list = []
+        mock_context.get_llm_tool_manager.return_value = tool_manager
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    llm_safety_mode=False,
+                    computer_use_runtime="none",
+                    add_cron_tools=False,
+                ),
+            )
+
+        assert result is not None
+        assert result.provider_request.contexts == [
+            {"role": "assistant", "content": "example"},
+            {"role": "user", "content": "history"},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_prompt_assembly_hook_can_add_blocks(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test that OnPromptAssembly hook can add blocks via PromptMutation."""
+        module = ama
+        mock_event.platform_meta.support_proactive_message = False
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        _setup_conversation_for_build(mock_context.conversation_manager)
+        tool_manager = MagicMock()
+        tool_manager.get_full_tool_set.return_value = ToolSet()
+        tool_manager.func_list = []
+        mock_context.get_llm_tool_manager.return_value = tool_manager
+
+        async def fake_call_event_hook(event, hook_type, *args):
+            if hook_type == module.EventType.OnPromptAssemblyEvent:
+                mutation = args[0]
+                mutation.add_system("\nPLUGIN_SYSTEM\n", "plugin:test", 950)
+                mutation.add_user_text("plugin user", "plugin:test", 950)
+                mutation.add_context_prefix(
+                    [{"role": "system", "content": "plugin prefix"}],
+                    "plugin:test",
+                    950,
+                )
+                mutation.add_context_suffix(
+                    [{"role": "assistant", "content": "plugin suffix"}],
+                    "plugin:test",
+                    950,
+                )
+            return False
+
+        with (
+            patch.object(
+                module, "call_event_hook", AsyncMock(side_effect=fake_call_event_hook)
+            ),
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    llm_safety_mode=False,
+                    computer_use_runtime="none",
+                    add_cron_tools=False,
+                ),
+            )
+
+        assert result is not None
+        assert result.provider_request.system_prompt == "\nPLUGIN_SYSTEM\n"
+        assert [
+            part.text for part in result.provider_request.extra_user_content_parts
+        ] == [
+            "plugin user",
+        ]
+        assert result.provider_request.contexts == [
+            {"role": "system", "content": "plugin prefix"},
+            {"role": "assistant", "content": "plugin suffix"},
+        ]
+        # Core trace should NOT include plugin blocks (snapshot taken before hook)
+        core_trace = next(
+            call
+            for call in mock_event.trace.record.call_args_list
+            if call.args and call.args[0] == "core_prompt_assembly"
+        )
+        assert core_trace.kwargs["system_blocks"] == []
+        assert core_trace.kwargs["user_append_parts"] == []
+        assert core_trace.kwargs["context_prefix"] == []
+        assert core_trace.kwargs["context_suffix"] == []
+        assert core_trace.kwargs["metadata"]["base_request"]["has_prompt"] is True
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_prompt_assembly_hook_can_cancel_request(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test that returning True from OnPromptAssembly hook cancels the request."""
+        module = ama
+        mock_event.platform_meta.support_proactive_message = False
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        _setup_conversation_for_build(mock_context.conversation_manager)
+        tool_manager = MagicMock()
+        tool_manager.get_full_tool_set.return_value = ToolSet()
+        tool_manager.func_list = []
+        mock_context.get_llm_tool_manager.return_value = tool_manager
+
+        async def fake_call_event_hook(event, hook_type, *args):
+            return hook_type == module.EventType.OnPromptAssemblyEvent
+
+        with (
+            patch.object(
+                module, "call_event_hook", AsyncMock(side_effect=fake_call_event_hook)
+            ),
+            patch.object(
+                module, "render_prompt_assembly"
+            ) as mock_render_prompt_assembly,
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    llm_safety_mode=False,
+                    computer_use_runtime="none",
+                    add_cron_tools=False,
+                ),
+            )
+
+        assert result is None
+        mock_render_prompt_assembly.assert_not_called()
+        mock_runner.reset.assert_not_called()
+        assert not any(
+            call.args and call.args[0] == "core_prompt_assembly"
+            for call in mock_event.trace.record.call_args_list
+        )
