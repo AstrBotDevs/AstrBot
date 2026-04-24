@@ -6,7 +6,8 @@ import httpx
 
 from astrbot import logger
 
-_SYSTEM_SSL_CTX = ssl.create_default_context()
+from astrbot.utils.http_ssl_common import build_ssl_context_with_certifi
+_SYSTEM_SSL_CTX = build_ssl_context_with_certifi()
 
 
 def is_connection_error(exc: BaseException) -> bool:
