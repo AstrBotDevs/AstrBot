@@ -1464,6 +1464,10 @@
         "description": "部署SenseVoice",
         "hint": "启用前请 pip 安装 funasr、funasr_onnx、torchaudio、torch、modelscope、jieba 库（默认使用CPU，大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。"
       },
+      "faster_whisper_hint": {
+        "description": "部署 faster-whisper",
+        "hint": "启用前请 pip 安装 faster-whisper。CPU 可直接使用；NVIDIA GPU 需要额外准备 CTranslate2 对应的 CUDA/cuDNN 运行库。"
+      },
       "is_emotion": {
         "description": "情绪识别",
         "hint": "是否开启情绪识别。happy｜sad｜angry｜neutral｜fearful｜disgusted｜surprised｜unknown"
@@ -1531,6 +1535,10 @@
       "whisper_device": {
         "description": "推理设备",
         "hint": "Whisper 推理设备。Apple Silicon 可选 mps；其他环境建议使用 cpu。若指定 mps 但当前环境不可用，将自动回退到 cpu。"
+      },
+      "faster_whisper_device": {
+        "description": "推理设备",
+        "hint": "faster-whisper 推理设备。可选 auto、cpu、cuda。通常建议保留 auto，让底层自行选择。"
       },
       "id": {
         "description": "ID"

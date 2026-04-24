@@ -397,6 +397,10 @@ class ProviderManager:
                 from .sources.sensevoice_selfhosted_source import (
                     ProviderSenseVoiceSTTSelfHost as ProviderSenseVoiceSTTSelfHost,
                 )
+            case "faster_whisper_stt_selfhost":
+                from .sources.faster_whisper_selfhosted_source import (
+                    ProviderFasterWhisperSTTSelfHost as ProviderFasterWhisperSTTSelfHost,
+                )
             case "openai_whisper_api":
                 from .sources.whisper_api_source import (
                     ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI,

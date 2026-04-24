@@ -1459,6 +1459,10 @@
                 "description": "Развертывание SenseVoice",
                 "hint": "Перед включением установите необходимые библиотеки: funasr, torch и др. Также требуется ffmpeg."
             },
+            "faster_whisper_hint": {
+                "description": "Развертывание faster-whisper",
+                "hint": "Перед включением установите faster-whisper. CPU-режим работает сразу; для NVIDIA GPU дополнительно потребуются совместимые CUDA/cuDNN runtime-библиотеки для CTranslate2."
+            },
             "is_emotion": {
                 "description": "Распознавание эмоций",
                 "hint": "Включить распознавание эмоций (радость, грусть, гнев и т.д.)."
@@ -1526,6 +1530,10 @@
             "whisper_device": {
                 "description": "Устройство инференса",
                 "hint": "Устройство для инференса Whisper. На Apple Silicon можно выбрать mps; в остальных средах рекомендуется cpu. Если выбран mps, но он недоступен, AstrBot автоматически переключится на cpu."
+            },
+            "faster_whisper_device": {
+                "description": "Устройство инференса",
+                "hint": "Устройство инференса faster-whisper. Поддерживаются значения auto, cpu и cuda. В большинстве случаев лучше оставить auto."
             },
             "id": {
                 "description": "ID провайдера"

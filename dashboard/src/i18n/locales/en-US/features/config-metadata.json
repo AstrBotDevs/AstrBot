@@ -1462,6 +1462,10 @@
         "description": "Deploy SenseVoice",
         "hint": "Before enabling, install funasr, funasr_onnx, torchaudio, torch, modelscope, and jieba (CPU by default, about 1 GB download), and install ffmpeg. Otherwise STT will not work."
       },
+      "faster_whisper_hint": {
+        "description": "Deploy faster-whisper",
+        "hint": "Before enabling, install faster-whisper. CPU inference works directly; NVIDIA GPU inference also requires the matching CUDA/cuDNN runtime libraries for CTranslate2."
+      },
       "is_emotion": {
         "description": "Emotion recognition",
         "hint": "Enable emotion recognition. happy?sad?angry?neutral?fearful?disgusted?surprised?unknown"
@@ -1529,6 +1533,10 @@
       "whisper_device": {
         "description": "Inference device",
         "hint": "Whisper inference device. Apple Silicon can use mps; other environments should use cpu. If mps is selected but unavailable, AstrBot will fall back to cpu."
+      },
+      "faster_whisper_device": {
+        "description": "Inference device",
+        "hint": "faster-whisper inference device. Supported values are auto, cpu, and cuda. In most cases keeping auto is the safest choice."
       },
       "id": {
         "description": "ID"

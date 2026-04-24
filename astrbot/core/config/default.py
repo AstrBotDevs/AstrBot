@@ -1588,6 +1588,15 @@ CONFIG_METADATA_2 = {
                         "stt_model": "iic/SenseVoiceSmall",
                         "is_emotion": False,
                     },
+                    "Faster Whisper(Local)": {
+                        "type": "faster_whisper_stt_selfhost",
+                        "provider": "faster-whisper",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "id": "faster_whisper",
+                        "model": "small",
+                        "faster_whisper_device": "auto",
+                    },
                     "OpenAI TTS(API)": {
                         "id": "openai_tts",
                         "type": "openai_tts_api",
@@ -2489,6 +2498,11 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "启用前请 pip 安装 funasr、funasr_onnx、torchaudio、torch、modelscope、jieba 库（默认使用CPU，大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
                     },
+                    "faster_whisper_hint": {
+                        "description": "部署 faster-whisper",
+                        "type": "string",
+                        "hint": "启用前请 pip 安装 faster-whisper。CPU 可直接使用；NVIDIA GPU 需要额外准备 CTranslate2 对应的 CUDA/cuDNN 运行库。模型会在首次加载时自动下载到 Hugging Face 缓存目录或你指定的下载目录。",
+                    },
                     "is_emotion": {
                         "description": "情绪识别",
                         "type": "bool",
@@ -2582,6 +2596,12 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "Whisper 推理设备。Apple Silicon 可选 mps；其他环境建议使用 cpu。若指定 mps 但当前环境不可用，将自动回退到 cpu。",
                         "options": ["cpu", "mps"],
+                    },
+                    "faster_whisper_device": {
+                        "description": "推理设备",
+                        "type": "string",
+                        "hint": "faster-whisper 推理设备。可选 auto、cpu、cuda。通常建议保留 auto，让底层自行选择。",
+                        "options": ["auto", "cpu", "cuda"],
                     },
                     "id": {
                         "description": "ID",
