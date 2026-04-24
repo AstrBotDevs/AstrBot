@@ -1,5 +1,6 @@
 <template>
   <div
+    v-if="props.active"
     class="chat-ui"
     :class="{ 'is-dark': isDark, 'sidebar-collapsed': isSidebarCollapsed }"
   >
@@ -35,6 +36,25 @@
         </div>
 
         <v-btn
+          class="new-chat-btn sidebar-provider-btn"
+          :class="{
+            'icon-only': isSidebarCollapsed,
+            'sidebar-workspace-btn--active': isProviderWorkspace,
+          }"
+          variant="text"
+          :icon="isSidebarCollapsed"
+          @click="openProviderWorkspace"
+        >
+          <v-icon
+            size="20"
+            class="sidebar-action-icon"
+            :class="{ 'mr-2': !isSidebarCollapsed }"
+            >mdi-creation</v-icon
+          >
+          <span v-if="!isSidebarCollapsed">{{ tm("actions.providerConfig") }}</span>
+        </v-btn>
+
+        <v-btn
           class="new-chat-btn"
           :class="{ 'icon-only': isSidebarCollapsed }"
           variant="text"
@@ -66,7 +86,7 @@
           v-for="session in sessions"
           :key="session.session_id"
           class="session-item"
-          :class="{ active: currSessionId === session.session_id }"
+          :class="{ active: !isProviderWorkspace && currSessionId === session.session_id }"
           role="button"
           tabindex="0"
           @click="selectSession(session.session_id)"
@@ -246,19 +266,6 @@
             <v-list-item
               class="styled-menu-item"
               rounded="md"
-              @click="providerDialog = true"
-            >
-              <template #prepend>
-                <v-icon size="18">mdi-robot-outline</v-icon>
-              </template>
-              <v-list-item-title>{{
-                tm("actions.providerConfig")
-              }}</v-list-item-title>
-            </v-list-item>
-
-            <v-list-item
-              class="styled-menu-item"
-              rounded="md"
               @click="toggleTheme"
             >
               <template #prepend>
@@ -278,12 +285,19 @@
     <main
       class="chat-main"
       :class="{
-        'empty-chat':
+        'empty-chat': !isProviderWorkspace &&
           !selectedProject && !loadingMessages && !activeMessages.length,
       }"
     >
+      <section v-if="isProviderWorkspace" class="provider-workspace-shell">
+        <ProviderChatCompletionPanel
+          class="provider-workspace-page"
+          :show-border="false"
+        />
+      </section>
+
       <ProjectView
-        v-if="selectedProject"
+        v-else-if="selectedProject"
         :project="selectedProject"
         :sessions="projectSessions"
         @select-session="selectProjectSession"
@@ -424,7 +438,6 @@
       </button>
     </div>
 
-    <ProviderConfigDialog v-model="providerDialog" />
     <ProjectDialog
       v-model="projectDialogOpen"
       :project="editingProject"
@@ -492,7 +505,6 @@ import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
 import axios from "axios";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
-import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
 import ProjectDialog, {
   type ProjectFormData,
 } from "@/components/chat/ProjectDialog.vue";
@@ -516,6 +528,7 @@ import {
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useProjects } from "@/composables/useProjects";
 import { useCustomizerStore } from "@/stores/customizer";
+import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import {
   useI18n,
   useLanguageSwitcher,
@@ -525,8 +538,9 @@ import type { Locale } from "@/i18n/types";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import { useToast } from "@/utils/toast";
 
-const props = withDefaults(defineProps<{ chatboxMode?: boolean }>(), {
+const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean }>(), {
   chatboxMode: false,
+  active: true,
 });
 
 const route = useRoute();
@@ -574,8 +588,10 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
+type WorkspaceView = "chat" | "providers";
+
 const sidebarCollapsed = ref(false);
-const providerDialog = ref(false);
+const activeWorkspace = ref<WorkspaceView>("chat");
 const projectDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
 const sessionTitleDialogOpen = ref(false);
@@ -629,6 +645,9 @@ const chatSidebarDrawer = computed({
 });
 const isSidebarCollapsed = computed(() =>
   lgAndUp.value ? sidebarCollapsed.value : !customizer.chatSidebarOpen,
+);
+const isProviderWorkspace = computed(
+  () => activeWorkspace.value === "providers",
 );
 const activeReasoningParts = computed<MessagePart[]>(() => {
   if (!activeReasoningTarget.value) return [];
@@ -734,7 +753,9 @@ onMounted(async () => {
   try {
     await Promise.all([getSessions(), getProjects()]);
     const routeSessionId = getRouteSessionId();
-    if (routeSessionId) {
+    if (routeSessionId === "models") {
+      activeWorkspace.value = "providers";
+    } else if (routeSessionId) {
       await selectSession(routeSessionId, false);
     }
   } finally {
@@ -750,10 +771,16 @@ watch(
   () => route.params.conversationId,
   async () => {
     const routeSessionId = getRouteSessionId();
+    if (routeSessionId === "models") {
+      activeWorkspace.value = "providers";
+      return;
+    }
     if (routeSessionId && routeSessionId !== currSessionId.value) {
+      showChatWorkspace();
       selectedProjectId.value = null;
       await selectSession(routeSessionId, false);
     } else if (!routeSessionId && currSessionId.value) {
+      showChatWorkspace();
       currSessionId.value = "";
     }
   },
@@ -780,11 +807,36 @@ function closeMobileSidebar() {
   }
 }
 
+function closeSecondaryPanels() {
+  threadSelection.visible = false;
+  threadPanelOpen.value = false;
+  activeThread.value = null;
+  reasoningPanelOpen.value = false;
+  activeReasoningTarget.value = null;
+  refsSidebarOpen.value = false;
+  selectedRefs.value = null;
+}
+
+function showChatWorkspace() {
+  activeWorkspace.value = "chat";
+}
+
+async function openProviderWorkspace() {
+  closeSecondaryPanels();
+  activeWorkspace.value = "providers";
+  const targetPath = `${basePath()}/models`;
+  if (route.path !== targetPath) {
+    await router.push(targetPath);
+  }
+  closeMobileSidebar();
+}
+
 function sessionTitle(session: Session) {
   return session.display_name?.trim() || tm("conversation.newConversation");
 }
 
 async function startNewChat() {
+  showChatWorkspace();
   selectedProjectId.value = null;
   replyTarget.value = null;
   newChat();
@@ -802,6 +854,7 @@ function openEditProjectDialog(project: Project) {
 }
 
 async function selectProject(projectId: string) {
+  showChatWorkspace();
   selectedProjectId.value = projectId;
   currSessionId.value = "";
   replyTarget.value = null;
@@ -910,6 +963,7 @@ async function saveProject(formData: ProjectFormData, projectId?: string) {
 }
 
 async function selectSession(sessionId: string, pushRoute = true) {
+  showChatWorkspace();
   selectedProjectId.value = null;
   currSessionId.value = sessionId;
   replyTarget.value = null;
@@ -1375,6 +1429,10 @@ function toggleTheme() {
   font-weight: 500;
 }
 
+.sidebar-provider-btn {
+  margin-bottom: 8px;
+}
+
 .new-chat-btn:not(.icon-only),
 .settings-btn:not(.icon-only) {
   padding-inline: 12px;
@@ -1398,6 +1456,11 @@ function toggleTheme() {
 .new-chat-btn:hover,
 .settings-btn:hover {
   background: var(--chat-session-active-bg);
+}
+
+.sidebar-workspace-btn--active {
+  background: var(--chat-session-active-bg);
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .chevron-collapsed {
@@ -1510,6 +1573,17 @@ function toggleTheme() {
 
 .chat-main.empty-chat {
   justify-content: center;
+}
+
+.provider-workspace-shell {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.provider-workspace-page {
+  height: 100%;
+  min-height: 0;
 }
 
 .messages-panel {

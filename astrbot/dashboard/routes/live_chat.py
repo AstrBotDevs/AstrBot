@@ -453,6 +453,7 @@ class LiveChatRoute(Route):
         llm_checkpoint_id = str(uuid.uuid4())
 
         try:
+            pending_bot_message_flusher = None
             chat_queue = webchat_queue_mgr.get_or_create_queue(session_id)
             await chat_queue.put(
                 (
@@ -499,9 +500,47 @@ class LiveChatRoute(Route):
             agent_stats = {}
             refs = {}
 
+            async def flush_pending_bot_message():
+                nonlocal message_accumulator, agent_stats, refs
+                if not (message_accumulator.has_content() or refs or agent_stats):
+                    return None
+
+                message_parts_to_save = message_accumulator.build_message_parts(
+                    include_pending_tool_calls=True
+                )
+                plain_text = collect_plain_text_from_message_parts(
+                    message_parts_to_save
+                )
+                try:
+                    extracted_refs = self._extract_web_search_refs(
+                        plain_text,
+                        message_parts_to_save,
+                    )
+                except Exception as e:
+                    logger.exception(
+                        f"[Live Chat] Failed to extract web search refs: {e}",
+                        exc_info=True,
+                    )
+                    extracted_refs = refs
+
+                saved_record = await self._save_bot_message(
+                    session_id,
+                    message_parts_to_save,
+                    agent_stats,
+                    extracted_refs,
+                    llm_checkpoint_id,
+                )
+                message_accumulator = BotMessageAccumulator()
+                agent_stats = {}
+                refs = {}
+                return saved_record
+
+            pending_bot_message_flusher = flush_pending_bot_message
+
             while True:
                 if session.should_interrupt:
                     session.should_interrupt = False
+                    await flush_pending_bot_message()
                     break
 
                 try:
@@ -574,30 +613,7 @@ class LiveChatRoute(Route):
                         should_save = True
 
                 if should_save:
-                    message_parts_to_save = message_accumulator.build_message_parts(
-                        include_pending_tool_calls=True
-                    )
-                    plain_text = collect_plain_text_from_message_parts(
-                        message_parts_to_save
-                    )
-                    try:
-                        refs = self._extract_web_search_refs(
-                            plain_text,
-                            message_parts_to_save,
-                        )
-                    except Exception as e:
-                        logger.exception(
-                            f"[Live Chat] Failed to extract web search refs: {e}",
-                            exc_info=True,
-                        )
-
-                    saved_record = await self._save_bot_message(
-                        session_id,
-                        message_parts_to_save,
-                        agent_stats,
-                        refs,
-                        llm_checkpoint_id,
-                    )
+                    saved_record = await flush_pending_bot_message()
                     if saved_record:
                         await self._send_chat_payload(
                             session,
@@ -614,10 +630,6 @@ class LiveChatRoute(Route):
                             },
                         )
 
-                    message_accumulator = BotMessageAccumulator()
-                    agent_stats = {}
-                    refs = {}
-
                 if msg_type == "end":
                     break
 
@@ -633,6 +645,14 @@ class LiveChatRoute(Route):
                 },
             )
         finally:
+            try:
+                if pending_bot_message_flusher is not None:
+                    await pending_bot_message_flusher()
+            except Exception as e:
+                logger.exception(
+                    f"[Live Chat] Failed to persist pending chat message: {e}",
+                    exc_info=True,
+                )
             session.is_processing = False
             webchat_queue_mgr.remove_back_queue(message_id)
 
