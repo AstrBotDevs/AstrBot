@@ -1371,7 +1371,9 @@ async def build_main_agent(
                                 ),
                             )
                         elif isinstance(reply_comp, Video):
-                            await _append_video_attachment(prompt_assembly, reply_comp, quoted=True)
+                            await _append_video_attachment(
+                                prompt_assembly, reply_comp, quoted=True
+                            )
 
                 # Fallback quoted image extraction for reply-id-only payloads, or when
                 # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).

@@ -24,6 +24,7 @@ async def test_internal_agent_prepare_trace_keeps_string_system_prompt():
     stage.show_tool_use = False
     stage.show_tool_call_result = False
     stage.show_reasoning = False
+    stage.buffer_intermediate_messages = False
     stage.main_agent_cfg = MainAgentBuildConfig(tool_call_timeout=60)
     stage._save_to_history = AsyncMock()
 

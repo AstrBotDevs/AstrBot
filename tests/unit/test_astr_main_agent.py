@@ -81,6 +81,7 @@ def mock_event():
     event.get_platform_id.return_value = "test_platform"
     event.get_group_id.return_value = None
     event.get_sender_name.return_value = "TestUser"
+    event.is_stopped.return_value = False
     event.trace = MagicMock()
     event.plugins_name = None
     return event
@@ -442,12 +443,13 @@ class TestApplyFileExtract:
         req = ProviderRequest(prompt="Summarize")
 
         with patch(
-            "astrbot.core.astr_main_agent.extract_file_moonshotai"
+            "astrbot.core.astr_main_agent.extract_file_moonshotai",
+            new_callable=AsyncMock,
         ) as mock_extract:
             mock_extract.return_value = "File content"
 
             assembly_fe = module.PromptAssembly()
-        await module._apply_file_extract(mock_event, req, sample_config, assembly_fe)
+            await module._apply_file_extract(mock_event, req, sample_config, assembly_fe)
         _render_assembly(req, assembly_fe)
 
         assert len(req.contexts) == 1
@@ -480,12 +482,13 @@ class TestApplyFileExtract:
         req = ProviderRequest(prompt="Summarize")
 
         with patch(
-            "astrbot.core.astr_main_agent.extract_file_moonshotai"
+            "astrbot.core.astr_main_agent.extract_file_moonshotai",
+            new_callable=AsyncMock,
         ) as mock_extract:
             mock_extract.return_value = "Reply content"
 
             assembly_fe = module.PromptAssembly()
-        await module._apply_file_extract(mock_event, req, sample_config, assembly_fe)
+            await module._apply_file_extract(mock_event, req, sample_config, assembly_fe)
         _render_assembly(req, assembly_fe)
 
         assert len(req.contexts) == 1
@@ -502,12 +505,13 @@ class TestApplyFileExtract:
         req = ProviderRequest(prompt=None)
 
         with patch(
-            "astrbot.core.astr_main_agent.extract_file_moonshotai"
+            "astrbot.core.astr_main_agent.extract_file_moonshotai",
+            new_callable=AsyncMock,
         ) as mock_extract:
             mock_extract.return_value = "Content"
 
             assembly_fe = module.PromptAssembly()
-        await module._apply_file_extract(mock_event, req, sample_config, assembly_fe)
+            await module._apply_file_extract(mock_event, req, sample_config, assembly_fe)
         _render_assembly(req, assembly_fe)
 
         assert req.prompt == "总结一下文件里面讲了什么？"
@@ -549,7 +553,11 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id=None)
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        assembly = module.PromptAssembly()
+        await module._ensure_persona_and_skills(
+            req, {}, mock_context, mock_event, assembly
+        )
+        _render_assembly(req, assembly)
 
         assert "You are helpful." in req.system_prompt
 
@@ -565,7 +573,11 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="conv-persona")
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        assembly = module.PromptAssembly()
+        await module._ensure_persona_and_skills(
+            req, {}, mock_context, mock_event, assembly
+        )
+        _render_assembly(req, assembly)
 
         assert "Custom persona." in req.system_prompt
 
@@ -580,7 +592,11 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="[%None]")
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        assembly = module.PromptAssembly()
+        await module._ensure_persona_and_skills(
+            req, {}, mock_context, mock_event, assembly
+        )
+        _render_assembly(req, assembly)
 
         assert "Persona Instructions" not in req.system_prompt
 
@@ -602,7 +618,10 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="persona")
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        assembly = module.PromptAssembly()
+        await module._ensure_persona_and_skills(
+            req, {}, mock_context, mock_event, assembly
+        )
 
         assert req.func_tool is not None
 
@@ -657,7 +676,10 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id=None)
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        assembly = module.PromptAssembly()
+        await module._ensure_persona_and_skills(
+            req, {}, mock_context, mock_event, assembly
+        )
 
         assert req.func_tool is not None
         assert "transfer_to_planner" in req.func_tool.names()
@@ -676,7 +698,11 @@ class TestDecorateLlmRequest:
         module = ama
         req = ProviderRequest(prompt="Hello", system_prompt="System")
 
-        await module._decorate_llm_request(mock_event, req, mock_context, sample_config)
+        assembly = module.PromptAssembly()
+        await module._decorate_llm_request(
+            mock_event, req, mock_context, sample_config, assembly
+        )
+        _render_assembly(req, assembly)
 
         assert req.prompt == "Hello"
         assert req.system_prompt == "System"
@@ -693,7 +719,11 @@ class TestDecorateLlmRequest:
         with patch.object(mock_context, "get_config") as mock_get_config:
             mock_get_config.return_value = {}
 
-            await module._decorate_llm_request(mock_event, req, mock_context, config)
+            assembly = module.PromptAssembly()
+            await module._decorate_llm_request(
+                mock_event, req, mock_context, config, assembly
+            )
+            _render_assembly(req, assembly)
 
         assert req.prompt == "AI: Hello"
 
@@ -712,7 +742,11 @@ class TestDecorateLlmRequest:
         with patch.object(mock_context, "get_config") as mock_get_config:
             mock_get_config.return_value = {}
 
-            await module._decorate_llm_request(mock_event, req, mock_context, config)
+            assembly = module.PromptAssembly()
+            await module._decorate_llm_request(
+                mock_event, req, mock_context, config, assembly
+            )
+            _render_assembly(req, assembly)
 
         assert req.prompt == "AI Hello - Please respond:"
 
@@ -727,7 +761,11 @@ class TestDecorateLlmRequest:
         with patch.object(mock_context, "get_config") as mock_get_config:
             mock_get_config.return_value = {}
 
-            await module._decorate_llm_request(mock_event, req, mock_context, config)
+            assembly = module.PromptAssembly()
+            await module._decorate_llm_request(
+                mock_event, req, mock_context, config, assembly
+            )
+            _render_assembly(req, assembly)
 
         assert req.prompt == "Hello"
 
@@ -1602,7 +1640,7 @@ class TestApplySandboxTools:
 
         with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
             assembly_sb = module.PromptAssembly()
-        module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
+            module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
 
         mock_logger.error.assert_called_once()
         assert (
@@ -1626,7 +1664,7 @@ class TestApplySandboxTools:
 
         with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
             assembly_sb = module.PromptAssembly()
-        module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
+            module._apply_sandbox_tools(config, req, "session-123", assembly_sb)
 
         mock_logger.error.assert_called_once()
 
@@ -1753,6 +1791,7 @@ class TestPromptAssemblyIntegration:
         assert [item["source"] for item in core_trace.kwargs["system_blocks"]] == [
             "persona",
             "runtime:local",
+            "tool_use",
         ]
 
     @pytest.mark.asyncio
