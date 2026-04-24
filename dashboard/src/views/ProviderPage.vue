@@ -840,8 +840,14 @@ function goToConfigPage() {
 }
 
 @media (max-width: 960px) {
+  .provider-page {
+    padding: 12px;
+    padding-bottom: 32px;
+  }
+
   .provider-workbench {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1px auto;
     min-height: auto;
   }
 
@@ -851,11 +857,62 @@ function goToConfigPage() {
 
   .provider-config-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    padding: 16px;
+  }
+
+  .provider-config-actions :deep(.v-btn) {
+    width: 100%;
   }
 
   .provider-section {
     padding: 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  .provider-page {
+    padding: 8px;
+    padding-bottom: 24px;
+  }
+
+  .provider-page :deep(.v-container) > .v-row:first-child {
+    margin: 0;
+    padding: 8px 4px 16px !important;
+  }
+
+  .provider-page :deep(.v-container) > .v-row:first-child > div {
+    width: 100%;
+  }
+
+  .provider-page :deep(.v-container) > .v-row:first-child .v-btn {
+    width: 100%;
+  }
+
+  .provider-page :deep(.v-tabs) {
+    overflow-x: auto;
+  }
+
+  .provider-workbench {
+    border-radius: 16px;
+    overflow: visible;
+  }
+
+  .provider-workbench__main {
+    overflow: visible;
+  }
+
+  .provider-config-body {
+    overflow-y: visible;
+  }
+
+  .provider-config-title {
+    font-size: 18px;
+  }
+
+  .provider-empty-state {
+    min-height: 260px;
+    padding: 24px;
   }
 }
 </style>

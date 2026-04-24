@@ -65,4 +65,34 @@ const dialog = computed({
   max-height: 70dvh;
   margin: 0;
 }
+
+@media (max-width: 960px) {
+  .provider-config-dialog {
+    border-radius: 20px;
+  }
+
+  :deep(.v-overlay__content) {
+    width: calc(100dvw - 24px);
+    height: calc(100dvh - 24px);
+    max-width: calc(100dvw - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+}
+
+@media (max-width: 600px) {
+  .provider-config-dialog {
+    border-radius: 0;
+  }
+
+  .provider-config-dialog__body {
+    overflow: auto;
+  }
+
+  :deep(.v-overlay__content) {
+    width: 100dvw;
+    height: 100dvh;
+    max-width: 100dvw;
+    max-height: 100dvh;
+  }
+}
 </style>

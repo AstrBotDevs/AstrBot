@@ -429,4 +429,68 @@ async function saveEditedProvider() {
   justify-content: center;
   color: rgba(var(--v-theme-on-surface), 0.56);
 }
+
+@media (max-width: 960px) {
+  .provider-workbench {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1px minmax(0, 1fr);
+  }
+
+  .provider-workbench__sidebar,
+  .provider-workbench__main,
+  .provider-workbench__divider {
+    height: auto;
+  }
+
+  .provider-workbench__divider {
+    min-height: 1px;
+  }
+
+  .provider-config-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .provider-config-actions :deep(.v-btn) {
+    width: 100%;
+  }
+
+  .provider-section {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  .provider-chat-panel {
+    overflow: auto;
+  }
+
+  .provider-workbench {
+    border-radius: 16px;
+    overflow: visible;
+  }
+
+  .provider-workbench--borderless {
+    border-radius: 0;
+  }
+
+  .provider-workbench__main {
+    overflow: visible;
+  }
+
+  .provider-config-body {
+    overflow-y: visible;
+  }
+
+  .provider-config-title {
+    font-size: 18px;
+  }
+
+  .provider-empty-state {
+    min-height: 260px;
+    padding: 24px;
+  }
+}
 </style>

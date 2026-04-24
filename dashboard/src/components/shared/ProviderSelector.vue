@@ -430,4 +430,49 @@ function closeProviderDrawer() {
   height: 100%;
   overflow: auto;
 }
+
+@media (max-width: 960px) {
+  .provider-drawer-card {
+    width: calc(100dvw - 24px);
+    height: calc(100dvh - 24px);
+    margin: 12px;
+  }
+}
+
+@media (max-width: 600px) {
+  .provider-name-text {
+    max-width: 100%;
+  }
+
+  .provider-drawer-overlay {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .provider-drawer-card {
+    width: 100dvw;
+    height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .provider-drawer-header {
+    padding: 8px 12px;
+  }
+
+  .provider-drawer-content {
+    overflow: auto;
+  }
+
+  :deep(.v-overlay__content) {
+    width: 100dvw;
+    max-width: 100dvw;
+    margin: 0;
+  }
+
+  :deep(.v-dialog > .v-overlay__content) {
+    width: calc(100dvw - 24px);
+    max-width: calc(100dvw - 24px);
+  }
+}
 </style>

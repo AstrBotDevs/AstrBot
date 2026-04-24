@@ -311,6 +311,11 @@ const isProviderTesting = (providerId) => props.testingProviders.includes(provid
   line-height: 1.3;
 }
 
+.provider-models-title-wrap {
+  min-width: 0;
+  flex-shrink: 0;
+}
+
 .provider-models-subtitle {
   display: block;
   margin-top: 6px;
@@ -467,5 +472,56 @@ const isProviderTesting = (providerId) => props.testingProviders.includes(provid
 
 .provider-models-empty--small {
   min-height: 120px;
+}
+
+@media (max-width: 760px) {
+  .provider-models-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .provider-models-title-wrap {
+    flex-shrink: 1;
+  }
+
+  .provider-models-toolbar__actions {
+    align-items: stretch;
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .provider-models-search {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .provider-models-toolbar__actions :deep(.v-btn) {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
+
+  .provider-models-toolbar__actions :deep(.v-btn__content) {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 600px) {
+  .provider-models-panel {
+    gap: 14px;
+  }
+
+  .provider-model-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 0;
+  }
+
+  .provider-model-row__actions {
+    align-self: flex-end;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 </style>

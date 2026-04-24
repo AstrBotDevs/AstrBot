@@ -5,40 +5,91 @@
         <h3 class="provider-sources-title">{{ tm('providerSources.title') }}</h3>
       </div>
 
-      <StyledMenu>
-        <template #activator="{ props }">
-          <v-btn
-            v-bind="props"
-            prepend-icon="mdi-plus"
-            color="primary"
-            variant="text"
-            size="small"
-            rounded="xl"
-          >
-            {{ tm('providerSources.add') }}
-          </v-btn>
-        </template>
-
-        <v-list-item
-          v-for="sourceType in availableSourceTypes"
-          :key="sourceType.value"
-          class="styled-menu-item"
-          @click="emitAddSource(sourceType.value)"
+      <div class="provider-sources-controls">
+        <div class="provider-sources-mobile-select">
+          <v-select
+            :model-value="selectedSourceValue"
+            :items="sourceOptions"
+            item-title="title"
+            item-value="value"
+            density="compact"
+            variant="solo-filled"
+            flat
+            hide-details
+            :placeholder="tm('providerSources.selectHint')"
+            @update:model-value="selectSourceByValue"
         >
-          <template #prepend>
-            <v-avatar size="18" rounded="0" class="me-2 provider-source-avatar">
-              <v-img
-                v-if="sourceType.icon"
-                :src="sourceType.icon"
-                alt="provider icon"
-                cover
-              ></v-img>
-              <v-icon v-else size="16">mdi-shape-outline</v-icon>
-            </v-avatar>
+            <template #selection="{ item }">
+              <div class="provider-source-select-value">
+                <v-avatar size="22" rounded="lg" class="provider-source-avatar">
+                  <v-img
+                    v-if="item.raw.source?.provider"
+                    :src="resolveSourceIcon(item.raw.source)"
+                    alt="provider logo"
+                    cover
+                  ></v-img>
+                  <v-icon v-else size="14">mdi-creation</v-icon>
+                </v-avatar>
+                <span>{{ item.raw.title }}</span>
+              </div>
+            </template>
+
+            <template #item="{ props: itemProps, item }">
+              <v-list-item
+                v-bind="itemProps"
+                :subtitle="item.raw.subtitle"
+              >
+                <template #prepend>
+                  <v-avatar size="24" rounded="lg" class="provider-source-avatar me-2">
+                    <v-img
+                      v-if="item.raw.source?.provider"
+                      :src="resolveSourceIcon(item.raw.source)"
+                      alt="provider logo"
+                      cover
+                    ></v-img>
+                    <v-icon v-else size="14">mdi-creation</v-icon>
+                  </v-avatar>
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
+        </div>
+
+        <StyledMenu>
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              prepend-icon="mdi-plus"
+              color="primary"
+              variant="text"
+              size="small"
+              rounded="xl"
+            >
+              {{ tm('providerSources.add') }}
+            </v-btn>
           </template>
-          <v-list-item-title>{{ sourceType.label }}</v-list-item-title>
-        </v-list-item>
-      </StyledMenu>
+
+          <v-list-item
+            v-for="sourceType in availableSourceTypes"
+            :key="sourceType.value"
+            class="styled-menu-item"
+            @click="emitAddSource(sourceType.value)"
+          >
+            <template #prepend>
+              <v-avatar size="18" rounded="0" class="me-2 provider-source-avatar">
+                <v-img
+                  v-if="sourceType.icon"
+                  :src="sourceType.icon"
+                  alt="provider icon"
+                  cover
+                ></v-img>
+                <v-icon v-else size="16">mdi-shape-outline</v-icon>
+              </v-avatar>
+            </template>
+            <v-list-item-title>{{ sourceType.label }}</v-list-item-title>
+          </v-list-item>
+        </StyledMenu>
+      </div>
     </div>
 
     <div v-if="displayedProviderSources.length > 0" class="provider-sources-list">
@@ -138,9 +189,34 @@ const isActive = (source) => {
 
 const sourceBadge = (source) => source.provider || source.templateKey || 'source'
 
+const sourceValue = (source) => (
+  source.isPlaceholder ? `template:${source.templateKey}` : `source:${source.id}`
+)
+
+const sourceOptions = computed(() =>
+  props.displayedProviderSources.map((source) => ({
+    title: props.getSourceDisplayName(source),
+    subtitle: source.api_base || sourceBadge(source),
+    value: sourceValue(source),
+    source
+  }))
+)
+
+const selectedSourceValue = computed(() => {
+  if (!props.selectedProviderSource) return null
+  return sourceValue(props.selectedProviderSource)
+})
+
 const emitAddSource = (type) => emit('add-provider-source', type)
 const emitSelectSource = (source) => emit('select-provider-source', source)
 const emitDeleteSource = (source) => emit('delete-provider-source', source)
+
+const selectSourceByValue = (value) => {
+  const option = sourceOptions.value.find((item) => item.value === value)
+  if (option?.source) {
+    emitSelectSource(option.source)
+  }
+}
 </script>
 
 <style scoped>
@@ -163,6 +239,13 @@ const emitDeleteSource = (source) => emit('delete-provider-source', source)
   min-width: 0;
 }
 
+.provider-sources-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .provider-sources-title {
   margin: 0;
   font-size: 16px;
@@ -172,6 +255,26 @@ const emitDeleteSource = (source) => emit('delete-provider-source', source)
 
 .provider-sources-mobile {
   padding: 8px 20px 16px;
+}
+
+.provider-sources-mobile-select {
+  display: none;
+  min-width: 0;
+  flex: 1;
+}
+
+.provider-source-select-value {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.provider-source-select-value span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .provider-sources-list {
@@ -254,5 +357,40 @@ const emitDeleteSource = (source) => emit('delete-provider-source', source)
   margin: 0;
   color: rgba(var(--v-theme-on-surface), 0.56);
   font-size: 13px;
+}
+
+@media (max-width: 960px) {
+  .provider-sources-panel {
+    height: auto;
+  }
+
+  .provider-sources-head {
+    padding: 16px 16px 8px;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .provider-sources-mobile-select {
+    display: block;
+  }
+
+  .provider-sources-controls {
+    width: 100%;
+  }
+
+  .provider-sources-list {
+    display: none;
+  }
+
+  .provider-sources-empty {
+    min-height: 160px;
+  }
+}
+
+@media (max-width: 600px) {
+  .provider-sources-controls :deep(.v-btn) {
+    min-width: max-content;
+  }
 }
 </style>
