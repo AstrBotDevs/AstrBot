@@ -1,7 +1,7 @@
 import asyncio
-import base64
 import logging
 import random
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -15,6 +15,8 @@ from astrbot.core.utils.t2i.template_manager import TemplateManager
 from . import RenderStrategy
 
 ASTRBOT_T2I_DEFAULT_ENDPOINT = "https://t2i.soulter.top/text2img"
+SHIKI_RUNTIME_SCRIPT_ID = "astrbot-t2i-shiki-runtime"
+SHIKI_RUNTIME_TEMPLATE_PATTERN = re.compile(r"\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}")
 
 logger = logging.getLogger("astrbot")
 
@@ -41,7 +43,25 @@ def get_shiki_runtime() -> str:
         )
         return ""
 
-    return runtime.replace("</script", "<\\/script")
+    return re.sub(r"</(script)", r"<\/\1", runtime, flags=re.IGNORECASE)
+
+
+def inject_shiki_runtime(tmpl_str: str) -> str:
+    if SHIKI_RUNTIME_SCRIPT_ID in tmpl_str or SHIKI_RUNTIME_TEMPLATE_PATTERN.search(
+        tmpl_str,
+    ):
+        return tmpl_str
+
+    runtime = get_shiki_runtime()
+    if not runtime:
+        return tmpl_str
+
+    script = f'<script id="{SHIKI_RUNTIME_SCRIPT_ID}">{runtime}</script>'
+    head_close = re.search(r"</head\s*>", tmpl_str, flags=re.IGNORECASE)
+    if head_close:
+        return f"{tmpl_str[: head_close.start()]}  {script}\n{tmpl_str[head_close.start() :]}"
+
+    return f"{script}\n{tmpl_str}"
 
 
 class NetworkRenderStrategy(RenderStrategy):
@@ -105,7 +125,9 @@ class NetworkRenderStrategy(RenderStrategy):
         if options:
             default_options |= options
 
-        tmpl_data = {"shiki_runtime": get_shiki_runtime()} | tmpl_data
+        if SHIKI_RUNTIME_TEMPLATE_PATTERN.search(tmpl_str):
+            tmpl_data = {"shiki_runtime": get_shiki_runtime()} | tmpl_data
+        tmpl_str = inject_shiki_runtime(tmpl_str)
         post_data = {
             "tmpl": tmpl_str,
             "json": return_url,
@@ -158,9 +180,11 @@ class NetworkRenderStrategy(RenderStrategy):
         if not template_name:
             template_name = "base"
         tmpl_str = await self.get_template(name=template_name)
-        text_base64 = base64.b64encode(text.encode("utf-8")).decode("ascii")
         return await self.render_custom_template(
             tmpl_str,
-            {"text_base64": text_base64, "version": f"v{VERSION}"},
+            {
+                "text": text,
+                "version": f"v{VERSION}",
+            },
             return_url,
         )

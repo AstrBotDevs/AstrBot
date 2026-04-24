@@ -97,7 +97,7 @@
         "save": "Сохранить",
         "livePreview": "Предпросмотр (может отличаться)",
         "refreshPreview": "Обновить",
-        "previewText": "Это пример текста для предпросмотра результата шаблона.\n\nОн может содержать несколько строк и различные форматы.",
+        "previewText": "# Предпросмотр AstrBot T2I\n\n> Используйте этот текст, чтобы проверить Markdown, подсветку синтаксиса, таблицы, формулы и многострочный текст.\n\n## Список проверки рендера\n\n- [x] Заголовки и списки\n- [x] Подсветка синтаксиса Shiki\n- [x] Таблицы и цитаты\n- [x] Строчная формула $E = mc^2$\n\n| Модуль | Статус | Примечание |\n| --- | --- | --- |\n| Markdown | OK | Поддерживает жирный текст, списки и таблицы |\n| Shiki | Проверить | Код Python ниже должен быть подсвечен |\n\n```python\nfrom astrbot.api.event import filter\n\n@filter.command('hello')\nasync def hello(event):\n    name = event.get_sender_name()\n    yield event.plain_result(f'Hello, {name}!')\n```\n\n```yaml\nprovider: openai\nfeatures:\n  - markdown\n  - shiki\n  - katex\n```\n\nРендер завершен: если код подсвечен, таблицы выровнены, а формулы отображаются, предпросмотр шаблона в целом работает.",
         "syntaxHint": "Поддерживается синтаксис jinja2. Переменные: text | safe (текст для рендеринга), version (версия AstrBot)",
         "saveAndApply": "Сохранить и применить текущий шаблон",
         "confirmReset": "Подтверждение сброса",
