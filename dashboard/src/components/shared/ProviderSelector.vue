@@ -168,7 +168,10 @@
         </v-btn>
       </div>
       <div class="provider-drawer-content">
-        <ProviderPage :default-tab="defaultTab" />
+        <ProviderChatCompletionPanel
+          v-if="defaultTab === 'chat_completion'"
+        />
+        <ProviderPage v-else :default-tab="defaultTab" />
       </div>
     </v-card>
   </v-overlay>
@@ -178,6 +181,7 @@
 import { computed, ref, watch } from 'vue'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
+import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue'
 import ProviderPage from '@/views/ProviderPage.vue'
 
 const props = defineProps({
