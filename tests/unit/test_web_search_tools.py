@@ -63,6 +63,72 @@ async def test_firecrawl_search_maps_web_results(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_firecrawl_search_maps_v2_data_list(monkeypatch):
+    async def fake_firecrawl_post(provider_settings, endpoint, payload):
+        assert endpoint == "search"
+        assert provider_settings["websearch_firecrawl_key"] == ["firecrawl-key"]
+        assert payload == {"query": "AstrBot", "limit": 5, "sources": ["web"]}
+        return {
+            "success": True,
+            "data": [
+                {
+                    "title": "AstrBot",
+                    "url": "https://example.com",
+                    "description": "Search result",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(tools, "_firecrawl_post", fake_firecrawl_post)
+
+    results = await tools._firecrawl_search(
+        {"websearch_firecrawl_key": ["firecrawl-key"]},
+        {"query": "AstrBot", "limit": 5, "sources": ["web"]},
+    )
+
+    assert results == [
+        tools.SearchResult(
+            title="AstrBot", url="https://example.com", snippet="Search result"
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_firecrawl_search_payload_omits_tbs_and_handles_null_limit(monkeypatch):
+    async def fake_firecrawl_search(provider_settings, payload):
+        assert payload == {
+            "query": "AstrBot",
+            "limit": 5,
+            "sources": ["web"],
+            "country": "US",
+        }
+        return [
+            tools.SearchResult(
+                title="AstrBot",
+                url="https://example.com",
+                snippet="Search result",
+            )
+        ]
+
+    monkeypatch.setattr(tools, "_firecrawl_search", fake_firecrawl_search)
+    tool = tools.FirecrawlWebSearchTool()
+    context = _context_with_provider_settings(
+        {"websearch_firecrawl_key": ["firecrawl-key"]}
+    )
+
+    result = await tool.call(
+        context,
+        query="AstrBot",
+        limit=None,
+        tbs="qdr:d",
+        country="US",
+    )
+
+    assert json.loads(result)["results"][0]["url"] == "https://example.com"
+    assert "tbs" not in tool.parameters["properties"]
+
+
+@pytest.mark.asyncio
 async def test_firecrawl_extract_returns_scraped_markdown(monkeypatch):
     async def fake_firecrawl_scrape(provider_settings, payload):
         assert provider_settings["websearch_firecrawl_key"] == ["firecrawl-key"]
@@ -90,11 +156,10 @@ async def test_firecrawl_post_uses_shared_request_setup(monkeypatch):
         _FakeFirecrawlResponse(status=200, json_data={"success": True})
     )
 
-    def fake_client_session(trust_env):
-        session.trust_env = trust_env
+    async def fake_get_web_search_session():
         return session
 
-    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+    monkeypatch.setattr(tools, "_get_web_search_session", fake_get_web_search_session)
 
     result = await tools._firecrawl_post(
         {"websearch_firecrawl_key": ["firecrawl-key"]},
@@ -103,7 +168,6 @@ async def test_firecrawl_post_uses_shared_request_setup(monkeypatch):
     )
 
     assert result == {"success": True}
-    assert session.trust_env is True
     assert session.posted == {
         "url": "https://api.firecrawl.dev/v2/search",
         "json": {"query": "AstrBot"},
@@ -119,7 +183,11 @@ async def test_firecrawl_post_raises_api_error_for_http_errors(monkeypatch):
     session = _FakeFirecrawlSession(
         _FakeFirecrawlResponse(status=401, text_data="Unauthorized")
     )
-    monkeypatch.setattr(tools.aiohttp, "ClientSession", lambda trust_env: session)
+
+    async def fake_get_web_search_session():
+        return session
+
+    monkeypatch.setattr(tools, "_get_web_search_session", fake_get_web_search_session)
 
     with pytest.raises(
         tools.FirecrawlAPIError,
