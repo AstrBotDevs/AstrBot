@@ -125,6 +125,10 @@
           "description": "Brave Search API Key",
           "hint": "Multiple keys can be added for rotation."
         },
+        "websearch_firecrawl_key": {
+          "description": "Firecrawl API Key",
+          "hint": "Multiple keys can be added for rotation."
+        },
         "websearch_baidu_app_builder_key": {
           "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
           "hint": "Reference: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
