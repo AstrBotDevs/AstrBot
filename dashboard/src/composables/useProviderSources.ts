@@ -10,12 +10,24 @@ export interface UseProviderSourcesOptions {
   showMessage: (message: string, color?: string) => void
 }
 
+const DEEPSEEK_PROVIDER = 'deepseek'
+const DEEPSEEK_ANTHROPIC_TYPE = 'anthropic_chat_completion'
+const DEEPSEEK_OPENAI_TYPE = 'openai_chat_completion'
+
+function cloneProviderSchema<T>(schema: T): T {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(schema)
+  }
+
+  return JSON.parse(JSON.stringify(schema)) as T
+}
+
 export function isDeepSeekAnthropicSource(source?: Record<string, any> | null) {
   if (!source || typeof source !== 'object') {
     return false
   }
 
-  return source.provider === 'deepseek' && source.type === 'anthropic_chat_completion'
+  return source.provider === DEEPSEEK_PROVIDER && source.type === DEEPSEEK_ANTHROPIC_TYPE
 }
 
 export function isDeepSeekOpenAISource(source?: Record<string, any> | null) {
@@ -23,7 +35,7 @@ export function isDeepSeekOpenAISource(source?: Record<string, any> | null) {
     return false
   }
 
-  return source.provider === 'deepseek' && source.type === 'openai_chat_completion'
+  return source.provider === DEEPSEEK_PROVIDER && source.type === DEEPSEEK_OPENAI_TYPE
 }
 
 export function buildProviderSourceSchema(
@@ -35,7 +47,7 @@ export function buildProviderSourceSchema(
     return schema
   }
 
-  const customSchema = JSON.parse(JSON.stringify(schema))
+  const customSchema = cloneProviderSchema(schema)
 
   if (customSchema.provider?.items?.id) {
     customSchema.provider.items.id.hint = tm('providerSources.hints.id')

@@ -2,6 +2,7 @@ import base64
 import json
 from collections.abc import AsyncGenerator
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import anthropic
 import httpx
@@ -32,6 +33,7 @@ from ..register import register_provider_adapter
 )
 class ProviderAnthropic(Provider):
     IMAGE_PLACEHOLDER_TEXT = "[Image Attachment]"
+    DEEPSEEK_PROVIDER_NAME = "deepseek"
 
     @staticmethod
     def _ensure_usable_response(
@@ -100,9 +102,14 @@ class ProviderAnthropic(Provider):
 
     def _is_deepseek_provider(self) -> bool:
         provider = str(self.provider_config.get("provider", "")).strip().lower()
-        if provider == "deepseek":
+        if provider == self.DEEPSEEK_PROVIDER_NAME:
             return True
-        return "api.deepseek.com/anthropic" in str(self.base_url).strip().lower()
+
+        parsed_base_url = urlparse(str(self.base_url).strip().lower())
+        return (
+            parsed_base_url.netloc.endswith("deepseek.com")
+            and "/anthropic" in parsed_base_url.path
+        )
 
     def _supports_image_input(self) -> bool:
         return not self._is_deepseek_provider()
@@ -134,6 +141,8 @@ class ProviderAnthropic(Provider):
     def _normalize_tool_choice(tool_choice: Any) -> dict[str, Any] | None:
         if isinstance(tool_choice, dict):
             choice_type = str(tool_choice.get("type", "")).strip().lower()
+            if choice_type == "required":
+                return {"type": "any"}
             if choice_type in {"auto", "any", "none"}:
                 return {"type": choice_type}
             if choice_type == "tool":
@@ -170,7 +179,22 @@ class ProviderAnthropic(Provider):
             payloads.pop("output_config", None)
 
         if payloads.get("thinking") or normalized_output_cfg:
-            payloads["thinking"] = {"type": "enabled"}
+            thinking_budget = self.thinking_config.get("budget")
+            existing_thinking = payloads.get("thinking")
+            if isinstance(existing_thinking, dict):
+                thinking_budget = (
+                    existing_thinking.get("budget_tokens") or thinking_budget
+                )
+
+            try:
+                normalized_budget = max(int(thinking_budget), 1024)
+            except (TypeError, ValueError):
+                normalized_budget = 1024
+
+            payloads["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": normalized_budget,
+            }
 
     def _init_api_key(self, provider_config: dict) -> None:
         self.chosen_api_key: str = ""
