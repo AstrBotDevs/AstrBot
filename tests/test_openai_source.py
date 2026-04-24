@@ -52,6 +52,43 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
     )
 
 
+def _make_tool_call_completion(
+    tool_call_id: str,
+    tool_name: str,
+    *,
+    completion_id: str,
+) -> ChatCompletion:
+    return ChatCompletion.model_validate(
+        {
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": 0,
+            "model": "gpt-4o-mini",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "refusal": None,
+                        "tool_calls": [
+                            {
+                                "id": tool_call_id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_name,
+                                    "arguments": "{}",
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+        }
+    )
+
+
 @pytest.mark.asyncio
 async def test_handle_api_error_content_moderated_removes_images():
     provider = _make_provider(
@@ -1177,44 +1214,51 @@ async def test_parse_openai_completion_raises_empty_model_output_error():
 
 
 @pytest.mark.asyncio
-async def test_parse_openai_completion_dedupes_self_concatenated_tool_call_fields():
+@pytest.mark.parametrize(
+    ("completion_id", "raw_tool_call_id", "raw_tool_name", "expected_id", "expected_name"),
+    [
+        (
+            "chatcmpl-toolcall-dup-id-only",
+            "call_95fae017db5b4a91b1259abacall_95fae017db5b4a91b1259aba",
+            "astr_kb_search",
+            "call_95fae017db5b4a91b1259aba",
+            "astr_kb_search",
+        ),
+        (
+            "chatcmpl-toolcall-dup-name-only",
+            "call_95fae017db5b4a91b1259aba",
+            "astr_kb_searchastr_kb_search",
+            "call_95fae017db5b4a91b1259aba",
+            "astr_kb_search",
+        ),
+        (
+            "chatcmpl-toolcall-dup-both",
+            "call_95fae017db5b4a91b1259abacall_95fae017db5b4a91b1259aba",
+            "astr_kb_searchastr_kb_search",
+            "call_95fae017db5b4a91b1259aba",
+            "astr_kb_search",
+        ),
+    ],
+    ids=["id-only", "name-only", "both-fields"],
+)
+async def test_parse_openai_completion_dedupes_self_concatenated_tool_call_fields(
+    completion_id: str,
+    raw_tool_call_id: str,
+    raw_tool_name: str,
+    expected_id: str,
+    expected_name: str,
+):
     provider = _make_provider()
     try:
-        tool_call_id = "call_95fae017db5b4a91b1259aba"
-        tool_name = "astr_kb_search"
-        completion = ChatCompletion.model_validate(
-            {
-                "id": "chatcmpl-toolcall-dup",
-                "object": "chat.completion",
-                "created": 0,
-                "model": "gpt-4o-mini",
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {
-                            "role": "assistant",
-                            "content": None,
-                            "refusal": None,
-                            "tool_calls": [
-                                {
-                                    "id": tool_call_id + tool_call_id,
-                                    "type": "function",
-                                    "function": {
-                                        "name": tool_name + tool_name,
-                                        "arguments": "{}",
-                                    },
-                                }
-                            ],
-                        },
-                        "finish_reason": "tool_calls",
-                    }
-                ],
-            }
+        completion = _make_tool_call_completion(
+            raw_tool_call_id,
+            raw_tool_name,
+            completion_id=completion_id,
         )
 
         llm_response = await provider._parse_openai_completion(completion, tools=object())
-        assert llm_response.tools_call_ids == [tool_call_id]
-        assert llm_response.tools_call_name == [tool_name]
+        assert llm_response.tools_call_ids == [expected_id]
+        assert llm_response.tools_call_name == [expected_name]
     finally:
         await provider.terminate()
 

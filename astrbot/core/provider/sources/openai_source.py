@@ -55,6 +55,8 @@ from ..register import register_provider_adapter
 )
 class ProviderOpenAIOfficial(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
+    _TOOL_CALL_ID_DEDUPE_MIN_LEN = 16
+    _TOOL_CALL_NAME_DEDUPE_MIN_LEN = 8
 
     @classmethod
     def _truncate_error_text_candidate(cls, text: str) -> str:
@@ -68,6 +70,13 @@ class ProviderOpenAIOfficial(Provider):
             return json.dumps(value, ensure_ascii=False, default=str)
         except Exception:
             return None
+
+    @staticmethod
+    def _dedupe_self_concatenated(value: str, *, min_len: int) -> str:
+        if not value or len(value) < min_len or (len(value) % 2) != 0:
+            return value
+        half = len(value) // 2
+        return value[:half] if value[:half] == value[half:] else value
 
     def _get_image_moderation_error_patterns(self) -> list[str]:
         """Return configured moderation patterns (case-insensitive substring match, not regex)."""
@@ -842,15 +851,6 @@ class ProviderOpenAIOfficial(Provider):
         # the priority is higher than the <think> tag extraction
         llm_response.reasoning_content = self._extract_reasoning_content(completion)
 
-        # Some OpenAI-compatible proxies may duplicate streaming chunks, causing tool call fields
-        # (e.g., id/name) to become self-concatenated (s + s). We defensively de-duplicate those.
-        # See: https://github.com/AstrBotDevs/AstrBot/issues/7694
-        def _dedupe_self_concatenated(value: str, *, min_len: int) -> str:
-            if not value or len(value) < min_len or (len(value) % 2) != 0:
-                return value
-            half = len(value) // 2
-            return value[:half] if value[:half] == value[half:] else value
-
         # parse tool calls if any
         if choice.message.tool_calls and tools is not None:
             args_ls = []
@@ -877,12 +877,18 @@ class ProviderOpenAIOfficial(Provider):
                     else:
                         args = tool_call.function.arguments
                     tool_call_id = (
-                        _dedupe_self_concatenated(tool_call.id, min_len=16)
+                        self._dedupe_self_concatenated(
+                            tool_call.id,
+                            min_len=self._TOOL_CALL_ID_DEDUPE_MIN_LEN,
+                        )
                         if isinstance(tool_call.id, str)
                         else tool_call.id
                     )
                     tool_call_name = (
-                        _dedupe_self_concatenated(tool_call.function.name, min_len=8)
+                        self._dedupe_self_concatenated(
+                            tool_call.function.name,
+                            min_len=self._TOOL_CALL_NAME_DEDUPE_MIN_LEN,
+                        )
                         if isinstance(tool_call.function.name, str)
                         else tool_call.function.name
                     )
