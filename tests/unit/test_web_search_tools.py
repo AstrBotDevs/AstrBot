@@ -22,9 +22,7 @@ def test_normalize_legacy_web_search_config_migrates_firecrawl_key():
 
     tools.normalize_legacy_web_search_config(config)
 
-    assert config["provider_settings"]["websearch_firecrawl_key"] == [
-        "firecrawl-key"
-    ]
+    assert config["provider_settings"]["websearch_firecrawl_key"] == ["firecrawl-key"]
     assert config.saved is True
 
 
@@ -84,6 +82,90 @@ async def test_firecrawl_extract_returns_scraped_markdown(monkeypatch):
     result = await tool.call(context, url="https://example.com")
 
     assert result == "URL: https://example.com\nContent: # Example"
+
+
+@pytest.mark.asyncio
+async def test_firecrawl_post_uses_shared_request_setup(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(status=200, json_data={"success": True})
+    )
+
+    def fake_client_session(trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    result = await tools._firecrawl_post(
+        {"websearch_firecrawl_key": ["firecrawl-key"]},
+        "search",
+        {"query": "AstrBot"},
+    )
+
+    assert result == {"success": True}
+    assert session.trust_env is True
+    assert session.posted == {
+        "url": "https://api.firecrawl.dev/v2/search",
+        "json": {"query": "AstrBot"},
+        "headers": {
+            "Authorization": "Bearer firecrawl-key",
+            "Content-Type": "application/json",
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_firecrawl_post_raises_api_error_for_http_errors(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(status=401, text_data="Unauthorized")
+    )
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", lambda trust_env: session)
+
+    with pytest.raises(
+        tools.FirecrawlAPIError,
+        match="Firecrawl scrape failed: Unauthorized, status: 401",
+    ):
+        await tools._firecrawl_post(
+            {"websearch_firecrawl_key": ["firecrawl-key"]},
+            "scrape",
+            {"url": "https://example.com"},
+        )
+
+
+class _FakeFirecrawlResponse:
+    def __init__(self, status=200, json_data=None, text_data=""):
+        self.status = status
+        self.json_data = json_data or {}
+        self.text_data = text_data
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    async def json(self):
+        return self.json_data
+
+    async def text(self):
+        return self.text_data
+
+
+class _FakeFirecrawlSession:
+    def __init__(self, response):
+        self.response = response
+        self.trust_env = None
+        self.posted = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    def post(self, url, json, headers):
+        self.posted = {"url": url, "json": json, "headers": headers}
+        return self.response
 
 
 def _context_with_provider_settings(provider_settings):
