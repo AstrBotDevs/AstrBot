@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from astrbot.core.astr_main_agent import MainAgentBuildConfig
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
     InternalAgentSubStage,
 )
-from astrbot.core.astr_main_agent import MainAgentBuildConfig
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 
 

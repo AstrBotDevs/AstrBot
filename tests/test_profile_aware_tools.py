@@ -9,7 +9,6 @@ import pytest
 
 from astrbot.core.prompt import PromptAssembly
 
-
 # ═══════════════════════════════════════════════════════════════
 # ShipyardNeoBooter.capabilities
 # ═══════════════════════════════════════════════════════════════
