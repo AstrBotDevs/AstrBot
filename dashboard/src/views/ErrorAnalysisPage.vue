@@ -4,21 +4,21 @@
       <v-row class="px-4 py-3 align-center">
         <v-col cols="12" md="8">
           <h1 class="text-h1 font-weight-bold mb-2">
-            <v-icon class="me-2">mdi-alert-decagram-outline</v-icon>Error Analysis
+            <v-icon class="me-2">mdi-alert-decagram-outline</v-icon>报错诊断
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-0">
-            Automatically captures ERROR/CRITICAL logs, analyzes with source context, and supports follow-up Q&A.
+            自动记录 ERROR/CRITICAL 日志，结合源码上下文进行 AI 分析，并支持继续追问。
           </p>
         </v-col>
         <v-col cols="12" md="4" class="d-flex justify-end">
           <v-btn color="primary" prepend-icon="mdi-content-save-outline" :loading="savingSettings" @click="saveSettings">
-            Save Settings
+            保存设置
           </v-btn>
         </v-col>
       </v-row>
 
       <v-card class="mx-4 mb-4" elevation="0" variant="outlined">
-        <v-card-title>Diagnosis Settings</v-card-title>
+        <v-card-title>诊断设置</v-card-title>
         <v-card-text>
           <v-row>
             <v-col cols="12" md="4">
@@ -27,7 +27,7 @@
                 :items="providerOptions"
                 item-title="title"
                 item-value="value"
-                label="Analysis Model"
+                label="分析模型"
                 variant="solo-filled"
                 flat
                 clearable
@@ -39,7 +39,7 @@
                 :items="scopeOptions"
                 item-title="title"
                 item-value="value"
-                label="Scope"
+                label="分析范围"
                 variant="solo-filled"
                 flat
               />
@@ -50,7 +50,7 @@
                 :items="pluginOptions"
                 item-title="title"
                 item-value="value"
-                label="Selected Plugins"
+                label="指定插件"
                 multiple
                 chips
                 variant="solo-filled"
@@ -58,16 +58,16 @@
               />
             </v-col>
             <v-col cols="12" md="3">
-              <v-switch v-model="settings.auto_analyze" color="primary" label="Auto Analyze" inset />
+              <v-switch v-model="settings.auto_analyze" color="primary" label="自动分析" inset />
             </v-col>
             <v-col cols="12" md="3">
-              <v-switch v-model="settings.passive_record" color="primary" label="Passive Record" inset />
+              <v-switch v-model="settings.passive_record" color="primary" label="被动记录" inset />
             </v-col>
             <v-col cols="12" md="3">
-              <v-switch v-model="settings.include_source_context" color="primary" label="Include Source Context" inset />
+              <v-switch v-model="settings.include_source_context" color="primary" label="包含源码上下文" inset />
             </v-col>
             <v-col cols="12" md="3">
-              <v-text-field v-model.number="settings.dedupe_window_sec" type="number" label="Dedupe Window (sec)" variant="solo-filled" flat />
+              <v-text-field v-model.number="settings.dedupe_window_sec" type="number" label="去重窗口（秒）" variant="solo-filled" flat />
             </v-col>
           </v-row>
         </v-card-text>
@@ -75,14 +75,14 @@
 
       <v-card class="mx-4 mb-4" elevation="0" variant="outlined">
         <v-card-title class="d-flex align-center">
-          Issue Cards
+          问题卡片
           <v-spacer />
           <v-select
             v-model="statusFilter"
             :items="statusOptions"
             item-title="title"
             item-value="value"
-            label="Status Filter"
+            label="状态筛选"
             variant="solo-filled"
             flat
             clearable
@@ -97,35 +97,35 @@
               <v-card elevation="0" variant="tonal">
                 <v-card-text>
                   <div class="d-flex flex-wrap align-center ga-2 mb-2">
-                    <v-chip size="small" :color="statusColor(record.status)">{{ record.status }}</v-chip>
+                    <v-chip size="small" :color="statusColor(record.status)">{{ statusLabel(record.status) }}</v-chip>
                     <v-chip size="small" :color="severityColor(record.severity)" variant="outlined">
-                      {{ record.severity || 'unknown' }}
+                      {{ severityLabel(record.severity) }}
                     </v-chip>
                     <span class="text-body-2 text-medium-emphasis">{{ record.target_type }} / {{ record.target_name }}</span>
                     <v-spacer />
                     <span class="text-caption text-medium-emphasis">{{ formatTime(record.updated_at) }}</span>
                   </div>
-                  <div class="text-body-1 font-weight-medium mb-1">{{ record.summary || 'No summary' }}</div>
+                  <div class="text-body-1 font-weight-medium mb-1">{{ record.summary || '暂无摘要' }}</div>
                   <div class="text-body-2 text-medium-emphasis mb-3">{{ record.analysis?.reason || record.error_message || '' }}</div>
                   <div class="d-flex flex-wrap ga-2">
                     <v-btn size="small" variant="outlined" prepend-icon="mdi-file-document-outline" @click="openDetail(record)">
-                      View Details
+                      查看详情
                     </v-btn>
                     <v-btn size="small" variant="outlined" prepend-icon="mdi-refresh" :loading="manualRunningId === record.id" @click="reanalyze(record)">
-                      Re-analyze
+                      重新分析
                     </v-btn>
                     <v-btn size="small" color="primary" variant="tonal" prepend-icon="mdi-chat-outline" @click="openAsk(record)">
-                      Ask AI
+                      询问 AI
                     </v-btn>
                     <v-btn size="small" color="grey" variant="text" prepend-icon="mdi-eye-off-outline" @click="ignoreRecord(record)">
-                      Ignore
+                      忽略
                     </v-btn>
                   </div>
                 </v-card-text>
               </v-card>
             </v-col>
           </v-row>
-          <div v-else class="text-medium-emphasis">No diagnosis records yet</div>
+          <div v-else class="text-medium-emphasis">暂无诊断记录</div>
         </v-card-text>
       </v-card>
     </v-container>
@@ -133,23 +133,23 @@
     <v-dialog v-model="detailDialog" max-width="1100">
       <v-card>
         <v-card-title class="d-flex align-center">
-          Diagnosis Details
+          诊断详情
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="detailDialog = false" />
         </v-card-title>
         <v-card-text v-if="activeRecord">
           <v-row>
             <v-col cols="12" md="6">
-              <v-textarea :model-value="activeRecord.log_excerpt || ''" label="Raw Log" rows="8" variant="solo-filled" flat readonly />
+              <v-textarea :model-value="activeRecord.log_excerpt || ''" label="原始日志" rows="8" variant="solo-filled" flat readonly />
             </v-col>
             <v-col cols="12" md="6">
               <v-textarea :model-value="activeRecord.traceback || ''" label="Traceback" rows="8" variant="solo-filled" flat readonly />
             </v-col>
             <v-col cols="12">
-              <v-textarea :model-value="formatAnalysis(activeRecord.analysis)" label="AI Analysis" rows="10" variant="solo-filled" flat readonly />
+              <v-textarea :model-value="formatAnalysis(activeRecord.analysis)" label="AI 分析结果" rows="10" variant="solo-filled" flat readonly />
             </v-col>
             <v-col cols="12" v-if="activeRecord.related_files?.length">
-              <div class="text-subtitle-1 mb-2">Related Source Snippets</div>
+              <div class="text-subtitle-1 mb-2">相关源码片段</div>
               <v-expansion-panels variant="accordion">
                 <v-expansion-panel v-for="(file, index) in activeRecord.related_files" :key="`${file.path}-${index}`">
                   <v-expansion-panel-title>
@@ -169,7 +169,7 @@
     <v-dialog v-model="askDialog" max-width="900">
       <v-card>
         <v-card-title class="d-flex align-center">
-          Ask AI
+          追问 AI
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="askDialog = false" />
         </v-card-title>
@@ -179,7 +179,7 @@
           </div>
           <div class="ask-history mb-3">
             <div v-for="(msg, index) in qaMessages" :key="index" class="mb-2">
-              <div class="text-caption text-medium-emphasis">{{ msg.role === 'assistant' ? 'AI' : 'User' }}</div>
+              <div class="text-caption text-medium-emphasis">{{ msg.role === 'assistant' ? 'AI' : '用户' }}</div>
               <div class="text-body-2">{{ msg.content }}</div>
             </div>
             <div v-if="streamingAnswer" class="mb-2">
@@ -189,7 +189,7 @@
           </div>
           <v-textarea
             v-model="question"
-            label="Follow-up Question"
+            label="继续提问"
             rows="3"
             auto-grow
             variant="solo-filled"
@@ -198,8 +198,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="askDialog = false">Close</v-btn>
-          <v-btn color="primary" :loading="asking" @click="askAI">Send</v-btn>
+          <v-btn variant="text" @click="askDialog = false">关闭</v-btn>
+          <v-btn color="primary" :loading="asking" @click="askAI">发送</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -245,18 +245,18 @@ const settings = ref({
 })
 
 const scopeOptions = [
-  { title: 'All', value: 'all' },
-  { title: 'Core Only', value: 'core' },
-  { title: 'All Plugins', value: 'all_plugins' },
-  { title: 'Selected Plugins', value: 'selected_plugins' }
+  { title: '全部', value: 'all' },
+  { title: '仅核心', value: 'core' },
+  { title: '全部插件', value: 'all_plugins' },
+  { title: '指定插件', value: 'selected_plugins' }
 ]
 
 const statusOptions = [
-  { title: 'Analyzing', value: 'analyzing' },
-  { title: 'Pending', value: 'pending' },
-  { title: 'Done', value: 'done' },
-  { title: 'Failed', value: 'failed' },
-  { title: 'Ignored', value: 'ignored' }
+  { title: '分析中', value: 'analyzing' },
+  { title: '待分析', value: 'pending' },
+  { title: '已完成', value: 'done' },
+  { title: '失败', value: 'failed' },
+  { title: '已忽略', value: 'ignored' }
 ]
 
 function showMessage(message, color = 'success') {
@@ -283,6 +283,28 @@ function severityColor(severity) {
     unknown: 'grey'
   }
   return map[severity] || 'grey'
+}
+
+function statusLabel(status) {
+  const map = {
+    pending: '待分析',
+    analyzing: '分析中',
+    done: '已完成',
+    failed: '失败',
+    ignored: '已忽略'
+  }
+  return map[status] || '未知'
+}
+
+function severityLabel(severity) {
+  const map = {
+    low: '低',
+    medium: '中',
+    high: '高',
+    critical: '严重',
+    unknown: '未知'
+  }
+  return map[severity] || '未知'
 }
 
 function formatTime(ts) {
@@ -321,12 +343,12 @@ async function saveSettings() {
     const res = await axios.post('/api/error-analysis/settings', settings.value)
     if (res.data.status === 'ok') {
       settings.value = { ...settings.value, ...res.data.data }
-      showMessage('Settings saved')
+      showMessage('设置已保存')
     } else {
-      showMessage(res.data.message || 'Failed to save settings', 'error')
+      showMessage(res.data.message || '保存设置失败', 'error')
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || 'Failed to save settings', 'error')
+    showMessage(err.response?.data?.message || err.message || '保存设置失败', 'error')
   } finally {
     savingSettings.value = false
   }
@@ -377,12 +399,12 @@ async function reanalyze(record) {
     })
     if (res.data.status === 'ok') {
       upsertRecord(res.data.data)
-      showMessage('Re-analyzed')
+      showMessage('已重新分析')
     } else {
-      showMessage(res.data.message || 'Analyze failed', 'error')
+      showMessage(res.data.message || '分析失败', 'error')
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || 'Analyze failed', 'error')
+    showMessage(err.response?.data?.message || err.message || '分析失败', 'error')
   } finally {
     manualRunningId.value = ''
   }
@@ -393,12 +415,12 @@ async function ignoreRecord(record) {
     const res = await axios.post('/api/error-analysis/ignore', { record_id: record.id })
     if (res.data.status === 'ok') {
       upsertRecord(res.data.data)
-      showMessage('Ignored')
+      showMessage('已忽略')
     } else {
-      showMessage(res.data.message || 'Operation failed', 'error')
+      showMessage(res.data.message || '操作失败', 'error')
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || 'Operation failed', 'error')
+    showMessage(err.response?.data?.message || err.message || '操作失败', 'error')
   }
 }
 
@@ -469,12 +491,12 @@ async function askAI() {
           await loadRecords()
         } else if (payload.type === 'error') {
           hadError = true
-          showMessage(payload.message || 'Ask failed', 'error')
+          showMessage(payload.message || '追问失败', 'error')
         }
       }
     }
   } catch (err) {
-    showMessage(err.message || 'Ask failed', 'error')
+    showMessage(err.message || '追问失败', 'error')
   } finally {
     asking.value = false
   }
