@@ -111,6 +111,8 @@ class AstrBotDashboard:
         self.command_route = CommandRoute(self.context)
         self.cr = ConfigRoute(self.context, core_lifecycle)
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
+        self.error_analysis_route = ErrorAnalysisRoute(self.context, core_lifecycle)
+        self.app.before_serving(self.error_analysis_route.start)
         self.sfr = StaticFileRoute(self.context)
         self.ar = AuthRoute(self.context)
         self.api_key_route = ApiKeyRoute(self.context, db)

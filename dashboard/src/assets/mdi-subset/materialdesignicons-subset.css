@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 247 icons */
+/* Auto-generated MDI subset – 260 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -50,6 +50,10 @@
 
 .mdi-alert-circle-outline::before {
   content: "\F05D6";
+}
+
+.mdi-alert-decagram-outline::before {
+  content: "\F0CE5";
 }
 
 .mdi-alert-outline::before {
@@ -148,6 +152,10 @@
   content: "\F0B79";
 }
 
+.mdi-chat-outline::before {
+  content: "\F0EDE";
+}
+
 .mdi-chat-processing::before {
   content: "\F0B7B";
 }
@@ -234,6 +242,10 @@
 
 .mdi-cloud-upload::before {
   content: "\F0167";
+}
+
+.mdi-code-braces::before {
+  content: "\F0169";
 }
 
 .mdi-code-json::before {
@@ -376,6 +388,10 @@
   content: "\F0209";
 }
 
+.mdi-eye-off-outline::before {
+  content: "\F06D1";
+}
+
 .mdi-eye-outline::before {
   content: "\F06D0";
 }
@@ -394,6 +410,10 @@
 
 .mdi-file-code::before {
   content: "\F022E";
+}
+
+.mdi-file-delimited-outline::before {
+  content: "\F0EA5";
 }
 
 .mdi-file-document::before {
@@ -416,6 +436,10 @@
   content: "\F021C";
 }
 
+.mdi-file-music-outline::before {
+  content: "\F0E2A";
+}
+
 .mdi-file-outline::before {
   content: "\F0224";
 }
@@ -434,6 +458,10 @@
 
 .mdi-file-upload::before {
   content: "\F0A4D";
+}
+
+.mdi-file-video-outline::before {
+  content: "\F0E2C";
 }
 
 .mdi-file-word-box::before {
@@ -564,8 +592,36 @@
   content: "\F0315";
 }
 
+.mdi-language-css3::before {
+  content: "\F031C";
+}
+
+.mdi-language-html5::before {
+  content: "\F031D";
+}
+
+.mdi-language-java::before {
+  content: "\F0B37";
+}
+
+.mdi-language-javascript::before {
+  content: "\F031E";
+}
+
 .mdi-language-markdown::before {
   content: "\F0354";
+}
+
+.mdi-language-markdown-outline::before {
+  content: "\F0F5B";
+}
+
+.mdi-language-python::before {
+  content: "\F0320";
+}
+
+.mdi-language-typescript::before {
+  content: "\F06E6";
 }
 
 .mdi-layers-outline::before {
@@ -810,10 +866,6 @@
 
 .mdi-robot-outline::before {
   content: "\F167A";
-}
-
-.mdi-send::before {
-  content: "\F048A";
 }
 
 .mdi-server::before {
