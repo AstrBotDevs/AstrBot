@@ -119,6 +119,8 @@ export function useMessages(options: UseMessagesOptions) {
   const sessionProjects = reactive<Record<string, ChatSessionProject | null>>(
     {},
   );
+  let chatWidgetApi = false;
+  let chatWidgetApiPackage: Record<string, string> | null = null;
 
   const activeMessages = computed(() =>
     options.currentSessionId.value
@@ -169,10 +171,22 @@ export function useMessages(options: UseMessagesOptions) {
     let cacheKey: string;
     if (part.attachment_id) {
       cacheKey = `att:${part.attachment_id}`;
-      url = `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
+      if (chatWidgetApi) {
+        const params = new URLSearchParams(chatWidgetApiPackage ?? {});
+        params.append('attachment_id', part.attachment_id)
+        url = '/api/widget/file?' + params.toString();
+      } else {
+        url = `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
+      }
     } else if (part.filename) {
       cacheKey = `file:${part.filename}`;
-      url = `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+      if (chatWidgetApi) {
+        const params = new URLSearchParams(chatWidgetApiPackage ?? {});
+        params.append('filename', part.filename)
+        url = '/api/widget/filename?' + params.toString();
+      } else {
+        url = `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+      }
     } else {
       return;
     }
@@ -704,7 +718,6 @@ export function useMessages(options: UseMessagesOptions) {
     parts: MessagePart[],
     botRecord: ChatRecord,
     enableStreaming: boolean,
-    apiPackage: Record<any, any>,
   ) {
     const abort = new AbortController();
     activeConnections[sessionId] = {
@@ -720,10 +733,10 @@ export function useMessages(options: UseMessagesOptions) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(
-          Object.assign({
-            message: parts.map(partToPayload),
-            enable_streaming: enableStreaming,
-          }, apiPackage)
+        Object.assign({
+          message: parts.map(partToPayload),
+          enable_streaming: enableStreaming,
+        }, chatWidgetApiPackage)
       ),
       signal: abort.signal,
     })
@@ -747,7 +760,7 @@ export function useMessages(options: UseMessagesOptions) {
       });
   }
 
-  async function widgetLoadSessionMessages(sessionId: string, apiPackage: Record<any, any>,) {
+  async function widgetLoadSessionMessages(sessionId: string) {
     if (!sessionId) return;
     loadingMessages.value = true;
     try {
@@ -757,7 +770,7 @@ export function useMessages(options: UseMessagesOptions) {
         headers: {
           'Content-Type': 'application/json'
         },
-        data: apiPackage
+        data: chatWidgetApiPackage
       });
       const payload = response.data?.data || {};
       const history = payload.history || [];
@@ -772,6 +785,15 @@ export function useMessages(options: UseMessagesOptions) {
     } finally {
       loadingMessages.value = false;
     }
+  }
+  async function widgetStopSession(sessionId: string) {
+    if (!sessionId) return;
+    await axios.post("/api/widget/stop", chatWidgetApiPackage);
+  }
+
+  function setChatWidGetPackage(apiPackage: Record<any, any>) {
+    chatWidgetApi = true;
+    chatWidgetApiPackage = apiPackage
   }
 
   return {
@@ -796,6 +818,8 @@ export function useMessages(options: UseMessagesOptions) {
     cleanupConnections,
     widgetStartSseStream,
     widgetLoadSessionMessages,
+    widgetStopSession,
+    setChatWidGetPackage,
   };
 }
 

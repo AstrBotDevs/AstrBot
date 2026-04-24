@@ -208,7 +208,13 @@ class AstrBotDashboard:
         # 验证签名、解包参数
         if request.path.startswith("/api/widget"):
             try:
-                post_data = await request.get_json(silent=True) or {}
+                post_data = await api_package.request_input([
+                    'appid',
+                    'data',
+                    'noise',
+                    'expiry_date',
+                    'signature',
+                ])
                 # 读取apikey
                 appid = post_data.get('appid')
                 if not appid:
@@ -221,13 +227,32 @@ class AstrBotDashboard:
                     r.status_code = 401
                     return r
                 # 验证
-                g.api_package = api_package.de_package(
+                pkg_data = api_package.de_package(
                     api_key.key_hash,
-                    post_data.get('data').__str__(),
-                    post_data.get('noise').__str__(),
-                    post_data.get('expiry_date').__str__(),
-                    post_data.get('signature').__str__(),
+                    post_data.get('data', ''),
+                    post_data.get('noise', ''),
+                    post_data.get('expiry_date', ''),
+                    post_data.get('signature', ''),
                 )
+                if "username" not in pkg_data:
+                    r = jsonify(Response().error("username is required").__dict__)
+                    r.status_code = 401
+                    return r
+                username = "widget." + pkg_data['username'] # 增加前缀，
+                pkg_data['username'] = username
+                # 设置全局参数
+                g.username = username
+                g.api_package = pkg_data
+                print(pkg_data)
+                # 权限
+                if isinstance(api_key.scopes, list):
+                    scopes = api_key.scopes
+                else:
+                    scopes = list(ALL_OPEN_API_SCOPES)
+                if "*" not in scopes and "chat_widget" not in scopes:
+                    r = jsonify(Response().error("Insufficient API key scope").__dict__)
+                    r.status_code = 403
+                    return r
                 return None
             except Exception as err:
                 r = jsonify(Response().error(str(err)).__dict__)

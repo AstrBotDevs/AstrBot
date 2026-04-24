@@ -1001,9 +1001,10 @@ class ChatRoute(Route):
         response.timeout = None  # fix SSE auto disconnect issue
         return response
 
-    async def stop_session(self):
+    async def stop_session(self, post_data: dict | None = None):
         """Stop active agent runs for a session."""
-        post_data = await request.json
+        if post_data is None:
+            post_data = await request.json
         if post_data is None:
             return Response().error("Missing JSON body").__dict__
 

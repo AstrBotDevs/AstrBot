@@ -1,6 +1,5 @@
 <script setup lang="ts">
 // chat挂件，适合用iframe挂到其他项目上，在`components/chat/StandaloneChat.vue`的基础上修改的
-// 目前仅实现文字接口，其他的有空再填
 
 import {
   computed,
@@ -54,16 +53,18 @@ const customMarkdownTags = ["ref"];
 const route = useRoute();
 
 // 从urlQuery获取api封包信息
-const api_package = {
-  appid: route.query?.appid ?? '',
-  data: route.query?.data ?? '',
-  noise: route.query?.noise ?? '',
-  expiry_date: route.query?.expiry_date ?? '',
-  signature: route.query?.signature ?? '',
+const api_package: Record<string, string> = {
+  appid: route.query?.appid as string ?? '',
+  data: route.query?.data as string ?? '',
+  noise: route.query?.noise as string ?? '',
+  expiry_date: route.query?.expiry_date as string ?? '',
+  signature: route.query?.signature as string ?? '',
 };
 // 解包后的请求参数
 const api_decode_data = JSON.parse(atob(api_package.data as string));
 currSessionId.value = api_decode_data.session_id;
+// 是否明确开启文件功能
+const attachmentEnabled = ref(api_decode_data?.file_upload === true);
 
 const {
   stagedFiles,
@@ -78,6 +79,7 @@ const {
   removeFile,
   clearStaged,
   cleanupMediaCache,
+  setUpChatWidGetPackage,
 } = useMediaHandling();
 
 const {
@@ -89,9 +91,10 @@ const {
   messageContent,
   messageParts,
   createLocalExchange,
-  stopSession,
+  widgetStopSession,
   widgetStartSseStream,
   widgetLoadSessionMessages,
+  setChatWidGetPackage,
 } = useMessages({
   currentSessionId: currSessionId,
   onStreamUpdate: () => {
@@ -104,7 +107,9 @@ const {
 onMounted(async () => {
   inputRef.value?.focusInput();
   initializing.value = true
-  widgetLoadSessionMessages(api_decode_data.session_id ?? '', api_package)
+  setUpChatWidGetPackage(api_package);
+  setChatWidGetPackage(api_package);
+  widgetLoadSessionMessages(api_decode_data.session_id ?? '')
       .then()
       .finally(() => {
         initializing.value = false
@@ -123,18 +128,17 @@ async function sendCurrentMessage() {
   const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
   const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
 
-  draft.value = "";
-  clearStaged();
-  scrollToBottom();
-
   widgetStartSseStream(
     sessionId,
     messageId,
     parts,
     botRecord,
     enableStreaming.value,
-    api_package
   );
+  // 先发请求再清理，chrome清理太快图片会显示异常
+  draft.value = "";
+  clearStaged();
+  scrollToBottom();
 }
 
 function buildOutgoingParts(text: string): MessagePart[] {
@@ -163,7 +167,7 @@ function hasNonReasoningContent(message: ChatRecord) {
 
 async function stopCurrentSession() {
   if (!currSessionId.value) return;
-  // await stopSession(currSessionId.value);
+  await widgetStopSession(currSessionId.value);
 }
 
 async function handleFilesSelected(files: FileList) {
@@ -197,12 +201,15 @@ function messageRefs(message: ChatRecord) {
 function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
-  if (part.attachment_id)
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
-  if (part.filename)
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+  const params = new URLSearchParams(api_package);
+  if (part.attachment_id) {
+    params.append('attachment_id', part.attachment_id)
+    return '/api/widget/file?' + params.toString();
+  }
+  if (part.filename) {
+    params.append('filename', part.filename)
+    return '/api/widget/filename?' + params.toString();
+  }
   return "";
 }
 
@@ -359,8 +366,8 @@ function closeImage() {
                 @file-select="handleFilesSelected"
                 :config-selector-disabled="true"
                 :provider-model-menu-disabled="true"
-                :upload-files-disabled="true"
-                :record-disabled="true"
+                :upload-files-disabled="!attachmentEnabled"
+                :record-disabled="!attachmentEnabled"
             />
           </section>
 

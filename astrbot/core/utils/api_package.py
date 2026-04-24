@@ -4,6 +4,7 @@ import hashlib
 import json
 import secrets
 from datetime import datetime, timedelta, timezone
+from quart import Quart, g, jsonify, request
 
 
 class InvalidSignatureError(Exception):
@@ -39,6 +40,7 @@ def de_package(apikey: str, data: str, noise: str, expiry_date: str, signature: 
 
     return result
 
+
 def en_package(appid: str, apikey: str, data: dict) -> dict:
     encode_data = base64.b64encode(
         json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -56,3 +58,25 @@ def en_package(appid: str, apikey: str, data: dict) -> dict:
         "apikey": apikey,
     }
 
+
+# 按顺序获取输入参数：json -> form -> query -> header
+async def request_input(name: list) -> dict:
+    json_data = await request.get_json(silent=True) or {}
+    form_data = (await request.form).to_dict() or {}
+
+    return_data = {}
+    for item in name:
+        if request.method == "POST":
+            if item in json_data:
+                return_data[item] = json_data.get(item)
+                continue
+            if item in form_data:
+                return_data[item] = form_data[item]
+                continue
+        if request.args.get(item):
+            return_data[item] = request.args.get(item)
+            continue
+        if request.headers.get(item):
+            return_data[item] = request.headers.get(item)
+            continue
+    return return_data

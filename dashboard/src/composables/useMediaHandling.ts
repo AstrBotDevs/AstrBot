@@ -15,6 +15,8 @@ export function useMediaHandling() {
     const stagedFiles = ref<StagedFileInfo[]>([]);
     const mediaCache = ref<Record<string, string>>({});
     const pendingFileSignatures = new Set<string>();
+    let chatWidgetApi = false;
+    let chatWidgetApiPackage: Record<any, any> | null = null;
 
     async function getFileSignature(file: File): Promise<string> {
         if (crypto?.subtle) {
@@ -41,11 +43,19 @@ export function useMediaHandling() {
             return mediaCache.value[filename];
         }
 
+        let params: Record<any, any> = { filename };
+        if (chatWidgetApi) {
+            for (const k in chatWidgetApiPackage)
+                params[k] = chatWidgetApiPackage[k];
+        }
         try {
-            const response = await axios.get('/api/chat/get_file', {
-                params: { filename },
-                responseType: 'blob'
-            });
+            const response = await axios.get(
+                chatWidgetApi ? '/api/widget/file' : '/api/chat/get_file',
+                {
+                    params: params,
+                    responseType: 'blob'
+                }
+            );
 
             const blobUrl = URL.createObjectURL(response.data);
             mediaCache.value[filename] = blobUrl;
@@ -63,13 +73,21 @@ export function useMediaHandling() {
         pendingFileSignatures.add(signature);
         const formData = new FormData();
         formData.append('file', file);
+        if (chatWidgetApi) {
+            for (const k in chatWidgetApiPackage)
+                formData.append(k, chatWidgetApiPackage[k]);
+        }
 
         try {
-            const response = await axios.post('/api/chat/post_file', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
+            const response = await axios.post(
+                chatWidgetApi ? '/api/widget/upload' : '/api/chat/post_file',
+                formData,
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data'
+                    }
                 }
-            });
+            );
 
             const { attachment_id, filename, type } = response.data.data;
             stagedFiles.value.push({
@@ -182,6 +200,11 @@ export function useMediaHandling() {
         stagedFiles.value.filter(f => f.type !== 'image')
     );
 
+    function setUpChatWidGetPackage(apiPackage: Record<any, any>) {
+        chatWidgetApi = true;
+        chatWidgetApiPackage = apiPackage
+    }
+
     return {
         stagedImagesUrl,
         stagedAudioUrl,
@@ -195,6 +218,7 @@ export function useMediaHandling() {
         removeAudio,
         removeFile,
         clearStaged,
-        cleanupMediaCache
+        cleanupMediaCache,
+        setUpChatWidGetPackage,
     };
 }

@@ -9,7 +9,7 @@ from astrbot.core.utils.datetime_utils import normalize_datetime_utc
 
 from .route import Response, Route, RouteContext
 
-ALL_OPEN_API_SCOPES = ("chat", "config", "file", "im")
+ALL_OPEN_API_SCOPES = ("chat", "config", "file", "im", "chat_widget")
 
 
 class ApiKeyRoute(Route):
