@@ -105,10 +105,14 @@ class ProviderAnthropic(Provider):
         if provider == self.DEEPSEEK_PROVIDER_NAME:
             return True
 
-        parsed_base_url = urlparse(str(self.base_url).strip().lower())
-        return (
-            parsed_base_url.netloc.endswith("deepseek.com")
-            and "/anthropic" in parsed_base_url.path
+        parsed_base_url = urlparse(str(self.base_url).strip())
+        hostname = (parsed_base_url.hostname or "").strip().lower().rstrip(".")
+        is_deepseek_hostname = hostname == "deepseek.com" or hostname.endswith(
+            ".deepseek.com"
+        )
+        normalized_path = parsed_base_url.path.rstrip("/")
+        return is_deepseek_hostname and (
+            normalized_path == "/anthropic" or normalized_path.startswith("/anthropic/")
         )
 
     def _supports_image_input(self) -> bool:
