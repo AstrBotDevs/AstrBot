@@ -1,24 +1,24 @@
-﻿<template>
+<template>
   <div class="error-analysis-page">
     <v-container fluid class="pa-0">
       <v-row class="px-4 py-3 align-center">
         <v-col cols="12" md="8">
           <h1 class="text-h1 font-weight-bold mb-2">
-            <v-icon class="me-2">mdi-alert-decagram-outline</v-icon>鎶ラ敊璇婃柇
+            <v-icon class="me-2">mdi-alert-decagram-outline</v-icon>Error Analysis
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-0">
-            鑷姩璁板綍 ERROR/CRITICAL 鏃ュ織锛岀粨鍚堟簮鐮佷笂涓嬫枃杩涜 AI 鍒嗘瀽锛屽苟鏀寔缁х画杩介棶銆?
+            Automatically captures ERROR/CRITICAL logs, analyzes with source context, and supports follow-up Q&A.
           </p>
         </v-col>
         <v-col cols="12" md="4" class="d-flex justify-end">
           <v-btn color="primary" prepend-icon="mdi-content-save-outline" :loading="savingSettings" @click="saveSettings">
-            淇濆瓨璁剧疆
+            Save Settings
           </v-btn>
         </v-col>
       </v-row>
 
       <v-card class="mx-4 mb-4" elevation="0" variant="outlined">
-        <v-card-title>璇婃柇璁剧疆</v-card-title>
+        <v-card-title>Diagnosis Settings</v-card-title>
         <v-card-text>
           <v-row>
             <v-col cols="12" md="4">
@@ -27,7 +27,7 @@
                 :items="providerOptions"
                 item-title="title"
                 item-value="value"
-                label="鍒嗘瀽妯″瀷"
+                label="Analysis Model"
                 variant="solo-filled"
                 flat
                 clearable
@@ -39,7 +39,7 @@
                 :items="scopeOptions"
                 item-title="title"
                 item-value="value"
-                label="鍒嗘瀽鑼冨洿"
+                label="Scope"
                 variant="solo-filled"
                 flat
               />
@@ -50,7 +50,7 @@
                 :items="pluginOptions"
                 item-title="title"
                 item-value="value"
-                label="鎸囧畾鎻掍欢"
+                label="Selected Plugins"
                 multiple
                 chips
                 variant="solo-filled"
@@ -58,10 +58,10 @@
               />
             </v-col>
             <v-col cols="12" md="3">
-              <v-switch v-model="settings.auto_analyze" color="primary" label="鑷姩鍒嗘瀽" inset />
+              <v-switch v-model="settings.auto_analyze" color="primary" label="Auto Analyze" inset />
             </v-col>
             <v-col cols="12" md="3">
-              <v-switch v-model="settings.passive_record" color="primary" label="涓诲姩璁板綍" inset />
+              <v-switch v-model="settings.passive_record" color="primary" label="Passive Record" inset />
             </v-col>
             <v-col cols="12" md="3">
               <v-switch v-model="settings.include_source_context" color="primary" label="Include Source Context" inset />
@@ -75,7 +75,7 @@
 
       <v-card class="mx-4 mb-4" elevation="0" variant="outlined">
         <v-card-title class="d-flex align-center">
-          闂鍗＄墖
+          Issue Cards
           <v-spacer />
           <v-select
             v-model="statusFilter"
@@ -109,23 +109,23 @@
                   <div class="text-body-2 text-medium-emphasis mb-3">{{ record.analysis?.reason || record.error_message || '' }}</div>
                   <div class="d-flex flex-wrap ga-2">
                     <v-btn size="small" variant="outlined" prepend-icon="mdi-file-document-outline" @click="openDetail(record)">
-                      鏌ョ湅璇︽儏
+                      View Details
                     </v-btn>
                     <v-btn size="small" variant="outlined" prepend-icon="mdi-refresh" :loading="manualRunningId === record.id" @click="reanalyze(record)">
-                      閲嶆柊鍒嗘瀽
+                      Re-analyze
                     </v-btn>
                     <v-btn size="small" color="primary" variant="tonal" prepend-icon="mdi-chat-outline" @click="openAsk(record)">
-                      璇㈤棶 AI
+                      Ask AI
                     </v-btn>
                     <v-btn size="small" color="grey" variant="text" prepend-icon="mdi-eye-off-outline" @click="ignoreRecord(record)">
-                      蹇界暐
+                      Ignore
                     </v-btn>
                   </div>
                 </v-card-text>
               </v-card>
             </v-col>
           </v-row>
-          <div v-else class="text-medium-emphasis">鏆傛棤璇婃柇璁板綍</div>
+          <div v-else class="text-medium-emphasis">No diagnosis records yet</div>
         </v-card-text>
       </v-card>
     </v-container>
@@ -133,23 +133,23 @@
     <v-dialog v-model="detailDialog" max-width="1100">
       <v-card>
         <v-card-title class="d-flex align-center">
-          璇婃柇璇︽儏
+          Diagnosis Details
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="detailDialog = false" />
         </v-card-title>
         <v-card-text v-if="activeRecord">
           <v-row>
             <v-col cols="12" md="6">
-              <v-textarea :model-value="activeRecord.log_excerpt || ''" label="鍘熷鏃ュ織" rows="8" variant="solo-filled" flat readonly />
+              <v-textarea :model-value="activeRecord.log_excerpt || ''" label="Raw Log" rows="8" variant="solo-filled" flat readonly />
             </v-col>
             <v-col cols="12" md="6">
               <v-textarea :model-value="activeRecord.traceback || ''" label="Traceback" rows="8" variant="solo-filled" flat readonly />
             </v-col>
             <v-col cols="12">
-              <v-textarea :model-value="formatAnalysis(activeRecord.analysis)" label="AI 鍒嗘瀽缁撴灉" rows="10" variant="solo-filled" flat readonly />
+              <v-textarea :model-value="formatAnalysis(activeRecord.analysis)" label="AI Analysis" rows="10" variant="solo-filled" flat readonly />
             </v-col>
             <v-col cols="12" v-if="activeRecord.related_files?.length">
-              <div class="text-subtitle-1 mb-2">鐩稿叧婧愮爜鐗囨</div>
+              <div class="text-subtitle-1 mb-2">Related Source Snippets</div>
               <v-expansion-panels variant="accordion">
                 <v-expansion-panel v-for="(file, index) in activeRecord.related_files" :key="`${file.path}-${index}`">
                   <v-expansion-panel-title>
@@ -169,7 +169,7 @@
     <v-dialog v-model="askDialog" max-width="900">
       <v-card>
         <v-card-title class="d-flex align-center">
-          杩介棶 AI
+          Ask AI
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="askDialog = false" />
         </v-card-title>
@@ -189,7 +189,7 @@
           </div>
           <v-textarea
             v-model="question"
-            label="缁х画鎻愰棶"
+            label="Follow-up Question"
             rows="3"
             auto-grow
             variant="solo-filled"
@@ -198,7 +198,7 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="askDialog = false">鍏抽棴</v-btn>
+          <v-btn variant="text" @click="askDialog = false">Close</v-btn>
           <v-btn color="primary" :loading="asking" @click="askAI">Send</v-btn>
         </v-card-actions>
       </v-card>
@@ -323,10 +323,10 @@ async function saveSettings() {
       settings.value = { ...settings.value, ...res.data.data }
       showMessage('Settings saved')
     } else {
-      showMessage(res.data.message || '淇濆瓨澶辫触', 'error')
+      showMessage(res.data.message || 'Failed to save settings', 'error')
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || '淇濆瓨澶辫触', 'error')
+    showMessage(err.response?.data?.message || err.message || 'Failed to save settings', 'error')
   } finally {
     savingSettings.value = false
   }
@@ -379,10 +379,10 @@ async function reanalyze(record) {
       upsertRecord(res.data.data)
       showMessage('Re-analyzed')
     } else {
-      showMessage(res.data.message || '鍒嗘瀽澶辫触', 'error')
+      showMessage(res.data.message || 'Analyze failed', 'error')
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || '鍒嗘瀽澶辫触', 'error')
+    showMessage(err.response?.data?.message || err.message || 'Analyze failed', 'error')
   } finally {
     manualRunningId.value = ''
   }
@@ -395,10 +395,10 @@ async function ignoreRecord(record) {
       upsertRecord(res.data.data)
       showMessage('Ignored')
     } else {
-      showMessage(res.data.message || '鎿嶄綔澶辫触', 'error')
+      showMessage(res.data.message || 'Operation failed', 'error')
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || '鎿嶄綔澶辫触', 'error')
+    showMessage(err.response?.data?.message || err.message || 'Operation failed', 'error')
   }
 }
 
@@ -469,12 +469,12 @@ async function askAI() {
           await loadRecords()
         } else if (payload.type === 'error') {
           hadError = true
-          showMessage(payload.message || '杩介棶澶辫触', 'error')
+          showMessage(payload.message || 'Ask failed', 'error')
         }
       }
     }
   } catch (err) {
-    showMessage(err.message || '杩介棶澶辫触', 'error')
+    showMessage(err.message || 'Ask failed', 'error')
   } finally {
     asking.value = false
   }

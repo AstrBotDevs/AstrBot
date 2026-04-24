@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import re
 
 import pytest
@@ -76,6 +77,23 @@ def test_classify_target_uses_traceback_plugin_path_over_core_pathname():
     assert result["target_name"] == "weather"
 
 
+def test_classify_target_prefers_provider_signal_over_core_pathname():
+    route = ErrorAnalysisRoute.__new__(ErrorAnalysisRoute)
+
+    result = route._classify_target(
+        {
+            "pathname": "astrbot/core/provider_manager.py",
+            "source_file": "astrbot/core/provider_manager.py",
+            "message": "Provider request failed with 401: invalid api key",
+            "exc_text": "",
+            "data": "",
+        }
+    )
+
+    assert result["target_type"] == "provider"
+    assert result["target_name"] == "Provider"
+
+
 def test_generate_record_id_has_random_suffix():
     route = ErrorAnalysisRoute.__new__(ErrorAnalysisRoute)
 
@@ -143,7 +161,8 @@ async def test_watch_logs_handles_single_log_failure_and_keeps_running():
         await asyncio.sleep(0.01)
 
     task.cancel()
-    await task
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
 
     assert calls["count"] >= 2
     assert route.log_broker.unregistered is True

@@ -359,9 +359,14 @@ class ErrorAnalysisRoute(Route):
                         + "\n\n"
                     )
 
-                updated = await self._append_qa_message(record_id, question, answer)
-                if updated:
-                    await self._emit_event("record_updated", updated)
+                if answer.strip():
+                    updated = await self._append_qa_message(
+                        record_id,
+                        question,
+                        answer,
+                    )
+                    if updated:
+                        await self._emit_event("record_updated", updated)
                 yield "data: " + json.dumps({"type": "done"}) + "\n\n"
             except Exception as exc:  # noqa: BLE001
                 logger.error("[ErrorAnalysis] ask_stream failed: %s", exc)
@@ -896,6 +901,7 @@ class ErrorAnalysisRoute(Route):
         )
         message = evidence.lower()
         normalized_path = pathname.replace("\\", "/")
+        normalized_source_file = source_file.replace("\\", "/")
 
         if plugin_match := PLUGIN_PATH_RE.search(evidence):
             plugin_dir = plugin_match.group(1)
@@ -903,8 +909,6 @@ class ErrorAnalysisRoute(Route):
         if builtin_match := BUILTIN_PLUGIN_PATH_RE.search(evidence):
             plugin_dir = builtin_match.group(1)
             return {"target_type": "plugin", "target_name": plugin_dir}
-        if "astrbot/core" in normalized_path:
-            return {"target_type": "core", "target_name": "AstrBot Core"}
         if any(key in message for key in ["401", "403", "429", "api key", "provider"]):
             return {"target_type": "provider", "target_name": "Provider"}
         if any(
@@ -914,6 +918,11 @@ class ErrorAnalysisRoute(Route):
             return {"target_type": "network", "target_name": "Network"}
         if any(key in message for key in ["config", "yaml", "json", "toml"]):
             return {"target_type": "config", "target_name": "Config"}
+        if (
+            "astrbot/core" in normalized_path
+            or "astrbot/core" in normalized_source_file
+        ):
+            return {"target_type": "core", "target_name": "AstrBot Core"}
         return {"target_type": "unknown", "target_name": "Unknown"}
 
     def _scope_matched(
