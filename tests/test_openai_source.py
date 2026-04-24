@@ -1177,6 +1177,49 @@ async def test_parse_openai_completion_raises_empty_model_output_error():
 
 
 @pytest.mark.asyncio
+async def test_parse_openai_completion_dedupes_self_concatenated_tool_call_fields():
+    provider = _make_provider()
+    try:
+        tool_call_id = "call_95fae017db5b4a91b1259aba"
+        tool_name = "astr_kb_search"
+        completion = ChatCompletion.model_validate(
+            {
+                "id": "chatcmpl-toolcall-dup",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "refusal": None,
+                            "tool_calls": [
+                                {
+                                    "id": tool_call_id + tool_call_id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool_name + tool_name,
+                                        "arguments": "{}",
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+            }
+        )
+
+        llm_response = await provider._parse_openai_completion(completion, tools=object())
+        assert llm_response.tools_call_ids == [tool_call_id]
+        assert llm_response.tools_call_name == [tool_name]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch):
     provider = _make_provider()
     try:

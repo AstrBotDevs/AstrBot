@@ -842,6 +842,15 @@ class ProviderOpenAIOfficial(Provider):
         # the priority is higher than the <think> tag extraction
         llm_response.reasoning_content = self._extract_reasoning_content(completion)
 
+        # Some OpenAI-compatible proxies may duplicate streaming chunks, causing tool call fields
+        # (e.g., id/name) to become self-concatenated (s + s). We defensively de-duplicate those.
+        # See: https://github.com/AstrBotDevs/AstrBot/issues/7694
+        def _dedupe_self_concatenated(value: str, *, min_len: int) -> str:
+            if not value or len(value) < min_len or (len(value) % 2) != 0:
+                return value
+            half = len(value) // 2
+            return value[:half] if value[:half] == value[half:] else value
+
         # parse tool calls if any
         if choice.message.tool_calls and tools is not None:
             args_ls = []
@@ -867,14 +876,24 @@ class ProviderOpenAIOfficial(Provider):
                             args = {}
                     else:
                         args = tool_call.function.arguments
+                    tool_call_id = (
+                        _dedupe_self_concatenated(tool_call.id, min_len=16)
+                        if isinstance(tool_call.id, str)
+                        else tool_call.id
+                    )
+                    tool_call_name = (
+                        _dedupe_self_concatenated(tool_call.function.name, min_len=8)
+                        if isinstance(tool_call.function.name, str)
+                        else tool_call.function.name
+                    )
                     args_ls.append(args)
-                    func_name_ls.append(tool_call.function.name)
-                    tool_call_ids.append(tool_call.id)
+                    func_name_ls.append(tool_call_name)
+                    tool_call_ids.append(tool_call_id)
 
                     # gemini-2.5 / gemini-3 series extra_content handling
                     extra_content = getattr(tool_call, "extra_content", None)
                     if extra_content is not None:
-                        tool_call_extra_content_dict[tool_call.id] = extra_content
+                        tool_call_extra_content_dict[tool_call_id] = extra_content
 
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
