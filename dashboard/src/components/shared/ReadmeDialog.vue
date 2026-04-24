@@ -5,6 +5,7 @@ import MarkdownIt from "markdown-it";
 import axios from "axios";
 import DOMPurify from "dompurify";
 import { useI18n } from "@/i18n/composables";
+import { copyToClipboard } from "@/utils/clipboard";
 import {
   escapeHtml,
   ensureShikiLanguages,
@@ -349,19 +350,13 @@ watch([content, locale, isDark], () => {
   updateRenderedHtml();
 }, { immediate: true });
 
-function handleContainerClick(event) {
+async function handleContainerClick(event) {
   const btn = event.target.closest(".copy-code-btn");
   if (btn) {
     const code = btn.closest(".code-block-wrapper")?.querySelector("code");
     if (code) {
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard
-          .writeText(code.textContent)
-          .then(() => showCopyFeedback(btn, true))
-          .catch(() => tryFallbackCopy(code.textContent, btn));
-      } else {
-        tryFallbackCopy(code.textContent, btn);
-      }
+      const success = await copyToClipboard(code.textContent || "");
+      showCopyFeedback(btn, success);
     }
     return;
   }
@@ -380,25 +375,6 @@ function handleContainerClick(event) {
 
   event.preventDefault();
   target.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function tryFallbackCopy(text, btn) {
-  try {
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    Object.assign(textArea.style, {
-      position: "absolute",
-      opacity: "0",
-      zIndex: "-1",
-    });
-    btn.parentNode.appendChild(textArea);
-    textArea.select();
-    const success = document.execCommand("copy");
-    btn.parentNode.removeChild(textArea);
-    showCopyFeedback(btn, success);
-  } catch (err) {
-    showCopyFeedback(btn, false);
-  }
 }
 
 function showCopyFeedback(btn, success) {
