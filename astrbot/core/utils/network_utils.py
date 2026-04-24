@@ -1,6 +1,7 @@
 """Network error handling utilities for providers."""
 
 import ssl
+from typing import Any
 
 import httpx
 
@@ -89,6 +90,7 @@ def create_proxy_client(
     proxy: str | None = None,
     headers: dict[str, str] | None = None,
     verify: ssl.SSLContext | str | bool | None = None,
+    httpx_module: Any = httpx,
 ) -> httpx.AsyncClient:
     """Create an httpx AsyncClient with proxy configuration if provided.
 
@@ -105,6 +107,9 @@ def create_proxy_client(
         headers: Optional custom headers to include in every request
         verify: Optional override for TLS verification. Defaults to the shared
             system SSL context when not provided.
+        httpx_module: Optional httpx module to construct AsyncClient from. This is
+            useful when a provider SDK performs isinstance checks against its own
+            httpx import.
 
     Returns:
         An httpx.AsyncClient created with the shared system SSL context; the proxy is applied only if one is provided.
@@ -112,5 +117,7 @@ def create_proxy_client(
     resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
     if proxy:
         logger.info(f"[{provider_label}] 使用代理: {proxy}")
-        return httpx.AsyncClient(proxy=proxy, verify=resolved_verify, headers=headers)
-    return httpx.AsyncClient(verify=resolved_verify, headers=headers)
+        return httpx_module.AsyncClient(
+            proxy=proxy, verify=resolved_verify, headers=headers
+        )
+    return httpx_module.AsyncClient(verify=resolved_verify, headers=headers)
