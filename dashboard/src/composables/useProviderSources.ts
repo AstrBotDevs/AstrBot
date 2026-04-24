@@ -10,6 +10,96 @@ export interface UseProviderSourcesOptions {
   showMessage: (message: string, color?: string) => void
 }
 
+export function isDeepSeekAnthropicSource(source?: Record<string, any> | null) {
+  if (!source || typeof source !== 'object') {
+    return false
+  }
+
+  return source.provider === 'deepseek' && source.type === 'anthropic_chat_completion'
+}
+
+export function isDeepSeekOpenAISource(source?: Record<string, any> | null) {
+  if (!source || typeof source !== 'object') {
+    return false
+  }
+
+  return source.provider === 'deepseek' && source.type === 'openai_chat_completion'
+}
+
+export function buildProviderSourceSchema(
+  schema: Record<string, any>,
+  tm: (key: string, params?: Record<string, unknown>) => string,
+  source?: Record<string, any> | null
+) {
+  if (!schema || !schema.provider) {
+    return schema
+  }
+
+  const customSchema = JSON.parse(JSON.stringify(schema))
+
+  if (customSchema.provider?.items?.id) {
+    customSchema.provider.items.id.hint = tm('providerSources.hints.id')
+    customSchema.provider.items.key.hint = tm('providerSources.hints.key')
+    customSchema.provider.items.api_base.hint = tm('providerSources.hints.apiBase')
+  }
+
+  if (customSchema.provider?.items?.proxy) {
+    customSchema.provider.items.proxy.description = tm('providerSources.labels.proxy')
+    customSchema.provider.items.proxy.hint = tm('providerSources.hints.proxy')
+  }
+
+  if (isDeepSeekOpenAISource(source)) {
+    if (customSchema.provider?.items?.id) {
+      customSchema.provider.items.id.hint = tm('providerSources.deepseekOpenAI.hints.id')
+    }
+
+    if (customSchema.provider?.items?.key) {
+      customSchema.provider.items.key.hint = tm('providerSources.deepseekOpenAI.hints.key')
+    }
+
+    if (customSchema.provider?.items?.api_base) {
+      customSchema.provider.items.api_base.description = tm('providerSources.deepseekOpenAI.labels.apiBase')
+      customSchema.provider.items.api_base.hint = tm('providerSources.deepseekOpenAI.hints.apiBase')
+    }
+
+    if (customSchema.provider?.items?.custom_headers) {
+      customSchema.provider.items.custom_headers.hint = tm('providerSources.deepseekOpenAI.hints.customHeaders')
+    }
+
+    return customSchema
+  }
+
+  if (!isDeepSeekAnthropicSource(source)) {
+    return customSchema
+  }
+
+  if (customSchema.provider?.items?.id) {
+    customSchema.provider.items.id.hint = tm('providerSources.deepseekAnthropic.hints.id')
+  }
+
+  if (customSchema.provider?.items?.key) {
+    customSchema.provider.items.key.hint = tm('providerSources.deepseekAnthropic.hints.key')
+  }
+
+  if (customSchema.provider?.items?.api_base) {
+    customSchema.provider.items.api_base.description = tm('providerSources.deepseekAnthropic.labels.apiBase')
+    customSchema.provider.items.api_base.hint = tm('providerSources.deepseekAnthropic.hints.apiBase')
+  }
+
+  if (customSchema.provider?.items?.custom_headers) {
+    customSchema.provider.items.custom_headers.hint = tm('providerSources.deepseekAnthropic.hints.customHeaders')
+  }
+
+  if (customSchema.provider?.items?.anth_thinking_config) {
+    customSchema.provider.items.anth_thinking_config.description = tm('providerSources.deepseekAnthropic.labels.thinkingConfig')
+    customSchema.provider.items.anth_thinking_config.items.type.hint = tm('providerSources.deepseekAnthropic.hints.thinkingType')
+    customSchema.provider.items.anth_thinking_config.items.budget.hint = tm('providerSources.deepseekAnthropic.hints.thinkingBudget')
+    customSchema.provider.items.anth_thinking_config.items.effort.hint = tm('providerSources.deepseekAnthropic.hints.thinkingEffort')
+  }
+
+  return customSchema
+}
+
 export function resolveDefaultTab(value?: string) {
   const normalized = (value || '').toLowerCase()
 
@@ -231,26 +321,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   })
 
   const providerSourceSchema = computed(() => {
-    if (!configSchema.value || !configSchema.value.provider) {
-      return configSchema.value
-    }
-
-    // 创建一个深拷贝以避免修改原始 schema
-    const customSchema = JSON.parse(JSON.stringify(configSchema.value))
-
-    // 为 provider source 的 id 字段添加自定义 hint
-    if (customSchema.provider?.items?.id) {
-      customSchema.provider.items.id.hint = tm('providerSources.hints.id')
-      customSchema.provider.items.key.hint = tm('providerSources.hints.key')
-      customSchema.provider.items.api_base.hint = tm('providerSources.hints.apiBase')
-    }
-    // 为 proxy 字段添加描述和提示
-    if (customSchema.provider?.items?.proxy) {
-      customSchema.provider.items.proxy.description = tm('providerSources.labels.proxy')
-      customSchema.provider.items.proxy.hint = tm('providerSources.hints.proxy')
-    }
-
-    return customSchema
+    return buildProviderSourceSchema(
+      configSchema.value,
+      tm,
+      editableProviderSource.value || selectedProviderSource.value
+    )
   })
 
   // ===== Watches =====

@@ -54,6 +54,9 @@
                     <div class="provider-config-subtitle">
                       {{ selectedProviderSource.api_base || 'N/A' }}
                     </div>
+                    <div v-if="deepseekSourceNote" class="provider-config-note">
+                      {{ deepseekSourceNote }}
+                    </div>
                   </div>
 
                   <div class="provider-config-actions">
@@ -199,7 +202,7 @@
       <v-card
         :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')">
         <v-card-text class="py-4">
-          <AstrBotConfig :iterable="newSelectedProviderConfig" :metadata="configSchema"
+          <AstrBotConfig :iterable="newSelectedProviderConfig" :metadata="newProviderSourceSchema"
             metadataKey="provider" :is-editing="updatingMode" />
         </v-card-text>
 
@@ -270,7 +273,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
@@ -279,7 +282,7 @@ import ItemCard from '@/components/shared/ItemCard.vue'
 import AddNewProvider from '@/components/provider/AddNewProvider.vue'
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
-import { useProviderSources } from '@/composables/useProviderSources'
+import { buildProviderSourceSchema, isDeepSeekOpenAISource, useProviderSources } from '@/composables/useProviderSources'
 import { getProviderIcon } from '@/utils/providerUtils'
 
 const props = defineProps({
@@ -363,6 +366,29 @@ const providerEditOriginalId = ref('')
 const showManualModelDialog = ref(false)
 
 const savingProviders = ref([])
+
+const deepseekSourceNote = computed(() => {
+  const source = selectedProviderSource.value
+  if (!source || source.provider !== 'deepseek') {
+    return ''
+  }
+
+  if (isDeepSeekOpenAISource(source)) {
+    return tm('providerSources.deepseekOpenAIActiveNote')
+  }
+
+  return source.type === 'anthropic_chat_completion'
+    ? tm('providerSources.deepseekAnthropicActiveNote')
+    : ''
+})
+
+const newProviderSourceSchema = computed(() => {
+  return buildProviderSourceSchema(
+    configSchema.value,
+    tm,
+    newSelectedProviderConfig.value
+  )
+})
 
 function openProviderEdit(provider) {
   providerEditData.value = JSON.parse(JSON.stringify(provider))
@@ -756,6 +782,13 @@ function goToConfigPage() {
   font-size: 13px;
   line-height: 1.6;
   overflow-wrap: anywhere;
+}
+
+.provider-config-note {
+  margin-top: 6px;
+  color: var(--provider-subtle);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .provider-config-actions {

@@ -1387,15 +1387,15 @@
         "description": "Thinking Config",
         "type": {
           "description": "Thinking Type",
-          "hint": "Set 'adaptive' for Opus 4.6+ / Sonnet 4.6+ (recommended). Leave empty to use manual budget mode. See: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+          "hint": "Set 'adaptive' to enable adaptive or compatibility thinking control. Whether it is recommended depends on the provider and model, such as Opus 4.6+, Sonnet 4.6+, and DeepSeek V4."
         },
         "budget": {
           "description": "Thinking Budget",
-          "hint": "Anthropic thinking.budget_tokens param. Must >= 1024. Only used when type is empty. Deprecated on Opus 4.6 / Sonnet 4.6. See: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+          "hint": "Anthropic thinking.budget_tokens param. Must be >= 1024. Compatibility is provider-specific: DeepSeek Anthropic ignores it, while Opus 4.6 / Sonnet 4.6 deprecate it."
         },
         "effort": {
           "description": "Effort Level",
-          "hint": "Controls thinking depth when type is 'adaptive'. 'high' is the default. 'max' is Opus 4.6 only. See: https://platform.claude.com/docs/en/build-with-claude/effort"
+          "hint": "Controls thinking depth when type is 'adaptive'. Supported values depend on the provider and model; both DeepSeek V4 and Opus 4.6 support 'max'."
         }
       },
       "minimax-group-id": {
@@ -1554,7 +1554,7 @@
       },
       "model": {
         "description": "Model ID",
-        "hint": "Model name, e.g., gpt-4o-mini, deepseek-chat."
+        "hint": "Model name, e.g., gpt-4o-mini, deepseek-v4-flash, deepseek-v4-pro."
       },
       "max_context_tokens": {
         "description": "Model context window size",

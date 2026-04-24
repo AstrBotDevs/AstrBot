@@ -1,7 +1,7 @@
 import base64
 import json
 from collections.abc import AsyncGenerator
-from typing import Literal
+from typing import Any, Literal
 
 import anthropic
 import httpx
@@ -31,6 +31,8 @@ from ..register import register_provider_adapter
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
+    IMAGE_PLACEHOLDER_TEXT = "[Image Attachment]"
+
     @staticmethod
     def _ensure_usable_response(
         llm_response: LLMResponse,
@@ -96,6 +98,80 @@ class ProviderAnthropic(Provider):
 
         self.set_model(provider_config.get("model", "unknown"))
 
+    def _is_deepseek_provider(self) -> bool:
+        provider = str(self.provider_config.get("provider", "")).strip().lower()
+        if provider == "deepseek":
+            return True
+        return "api.deepseek.com/anthropic" in str(self.base_url).strip().lower()
+
+    def _supports_image_input(self) -> bool:
+        return not self._is_deepseek_provider()
+
+    @staticmethod
+    def _build_text_block(text: str) -> dict[str, str]:
+        return {"type": "text", "text": text}
+
+    def _build_thinking_block(
+        self,
+        reasoning_content: str,
+        thinking_signature: str,
+    ) -> dict[str, Any] | None:
+        if not reasoning_content:
+            return None
+
+        thinking_block: dict[str, Any] = {
+            "type": "thinking",
+            "thinking": reasoning_content,
+        }
+        if thinking_signature:
+            thinking_block["signature"] = thinking_signature
+            return thinking_block
+        if self._is_deepseek_provider():
+            return thinking_block
+        return None
+
+    @staticmethod
+    def _normalize_tool_choice(tool_choice: Any) -> dict[str, Any] | None:
+        if isinstance(tool_choice, dict):
+            choice_type = str(tool_choice.get("type", "")).strip().lower()
+            if choice_type in {"auto", "any", "none"}:
+                return {"type": choice_type}
+            if choice_type == "tool":
+                name = str(tool_choice.get("name", "")).strip()
+                if name:
+                    return {"type": "tool", "name": name}
+            return None
+
+        if isinstance(tool_choice, str):
+            choice_type = tool_choice.strip().lower()
+            if choice_type == "required":
+                return {"type": "any"}
+            if choice_type in {"auto", "any", "none"}:
+                return {"type": choice_type}
+
+        return None
+
+    def _apply_provider_specific_payload_overrides(
+        self, payloads: dict[str, Any]
+    ) -> None:
+        if not self._is_deepseek_provider():
+            return
+
+        output_cfg = payloads.get("output_config")
+        normalized_output_cfg: dict[str, str] | None = None
+        if isinstance(output_cfg, dict):
+            effort = output_cfg.get("effort")
+            if isinstance(effort, str) and effort.strip():
+                normalized_output_cfg = {"effort": effort.strip()}
+
+        if normalized_output_cfg:
+            payloads["output_config"] = normalized_output_cfg
+        else:
+            payloads.pop("output_config", None)
+
+        if payloads.get("thinking") or normalized_output_cfg:
+            payloads["thinking"] = {"type": "enabled"}
+
     def _init_api_key(self, provider_config: dict) -> None:
         self.chosen_api_key: str = ""
         self.api_keys: list = super().get_keys()
@@ -154,22 +230,34 @@ class ProviderAnthropic(Provider):
                     blocks.append({"type": "text", "text": message["content"]})
                 elif isinstance(message["content"], list):
                     for part in message["content"]:
-                        if part.get("type") == "think":
-                            # only pick the last think part for now
-                            reasoning_content = part.get("think")
-                            thinking_signature = part.get("encrypted")
+                        part_type = part.get("type")
+                        if part_type == "think":
+                            reasoning_content = part.get("think") or reasoning_content
+                            thinking_signature = (
+                                part.get("encrypted") or thinking_signature
+                            )
+                        elif part_type == "thinking":
+                            reasoning_content = (
+                                part.get("thinking") or reasoning_content
+                            )
+                            thinking_signature = (
+                                part.get("signature")
+                                or part.get("encrypted")
+                                or thinking_signature
+                            )
+                        elif part_type == "image" and not self._supports_image_input():
+                            blocks.append(
+                                self._build_text_block(self.IMAGE_PLACEHOLDER_TEXT)
+                            )
                         else:
                             blocks.append(part)
 
-                if reasoning_content and thinking_signature:
-                    blocks.insert(
-                        0,
-                        {
-                            "type": "thinking",
-                            "thinking": reasoning_content,
-                            "signature": thinking_signature,
-                        },
-                    )
+                thinking_block = self._build_thinking_block(
+                    reasoning_content,
+                    thinking_signature,
+                )
+                if thinking_block:
+                    blocks.insert(0, thinking_block)
 
                 if "tool_calls" in message and isinstance(message["tool_calls"], list):
                     for tool_call in message["tool_calls"]:
@@ -211,7 +299,13 @@ class ProviderAnthropic(Provider):
                 if isinstance(message.get("content"), list):
                     converted_content = []
                     for part in message["content"]:
-                        if part.get("type") == "image_url":
+                        part_type = part.get("type")
+                        if part_type == "image_url":
+                            if not self._supports_image_input():
+                                converted_content.append(
+                                    self._build_text_block(self.IMAGE_PLACEHOLDER_TEXT)
+                                )
+                                continue
                             # Convert OpenAI image_url format to Anthropic image format
                             image_url_data = part.get("image_url", {})
                             url = image_url_data.get("url", "")
@@ -241,7 +335,14 @@ class ProviderAnthropic(Provider):
                                 logger.warning(
                                     f"Unsupported image URL format for Anthropic: {url[:50]}..."
                                 )
-                        elif part.get("type") == "audio_url":
+                        elif part_type == "image":
+                            if self._supports_image_input():
+                                converted_content.append(part)
+                            else:
+                                converted_content.append(
+                                    self._build_text_block(self.IMAGE_PLACEHOLDER_TEXT)
+                                )
+                        elif part_type == "audio_url":
                             converted_content.append(
                                 {
                                     "type": "text",
@@ -283,17 +384,18 @@ class ProviderAnthropic(Provider):
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
-                payloads["tool_choice"] = {
-                    "type": "any"
-                    if payloads.get("tool_choice") == "required"
-                    else "auto"
-                }
+                payloads["tool_choice"] = self._normalize_tool_choice(
+                    payloads.get("tool_choice")
+                ) or {"type": "auto"}
 
         extra_body = self.provider_config.get("custom_extra_body", {})
+        if not isinstance(extra_body, dict):
+            extra_body = {}
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
+        self._apply_provider_specific_payload_overrides(payloads)
 
         try:
             completion = await self.client.messages.create(
@@ -327,7 +429,11 @@ class ProviderAnthropic(Provider):
             if content_block.type == "thinking":
                 reasoning_content = str(content_block.thinking).strip()
                 llm_response.reasoning_content = reasoning_content
-                llm_response.reasoning_signature = content_block.signature
+                llm_response.reasoning_signature = getattr(
+                    content_block,
+                    "signature",
+                    None,
+                )
 
             if content_block.type == "tool_use":
                 llm_response.tools_call_args.append(content_block.input)
@@ -370,11 +476,9 @@ class ProviderAnthropic(Provider):
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
-                payloads["tool_choice"] = {
-                    "type": "any"
-                    if payloads.get("tool_choice") == "required"
-                    else "auto"
-                }
+                payloads["tool_choice"] = self._normalize_tool_choice(
+                    payloads.get("tool_choice")
+                ) or {"type": "auto"}
 
         # 用于累积工具调用信息
         tool_use_buffer = {}
@@ -384,12 +488,15 @@ class ProviderAnthropic(Provider):
         id = None
         usage = TokenUsage()
         extra_body = self.provider_config.get("custom_extra_body", {})
+        if not isinstance(extra_body, dict):
+            extra_body = {}
         reasoning_content = ""
         reasoning_signature = ""
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
+        self._apply_provider_specific_payload_overrides(payloads)
 
         async with self.client.messages.stream(
             **payloads, extra_body=extra_body
@@ -662,6 +769,8 @@ class ProviderAnthropic(Provider):
         """组装上下文，支持文本和图片"""
 
         async def resolve_image_url(image_url: str) -> dict | None:
+            if not self._supports_image_input():
+                return self._build_text_block(self.IMAGE_PLACEHOLDER_TEXT)
             if image_url.startswith("http"):
                 image_path = await download_image_by_url(image_url)
                 image_data, mime_type = await self.encode_image_bs64(image_path)
@@ -695,7 +804,16 @@ class ProviderAnthropic(Provider):
             content.append({"type": "text", "text": text})
         elif image_urls:
             # 如果没有文本但有图片，添加占位文本
-            content.append({"type": "text", "text": "[Image]"})
+            content.append(
+                {
+                    "type": "text",
+                    "text": (
+                        "[Image]"
+                        if self._supports_image_input()
+                        else self.IMAGE_PLACEHOLDER_TEXT
+                    ),
+                }
+            )
         elif audio_urls:
             content.append({"type": "text", "text": "[Audio]"})
         elif extra_user_content_parts:
