@@ -5,6 +5,7 @@ import {
   defineConfigWithVueTs,
   vueTsConfigs,
 } from "@vue/eslint-config-typescript";
+import globals from "globals";
 
 // Global ignores dir
 const ignores = {
@@ -51,6 +52,8 @@ const vue = {
     "vue/require-default-prop": "off",
     "vue/no-v-html": "warn",
     "vue/block-lang": "off",
+    "vue/no-unused-components": "off",
+    "vue/no-unused-vars": "off",
   },
 };
 
@@ -59,18 +62,7 @@ const scripts = {
   files: ["scripts/**/*.mjs", "scripts/**/*.cjs", "*.cjs"],
   languageOptions: {
     parserOptions: { sourceType: "module" },
-    globals: { node: true },
-  },
-};
-
-// Special Config for extensions page and code
-const extensions = {
-  files: [
-    "src/components/extension/**",
-    "src/components/extension/componentPanel/**",
-  ],
-  rules: {
-    "vue/valid-v-slot": "off",
+    globals: { ...globals.node },
   },
 };
 
@@ -85,7 +77,6 @@ export default defineConfigWithVueTs(
   base,
   vue,
   scripts,
-  extensions,
   // add skip formatting for prettier because already have eslint
   skipFormatting,
 );

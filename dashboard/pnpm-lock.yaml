@@ -147,6 +147,9 @@ importers:
       eslint-plugin-vue:
         specifier: 10.8.0
         version: 10.8.0(@typescript-eslint/parser@8.59.0(eslint@10.1.0)(typescript@6.0.3))(eslint@10.1.0)(vue-eslint-parser@10.4.0(eslint@10.1.0))
+      globals:
+        specifier: ^17.5.0
+        version: 17.5.0
       prettier:
         specifier: 3.8.1
         version: 3.8.1
@@ -1814,6 +1817,10 @@ packages:
 
   glob-to-regexp@0.4.1:
     resolution: {integrity: sha512-lkX1HJXwyMcprw/5YUZc2s7DrpAiHB21/V+E1rHUrVNokkvB6bqMzT0VfV6/86ZNabt1k14YOIaT7nDvOX3Iiw==}
+
+  globals@17.5.0:
+    resolution: {integrity: sha512-qoV+HK2yFl/366t2/Cb3+xxPUo5BuMynomoDmiaZBIdbs+0pYbjfZU+twLhGKp4uCZ/+NbtpVepH5bGCxRyy2g==}
+    engines: {node: '>=18'}
 
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
@@ -4804,6 +4811,8 @@ snapshots:
 
   glob-to-regexp@0.4.1:
     optional: true
+
+  globals@17.5.0: {}
 
   gopd@1.2.0: {}
 
