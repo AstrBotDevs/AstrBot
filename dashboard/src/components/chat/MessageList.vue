@@ -254,6 +254,7 @@ import type {
   MessagePart,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
+import { copyToClipboard } from "@/utils/clipboard";
 
 const props = withDefaults(
   defineProps<{
@@ -446,28 +447,10 @@ function parseJsonSafe(value: unknown) {
   }
 }
 
-function tryFallbackCopy(text: string) {
-  const textArea = document.createElement("textarea");
-  textArea.value = text;
-  Object.assign(textArea.style, {
-    position: "absolute",
-    opacity: "0",
-    zIndex: "-1",
-  });
-  document.body.appendChild(textArea);
-  textArea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textArea);
-}
-
 async function copyMessage(message: ChatRecord) {
   const text = plainTextFromMessage(message);
   if (!text) return;
-  if (navigator.clipboard && window.isSecureContext) {
-    await navigator.clipboard.writeText(text);
-  } else {
-    tryFallbackCopy(text);
-  }
+  await copyToClipboard(text, { container: messageListRoot.value });
 }
 
 async function downloadPart(part: MessagePart) {
