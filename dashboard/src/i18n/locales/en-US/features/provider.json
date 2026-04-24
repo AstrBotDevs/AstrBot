@@ -21,6 +21,8 @@
     },
     "description": {
       "openai": "Supports all OpenAI API compatible providers.",
+      "deepseek": "Official DeepSeek template for the OpenAI-compatible endpoint at https://api.deepseek.com. Best for regular chat and tool-calling flows.",
+      "deepseek_anthropic": "Official DeepSeek template for the Anthropic-compatible endpoint at https://api.deepseek.com/anthropic. Recommended for DeepSeek V4 series.",
       "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API compatibility layer.",
       "default": ""
     }
@@ -117,6 +119,35 @@
       "key": "API key for authentication",
       "apiBase": "Custom API endpoint URL",
       "proxy": "HTTP/HTTPS proxy address, e.g. http://127.0.0.1:7890. Only affects this provider's API requests, doesn't interfere with Docker internal networking."
+    },
+    "deepseekOpenAIActiveNote": "This template uses DeepSeek's official OpenAI-compatible endpoint: https://api.deepseek.com. Use a DeepSeek API key here; you usually do not need to append /v1 or add custom headers. If you want the Anthropic-compatible protocol, switch to the DeepSeek Anthropic template.",
+    "deepseekOpenAI": {
+      "labels": {
+        "apiBase": "DeepSeek API Base URL"
+      },
+      "hints": {
+        "id": "Unique provider source ID. Keeping deepseek is recommended unless you need multiple DeepSeek gateways side by side.",
+        "key": "Use your DeepSeek API key here. Multiple keys can be added for rotation or separate environments.",
+        "apiBase": "DeepSeek's official OpenAI-compatible endpoint. The default is https://api.deepseek.com, and AstrBot usually should not need an extra /v1 suffix.",
+        "customHeaders": "These key-value pairs are merged into the OpenAI SDK default_headers. Direct calls to DeepSeek usually do not need them; only add string-valued headers when your proxy, gateway, or auth chain requires them."
+      }
+    },
+    "deepseekAnthropicNote": "If you want the Anthropic-compatible protocol, switch to the DeepSeek Anthropic template at https://api.deepseek.com/anthropic.",
+    "deepseekAnthropicActiveNote": "This template uses DeepSeek's Anthropic-compatible endpoint: https://api.deepseek.com/anthropic. Use a DeepSeek API key here; thinking is enabled by default, output_config.effort supports high / max, low / medium are compatibility-mapped to high, and budget_tokens is ignored.",
+    "deepseekAnthropic": {
+      "labels": {
+        "apiBase": "Anthropic API Base URL",
+        "thinkingConfig": "DeepSeek Thinking Configuration"
+      },
+      "hints": {
+        "id": "Unique provider source ID. Keeping deepseek-anthropic helps distinguish it from the standard DeepSeek OpenAI entrypoint.",
+        "key": "Use your DeepSeek API key here, not an Anthropic Console key.",
+        "apiBase": "DeepSeek's Anthropic-compatible endpoint. The default is https://api.deepseek.com/anthropic and you usually should not append an extra /v1.",
+        "customHeaders": "These key-value pairs are merged into the Anthropic SDK default_headers. Direct calls to DeepSeek usually do not need them; only add string-valued headers when your proxy or gateway requires them.",
+        "thinkingType": "Set to 'adaptive' to explicitly send the thinking toggle and unlock effort control. If left empty, DeepSeek still keeps thinking enabled by default.",
+        "thinkingBudget": "DeepSeek Anthropic ignores thinking.budget_tokens. This field only exists for compatibility with Anthropic-ecosystem clients and does not precisely control the budget.",
+        "thinkingEffort": "When Thinking Type is 'adaptive', this maps to output_config.effort. DeepSeek V4 supports high / max, while low / medium are compatibility-mapped to high."
+      }
     },
     "labels": {
       "proxy": "Proxy"

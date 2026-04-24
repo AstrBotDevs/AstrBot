@@ -58,7 +58,11 @@ export function getProviderIcon(type) {
  * @returns {string} 提供商描述
  */
 export function getProviderDescription(template, name, tm) {
-  if (name === 'OpenAI') {
+  if (name === 'DeepSeek') {
+    return tm('providers.description.deepseek');
+  } else if (name === 'DeepSeek Anthropic') {
+    return tm('providers.description.deepseek_anthropic');
+  } else if (name === 'OpenAI') {
     return tm('providers.description.openai', { type: template.type });
   } else if (template.provider === 'kimi-code') {
     return tm('providers.description.kimi_code');

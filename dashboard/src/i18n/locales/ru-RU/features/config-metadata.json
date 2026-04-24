@@ -1384,15 +1384,15 @@
                 "description": "Настройки рассуждения (Thinking)",
                 "type": {
                     "description": "Тип рассуждения",
-                    "hint": "Установите 'adaptive' для Opus 4.6+ / Sonnet 4.6+ (рекомендуется)."
+                    "hint": "Установите 'adaptive', чтобы включить адаптивное или совместимое управление рассуждением. Рекомендация зависит от провайдера и модели, например Opus 4.6+, Sonnet 4.6+ и DeepSeek V4."
                 },
                 "budget": {
                     "description": "Бюджет рассуждения",
-                    "hint": "Параметр budget_tokens (минимум 1024). Устарело для моделей 4.6+."
+                    "hint": "Параметр Anthropic thinking.budget_tokens (минимум 1024). Совместимость зависит от провайдера: DeepSeek Anthropic игнорирует это поле, а Opus 4.6 / Sonnet 4.6 считают его устаревшим."
                 },
                 "effort": {
                     "description": "Уровень усилий",
-                    "hint": "Контролирует глубину рассуждений в режиме 'adaptive'."
+                    "hint": "Контролирует глубину рассуждений в режиме 'adaptive'. Поддерживаемые значения зависят от провайдера и модели; и DeepSeek V4, и Opus 4.6 поддерживают 'max'."
                 }
             },
             "minimax-group-id": {
@@ -1551,7 +1551,7 @@
             },
             "model": {
                 "description": "Имя модели",
-                "hint": "Имя модели, напр. gpt-4o-mini."
+                "hint": "Имя модели, напр. gpt-4o-mini, deepseek-v4-flash, deepseek-v4-pro."
             },
             "max_context_tokens": {
                 "description": "Размер окна контекста модели",

@@ -21,6 +21,8 @@
         },
         "description": {
             "openai": "Поддерживаются все провайдеры, совместимые с OpenAI API.",
+            "deepseek": "Официальный шаблон DeepSeek для OpenAI-совместимой точки входа https://api.deepseek.com. Подходит для обычных диалогов и вызовов инструментов.",
+            "deepseek_anthropic": "Официальный шаблон DeepSeek для Anthropic-совместимой точки входа https://api.deepseek.com/anthropic. Рекомендуется для моделей серии DeepSeek V4.",
             "kimi_code": "Специальная интеграция Kimi CodingPlan / Kimi Code с отдельной совместимой адаптацией Anthropic API.",
             "vllm_rerank": "Также поддерживает Jina AI, Cohere, PPIO и другие.",
             "default": "Преобразование речи в текст"
@@ -118,6 +120,35 @@
             "key": "Ваш серетный API-ключ",
             "apiBase": "Адрес API точки входа (Endpoint URL)",
             "proxy": "Прокси сервер (HTTP/HTTPS), напр. http://127.0.0.1:7890. Используется только для запросов к этому провайдеру."
+        },
+        "deepseekOpenAIActiveNote": "Этот шаблон использует официальный OpenAI-совместимый вход DeepSeek: https://api.deepseek.com. Здесь нужен API-ключ DeepSeek; обычно не требуется добавлять /v1 или собственные заголовки. Если нужен Anthropic-совместимый протокол, переключитесь на шаблон DeepSeek Anthropic.",
+        "deepseekOpenAI": {
+            "labels": {
+                "apiBase": "DeepSeek API Base URL"
+            },
+            "hints": {
+                "id": "Уникальный ID источника. Имя deepseek лучше сохранить, если вам не нужны несколько шлюзов DeepSeek параллельно.",
+                "key": "Используйте здесь API-ключ DeepSeek. Можно добавить несколько ключей для ротации или разных окружений.",
+                "apiBase": "Официальная OpenAI-совместимая точка входа DeepSeek. Значение по умолчанию: https://api.deepseek.com; дополнительный суффикс /v1 обычно не нужен.",
+                "customHeaders": "Эти пары ключ-значение будут объединены с default_headers OpenAI SDK. При прямом подключении к DeepSeek они обычно не нужны; добавляйте только строковые заголовки, если этого требует прокси, шлюз или схема авторизации."
+            }
+        },
+        "deepseekAnthropicNote": "Если нужен Anthropic-совместимый протокол, переключитесь на шаблон DeepSeek Anthropic с точкой входа https://api.deepseek.com/anthropic.",
+        "deepseekAnthropicActiveNote": "Этот шаблон использует Anthropic-совместимую точку входа DeepSeek: https://api.deepseek.com/anthropic. Используйте ключ DeepSeek API; режим thinking включён по умолчанию, output_config.effort поддерживает high / max, low / medium совместимо приводятся к high, а budget_tokens игнорируется.",
+        "deepseekAnthropic": {
+            "labels": {
+                "apiBase": "Anthropic API Base URL",
+                "thinkingConfig": "Настройки мышления DeepSeek"
+            },
+            "hints": {
+                "id": "Уникальный ID источника. Имя deepseek-anthropic удобно сохранять, чтобы не путать этот источник со стандартной OpenAI-совместимой точкой входа DeepSeek.",
+                "key": "Здесь нужен API-ключ DeepSeek, а не ключ из Anthropic Console.",
+                "apiBase": "Anthropic-совместимая точка входа DeepSeek. Значение по умолчанию: https://api.deepseek.com/anthropic; обычно дополнительный /v1 не требуется.",
+                "customHeaders": "Эти пары ключ-значение будут объединены с default_headers Anthropic SDK. Для прямого подключения к DeepSeek обычно не нужны; добавляйте только строковые заголовки, если этого требует прокси или шлюз.",
+                "thinkingType": "Установите 'adaptive', чтобы явно отправлять переключатель thinking и включить управление Effort. Если оставить поле пустым, DeepSeek всё равно по умолчанию держит thinking включённым.",
+                "thinkingBudget": "DeepSeek Anthropic игнорирует thinking.budget_tokens. Поле сохраняется только для совместимости с клиентами экосистемы Anthropic и не даёт точного контроля бюджета.",
+                "thinkingEffort": "Когда Thinking Type = 'adaptive', значение преобразуется в output_config.effort. DeepSeek V4 поддерживает high / max, а low / medium совместимо приводятся к high."
+            }
         },
         "labels": {
             "proxy": "Прокси"

@@ -1389,15 +1389,15 @@
         "description": "思考配置",
         "type": {
           "description": "思考类型",
-          "hint": "设为 'adaptive' 以使用自适应思考（推荐 Opus 4.6+ / Sonnet 4.6+）。留空则使用手动预算模式。参见: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+          "hint": "设为 'adaptive' 以启用自适应/兼容思考控制。是否推荐取决于具体提供商与模型，例如 Opus 4.6+、Sonnet 4.6+ 与 DeepSeek V4。"
         },
         "budget": {
           "description": "思考预算",
-          "hint": "Anthropic thinking.budget_tokens 参数。必须 >= 1024。仅在思考类型为空时生效。Opus 4.6 / Sonnet 4.6 已弃用。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+          "hint": "Anthropic thinking.budget_tokens 参数。必须 >= 1024。不同提供商兼容性不同：例如 DeepSeek Anthropic 会忽略该字段，而 Opus 4.6 / Sonnet 4.6 已弃用。"
         },
         "effort": {
           "description": "思考深度",
-          "hint": "当思考类型为 'adaptive' 时控制思考深度。'high' 为默认值。'max' 仅限 Opus 4.6。参见: https://platform.claude.com/docs/en/build-with-claude/effort"
+          "hint": "当思考类型为 'adaptive' 时控制思考深度。支持值取决于提供商与模型；DeepSeek V4 与 Opus 4.6 都支持 'max'。"
         }
       },
       "minimax-group-id": {
@@ -1556,7 +1556,7 @@
       },
       "model": {
         "description": "模型 ID",
-        "hint": "模型名称，如 gpt-4o-mini, deepseek-chat。"
+        "hint": "模型名称，如 gpt-4o-mini, deepseek-v4-flash, deepseek-v4-pro。"
       },
       "max_context_tokens": {
         "description": "模型上下文窗口大小",
