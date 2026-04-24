@@ -1,76 +1,91 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const prettierPlugin = require("eslint-plugin-prettier");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const configPrettier = require("eslint-config-prettier");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const vueTsConfig = require("@vue/eslint-config-typescript");
+import prettierPlugin from "eslint-plugin-prettier";
+import pluginVue from "eslint-plugin-vue";
+import skipFormatting from "@vue/eslint-config-prettier/skip-formatting";
+import {
+  defineConfigWithVueTs,
+  vueTsConfigs,
+} from "@vue/eslint-config-typescript";
 
-module.exports = [
-  {
-    ignores: [
-      "dist/",
-      "build/",
-      "node_modules/",
-      "public/",
-      "dashboard/dist/",
-      "dashboard/node_modules/",
-      "env.d.ts",
-      ".vite/",
-      ".cache/",
+// Global ignores dir
+const ignores = {
+  ignores: [
+    "**/node_modules/**",
+    "dist/",
+    "build/",
+    "public/",
+    "env.d.ts",
+    ".vite/",
+    ".cache/",
+  ],
+};
+
+// Base Prettier and ESLint Config
+const base = {
+  plugins: {
+    prettier: prettierPlugin,
+  },
+  rules: {
+    "prettier/prettier": "error",
+    "no-console": ["warn", { allow: ["warn", "error", "info"] }],
+    "no-debugger": "warn",
+    "linebreak-style": ["off", "unix"],
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+      },
     ],
+    "@typescript-eslint/explicit-module-boundary-types": "off",
+    "@typescript-eslint/no-explicit-any": "off",
   },
-  ...vueTsConfig.createConfig(),
-  {
-    plugins: {
-      prettier: prettierPlugin,
-    },
-    rules: {
-      "vue/multi-word-component-names": "off",
-      "vue/html-self-closing": [
-        "error",
-        {
-          html: { void: "never", normal: "always", component: "always" },
-          svg: "always",
-          math: "always",
-        },
-      ],
-      "vue/valid-v-slot": "off",
-      "vue/v-on-event-hyphenation": "off",
-      "vue/no-unused-components": "off",
-      "vue/no-unused-vars": "off",
-      "vue/require-default-prop": "off",
-      "vue/no-v-html": "warn",
-      "vue/block-lang": "off",
-      "@typescript-eslint/no-unused-vars": [
-        "warn",
-        {
-          argsIgnorePattern: "^_",
-          varsIgnorePattern: "^_",
-          caughtErrorsIgnorePattern: "^_",
-        },
-      ],
-      "@typescript-eslint/explicit-module-boundary-types": "off",
-      "@typescript-eslint/no-explicit-any": "off",
-      "no-console": ["warn", { allow: ["warn", "error", "info"] }],
-      "no-debugger": "warn",
-      "prettier/prettier": "error",
-    },
+};
+
+// Base Config for Vue
+const vue = {
+  rules: {
+    "vue/multi-word-component-names": "off",
+    "vue/valid-v-slot": "off",
+    "vue/v-on-event-hyphenation": "off",
+    "vue/require-default-prop": "off",
+    "vue/no-v-html": "warn",
+    "vue/block-lang": "off",
   },
-  {
-    files: ["scripts/**/*.mjs", "scripts/**/*.cjs", "*.cjs"],
-    languageOptions: {
-      parserOptions: { sourceType: "module" },
-      globals: { node: true },
-    },
+};
+
+// Special config for scripts/*
+const scripts = {
+  files: ["scripts/**/*.mjs", "scripts/**/*.cjs", "*.cjs"],
+  languageOptions: {
+    parserOptions: { sourceType: "module" },
+    globals: { node: true },
   },
-  {
-    files: [
-      "src/components/extension/**",
-      "src/components/extension/componentPanel/**",
-    ],
-    rules: {
-      "vue/valid-v-slot": "off",
-    },
+};
+
+// Special Config for extensions page and code
+const extensions = {
+  files: [
+    "src/components/extension/**",
+    "src/components/extension/componentPanel/**",
+  ],
+  rules: {
+    "vue/valid-v-slot": "off",
   },
-  configPrettier,
-];
+};
+
+// Export all configs
+export default defineConfigWithVueTs(
+  // ignore first
+  ignores,
+  // use recommanded configs
+  pluginVue.configs["flat/essential"],
+  vueTsConfigs.recommended,
+  // custom configs
+  base,
+  vue,
+  scripts,
+  extensions,
+  // add skip formatting for prettier because already have eslint
+  skipFormatting,
+);
