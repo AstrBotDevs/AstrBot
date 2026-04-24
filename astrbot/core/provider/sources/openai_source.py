@@ -508,6 +508,37 @@ class ProviderOpenAIOfficial(Provider):
         extra_body.pop("think", None)
         extra_body["reasoning_effort"] = "none"
 
+    def _clean_assistant_messages_for_chat_completion(
+        self, payloads: dict[str, Any]
+    ) -> None:
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
+            return
+
+        cleaned_messages: list[Any] = []
+        for idx, msg in enumerate(messages):
+            if isinstance(msg, dict) and msg.get("role") == "assistant":
+                content = msg.get("content")
+                tool_calls = msg.get("tool_calls")
+                reasoning_content = msg.get("reasoning_content") or msg.get("reasoning")
+
+                if (
+                    not tool_calls
+                    and not reasoning_content
+                    and (content == "" or content is None)
+                ):
+                    logger.warning(
+                        f"过滤第 {idx} 条空 assistant 消息 (无工具调用且无推理内容)"
+                    )
+                    continue
+
+                if content == "" and tool_calls:
+                    msg["content"] = None
+
+            cleaned_messages.append(msg)
+
+        payloads["messages"] = cleaned_messages
+
     async def get_models(self):
         try:
             models_str = []
@@ -546,28 +577,7 @@ class ProviderOpenAIOfficial(Provider):
             extra_body.update(custom_extra_body)
         self._apply_provider_specific_extra_body_overrides(extra_body)
 
-        model = payloads.get("model", "").lower()
-
-        if "messages" in payloads and isinstance(payloads["messages"], list):
-            cleaned_messages = []
-            for idx, msg in enumerate(payloads["messages"]):
-                # 过滤空的 assistant 消息，防止严格 API（如 Moonshot）返回 400 错误
-                if msg.get("role") == "assistant":
-                    content = msg.get("content")
-                    tool_calls = msg.get("tool_calls")
-
-                    # 情况1: 空/null content 且无 tool_calls -> 过滤掉
-                    if not tool_calls and (content == "" or content is None):
-                        logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
-                        continue
-
-                    # 情况2: 空 content 但有 tool_calls -> 设为 None (符合 OpenAI 规范)
-                    if content == "" and tool_calls:
-                        msg["content"] = None
-
-                cleaned_messages.append(msg)
-
-            payloads["messages"] = cleaned_messages
+        self._clean_assistant_messages_for_chat_completion(payloads)
 
         completion = await self.client.chat.completions.create(
             **payloads,
@@ -618,6 +628,7 @@ class ProviderOpenAIOfficial(Provider):
         for key in to_del:
             del payloads[key]
         self._apply_provider_specific_extra_body_overrides(extra_body)
+        self._clean_assistant_messages_for_chat_completion(payloads)
 
         stream = await self.client.chat.completions.create(
             **payloads,
@@ -629,6 +640,7 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = LLMResponse("assistant", is_chunk=True)
 
         state = ChatCompletionStreamState()
+        accumulated_reasoning_content = ""
 
         async for chunk in stream:
             choice = chunk.choices[0] if chunk.choices else None
@@ -656,6 +668,7 @@ class ProviderOpenAIOfficial(Provider):
             llm_response.completion_text = ""
             if reasoning:
                 llm_response.reasoning_content = reasoning
+                accumulated_reasoning_content += reasoning
                 _y = True
             if delta and delta.content:
                 # Don't strip streaming chunks to preserve spaces between words
@@ -675,7 +688,22 @@ class ProviderOpenAIOfficial(Provider):
                 yield llm_response
 
         final_completion = state.get_final_completion()
-        llm_response = await self._parse_openai_completion(final_completion, tools)
+        try:
+            llm_response = await self._parse_openai_completion(final_completion, tools)
+        except EmptyModelOutputError:
+            if not accumulated_reasoning_content:
+                raise
+            llm_response = LLMResponse(
+                "assistant",
+                reasoning_content=accumulated_reasoning_content,
+            )
+            llm_response.raw_completion = final_completion
+            llm_response.id = final_completion.id
+            if final_completion.usage:
+                llm_response.usage = self._extract_usage(final_completion.usage)
+        else:
+            if accumulated_reasoning_content and not llm_response.reasoning_content:
+                llm_response.reasoning_content = accumulated_reasoning_content
 
         yield llm_response
 

@@ -246,6 +246,70 @@ async def test_openai_payload_keeps_reasoning_content_in_assistant_history():
 
 
 @pytest.mark.asyncio
+async def test_openai_payload_keeps_reasoning_only_assistant_history(monkeypatch):
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "think", "think": "step 1"},
+                    ],
+                }
+            ]
+        }
+
+        provider._finally_convert_payload(payloads)
+
+        assistant_message = payloads["messages"][0]
+        assert assistant_message["content"] is None
+        assert assistant_message["reasoning_content"] == "step 1"
+
+        captured_kwargs = {}
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "deepseek-reasoner",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "ok",
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            )
+
+        provider.set_model("deepseek-reasoner")
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+        await provider._query(payloads=payloads, tools=None)
+
+        assert captured_kwargs["messages"] == [
+            {
+                "role": "assistant",
+                "content": None,
+                "reasoning_content": "step 1",
+            }
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_groq_payload_drops_reasoning_content_from_assistant_history():
     provider = _make_groq_provider()
     try:
@@ -1264,6 +1328,108 @@ async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_query_stream_accumulates_reasoning_content_in_final_response(monkeypatch):
+    provider = _make_provider({"model": "deepseek-reasoner"})
+    try:
+        chunks = [
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "deepseek-reasoner",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "reasoning_content": "step 1",
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "deepseek-reasoner",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "reasoning_content": " step 2",
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "deepseek-reasoner",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "content": "final answer",
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+            ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "deepseek-reasoner",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            ),
+        ]
+
+        async def fake_stream():
+            for chunk in chunks:
+                yield chunk
+
+        async def fake_create(**kwargs):
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        responses = [
+            (response.reasoning_content, response.completion_text)
+            async for response in provider._query_stream(
+                payloads={
+                    "model": "deepseek-reasoner",
+                    "messages": [{"role": "user", "content": "hello"}],
+                },
+                tools=None,
+            )
+        ]
+
+        assert responses[0] == ("step 1", "")
+        final_reasoning, final_text = responses[-1]
+        assert final_text == "final answer"
+        assert final_reasoning == "step 1 step 2"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_query_filters_empty_assistant_message_without_tool_calls(monkeypatch):
     """Test that empty assistant messages without tool_calls are filtered out."""
     provider = _make_provider()
@@ -1371,6 +1537,155 @@ async def test_query_filters_null_content_assistant_message_without_tool_calls(
         assert len(messages) == 2
         assert messages[0] == {"role": "user", "content": "hello"}
         assert messages[1] == {"role": "user", "content": "world"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_filters_empty_assistant_message_without_tool_calls(
+    monkeypatch,
+):
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+
+        async def fake_stream():
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "content": "ok",
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            )
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            )
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        responses = [
+            response
+            async for response in provider._query_stream(
+                payloads={
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "user", "content": "hello"},
+                        {"role": "assistant", "content": ""},
+                        {"role": "user", "content": "world"},
+                    ],
+                },
+                tools=None,
+            )
+        ]
+
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 2
+        assert messages[0] == {"role": "user", "content": "hello"}
+        assert messages[1] == {"role": "user", "content": "world"}
+        assert responses[-1].completion_text == "ok"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_keeps_reasoning_only_assistant_history(monkeypatch):
+    provider = _make_provider({"model": "deepseek-reasoner"})
+    try:
+        captured_kwargs = {}
+
+        async def fake_stream():
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "deepseek-reasoner",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "content": "ok",
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            )
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "deepseek-reasoner",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            )
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        responses = [
+            response
+            async for response in provider._query_stream(
+                payloads={
+                    "model": "deepseek-reasoner",
+                    "messages": [
+                        {
+                            "role": "assistant",
+                            "content": None,
+                            "reasoning_content": "step 1",
+                        },
+                    ],
+                },
+                tools=None,
+            )
+        ]
+
+        assert captured_kwargs["messages"] == [
+            {
+                "role": "assistant",
+                "content": None,
+                "reasoning_content": "step 1",
+            }
+        ]
+        assert responses[-1].completion_text == "ok"
     finally:
         await provider.terminate()
 
