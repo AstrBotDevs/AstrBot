@@ -241,6 +241,7 @@ import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
 } from '@/utils/confirmDialog';
+import { copyToClipboard } from '@/utils/clipboard';
 
 export default {
   name: 'PlatformPage',
@@ -608,10 +609,10 @@ export default {
 
     async copyWebhookUrl(webhookUuid) {
       const url = this.getWebhookUrl(webhookUuid);
-      try {
-        await navigator.clipboard.writeText(url);
+      const ok = await copyToClipboard(url);
+      if (ok) {
         this.showSuccess(this.tm('webhookCopied'));
-      } catch (err) {
+      } else {
         this.showError(this.tm('webhookCopyFailed'));
       }
     }

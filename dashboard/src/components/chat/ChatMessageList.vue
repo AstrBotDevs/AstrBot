@@ -407,6 +407,7 @@ import type {
   MessagePart,
 } from "@/composables/useMessages";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { copyToClipboard } from "@/utils/clipboard";
 
 const props = withDefaults(
   defineProps<{
@@ -809,7 +810,7 @@ function toolCallStatusText(tool: Record<string, unknown>) {
 async function copyMessage(message: ChatRecord) {
   const text = plainTextFromMessage(message);
   if (!text) return;
-  await navigator.clipboard?.writeText(text);
+  await copyToClipboard(text);
 }
 
 async function downloadPart(part: MessagePart) {
