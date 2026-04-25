@@ -408,7 +408,7 @@ async def run_live_agent(
     audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
 
     # 为 TTS 创建过滤队列（Feeder 写入原始文本，TTS 读取过滤后文本）
-    tts_text_queue: asyncio.Queue[str | None] = (
+    tts_text_queue: asyncio.Queue[str | None] | FilteredQueue = (
         FilteredQueue(raw_text_queue, tts_filter_custom_rules)
         if tts_filter_enable
         else raw_text_queue

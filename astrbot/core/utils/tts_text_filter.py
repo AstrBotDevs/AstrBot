@@ -66,12 +66,16 @@ class FilteredQueue:
         self._custom_rules = custom_rules
 
     async def get(self):
-        item = await self._real_queue.get()
-        if item is None:
-            return None
-        if isinstance(item, str):
-            return TTSTextFilter.apply(item, self._custom_rules)
-        return item
+        while True:
+            item = await self._real_queue.get()
+            if item is None:
+                return None
+            if isinstance(item, str):
+                filtered = TTSTextFilter.apply(item, self._custom_rules)
+                if filtered:
+                    return filtered
+                continue
+            return item
 
     def qsize(self) -> int:
         return self._real_queue.qsize()

@@ -12,6 +12,7 @@ streaming text-to-speech with low-latency response.
 import asyncio
 import base64
 import os
+import struct
 import threading
 import uuid
 
@@ -204,8 +205,6 @@ class ProviderQwenTTSRealtime(TTSProvider):
 
     def _pcm_to_wav(self, pcm_data: bytes, sample_rate: int = 24000) -> bytes:
         """Convert raw PCM to WAV format."""
-        import struct
-
         num_channels = 1
         bits_per_sample = 16
         byte_rate = sample_rate * num_channels * bits_per_sample // 8
@@ -258,7 +257,6 @@ class ProviderQwenTTSRealtime(TTSProvider):
         )
 
         loop = asyncio.get_running_loop()
-        accumulated_text = ""
 
         # Connect and configure session on background thread
         def _connect() -> None:
@@ -326,13 +324,7 @@ class ProviderQwenTTSRealtime(TTSProvider):
                 text_part = await text_queue.get()
 
                 if text_part is None:
-                    # End of input: send any accumulated text and finish
-                    if accumulated_text:
-                        await loop.run_in_executor(
-                            None,
-                            qwen_tts.append_text,
-                            accumulated_text,
-                        )
+                    # End of input: finish synthesis
                     await loop.run_in_executor(None, qwen_tts.finish)
 
                     # Wait for all audio to be generated
@@ -348,7 +340,6 @@ class ProviderQwenTTSRealtime(TTSProvider):
                     await audio_queue.put(None)
                     break
 
-                accumulated_text += text_part
                 await loop.run_in_executor(
                     None,
                     qwen_tts.append_text,
