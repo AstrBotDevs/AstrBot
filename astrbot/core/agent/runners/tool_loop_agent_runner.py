@@ -198,7 +198,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             Message(
                 role="assistant",
                 content=parts,
-                reasoning_content=llm_resp.reasoning_content or None,
+                reasoning_content=llm_resp.reasoning_content,
             )
         )
 
@@ -897,7 +897,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 tool_calls_info=AssistantMessageSegment(
                     tool_calls=llm_resp.to_openai_to_calls_model(),
                     content=parts,
-                    reasoning_content=llm_resp.reasoning_content or None,
+                    reasoning_content=llm_resp.reasoning_content,
                 ),
                 tool_calls_result=tool_call_result_blocks,
             )
@@ -1382,7 +1382,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 Message(
                     role="assistant",
                     content=parts,
-                    reasoning_content=llm_resp.reasoning_content or None,
+                    reasoning_content=llm_resp.reasoning_content,
                 )
             )
 
