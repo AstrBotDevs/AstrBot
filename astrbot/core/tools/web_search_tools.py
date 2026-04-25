@@ -287,6 +287,8 @@ async def _firecrawl_search(
 ) -> list[SearchResult]:
     data = await _firecrawl_post(provider_settings, "search", payload)
     rows = data.get("data", [])
+    if isinstance(rows, dict):
+        rows = rows.get("web", [])
     return [
         SearchResult(
             title=item.get("title", ""),

@@ -94,6 +94,39 @@ async def test_firecrawl_search_maps_v2_data_list(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_firecrawl_search_maps_v2_grouped_web_data(monkeypatch):
+    async def fake_firecrawl_post(provider_settings, endpoint, payload):
+        assert endpoint == "search"
+        assert provider_settings["websearch_firecrawl_key"] == ["firecrawl-key"]
+        assert payload == {"query": "AstrBot", "limit": 5, "sources": ["web"]}
+        return {
+            "success": True,
+            "data": {
+                "web": [
+                    {
+                        "title": "AstrBot",
+                        "url": "https://example.com",
+                        "description": "Search result",
+                    }
+                ]
+            },
+        }
+
+    monkeypatch.setattr(tools, "_firecrawl_post", fake_firecrawl_post)
+
+    results = await tools._firecrawl_search(
+        {"websearch_firecrawl_key": ["firecrawl-key"]},
+        {"query": "AstrBot", "limit": 5, "sources": ["web"]},
+    )
+
+    assert results == [
+        tools.SearchResult(
+            title="AstrBot", url="https://example.com", snippet="Search result"
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_firecrawl_search_payload_omits_tbs_and_handles_null_limit(monkeypatch):
     async def fake_firecrawl_search(provider_settings, payload):
         assert payload == {
