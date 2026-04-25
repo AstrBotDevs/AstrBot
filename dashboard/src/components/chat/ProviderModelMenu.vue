@@ -97,7 +97,8 @@ const filteredProviders = computed(() => {
 });
 
 function loadFromStorage() {
-    const savedProvider = localStorage.getItem('selectedProvider');
+    const username = localStorage.getItem('user') || 'guest';
+    const savedProvider = localStorage.getItem(`selectedProvider:${username}`);
     if (savedProvider) {
         selectedProviderId.value = savedProvider;
     }
@@ -105,7 +106,8 @@ function loadFromStorage() {
 
 function saveToStorage() {
     if (selectedProviderId.value) {
-        localStorage.setItem('selectedProvider', selectedProviderId.value);
+        const username = localStorage.getItem('user') || 'guest';
+        localStorage.setItem(`selectedProvider:${username}`, selectedProviderId.value);
     }
 }
 
@@ -118,6 +120,12 @@ function loadProviderConfigs() {
             providerConfigs.value = (response.data.data || []).filter(
                 (p: ProviderConfig) => p.enable !== false
             );
+            if (
+                selectedProviderId.value
+                && !providerConfigs.value.some((provider) => provider.id === selectedProviderId.value)
+            ) {
+                selectedProviderId.value = '';
+            }
         }
     }).catch(error => {
         console.error('获取提供商列表失败:', error);

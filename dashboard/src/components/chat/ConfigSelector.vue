@@ -148,6 +148,9 @@ const targetUmo = computed(() => {
 });
 
 const selectedConfigLabel = computed(() => {
+    if (configOptions.value.length === 0) {
+        return '无可用配置';
+    }
     const target = configOptions.value.find((item) => item.id === selectedConfigId.value);
     return target?.name || selectedConfigId.value || 'default';
 });
@@ -278,6 +281,10 @@ async function confirmSelection() {
 }
 
 async function syncSelectionForSession() {
+    if (configOptions.value.length === 0) {
+        selectedConfigId.value = '';
+        return;
+    }
     if (!targetUmo.value) {
         pendingSync.value = true;
         return;
@@ -289,8 +296,11 @@ async function syncSelectionForSession() {
     }
     await fetchRoutingEntries();
     const resolved = resolveConfigId(targetUmo.value);
-    await setSelection(resolved);
-    setStoredSelectedChatConfigId(resolved);
+    const nextConfigId = configOptions.value.some((item) => item.id === resolved)
+        ? resolved
+        : (configOptions.value[0]?.id || 'default');
+    await setSelection(nextConfigId);
+    setStoredSelectedChatConfigId(nextConfigId);
 }
 
 watch(
@@ -302,9 +312,16 @@ watch(
 
 onMounted(async () => {
     await fetchConfigList();
+    if (configOptions.value.length === 0) {
+        selectedConfigId.value = '';
+        return;
+    }
     const stored = props.initialConfigId || getStoredSelectedChatConfigId();
-    selectedConfigId.value = stored;
-    await setSelection(stored);
+    const initial = configOptions.value.some((item) => item.id === stored)
+        ? stored
+        : (configOptions.value[0]?.id || 'default');
+    selectedConfigId.value = initial;
+    await setSelection(initial);
     await syncSelectionForSession();
 });
 </script>

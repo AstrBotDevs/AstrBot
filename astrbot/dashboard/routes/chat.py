@@ -518,6 +518,35 @@ class ChatRoute(Route):
             f"webchat:{MessageType.FRIEND_MESSAGE.value}:webchat!{creator}!{thread_id}"
         )
 
+    def _can_use_selected_provider(self, provider_id: str | None) -> bool:
+        if not provider_id or g.get("webui_role", "admin") == "admin":
+            return True
+        for provider in self.core_lifecycle.provider_manager.providers_config:
+            if provider.get("id") == provider_id:
+                return provider.get("_webui_owner") == g.get("username")
+        return False
+
+    def _can_use_session_config(self, session) -> bool:
+        if g.get("webui_role", "admin") == "admin":
+            return True
+        user = g.get("webui_user")
+        if not user:
+            return False
+        allowed = {
+            str(config_id)
+            for config_id in (user.allowed_config_ids or [])
+            if str(config_id).strip()
+        }
+        if "*" in allowed:
+            return True
+        conf_id = (
+            self.umop_config_router.get_conf_id_for_umop(
+                self._build_webchat_unified_msg_origin(session)
+            )
+            or "default"
+        )
+        return conf_id in allowed
+
     def _serialize_thread(self, thread) -> dict:
         return {
             "thread_id": thread.thread_id,
@@ -755,6 +784,19 @@ class ChatRoute(Route):
 
         if not session_id:
             return Response().error("session_id is empty").__dict__
+        if platform_history_id == "webchat_thread":
+            thread = await self.db.get_webchat_thread_by_id(session_id)
+            if not thread or thread.creator != username:
+                return Response().error("Permission denied").__dict__
+            session = await self.db.get_platform_session_by_id(thread.parent_session_id)
+        else:
+            session = await self.db.get_platform_session_by_id(session_id)
+        if not session or session.creator != username:
+            return Response().error("Permission denied").__dict__
+        if not self._can_use_session_config(session):
+            return Response().error("当前用户没有使用该配置文件的权限").__dict__
+        if not self._can_use_selected_provider(selected_provider):
+            return Response().error("Permission denied").__dict__
 
         webchat_conv_id = session_id
 

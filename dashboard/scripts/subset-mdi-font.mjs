@@ -31,6 +31,7 @@ const UTILITY_CLASSES = new Set([
     "mdi-rotate-180", "mdi-rotate-225", "mdi-rotate-270", "mdi-rotate-315",
     "mdi-flip-h", "mdi-flip-v", "mdi-light", "mdi-dark", "mdi-inactive",
     "mdi-18px", "mdi-24px", "mdi-36px", "mdi-48px",
+    "mdi-subset",
 ]);
 
 // Icons used indirectly by Vuetify internals, so they won't appear in src/ static scans.

@@ -467,6 +467,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       if (response.data.status !== 'ok') {
         throw new Error(response.data.message)
       }
+      if (response.data.data?.config) {
+        editableProviderSource.value = response.data.data.config
+      }
 
       if (editableProviderSource.value!.id !== originalId) {
         providers.value = providers.value.map((p) =>

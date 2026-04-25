@@ -62,6 +62,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_platform_message_history_checkpoint_column(conn)
+            await self._ensure_webui_user_password_column(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -123,6 +124,22 @@ class SQLiteDatabase(BaseDatabase):
                     "CREATE INDEX IF NOT EXISTS "
                     "ix_platform_message_history_llm_checkpoint_id "
                     "ON platform_message_history (llm_checkpoint_id)"
+                )
+            )
+
+    async def _ensure_webui_user_password_column(self, conn) -> None:
+        """Ensure webui_users has password for early multi-user databases."""
+        result = await conn.execute(text("PRAGMA table_info(webui_users)"))
+        rows = result.fetchall()
+        if not rows:
+            return
+
+        columns = {row[1] for row in rows}
+        if "password" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE webui_users "
+                    "ADD COLUMN password VARCHAR(128) NOT NULL DEFAULT ''"
                 )
             )
 

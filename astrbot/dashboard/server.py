@@ -14,11 +14,13 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
+from sqlmodel import col, select
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.po import WebUIUser
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
@@ -112,7 +114,8 @@ class AstrBotDashboard:
         self.cr = ConfigRoute(self.context, core_lifecycle)
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
-        self.ar = AuthRoute(self.context)
+        self.ar = AuthRoute(self.context, db)
+        self.webui_users_route = WebUIUsersRoute(self.context, db)
         self.api_key_route = ApiKeyRoute(self.context, db)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
         self.open_api_route = OpenApiRoute(
@@ -215,6 +218,20 @@ class AstrBotDashboard:
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
             g.username = payload["username"]
+            g.webui_role = payload.get("role", "admin")
+            g.webui_scopes = payload.get("scopes", ["*"])
+            if g.webui_role == "webui_user":
+                user = await self._load_webui_user(g.username)
+                if not user or not user.enabled:
+                    r = jsonify(Response().error("用户不存在或已禁用").__dict__)
+                    r.status_code = 401
+                    return r
+                g.webui_user = user
+                g.webui_scopes = [user.scope]
+                if not self._is_allowed_for_scoped_webui_user(request.path):
+                    r = jsonify(Response().error("Permission denied").__dict__)
+                    r.status_code = 403
+                    return r
         except jwt.ExpiredSignatureError:
             r = jsonify(Response().error("Token 过期").__dict__)
             r.status_code = 401
@@ -223,6 +240,44 @@ class AstrBotDashboard:
             r = jsonify(Response().error("Token 无效").__dict__)
             r.status_code = 401
             return r
+
+    async def _load_webui_user(self, username: str) -> WebUIUser | None:
+        async with self.db.get_db() as session:
+            result = await session.execute(
+                select(WebUIUser).where(col(WebUIUser.username) == username)
+            )
+            return result.scalar_one_or_none()
+
+    @staticmethod
+    def _is_allowed_for_scoped_webui_user(path: str) -> bool:
+        exact_paths = {
+            "/api/auth/profile",
+            "/api/stat/version",
+            "/api/config/abconfs",
+            "/api/config/abconf",
+            "/api/config/umo_abconf_routes",
+            "/api/config/umo_abconf_route/update",
+            "/api/config/provider/list",
+            "/api/config/provider/template",
+            "/api/config/provider/check_one",
+            "/api/config/provider_sources/models",
+        }
+        base_prefixes = (
+            "/api/auth/profile",
+            "/api/chat/",
+            "/api/chatui_project/",
+        )
+        provider_write_prefixes = (
+            "/api/config/provider/new",
+            "/api/config/provider/update",
+            "/api/config/provider/delete",
+            "/api/config/provider_sources/update",
+            "/api/config/provider_sources/delete",
+        )
+        if path.startswith(provider_write_prefixes):
+            user = g.get("webui_user")
+            return bool(user and user.allow_provider_management)
+        return path in exact_paths or path.startswith(base_prefixes)
 
     @staticmethod
     def _extract_raw_api_key() -> str | None:

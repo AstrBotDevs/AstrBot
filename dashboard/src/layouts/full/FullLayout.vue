@@ -9,18 +9,22 @@ import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
 import Chat from '@/components/chat/Chat.vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useRouterLoadingStore } from '@/stores/routerLoading';
+import { useAuthStore } from '@/stores/auth';
 import { useI18n } from '@/i18n/composables';
 
 const FIRST_NOTICE_SEEN_KEY = 'astrbot:first_notice_seen:v1';
 
 const customizer = useCustomizerStore();
+const authStore = useAuthStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
 const isCurrentChatRoute = computed(() => route.path === '/chat' || route.path.startsWith('/chat/'));
 const shouldMountChat = ref(isCurrentChatRoute.value);
+const isChatUIOnly = computed(() => authStore.isChatUIScoped());
 
-const showSidebar = computed(() => !isCurrentChatRoute.value)
+const showHeader = computed(() => !isChatUIOnly.value);
+const showSidebar = computed(() => !isCurrentChatRoute.value && !isChatUIOnly.value)
 
 const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
 const showFirstNoticeDialog = ref(false);
@@ -84,6 +88,9 @@ const onFirstNoticeDialogUpdate = (visible: boolean) => {
 
 onMounted(() => {
   setTimeout(async () => {
+    if (isChatUIOnly.value) {
+      return;
+    }
     const migrationPending = await checkMigration();
     if (!migrationPending) {
       await maybeShowFirstNotice();
@@ -106,10 +113,10 @@ onMounted(() => {
         top
         style="z-index: 9999; position: absolute; opacity: 0.3; "
       />
-      <VerticalHeaderVue />
+      <VerticalHeaderVue v-if="showHeader" />
       <VerticalSidebarVue v-if="showSidebar" />
       <v-main :style="{
-        height: isCurrentChatRoute ? 'calc(100vh - 55px)' : undefined,
+        height: isCurrentChatRoute ? (showHeader ? 'calc(100vh - 55px)' : '100vh') : undefined,
         overflow: isCurrentChatRoute ? 'hidden' : undefined
       }">
         <v-container

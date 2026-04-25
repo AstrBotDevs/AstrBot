@@ -25,6 +25,16 @@ function toggleTheme() {
 onMounted(async () => {
   // 检查用户是否已登录，如果已登录则重定向
   if (authStore.has_token()) {
+    try {
+      await authStore.loadProfile();
+    } catch {
+      authStore.clearSession();
+      return;
+    }
+    if (authStore.isChatUIScoped()) {
+      router.push('/chat');
+      return;
+    }
     const onboardingCompleted = await authStore.checkOnboardingCompleted();
     if (onboardingCompleted) {
       router.push('/dashboard/default');

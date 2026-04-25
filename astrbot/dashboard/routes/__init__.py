@@ -21,6 +21,7 @@ from .static_file import StaticFileRoute
 from .subagent import SubAgentRoute
 from .tools import ToolsRoute
 from .update import UpdateRoute
+from .webui_users import WebUIUsersRoute
 
 __all__ = [
     "ApiKeyRoute",
@@ -46,4 +47,5 @@ __all__ = [
     "ToolsRoute",
     "SkillsRoute",
     "UpdateRoute",
+    "WebUIUsersRoute",
 ]

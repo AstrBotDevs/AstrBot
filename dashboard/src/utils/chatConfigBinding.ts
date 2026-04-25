@@ -38,11 +38,16 @@ export function getStoredDashboardUsername(): string {
 }
 
 export function getStoredSelectedChatConfigId(): string {
-  return getFromLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, '').trim() || 'default';
+  const username = getStoredDashboardUsername();
+  const userScopedKey = `${CHAT_SELECTED_CONFIG_STORAGE_KEY}:${username}`;
+  return getFromLocalStorage(userScopedKey, '').trim()
+    || getFromLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, '').trim()
+    || 'default';
 }
 
 export function setStoredSelectedChatConfigId(configId: string): void {
-  setToLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, configId);
+  const username = getStoredDashboardUsername();
+  setToLocalStorage(`${CHAT_SELECTED_CONFIG_STORAGE_KEY}:${username}`, configId);
 }
 
 export function buildWebchatUmoDetails(sessionId: string, isGroup = false): WebchatUmoDetails {

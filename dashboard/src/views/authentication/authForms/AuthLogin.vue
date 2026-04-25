@@ -43,7 +43,7 @@ async function validate(values: any, { setErrors }: any) {
     <v-text-field v-model="username" :label="t('username')" class="mb-6 input-field" required hide-details="auto"
       variant="outlined" prepend-inner-icon="mdi-account" :disabled="loading"></v-text-field>
 
-    <v-text-field v-model="password" :label="t('password')" required variant="outlined" hide-details="auto"
+    <v-text-field v-model="password" :label="t('password')" variant="outlined" hide-details="auto"
       :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'" :type="show1 ? 'text' : 'password'"
       @click:append="show1 = !show1" class="pwd-input" prepend-inner-icon="mdi-lock" :disabled="loading"></v-text-field>
 

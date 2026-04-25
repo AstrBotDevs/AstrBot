@@ -20,6 +20,9 @@ interface AuthStore {
   login(username: string, password: string): Promise<void>;
   logout(): void;
   has_token(): boolean;
+  loadProfile(): Promise<any>;
+  isChatUIScoped(): boolean;
+  clearSession(): void;
 }
 
 router.beforeEach(async (to, from, next) => {
@@ -34,14 +37,30 @@ router.beforeEach(async (to, from, next) => {
 
   // 如果用户已登录且试图访问登录页面，则重定向到首页
   if (to.path === '/auth/login' && auth.has_token()) {
-    return next('/welcome');
+    try {
+      await auth.loadProfile();
+      return next(auth.isChatUIScoped() ? '/chat' : '/welcome');
+    } catch {
+      auth.clearSession();
+      return next('/auth/login');
+    }
   }
 
   if (to.matched.some((record) => record.meta.requiresAuth)) {
     if (authRequired && !auth.has_token()) {
       auth.returnUrl = to.fullPath;
       return next('/auth/login');
-    } else next();
+    }
+    try {
+      await auth.loadProfile();
+      if (auth.isChatUIScoped() && !(to.path === '/chat' || to.path.startsWith('/chat/'))) {
+        return next('/chat');
+      }
+      next();
+    } catch {
+      auth.clearSession();
+      return next('/auth/login');
+    }
   } else {
     next();
   }

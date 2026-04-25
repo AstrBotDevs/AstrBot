@@ -2,13 +2,53 @@ import { defineStore } from 'pinia';
 import { router } from '@/router';
 import axios from 'axios';
 
+function readJsonStorage(key: string, fallback: any) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export const useAuthStore = defineStore("auth", {
   state: () => ({
     // @ts-ignore
     username: '',
+    role: localStorage.getItem('webui_role') || 'admin',
+    scopes: readJsonStorage('webui_scopes', ['*']),
+    permissions: readJsonStorage('webui_permissions', {}),
     returnUrl: null
   }),
   actions: {
+    persistProfile(profile: any) {
+      this.username = profile?.username || '';
+      this.role = profile?.role || 'admin';
+      this.scopes = profile?.scopes || ['*'];
+      this.permissions = profile?.permissions || {};
+      localStorage.setItem('user', this.username);
+      localStorage.setItem('webui_role', this.role);
+      localStorage.setItem('webui_scopes', JSON.stringify(this.scopes));
+      localStorage.setItem('webui_permissions', JSON.stringify(this.permissions));
+    },
+    isChatUIScoped(): boolean {
+      return this.role === 'webui_user'
+        && Array.isArray(this.scopes)
+        && this.scopes.length === 1
+        && this.scopes[0] === 'chatui';
+    },
+    canManageProviders(): boolean {
+      if (this.role === 'admin') return true;
+      return Boolean(this.permissions?.allow_provider_management);
+    },
+    async loadProfile(): Promise<any> {
+      const res = await axios.get('/api/auth/profile');
+      if (res.data.status === 'ok') {
+        this.persistProfile(res.data.data);
+        return res.data.data;
+      }
+      return Promise.reject(res.data.message);
+    },
     async login(username: string, password: string): Promise<void> {
       try {
         const res = await axios.post('/api/auth/login', {
@@ -20,10 +60,20 @@ export const useAuthStore = defineStore("auth", {
           return Promise.reject(res.data.message);
         }
     
-        this.username = res.data.data.username
-        localStorage.setItem('user', this.username);
+        this.persistProfile({
+          username: res.data.data.username,
+          role: res.data.data.role || 'admin',
+          scopes: res.data.data.scopes || ['*'],
+          permissions: res.data.data.permissions || {}
+        });
         localStorage.setItem('token', res.data.data.token);
         localStorage.setItem('change_pwd_hint', res.data.data?.change_pwd_hint);
+
+        if (this.isChatUIScoped()) {
+          this.returnUrl = null;
+          router.push('/chat');
+          return;
+        }
         
         const onboardingCompleted = await this.checkOnboardingCompleted();
         this.returnUrl = null;
@@ -65,10 +115,19 @@ export const useAuthStore = defineStore("auth", {
         return false;
       }
     },
-    logout() {
+    clearSession() {
       this.username = '';
+      this.role = 'admin';
+      this.scopes = ['*'];
+      this.permissions = {};
       localStorage.removeItem('user');
       localStorage.removeItem('token');
+      localStorage.removeItem('webui_role');
+      localStorage.removeItem('webui_scopes');
+      localStorage.removeItem('webui_permissions');
+    },
+    logout() {
+      this.clearSession();
       router.push('/auth/login');
     },
     has_token(): boolean {

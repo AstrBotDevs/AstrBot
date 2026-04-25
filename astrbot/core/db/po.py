@@ -382,6 +382,42 @@ class ApiKey(TimestampMixin, SQLModel, table=True):
     )
 
 
+class WebUIUser(TimestampMixin, SQLModel, table=True):
+    """Scoped WebUI user for limited dashboard access."""
+
+    __tablename__: str = "webui_users"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    user_id: str = Field(
+        max_length=36,
+        nullable=False,
+        unique=True,
+        default_factory=lambda: str(uuid.uuid4()),
+    )
+    username: str = Field(max_length=255, nullable=False, unique=True, index=True)
+    password: str = Field(default="", max_length=128, nullable=False)
+    scope: str = Field(default="chatui", max_length=64, nullable=False, index=True)
+    enabled: bool = Field(default=True, nullable=False)
+    allowed_config_ids: list = Field(default_factory=list, sa_type=JSON)
+    allow_provider_management: bool = Field(default=False, nullable=False)
+    created_by: str | None = Field(default=None, max_length=255)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            name="uix_webui_user_id",
+        ),
+        UniqueConstraint(
+            "username",
+            name="uix_webui_username",
+        ),
+    )
+
+
 class ChatUIProject(TimestampMixin, SQLModel, table=True):
     """This class represents projects for organizing ChatUI conversations.
 

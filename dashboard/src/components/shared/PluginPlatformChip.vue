@@ -94,7 +94,7 @@ const platformDetails = computed(() => {
               <v-avatar size="14" class="mr-2" v-if="platform.icon">
                 <v-img :src="platform.icon"></v-img>
               </v-avatar>
-              <v-icon v-else icon="mdi-platform" size="12" class="mr-2"></v-icon>
+              <v-icon v-else icon="mdi-apps" size="12" class="mr-2"></v-icon>
             </template>
             <v-list-item-title class="text-caption font-weight-bold" style="font-size: 0.75rem !important">
               {{ platform.name }}

@@ -6,7 +6,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from quart import request
+from quart import g, request
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -387,6 +387,90 @@ class ConfigRoute(Route):
         }
         self.register_routes()
 
+    def _is_admin(self) -> bool:
+        return g.get("webui_role", "admin") == "admin"
+
+    def _current_webui_user(self):
+        return g.get("webui_user")
+
+    def _allowed_config_ids(self) -> set[str]:
+        if self._is_admin():
+            return {"*"}
+        user = self._current_webui_user()
+        if not user:
+            return set()
+        return {
+            str(config_id)
+            for config_id in (user.allowed_config_ids or [])
+            if str(config_id).strip()
+        }
+
+    def _is_config_allowed(self, conf_id: str | None) -> bool:
+        if self._is_admin():
+            return True
+        if not conf_id:
+            return False
+        allowed = self._allowed_config_ids()
+        return "*" in allowed or conf_id in allowed
+
+    def _is_user_umo(self, umo: str | None) -> bool:
+        if self._is_admin():
+            return True
+        username = g.get("username", "")
+        if not umo or not username:
+            return False
+        return f"!{username}!" in umo and "*" not in umo
+
+    def _require_provider_management(self):
+        if self._is_admin():
+            return None
+        user = self._current_webui_user()
+        if user and user.allow_provider_management:
+            return None
+        return Response().error("当前用户没有创建或管理提供商的权限").__dict__
+
+    def _is_owned_by_current_user(self, config: dict | None) -> bool:
+        if self._is_admin():
+            return True
+        return bool(config and config.get("_webui_owner") == g.get("username"))
+
+    def _mark_owned_by_current_user(self, config: dict) -> None:
+        if self._is_admin():
+            return
+        config["_webui_owner"] = g.get("username")
+        config["_webui_scope"] = "chatui"
+
+    def _owned_id_prefix(self) -> str:
+        username = "".join(
+            ch if ch.isalnum() or ch in {"_", "-"} else "_"
+            for ch in str(g.get("username", "user"))
+        ).strip("_")
+        return f"webui_{username or 'user'}_"
+
+    def _namespace_owned_id(self, value: str) -> str:
+        if self._is_admin():
+            return value
+        prefix = self._owned_id_prefix()
+        return value if value.startswith(prefix) else f"{prefix}{value}"
+
+    def _filter_owned_configs(self, configs: list[dict]) -> list[dict]:
+        if self._is_admin():
+            return configs
+        username = g.get("username")
+        return [item for item in configs if item.get("_webui_owner") == username]
+
+    def _find_provider_source(self, source_id: str) -> dict | None:
+        for source in self.config.get("provider_sources", []):
+            if source.get("id") == source_id:
+                return source
+        return None
+
+    def _find_provider_config(self, provider_id: str) -> dict | None:
+        for provider in self.config.get("provider", []):
+            if provider.get("id") == provider_id:
+                return provider
+        return None
+
     async def delete_provider_source(self):
         """删除 provider_source，并更新关联的 providers"""
         post_data = await request.json
@@ -396,6 +480,8 @@ class ConfigRoute(Route):
         provider_source_id = post_data.get("id")
         if not provider_source_id:
             return Response().error("缺少 provider_source_id").__dict__
+        if denied := self._require_provider_management():
+            return denied
 
         provider_sources = self.config.get("provider_sources", [])
         target_idx = next(
@@ -409,6 +495,8 @@ class ConfigRoute(Route):
 
         if target_idx == -1:
             return Response().error("未找到对应的 provider source").__dict__
+        if not self._is_owned_by_current_user(provider_sources[target_idx]):
+            return Response().error("Permission denied").__dict__
 
         # 删除 provider_source
         del provider_sources[target_idx]
@@ -442,10 +530,21 @@ class ConfigRoute(Route):
 
         if not isinstance(new_source_config, dict):
             return Response().error("缺少或错误的配置数据").__dict__
+        if denied := self._require_provider_management():
+            return denied
 
         # 确保配置中有 id 字段
         if not new_source_config.get("id"):
             new_source_config["id"] = original_id
+        if not self._is_admin():
+            original_source = self._find_provider_source(original_id)
+            if not original_source or not self._is_owned_by_current_user(
+                original_source
+            ):
+                new_source_config["id"] = self._namespace_owned_id(
+                    str(new_source_config["id"])
+                )
+                original_id = new_source_config["id"]
 
         provider_sources = self.config.get("provider_sources", [])
 
@@ -467,8 +566,12 @@ class ConfigRoute(Route):
 
         old_id = original_id
         if target_idx == -1:
+            self._mark_owned_by_current_user(new_source_config)
             provider_sources.append(new_source_config)
         else:
+            if not self._is_owned_by_current_user(provider_sources[target_idx]):
+                return Response().error("Permission denied").__dict__
+            self._mark_owned_by_current_user(new_source_config)
             old_id = provider_sources[target_idx].get("id")
             provider_sources[target_idx] = new_source_config
 
@@ -505,7 +608,11 @@ class ConfigRoute(Route):
                 .__dict__
             )
 
-        return Response().ok(message="更新 provider source 成功").__dict__
+        return (
+            Response()
+            .ok({"config": new_source_config}, "更新 provider source 成功")
+            .__dict__
+        )
 
     async def get_provider_template(self):
         provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
@@ -524,14 +631,23 @@ class ConfigRoute(Route):
         }
         data = {
             "config_schema": config_schema,
-            "providers": astrbot_config["provider"],
-            "provider_sources": astrbot_config["provider_sources"],
+            "providers": self._filter_owned_configs(list(astrbot_config["provider"])),
+            "provider_sources": self._filter_owned_configs(
+                list(astrbot_config["provider_sources"])
+            ),
         }
         return Response().ok(data=data).__dict__
 
     async def get_uc_table(self):
         """获取 UMOP 配置路由表"""
-        return Response().ok({"routing": self.ucr.umop_to_conf_id}).__dict__
+        routing = dict(self.ucr.umop_to_conf_id)
+        if not self._is_admin():
+            routing = {
+                umo: conf_id
+                for umo, conf_id in routing.items()
+                if self._is_user_umo(umo) and self._is_config_allowed(conf_id)
+            }
+        return Response().ok({"routing": routing}).__dict__
 
     async def update_ucr_all(self):
         """更新 UMOP 配置路由表的全部内容"""
@@ -562,6 +678,8 @@ class ConfigRoute(Route):
 
         if not umo or not conf_id:
             return Response().error("缺少 UMO 或配置文件 ID").__dict__
+        if not self._is_user_umo(umo) or not self._is_config_allowed(conf_id):
+            return Response().error("Permission denied").__dict__
 
         try:
             await self.ucr.update_route(umo, conf_id)
@@ -598,6 +716,10 @@ class ConfigRoute(Route):
     async def get_abconf_list(self):
         """获取所有 AstrBot 配置文件的列表"""
         abconf_list = self.acm.get_conf_list()
+        if not self._is_admin():
+            abconf_list = [
+                conf for conf in abconf_list if self._is_config_allowed(conf["id"])
+            ]
         return Response().ok({"info_list": abconf_list}).__dict__
 
     async def create_abconf(self):
@@ -621,6 +743,10 @@ class ConfigRoute(Route):
         system_config = request.args.get("system_config", "0").lower() == "1"
         if not abconf_id and not system_config:
             return Response().error("缺少配置文件 ID").__dict__
+        if system_config and not self._is_admin():
+            return Response().error("Permission denied").__dict__
+        if abconf_id and not self._is_config_allowed(abconf_id):
+            return Response().error("Permission denied").__dict__
 
         try:
             if system_config:
@@ -739,6 +865,8 @@ class ConfigRoute(Route):
                 400,
                 logger.warning,
             )
+        if not self._is_owned_by_current_user(self._find_provider_config(provider_id)):
+            return Response().error("Permission denied").__dict__
 
         logger.info(f"API call: /config/provider/check_one id={provider_id}")
         try:
@@ -784,6 +912,8 @@ class ConfigRoute(Route):
             for psrc in self.core_lifecycle.provider_manager.provider_sources_config
         }
         for provider in ps:
+            if not self._is_owned_by_current_user(provider):
+                continue
             ps_id = provider.get("provider_source_id", None)
             if (
                 ps_id
@@ -934,6 +1064,8 @@ class ConfigRoute(Route):
                     .error(f"未找到 ID 为 {provider_source_id} 的 provider_source")
                     .__dict__
                 )
+            if not self._is_owned_by_current_user(provider_source):
+                return Response().error("Permission denied").__dict__
 
             # 获取 provider 类型
             provider_type = provider_source.get("type", None)
@@ -1257,6 +1389,16 @@ class ConfigRoute(Route):
 
     async def post_new_provider(self):
         new_provider_config = await request.json
+        if denied := self._require_provider_management():
+            return denied
+        if not isinstance(new_provider_config, dict):
+            return Response().error("参数错误").__dict__
+        source_id = new_provider_config.get("provider_source_id")
+        if source_id and not self._is_owned_by_current_user(
+            self._find_provider_source(source_id)
+        ):
+            return Response().error("Permission denied").__dict__
+        self._mark_owned_by_current_user(new_provider_config)
 
         try:
             await self.core_lifecycle.provider_manager.create_provider(
@@ -1299,6 +1441,18 @@ class ConfigRoute(Route):
         new_config = update_provider_config.get("config", None)
         if not origin_provider_id or not new_config:
             return Response().error("参数错误").__dict__
+        if denied := self._require_provider_management():
+            return denied
+        if not self._is_owned_by_current_user(
+            self._find_provider_config(origin_provider_id)
+        ):
+            return Response().error("Permission denied").__dict__
+        source_id = new_config.get("provider_source_id")
+        if source_id and not self._is_owned_by_current_user(
+            self._find_provider_source(source_id)
+        ):
+            return Response().error("Permission denied").__dict__
+        self._mark_owned_by_current_user(new_config)
 
         try:
             await self.core_lifecycle.provider_manager.update_provider(
@@ -1329,6 +1483,10 @@ class ConfigRoute(Route):
         provider_id = provider_id.get("id", "")
         if not provider_id:
             return Response().error("缺少参数 id").__dict__
+        if denied := self._require_provider_management():
+            return denied
+        if not self._is_owned_by_current_user(self._find_provider_config(provider_id)):
+            return Response().error("Permission denied").__dict__
 
         try:
             await self.core_lifecycle.provider_manager.delete_provider(

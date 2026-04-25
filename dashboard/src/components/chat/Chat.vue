@@ -36,6 +36,7 @@
         </div>
 
         <v-btn
+          v-if="canManageProviders"
           class="new-chat-btn sidebar-provider-btn"
           :class="{
             'icon-only': isSidebarCollapsed,
@@ -132,155 +133,28 @@
       </div>
 
       <div class="sidebar-footer">
-        <StyledMenu
-          location="top start"
-          offset="10"
-          :close-on-content-click="false"
+        <v-btn
+          class="settings-btn"
+          :class="{ 'icon-only': isSidebarCollapsed }"
+          variant="text"
+          :icon="isSidebarCollapsed"
+          @click="chatSettingsDialogOpen = true"
         >
-          <template #activator="{ props: menuProps }">
-            <v-btn
-              v-bind="menuProps"
-              class="settings-btn"
-              :class="{ 'icon-only': isSidebarCollapsed }"
-              variant="text"
-              :icon="isSidebarCollapsed"
-            >
-              <v-icon
-                size="20"
-                class="sidebar-action-icon"
-                :class="{ 'mr-2': !isSidebarCollapsed }"
-                >mdi-cog-outline</v-icon
-              >
-              <span v-if="!isSidebarCollapsed">{{
-                t("core.common.settings")
-              }}</span>
-            </v-btn>
-          </template>
-
-          <div class="settings-menu-content">
-            <v-menu
-              location="end"
-              offset="8"
-              open-on-hover
-              :close-on-content-click="true"
-            >
-              <template #activator="{ props: transportMenuProps }">
-                <v-list-item
-                  v-bind="transportMenuProps"
-                  class="styled-menu-item"
-                  rounded="md"
-                >
-                  <template #prepend>
-                    <v-icon size="18">mdi-connection</v-icon>
-                  </template>
-                  <v-list-item-title>{{
-                    tm("transport.title")
-                  }}</v-list-item-title>
-                  <template #append>
-                    <span class="settings-menu-value">{{
-                      currentTransportLabel
-                    }}</span>
-                    <v-icon size="18">mdi-chevron-right</v-icon>
-                  </template>
-                </v-list-item>
-              </template>
-
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
-                <v-list density="compact" class="styled-menu-list pa-1">
-                  <v-list-item
-                    v-for="item in transportOptions"
-                    :key="item.value"
-                    class="styled-menu-item"
-                    :class="{
-                      'styled-menu-item-active': transportMode === item.value,
-                    }"
-                    rounded="md"
-                    @click="transportMode = item.value"
-                  >
-                    <v-list-item-title>{{
-                      tm(item.labelKey)
-                    }}</v-list-item-title>
-                    <template #append>
-                      <v-icon v-if="transportMode === item.value" size="18">
-                        mdi-check
-                      </v-icon>
-                    </template>
-                  </v-list-item>
-                </v-list>
-              </v-card>
-            </v-menu>
-
-            <v-menu
-              location="end"
-              offset="8"
-              open-on-hover
-              :close-on-content-click="true"
-            >
-              <template #activator="{ props: languageMenuProps }">
-                <v-list-item
-                  v-bind="languageMenuProps"
-                  class="styled-menu-item"
-                  rounded="md"
-                >
-                  <template #prepend>
-                    <v-icon size="18">mdi-translate</v-icon>
-                  </template>
-                  <v-list-item-title>{{
-                    t("core.common.language")
-                  }}</v-list-item-title>
-                  <template #append>
-                    <span class="settings-menu-value">{{
-                      currentLanguage?.label || locale
-                    }}</span>
-                    <v-icon size="18">mdi-chevron-right</v-icon>
-                  </template>
-                </v-list-item>
-              </template>
-
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
-                <v-list density="compact" class="styled-menu-list pa-1">
-                  <v-list-item
-                    v-for="lang in languageOptions"
-                    :key="lang.value"
-                    class="styled-menu-item"
-                    :class="{
-                      'styled-menu-item-active': locale === lang.value,
-                    }"
-                    rounded="md"
-                    @click="switchLanguage(lang.value as Locale)"
-                  >
-                    <template #prepend>
-                      <span class="language-flag">{{ lang.flag }}</span>
-                    </template>
-                    <v-list-item-title>{{ lang.label }}</v-list-item-title>
-                    <template #append>
-                      <v-icon v-if="locale === lang.value" size="18">
-                        mdi-check
-                      </v-icon>
-                    </template>
-                  </v-list-item>
-                </v-list>
-              </v-card>
-            </v-menu>
-
-            <v-list-item
-              class="styled-menu-item"
-              rounded="md"
-              @click="toggleTheme"
-            >
-              <template #prepend>
-                <v-icon size="18">{{
-                  isDark ? "mdi-white-balance-sunny" : "mdi-weather-night"
-                }}</v-icon>
-              </template>
-              <v-list-item-title>{{
-                isDark ? tm("modes.lightMode") : tm("modes.darkMode")
-              }}</v-list-item-title>
-            </v-list-item>
-          </div>
-        </StyledMenu>
+          <v-icon
+            size="20"
+            class="sidebar-action-icon"
+            :class="{ 'mr-2': !isSidebarCollapsed }"
+            >mdi-cog-outline</v-icon
+          >
+          <span v-if="!isSidebarCollapsed">{{ t("core.common.settings") }}</span>
+        </v-btn>
       </div>
     </v-navigation-drawer>
+
+    <ChatSettingsDialog
+      v-model="chatSettingsDialogOpen"
+      v-model:transport-mode="transportMode"
+    />
 
     <main
       class="chat-main"
@@ -504,7 +378,6 @@ import {
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
 import axios from "axios";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
 import ProjectDialog, {
   type ProjectFormData,
 } from "@/components/chat/ProjectDialog.vue";
@@ -527,14 +400,11 @@ import {
 } from "@/composables/useMessages";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useProjects } from "@/composables/useProjects";
+import { useAuthStore } from "@/stores/auth";
 import { useCustomizerStore } from "@/stores/customizer";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
-import {
-  useI18n,
-  useLanguageSwitcher,
-  useModuleI18n,
-} from "@/i18n/composables";
-import type { Locale } from "@/i18n/types";
+import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import { useToast } from "@/utils/toast";
 
@@ -547,12 +417,11 @@ const route = useRoute();
 const router = useRouter();
 const { lgAndUp } = useDisplay();
 const customizer = useCustomizerStore();
+const authStore = useAuthStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
-const { languageOptions, currentLanguage, switchLanguage, locale } =
-  useLanguageSwitcher();
 const {
   sessions,
   currSessionId,
@@ -593,6 +462,7 @@ type WorkspaceView = "chat" | "providers";
 const sidebarCollapsed = ref(false);
 const activeWorkspace = ref<WorkspaceView>("chat");
 const projectDialogOpen = ref(false);
+const chatSettingsDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
 const sessionTitleDialogOpen = ref(false);
 const sessionTitleDraft = ref("");
@@ -649,6 +519,7 @@ const isSidebarCollapsed = computed(() =>
 const isProviderWorkspace = computed(
   () => activeWorkspace.value === "providers",
 );
+const canManageProviders = computed(() => authStore.canManageProviders());
 const activeReasoningParts = computed<MessagePart[]>(() => {
   if (!activeReasoningTarget.value) return [];
   const blocks = buildMessageBlocks(
@@ -695,17 +566,6 @@ const transportMode = ref<TransportMode>(
     ? "websocket"
     : "sse",
 );
-const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
-  { value: "sse", labelKey: "transport.sse" },
-  { value: "websocket", labelKey: "transport.websocket" },
-];
-const currentTransportLabel = computed(() =>
-  tm(
-    transportOptions.find((item) => item.value === transportMode.value)
-      ?.labelKey || "transport.sse",
-  ),
-);
-
 watch(transportMode, (mode) => {
   localStorage.setItem("chat.transportMode", mode);
 });
@@ -754,7 +614,7 @@ onMounted(async () => {
     await Promise.all([getSessions(), getProjects()]);
     const routeSessionId = getRouteSessionId();
     if (routeSessionId === "models") {
-      activeWorkspace.value = "providers";
+      activeWorkspace.value = canManageProviders.value ? "providers" : "chat";
     } else if (routeSessionId) {
       await selectSession(routeSessionId, false);
     }
@@ -772,7 +632,7 @@ watch(
   async () => {
     const routeSessionId = getRouteSessionId();
     if (routeSessionId === "models") {
-      activeWorkspace.value = "providers";
+      activeWorkspace.value = canManageProviders.value ? "providers" : "chat";
       return;
     }
     if (routeSessionId && routeSessionId !== currSessionId.value) {
@@ -822,6 +682,9 @@ function showChatWorkspace() {
 }
 
 async function openProviderWorkspace() {
+  if (!canManageProviders.value) {
+    return;
+  }
   closeSecondaryPanels();
   activeWorkspace.value = "providers";
   const targetPath = `${basePath()}/models`;
@@ -1335,9 +1198,6 @@ async function stopCurrentSession() {
   }
 }
 
-function toggleTheme() {
-  customizer.SET_UI_THEME(isDark.value ? "PurpleTheme" : "PurpleThemeDark");
-}
 </script>
 
 <style scoped>
@@ -1539,27 +1399,6 @@ function toggleTheme() {
 .sidebar-footer {
   margin-top: auto;
   padding: 10px 12px 14px;
-}
-
-.settings-menu-content {
-  min-width: 230px;
-  padding: 6px;
-}
-
-.settings-menu-value {
-  color: var(--chat-muted);
-  font-size: 12px;
-  margin-right: 4px;
-  max-width: 92px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.language-flag {
-  display: inline-block;
-  width: 20px;
-  margin-right: 8px;
 }
 
 .chat-main {
