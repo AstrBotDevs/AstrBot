@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
@@ -140,6 +141,8 @@ class WecomServer:
 
 @register_platform_adapter("wecom", "wecom 适配器", support_streaming_message=False)
 class WecomPlatformAdapter(Platform):
+    WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS = 15
+
     def __init__(
         self,
         platform_config: dict,
@@ -166,6 +169,7 @@ class WecomPlatformAdapter(Platform):
 
         self.server = WecomServer(self._event_queue, self.config)
         self.agent_id: str | None = None
+        self._wechat_kf_seen_text_messages: dict[str, float] = {}
 
         self.client = WeChatClient(
             self.config["corpid"].strip(),
@@ -209,6 +213,28 @@ class WecomPlatformAdapter(Platform):
             await self.convert_message(msg)
 
         self.server.callback = callback
+
+    def _is_duplicate_wechat_kf_text_message(self, session_id: str, text: str) -> bool:
+        normalized_text = text.strip()
+        if not normalized_text:
+            return False
+
+        now = time.monotonic()
+        expired_keys = [
+            key
+            for key, expires_at in self._wechat_kf_seen_text_messages.items()
+            if expires_at <= now
+        ]
+        for key in expired_keys:
+            self._wechat_kf_seen_text_messages.pop(key, None)
+
+        dedup_key = f"{session_id}:{normalized_text}"
+        if dedup_key in self._wechat_kf_seen_text_messages:
+            return True
+        self._wechat_kf_seen_text_messages[dedup_key] = (
+            now + self.WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS
+        )
+        return False
 
     @override
     async def send_by_session(
@@ -390,6 +416,13 @@ class WecomPlatformAdapter(Platform):
         abm.message_str = ""
         if msgtype == "text":
             text = msg.get("text", {}).get("content", "").strip()
+            if self._is_duplicate_wechat_kf_text_message(abm.session_id, text):
+                logger.debug(
+                    "忽略 15 秒内重复微信客服文本消息 session_id=%s text=%s",
+                    abm.session_id,
+                    text,
+                )
+                return None
             abm.message = [Plain(text=text)]
             abm.message_str = text
         elif msgtype == "image":
