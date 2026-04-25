@@ -216,7 +216,7 @@ class Message(BaseModel):
             return self
 
         # assistant + reasoning_content is not None: allow content to be None
-        if self.role == "assistant" and self.reasoning_content:
+        if self.role == "assistant" and self.reasoning_content is not None:
             return self
 
         # other all cases: content is required
