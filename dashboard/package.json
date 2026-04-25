@@ -61,7 +61,7 @@
     "eslint": "8.48.0",
     "eslint-plugin-vue": "9.17.0",
     "prettier": "3.0.2",
-    "sass": "1.66.1",
+    "sass": "1.98.0",
     "sass-loader": "13.3.2",
     "subset-font": "^2.4.0",
     "typescript": "5.1.6",
