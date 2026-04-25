@@ -24,7 +24,7 @@ class ChatWidget(Route):
         self.open_api = open_api
         self.routes = {
             "/widget/send": ("POST", self.send),
-            "/widget/history": ("POST", self.history),
+            "/widget/history": ("GET", self.history),
             "/widget/file": ("GET", self.file_get),
             "/widget/filename": ("GET", self.filename_get),
             "/widget/upload": ("POST", self.file_upload),

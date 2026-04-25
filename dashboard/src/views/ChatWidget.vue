@@ -50,6 +50,11 @@ const imagePreview = reactive({ visible: false, url: "" });
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
 const customMarkdownTags = ["ref"];
 
+const apiStatusError = ref(false);
+const apiErrorMsg = ref("");
+
+const attachmentEnabled = ref(true); // 是否明确开启文件功能
+
 const route = useRoute();
 
 // 从urlQuery获取api封包信息
@@ -60,11 +65,27 @@ const api_package: Record<string, string> = {
   expiry_date: route.query?.expiry_date as string ?? '',
   signature: route.query?.signature as string ?? '',
 };
+let api_decode_data = ref({} as Record<string, any>);
+
 // 解包后的请求参数
-const api_decode_data = JSON.parse(atob(api_package.data as string));
-currSessionId.value = api_decode_data.session_id;
-// 是否明确开启文件功能
-const attachmentEnabled = ref(api_decode_data?.file_upload === true);
+try {
+  api_decode_data.value = JSON.parse(
+      new TextDecoder().decode(
+          Uint8Array.from(
+              atob(api_package.data as string),
+              c => c.charCodeAt(0)
+          )
+      )
+  );
+  if (!api_decode_data.value?.session_id) throw new Error('args `session_id` is miss')
+  if (!api_decode_data.value?.username) throw new Error('args `username` is miss')
+  currSessionId.value = api_decode_data.value.session_id;
+  attachmentEnabled.value = api_decode_data.value?.file_upload === true;
+} catch (err) {
+  apiErrorMsg.value = err.message;
+  apiStatusError.value = true;
+  console.error(err);
+}
 
 const {
   stagedFiles,
@@ -79,7 +100,7 @@ const {
   removeFile,
   clearStaged,
   cleanupMediaCache,
-  setUpChatWidGetPackage,
+  chatWidgetSetApiPackage,
 } = useMediaHandling();
 
 const {
@@ -91,10 +112,10 @@ const {
   messageContent,
   messageParts,
   createLocalExchange,
-  widgetStopSession,
-  widgetStartSseStream,
-  widgetLoadSessionMessages,
-  setChatWidGetPackage,
+  startSseStream,
+  loadSessionMessages,
+  widgetSetApiPackage,
+  stopSession,
 } = useMessages({
   currentSessionId: currSessionId,
   onStreamUpdate: () => {
@@ -107,13 +128,13 @@ const {
 onMounted(async () => {
   inputRef.value?.focusInput();
   initializing.value = true
-  setUpChatWidGetPackage(api_package);
-  setChatWidGetPackage(api_package);
-  widgetLoadSessionMessages(api_decode_data.session_id ?? '')
-      .then()
-      .finally(() => {
-        initializing.value = false
-      });
+  chatWidgetSetApiPackage(api_package);
+  widgetSetApiPackage(api_package);
+  loadSessionMessages(api_decode_data.value?.session_id,)
+    .then()
+    .finally(() => {
+      initializing.value = false
+    });
 });
 
 onBeforeUnmount(() => {
@@ -122,18 +143,20 @@ onBeforeUnmount(() => {
 
 async function sendCurrentMessage() {
   if (!draft.value.trim() && !stagedFiles.value.length) return;
-  const sessionId = api_decode_data.session_id ?? '';
+  const sessionId = api_decode_data.value.session_id ?? '';
   const text = draft.value.trim();
   const parts = buildOutgoingParts(text);
   const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
   const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
-
-  widgetStartSseStream(
+  startSseStream(
     sessionId,
     messageId,
     parts,
     botRecord,
+    undefined,
     enableStreaming.value,
+  '',
+    '',
   );
   // 先发请求再清理，chrome清理太快图片会显示异常
   draft.value = "";
@@ -167,7 +190,7 @@ function hasNonReasoningContent(message: ChatRecord) {
 
 async function stopCurrentSession() {
   if (!currSessionId.value) return;
-  await widgetStopSession(currSessionId.value);
+  await stopSession(currSessionId.value);
 }
 
 async function handleFilesSelected(files: FileList) {
@@ -268,8 +291,9 @@ function closeImage() {
   <v-app :theme="customizer.uiTheme" style="height: 100%; width: 100%">
     <div style="height: 100%;width: 100%;display: flex;flex-direction: column;align-items: center;justify-content: center;">
       <div id="container">
+        <div v-if="apiStatusError" class="api_error">Api请求异常：{{ apiErrorMsg }}</div>
 
-        <div class="standalone-chat">
+        <div v-else class="standalone-chat">
           <section ref="messagesContainer" class="standalone-messages">
             <div v-if="initializing" class="standalone-state">
               <v-progress-circular indeterminate size="28" width="3"/>
@@ -560,5 +584,10 @@ function closeImage() {
   max-height: 88vh;
   border-radius: 8px;
   object-fit: contain;
+}
+.api_error {
+  color: #c70404;
+  font-size: 16px;
+  padding: 20px;
 }
 </style>

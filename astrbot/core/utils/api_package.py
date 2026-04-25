@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import secrets
+import hmac
 from datetime import datetime, timedelta, timezone
 
 from quart import request
@@ -30,13 +31,15 @@ def de_package(apikey: str, data: str, noise: str, expiry_date: str, signature: 
     payload = f"{data}{noise}{expiry_date}{apikey}"
     computed = hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-    if computed != signature:
+    if not hmac.compare_digest(computed, signature):
         raise InvalidSignatureError("signature error")
 
-    # 5. 解码数据
-    decoded_bytes = base64.b64decode(data)
-    decoded_str = decoded_bytes.decode("utf-8")
-    result = json.loads(decoded_str)
+    try:
+        decoded_bytes = base64.b64decode(data)
+        decoded_str = decoded_bytes.decode("utf-8")
+        result = json.loads(decoded_str)
+    except Exception as e:
+        raise InvalidSignatureError(f"failed to decode data: {e}")
 
     return result
 
@@ -73,10 +76,10 @@ async def request_input(name: list) -> dict:
             if item in form_data:
                 return_data[item] = form_data[item]
                 continue
-        if request.args.get(item):
+        if item in request.args:
             return_data[item] = request.args.get(item)
             continue
-        if request.headers.get(item):
+        if item in request.headers:
             return_data[item] = request.headers.get(item)
             continue
     return return_data

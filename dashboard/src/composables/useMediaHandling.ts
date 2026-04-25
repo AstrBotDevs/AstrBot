@@ -16,7 +16,7 @@ export function useMediaHandling() {
     const mediaCache = ref<Record<string, string>>({});
     const pendingFileSignatures = new Set<string>();
     let chatWidgetApi = false;
-    let chatWidgetApiPackage: Record<any, any> | null = null;
+    let chatWidgetApiPackage: Record<string, string> | null = null;
 
     async function getFileSignature(file: File): Promise<string> {
         if (crypto?.subtle) {
@@ -200,7 +200,7 @@ export function useMediaHandling() {
         stagedFiles.value.filter(f => f.type !== 'image')
     );
 
-    function setUpChatWidGetPackage(apiPackage: Record<any, any>) {
+    function chatWidgetSetApiPackage(apiPackage: Record<string, string>) {
         chatWidgetApi = true;
         chatWidgetApiPackage = apiPackage
     }
@@ -219,6 +219,6 @@ export function useMediaHandling() {
         removeFile,
         clearStaged,
         cleanupMediaCache,
-        setUpChatWidGetPackage,
+        chatWidgetSetApiPackage,
     };
 }
