@@ -2,18 +2,23 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+from jinja2.sandbox import SandboxedEnvironment
 
 import astrbot.core.utils.t2i.network_strategy as network_strategy
 from astrbot.core.utils.t2i.network_strategy import (
-    NetworkRenderStrategy,
     SHIKI_RUNTIME_SCRIPT_ID,
+    NetworkRenderStrategy,
     inject_shiki_runtime,
 )
 from astrbot.core.utils.t2i.template_manager import TemplateManager
 
-
 TEMPLATE_DIR = (
-    Path(__file__).resolve().parents[2] / "astrbot" / "core" / "utils" / "t2i" / "template"
+    Path(__file__).resolve().parents[2]
+    / "astrbot"
+    / "core"
+    / "utils"
+    / "t2i"
+    / "template"
 )
 
 
@@ -137,7 +142,26 @@ def test_inject_shiki_runtime_adds_runtime_before_head_close(monkeypatch) -> Non
 
     assert f'id="{SHIKI_RUNTIME_SCRIPT_ID}"' in injected
     assert "window.AstrBotT2IShiki = {};" in injected
+    assert "{% raw %}" in injected
+    assert "{% endraw %}" in injected
     assert injected.index(SHIKI_RUNTIME_SCRIPT_ID) < injected.lower().index("</head>")
+
+
+def test_injected_shiki_runtime_survives_jinja_render() -> None:
+    html = "<html><head></head><body>{{ text | safe }}</body></html>"
+
+    rendered = (
+        SandboxedEnvironment()
+        .from_string(inject_shiki_runtime(html))
+        .render(
+            {"text": "hello"},
+        )
+    )
+
+    assert f'id="{SHIKI_RUNTIME_SCRIPT_ID}"' in rendered
+    assert "{% raw %}" not in rendered
+    assert "{% endraw %}" not in rendered
+    assert "hello" in rendered
 
 
 def test_inject_shiki_runtime_keeps_legacy_placeholder_templates(monkeypatch) -> None:
@@ -180,6 +204,8 @@ async def test_render_custom_template_injects_runtime_without_template_data(
     assert result == "image.png"
     assert f'id="{SHIKI_RUNTIME_SCRIPT_ID}"' in captured["post_data"]["tmpl"]
     assert "shiki_runtime" not in captured["post_data"]["tmpldata"]
+    assert captured["post_data"]["options"]["quality"] == 40
+    assert "device_scale_factor_level" not in captured["post_data"]["options"]
 
 
 @pytest.mark.asyncio

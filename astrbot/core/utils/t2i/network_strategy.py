@@ -56,7 +56,11 @@ def inject_shiki_runtime(tmpl_str: str) -> str:
     if not runtime:
         return tmpl_str
 
-    script = f'<script id="{SHIKI_RUNTIME_SCRIPT_ID}">{runtime}</script>'
+    script = (
+        "{% raw %}"
+        f'<script id="{SHIKI_RUNTIME_SCRIPT_ID}">{runtime}</script>'
+        "{% endraw %}"
+    )
     head_close = re.search(r"</head\s*>", tmpl_str, flags=re.IGNORECASE)
     if head_close:
         return f"{tmpl_str[: head_close.start()]}  {script}\n{tmpl_str[head_close.start() :]}"
@@ -121,7 +125,11 @@ class NetworkRenderStrategy(RenderStrategy):
         options: dict | None = None,
     ) -> str:
         """使用自定义文转图模板"""
-        default_options = {"full_page": True, "type": "jpeg", "quality": 40}
+        default_options = {
+            "full_page": True,
+            "type": "jpeg",
+            "quality": 40,
+        }
         if options:
             default_options |= options
 
