@@ -445,9 +445,9 @@ class ProviderOpenAIOfficial(Provider):
         try:
             from openai import _base_client as openai_base_client
 
-            httpx_module = openai_base_client.httpx
-        except Exception:
-            httpx_module = httpx
+            httpx_module = getattr(openai_base_client, "httpx", httpx)
+        except ImportError:
+            pass
         return create_proxy_client("OpenAI", proxy, httpx_module=httpx_module)
 
     def __init__(self, provider_config, provider_settings) -> None:

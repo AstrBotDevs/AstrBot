@@ -1,3 +1,4 @@
+import builtins
 from types import SimpleNamespace
 
 import pytest
@@ -78,6 +79,39 @@ def test_create_http_client_uses_openai_httpx_module(monkeypatch):
     from openai import _base_client as openai_base_client
 
     assert captured["httpx_module"] is openai_base_client.httpx
+
+
+def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_create_proxy_client(
+        provider_label: str,
+        proxy: str | None = None,
+        headers: dict[str, str] | None = None,
+        verify=None,
+        httpx_module=None,
+    ):
+        captured["httpx_module"] = httpx_module
+        return object()
+
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "openai" and fromlist:
+            raise ImportError("missing openai._base_client")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(
+        openai_source_module,
+        "create_proxy_client",
+        fake_create_proxy_client,
+    )
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
+    provider._create_http_client({"proxy": ""})
+
+    assert captured["httpx_module"] is openai_source_module.httpx
 
 
 @pytest.mark.asyncio
