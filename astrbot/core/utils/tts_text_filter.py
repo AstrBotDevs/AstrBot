@@ -65,7 +65,7 @@ class FilteredQueue:
         self._real_queue = real_queue
         self._custom_rules = custom_rules
 
-    async def get(self):
+    async def get(self) -> str | None:
         while True:
             item = await self._real_queue.get()
             if item is None:
