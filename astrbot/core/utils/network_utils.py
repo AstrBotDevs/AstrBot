@@ -5,8 +5,8 @@ import ssl
 import httpx
 
 from astrbot import logger
-
 from astrbot.utils.http_ssl_common import build_ssl_context_with_certifi
+
 _SYSTEM_SSL_CTX = build_ssl_context_with_certifi()
 
 
