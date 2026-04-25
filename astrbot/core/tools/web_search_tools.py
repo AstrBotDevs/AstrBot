@@ -76,11 +76,6 @@ _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
 _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
 _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
-_FIRECRAWL_BASE_URL = "https://api.firecrawl.dev/v2"
-
-
-class FirecrawlAPIError(RuntimeError):
-    pass
 
 
 def _coerce_int(value, default: int, minimum: int, maximum: int) -> int:
@@ -285,54 +280,66 @@ async def _firecrawl_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    data = await _firecrawl_post(provider_settings, "search", payload)
-    rows = data.get("data", [])
-    if isinstance(rows, dict):
-        rows = rows.get("web", [])
-    return [
-        SearchResult(
-            title=item.get("title", ""),
-            url=item.get("url", ""),
-            snippet=(
-                item.get("description")
-                or item.get("snippet")
-                or item.get("markdown")
-                or ""
-            ),
-        )
-        for item in rows
-        if item.get("url")
-    ]
-
-
-async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
-    data = await _firecrawl_post(provider_settings, "scrape", payload)
-    result = data.get("data", {})
-    if not result:
-        raise ValueError("Error: Firecrawl web scraper does not return any results.")
-    return result
-
-
-async def _firecrawl_post(
-    provider_settings: dict, endpoint: str, payload: dict
-) -> dict:
     firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
-    headers = {
+    header = {
         "Authorization": f"Bearer {firecrawl_key}",
         "Content-Type": "application/json",
     }
     async with aiohttp.ClientSession(trust_env=True) as session:
         async with session.post(
-            f"{_FIRECRAWL_BASE_URL}/{endpoint}",
+            "https://api.firecrawl.dev/v2/search",
             json=payload,
-            headers=headers,
+            headers=header,
         ) as response:
             if response.status != 200:
                 reason = await response.text()
-                raise FirecrawlAPIError(
-                    f"Firecrawl {endpoint} failed: {reason}, status: {response.status}",
+                raise Exception(
+                    f"Firecrawl web search failed: {reason}, status: {response.status}",
                 )
-            return await response.json()
+            data = await response.json()
+            rows = data.get("data", [])
+            if isinstance(rows, dict):
+                rows = rows.get("web", [])
+            return [
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("url", ""),
+                    snippet=(
+                        item.get("description")
+                        or item.get("snippet")
+                        or item.get("markdown")
+                        or ""
+                    ),
+                )
+                for item in rows
+                if item.get("url")
+            ]
+
+
+async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
+    firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
+    header = {
+        "Authorization": f"Bearer {firecrawl_key}",
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            "https://api.firecrawl.dev/v2/scrape",
+            json=payload,
+            headers=header,
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    f"Firecrawl web scraper failed: {reason}, status: {response.status}",
+                )
+            data = await response.json()
+            result = data.get("data", {})
+            if not result:
+                raise ValueError(
+                    "Error: Firecrawl web scraper does not return any results."
+                )
+            return result
 
 
 async def _baidu_search(
