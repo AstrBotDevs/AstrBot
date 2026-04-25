@@ -78,16 +78,6 @@ _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
 _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
 
 
-def _coerce_int(value, default: int, minimum: int, maximum: int) -> int:
-    if value is None:
-        value = default
-    try:
-        coerced = int(value)
-    except (TypeError, ValueError):
-        coerced = default
-    return max(minimum, min(maximum, coerced))
-
-
 def normalize_legacy_web_search_config(cfg) -> None:
     provider_settings = cfg.get("provider_settings")
     if not provider_settings:
@@ -671,11 +661,9 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_firecrawl_key", []):
             return "Error: Firecrawl API key is not configured in AstrBot."
 
-        limit = _coerce_int(kwargs.get("limit"), 5, 1, 100)
-
         payload = {
             "query": kwargs["query"],
-            "limit": limit,
+            "limit": kwargs.get("limit", 5),
             "sources": ["web"],
         }
         for key in ("location", "country", "timeout"):

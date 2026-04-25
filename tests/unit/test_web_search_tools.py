@@ -145,7 +145,7 @@ async def test_firecrawl_search_maps_v2_grouped_web_data(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_firecrawl_search_payload_omits_tbs_and_handles_null_limit(monkeypatch):
+async def test_firecrawl_search_payload_omits_tbs_and_uses_default_limit(monkeypatch):
     async def fake_firecrawl_search(provider_settings, payload):
         assert payload == {
             "query": "AstrBot",
@@ -170,7 +170,6 @@ async def test_firecrawl_search_payload_omits_tbs_and_handles_null_limit(monkeyp
     result = await tool.call(
         context,
         query="AstrBot",
-        limit=None,
         tbs="qdr:d",
         country="US",
     )
