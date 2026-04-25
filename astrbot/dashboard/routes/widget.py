@@ -68,5 +68,4 @@ class ChatWidget(Route):
 
     async def stop(self):
         api_package = g.api_package
-        print(g.username)
         return await self.chat_route.stop_session(api_package)

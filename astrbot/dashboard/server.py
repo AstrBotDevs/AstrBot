@@ -243,7 +243,6 @@ class AstrBotDashboard:
                 # 设置全局参数
                 g.username = username
                 g.api_package = pkg_data
-                print(pkg_data)
                 # 权限
                 if isinstance(api_key.scopes, list):
                     scopes = api_key.scopes
