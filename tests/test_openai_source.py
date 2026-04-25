@@ -1618,3 +1618,36 @@ async def test_query_does_not_filter_user_or_system_messages(monkeypatch):
         assert messages[2] == {"role": "user", "content": "hello"}
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_adds_deepseek_reasoning_content_for_tool_continuation():
+    provider = _make_provider({"model": "deepseek/deepseek-v4-flash"})
+    try:
+        payloads = {
+            "model": "deepseek/deepseek-v4-flash",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call-123",
+                            "type": "function",
+                            "function": {"name": "test", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call-123", "content": "result"},
+            ],
+        }
+
+        provider._finally_convert_payload(payloads)
+        provider._clean_chat_payload_messages(payloads)
+
+        messages = payloads["messages"]
+        assert messages[1]["content"] is None
+        assert messages[1]["reasoning_content"] == ""
+    finally:
+        await provider.terminate()

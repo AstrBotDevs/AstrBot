@@ -524,6 +524,31 @@ class ProviderOpenAIOfficial(Provider):
         except NotFoundError as e:
             raise Exception(f"获取模型列表失败：{e}")
 
+    def _clean_chat_payload_messages(self, payloads: dict) -> None:
+        if "messages" not in payloads or not isinstance(payloads["messages"], list):
+            return
+
+        cleaned_messages = []
+        for idx, msg in enumerate(payloads["messages"]):
+            if not isinstance(msg, dict):
+                cleaned_messages.append(msg)
+                continue
+
+            if msg.get("role") == "assistant":
+                content = msg.get("content")
+                tool_calls = msg.get("tool_calls")
+
+                if not tool_calls and (content == "" or content is None):
+                    logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
+                    continue
+
+                if content == "" and tool_calls:
+                    msg["content"] = None
+
+            cleaned_messages.append(msg)
+
+        payloads["messages"] = cleaned_messages
+
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
@@ -553,26 +578,7 @@ class ProviderOpenAIOfficial(Provider):
 
         model = payloads.get("model", "").lower()
 
-        if "messages" in payloads and isinstance(payloads["messages"], list):
-            cleaned_messages = []
-            for idx, msg in enumerate(payloads["messages"]):
-                # 过滤空的 assistant 消息，防止严格 API（如 Moonshot）返回 400 错误
-                if msg.get("role") == "assistant":
-                    content = msg.get("content")
-                    tool_calls = msg.get("tool_calls")
-
-                    # 情况1: 空/null content 且无 tool_calls -> 过滤掉
-                    if not tool_calls and (content == "" or content is None):
-                        logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
-                        continue
-
-                    # 情况2: 空 content 但有 tool_calls -> 设为 None (符合 OpenAI 规范)
-                    if content == "" and tool_calls:
-                        msg["content"] = None
-
-                cleaned_messages.append(msg)
-
-            payloads["messages"] = cleaned_messages
+        self._clean_chat_payload_messages(payloads)
 
         completion = await self.client.chat.completions.create(
             **payloads,
@@ -623,6 +629,7 @@ class ProviderOpenAIOfficial(Provider):
         for key in to_del:
             del payloads[key]
         self._apply_provider_specific_extra_body_overrides(extra_body)
+        self._clean_chat_payload_messages(payloads)
 
         stream = await self.client.chat.completions.create(
             **payloads,
@@ -688,6 +695,15 @@ class ProviderOpenAIOfficial(Provider):
 
         yield llm_response
 
+    def _get_openai_extra_attr(self, obj: Any, key: str) -> Any:
+        value = getattr(obj, key, None)
+        if value is not None:
+            return value
+        model_extra = getattr(obj, "model_extra", None)
+        if isinstance(model_extra, dict):
+            return model_extra.get(key)
+        return None
+
     def _extract_reasoning_content(
         self,
         completion: ChatCompletion | ChatCompletionChunk,
@@ -698,12 +714,14 @@ class ProviderOpenAIOfficial(Provider):
             return reasoning_text
         if isinstance(completion, ChatCompletion):
             choice = completion.choices[0]
-            reasoning_attr = getattr(choice.message, self.reasoning_key, None)
+            reasoning_attr = self._get_openai_extra_attr(
+                choice.message, self.reasoning_key
+            )
             if reasoning_attr:
                 reasoning_text = str(reasoning_attr)
         elif isinstance(completion, ChatCompletionChunk):
             delta = completion.choices[0].delta
-            reasoning_attr = getattr(delta, self.reasoning_key, None)
+            reasoning_attr = self._get_openai_extra_attr(delta, self.reasoning_key)
             if reasoning_attr:
                 reasoning_text = str(reasoning_attr)
         return reasoning_text
@@ -969,6 +987,30 @@ class ProviderOpenAIOfficial(Provider):
 
         return payloads, context_query
 
+    def _is_deepseek_model(self, model: str | None = None) -> bool:
+        model = (model or self.get_model() or "").lower()
+        api_base = str(self.provider_config.get("api_base", "")).lower()
+        return "deepseek" in model or "deepseek" in api_base
+
+    def _ensure_deepseek_tool_reasoning_content(self, payloads: dict) -> None:
+        if not self._is_deepseek_model(payloads.get("model")):
+            return
+
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
+            return
+
+        for idx, message in enumerate(messages):
+            if not isinstance(message, dict):
+                continue
+            if message.get("role") != "assistant" or not message.get("tool_calls"):
+                continue
+            if self.reasoning_key in message:
+                continue
+            next_message = messages[idx + 1] if idx + 1 < len(messages) else None
+            if isinstance(next_message, dict) and next_message.get("role") == "tool":
+                message[self.reasoning_key] = ""
+
     def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
         model = payloads.get("model", "").lower()
@@ -1002,6 +1044,8 @@ class ProviderOpenAIOfficial(Provider):
                         message["content"] = json.dumps(
                             {"result": content}, ensure_ascii=False
                         )
+
+        self._ensure_deepseek_tool_reasoning_content(payloads)
 
     async def _handle_api_error(
         self,
