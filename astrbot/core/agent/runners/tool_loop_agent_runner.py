@@ -1296,8 +1296,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     tool_choice="required",
                     abort_signal=self._abort_signal,
                 )
-                if requery_resp:
+                if (
+                    requery_resp
+                    and requery_resp.tools_call_name
+                    and len(requery_resp.tools_call_name)
+                    == len(requery_resp.tools_call_ids)
+                    == len(requery_resp.tools_call_args)
+                    > 0
+                ):
                     llm_resp = requery_resp
+                else:
+                    logger.warning(
+                        "LLM returned invalid or no tool calls during 'skills_like' parameter re-query. "
+                        "Falling back to original light-schema response to avoid empty tool_calls error."
+                    )
 
                 # If the re-query still returns no tool calls, and also does not have a meaningful assistant reply,
                 # we consider it as a failure of the LLM to follow the tool-use instruction,
