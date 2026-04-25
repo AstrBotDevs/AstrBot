@@ -23,6 +23,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
 
+from ..core.utils import api_package
 from .routes import *
 from .routes.api_key import ALL_OPEN_API_SCOPES
 from .routes.backup import BackupRoute
@@ -33,7 +34,6 @@ from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
 from .routes.widget import ChatWidget
-from ..core.utils import api_package
 
 # Static assets shipped inside the wheel (built during `hatch build`).
 _BUNDLED_DIST = Path(__file__).parent / "dist"
@@ -209,14 +209,14 @@ class AstrBotDashboard:
         if request.path.startswith("/api/widget"):
             try:
                 post_data = await api_package.request_input([
-                    'appid',
-                    'data',
-                    'noise',
-                    'expiry_date',
-                    'signature',
+                    "appid",
+                    "data",
+                    "noise",
+                    "expiry_date",
+                    "signature",
                 ])
                 # 读取apikey
-                appid = post_data.get('appid')
+                appid = post_data.get("appid")
                 if not appid:
                     r = jsonify(Response().error("appid is empty").__dict__)
                     r.status_code = 403
@@ -229,17 +229,17 @@ class AstrBotDashboard:
                 # 验证
                 pkg_data = api_package.de_package(
                     api_key.key_hash,
-                    post_data.get('data', ''),
-                    post_data.get('noise', ''),
-                    post_data.get('expiry_date', ''),
-                    post_data.get('signature', ''),
+                    post_data.get("data", ""),
+                    post_data.get("noise", ""),
+                    post_data.get("expiry_date", ""),
+                    post_data.get("signature", ""),
                 )
                 if "username" not in pkg_data:
                     r = jsonify(Response().error("username is required").__dict__)
                     r.status_code = 401
                     return r
-                username = "widget." + pkg_data['username'] # 增加前缀，
-                pkg_data['username'] = username
+                username = "widget." + pkg_data["username"] # 增加前缀，
+                pkg_data["username"] = username
                 # 设置全局参数
                 g.username = username
                 g.api_package = pkg_data

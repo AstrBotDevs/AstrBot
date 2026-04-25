@@ -1,10 +1,10 @@
 import base64
-import binascii
 import hashlib
 import json
 import secrets
 from datetime import datetime, timedelta, timezone
-from quart import Quart, g, jsonify, request
+
+from quart import request
 
 
 class InvalidSignatureError(Exception):
@@ -47,7 +47,7 @@ def en_package(appid: str, apikey: str, data: dict) -> dict:
     ).decode("utf-8")
     noise = secrets.token_urlsafe(32)
     expiry_date = (datetime.now().astimezone() + timedelta(days=1)).replace(microsecond=0).isoformat()
-    signature = hashlib.sha256(f"{encode_data}{noise}{expiry_date}{apikey}".encode("utf-8")).hexdigest()
+    signature = hashlib.sha256(f"{encode_data}{noise}{expiry_date}{apikey}".encode()).hexdigest()
 
     return {
         "appid": appid,
