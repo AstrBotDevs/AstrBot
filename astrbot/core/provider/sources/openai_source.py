@@ -978,7 +978,7 @@ class ProviderOpenAIOfficial(Provider):
                 # Some providers (Grok, etc.) reject empty content lists.
                 # When all parts were think blocks, fall back to None.
                 message["content"] = new_content or None
-                if reasoning_content:
+                if reasoning_content and not message.get("reasoning_content"):
                     message["reasoning_content"] = reasoning_content
 
             # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
