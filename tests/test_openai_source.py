@@ -1376,6 +1376,67 @@ async def test_query_filters_null_content_assistant_message_without_tool_calls(
 
 
 @pytest.mark.asyncio
+async def test_query_keeps_reasoning_only_assistant_message(monkeypatch):
+    """Test that reasoning-only assistant messages are preserved for thinking models."""
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "ok",
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            )
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "reasoning_content": "deepseek reasoning",
+                },
+                {"role": "user", "content": "world"},
+            ],
+        }
+
+        await provider._query(payloads=payloads, tools=None)
+
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 3
+        assert messages[1] == {
+            "role": "assistant",
+            "content": None,
+            "reasoning_content": "deepseek reasoning",
+        }
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_query_converts_empty_content_to_none_with_tool_calls(monkeypatch):
     """Test that empty content with tool_calls is converted to None (OpenAI spec)."""
     provider = _make_provider()
