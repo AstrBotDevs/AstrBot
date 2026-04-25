@@ -156,10 +156,11 @@ async def test_firecrawl_post_uses_shared_request_setup(monkeypatch):
         _FakeFirecrawlResponse(status=200, json_data={"success": True})
     )
 
-    async def fake_get_web_search_session():
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
         return session
 
-    monkeypatch.setattr(tools, "_get_web_search_session", fake_get_web_search_session)
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
 
     result = await tools._firecrawl_post(
         {"websearch_firecrawl_key": ["firecrawl-key"]},
@@ -168,6 +169,9 @@ async def test_firecrawl_post_uses_shared_request_setup(monkeypatch):
     )
 
     assert result == {"success": True}
+    assert session.trust_env is True
+    assert session.entered is True
+    assert session.exited is True
     assert session.posted == {
         "url": "https://api.firecrawl.dev/v2/search",
         "json": {"query": "AstrBot"},
@@ -184,10 +188,11 @@ async def test_firecrawl_post_raises_api_error_for_http_errors(monkeypatch):
         _FakeFirecrawlResponse(status=401, text_data="Unauthorized")
     )
 
-    async def fake_get_web_search_session():
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
         return session
 
-    monkeypatch.setattr(tools, "_get_web_search_session", fake_get_web_search_session)
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
 
     with pytest.raises(
         tools.FirecrawlAPIError,
@@ -198,6 +203,10 @@ async def test_firecrawl_post_raises_api_error_for_http_errors(monkeypatch):
             "scrape",
             {"url": "https://example.com"},
         )
+
+    assert session.trust_env is True
+    assert session.entered is True
+    assert session.exited is True
 
 
 class _FakeFirecrawlResponse:
@@ -223,12 +232,16 @@ class _FakeFirecrawlSession:
     def __init__(self, response):
         self.response = response
         self.trust_env = None
+        self.entered = False
+        self.exited = False
         self.posted = None
 
     async def __aenter__(self):
+        self.entered = True
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
+        self.exited = True
         return None
 
     def post(self, url, json, headers):
