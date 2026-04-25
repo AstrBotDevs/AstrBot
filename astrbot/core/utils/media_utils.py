@@ -436,19 +436,37 @@ async def compress_image(
     optimize = IMAGE_COMPRESS_DEFAULT_OPTIMIZE
     min_file_size_bytes = int(IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB * 1024 * 1024)
     data = None
+
+    def _exceeds_max_size_bytes(raw: bytes) -> bool:
+        try:
+            with PILImage.open(io.BytesIO(raw)) as opened_img:
+                return max(opened_img.size) > max_size
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _exceeds_max_size_path(path: Path) -> bool:
+        try:
+            with PILImage.open(path) as opened_img:
+                return max(opened_img.size) > max_size
+        except Exception:  # noqa: BLE001
+            return False
+
     # Skip compression for remote images and return the original value.
     if url_or_path.startswith("http"):
         return url_or_path
     elif url_or_path.startswith("data:image"):
         _header, encoded = url_or_path.split(",", 1)
         data = base64.b64decode(encoded)
-        if len(data) < min_file_size_bytes:
+        if len(data) < min_file_size_bytes and not _exceeds_max_size_bytes(data):
             return url_or_path
     else:
         local_path = Path(url_or_path)
         if not local_path.exists():
             return url_or_path
-        if local_path.stat().st_size < min_file_size_bytes:
+        if (
+            local_path.stat().st_size < min_file_size_bytes
+            and not _exceeds_max_size_path(local_path)
+        ):
             return url_or_path
         with local_path.open("rb") as f:
             data = f.read()
