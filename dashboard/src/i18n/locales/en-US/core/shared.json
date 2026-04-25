@@ -96,7 +96,7 @@
     "save": "Save",
     "livePreview": "Live Preview (may differ)",
     "refreshPreview": "Refresh Preview",
-    "previewText": "# AstrBot T2I Preview\n\n> Use this to check Markdown, syntax highlighting, tables, math, and multiline text.\n\n## Render Checklist\n\n- [x] Headings and lists\n- [x] Shiki syntax highlighting\n- [x] Tables and blockquotes\n- [x] Inline math $E = mc^2$\n\n| Module | Status | Notes |\n| --- | --- | --- |\n| Markdown | OK | Supports bold text, lists, and tables |\n| Shiki | Verify | The Python code below should be highlighted |\n\n```python\nfrom astrbot.api.event import filter\n\n@filter.command('hello')\nasync def hello(event):\n    name = event.get_sender_name()\n    yield event.plain_result(f'Hello, {name}!')\n```\n\n```yaml\nprovider: openai\nfeatures:\n  - markdown\n  - shiki\n  - katex\n```\n\nRender complete: if code blocks are colored, tables align, and math renders, the template preview is basically working.",
+    "previewText": "This is a sample text used to preview the template output.\n\nIt can contain multiple lines and various formatting.",
     "syntaxHint": "Supports jinja2 syntax. Available variables: text | safe (text to render), version (AstrBot version). If the preview test content does not load or looks wrong, click Reset Base to restore the default template.",
     "saveAndApply": "Save and Apply Current Template",
     "confirmReset": "Confirm Reset",

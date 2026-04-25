@@ -96,7 +96,7 @@
     "save": "保存",
     "livePreview": "实时预览(可能有差异)",
     "refreshPreview": "刷新预览",
-    "previewText": "# AstrBot T2I 预览\n\n> 用来检查 Markdown、代码高亮、表格、数学公式和多行文本。\n\n## 渲染清单\n\n- [x] 标题和列表\n- [x] Shiki 代码高亮\n- [x] 表格和引用\n- [x] 行内公式 $E = mc^2$\n\n| 模块 | 状态 | 说明 |\n| --- | --- | --- |\n| Markdown | 正常 | 支持粗体、列表、表格 |\n| Shiki | 待验证 | 下面的 Python 代码应被高亮 |\n\n```python\nfrom astrbot.api.event import filter\n\n@filter.command('hello')\nasync def hello(event):\n    name = event.get_sender_name()\n    yield event.plain_result(f'Hello, {name}!')\n```\n\n```yaml\nprovider: openai\nfeatures:\n  - markdown\n  - shiki\n  - katex\n```\n\n渲染结束：如果代码块有颜色、表格对齐、公式正常，模板预览就基本可用。",
+    "previewText": "这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。",
     "syntaxHint": "支持 jinja2 语法。可用变量：text | safe（要渲染的文本）, version（AstrBot 版本）。如果预览测试内容未加载或显示异常，请点击“重置Base”恢复默认模板。",
     "saveAndApply": "保存应用当前编辑模板",
     "confirmReset": "确认重置",

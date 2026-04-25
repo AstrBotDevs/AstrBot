@@ -284,42 +284,6 @@ const editorOptions = {
 
 // --- 预览逻辑 ---
 const previewVersion = ref('v4.0.0')
-const defaultPreviewText = [
-  '# AstrBot T2I 预览',
-  '',
-  '> 用来检查 Markdown、代码高亮、表格、数学公式和多行文本。',
-  '',
-  '## 渲染清单',
-  '',
-  '- [x] 标题和列表',
-  '- [x] Shiki 代码高亮',
-  '- [x] 表格和引用',
-  '- [x] 行内公式 $E = mc^2$',
-  '',
-  '| 模块 | 状态 | 说明 |',
-  '| --- | --- | --- |',
-  '| Markdown | 正常 | 支持粗体、列表、表格 |',
-  '| Shiki | 待验证 | 下面的 Python 代码应被高亮 |',
-  '',
-  '```python',
-  'from astrbot.api.event import filter',
-  '',
-  "@filter.command('hello')",
-  'async def hello(event):',
-  '    name = event.get_sender_name()',
-  "    yield event.plain_result(f'Hello, {name}!')",
-  '```',
-  '',
-  '```yaml',
-  'provider: openai',
-  'features:',
-  '  - markdown',
-  '  - shiki',
-  '  - katex',
-  '```',
-  '',
-  '渲染结束：如果代码块有颜色、表格对齐、公式正常，模板预览就基本可用。'
-].join('\n')
 const syncPreviewVersion = async () => {
   try {
     const res = await axios.get('/api/stat/version')
@@ -333,7 +297,7 @@ const syncPreviewVersion = async () => {
 }
 
 const previewData = computed(() => ({
-  text: tm('t2iTemplateEditor.previewText') || defaultPreviewText,
+  text: tm('t2iTemplateEditor.previewText') || '这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。',
   version: previewVersion.value
 }))
 
