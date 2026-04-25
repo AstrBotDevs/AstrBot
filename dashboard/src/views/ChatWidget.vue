@@ -69,6 +69,12 @@ let api_decode_data = ref({} as Record<string, any>);
 
 // 解包后的请求参数
 try {
+  if (!api_package.appid) throw new Error('args `appid` is miss');
+  if (!api_package.data) throw new Error('args `data` is miss');
+  if (!api_package.noise) throw new Error('args `noise` is miss');
+  if (!api_package.expiry_date) throw new Error('args `expiry_date` is miss');
+  if (!api_package.signature) throw new Error('args `signature` is miss');
+
   api_decode_data.value = JSON.parse(
       new TextDecoder().decode(
           Uint8Array.from(
@@ -82,7 +88,7 @@ try {
   currSessionId.value = api_decode_data.value.session_id;
   attachmentEnabled.value = api_decode_data.value?.file_upload === true;
 } catch (err) {
-  apiErrorMsg.value = err.message;
+  apiErrorMsg.value = err instanceof Error ? err.message : String(err);
   apiStatusError.value = true;
   console.error(err);
 }
@@ -291,7 +297,7 @@ function closeImage() {
   <v-app :theme="customizer.uiTheme" style="height: 100%; width: 100%">
     <div style="height: 100%;width: 100%;display: flex;flex-direction: column;align-items: center;justify-content: center;">
       <div id="container">
-        <div v-if="apiStatusError" class="api_error">Api请求异常：{{ apiErrorMsg }}</div>
+        <div v-if="apiStatusError" class="api_error">ApiError：{{ apiErrorMsg }}</div>
 
         <div v-else class="standalone-chat">
           <section ref="messagesContainer" class="standalone-messages">
