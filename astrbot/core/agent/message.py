@@ -195,6 +195,9 @@ class Message(BaseModel):
     tool_call_id: str | None = None
     """The ID of the tool call."""
 
+    reasoning_content: str | None = None
+    """The reasoning content from thinking mode providers (e.g. DeepSeek)."""
+
     _no_save: bool = PrivateAttr(default=False)
     _checkpoint_after: CheckpointData | None = PrivateAttr(default=None)
 
@@ -212,6 +215,10 @@ class Message(BaseModel):
         if self.role == "assistant" and self.tool_calls is not None:
             return self
 
+        # assistant + reasoning_content is not None: allow content to be None
+        if self.role == "assistant" and self.reasoning_content:
+            return self
+
         # other all cases: content is required
         if self.content is None:
             raise ValueError(
@@ -226,6 +233,8 @@ class Message(BaseModel):
             data.pop("tool_calls", None)
         if self.tool_call_id is None:
             data.pop("tool_call_id", None)
+        if self.reasoning_content is None:
+            data.pop("reasoning_content", None)
         return data
 
 
