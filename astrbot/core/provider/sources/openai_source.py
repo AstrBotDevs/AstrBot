@@ -632,6 +632,7 @@ class ProviderOpenAIOfficial(Provider):
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
+        reasoning_content_chunks: list[str] = []
 
         state = ChatCompletionStreamState()
 
@@ -660,6 +661,7 @@ class ProviderOpenAIOfficial(Provider):
             llm_response.reasoning_content = ""
             llm_response.completion_text = ""
             if reasoning:
+                reasoning_content_chunks.append(reasoning)
                 llm_response.reasoning_content = reasoning
                 _y = True
             if delta and delta.content:
@@ -681,6 +683,8 @@ class ProviderOpenAIOfficial(Provider):
 
         final_completion = state.get_final_completion()
         llm_response = await self._parse_openai_completion(final_completion, tools)
+        if not llm_response.reasoning_content and reasoning_content_chunks:
+            llm_response.reasoning_content = "".join(reasoning_content_chunks)
 
         yield llm_response
 
@@ -845,7 +849,8 @@ class ProviderOpenAIOfficial(Provider):
 
         # parse the reasoning content if any
         # the priority is higher than the <think> tag extraction
-        llm_response.reasoning_content = self._extract_reasoning_content(completion)
+        if reasoning_content := self._extract_reasoning_content(completion):
+            llm_response.reasoning_content = reasoning_content
 
         # parse tool calls if any
         if choice.message.tool_calls and tools is not None:
