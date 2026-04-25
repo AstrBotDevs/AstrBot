@@ -13,6 +13,7 @@ class PlatformMessageHistoryManager:
         content: dict,  # TODO: parse from message chain
         sender_id: str | None = None,
         sender_name: str | None = None,
+        llm_checkpoint_id: str | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
         return await self.db.insert_platform_message_history(
@@ -21,6 +22,7 @@ class PlatformMessageHistoryManager:
             content=content,
             sender_id=sender_id,
             sender_name=sender_name,
+            llm_checkpoint_id=llm_checkpoint_id,
         )
 
     async def get(
@@ -49,3 +51,20 @@ class PlatformMessageHistoryManager:
             user_id=user_id,
             offset_sec=offset_sec,
         )
+
+    async def update(
+        self,
+        message_id: int,
+        content: dict | None = None,
+        llm_checkpoint_id: str | None = None,
+    ) -> None:
+        """Update a platform message history record."""
+        await self.db.update_platform_message_history(
+            message_id=message_id,
+            content=content,
+            llm_checkpoint_id=llm_checkpoint_id,
+        )
+
+    async def delete_by_id(self, message_id: int) -> None:
+        """Delete a platform message history record by ID."""
+        await self.db.delete_platform_message_history_by_id(message_id)
