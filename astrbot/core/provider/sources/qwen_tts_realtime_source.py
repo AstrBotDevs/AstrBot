@@ -26,8 +26,6 @@ except ImportError:  # pragma: no cover
     QwenTtsRealtimeCallback = None
     AudioFormat = None
 
-import dashscope
-
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -118,7 +116,10 @@ class ProviderQwenTTSRealtime(TTSProvider):
         model = provider_config.get("model", "qwen3-tts-flash-realtime")
         self.set_model(model)
 
-        dashscope.api_key = self.chosen_api_key
+        if not self.qwen_tts_url.startswith("wss://"):
+            logger.warning(
+                f"[QwenTTS Realtime] WebSocket URL 未使用 wss:// 协议: {self.qwen_tts_url}"
+            )
 
     def support_stream(self) -> bool:
         return True
@@ -155,6 +156,7 @@ class ProviderQwenTTSRealtime(TTSProvider):
             model=model,
             callback=callback,
             url=self.qwen_tts_url,
+            api_key=self.chosen_api_key,
         )
 
         loop = asyncio.get_running_loop()
@@ -252,6 +254,7 @@ class ProviderQwenTTSRealtime(TTSProvider):
             model=model,
             callback=callback,
             url=self.qwen_tts_url,
+            api_key=self.chosen_api_key,
         )
 
         loop = asyncio.get_running_loop()

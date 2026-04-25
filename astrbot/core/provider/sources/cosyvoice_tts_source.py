@@ -13,9 +13,9 @@ import asyncio
 import os
 import uuid
 
-import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
 
+from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType
@@ -41,18 +41,18 @@ class ProviderCosyVoiceTTS(TTSProvider):
         self.volume: float = provider_config.get("cosyvoice_volume", 1.0)
         self.pitch_rate: float = provider_config.get("cosyvoice_pitch_rate", 1.0)
         self.timeout_ms: float = float(provider_config.get("timeout", 20)) * 1000
-
-        model = provider_config.get("model", "cosyvoice-v3-flash")
-        self.set_model(model)
-
-        dashscope.api_key = self.chosen_api_key
-
-        # Set base URL for the region (Beijing default)
         self.base_url: str = provider_config.get(
             "cosyvoice_base_url",
             "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
         )
-        dashscope.base_websocket_api_url = self.base_url
+
+        model = provider_config.get("model", "cosyvoice-v3-flash")
+        self.set_model(model)
+
+        if not self.base_url.startswith("wss://"):
+            logger.warning(
+                f"[CosyVoice TTS] WebSocket URL 未使用 wss:// 协议: {self.base_url}"
+            )
 
     async def get_audio(self, text: str) -> str:
         """Synthesize speech using CosyVoice and return the audio file path."""
@@ -82,6 +82,8 @@ class ProviderCosyVoiceTTS(TTSProvider):
             model=model,
             voice=self.voice,
             format=fmt,
+            api_key=self.chosen_api_key,
+            url=self.base_url,
         )
 
         audio_bytes = await loop.run_in_executor(
