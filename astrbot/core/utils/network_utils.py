@@ -6,8 +6,9 @@ from typing import Any
 import httpx
 
 from astrbot import logger
+from astrbot.utils.http_ssl_common import build_ssl_context_with_certifi
 
-_SYSTEM_SSL_CTX = ssl.create_default_context()
+_SYSTEM_SSL_CTX = build_ssl_context_with_certifi()
 
 
 def is_connection_error(exc: BaseException) -> bool:
@@ -94,9 +95,9 @@ def create_proxy_client(
 ) -> httpx.AsyncClient:
     """Create an httpx AsyncClient with proxy configuration if provided.
 
-    Uses the system SSL certificate store instead of certifi, which avoids
-    SSL verification failures for endpoints whose CA chain is not in certifi
-    but is trusted by the operating system.
+    Uses a hybrid SSL context that combines the system SSL certificate store
+    with certifi as a fallback, ensuring compatibility across different
+    environments including Windows where the system store may be incomplete.
 
     Note: The caller is responsible for closing the client when done.
     Consider using the client as a context manager or calling aclose() explicitly.
@@ -112,7 +113,7 @@ def create_proxy_client(
             httpx import.
 
     Returns:
-        An httpx.AsyncClient created with the shared system SSL context; the proxy is applied only if one is provided.
+        An httpx.AsyncClient created with the hybrid SSL context (system store + certifi); the proxy is applied only if one is provided.
     """
     resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
     if proxy:
