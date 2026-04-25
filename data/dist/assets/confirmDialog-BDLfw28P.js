@@ -1,1 +1,0 @@
-import{i as r}from"./index-x8OGopEE.js";function a(){return r("$confirm",void 0)}async function c(i,o){const n=o??void 0;if(n)try{return await n({message:i})}catch{return!1}return window.confirm(i)}export{c as a,a as u};
