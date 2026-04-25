@@ -58,7 +58,6 @@ def en_package(appid: str, apikey: str, data: dict) -> dict:
         "noise": noise,
         "expiry_date": expiry_date,
         "signature": signature,
-        "apikey": apikey,
     }
 
 
