@@ -12,6 +12,7 @@ class PlatformAdapterType(enum.Flag):
     QQOFFICIAL_WEBHOOK = enum.auto()
     TELEGRAM = enum.auto()
     WECOM = enum.auto()
+    WECOM_KF = enum.auto()
     WECOM_AI_BOT = enum.auto()
     LARK = enum.auto()
     DINGTALK = enum.auto()
@@ -36,6 +37,7 @@ ADAPTER_NAME_2_TYPE = {
     "qq_official_webhook": PlatformAdapterType.QQOFFICIAL_WEBHOOK,
     "telegram": PlatformAdapterType.TELEGRAM,
     "wecom": PlatformAdapterType.WECOM,
+    "wecom_kf": PlatformAdapterType.WECOM_KF,
     "wecom_ai_bot": PlatformAdapterType.WECOM_AI_BOT,
     "lark": PlatformAdapterType.LARK,
     "dingtalk": PlatformAdapterType.DINGTALK,

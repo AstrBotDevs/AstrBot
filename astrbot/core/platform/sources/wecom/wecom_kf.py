@@ -160,6 +160,42 @@ class WeChatKF(BaseWeChatAPI):
         """
         return self._get("kf/account/list")
 
+    def add_account(self, name, media_id=""):
+        """添加客服帐号
+
+        :param name: 客服帐号名称
+        :param media_id: 客服头像临时素材 media_id
+        :return: 接口调用结果
+        """
+        data = {"name": name}
+        if media_id:
+            data["media_id"] = media_id
+        return self._post("kf/account/add", data=data)
+
+    def update_account(self, open_kfid, name="", media_id=""):
+        """修改客服帐号
+
+        :param open_kfid: 客服帐号ID
+        :param name: 客服帐号名称
+        :param media_id: 客服头像临时素材 media_id
+        :return: 接口调用结果
+        """
+        data = {"open_kfid": open_kfid}
+        if name:
+            data["name"] = name
+        if media_id:
+            data["media_id"] = media_id
+        return self._post("kf/account/update", data=data)
+
+    def del_account(self, open_kfid):
+        """删除客服帐号
+
+        :param open_kfid: 客服帐号ID
+        :return: 接口调用结果
+        """
+        data = {"open_kfid": open_kfid}
+        return self._post("kf/account/del", data=data)
+
     def add_contact_way(self, open_kfid, scene):
         """获取客服帐号链接
 

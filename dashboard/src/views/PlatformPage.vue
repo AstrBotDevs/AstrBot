@@ -72,6 +72,21 @@
                     {{ tm('platformQr.show') }}
                   </v-chip>
                 </div>
+                <div
+                  class="platform-qr-chip"
+                  v-if="item.type === 'wecom_kf' && getPlatformStat(item.id)"
+                >
+                  <v-chip
+                    size="small"
+                    color="primary"
+                    variant="tonal"
+                    class="platform-qr-chip-item"
+                    @click.stop="openWecomKfDialog(item.id)"
+                  >
+                    <v-icon size="small" start>mdi-robot</v-icon>
+                    {{ tm('wecomKf.manage') }}
+                  </v-chip>
+                </div>
                 <div v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid" class="webhook-info">
                   <v-chip
                     size="small"
@@ -160,11 +175,26 @@
           {{ tm('platformQr.title') }}
         </v-card-title>
         <v-card-text class="px-4 pb-4">
-          <div class="platform-qr-status">
+          <div v-if="getPlatformQrLoginStat(currentQrPlatformId)?.qr_status" class="platform-qr-status">
             {{ tm('platformQr.status') }}: {{ getPlatformQrLoginStat(currentQrPlatformId)?.qr_status || tm('platformQr.waiting') }}
           </div>
+          <div v-if="getPlatformQrLoginStat(currentQrPlatformId)?.contact_links" class="platform-qr-list">
+            <div
+              v-for="item in getPlatformQrItems(currentQrPlatformId)"
+              :key="item.open_kfid || item.qrcode_img_content || item.qrcode"
+              class="platform-qr-list-item"
+            >
+              <div class="platform-qr-name">{{ item.name || item.open_kfid || tm('platformQr.title') }}</div>
+              <QrCodeViewer
+                :value="(item.qrcode_img_content || item.qrcode || '')"
+                :alt="item.name || tm('platformQr.title')"
+                :size="180"
+              />
+            </div>
+          </div>
           <QrCodeViewer
-            :value="(getPlatformQrLoginStat(currentQrPlatformId)?.qrcode_img_content || getPlatformQrLoginStat(currentQrPlatformId)?.qrcode || '')"
+            v-else
+            :value="(getPlatformQrItems(currentQrPlatformId)[0]?.qrcode_img_content || getPlatformQrItems(currentQrPlatformId)[0]?.qrcode || '')"
             :alt="tm('platformQr.title')"
           />
         </v-card-text>
@@ -172,6 +202,95 @@
           <v-spacer></v-spacer>
           <v-btn variant="tonal" color="primary" @click="showQrDialog = false">
             {{ tm('platformQr.close') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="showWecomKfDialog" max-width="760">
+      <v-card>
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon class="me-2">mdi-robot</v-icon>
+          {{ tm('wecomKf.title') }}
+          <v-spacer></v-spacer>
+          <v-btn icon variant="text" :loading="wecomKfLoading" @click="loadWecomKfAccounts">
+            <v-icon>mdi-refresh</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-card-text class="px-4 pb-4">
+          <div class="wecom-kf-form">
+            <v-text-field
+              v-model="wecomKfForm.name"
+              :label="tm('wecomKf.name')"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
+            <v-file-input
+              v-model="wecomKfAvatarFile"
+              :label="tm('wecomKf.avatarFile')"
+              accept="image/*"
+              variant="outlined"
+              density="compact"
+              hide-details
+              prepend-icon=""
+              prepend-inner-icon="mdi-robot"
+              :loading="wecomKfAvatarUploading"
+              @update:model-value="uploadWecomKfAvatar"
+            />
+            <div class="wecom-kf-actions">
+              <v-btn variant="tonal" @click="resetWecomKfForm" :disabled="wecomKfSaving">
+                {{ tm('wecomKf.cancelEdit') }}
+              </v-btn>
+              <v-btn color="primary" @click="saveWecomKfAccount" :loading="wecomKfSaving">
+                {{ wecomKfForm.open_kfid ? tm('wecomKf.update') : tm('wecomKf.create') }}
+              </v-btn>
+            </div>
+          </div>
+
+          <v-alert
+            v-if="wecomKfError"
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mt-4"
+          >
+            {{ wecomKfError }}
+          </v-alert>
+
+          <v-table class="mt-4" density="comfortable">
+            <thead>
+              <tr>
+                <th>{{ tm('wecomKf.name') }}</th>
+                <th>open_kfid</th>
+                <th class="text-right">{{ tm('wecomKf.actions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="wecomKfAccounts.length === 0">
+                <td colspan="3" class="text-center text-medium-emphasis py-6">
+                  {{ wecomKfLoading ? tm('wecomKf.loading') : tm('wecomKf.empty') }}
+                </td>
+              </tr>
+              <tr v-for="account in wecomKfAccounts" :key="account.open_kfid">
+                <td>{{ account.name || '-' }}</td>
+                <td class="wecom-kf-openid">{{ account.open_kfid }}</td>
+                <td class="text-right">
+                  <v-btn icon variant="text" size="small" @click="editWecomKfAccount(account)">
+                    <v-icon>mdi-pencil</v-icon>
+                  </v-btn>
+                  <v-btn icon variant="text" size="small" color="error" @click="deleteWecomKfAccount(account)">
+                    <v-icon>mdi-delete</v-icon>
+                  </v-btn>
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer></v-spacer>
+          <v-btn variant="tonal" color="primary" @click="showWecomKfDialog = false">
+            {{ tm('wecomKf.close') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -292,6 +411,19 @@ export default {
       currentErrorPlatform: null,
       showQrDialog: false,
       currentQrPlatformId: "",
+      showWecomKfDialog: false,
+      currentWecomKfPlatformId: "",
+      wecomKfAccounts: [],
+      wecomKfLoading: false,
+      wecomKfSaving: false,
+      wecomKfAvatarUploading: false,
+      wecomKfAvatarFile: null,
+      wecomKfError: "",
+      wecomKfForm: {
+        open_kfid: "",
+        name: "",
+        media_id: "",
+      },
 
       store: useCommonStore()
     }
@@ -390,8 +522,21 @@ export default {
     },
 
     hasQrPayload(platformId) {
+      return this.getPlatformQrItems(platformId).length > 0;
+    },
+
+    getPlatformQrItems(platformId) {
       const stat = this.getPlatformQrLoginStat(platformId);
-      return Boolean(stat?.qrcode_img_content || stat?.qrcode);
+      if (!stat) {
+        return [];
+      }
+      if (Array.isArray(stat.contact_links)) {
+        return stat.contact_links.filter((item) => item?.qrcode_img_content || item?.qrcode);
+      }
+      if (stat.qrcode_img_content || stat.qrcode) {
+        return [stat];
+      }
+      return [];
     },
 
     getPlatformQrLoginStat(platformId) {
@@ -399,9 +544,12 @@ export default {
       if (stat?.weixin_oc) {
         return stat.weixin_oc;
       }
+      if (stat?.wecom_kf) {
+        return stat.wecom_kf;
+      }
       if (stat && typeof stat === "object") {
         for (const value of Object.values(stat)) {
-          if (value && typeof value === "object" && ("qrcode_img_content" in value || "qrcode" in value)) {
+          if (value && typeof value === "object" && ("qrcode_img_content" in value || "qrcode" in value || "contact_links" in value)) {
             return value;
           }
         }
@@ -412,6 +560,144 @@ export default {
     openPlatformQrDialog(platformId) {
       this.currentQrPlatformId = platformId;
       this.showQrDialog = true;
+    },
+
+    openWecomKfDialog(platformId) {
+      this.currentWecomKfPlatformId = platformId;
+      this.showWecomKfDialog = true;
+      this.resetWecomKfForm();
+      this.loadWecomKfAccounts();
+    },
+
+    resetWecomKfForm() {
+      this.wecomKfForm = {
+        open_kfid: "",
+        name: "",
+        media_id: "",
+      };
+      this.wecomKfAvatarFile = null;
+      this.wecomKfError = "";
+    },
+
+    async loadWecomKfAccounts() {
+      if (!this.currentWecomKfPlatformId) {
+        return;
+      }
+      this.wecomKfLoading = true;
+      this.wecomKfError = "";
+      try {
+        const platformId = encodeURIComponent(this.currentWecomKfPlatformId);
+        const res = await axios.get(`/api/platform/wecom-kf/${platformId}/accounts`);
+        if (res.data.status === 'ok') {
+          this.wecomKfAccounts = res.data.data.accounts || [];
+          await this.getPlatformStats();
+        } else {
+          this.wecomKfError = res.data.message || this.tm('wecomKf.loadFailed');
+        }
+      } catch (err) {
+        this.wecomKfError = err.response?.data?.message || err.message || this.tm('wecomKf.loadFailed');
+      } finally {
+        this.wecomKfLoading = false;
+      }
+    },
+
+    editWecomKfAccount(account) {
+      this.wecomKfForm = {
+        open_kfid: account.open_kfid || "",
+        name: account.name || "",
+        media_id: "",
+      };
+      this.wecomKfError = "";
+    },
+
+    async uploadWecomKfAvatar(fileValue) {
+      const file = Array.isArray(fileValue) ? fileValue[0] : fileValue;
+      if (!file) {
+        return;
+      }
+      this.wecomKfAvatarUploading = true;
+      this.wecomKfError = "";
+      try {
+        const platformId = encodeURIComponent(this.currentWecomKfPlatformId);
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await axios.post(`/api/platform/wecom-kf/${platformId}/avatar`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        const mediaId = res.data?.data?.media_id;
+        if (mediaId) {
+          this.wecomKfForm.media_id = mediaId;
+          this.showSuccess(this.tm('wecomKf.avatarUploadSuccess'));
+        } else {
+          this.wecomKfError = this.tm('wecomKf.avatarUploadFailed');
+        }
+      } catch (err) {
+        this.wecomKfError = err.response?.data?.message || err.message || this.tm('wecomKf.avatarUploadFailed');
+      } finally {
+        this.wecomKfAvatarUploading = false;
+      }
+    },
+
+    async saveWecomKfAccount() {
+      const name = String(this.wecomKfForm.name || "").trim();
+      const mediaId = String(this.wecomKfForm.media_id || "").trim();
+      if (!this.wecomKfForm.open_kfid && !name) {
+        this.wecomKfError = this.tm('wecomKf.nameRequired');
+        return;
+      }
+      if (this.wecomKfForm.open_kfid && !name && !mediaId) {
+        this.wecomKfError = this.tm('wecomKf.updateRequired');
+        return;
+      }
+
+      this.wecomKfSaving = true;
+      this.wecomKfError = "";
+      try {
+        const platformId = encodeURIComponent(this.currentWecomKfPlatformId);
+        const payload = { name, media_id: mediaId };
+        if (this.wecomKfForm.open_kfid) {
+          const openKfid = encodeURIComponent(this.wecomKfForm.open_kfid);
+          await axios.put(
+            `/api/platform/wecom-kf/${platformId}/accounts/${openKfid}`,
+            payload
+          );
+          this.showSuccess(this.tm('wecomKf.updateSuccess'));
+        } else {
+          await axios.post(`/api/platform/wecom-kf/${platformId}/accounts`, payload);
+          this.showSuccess(this.tm('wecomKf.createSuccess'));
+        }
+        this.resetWecomKfForm();
+        await this.loadWecomKfAccounts();
+      } catch (err) {
+        this.wecomKfError = err.response?.data?.message || err.message || this.tm('wecomKf.saveFailed');
+      } finally {
+        this.wecomKfSaving = false;
+      }
+    },
+
+    async deleteWecomKfAccount(account) {
+      const name = account.name || account.open_kfid;
+      const message = this.tm('wecomKf.deleteConfirm', { name });
+      if (!(await askForConfirmationDialog(message, this.confirmDialog))) {
+        return;
+      }
+
+      this.wecomKfSaving = true;
+      this.wecomKfError = "";
+      try {
+        const platformId = encodeURIComponent(this.currentWecomKfPlatformId);
+        const openKfid = encodeURIComponent(account.open_kfid);
+        await axios.delete(`/api/platform/wecom-kf/${platformId}/accounts/${openKfid}`);
+        this.showSuccess(this.tm('wecomKf.deleteSuccess'));
+        if (this.wecomKfForm.open_kfid === account.open_kfid) {
+          this.resetWecomKfForm();
+        }
+        await this.loadWecomKfAccounts();
+      } catch (err) {
+        this.wecomKfError = err.response?.data?.message || err.message || this.tm('wecomKf.deleteFailed');
+      } finally {
+        this.wecomKfSaving = false;
+      }
     },
 
     getStatusColor(status) {
@@ -696,5 +982,56 @@ export default {
   font-size: 13px;
   margin-bottom: 10px;
   color: rgba(0, 0, 0, 0.7);
+}
+
+.platform-qr-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.platform-qr-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.platform-qr-name {
+  max-width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.wecom-kf-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.wecom-kf-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.wecom-kf-openid {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+@media (max-width: 700px) {
+  .wecom-kf-form {
+    grid-template-columns: 1fr;
+  }
+
+  .wecom-kf-actions {
+    justify-content: flex-end;
+  }
 }
 </style>

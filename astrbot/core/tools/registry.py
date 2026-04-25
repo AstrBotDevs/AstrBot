@@ -140,7 +140,7 @@ def _evaluate_send_message_tool(config: dict[str, Any]) -> list[dict[str, Any]]:
         if not platform_type:
             continue
 
-        if platform_type in {"wecom", "weixin_official_account"}:
+        if platform_type in {"wecom", "wecom_kf", "weixin_official_account"}:
             continue
 
         if platform_type == "wecom_ai_bot":

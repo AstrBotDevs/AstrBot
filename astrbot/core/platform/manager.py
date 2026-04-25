@@ -154,6 +154,10 @@ class PlatformManager:
                     from .sources.wecom.wecom_adapter import (
                         WecomPlatformAdapter,  # noqa: F401
                     )
+                case "wecom_kf":
+                    from .sources.wecom.wecom_kf_adapter import (
+                        WecomKFPlatformAdapter,  # noqa: F401
+                    )
                 case "wecom_ai_bot":
                     from .sources.wecom_ai_bot.wecomai_adapter import (
                         WecomAIBotAdapter,  # noqa: F401
