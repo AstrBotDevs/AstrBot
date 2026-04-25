@@ -408,7 +408,8 @@ const previewContent = computed(() => {
     })
     return usedLegacyShikiPlaceholder ? content : injectShikiRuntime(content)
   } catch (error) {
-    return `<div style="color: red; padding: 20px;">模板渲染错误: ${error.message}</div>`
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return `<div style="color: red; padding: 20px;">模板渲染错误: ${errorMessage}</div>`
   }
 })
 

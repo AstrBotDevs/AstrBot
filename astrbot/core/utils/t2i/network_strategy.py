@@ -17,6 +17,9 @@ from . import RenderStrategy
 ASTRBOT_T2I_DEFAULT_ENDPOINT = "https://t2i.soulter.top/text2img"
 SHIKI_RUNTIME_SCRIPT_ID = "astrbot-t2i-shiki-runtime"
 SHIKI_RUNTIME_TEMPLATE_PATTERN = re.compile(r"\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}")
+JINJA_SYNTAX_PATTERN = re.compile(r"\{[{%#]")
+JINJA_RAW_OPEN_PATTERN = re.compile(r"{%-?\s*raw\s*-?%}")
+JINJA_RAW_CLOSE_PATTERN = re.compile(r"{%-?\s*endraw\s*-?%}")
 
 logger = logging.getLogger("astrbot")
 
@@ -46,6 +49,28 @@ def get_shiki_runtime() -> str:
     return re.sub(r"</(script)", r"<\/\1", runtime, flags=re.IGNORECASE)
 
 
+def _is_inside_jinja_raw_block(tmpl_str: str, index: int) -> bool:
+    raw_open_index = -1
+    for match in JINJA_RAW_OPEN_PATTERN.finditer(tmpl_str, 0, index):
+        raw_open_index = match.start()
+
+    raw_close_index = -1
+    for match in JINJA_RAW_CLOSE_PATTERN.finditer(tmpl_str, 0, index):
+        raw_close_index = match.start()
+
+    return raw_open_index > raw_close_index
+
+
+def _wrap_runtime_for_jinja(tmpl_str: str, script: str, index: int) -> str:
+    if not JINJA_SYNTAX_PATTERN.search(script) or _is_inside_jinja_raw_block(
+        tmpl_str,
+        index,
+    ):
+        return script
+
+    return f"{{% raw %}}{script}{{% endraw %}}"
+
+
 def inject_shiki_runtime(tmpl_str: str) -> str:
     if SHIKI_RUNTIME_SCRIPT_ID in tmpl_str or SHIKI_RUNTIME_TEMPLATE_PATTERN.search(
         tmpl_str,
@@ -56,15 +81,13 @@ def inject_shiki_runtime(tmpl_str: str) -> str:
     if not runtime:
         return tmpl_str
 
-    script = (
-        "{% raw %}"
-        f'<script id="{SHIKI_RUNTIME_SCRIPT_ID}">{runtime}</script>'
-        "{% endraw %}"
-    )
+    script = f'<script id="{SHIKI_RUNTIME_SCRIPT_ID}">{runtime}</script>'
     head_close = re.search(r"</head\s*>", tmpl_str, flags=re.IGNORECASE)
     if head_close:
+        script = _wrap_runtime_for_jinja(tmpl_str, script, head_close.start())
         return f"{tmpl_str[: head_close.start()]}  {script}\n{tmpl_str[head_close.start() :]}"
 
+    script = _wrap_runtime_for_jinja(tmpl_str, script, 0)
     return f"{script}\n{tmpl_str}"
 
 

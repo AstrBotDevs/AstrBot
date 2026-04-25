@@ -38,11 +38,19 @@ function t2iShikiRuntimeAsset(): Plugin {
       });
     },
     generateBundle() {
-      this.emitFile({
-        type: 'asset',
-        fileName: 't2i/shiki_runtime.iife.js',
-        source: readFileSync(t2iShikiRuntimePath)
-      });
+      try {
+        this.emitFile({
+          type: 'asset',
+          fileName: 't2i/shiki_runtime.iife.js',
+          source: readFileSync(t2iShikiRuntimePath)
+        });
+      } catch (error) {
+        this.warn(
+          `Skipping T2I Shiki runtime asset because it could not be read: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
     }
   };
 }

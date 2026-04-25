@@ -10,7 +10,6 @@ from astrbot.core.utils.t2i.network_strategy import (
     NetworkRenderStrategy,
     inject_shiki_runtime,
 )
-from astrbot.core.utils.t2i.template_manager import TemplateManager
 
 TEMPLATE_DIR = (
     Path(__file__).resolve().parents[2]
@@ -62,74 +61,6 @@ def test_builtin_templates_read_legacy_text_from_hidden_textarea() -> None:
         assert "{{ shiki_runtime | safe }}" not in content
 
 
-def test_template_manager_migrates_legacy_user_template(
-    temp_astrbot_root: Path,
-) -> None:
-    user_template_dir = temp_astrbot_root / "data" / "t2i_templates"
-    user_template_dir.mkdir(parents=True)
-    stale_template = user_template_dir / "astrbot_vitepress.html"
-    stale_template.write_text(
-        """<html>
-<body>
-  <script>{{ shiki_runtime | safe }}</script>
-  <script>
-    (function () {
-      const source = decodeBase64Utf8("{{ text_base64 }}");
-
-      function decodeBase64Utf8(base64Text) {
-        const binary = window.atob(base64Text || "");
-        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-
-        if (window.TextDecoder) {
-          return new TextDecoder().decode(bytes);
-        }
-
-        let fallback = "";
-        bytes.forEach((byte) => {
-          fallback += String.fromCharCode(byte);
-        });
-        return decodeURIComponent(escape(fallback));
-      }
-    })();
-  </script>
-</body>
-</html>
-""",
-        encoding="utf-8",
-    )
-
-    manager = TemplateManager()
-
-    content = manager.get_template("astrbot_vitepress")
-    assert "{{ text | safe }}" in content
-    assert '<textarea id="markdown-source" hidden>' in content
-    assert 'document.getElementById("markdown-source").value' in content
-    assert "{{ text_base64 }}" not in content
-    assert "{{ shiki_runtime | safe }}" not in content
-    assert "function decodeBase64Utf8" not in content
-    assert "`{{ text | safe }}`" not in content
-    assert stale_template.read_text(encoding="utf-8") == content
-
-
-def test_template_manager_migrates_plain_script_markdown_source() -> None:
-    content = TemplateManager._migrate_legacy_template_content(
-        """<html>
-<body>
-  <script id="markdown-source" type="text/plain">{{ text | safe }}</script>
-  <script>
-    const source = document.getElementById("markdown-source").textContent;
-  </script>
-</body>
-</html>
-""",
-    )
-
-    assert '<textarea id="markdown-source" hidden>' in content
-    assert '<script id="markdown-source" type="text/plain">' not in content
-    assert 'document.getElementById("markdown-source").value' in content
-    assert content.count('id="markdown-source"') == 1
-
-
 def test_inject_shiki_runtime_adds_runtime_before_head_close(monkeypatch) -> None:
     monkeypatch.setattr(
         "astrbot.core.utils.t2i.network_strategy.get_shiki_runtime",
@@ -142,9 +73,42 @@ def test_inject_shiki_runtime_adds_runtime_before_head_close(monkeypatch) -> Non
 
     assert f'id="{SHIKI_RUNTIME_SCRIPT_ID}"' in injected
     assert "window.AstrBotT2IShiki = {};" in injected
+    assert "{% raw %}" not in injected
+    assert "{% endraw %}" not in injected
+    assert injected.index(SHIKI_RUNTIME_SCRIPT_ID) < injected.lower().index("</head>")
+
+
+def test_inject_shiki_runtime_wraps_jinja_like_runtime(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "astrbot.core.utils.t2i.network_strategy.get_shiki_runtime",
+        lambda: "window.AstrBotT2IShiki = { grammar: '{% token %}' };",
+    )
+    html = "<html><head></head><body>{{ text | safe }}</body></html>"
+
+    injected = inject_shiki_runtime(html)
+    rendered = SandboxedEnvironment().from_string(injected).render({"text": "hello"})
+
     assert "{% raw %}" in injected
     assert "{% endraw %}" in injected
-    assert injected.index(SHIKI_RUNTIME_SCRIPT_ID) < injected.lower().index("</head>")
+    assert f'id="{SHIKI_RUNTIME_SCRIPT_ID}"' in rendered
+    assert "{% token %}" in rendered
+    assert "hello" in rendered
+
+
+def test_inject_shiki_runtime_does_not_nest_raw_blocks(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "astrbot.core.utils.t2i.network_strategy.get_shiki_runtime",
+        lambda: "window.AstrBotT2IShiki = { grammar: '{% token %}' };",
+    )
+    html = "{% raw %}<html><head></head><body></body></html>{% endraw %}"
+
+    injected = inject_shiki_runtime(html)
+    rendered = SandboxedEnvironment().from_string(injected).render()
+
+    assert injected.count("{% raw %}") == 1
+    assert injected.count("{% endraw %}") == 1
+    assert f'id="{SHIKI_RUNTIME_SCRIPT_ID}"' in rendered
+    assert "{% token %}" in rendered
 
 
 def test_injected_shiki_runtime_survives_jinja_render() -> None:
