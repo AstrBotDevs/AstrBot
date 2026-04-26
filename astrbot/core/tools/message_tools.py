@@ -23,10 +23,12 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
     description: str = (
-        "Send message to the user. "
+        "Send message to the current user/session. "
         "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
         "Use this tool to send media files (`image`, `record`, `video`, `file`), "
-        "or when you need to proactively message the user(such as cron job). For normal text replies, you can output directly."
+        "or when you need to proactively message the user (such as cron job). "
+        "For normal text replies, you can output directly. "
+        "This tool always sends the message to the current user's session and CANNOT send to other sessions."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -64,10 +66,6 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         },
                         "required": ["type"],
                     },
-                },
-                "session": {
-                    "type": "string",
-                    "description": "Optional. Target session string. Defaults to current session.",
                 },
             },
             "required": ["messages"],
@@ -117,7 +115,11 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        session = kwargs.get("session") or context.context.event.unified_msg_origin
+        # SECURITY FIX: Always use the current session (the user who triggered the tool).
+        # Previously, the tool accepted a user-controlled "session" parameter, which allowed
+        # attackers to send arbitrary messages to arbitrary sessions (groups/chats).
+        # See https://github.com/AstrBotDevs/AstrBot/issues/7822
+        session = context.context.event.unified_msg_origin
         messages = kwargs.get("messages")
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
