@@ -26,6 +26,14 @@ from ...register import register_platform_adapter
 from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 
+# 群信息缓存，避免重复 API 调用，同时修复编码问题
+# Key: group_id (str), Value: (group_name (str), timestamp (float), is_failed (bool))
+_group_name_cache: dict[str, tuple[str, float, bool]] = {}
+# 成功缓存有效期：1小时
+_CACHE_TTL_SUCCESS = 3600
+# 失败缓存有效期：60秒（允许临时故障恢复后重试）
+_CACHE_TTL_FAILURE = 60
+
 
 @register_platform_adapter(
     "aiocqhttp",
@@ -140,6 +148,48 @@ class AiocqhttpAdapter(Platform):
 
         return abm
 
+    async def _get_group_name(self, group_id: int) -> str:
+        """通过 API 获取群名称并缓存，修复编码问题。
+
+        修复 GitHub issue #4721：OneBot V11 消息事件中不包含 group_name 字段，
+        部分实现（如 napcat）扩展了此字段但存在编码问题，导致中文群名显示乱码。
+        通过调用 get_group_info API 获取正确编码的群名称。
+
+        Args:
+            group_id: 群号
+
+        Returns:
+            群名称，获取失败时返回 "N/A"
+        """
+        group_id_str = str(group_id)
+        now = time.time()
+
+        # 检查缓存是否存在且未过期
+        if group_id_str in _group_name_cache:
+            group_name, cached_time, is_failed = _group_name_cache[group_id_str]
+            ttl = _CACHE_TTL_FAILURE if is_failed else _CACHE_TTL_SUCCESS
+            if now - cached_time < ttl:
+                return group_name
+            # 缓存已过期，删除旧条目
+            del _group_name_cache[group_id_str]
+
+        try:
+            # 调用 OneBot API 获取群信息
+            info: dict = await self.bot.call_action(
+                "get_group_info",
+                group_id=group_id,
+            )
+            group_name = info.get("group_name", "N/A")
+            # 缓存成功结果
+            _group_name_cache[group_id_str] = (group_name, now, False)
+            return group_name
+        except Exception as e:
+            # 只捕获 API 调用和网络相关的异常
+            logger.warning(f"获取群 {group_id} 信息失败: {e}")
+            # 缓存失败结果，使用较短的过期时间以便临时故障恢复后重试
+            _group_name_cache[group_id_str] = ("N/A", now, True)
+            return "N/A"
+
     async def _convert_handle_request_event(self, event: Event) -> AstrBotMessage:
         """OneBot V11 请求类事件"""
         abm = AstrBotMessage()
@@ -216,7 +266,8 @@ class AiocqhttpAdapter(Platform):
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = str(event.group_id)
             abm.group = Group(str(event.group_id))
-            abm.group.group_name = event.get("group_name", "N/A")
+            # 修复 #4721: 通过 API 获取群名称，避免编码问题导致乱码
+            abm.group.group_name = await self._get_group_name(event.group_id)
         elif event["message_type"] == "private":
             abm.type = MessageType.FRIEND_MESSAGE
         abm.session_id = (
