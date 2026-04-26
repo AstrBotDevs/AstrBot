@@ -2,6 +2,8 @@ from astrbot.core import sp
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.tools.computer_tools.shell import ExecuteShellTool
 from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.web_search_tools import FirecrawlExtractWebPageTool
+from astrbot.core.tools.web_search_tools import FirecrawlWebSearchTool
 
 
 def test_get_builtin_tool_by_class_returns_cached_instance():
@@ -38,3 +40,15 @@ def test_computer_tools_are_registered_as_builtin_tools():
 
     assert tool.name == "astrbot_execute_shell"
     assert manager.is_builtin_tool("astrbot_execute_shell") is True
+
+
+def test_firecrawl_tools_are_registered_as_builtin_tools():
+    manager = FunctionToolManager()
+
+    search_tool = manager.get_builtin_tool(FirecrawlWebSearchTool)
+    extract_tool = manager.get_builtin_tool(FirecrawlExtractWebPageTool)
+
+    assert search_tool.name == "web_search_firecrawl"
+    assert extract_tool.name == "firecrawl_extract_web_page"
+    assert manager.is_builtin_tool("web_search_firecrawl") is True
+    assert manager.is_builtin_tool("firecrawl_extract_web_page") is True
