@@ -4,6 +4,7 @@ import asyncio
 from types import SimpleNamespace
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
     CreateSkillPayloadTool,
     PromoteSkillCandidateTool,
@@ -103,4 +104,16 @@ def test_create_skill_payload_tool_schema_allows_non_empty_payload_objects():
     array_schema = next(
         s for s in payload_schema["anyOf"] if isinstance(s, dict) and s.get("type") == "array"
     )
-    assert array_schema.get("items") == {}
+    assert array_schema.get("items", {}).get("type") == "object"
+    assert array_schema.get("items", {}).get("additionalProperties") is True
+
+
+def test_create_skill_payload_tool_google_schema_keeps_object_array_items():
+    tool = CreateSkillPayloadTool()
+    schema = ToolSet([tool]).google_schema()
+    payload_schema = schema["function_declarations"][0]["parameters"]["properties"]["payload"]
+
+    array_schema = next(
+        s for s in payload_schema["anyOf"] if isinstance(s, dict) and s.get("type") == "array"
+    )
+    assert array_schema["items"]["type"] == "object"
