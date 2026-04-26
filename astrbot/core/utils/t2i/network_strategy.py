@@ -161,6 +161,6 @@ class NetworkRenderStrategy(RenderStrategy):
         text_base64 = base64.b64encode(text.encode("utf-8")).decode("ascii")
         return await self.render_custom_template(
             tmpl_str,
-            {"text_base64": text_base64, "version": f"v{VERSION}"},
+            {"text_base64": text_base64, "text": text, "version": f"v{VERSION}"},
             return_url,
         )
