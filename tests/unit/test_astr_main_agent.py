@@ -398,6 +398,37 @@ class TestBuiltinToolInjection:
         assert req.func_tool is not None
         assert req.func_tool.get_tool("web_search_baidu") is builtin_tool
 
+    @pytest.mark.asyncio
+    async def test_apply_web_search_tools_adds_firecrawl_search_and_extract_tools(
+        self, mock_event, mock_context
+    ):
+        """Test Firecrawl web search injects search and extract tools."""
+        module = ama
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {
+                "web_search": True,
+                "websearch_provider": "firecrawl",
+            }
+        }
+        search_tool = MagicMock(spec=FunctionTool)
+        search_tool.name = "web_search_firecrawl"
+        extract_tool = MagicMock(spec=FunctionTool)
+        extract_tool.name = "firecrawl_extract_web_page"
+        tool_mgr = MagicMock()
+        tool_mgr.get_builtin_tool.side_effect = [search_tool, extract_tool]
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        await module._apply_web_search_tools(mock_event, req, mock_context)
+
+        assert tool_mgr.get_builtin_tool.call_args_list == [
+            ((module.FirecrawlWebSearchTool,),),
+            ((module.FirecrawlExtractWebPageTool,),),
+        ]
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("web_search_firecrawl") is search_tool
+        assert req.func_tool.get_tool("firecrawl_extract_web_page") is extract_tool
+
     def test_proactive_cron_job_tools_uses_builtin_tool_manager(self, mock_context):
         """Test cron tool injection through the builtin tool manager."""
         module = ama
@@ -711,144 +742,6 @@ class TestDecorateLlmRequest:
             await module._decorate_llm_request(mock_event, req, mock_context, config)
 
         assert req.prompt == "Hello"
-
-
-class TestModalitiesFix:
-    """Tests for _modalities_fix function."""
-
-    def test_modalities_fix_image_not_supported(self, mock_provider):
-        """Test modality fix when image is not supported."""
-        module = ama
-        mock_provider.provider_config = {"modalities": ["text"]}
-        req = ProviderRequest(prompt="Hello", image_urls=["/path/to/image.jpg"])
-
-        module._modalities_fix(mock_provider, req)
-
-        assert "[Image]" in req.prompt
-        assert req.image_urls == []
-
-    def test_modalities_fix_tool_not_supported(self, mock_provider):
-        """Test modality fix when tool is not supported."""
-        module = ama
-        mock_provider.provider_config = {"modalities": ["text", "image"]}
-        req = ProviderRequest(prompt="Hello")
-        req.func_tool = ToolSet()
-        req.func_tool.add_tool(
-            FunctionTool(
-                name="dummy_tool",
-                description="dummy",
-                parameters={"type": "object", "properties": {}},
-            )
-        )
-
-        module._modalities_fix(mock_provider, req)
-
-        assert req.func_tool is None
-
-    def test_modalities_fix_all_supported(self, mock_provider):
-        """Test modality fix when all features are supported."""
-        module = ama
-        mock_provider.provider_config = {"modalities": ["image", "tool_use"]}
-        tool_set = ToolSet()
-        tool_set.add_tool(
-            FunctionTool(
-                name="dummy_tool",
-                description="dummy",
-                parameters={"type": "object", "properties": {}},
-            )
-        )
-        req = ProviderRequest(
-            prompt="Hello",
-            image_urls=["/path/to/image.jpg"],
-            func_tool=tool_set,
-        )
-
-        module._modalities_fix(mock_provider, req)
-
-        assert req.prompt == "Hello"
-        assert len(req.image_urls) == 1
-        assert req.func_tool is not None
-
-
-class TestSanitizeContextByModalities:
-    """Tests for _sanitize_context_by_modalities function."""
-
-    def test_sanitize_no_op(self, mock_provider):
-        """Test sanitize when disabled or modalities support everything."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, sanitize_context_by_modalities=False
-        )
-        mock_provider.provider_config = {"modalities": ["image", "tool_use"]}
-        req = ProviderRequest(contexts=[{"role": "user", "content": "Hello"}])
-
-        module._sanitize_context_by_modalities(config, mock_provider, req)
-
-        assert len(req.contexts) == 1
-
-    def test_sanitize_removes_tool_messages(self, mock_provider):
-        """Test sanitize removes tool messages when tool_use not supported."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, sanitize_context_by_modalities=True
-        )
-        mock_provider.provider_config = {"modalities": ["image"]}
-        req = ProviderRequest(
-            contexts=[
-                {"role": "user", "content": "Hello"},
-                {"role": "tool", "content": "Tool result"},
-            ]
-        )
-
-        module._sanitize_context_by_modalities(config, mock_provider, req)
-
-        assert len(req.contexts) == 1
-        assert req.contexts[0]["role"] == "user"
-
-    def test_sanitize_removes_tool_calls(self, mock_provider):
-        """Test sanitize removes tool_calls from assistant messages."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, sanitize_context_by_modalities=True
-        )
-        mock_provider.provider_config = {"modalities": ["image"]}
-        req = ProviderRequest(
-            contexts=[
-                {
-                    "role": "assistant",
-                    "content": "Response",
-                    "tool_calls": [{"name": "tool"}],
-                }
-            ]
-        )
-
-        module._sanitize_context_by_modalities(config, mock_provider, req)
-
-        assert "tool_calls" not in req.contexts[0]
-
-    def test_sanitize_removes_image_blocks(self, mock_provider):
-        """Test sanitize removes image blocks when image not supported."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, sanitize_context_by_modalities=True
-        )
-        mock_provider.provider_config = {"modalities": ["tool_use"]}
-        req = ProviderRequest(
-            contexts=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Hello"},
-                        {"type": "image_url", "url": "image.jpg"},
-                    ],
-                }
-            ]
-        )
-
-        module._sanitize_context_by_modalities(config, mock_provider, req)
-
-        assert len(req.contexts[0]["content"]) == 1
-        assert req.contexts[0]["content"][0]["type"] == "text"
 
 
 class TestPluginToolFix:

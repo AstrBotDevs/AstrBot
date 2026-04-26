@@ -58,10 +58,12 @@ _qqofficial_retry = retry(
         (
             botpy.errors.ServerError,
             botpy.errors.SequenceNumberError,
+            OSError,
+            asyncio.TimeoutError,
         )
     ),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=1, max=10),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
     before_sleep=before_sleep_log(logger, logging.WARNING),
     reraise=True,
 )
@@ -564,7 +566,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     ttl=result.get("ttl", 0),
                 )
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
-            logger.error(f"上传媒体文件失败，共尝试3次后放弃: {file_source}")
+            logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
             logger.error(f"上传请求错误: {e}")
 

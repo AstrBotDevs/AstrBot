@@ -1,132 +1,154 @@
 <template>
   <div class="reasoning-block" :class="{ 'reasoning-block--dark': isDark }">
-    <button class="reasoning-header" type="button" @click="toggleExpanded">
+    <button
+      class="reasoning-header"
+      :class="{ 'reasoning-header--trigger': openInSidebar }"
+      type="button"
+      @click="handlePrimaryAction"
+    >
       <span class="reasoning-title">
         {{ tm("reasoning.thinking") }}
       </span>
       <v-icon
         size="22"
         class="reasoning-icon"
-        :class="{ 'rotate-90': isExpanded }"
+        :class="{ 'rotate-90': !openInSidebar && isExpanded }"
       >
         mdi-chevron-right
       </v-icon>
     </button>
-    <div v-if="isExpanded" class="reasoning-content animate-fade-in">
-      <MarkdownRender
-        :key="`reasoning-${isDark ? 'dark' : 'light'}`"
-        :content="reasoning"
-        class="reasoning-text markdown-content"
-        :typewriter="false"
+
+    <div
+      v-if="!openInSidebar && isExpanded"
+      class="reasoning-content animate-fade-in"
+    >
+      <ReasoningTimeline
+        :parts="renderParts"
+        :reasoning="reasoning"
         :is-dark="isDark"
       />
     </div>
+
     <transition :name="previewTransitionName" mode="out-in">
-      <div
-        v-if="showStreamingPreview"
-        :key="previewKey"
-        class="reasoning-preview"
-      >
+      <div v-if="showStreamingPreview" :key="previewKey" class="reasoning-preview">
         {{ previewText }}
       </div>
     </transition>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import type { MessagePart } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
-import { MarkdownRender } from "markstream-vue";
+import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
 
-const props = defineProps({
-  reasoning: {
-    type: String,
-    required: true,
-  },
-  isDark: {
-    type: Boolean,
-    default: false,
-  },
-  initialExpanded: {
-    type: Boolean,
-    default: false,
-  },
-  isStreaming: {
-    type: Boolean,
-    default: false,
-  },
-  hasNonReasoningContent: {
-    type: Boolean,
-    default: false,
-  },
-});
+const props = defineProps<{
+  parts?: MessagePart[];
+  reasoning?: string;
+  isDark?: boolean;
+  initialExpanded?: boolean;
+  isStreaming?: boolean;
+  hasNonReasoningContent?: boolean;
+  openInSidebar?: boolean;
+}>();
+
+const emit = defineEmits<{
+  open: [];
+}>();
 
 const { tm } = useModuleI18n("features/chat");
-const isExpanded = ref(props.initialExpanded);
+const isExpanded = ref(Boolean(props.initialExpanded));
 const previewText = ref("");
 const previewKey = ref(0);
-let previewTimer = null;
-let previewStartTimer = null;
+let previewTimer: ReturnType<typeof setInterval> | null = null;
+let previewStartTimer: ReturnType<typeof setTimeout> | null = null;
+
+const renderParts = computed<MessagePart[]>(() => {
+  if (props.parts?.length) return props.parts;
+  if (props.reasoning) {
+    return [{ type: "think", think: props.reasoning }];
+  }
+  return [];
+});
+
+const openInSidebar = computed(() => Boolean(props.openInSidebar));
+
+const thinkingText = computed(() =>
+  renderParts.value
+    .filter((part) => part.type === "think")
+    .map((part) => String(part.think || ""))
+    .join(""),
+);
 
 const showStreamingPreview = computed(
   () =>
     props.isStreaming &&
-    !isExpanded.value &&
+    (openInSidebar.value || !isExpanded.value) &&
     !props.hasNonReasoningContent &&
     previewText.value,
 );
+
 const previewTransitionName = computed(() =>
   props.hasNonReasoningContent
     ? "reasoning-preview-collapse"
     : "reasoning-preview-fade",
 );
 
-const toggleExpanded = () => {
+function handlePrimaryAction() {
+  if (openInSidebar.value) {
+    emit("open");
+    return;
+  }
   isExpanded.value = !isExpanded.value;
-};
+}
 
-const latestReasoningPreview = () => {
-  const lines = props.reasoning
+function latestReasoningPreview() {
+  const lines = thinkingText.value
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
   return lines.slice(-3).join("\n");
-};
+}
 
-const updatePreviewLine = () => {
+function updatePreviewLine() {
   const nextText = latestReasoningPreview();
   if (!nextText || nextText === previewText.value) return;
   previewText.value = nextText;
   previewKey.value += 1;
-};
+}
 
-const stopPreviewTimer = () => {
+function stopPreviewTimer() {
   if (!previewTimer) return;
   clearInterval(previewTimer);
   previewTimer = null;
-};
+}
 
-const stopPreviewStartTimer = () => {
+function stopPreviewStartTimer() {
   if (!previewStartTimer) return;
   clearTimeout(previewStartTimer);
   previewStartTimer = null;
-};
+}
 
-const startPreviewTimer = () => {
+function startPreviewTimer() {
   updatePreviewLine();
   if (!previewTimer) {
     previewTimer = setInterval(updatePreviewLine, 2000);
   }
-};
+}
 
-const syncPreviewTimer = () => {
-  if (props.isStreaming && !isExpanded.value && !props.hasNonReasoningContent) {
+function syncPreviewTimer() {
+  if (
+    props.isStreaming &&
+    (openInSidebar.value || !isExpanded.value) &&
+    !props.hasNonReasoningContent
+  ) {
     if (!previewTimer && !previewStartTimer) {
       previewStartTimer = setTimeout(() => {
         previewStartTimer = null;
         if (
           props.isStreaming &&
-          !isExpanded.value &&
+          (openInSidebar.value || !isExpanded.value) &&
           !props.hasNonReasoningContent
         ) {
           startPreviewTimer();
@@ -141,10 +163,16 @@ const syncPreviewTimer = () => {
   if (!props.isStreaming) {
     previewText.value = "";
   }
-};
+}
 
 watch(
-  () => [props.isStreaming, isExpanded.value, props.hasNonReasoningContent],
+  () => [
+    props.isStreaming,
+    isExpanded.value,
+    props.hasNonReasoningContent,
+    thinkingText.value,
+    openInSidebar.value,
+  ],
   syncPreviewTimer,
   {
     immediate: true,
@@ -185,6 +213,10 @@ onBeforeUnmount(() => {
   color: rgba(var(--v-theme-on-surface), 0.88);
 }
 
+.reasoning-header--trigger {
+  align-items: flex-start;
+}
+
 .reasoning-icon {
   color: currentcolor;
   transition: transform 0.2s ease;
@@ -199,11 +231,14 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-content {
-  margin-top: 8px;
-  padding: 0;
-  color: rgba(var(--v-theme-on-surface), 0.7);
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 18px;
+  background: rgb(var(--v-theme-surface));
+  color: rgba(var(--v-theme-on-surface), 0.72);
   animation: fadeIn 0.2s ease-in-out;
-  font-style: italic;
+  font-style: normal;
 }
 
 .reasoning-preview {
@@ -216,13 +251,9 @@ onBeforeUnmount(() => {
   -webkit-line-clamp: 3;
   white-space: pre-line;
   font: inherit;
-  font-style: italic;
-}
-
-.reasoning-text {
-  font-size: inherit;
-  line-height: inherit;
-  color: inherit;
+  font-size: 14.5px;
+  line-height: 1.62;
+  font-style: normal;
 }
 
 .animate-fade-in {
@@ -261,12 +292,11 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-preview-collapse-leave-active {
-  overflow: hidden;
   transition:
-    max-height 0.45s cubic-bezier(0.55, 0, 1, 0.45),
-    margin-top 0.45s cubic-bezier(0.55, 0, 1, 0.45),
-    opacity 0.35s ease-in,
-    transform 0.45s cubic-bezier(0.55, 0, 1, 0.45);
+    opacity 0.18s ease,
+    max-height 0.18s ease,
+    margin-top 0.18s ease;
+  overflow: hidden;
 }
 
 .reasoning-preview-collapse-enter-from {
@@ -274,15 +304,14 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-preview-collapse-leave-from {
-  max-height: 5rem;
   opacity: 1;
-  transform: translateY(0);
+  max-height: 6.5em;
+  margin-top: 4px;
 }
 
 .reasoning-preview-collapse-leave-to {
+  opacity: 0;
   max-height: 0;
   margin-top: 0;
-  opacity: 0;
-  transform: translateY(-8px);
 }
 </style>

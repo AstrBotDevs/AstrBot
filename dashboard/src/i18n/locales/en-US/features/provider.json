@@ -123,6 +123,7 @@
     }
   },
   "models": {
+    "title": "Models",
     "available": "Available Models",
     "configured": "Configured Models",
     "empty": "No configured models yet. Click \"Fetch Models\" above to add.",
