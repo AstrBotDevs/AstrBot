@@ -181,6 +181,33 @@ class ProviderOpenAIOfficial(Provider):
             return True
         return False
 
+    def _is_tool_choice_required_incompatible_with_thinking_error(
+        self,
+        error: Exception,
+        candidates: list[str] | None = None,
+    ) -> bool:
+        if candidates is None:
+            candidates = [
+                candidate.lower()
+                for candidate in self._extract_error_text_candidates(error)
+            ]
+        exact_messages = (
+            "tool_choice 'required' is incompatible with thinking enabled",
+            'tool_choice "required" is incompatible with thinking enabled',
+        )
+        for candidate in candidates:
+            if any(message in candidate for message in exact_messages):
+                return True
+
+            if (
+                "tool_choice" in candidate
+                and re.search(r"\brequired\b", candidate)
+                and "thinking enabled" in candidate
+                and "incompatible" in candidate
+            ):
+                return True
+        return False
+
     @classmethod
     def _encode_image_file_to_data_url(
         cls,
@@ -1098,6 +1125,43 @@ class ProviderOpenAIOfficial(Provider):
                 "invalid_attachment",
                 image_fallback_used=True,
             )
+        required_tool_choice = payloads.get("tool_choice") == "required"
+        if required_tool_choice:
+            candidates = [
+                candidate.lower()
+                for candidate in self._extract_error_text_candidates(e)
+            ]
+            thinking_conflict_error = (
+                self._is_tool_choice_required_incompatible_with_thinking_error(
+                    e,
+                    candidates,
+                )
+            )
+            if thinking_conflict_error:
+                provider_name = self.provider_config.get("provider", "unknown")
+                logger.warning(
+                    "检测到 `tool_choice=required` 与 thinking 模式不兼容，"
+                    f"自动降级为 `auto` 并重试，provider={provider_name}"
+                )
+                retry_payloads = {**payloads, "tool_choice": "auto"}
+                return (
+                    False,
+                    chosen_key,
+                    available_api_keys,
+                    retry_payloads,
+                    context_query,
+                    func_tool,
+                    image_fallback_used,
+                )
+            has_related_keywords = any(
+                "tool_choice" in candidate and "thinking" in candidate
+                for candidate in candidates
+            )
+            if has_related_keywords:
+                logger.debug(
+                    "检测到 tool_choice/thinking 相关错误，但未命中降级模式，"
+                    "保持 tool_choice=required"
+                )
 
         if (
             "Function calling is not enabled" in str(e)
