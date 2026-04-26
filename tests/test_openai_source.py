@@ -246,6 +246,40 @@ async def test_openai_payload_keeps_reasoning_content_in_assistant_history():
 
 
 @pytest.mark.asyncio
+async def test_deepseek_thinking_payload_adds_empty_reasoning_content_to_assistant_history():
+    provider = _make_provider({"model": "deepseek-v4-flash"})
+    try:
+        payloads = {
+            "model": "deepseek-v4-flash",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": "foreign assistant reply"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "search", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call_1", "content": "result"},
+            ],
+        }
+
+        provider._finally_convert_payload(payloads)
+
+        assert payloads["messages"][1]["reasoning_content"] == ""
+        assert payloads["messages"][2]["reasoning_content"] == ""
+        assert "reasoning_content" not in payloads["messages"][0]
+        assert "reasoning_content" not in payloads["messages"][3]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_groq_payload_drops_reasoning_content_from_assistant_history():
     provider = _make_groq_provider()
     try:
@@ -1431,6 +1465,67 @@ async def test_query_keeps_reasoning_only_assistant_message(monkeypatch):
             "role": "assistant",
             "content": None,
             "reasoning_content": "deepseek reasoning",
+        }
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_keeps_empty_reasoning_content_assistant_message(monkeypatch):
+    """Test that empty reasoning_content still marks an assistant message as valid."""
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "ok",
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            )
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "reasoning_content": "",
+                },
+                {"role": "user", "content": "world"},
+            ],
+        }
+
+        await provider._query(payloads=payloads, tools=None)
+
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 3
+        assert messages[1] == {
+            "role": "assistant",
+            "content": None,
+            "reasoning_content": "",
         }
     finally:
         await provider.terminate()
