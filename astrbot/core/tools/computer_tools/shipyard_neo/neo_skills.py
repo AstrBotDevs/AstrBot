@@ -168,8 +168,32 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
             "properties": {
                 "payload": {
                     "anyOf": [
-                        {"type": "object"},
-                        {"type": "array", "items": {"type": "object"}},
+                        {
+                            "type": "object",
+                            "additionalProperties": True,
+                            "properties": {
+                                "skill_markdown": {"type": "string"},
+                                "inputs": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "additionalProperties": True,
+                                    },
+                                },
+                                "outputs": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "additionalProperties": True,
+                                    },
+                                },
+                                "meta": {
+                                    "type": "object",
+                                    "additionalProperties": True,
+                                },
+                            },
+                        },
+                        {"type": "array", "items": {}},
                     ],
                     "description": (
                         "Skill payload JSON. Typical schema: {skill_markdown, inputs, outputs, meta}. "
