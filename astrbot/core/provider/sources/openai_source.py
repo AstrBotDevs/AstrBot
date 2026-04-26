@@ -555,12 +555,12 @@ class ProviderOpenAIOfficial(Provider):
                 if msg.get("role") == "assistant":
                     content = msg.get("content")
                     tool_calls = msg.get("tool_calls")
-                    reasoning_content = msg.get("reasoning_content")
+                    has_reasoning_content = "reasoning_content" in msg
 
                     # 情况1: 空/null content 且无 tool_calls/reasoning_content -> 过滤掉
                     if (
                         not tool_calls
-                        and not reasoning_content
+                        and not has_reasoning_content
                         and (content == "" or content is None)
                     ):
                         logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
@@ -968,16 +968,19 @@ class ProviderOpenAIOfficial(Provider):
         """Finally convert the payload. Such as think part conversion, tool inject."""
         model = payloads.get("model", "").lower()
         is_gemini = "gemini" in model
+        messages = payloads.get("messages", [])
 
-        for message in payloads.get("messages", []):
+        for message in messages:
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
             ):
-                reasoning_content = ""
+                reasoning_content: str | None = None
                 new_content = []  # not including think part
                 for part in message["content"]:
                     if part.get("type") == "think":
-                        reasoning_content += str(part.get("think"))
+                        reasoning_content = (reasoning_content or "") + str(
+                            part.get("think")
+                        )
                     else:
                         new_content.append(part)
                 # Some providers (Grok, etc.) reject empty content lists.
@@ -999,6 +1002,24 @@ class ProviderOpenAIOfficial(Provider):
                         message["content"] = json.dumps(
                             {"result": content}, ensure_ascii=False
                         )
+
+        if self._is_deepseek_thinking_model(model) and isinstance(messages, list):
+            self._normalize_deepseek_thinking_messages(messages)
+
+    @staticmethod
+    def _is_deepseek_thinking_model(model: str) -> bool:
+        return "deepseek" in model and (
+            "v4" in model or "reasoner" in model or "flash" in model
+        )
+
+    @staticmethod
+    def _normalize_deepseek_thinking_messages(messages: list[dict]) -> None:
+        for message in messages:
+            if message.get("role") != "assistant":
+                continue
+            message.setdefault("reasoning_content", "")
+            if message.get("content") == []:
+                message["content"] = None
 
     async def _handle_api_error(
         self,
