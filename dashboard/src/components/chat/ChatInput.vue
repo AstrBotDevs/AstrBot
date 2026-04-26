@@ -355,6 +355,10 @@ const props = withDefaults(defineProps<Props>(), {
   stagedFiles: () => [],
   replyTo: null,
   sendShortcut: "shift_enter",
+  configSelectorDisabled: false,
+  providerModelMenuDisabled: false,
+  uploadFilesDisabled: false,
+  recordDisabled: false,
 });
 
 const emit = defineEmits<{
