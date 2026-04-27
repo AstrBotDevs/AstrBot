@@ -137,9 +137,9 @@
   },
   "stats": {
     "tokens": "Tokens",
-    "inputTokens": "Input Tokens",
+    "inputTokens": "Input (other)",
     "outputTokens": "Output Tokens",
-    "cachedTokens": "Cached Tokens",
+    "cachedTokens": "Input (cached)",
     "duration": "Duration",
     "ttft": "Time to First Token"
   },

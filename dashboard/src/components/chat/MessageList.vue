@@ -185,6 +185,15 @@
                 />
               </template>
               <v-card class="stats-card" elevation="4">
+                <div
+                  v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
+                  class="stats-row"
+                >
+                  <span>{{ tm("stats.cachedTokens") }}</span>
+                  <strong>{{
+                    cachedInputTokens(messageContent(msg).agentStats)
+                  }}</strong>
+                </div>
                 <div class="stats-row">
                   <span>{{ tm("stats.inputTokens") }}</span>
                   <strong>{{
@@ -512,11 +521,15 @@ function formatTime(value: string) {
 
 function inputTokens(stats: any) {
   const usage = stats?.token_usage || {};
-  return (usage.input_other || 0) + (usage.input_cached || 0);
+  return usage.input_other || 0;
 }
 
 function outputTokens(stats: any) {
   return stats?.token_usage?.output || 0;
+}
+
+function cachedInputTokens(stats: any) {
+  return stats?.token_usage?.input_cached || 0;
 }
 
 function agentDuration(stats: any) {
