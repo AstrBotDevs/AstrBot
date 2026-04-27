@@ -1,4 +1,5 @@
 from sqlalchemy import select
+from sqlmodel import col
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -267,8 +268,8 @@ class ConversationCommands:
         async with db.get_db() as session:
             result = await session.execute(
                 select(ProviderStat).where(
-                    ProviderStat.agent_type == "internal",
-                    ProviderStat.conversation_id == cid,
+                    col(ProviderStat.agent_type) == "internal",
+                    col(ProviderStat.conversation_id) == cid,
                 )
             )
             records = result.scalars().all()
@@ -281,23 +282,17 @@ class ConversationCommands:
             )
             return
 
-        total_calls = len(records)
         total_input_other = sum(r.token_input_other for r in records)
         total_input_cached = sum(r.token_input_cached for r in records)
         total_output = sum(r.token_output for r in records)
         total_tokens = total_input_other + total_input_cached + total_output
-        success_count = sum(1 for r in records if r.status != "error")
 
         ret = (
-            f"📊 Conversation Stats (ID: {cid[:8]}...)\n"
-            f"───\n"
-            f"Total Calls: {total_calls}\n"
-            f"Successful: {success_count}\n"
-            f"───\n"
-            f"Input Tokens (other): {total_input_other:,}\n"
-            f"Input Tokens (cached): {total_input_cached:,}\n"
-            f"Output Tokens:        {total_output:,}\n"
-            f"Total Tokens:         {total_tokens:,}"
+            f"📊 Token usage (ID: {cid[:8]}...)\n"
+            f"Total:          {total_tokens:,}\n"
+            f"Input (other):  {total_input_other:,}\n"
+            f"Input (cached): {total_input_cached:,}\n"
+            f"Output:         {total_output:,}\n"
         )
 
         message.set_result(MessageEventResult().message(ret))
