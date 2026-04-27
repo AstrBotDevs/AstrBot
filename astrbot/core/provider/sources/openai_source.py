@@ -990,6 +990,11 @@ class ProviderOpenAIOfficial(Provider):
         """Finally convert the payload. Such as think part conversion, tool inject."""
         model = payloads.get("model", "").lower()
         is_gemini = "gemini" in model
+        deepseek_reasoning_models = {"deepseek-v4-pro", "deepseek-v4-flash"}
+        is_deepseek_v4_reasoning = (
+            model in deepseek_reasoning_models
+            or "api.deepseek.com" in self.client.base_url.host
+        )
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
@@ -1008,6 +1013,15 @@ class ProviderOpenAIOfficial(Provider):
                 message["content"] = new_content or None
                 if reasoning_content_present:
                     message["reasoning_content"] = reasoning_content
+
+            if (
+                message.get("role") == "assistant"
+                and is_deepseek_v4_reasoning
+                and "reasoning_content" not in message
+            ):
+                # DeepSeek v4 reasoning models require the field on assistant
+                # history messages, even when the reasoning content is empty.
+                message["reasoning_content"] = ""
 
             # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
             # 纯文本会触发 400 Invalid argument，需要包一层 JSON。
