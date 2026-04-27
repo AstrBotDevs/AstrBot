@@ -149,6 +149,22 @@ const viewChangelog = () => {
   emit("view-changelog", props.extension);
 };
 
+const safeSocialLink = computed(() => {
+  const socialLink = props.extension?.social_link;
+  if (typeof socialLink !== "string" || !socialLink.trim().length) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(socialLink);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.href
+      : "";
+  } catch {
+    return "";
+  }
+});
+
 </script>
 
 <template>
@@ -374,6 +390,33 @@ const viewChangelog = () => {
               </div>
 
               <div
+                v-if="!marketMode && extension.author"
+                class="extension-author-row"
+              >
+                <v-icon
+                  icon="mdi-account"
+                  size="x-small"
+                  class="extension-author-row__icon"
+                ></v-icon>
+                <a
+                  v-if="safeSocialLink"
+                  :href="safeSocialLink"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="extension-author-row__link text-subtitle-2 font-weight-medium"
+                  @click.stop
+                >
+                  {{ extension.author }}
+                </a>
+                <span
+                  v-else
+                  class="extension-author-row__text text-subtitle-2 font-weight-medium"
+                >
+                  {{ extension.author }}
+                </span>
+              </div>
+
+              <div
                 class="extension-desc"
                 :class="{ 'text-caption': $vuetify.display.xs }"
               >
@@ -456,6 +499,14 @@ const viewChangelog = () => {
             <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
           </v-list-item>
 
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-text-box-search-outline"
+            @click="viewChangelog"
+          >
+            <v-list-item-title>{{ tm("pluginChangelog.menuTitle") }}</v-list-item-title>
+          </v-list-item>
+
           <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click="updateExtension">
             <v-list-item-title>{{
               extension.has_update
@@ -511,6 +562,41 @@ const viewChangelog = () => {
 
 .extension-chip-group {
   gap: 8px;
+}
+
+.extension-author-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  color: rgb(var(--v-theme-primary));
+  min-width: 0;
+}
+
+.extension-author-row__icon {
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  flex-shrink: 0;
+}
+
+.extension-author-row__link,
+.extension-author-row__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extension-author-row__link,
+.extension-author-row__text {
+  color: rgb(var(--v-theme-primary));
+}
+
+.extension-author-row__link {
+  text-decoration: none;
+}
+
+.extension-author-row__link:hover {
+  text-decoration: underline;
 }
 
 .extension-desc {
