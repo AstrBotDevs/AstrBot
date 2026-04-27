@@ -58,15 +58,15 @@ class ExecuteShellTool(FunctionTool):
                     "type": "string",
                     "description": "The shell command to execute in the current runtime shell (for example, cmd.exe on Windows). Equal to 'cd {working_dir} && {your_command}'.",
                 },
-                "timeout": {
-                    "type": "integer",
-                    "description": "Optional timeout in seconds for the command execution.",
-                    "default": 300,
-                },
                 "background": {
                     "type": "boolean",
                     "description": "Run the command in the background. Use the file read tool to read the output later.",
                     "default": False,
+                },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional timeout in seconds for the command execution.",
+                    "default": 300,
                 },
                 "env": {
                     "type": "object",
