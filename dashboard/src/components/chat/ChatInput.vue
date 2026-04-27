@@ -114,6 +114,8 @@
         @keydown="handleKeyDown"
         @compositionstart="handleCompositionStart"
         @compositionend="handleCompositionEnd"
+        @compositioncancel="handleCompositionEnd"
+        @blur="clearCompositionState"
         :disabled="disabled"
         placeholder="Ask AstrBot..."
         class="chat-textarea"
@@ -383,6 +385,7 @@ const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
 const isDragging = ref(false);
 const isComposing = ref(false);
+const lastCompositionEndAt = ref<number | null>(null);
 let dragLeaveTimeout: number | null = null;
 
 const localPrompt = computed({
@@ -518,7 +521,7 @@ function handleKeyDown(e: KeyboardEvent) {
     return;
   }
 
-  if (isComposingEnter(e, isComposing.value)) {
+  if (isComposingEnter(e, isComposing.value, lastCompositionEndAt.value)) {
     return;
   }
 
@@ -543,10 +546,21 @@ function handleKeyDown(e: KeyboardEvent) {
 
 function handleCompositionStart() {
   isComposing.value = true;
+  lastCompositionEndAt.value = null;
 }
 
-function handleCompositionEnd() {
+function handleCompositionEnd(e: CompositionEvent) {
+  lastCompositionEndAt.value = e.timeStamp;
+  resetComposingState();
+}
+
+function resetComposingState() {
   isComposing.value = false;
+}
+
+function clearCompositionState() {
+  isComposing.value = false;
+  lastCompositionEndAt.value = null;
 }
 
 function handleKeyUp(e: KeyboardEvent) {
@@ -650,6 +664,7 @@ onBeforeUnmount(() => {
   if (inputField.value) {
     inputField.value.removeEventListener("paste", handlePaste);
   }
+  clearCompositionState();
   document.removeEventListener("keyup", handleKeyUp);
 });
 
