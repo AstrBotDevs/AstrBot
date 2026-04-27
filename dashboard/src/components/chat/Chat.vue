@@ -95,6 +95,7 @@
                   active: currSessionId === session.session_id,
                   selected: isSessionSelected(session.session_id),
                   'selection-mode': isSessionSelectionMode,
+                  'drop-before': isDropTarget(session.session_id),
                 }"
                 role="button"
                 tabindex="0"
@@ -117,7 +118,8 @@
                   )
                 "
                 @dragend="finishProjectSessionDrag"
-                @dragover.prevent
+                @dragover.prevent="markDropTarget(session.session_id)"
+                @dragleave="clearDropTarget(session.session_id)"
                 @drop.stop.prevent="
                   dropProjectSessionsBefore(
                     project.project_id,
@@ -211,6 +213,7 @@
                 !isProviderWorkspace && currSessionId === session.session_id,
               selected: isSessionSelected(session.session_id),
               'selection-mode': isSessionSelectionMode,
+              'drop-before': isDropTarget(session.session_id),
             }"
             role="button"
             tabindex="0"
@@ -222,7 +225,8 @@
             @pointercancel="cancelSessionLongPress"
             @dragstart="startSessionDrag($event, session.session_id)"
             @dragend="finishSessionDrag"
-            @dragover.prevent
+            @dragover.prevent="markDropTarget(session.session_id)"
+            @dragleave="clearDropTarget(session.session_id)"
             @drop.stop.prevent="dropSessionsBefore(session.session_id)"
             @keydown.enter="handleSessionItemClick(session.session_id)"
             @keydown.space.prevent="handleSessionItemClick(session.session_id)"
@@ -781,6 +785,7 @@ const deletingSelectedSessions = ref(false);
 const refsSidebarOpen = ref(false);
 const expandedProjectIds = ref<string[]>([]);
 const selectedProjectSessionSourceId = ref<string | null>(null);
+const dropTargetSessionId = ref<string | null>(null);
 const {
   draggingSessionIds,
   draggingSourceProjectId,
@@ -1181,6 +1186,26 @@ function handleProjectSessionItemClick(
   selectProjectSession(sessionId, sourceProjectId);
 }
 
+function isDropTarget(sessionId: string) {
+  return dropTargetSessionId.value === sessionId;
+}
+
+function markDropTarget(sessionId: string) {
+  if (
+    !draggingSessionIds.value.length ||
+    draggingSessionIds.value.includes(sessionId)
+  ) {
+    return;
+  }
+  dropTargetSessionId.value = sessionId;
+}
+
+function clearDropTarget(sessionId?: string) {
+  if (!sessionId || dropTargetSessionId.value === sessionId) {
+    dropTargetSessionId.value = null;
+  }
+}
+
 function startSessionDrag(event: DragEvent, sessionId: string) {
   const sessionIds = startSessionDragState(sessionId);
   configureSessionDrag(event, sessionIds);
@@ -1191,6 +1216,7 @@ async function dropDraggedSessionsOnProject(projectId: string) {
   const sourceProjectId = draggingSourceProjectId.value;
   if (!sessionIds.length) return;
   if (sourceProjectId === projectId) {
+    clearDropTarget();
     finishSessionDrag();
     return;
   }
@@ -1213,6 +1239,7 @@ async function dropDraggedSessionsOnProject(projectId: string) {
       clearSessionSelection();
     }
   } finally {
+    clearDropTarget();
     finishSessionDrag();
   }
 }
@@ -1235,6 +1262,7 @@ async function dropSessionsBefore(targetSessionId: string) {
       sessionIds.map((sessionId) => removeSessionFromProject(sessionId)),
     );
     if (!results.some(Boolean)) {
+      clearDropTarget();
       finishSessionDrag();
       return;
     }
@@ -1267,6 +1295,7 @@ async function dropSessionsBefore(targetSessionId: string) {
     }
     clearSessionSelection();
   } finally {
+    clearDropTarget();
     finishSessionDrag();
   }
 }
@@ -1292,6 +1321,7 @@ async function dropProjectSessionsBefore(
       sessionIds.map((sessionId) => addSessionToProject(sessionId, projectId)),
     );
     if (!results.some(Boolean)) {
+      clearDropTarget();
       finishSessionDrag();
       return;
     }
@@ -1313,6 +1343,7 @@ async function dropProjectSessionsBefore(
     targetSessionId,
   );
   if (nextSessionIds.join("\0") === currentSessionIds.join("\0")) {
+    clearDropTarget();
     finishSessionDrag();
     return;
   }
@@ -1337,6 +1368,7 @@ async function dropProjectSessionsBefore(
       await loadProjectSessions(projectId);
     }
   } finally {
+    clearDropTarget();
     finishSessionDrag();
   }
 }
@@ -1382,6 +1414,7 @@ async function dropDraggedProjectSessionsOut() {
       }
     }
   } finally {
+    clearDropTarget();
     finishSessionDrag();
   }
 }
@@ -2076,6 +2109,29 @@ function toggleTheme() {
   padding: 8px 12px;
   cursor: pointer;
   text-align: left;
+  position: relative;
+  transition:
+    background-color 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    margin-top 0.16s ease;
+}
+
+.session-item.drop-before {
+  margin-top: 12px;
+  transform: translateY(2px);
+}
+
+.session-item.drop-before::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: -8px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(80, 150, 230, 0.72);
+  box-shadow: 0 0 0 4px rgba(80, 150, 230, 0.12);
 }
 
 .session-item:hover,
