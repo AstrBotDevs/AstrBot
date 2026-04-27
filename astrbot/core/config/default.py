@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.23.5"
+VERSION = "4.23.6"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -3217,6 +3217,7 @@ CONFIG_METADATA_3 = {
                             "baidu_ai_search",
                             "bocha",
                             "brave",
+                            "firecrawl",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3249,6 +3250,16 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。",
                         "condition": {
                             "provider_settings.websearch_provider": "brave",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_firecrawl_key": {
+                        "description": "Firecrawl API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "firecrawl",
                             "provider_settings.web_search": True,
                         },
                     },
