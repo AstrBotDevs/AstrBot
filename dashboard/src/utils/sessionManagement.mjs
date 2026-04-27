@@ -1,5 +1,15 @@
 export const DRAG_MIME_SESSION_IDS = "application/x-astrbot-session-ids";
 
+export function configureSessionDrag(event, sessionIds) {
+  event.dataTransfer?.setData(
+    DRAG_MIME_SESSION_IDS,
+    JSON.stringify(sessionIds),
+  );
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+  }
+}
+
 export function toggleSessionSelection(selectedSessionIds, sessionId) {
   return selectedSessionIds.includes(sessionId)
     ? selectedSessionIds.filter((id) => id !== sessionId)

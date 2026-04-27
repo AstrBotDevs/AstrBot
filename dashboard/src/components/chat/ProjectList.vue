@@ -78,6 +78,7 @@
             v-if="expandedProjectIds.includes(project.project_id)"
             name="project-sessions"
             :project="project"
+            :sessions="projectSessionsById[project.project_id] || []"
           />
         </div>
       </div>
@@ -87,6 +88,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
+import type { Session } from "@/composables/useSessions";
 import { useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
@@ -104,6 +106,7 @@ interface Props {
   initialExpanded?: boolean;
   selectedProjectId?: string | null;
   expandedProjectIds?: string[];
+  projectSessionsById?: Record<string, Session[]>;
   dragActive?: boolean;
 }
 
@@ -111,6 +114,7 @@ const props = withDefaults(defineProps<Props>(), {
   initialExpanded: false,
   selectedProjectId: null,
   expandedProjectIds: () => [],
+  projectSessionsById: () => ({}),
   dragActive: false,
 });
 

@@ -77,6 +77,7 @@
           :projects="projects"
           :selected-project-id="selectedProjectId"
           :expanded-project-ids="expandedProjectIds"
+          :project-sessions-by-id="projectSessionsById"
           :drag-active="draggingSessionIds.length > 0"
           @create-project="openCreateProjectDialog"
           @edit-project="openEditProjectDialog"
@@ -84,10 +85,10 @@
           @select-project="selectProject"
           @drop-sessions="dropDraggedSessionsOnProject"
         >
-          <template #project-sessions="{ project }">
+          <template #project-sessions="{ project, sessions: projectSessions }">
             <div class="project-inline-sessions">
               <div
-                v-for="session in projectSessionsFor(project.project_id)"
+                v-for="session in projectSessions"
                 :key="session.session_id"
                 class="session-item project-session-sidebar-item"
                 :class="{
@@ -150,7 +151,7 @@
                 </div>
               </div>
               <div
-                v-if="!projectSessionsFor(project.project_id).length"
+                v-if="!projectSessions.length"
                 class="empty-sessions expanded-project-empty"
               >
                 {{ tm("project.noSessions") }}
@@ -666,7 +667,7 @@ import { useProjects } from "@/composables/useProjects";
 import { useSessionSelectionDrag } from "@/composables/useSessionSelectionDrag";
 import { useCustomizerStore } from "@/stores/customizer";
 import {
-  DRAG_MIME_SESSION_IDS,
+  configureSessionDrag,
   toggleExpandedProjectIds,
 } from "@/utils/sessionManagement.mjs";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
@@ -1163,13 +1164,7 @@ function handleProjectSessionItemClick(
 
 function startSessionDrag(event: DragEvent, sessionId: string) {
   const sessionIds = startSessionDragState(sessionId);
-  event.dataTransfer?.setData(
-    DRAG_MIME_SESSION_IDS,
-    JSON.stringify(sessionIds),
-  );
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = "move";
-  }
+  configureSessionDrag(event, sessionIds);
 }
 
 async function dropDraggedSessionsOnProject(projectId: string) {
@@ -1207,13 +1202,7 @@ function startProjectSessionDrag(
   sourceProjectId: string,
 ) {
   const payload = startProjectSessionDragState(sessionId, sourceProjectId);
-  event.dataTransfer?.setData(
-    DRAG_MIME_SESSION_IDS,
-    JSON.stringify(payload.sessionIds),
-  );
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = "move";
-  }
+  configureSessionDrag(event, payload.sessionIds);
 }
 
 function finishProjectSessionDrag() {
