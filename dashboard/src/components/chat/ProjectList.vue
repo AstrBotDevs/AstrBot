@@ -45,6 +45,13 @@
         >
           <span class="project-emoji">{{ project.emoji || "📁" }}</span>
           <span class="project-title">{{ project.title }}</span>
+          <v-icon size="16" class="project-row-toggle">
+            {{
+              expandedProjectId === project.project_id
+                ? "mdi-chevron-up"
+                : "mdi-chevron-down"
+            }}
+          </v-icon>
           <span class="project-actions">
             <v-btn
               icon="mdi-pencil"
@@ -86,12 +93,14 @@ interface Props {
   projects: Project[];
   initialExpanded?: boolean;
   selectedProjectId?: string | null;
+  expandedProjectId?: string | null;
   dragActive?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   initialExpanded: false,
   selectedProjectId: null,
+  expandedProjectId: null,
   dragActive: false,
 });
 
@@ -232,6 +241,11 @@ function handleProjectDrop(projectId: string) {
   white-space: nowrap;
   font-size: 14px;
   font-weight: 500;
+}
+
+.project-row-toggle {
+  color: var(--chat-muted);
+  flex: 0 0 auto;
 }
 
 .project-actions {

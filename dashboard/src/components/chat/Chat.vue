@@ -76,6 +76,7 @@
           v-if="!isSidebarCollapsed"
           :projects="projects"
           :selected-project-id="selectedProjectId"
+          :expanded-project-id="expandedProjectId"
           :drag-active="draggingSessionIds.length > 0"
           @create-project="openCreateProjectDialog"
           @edit-project="openEditProjectDialog"
@@ -110,60 +111,105 @@
         </div>
 
         <div
-          v-for="session in sessions"
-          :key="session.session_id"
-          class="session-item"
-          :class="{
-            active:
-              !isProviderWorkspace && currSessionId === session.session_id,
-            selected: isSessionSelected(session.session_id),
-            'selection-mode': isSessionSelectionMode,
-          }"
-          role="button"
-          tabindex="0"
-          draggable="true"
-          @click="handleSessionItemClick(session.session_id)"
-          @pointerdown="startSessionLongPress(session.session_id)"
-          @pointerup="cancelSessionLongPress"
-          @pointerleave="cancelSessionLongPress"
-          @pointercancel="cancelSessionLongPress"
-          @dragstart="startSessionDrag($event, session.session_id)"
-          @dragend="finishSessionDrag"
-          @keydown.enter="handleSessionItemClick(session.session_id)"
-          @keydown.space.prevent="handleSessionItemClick(session.session_id)"
+          class="session-drop-zone"
+          :class="{ 'drop-ready': sessionListDropReady }"
+          @dragover.prevent="handleSessionListDragOver"
+          @dragleave="handleSessionListDragLeave"
+          @drop.prevent="dropDraggedProjectSessionsOut"
         >
-          <span v-if="!isSidebarCollapsed" class="session-title">{{
-            sessionTitle(session)
-          }}</span>
-          <div class="session-actions" @click.stop @pointerdown.stop>
-            <v-btn
-              icon="mdi-pencil-outline"
-              size="x-small"
-              variant="text"
-              class="session-action-btn"
-              :title="tm('conversation.editDisplayName')"
-              @click="editSidebarSessionTitle(session)"
-            />
-            <v-btn
-              icon="mdi-delete-outline"
-              size="x-small"
-              variant="text"
-              class="session-action-btn"
-              :title="tm('actions.deleteChat')"
-              @click="deleteSidebarSession(session)"
+          <div
+            v-if="expandedProject"
+            class="expanded-project-sessions"
+            @dragover.stop
+            @drop.stop.prevent="finishProjectSessionDrag"
+          >
+            <div class="expanded-project-title">
+              {{ expandedProject.title }}
+            </div>
+            <div
+              v-for="session in expandedProjectSessions"
+              :key="session.session_id"
+              class="session-item project-session-sidebar-item"
+              role="button"
+              tabindex="0"
+              draggable="true"
+              @click="selectProjectSession(session.session_id)"
+              @dragstart="startProjectSessionDrag($event, session.session_id)"
+              @dragend="finishProjectSessionDrag"
+              @keydown.enter="selectProjectSession(session.session_id)"
+              @keydown.space.prevent="selectProjectSession(session.session_id)"
+            >
+              <span class="session-title">{{ sessionTitle(session) }}</span>
+            </div>
+            <div
+              v-if="!expandedProjectSessions.length"
+              class="empty-sessions expanded-project-empty"
+            >
+              {{ tm("project.noSessions") }}
+            </div>
+          </div>
+
+          <div
+            v-for="session in sessions"
+            :key="session.session_id"
+            class="session-item"
+            :class="{
+              active:
+                !isProviderWorkspace && currSessionId === session.session_id,
+              selected: isSessionSelected(session.session_id),
+              'selection-mode': isSessionSelectionMode,
+            }"
+            role="button"
+            tabindex="0"
+            draggable="true"
+            @click="handleSessionItemClick(session.session_id)"
+            @pointerdown="startSessionLongPress(session.session_id)"
+            @pointerup="cancelSessionLongPress"
+            @pointerleave="cancelSessionLongPress"
+            @pointercancel="cancelSessionLongPress"
+            @dragstart="startSessionDrag($event, session.session_id)"
+            @dragend="finishSessionDrag"
+            @keydown.enter="handleSessionItemClick(session.session_id)"
+            @keydown.space.prevent="handleSessionItemClick(session.session_id)"
+          >
+            <span v-if="!isSidebarCollapsed" class="session-title">{{
+              sessionTitle(session)
+            }}</span>
+            <div class="session-actions" @click.stop @pointerdown.stop>
+              <v-btn
+                icon="mdi-pencil-outline"
+                size="x-small"
+                variant="text"
+                class="session-action-btn"
+                :title="tm('conversation.editDisplayName')"
+                @click="editSidebarSessionTitle(session)"
+              />
+              <v-btn
+                icon="mdi-delete-outline"
+                size="x-small"
+                variant="text"
+                class="session-action-btn"
+                :title="tm('actions.deleteChat')"
+                @click="deleteSidebarSession(session)"
+              />
+            </div>
+            <v-progress-circular
+              v-if="isSessionRunning(session.session_id)"
+              class="session-progress"
+              indeterminate
+              size="16"
+              width="2"
             />
           </div>
-          <v-progress-circular
-            v-if="isSessionRunning(session.session_id)"
-            class="session-progress"
-            indeterminate
-            size="16"
-            width="2"
-          />
         </div>
 
         <div
-          v-if="!isSidebarCollapsed && !sessions.length && !loadingSessions"
+          v-if="
+            !isSidebarCollapsed &&
+            !sessions.length &&
+            !loadingSessions &&
+            !expandedProject
+          "
           class="empty-sessions"
         >
           {{ tm("conversation.noHistory") }}
@@ -572,7 +618,9 @@ import { useProjects } from "@/composables/useProjects";
 import { useCustomizerStore } from "@/stores/customizer";
 import {
   getDragSessionIds,
+  getProjectDragPayload,
   shouldSuppressClickAfterLongPress,
+  toggleExpandedProject,
   toggleSessionSelection,
 } from "@/utils/sessionManagement.mjs";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
@@ -622,6 +670,7 @@ const {
   updateProject,
   deleteProject: deleteProjectById,
   addSessionToProject,
+  removeSessionFromProject,
   getProjectSessions,
 } = useProjects();
 
@@ -671,7 +720,10 @@ const activeReasoningTarget = ref<{
 const deletingThread = ref(false);
 const deletingSelectedSessions = ref(false);
 const refsSidebarOpen = ref(false);
+const expandedProjectId = ref<string | null>(null);
 const draggingSessionIds = ref<string[]>([]);
+const draggingSourceProjectId = ref<string | null>(null);
+const sessionListDropReady = ref(false);
 const isSessionSelectionMode = ref(false);
 const suppressNextSessionClick = ref(false);
 const sessionLongPressMs = 450;
@@ -795,6 +847,15 @@ const selectedProject = computed(
       (project) => project.project_id === selectedProjectId.value,
     ) || null,
 );
+const expandedProject = computed(
+  () =>
+    projects.value.find(
+      (project) => project.project_id === expandedProjectId.value,
+    ) || null,
+);
+const expandedProjectSessions = computed(() =>
+  expandedProjectId.value ? projectSessions.value : [],
+);
 const chatInputReplyTarget = computed(() =>
   replyTarget.value?.id == null
     ? null
@@ -914,11 +975,19 @@ function openEditProjectDialog(project: Project) {
 
 async function selectProject(projectId: string) {
   showChatWorkspace();
-  selectedProjectId.value = projectId;
+  expandedProjectId.value = toggleExpandedProject(
+    expandedProjectId.value,
+    projectId,
+  );
+  selectedProjectId.value = expandedProjectId.value ? projectId : null;
   currSessionId.value = "";
   replyTarget.value = null;
   await router.push(basePath());
-  await loadProjectSessions(projectId);
+  if (expandedProjectId.value) {
+    await loadProjectSessions(projectId);
+  } else {
+    projectSessions.value = [];
+  }
   closeMobileSidebar();
 }
 
@@ -1060,6 +1129,8 @@ function startSessionDrag(event: DragEvent, sessionId: string) {
 
 function finishSessionDrag() {
   draggingSessionIds.value = [];
+  draggingSourceProjectId.value = null;
+  sessionListDropReady.value = false;
 }
 
 async function dropDraggedSessionsOnProject(projectId: string) {
@@ -1072,10 +1143,66 @@ async function dropDraggedSessionsOnProject(projectId: string) {
     const movedCount = results.filter(Boolean).length;
     if (movedCount > 0) {
       await getSessions();
-      if (selectedProjectId.value === projectId) {
-        await loadProjectSessions(projectId);
+      const refreshProjectId =
+        selectedProjectId.value || expandedProjectId.value;
+      if (refreshProjectId) {
+        await loadProjectSessions(refreshProjectId);
       }
       clearSessionSelection();
+    }
+  } finally {
+    finishSessionDrag();
+  }
+}
+
+function startProjectSessionDrag(event: DragEvent, sessionId: string) {
+  if (!expandedProjectId.value) return;
+  const payload = getProjectDragPayload(sessionId, expandedProjectId.value);
+  draggingSessionIds.value = payload.sessionIds;
+  draggingSourceProjectId.value = payload.sourceProjectId;
+  event.dataTransfer?.setData(
+    "application/x-astrbot-session-ids",
+    JSON.stringify(payload.sessionIds),
+  );
+  event.dataTransfer?.setData(
+    "application/x-astrbot-source-project-id",
+    payload.sourceProjectId,
+  );
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+  }
+}
+
+function finishProjectSessionDrag() {
+  finishSessionDrag();
+}
+
+function handleSessionListDragOver() {
+  if (draggingSourceProjectId.value) {
+    sessionListDropReady.value = true;
+  }
+}
+
+function handleSessionListDragLeave() {
+  sessionListDropReady.value = false;
+}
+
+async function dropDraggedProjectSessionsOut() {
+  if (!draggingSourceProjectId.value || !draggingSessionIds.value.length)
+    return;
+  const sessionIds = [...draggingSessionIds.value];
+  try {
+    const results = await Promise.all(
+      sessionIds.map((sessionId) => removeSessionFromProject(sessionId)),
+    );
+    if (results.some(Boolean)) {
+      for (const sessionId of sessionIds) {
+        sessionProjects[sessionId] = null;
+      }
+      await getSessions();
+      if (expandedProjectId.value) {
+        await loadProjectSessions(expandedProjectId.value);
+      }
     }
   } finally {
     finishSessionDrag();
@@ -1700,6 +1827,46 @@ function toggleTheme() {
 .session-selection-action:disabled {
   cursor: default;
   opacity: 0.5;
+}
+
+.session-drop-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 12px;
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.session-drop-zone.drop-ready {
+  background: rgba(80, 150, 230, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(80, 150, 230, 0.22);
+}
+
+.expanded-project-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+
+.expanded-project-title {
+  padding: 2px 4px 4px;
+  color: var(--chat-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.project-session-sidebar-item {
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.expanded-project-empty {
+  padding: 8px 4px 2px;
 }
 
 .session-item {

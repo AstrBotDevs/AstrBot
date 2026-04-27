@@ -16,3 +16,14 @@ export function shouldSuppressClickAfterLongPress(suppressNextClick) {
     nextSuppressState: false,
   };
 }
+
+export function toggleExpandedProject(currentProjectId, projectId) {
+  return currentProjectId === projectId ? null : projectId;
+}
+
+export function getProjectDragPayload(sessionId, sourceProjectId) {
+  return {
+    sessionIds: [sessionId],
+    sourceProjectId,
+  };
+}
