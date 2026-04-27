@@ -97,7 +97,7 @@
     "livePreview": "实时预览(可能有差异)",
     "refreshPreview": "刷新预览",
     "previewText": "这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。",
-    "syntaxHint": "支持 jinja2 语法。可用变量：text | safe（要渲染的文本）, version（AstrBot 版本）",
+    "syntaxHint": "支持 jinja2 语法。可用变量：text | safe（要渲染的文本）, version（AstrBot 版本）。如果预览测试内容未加载或显示异常，请点击“重置Base”恢复默认模板。",
     "saveAndApply": "保存应用当前编辑模板",
     "confirmReset": "确认重置",
     "confirmResetMessage": "确定要将 'base' 模板恢复为默认内容吗？当前编辑器中的任何未保存更改将丢失。此操作无法撤销。",
