@@ -1287,14 +1287,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             if param_subset.tools and tool_names:
                 contexts = self._build_tool_requery_context(tool_names)
-                requery_resp = await self.provider.text_chat(
-                    contexts=self._sanitize_contexts_for_provider(contexts),
-                    func_tool=param_subset,
-                    model=self.req.model,
-                    session_id=self.req.session_id,
-                    extra_user_content_parts=self.req.extra_user_content_parts,
-                    tool_choice="required",
-                    abort_signal=self._abort_signal,
+                requery_resp = await self._requery(
+                    contexts=contexts,
+                    param_subset=param_subset,
                 )
                 if requery_resp:
                     llm_resp = requery_resp
@@ -1313,19 +1308,49 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         tool_names,
                         extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
-                    repair_resp = await self.provider.text_chat(
-                        contexts=self._sanitize_contexts_for_provider(repair_contexts),
-                        func_tool=param_subset,
-                        model=self.req.model,
-                        session_id=self.req.session_id,
-                        extra_user_content_parts=self.req.extra_user_content_parts,
-                        tool_choice="required",
-                        abort_signal=self._abort_signal,
+                    repair_resp = await self._requery(
+                        contexts=repair_contexts,
+                        param_subset=param_subset,
                     )
                     if repair_resp:
                         llm_resp = repair_resp
 
         return llm_resp, subset
+
+    async def _requery(
+        self,
+        contexts: list,
+        param_subset: ToolSet,
+    ) -> LLMResponse | None:
+        """Send a re-query with tool_choice='required', falling back to 'auto' if
+        the provider does not support the 'required' value (e.g. deepseek-reasoner).
+        """
+        try:
+            return await self.provider.text_chat(
+                contexts=self._sanitize_contexts_for_provider(contexts),
+                func_tool=param_subset,
+                model=self.req.model,
+                session_id=self.req.session_id,
+                extra_user_content_parts=self.req.extra_user_content_parts,
+                tool_choice="required",
+                abort_signal=self._abort_signal,
+            )
+        except Exception as e:
+            if "tool_choice" in str(e).lower():
+                logger.info(
+                    f"tool_choice='required' 不被当前模型支持，降级为 'auto' 重试。",
+                )
+                logger.debug(f"原始错误: {e}")
+                return await self.provider.text_chat(
+                    contexts=self._sanitize_contexts_for_provider(contexts),
+                    func_tool=param_subset,
+                    model=self.req.model,
+                    session_id=self.req.session_id,
+                    extra_user_content_parts=self.req.extra_user_content_parts,
+                    tool_choice="auto",
+                    abort_signal=self._abort_signal,
+                )
+            raise
 
     def done(self) -> bool:
         """检查 Agent 是否已完成工作"""
