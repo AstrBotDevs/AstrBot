@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlmodel import col
 
 from astrbot.api import sp, star
@@ -267,14 +267,27 @@ class ConversationCommands:
         db = self.context.get_db()
         async with db.get_db() as session:
             result = await session.execute(
-                select(ProviderStat).where(
+                select(
+                    func.count(case((col(ProviderStat.id).is_not(None), 1))).label(
+                        "record_count",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_input_other), 0).label(
+                        "total_input_other",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_input_cached), 0).label(
+                        "total_input_cached",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_output), 0).label(
+                        "total_output",
+                    ),
+                ).where(
                     col(ProviderStat.agent_type) == "internal",
                     col(ProviderStat.conversation_id) == cid,
                 )
             )
-            records = result.scalars().all()
+            stats = result.one()
 
-        if not records:
+        if stats.record_count == 0:
             message.set_result(
                 MessageEventResult().message(
                     "📊 No stats available for this conversation yet."
@@ -282,9 +295,9 @@ class ConversationCommands:
             )
             return
 
-        total_input_other = sum(r.token_input_other for r in records)
-        total_input_cached = sum(r.token_input_cached for r in records)
-        total_output = sum(r.token_output for r in records)
+        total_input_other = stats.total_input_other
+        total_input_cached = stats.total_input_cached
+        total_output = stats.total_output
         total_tokens = total_input_other + total_input_cached + total_output
 
         ret = (
