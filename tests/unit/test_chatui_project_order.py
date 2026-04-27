@@ -37,3 +37,39 @@ async def test_project_sessions_preserve_custom_order(temp_db):
         first.session_id,
         second.session_id,
     ]
+
+
+@pytest.mark.asyncio
+async def test_unassigned_sessions_preserve_custom_order(temp_db):
+    await temp_db.initialize()
+
+    first = await temp_db.create_platform_session(
+        creator="user",
+        session_id="session-1",
+        display_name="First",
+    )
+    second = await temp_db.create_platform_session(
+        creator="user",
+        session_id="session-2",
+        display_name="Second",
+    )
+    third = await temp_db.create_platform_session(
+        creator="user",
+        session_id="session-3",
+        display_name="Third",
+    )
+
+    await temp_db.reorder_platform_sessions(
+        "user",
+        [third.session_id, first.session_id, second.session_id],
+    )
+
+    sessions, _ = await temp_db.get_platform_sessions_by_creator_paginated(
+        creator="user",
+        exclude_project_sessions=True,
+    )
+    assert [item["session"].session_id for item in sessions] == [
+        third.session_id,
+        first.session_id,
+        second.session_id,
+    ]

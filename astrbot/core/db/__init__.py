@@ -797,6 +797,13 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def reorder_platform_sessions(
+        self, creator: str, session_ids: list[str]
+    ) -> None:
+        """Persist custom ordering for a creator's unassigned platform sessions."""
+        ...
+
+    @abc.abstractmethod
     async def delete_platform_session(self, session_id: str) -> None:
         """Delete a Platform session by its ID."""
         ...

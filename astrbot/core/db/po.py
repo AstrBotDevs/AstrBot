@@ -305,6 +305,8 @@ class PlatformSession(TimestampMixin, SQLModel, table=True):
     """Display name for the session"""
     is_group: int = Field(default=0, nullable=False)
     """0 for private chat, 1 for group chat (not implemented yet)"""
+    position: int = Field(default=0, nullable=False)
+    """Custom order of the session in the unassigned chat list."""
 
     __table_args__ = (
         UniqueConstraint(

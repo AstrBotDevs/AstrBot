@@ -258,6 +258,7 @@ class ChatRoute(Route):
             "/chat/stop": ("POST", self.stop_session),
             "/chat/delete_session": ("GET", self.delete_webchat_session),
             "/chat/batch_delete_sessions": ("POST", self.batch_delete_sessions),
+            "/chat/reorder_sessions": ("POST", self.reorder_sessions),
             "/chat/update_session_display_name": (
                 "POST",
                 self.update_session_display_name,
@@ -1247,6 +1248,27 @@ class ChatRoute(Route):
             )
 
         return Response().ok(data=sessions_data).__dict__
+
+    async def reorder_sessions(self):
+        """Persist custom order for the current user's unassigned sessions."""
+        post_data = await request.json
+        session_ids = post_data.get("session_ids")
+        if not isinstance(session_ids, list):
+            return Response().error("Missing key: session_ids").__dict__
+
+        username = g.get("username", "guest")
+        sessions, _ = await self.db.get_platform_sessions_by_creator_paginated(
+            creator=username,
+            page=1,
+            page_size=100,
+            exclude_project_sessions=True,
+        )
+        unassigned_session_ids = {item["session"].session_id for item in sessions}
+        if any(session_id not in unassigned_session_ids for session_id in session_ids):
+            return Response().error("Invalid session_ids").__dict__
+
+        await self.db.reorder_platform_sessions(username, session_ids)
+        return Response().ok().__dict__
 
     async def get_session(self):
         """Get session information and message history by session_id."""

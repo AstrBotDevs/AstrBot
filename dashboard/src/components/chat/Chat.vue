@@ -222,6 +222,8 @@
             @pointercancel="cancelSessionLongPress"
             @dragstart="startSessionDrag($event, session.session_id)"
             @dragend="finishSessionDrag"
+            @dragover.prevent
+            @drop.stop.prevent="dropSessionsBefore(session.session_id)"
             @keydown.enter="handleSessionItemClick(session.session_id)"
             @keydown.space.prevent="handleSessionItemClick(session.session_id)"
           >
@@ -714,6 +716,7 @@ const {
   newChat,
   deleteSession,
   batchDeleteSessions,
+  reorderSessions,
   selectedSessions,
   updateSessionTitle,
 } = useSessions(props.chatboxMode);
@@ -1071,6 +1074,13 @@ function removeSessionsFromProjectCache(
   );
 }
 
+function removeSessionsFromUnassignedCache(sessionIds: string[]) {
+  const movedSessionIds = new Set(sessionIds);
+  sessions.value = sessions.value.filter(
+    (session) => !movedSessionIds.has(session.session_id),
+  );
+}
+
 async function loadExpandedProjectSessions() {
   await Promise.all(
     expandedProjectIds.value.map((id) => loadProjectSessions(id)),
@@ -1192,6 +1202,8 @@ async function dropDraggedSessionsOnProject(projectId: string) {
     if (movedCount > 0) {
       if (sourceProjectId) {
         removeSessionsFromProjectCache(sourceProjectId, sessionIds);
+      } else {
+        removeSessionsFromUnassignedCache(sessionIds);
       }
       await getSessions();
       await loadProjectSessions(projectId);
@@ -1205,13 +1217,92 @@ async function dropDraggedSessionsOnProject(projectId: string) {
   }
 }
 
+async function dropSessionsBefore(targetSessionId: string) {
+  const sessionIds = [...draggingSessionIds.value];
+  const sourceProjectId = draggingSourceProjectId.value;
+  if (!sessionIds.length) return;
+  const movedSessionIds = new Set(sessionIds);
+  const movedSessions = sourceProjectId
+    ? projectSessionsFor(sourceProjectId).filter((session) =>
+        movedSessionIds.has(session.session_id),
+      )
+    : sessions.value.filter((session) =>
+        movedSessionIds.has(session.session_id),
+      );
+
+  if (sourceProjectId) {
+    const results = await Promise.all(
+      sessionIds.map((sessionId) => removeSessionFromProject(sessionId)),
+    );
+    if (!results.some(Boolean)) {
+      finishSessionDrag();
+      return;
+    }
+    removeSessionsFromProjectCache(sourceProjectId, sessionIds);
+    await loadProjectSessions(sourceProjectId);
+  }
+
+  const currentSessionIds = sessions.value.map((session) => session.session_id);
+  const nextSessionIds = moveSessionIdsBefore(
+    currentSessionIds,
+    sessionIds,
+    targetSessionId,
+  );
+
+  const currentSessionsById = new Map(
+    sessions.value.map((session) => [session.session_id, session]),
+  );
+  for (const session of movedSessions) {
+    currentSessionsById.set(session.session_id, session);
+  }
+  sessions.value = nextSessionIds
+    .map((sessionId: string) => currentSessionsById.get(sessionId))
+    .filter((session: Session | undefined): session is Session =>
+      Boolean(session),
+    );
+
+  try {
+    if (!(await reorderSessions(nextSessionIds))) {
+      await getSessions();
+    }
+    clearSessionSelection();
+  } finally {
+    finishSessionDrag();
+  }
+}
+
 async function dropProjectSessionsBefore(
   projectId: string,
   targetSessionId: string,
 ) {
   const sessionIds = [...draggingSessionIds.value];
   const sourceProjectId = draggingSourceProjectId.value;
-  if (!sessionIds.length || sourceProjectId !== projectId) return;
+  if (!sessionIds.length) return;
+  const movedSessionIds = new Set(sessionIds);
+  const movedSessions = sourceProjectId
+    ? projectSessionsFor(sourceProjectId).filter((session) =>
+        movedSessionIds.has(session.session_id),
+      )
+    : sessions.value.filter((session) =>
+        movedSessionIds.has(session.session_id),
+      );
+
+  if (sourceProjectId !== projectId) {
+    const results = await Promise.all(
+      sessionIds.map((sessionId) => addSessionToProject(sessionId, projectId)),
+    );
+    if (!results.some(Boolean)) {
+      finishSessionDrag();
+      return;
+    }
+    if (sourceProjectId) {
+      removeSessionsFromProjectCache(sourceProjectId, sessionIds);
+      await loadProjectSessions(sourceProjectId);
+    } else {
+      removeSessionsFromUnassignedCache(sessionIds);
+      await getSessions();
+    }
+  }
 
   const currentSessionIds = projectSessionsFor(projectId).map(
     (session) => session.session_id,
@@ -1232,6 +1323,9 @@ async function dropProjectSessionsBefore(
       session,
     ]),
   );
+  for (const session of movedSessions) {
+    currentSessionsById.set(session.session_id, session);
+  }
   projectSessionsById[projectId] = nextSessionIds
     .map((sessionId: string) => currentSessionsById.get(sessionId))
     .filter((session: Session | undefined): session is Session =>

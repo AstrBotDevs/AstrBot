@@ -62,6 +62,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_platform_message_history_checkpoint_column(conn)
+            await self._ensure_platform_session_position_column(conn)
             await self._ensure_session_project_relation_position_column(conn)
             await conn.commit()
 
@@ -138,6 +139,19 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(
                 text(
                     "ALTER TABLE session_project_relations "
+                    "ADD COLUMN position INTEGER NOT NULL DEFAULT 0"
+                )
+            )
+
+    async def _ensure_platform_session_position_column(self, conn) -> None:
+        """Ensure platform_sessions has a custom ordering column."""
+        result = await conn.execute(text("PRAGMA table_info(platform_sessions)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "position" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE platform_sessions "
                     "ADD COLUMN position INTEGER NOT NULL DEFAULT 0"
                 )
             )
@@ -1644,11 +1658,18 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
+                max_position_result = await session.execute(
+                    select(func.max(PlatformSession.position)).where(
+                        col(PlatformSession.creator) == creator,
+                    )
+                )
+                next_position = int(max_position_result.scalar() or 0) + 1
                 new_session = PlatformSession(
                     creator=creator,
                     platform_id=platform_id,
                     display_name=display_name,
                     is_group=is_group,
+                    position=next_position,
                     **kwargs,
                 )
                 session.add(new_session)
@@ -1782,7 +1803,9 @@ class SQLiteDatabase(BaseDatabase):
             total = int(total_result.scalar_one() or 0)
 
             result_query = (
-                base_query.order_by(desc(PlatformSession.updated_at))
+                base_query.order_by(
+                    PlatformSession.position, desc(PlatformSession.updated_at)
+                )
                 .offset(offset)
                 .limit(page_size)
             )
@@ -1809,6 +1832,23 @@ class SQLiteDatabase(BaseDatabase):
                     .where(col(PlatformSession.session_id) == session_id)
                     .values(**values),
                 )
+
+    async def reorder_platform_sessions(
+        self, creator: str, session_ids: list[str]
+    ) -> None:
+        """Persist custom ordering for a creator's unassigned platform sessions."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                for position, session_id in enumerate(session_ids, start=1):
+                    await session.execute(
+                        update(PlatformSession)
+                        .where(
+                            col(PlatformSession.creator) == creator,
+                            col(PlatformSession.session_id) == session_id,
+                        )
+                        .values(position=position),
+                    )
 
     async def delete_platform_session(self, session_id: str) -> None:
         """Delete a Platform session by its ID."""
