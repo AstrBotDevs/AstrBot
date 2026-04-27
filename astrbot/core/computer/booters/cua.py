@@ -107,6 +107,15 @@ def _normalize_process_result(raw: Any) -> ProcessResult:
     )
 
 
+def _is_missing_python3_error(stderr: str) -> bool:
+    lowered = stderr.lower()
+    return "python3" in lowered and (
+        "not found" in lowered
+        or "command not found" in lowered
+        or "no such file" in lowered
+    )
+
+
 def _split_listing_entries(output: str) -> list[str]:
     return [line for line in output.splitlines() if line.strip()]
 
@@ -174,9 +183,12 @@ class CuaShellComponent(ShellComponent):
             self._sandbox.shell, ("run", "exec"), command, **kwargs
         )
         proc = _normalize_process_result(result)
+        stderr = proc.stderr
+        if background and stderr and _is_missing_python3_error(stderr):
+            stderr = f"CUA background execution requires python3 in the sandbox image: {stderr}"
         response = {
             "stdout": proc.stdout,
-            "stderr": proc.stderr,
+            "stderr": stderr,
             "exit_code": proc.exit_code,
             "success": proc.success,
         }
@@ -242,8 +254,14 @@ class CuaPythonComponent(PythonComponent):
         }
 
 
-class _NativeFSAdapter:
-    def __init__(self, fs: Any, shell: CuaShellComponent) -> None:
+def _write_result(path: str, result: dict[str, Any]) -> dict[str, Any]:
+    if result.get("stderr") or result.get("success") is False:
+        return {"success": False, "path": path, **result}
+    return {"success": True, "path": path, **result}
+
+
+class _CuaFSAdapter:
+    def __init__(self, fs: Any | None, shell: CuaShellComponent) -> None:
         self._fs = fs
         self._shell = shell
 
@@ -253,7 +271,9 @@ class _NativeFSAdapter:
         content: str = "",
         mode: int = 0o644,
     ) -> dict[str, Any]:
-        await self.write_file(path, content)
+        write_result = await self.write_file(path, content)
+        if not write_result.get("success"):
+            return {**write_result, "mode": mode}
         return {"success": True, "path": path, "mode": mode}
 
     async def read_file(
@@ -263,7 +283,7 @@ class _NativeFSAdapter:
         offset: int | None = None,
         limit: int | None = None,
     ) -> dict[str, Any]:
-        read_file = getattr(self._fs, "read_file", None)
+        read_file = None if self._fs is None else getattr(self._fs, "read_file", None)
         if read_file is None:
             result = await self._shell.exec(f"cat {path!r}")
             if result.get("stderr"):
@@ -289,17 +309,22 @@ class _NativeFSAdapter:
         encoding: str = "utf-8",
     ) -> dict[str, Any]:
         _ = mode
-        write_file = getattr(self._fs, "write_file", None)
+        write_file = None if self._fs is None else getattr(self._fs, "write_file", None)
         if write_file is None:
-            await _write_base64_via_shell(self._shell, path, content.encode(encoding))
+            result = await _write_base64_via_shell(
+                self._shell, path, content.encode(encoding)
+            )
+            return _write_result(path, result)
         else:
             await _maybe_await(write_file(path, content))
         return {"success": True, "path": path}
 
     async def delete_file(self, path: str) -> dict[str, Any]:
-        delete = getattr(self._fs, "delete", None) or getattr(
-            self._fs, "delete_file", None
-        )
+        delete = None
+        if self._fs is not None:
+            delete = getattr(self._fs, "delete", None) or getattr(
+                self._fs, "delete_file", None
+            )
         if delete is None:
             await self._shell.exec(f"rm -rf {path!r}")
         else:
@@ -311,65 +336,10 @@ class _NativeFSAdapter:
         path: str = ".",
         show_hidden: bool = False,
     ) -> dict[str, Any]:
-        list_dir = getattr(self._fs, "list_dir", None)
+        list_dir = None if self._fs is None else getattr(self._fs, "list_dir", None)
         if list_dir is not None:
             entries = await _maybe_await(list_dir(path))
             return {"success": True, "path": path, "entries": entries}
-        return await _list_dir_via_shell(self._shell, path, show_hidden)
-
-
-class _ShellFSAdapter:
-    def __init__(self, shell: CuaShellComponent) -> None:
-        self._shell = shell
-
-    async def create_file(
-        self,
-        path: str,
-        content: str = "",
-        mode: int = 0o644,
-    ) -> dict[str, Any]:
-        await self.write_file(path, content)
-        return {"success": True, "path": path, "mode": mode}
-
-    async def read_file(
-        self,
-        path: str,
-        encoding: str = "utf-8",
-        offset: int | None = None,
-        limit: int | None = None,
-    ) -> dict[str, Any]:
-        _ = encoding
-        result = await self._shell.exec(f"cat {path!r}")
-        if result.get("stderr"):
-            return {"success": False, "path": path, "error": result["stderr"]}
-        return {
-            "success": True,
-            "path": path,
-            "content": _slice_content_by_lines(
-                str(result.get("stdout", "")), offset=offset, limit=limit
-            ),
-        }
-
-    async def write_file(
-        self,
-        path: str,
-        content: str,
-        mode: str = "w",
-        encoding: str = "utf-8",
-    ) -> dict[str, Any]:
-        _ = mode
-        await _write_base64_via_shell(self._shell, path, content.encode(encoding))
-        return {"success": True, "path": path}
-
-    async def delete_file(self, path: str) -> dict[str, Any]:
-        await self._shell.exec(f"rm -rf {path!r}")
-        return {"success": True, "path": path}
-
-    async def list_dir(
-        self,
-        path: str = ".",
-        show_hidden: bool = False,
-    ) -> dict[str, Any]:
         return await _list_dir_via_shell(self._shell, path, show_hidden)
 
 
@@ -392,11 +362,7 @@ class CuaFileSystemComponent(FileSystemComponent):
     def __init__(self, sandbox: Any, os_type: str = "linux") -> None:
         self._shell = CuaShellComponent(sandbox, os_type=os_type)
         fs = getattr(sandbox, "filesystem", None)
-        self._impl = (
-            _NativeFSAdapter(fs, self._shell)
-            if fs is not None
-            else _ShellFSAdapter(self._shell)
-        )
+        self._impl = _CuaFSAdapter(fs, self._shell)
 
     async def create_file(
         self,

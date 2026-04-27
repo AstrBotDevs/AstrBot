@@ -1,6 +1,7 @@
 import json
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
@@ -50,7 +51,7 @@ class ExecuteShellTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         command: str,
         background: bool = True,
-        env: dict = {},
+        env: dict[str, Any] | None = None,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Shell execution"):
             return permission_error
@@ -73,7 +74,7 @@ class ExecuteShellTool(FunctionTool):
                 command,
                 cwd=cwd,
                 background=effective_background,
-                env=env,
+                env=dict(env or {}),
             )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:

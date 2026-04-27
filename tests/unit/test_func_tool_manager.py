@@ -6,8 +6,10 @@ from astrbot.core import sp
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.tools.computer_tools.shell import ExecuteShellTool
 from astrbot.core.tools.message_tools import SendMessageToUserTool
-from astrbot.core.tools.web_search_tools import FirecrawlExtractWebPageTool
-from astrbot.core.tools.web_search_tools import FirecrawlWebSearchTool
+from astrbot.core.tools.web_search_tools import (
+    FirecrawlExtractWebPageTool,
+    FirecrawlWebSearchTool,
+)
 
 
 def test_get_builtin_tool_by_class_returns_cached_instance():
@@ -81,16 +83,62 @@ async def test_execute_shell_defaults_to_background(monkeypatch):
 
     monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
 
-    result = await ExecuteShellTool().call(FakeWrapper(), command="chromium https://example.com")
+    result = await ExecuteShellTool().call(
+        FakeWrapper(), command="chromium https://example.com"
+    )
 
     assert json.loads(result)["success"] is True
-    assert calls == [
-        {"command": "chromium https://example.com", "background": True}
-    ]
+    assert calls == [{"command": "chromium https://example.com", "background": True}]
 
 
 @pytest.mark.asyncio
-async def test_execute_shell_avoids_double_background_for_detached_commands(monkeypatch):
+async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+
+    calls = []
+
+    class FakeShell:
+        async def exec(self, command, cwd=None, background=False, env=None):
+            env["MUTATED_BY_FAKE_SHELL"] = command
+            calls.append(env)
+            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
+
+    class FakeBooter:
+        shell = FakeShell()
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        context = FakeConfig()
+        event = FakeEvent()
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    async def fake_get_booter(context, session_id):
+        return FakeBooter()
+
+    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    tool = ExecuteShellTool()
+
+    await tool.call(FakeWrapper(), command="first")
+    await tool.call(FakeWrapper(), command="second")
+
+    assert calls[0] is not calls[1]
+    assert calls[0]["MUTATED_BY_FAKE_SHELL"] == "first"
+    assert calls[1] == {"MUTATED_BY_FAKE_SHELL": "second"}
+
+
+@pytest.mark.asyncio
+async def test_execute_shell_avoids_double_background_for_detached_commands(
+    monkeypatch,
+):
     from astrbot.core.tools.computer_tools import shell as shell_tools
 
     calls = []

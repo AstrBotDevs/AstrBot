@@ -100,6 +100,20 @@ class SyncShell:
         return {"stdout": self.stdout, "stderr": "", "exit_code": 0}
 
 
+class FailingShell:
+    def __init__(self):
+        self.commands = []
+
+    async def run(self, command: str, **kwargs):
+        self.commands.append((command, kwargs))
+        return {
+            "stdout": "",
+            "stderr": "python3: command not found",
+            "exit_code": 127,
+            "success": False,
+        }
+
+
 class SyncPython:
     def run(self, code: str, **kwargs):
         return {"output": "sync", "error": ""}
@@ -258,6 +272,21 @@ async def test_cua_write_file_shell_fallback_uses_python_base64_decoder():
 
 
 @pytest.mark.asyncio
+async def test_cua_write_file_shell_fallback_propagates_shell_failure():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = FakeSandbox()
+    sandbox.shell = FailingShell()
+    delattr(sandbox, "filesystem")
+
+    result = await CuaFileSystemComponent(sandbox).write_file("hello.txt", "hello")
+
+    assert result["success"] is False
+    assert result["stderr"] == "python3: command not found"
+    assert result["path"] == "hello.txt"
+
+
+@pytest.mark.asyncio
 async def test_cua_list_dir_shell_fallback_returns_filename_only_entries():
     from astrbot.core.computer.booters.cua import CuaFileSystemComponent
 
@@ -342,6 +371,20 @@ async def test_cua_shell_background_rejects_non_posix_os_type():
         "success": False,
     }
     assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
+async def test_cua_shell_background_reports_missing_python3_requirement():
+    from astrbot.core.computer.booters.cua import CuaShellComponent
+
+    sandbox = FakeSandbox()
+    sandbox.shell = FailingShell()
+
+    result = await CuaShellComponent(sandbox).exec("firefox", background=True)
+
+    assert result["success"] is False
+    assert "requires python3" in result["stderr"]
+    assert "python3: command not found" in result["stderr"]
 
 
 @pytest.mark.asyncio
