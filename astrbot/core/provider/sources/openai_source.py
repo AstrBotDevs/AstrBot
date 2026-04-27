@@ -438,7 +438,7 @@ class ProviderOpenAIOfficial(Provider):
             image_fallback_used,
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
         return create_proxy_client("OpenAI", proxy)
@@ -455,9 +455,9 @@ class ProviderOpenAIOfficial(Provider):
                 api_key=api_key,
                 api_version=self.provider_config.get("api_version", None),
                 default_headers=self.custom_headers,
-                base_url=self.provider_config.get("api_base", ""),
+                base_url=self.provider_config.get("api_base", None),
                 timeout=self.timeout,
-                http_client=self._create_http_client(self.provider_config),
+                http_client=self._http_client,
             )
         else:
             # Using OpenAI Official API
@@ -466,13 +466,33 @@ class ProviderOpenAIOfficial(Provider):
                 base_url=self.provider_config.get("api_base", None),
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
-                http_client=self._create_http_client(self.provider_config),
+                http_client=self._http_client,
             )
 
-    def _ensure_client(self) -> None:
-        """确保 client 可用，仅在真实 API 调用前按需重建。"""
-        if self.client is None or not self._client_alive:
+    async def _ensure_client(self) -> None:
+        """确保 client 可用，仅在真实 API 调用前按需重建。
+
+        持有 ``_client_lock`` 防止并发请求同时重建导致 httpx 资源泄漏。
+        """
+        if self.client is not None and self._client_alive:
+            return
+
+        async with self._client_lock:
+            # 二次检查，避免在获取锁期间已被其他协程重建
+            if self.client is not None and self._client_alive:
+                return
+
             logger.warning("检测到 OpenAI client 已关闭或未初始化，正在重新创建...")
+
+            if self._http_client is not None:
+                try:
+                    await self._http_client.aclose()
+                except Exception as exc:
+                    logger.warning("关闭旧 httpx client 时出错: %s", exc)
+                finally:
+                    self._http_client = None
+
+            self._http_client = self._create_http_client(self.provider_config)
             self.client = self._create_openai_client()
             self._client_alive = True
             self.default_params = inspect.signature(
@@ -487,7 +507,9 @@ class ProviderOpenAIOfficial(Provider):
         self.timeout = provider_config.get("timeout", 120)
         self.custom_headers = provider_config.get("custom_headers", {})
         self.client: AsyncOpenAI | AsyncAzureOpenAI | None = None
+        self._http_client: httpx.AsyncClient | None = None
         self._client_alive = False
+        self._client_lock = asyncio.Lock()
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
 
@@ -497,6 +519,7 @@ class ProviderOpenAIOfficial(Provider):
             for key in self.custom_headers:
                 self.custom_headers[key] = str(self.custom_headers[key])
 
+        self._http_client = self._create_http_client(self.provider_config)
         self.client = self._create_openai_client()
         self._client_alive = True
 
@@ -530,7 +553,7 @@ class ProviderOpenAIOfficial(Provider):
         extra_body["reasoning_effort"] = "none"
 
     async def get_models(self):
-        self._ensure_client()
+        await self._ensure_client()
         try:
             models_str = []
             models = await self.client.models.list()
@@ -578,7 +601,7 @@ class ProviderOpenAIOfficial(Provider):
         payloads["messages"] = cleaned
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
-        self._ensure_client()
+        await self._ensure_client()
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -632,7 +655,7 @@ class ProviderOpenAIOfficial(Provider):
         tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
-        self._ensure_client()
+        await self._ensure_client()
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -1216,7 +1239,7 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.chosen_api_key = chosen_key
-                self._ensure_client()
+                await self._ensure_client()
                 if self.client is not None:
                     self.client.api_key = chosen_key
                 llm_response = await self._query(payloads, func_tool)
@@ -1290,7 +1313,7 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.chosen_api_key = chosen_key
-                self._ensure_client()
+                await self._ensure_client()
                 if self.client is not None:
                     self.client.api_key = chosen_key
                 async for response in self._query_stream(payloads, func_tool):
@@ -1433,7 +1456,7 @@ class ProviderOpenAIOfficial(Provider):
         return image_data
 
     async def terminate(self):
-        """关闭 client 并将引用置为 None，确保后续仅在真实调用时重建。"""
+        """关闭 client 和 http_client，确保资源被正确释放。"""
         if self.client:
             try:
                 await self.client.close()
@@ -1442,3 +1465,10 @@ class ProviderOpenAIOfficial(Provider):
             finally:
                 self.client = None
                 self._client_alive = False
+        if self._http_client:
+            try:
+                await self._http_client.aclose()
+            except Exception as e:
+                logger.warning(f"关闭 httpx client 时出错: {e}")
+            finally:
+                self._http_client = None
