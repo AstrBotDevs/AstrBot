@@ -18,6 +18,7 @@ from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
+    create_proxy_client,
     is_connection_error,
     log_connection_failure,
 )
@@ -38,7 +39,7 @@ class ProviderAnthropic(Provider):
         stop_reason: str | None = None,
     ) -> None:
         has_text_output = bool((llm_response.completion_text or "").strip())
-        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
         has_tool_output = bool(llm_response.tools_call_args)
         if has_text_output or has_reasoning_output or has_tool_output:
             return
@@ -108,11 +109,15 @@ class ProviderAnthropic(Provider):
         )
 
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
-        """创建带代理的 HTTP 客户端"""
+        """创建带代理的 HTTP 客户端，使用系统 SSL 证书"""
         proxy = provider_config.get("proxy", "")
         if proxy:
             logger.info(f"[Anthropic] 使用代理: {proxy}")
-            return httpx.AsyncClient(proxy=proxy)
+            return create_proxy_client(
+                "Anthropic",
+                proxy,
+                headers=self.custom_headers,
+            )
         return None
 
     def _apply_thinking_config(self, payloads: dict) -> None:
@@ -292,7 +297,7 @@ class ProviderAnthropic(Provider):
         extra_body = self.provider_config.get("custom_extra_body", {})
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 1024
+            payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
 
         try:
@@ -388,7 +393,7 @@ class ProviderAnthropic(Provider):
         reasoning_signature = ""
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 1024
+            payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
 
         async with self.client.messages.stream(

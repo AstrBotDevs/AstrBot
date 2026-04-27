@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.23.1"
+VERSION = "4.23.5"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -134,6 +134,7 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
+        "buffer_intermediate_messages": False,
         "sanitize_context_by_modalities": False,
         "max_quoted_fallback_images": 20,
         "quoted_message_parser": {
@@ -782,7 +783,7 @@ CONFIG_METADATA_2 = {
                     "appid": {
                         "description": "appid",
                         "type": "string",
-                        "hint": "必填项。QQ 官方机器人平台的 appid。如何获取请参考文档。",
+                        "hint": "必填项。当前消息平台的 AppID。如何获取请参考对应平台接入文档。",
                     },
                     "secret": {
                         "description": "secret",
@@ -1206,7 +1207,7 @@ CONFIG_METADATA_2 = {
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
-                        "api_base": "https://api.kimi.com/coding/",
+                        "api_base": "https://api.kimi.com/coding",
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {"User-Agent": "claude-code/0.1.0"},
@@ -1235,6 +1236,19 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
+                    },
+                    "MiniMax Token Plan": {
+                        "id": "minimax-token-plan",
+                        "provider": "minimax-token-plan",
+                        "type": "minimax_token_plan",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.minimaxi.com/anthropic",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "xAI": {
                         "id": "xai",
@@ -2764,6 +2778,9 @@ CONFIG_METADATA_2 = {
                     "show_tool_call_result": {
                         "type": "bool",
                     },
+                    "buffer_intermediate_messages": {
+                        "type": "bool",
+                    },
                     "unsupported_streaming_strategy": {
                         "type": "string",
                     },
@@ -3185,6 +3202,7 @@ CONFIG_METADATA_3 = {
                             "baidu_ai_search",
                             "bocha",
                             "brave",
+                            "firecrawl",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3217,6 +3235,16 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。",
                         "condition": {
                             "provider_settings.websearch_provider": "brave",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_firecrawl_key": {
+                        "description": "Firecrawl API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "firecrawl",
                             "provider_settings.web_search": True,
                         },
                     },
@@ -3528,6 +3556,15 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                             "provider_settings.show_tool_use_status": True,
+                        },
+                    },
+                    "provider_settings.buffer_intermediate_messages": {
+                        "description": "合并 Agent 中间消息",
+                        "type": "bool",
+                        "hint": "开启后，非流式模式下多步工具调用过程中产生的中间文本将缓冲，待 Agent 完成后合并为一条回复发送。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.streaming_response": False,
                         },
                     },
                     "provider_settings.sanitize_context_by_modalities": {

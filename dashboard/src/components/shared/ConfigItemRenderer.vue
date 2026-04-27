@@ -161,7 +161,7 @@
       <v-text-field
         :model-value="numericTemp ?? modelValue"
         @update:model-value="val => (numericTemp = val)"
-        @blur="() => { emitUpdate(toNumber(numericTemp)); numericTemp = null }"
+        @blur="() => { if (numericTemp != null) { emitUpdate(toNumber(numericTemp)) } numericTemp = null }"
         density="compact"
         variant="outlined"
         class="config-field"

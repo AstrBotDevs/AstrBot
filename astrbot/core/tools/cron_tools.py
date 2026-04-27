@@ -7,6 +7,7 @@ from pydantic.dataclasses import dataclass
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.cron.manager import CronJobSchedulingError
 from astrbot.core.tools.registry import builtin_tool
 
 _CRON_TOOL_CONFIG = {
@@ -112,14 +113,17 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 "origin": "tool",
             }
 
-            job = await cron_mgr.add_active_job(
-                name=name,
-                cron_expression=str(cron_expression) if cron_expression else None,
-                payload=payload,
-                description=note,
-                run_once=run_once,
-                run_at=run_at_dt,
-            )
+            try:
+                job = await cron_mgr.add_active_job(
+                    name=name,
+                    cron_expression=str(cron_expression) if cron_expression else None,
+                    payload=payload,
+                    description=note,
+                    run_once=run_once,
+                    run_at=run_at_dt,
+                )
+            except CronJobSchedulingError:
+                return "error: failed to schedule task due to invalid configuration."
             next_run = job.next_run_time or run_at_dt
             suffix = (
                 f"one-time at {next_run}"
@@ -195,7 +199,10 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             updates["cron_expression"] = cron_expression
             updates["payload"] = payload
 
-            job = await cron_mgr.update_job(str(job_id), **updates)
+            try:
+                job = await cron_mgr.update_job(str(job_id), **updates)
+            except CronJobSchedulingError:
+                return "error: failed to update task due to invalid configuration."
             if not job:
                 return f"error: cron job {job_id} not found."
             return f"Updated future task {job.job_id} ({job.name})."
