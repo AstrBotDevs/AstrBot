@@ -86,30 +86,33 @@
         />
       </div>
 
-      <div v-if="!isSidebarCollapsed" class="session-list">
-        <div v-if="isSessionSelectionMode" class="session-selection-toolbar">
-          <span class="session-selection-count">
-            {{ tm("batch.selected", { count: selectedSessions.length }) }}
-          </span>
-          <div class="session-selection-actions">
-            <button
-              class="session-selection-action danger"
-              type="button"
-              :disabled="!selectedSessions.length || deletingSelectedSessions"
-              @click="deleteSelectedSidebarSessions"
-            >
-              {{ tm("batch.delete") }}
-            </button>
-            <button
-              class="session-selection-action"
-              type="button"
-              @click="clearSessionSelection"
-            >
-              {{ t("core.common.cancel") }}
-            </button>
-          </div>
+      <div
+        v-if="!isSidebarCollapsed && isSessionSelectionMode"
+        class="session-selection-floating-bar"
+      >
+        <span class="session-selection-count">
+          {{ tm("batch.selected", { count: selectedSessions.length }) }}
+        </span>
+        <div class="session-selection-actions">
+          <button
+            class="session-selection-action danger"
+            type="button"
+            :disabled="!selectedSessions.length || deletingSelectedSessions"
+            @click="deleteSelectedSidebarSessions"
+          >
+            {{ tm("batch.delete") }}
+          </button>
+          <button
+            class="session-selection-action"
+            type="button"
+            @click="clearSessionSelection"
+          >
+            {{ t("core.common.cancel") }}
+          </button>
         </div>
+      </div>
 
+      <div v-if="!isSidebarCollapsed" class="session-list">
         <div
           class="session-drop-zone"
           :class="{ 'drop-ready': sessionListDropReady }"
@@ -1689,6 +1692,7 @@ function toggleTheme() {
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
 }
 
 .sidebar-top {
@@ -1779,15 +1783,23 @@ function toggleTheme() {
   gap: 8px;
 }
 
-.session-selection-toolbar {
+.session-selection-floating-bar {
+  position: absolute;
+  z-index: 3;
+  left: 12px;
+  right: 12px;
+  bottom: 74px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 42px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: rgba(80, 150, 230, 0.1);
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid rgba(80, 150, 230, 0.22);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--chat-sidebar-bg) 86%, #ffffff 14%);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(14px);
 }
 
 .session-selection-count {
@@ -1861,7 +1873,7 @@ function toggleTheme() {
 }
 
 .project-session-sidebar-item {
-  min-height: 34px;
+  height: 34px;
   padding: 7px 10px;
 }
 
@@ -1871,7 +1883,7 @@ function toggleTheme() {
 
 .session-item {
   width: 100%;
-  min-height: 38px;
+  height: 38px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -1904,11 +1916,13 @@ function toggleTheme() {
 .session-title {
   min-width: 0;
   flex: 1;
+  align-self: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
   font-weight: 500;
+  line-height: 20px;
 }
 
 .session-progress {
@@ -1916,15 +1930,30 @@ function toggleTheme() {
 }
 
 .session-actions {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 2px;
+  width: 56px;
   flex-shrink: 0;
+  justify-content: flex-end;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.14s ease,
+    visibility 0.14s ease;
 }
 
 .session-item:hover .session-actions,
 .session-item:focus-within .session-actions {
-  display: flex;
+  opacity: 1;
+  visibility: visible;
+}
+
+.session-item.selection-mode .session-actions,
+.session-item.selection-mode:hover .session-actions,
+.session-item.selection-mode:focus-within .session-actions {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .session-action-btn {
