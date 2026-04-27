@@ -112,6 +112,8 @@
         ref="inputField"
         v-model="localPrompt"
         @keydown="handleKeyDown"
+        @compositionstart="handleCompositionStart"
+        @compositionend="handleCompositionEnd"
         :disabled="disabled"
         placeholder="Ask AstrBot..."
         class="chat-textarea"
@@ -307,6 +309,7 @@ import {
 import { useDisplay } from "vuetify";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
+import { isComposingEnter } from "@/utils/imeInput.mjs";
 import ConfigSelector from "./ConfigSelector.vue";
 import ProviderModelMenu from "./ProviderModelMenu.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
@@ -379,6 +382,7 @@ const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
 const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
 const isDragging = ref(false);
+const isComposing = ref(false);
 let dragLeaveTimeout: number | null = null;
 
 const localPrompt = computed({
@@ -514,6 +518,10 @@ function handleKeyDown(e: KeyboardEvent) {
     return;
   }
 
+  if (isComposingEnter(e, isComposing.value)) {
+    return;
+  }
+
   const isSendHotkey =
     e.ctrlKey ||
     e.metaKey ||
@@ -531,6 +539,14 @@ function handleKeyDown(e: KeyboardEvent) {
     }
     return;
   }
+}
+
+function handleCompositionStart() {
+  isComposing.value = true;
+}
+
+function handleCompositionEnd() {
+  isComposing.value = false;
 }
 
 function handleKeyUp(e: KeyboardEvent) {
