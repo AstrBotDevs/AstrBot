@@ -3,6 +3,7 @@
 import os
 from typing import Any, TypedDict
 
+from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = "4.23.5"
@@ -175,12 +176,12 @@ DEFAULT_CONFIG = {
             "shipyard_neo_access_token": "",
             "shipyard_neo_profile": "python-default",
             "shipyard_neo_ttl": 3600,
-            "cua_image": "linux",
-            "cua_os_type": "linux",
-            "cua_ttl": 3600,
-            "cua_telemetry_enabled": False,
-            "cua_local": True,
-            "cua_api_key": "",
+            "cua_image": CUA_DEFAULT_CONFIG["image"],
+            "cua_os_type": CUA_DEFAULT_CONFIG["os_type"],
+            "cua_ttl": CUA_DEFAULT_CONFIG["ttl"],
+            "cua_telemetry_enabled": CUA_DEFAULT_CONFIG["telemetry_enabled"],
+            "cua_local": CUA_DEFAULT_CONFIG["local"],
+            "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
         },
         "image_compress_enabled": True,
         "image_compress_options": {

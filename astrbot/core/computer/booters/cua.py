@@ -11,13 +11,40 @@ from astrbot.api import logger
 
 from ..olayer import FileSystemComponent, GUIComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
+from .cua_defaults import CUA_CONFIG_KEYS, CUA_DEFAULT_CONFIG
 from .shipyard_search_file_util import search_files_via_shell
+
+_POSIX_OS_TYPES = {"linux", "darwin", "macos"}
+
+_CUA_BACKGROUND_LAUNCHER = """
+import subprocess, sys, time
+
+p = subprocess.Popen(
+    ["sh", "-lc", sys.argv[1]],
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+    start_new_session=True,
+)
+sys.stdout.write(str(p.pid) + "\\n")
+sys.stdout.flush()
+time.sleep(0.2)
+code = p.poll()
+sys.exit(0 if code is None else code)
+""".strip()
 
 
 async def _maybe_await(value: Any) -> Any:
     if inspect.isawaitable(value):
         return await value
     return value
+
+
+def build_cua_booter_kwargs(sandbox_cfg: dict[str, Any]) -> dict[str, Any]:
+    return {
+        name: sandbox_cfg.get(config_key, CUA_DEFAULT_CONFIG[name])
+        for name, config_key in CUA_CONFIG_KEYS.items()
+    }
 
 
 async def _write_base64_via_shell(
@@ -116,6 +143,25 @@ def _is_missing_python3_error(stderr: str) -> bool:
     )
 
 
+def _python3_requirement_error(operation: str, stderr: str) -> str:
+    return f"CUA {operation} requires python3 in the sandbox image: {stderr}"
+
+
+def _is_posix_os_type(os_type: str) -> bool:
+    return os_type.lower() in _POSIX_OS_TYPES
+
+
+def _non_posix_filesystem_result(path: str, os_type: str) -> dict[str, Any]:
+    return {
+        "success": False,
+        "path": path,
+        "error": (
+            "CUA filesystem shell fallback is only supported for POSIX images; "
+            f"os_type={os_type!r} does not support the required shell commands."
+        ),
+    }
+
+
 def _split_listing_entries(output: str) -> list[str]:
     return [line for line in output.splitlines() if line.strip()]
 
@@ -170,7 +216,7 @@ class CuaShellComponent(ShellComponent):
         if env:
             kwargs["env"] = env
         if background:
-            if self._os_type not in {"linux", "darwin", "macos"}:
+            if not _is_posix_os_type(self._os_type):
                 return {
                     "stdout": "",
                     "stderr": "error: background shell execution is only supported for POSIX CUA images.",
@@ -185,7 +231,7 @@ class CuaShellComponent(ShellComponent):
         proc = _normalize_process_result(result)
         stderr = proc.stderr
         if background and stderr and _is_missing_python3_error(stderr):
-            stderr = f"CUA background execution requires python3 in the sandbox image: {stderr}"
+            stderr = _python3_requirement_error("background execution", stderr)
         response = {
             "stdout": proc.stdout,
             "stderr": stderr,
@@ -201,17 +247,7 @@ class CuaShellComponent(ShellComponent):
 
 
 def _build_cua_background_command(command: str) -> str:
-    launcher = (
-        "import subprocess,sys,time; "
-        'p=subprocess.Popen(["sh","-lc",sys.argv[1]], '
-        "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
-        "stderr=subprocess.DEVNULL, start_new_session=True); "
-        "sys.stdout.write(str(p.pid)+chr(10)); sys.stdout.flush(); "
-        "time.sleep(0.2); "
-        "code=p.poll(); "
-        "sys.exit(0 if code is None else code)"
-    )
-    return f"python3 -c {shlex.quote(launcher)} {shlex.quote(command)}"
+    return f"python3 -c {shlex.quote(_CUA_BACKGROUND_LAUNCHER)} {shlex.quote(command)}"
 
 
 class CuaPythonComponent(PythonComponent):
@@ -234,9 +270,12 @@ class CuaPythonComponent(PythonComponent):
         else:
             shell = CuaShellComponent(self._sandbox, os_type=self._os_type)
             result = await shell.exec(f"python3 - <<'PY'\n{code}\nPY", timeout=timeout)
+            error = result.get("stderr", "")
+            if error and _is_missing_python3_error(error):
+                error = _python3_requirement_error("Python execution fallback", error)
             proc = ProcessResult(
                 stdout=result.get("stdout", ""),
-                stderr=result.get("stderr", ""),
+                stderr=error,
                 exit_code=result.get("exit_code"),
                 success=bool(result.get("success", False)),
             )
@@ -255,15 +294,24 @@ class CuaPythonComponent(PythonComponent):
 
 
 def _write_result(path: str, result: dict[str, Any]) -> dict[str, Any]:
+    stderr = result.get("stderr", "")
+    if stderr and _is_missing_python3_error(stderr):
+        result = {
+            **result,
+            "stderr": _python3_requirement_error("filesystem write fallback", stderr),
+        }
     if result.get("stderr") or result.get("success") is False:
         return {"success": False, "path": path, **result}
     return {"success": True, "path": path, **result}
 
 
-class _CuaFSAdapter:
-    def __init__(self, fs: Any | None, shell: CuaShellComponent) -> None:
-        self._fs = fs
-        self._shell = shell
+class CuaFileSystemComponent(FileSystemComponent):
+    def __init__(
+        self, sandbox: Any, os_type: str = CUA_DEFAULT_CONFIG["os_type"]
+    ) -> None:
+        self._shell = CuaShellComponent(sandbox, os_type=os_type)
+        self._fs = getattr(sandbox, "filesystem", None)
+        self._os_type = os_type.lower()
 
     async def create_file(
         self,
@@ -285,6 +333,8 @@ class _CuaFSAdapter:
     ) -> dict[str, Any]:
         read_file = None if self._fs is None else getattr(self._fs, "read_file", None)
         if read_file is None:
+            if not _is_posix_os_type(self._os_type):
+                return _non_posix_filesystem_result(path, self._os_type)
             result = await self._shell.exec(f"cat {path!r}")
             if result.get("stderr"):
                 return {"success": False, "path": path, "error": result["stderr"]}
@@ -311,6 +361,8 @@ class _CuaFSAdapter:
         _ = mode
         write_file = None if self._fs is None else getattr(self._fs, "write_file", None)
         if write_file is None:
+            if not _is_posix_os_type(self._os_type):
+                return _non_posix_filesystem_result(path, self._os_type)
             result = await _write_base64_via_shell(
                 self._shell, path, content.encode(encoding)
             )
@@ -326,7 +378,11 @@ class _CuaFSAdapter:
                 self._fs, "delete_file", None
             )
         if delete is None:
-            await self._shell.exec(f"rm -rf {path!r}")
+            if not _is_posix_os_type(self._os_type):
+                return _non_posix_filesystem_result(path, self._os_type)
+            result = await self._shell.exec(f"rm -rf {path!r}")
+            if result.get("stderr"):
+                return {"success": False, "path": path, "error": result["stderr"]}
         else:
             await _maybe_await(delete(path))
         return {"success": True, "path": path}
@@ -340,46 +396,9 @@ class _CuaFSAdapter:
         if list_dir is not None:
             entries = await _maybe_await(list_dir(path))
             return {"success": True, "path": path, "entries": entries}
+        if not _is_posix_os_type(self._os_type):
+            return _non_posix_filesystem_result(path, self._os_type)
         return await _list_dir_via_shell(self._shell, path, show_hidden)
-
-
-async def _list_dir_via_shell(
-    shell: CuaShellComponent,
-    path: str,
-    show_hidden: bool,
-) -> dict[str, Any]:
-    flags = "-1A" if show_hidden else "-1"
-    result = await shell.exec(f"ls {flags} {path!r}")
-    return {
-        "success": not bool(result.get("stderr")),
-        "path": path,
-        "entries": _split_listing_entries(result.get("stdout", "")),
-        "error": result.get("stderr", ""),
-    }
-
-
-class CuaFileSystemComponent(FileSystemComponent):
-    def __init__(self, sandbox: Any, os_type: str = "linux") -> None:
-        self._shell = CuaShellComponent(sandbox, os_type=os_type)
-        fs = getattr(sandbox, "filesystem", None)
-        self._impl = _CuaFSAdapter(fs, self._shell)
-
-    async def create_file(
-        self,
-        path: str,
-        content: str = "",
-        mode: int = 0o644,
-    ) -> dict[str, Any]:
-        return await self._impl.create_file(path, content, mode)
-
-    async def read_file(
-        self,
-        path: str,
-        encoding: str = "utf-8",
-        offset: int | None = None,
-        limit: int | None = None,
-    ) -> dict[str, Any]:
-        return await self._impl.read_file(path, encoding, offset, limit)
 
     async def search_files(
         self,
@@ -389,6 +408,8 @@ class CuaFileSystemComponent(FileSystemComponent):
         after_context: int | None = None,
         before_context: int | None = None,
     ) -> dict[str, Any]:
+        if not _is_posix_os_type(self._os_type):
+            return _non_posix_filesystem_result(path or ".", self._os_type)
         return await search_files_via_shell(
             self._shell,
             pattern=pattern,
@@ -425,24 +446,20 @@ class CuaFileSystemComponent(FileSystemComponent):
             "replacements": occurrences if replace_all else 1,
         }
 
-    async def write_file(
-        self,
-        path: str,
-        content: str,
-        mode: str = "w",
-        encoding: str = "utf-8",
-    ) -> dict[str, Any]:
-        return await self._impl.write_file(path, content, mode, encoding)
 
-    async def delete_file(self, path: str) -> dict[str, Any]:
-        return await self._impl.delete_file(path)
-
-    async def list_dir(
-        self,
-        path: str = ".",
-        show_hidden: bool = False,
-    ) -> dict[str, Any]:
-        return await self._impl.list_dir(path, show_hidden)
+async def _list_dir_via_shell(
+    shell: CuaShellComponent,
+    path: str,
+    show_hidden: bool,
+) -> dict[str, Any]:
+    flags = "-1A" if show_hidden else "-1"
+    result = await shell.exec(f"ls {flags} {path!r}")
+    return {
+        "success": not bool(result.get("stderr")),
+        "path": path,
+        "entries": _split_listing_entries(result.get("stdout", "")),
+        "error": result.get("stderr", ""),
+    }
 
 
 class CuaGUIComponent(GUIComponent):
@@ -533,12 +550,12 @@ class _CuaRuntime:
 class CuaBooter(ComputerBooter):
     def __init__(
         self,
-        image: str = "linux",
-        os_type: str = "linux",
-        ttl: int = 3600,
-        telemetry_enabled: bool = False,
-        local: bool = True,
-        api_key: str = "",
+        image: str = CUA_DEFAULT_CONFIG["image"],
+        os_type: str = CUA_DEFAULT_CONFIG["os_type"],
+        ttl: int = CUA_DEFAULT_CONFIG["ttl"],
+        telemetry_enabled: bool = CUA_DEFAULT_CONFIG["telemetry_enabled"],
+        local: bool = CUA_DEFAULT_CONFIG["local"],
+        api_key: str = CUA_DEFAULT_CONFIG["api_key"],
     ) -> None:
         self.image = image
         self.os_type = os_type

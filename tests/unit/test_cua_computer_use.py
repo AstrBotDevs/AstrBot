@@ -114,6 +114,12 @@ class FailingShell:
         }
 
 
+class SandboxWithoutFilesystem:
+    def __init__(self):
+        self.shell = FakeShell()
+        self.python = FakePython()
+
+
 class SyncPython:
     def run(self, code: str, **kwargs):
         return {"output": "sync", "error": ""}
@@ -207,6 +213,30 @@ def test_cua_ephemeral_kwargs_include_api_key_for_cloud_when_supported():
     assert kwargs == {"local": False, "api_key": "sk-test"}
 
 
+def test_cua_default_config_matches_booter_defaults():
+    from astrbot.core.computer.booters.cua import CUA_DEFAULT_CONFIG, CuaBooter
+    from astrbot.core.config.default import DEFAULT_CONFIG
+
+    booter = CuaBooter()
+    sandbox_defaults = DEFAULT_CONFIG["provider_settings"]["sandbox"]
+
+    assert booter.image == CUA_DEFAULT_CONFIG["image"]
+    assert booter.os_type == CUA_DEFAULT_CONFIG["os_type"]
+    assert booter.ttl == CUA_DEFAULT_CONFIG["ttl"]
+    assert booter.telemetry_enabled == CUA_DEFAULT_CONFIG["telemetry_enabled"]
+    assert booter.local == CUA_DEFAULT_CONFIG["local"]
+    assert booter.api_key == CUA_DEFAULT_CONFIG["api_key"]
+    assert sandbox_defaults["cua_image"] == CUA_DEFAULT_CONFIG["image"]
+    assert sandbox_defaults["cua_os_type"] == CUA_DEFAULT_CONFIG["os_type"]
+    assert sandbox_defaults["cua_ttl"] == CUA_DEFAULT_CONFIG["ttl"]
+    assert (
+        sandbox_defaults["cua_telemetry_enabled"]
+        == CUA_DEFAULT_CONFIG["telemetry_enabled"]
+    )
+    assert sandbox_defaults["cua_local"] == CUA_DEFAULT_CONFIG["local"]
+    assert sandbox_defaults["cua_api_key"] == CUA_DEFAULT_CONFIG["api_key"]
+
+
 @pytest.mark.asyncio
 async def test_cua_components_map_sdk_results(tmp_path):
     from astrbot.core.computer.booters.cua import (
@@ -282,7 +312,8 @@ async def test_cua_write_file_shell_fallback_propagates_shell_failure():
     result = await CuaFileSystemComponent(sandbox).write_file("hello.txt", "hello")
 
     assert result["success"] is False
-    assert result["stderr"] == "python3: command not found"
+    assert "requires python3" in result["stderr"]
+    assert "python3: command not found" in result["stderr"]
     assert result["path"] == "hello.txt"
 
 
@@ -298,6 +329,26 @@ async def test_cua_list_dir_shell_fallback_returns_filename_only_entries():
 
     assert result["entries"] == ["alpha.txt", "folder"]
     assert sandbox.shell.commands[0][0] == "ls -1A '.'"
+
+
+@pytest.mark.asyncio
+async def test_cua_shell_filesystem_fallback_rejects_non_posix_os_type():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = SandboxWithoutFilesystem()
+    fs = CuaFileSystemComponent(sandbox, os_type="windows")
+
+    read_result = await fs.read_file("hello.txt")
+    write_result = await fs.write_file("hello.txt", "hello")
+    delete_result = await fs.delete_file("hello.txt")
+    list_result = await fs.list_dir(".")
+
+    for result in (read_result, write_result, delete_result, list_result):
+        assert result["success"] is False
+        assert (
+            "filesystem shell fallback is only supported for POSIX" in result["error"]
+        )
+    assert sandbox.shell.commands == []
 
 
 @pytest.mark.asyncio
@@ -385,6 +436,21 @@ async def test_cua_shell_background_reports_missing_python3_requirement():
     assert result["success"] is False
     assert "requires python3" in result["stderr"]
     assert "python3: command not found" in result["stderr"]
+
+
+@pytest.mark.asyncio
+async def test_cua_python_fallback_reports_missing_python3_requirement():
+    from astrbot.core.computer.booters.cua import CuaPythonComponent
+
+    sandbox = SandboxWithoutFilesystem()
+    sandbox.shell = FailingShell()
+    delattr(sandbox, "python")
+
+    result = await CuaPythonComponent(sandbox).exec("print('hello')")
+
+    assert result["success"] is False
+    assert "requires python3" in result["error"]
+    assert "python3: command not found" in result["error"]
 
 
 @pytest.mark.asyncio

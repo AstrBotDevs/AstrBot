@@ -485,26 +485,14 @@ async def get_booter(
                 ttl=ttl,
             )
         elif booter_type == "cua":
-            from .booters.cua import CuaBooter
+            from .booters.cua import CuaBooter, build_cua_booter_kwargs
 
-            image = sandbox_cfg.get("cua_image", "linux")
-            os_type = sandbox_cfg.get("cua_os_type", "linux")
-            ttl = sandbox_cfg.get("cua_ttl", 3600)
-            telemetry_enabled = sandbox_cfg.get("cua_telemetry_enabled", False)
-            local = sandbox_cfg.get("cua_local", True)
-            api_key = sandbox_cfg.get("cua_api_key", "")
-
+            cua_kwargs = build_cua_booter_kwargs(sandbox_cfg)
             logger.info(
-                f"[Computer] CUA config: image={image}, os_type={os_type}, ttl={ttl}"
+                f"[Computer] CUA config: image={cua_kwargs['image']}, "
+                f"os_type={cua_kwargs['os_type']}, ttl={cua_kwargs['ttl']}"
             )
-            client = CuaBooter(
-                image=image,
-                os_type=os_type,
-                ttl=ttl,
-                telemetry_enabled=telemetry_enabled,
-                local=local,
-                api_key=api_key,
-            )
+            client = CuaBooter(**cua_kwargs)
         elif booter_type == "boxlite":
             from .booters.boxlite import BoxliteBooter
 
