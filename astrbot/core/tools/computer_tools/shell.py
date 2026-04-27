@@ -69,12 +69,13 @@ class ExecuteShellTool(FunctionTool):
                 current_workspace_root.mkdir(parents=True, exist_ok=True)
                 cwd = str(current_workspace_root)
 
+            env = dict(env or {})
             effective_background = background and not _is_self_detached_command(command)
             result = await sb.shell.exec(
                 command,
                 cwd=cwd,
                 background=effective_background,
-                env=dict(env or {}),
+                env=env,
             )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:

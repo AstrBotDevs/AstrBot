@@ -129,9 +129,13 @@ def _normalize_process_result(raw: Any) -> ProcessResult:
 
     stdout = _result_text(payload, "stdout", "output")
     stderr = _result_text(payload, "stderr", "error")
-    exit_code = payload.get(
-        "exit_code", payload.get("returncode", 0 if not stderr else 1)
-    )
+    exit_code = payload.get("exit_code")
+    if exit_code is None:
+        exit_code = payload.get("returncode")
+    if exit_code is None:
+        exit_code = payload.get("return_code")
+    if exit_code is None:
+        exit_code = 0 if not stderr else 1
     success = bool(payload.get("success", not stderr and exit_code in (0, None)))
     return ProcessResult(
         stdout=stdout,

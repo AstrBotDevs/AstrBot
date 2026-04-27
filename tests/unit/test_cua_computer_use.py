@@ -497,6 +497,28 @@ async def test_cua_shell_normalizes_command_result_object_shape():
 
 
 @pytest.mark.asyncio
+async def test_cua_shell_prefers_returncode_when_exit_code_is_none():
+    from astrbot.core.computer.booters.cua import CuaShellComponent
+
+    class ShellWithMixedExitCode:
+        async def run(self, command: str, **kwargs):
+            return {
+                "stdout": "",
+                "stderr": "",
+                "exit_code": None,
+                "returncode": 1,
+            }
+
+    sandbox = FakeSandbox()
+    sandbox.shell = ShellWithMixedExitCode()
+
+    result = await CuaShellComponent(sandbox).exec("false")
+
+    assert result["exit_code"] == 1
+    assert result["success"] is False
+
+
+@pytest.mark.asyncio
 async def test_cua_python_fallback_preserves_shell_command_result_stdout():
     from astrbot.core.computer.booters.cua import CuaPythonComponent
 
