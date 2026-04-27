@@ -1030,7 +1030,9 @@ def _apply_sandbox_tools(
             "Do not use `firefox &` unless the user confirms Firefox exists. "
             "After launching or changing any GUI app, immediately call "
             "`astrbot_cua_screenshot` to inspect the current desktop before "
-            "clicking or typing. Use coordinates from screenshots for "
+            "clicking or typing; keep `return_image_to_llm` enabled unless the "
+            "provider cannot handle image tool results. "
+            "Use coordinates from screenshots for "
             "`astrbot_cua_mouse_click`, `astrbot_cua_keyboard_type` for text input, "
             "and `astrbot_cua_key_press` for Enter, Ctrl+L, Tab, or Escape.\n"
         )

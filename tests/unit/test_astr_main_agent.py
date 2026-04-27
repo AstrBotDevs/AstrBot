@@ -1578,6 +1578,7 @@ class TestApplySandboxTools:
         assert "astrbot_cua_screenshot" in req.system_prompt
         assert "astrbot_cua_open_browser" in req.system_prompt
         assert "astrbot_cua_key_press" in req.system_prompt
+        assert "return_image_to_llm" in req.system_prompt
         assert "Do not use `firefox &`" in req.system_prompt
 
     def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):

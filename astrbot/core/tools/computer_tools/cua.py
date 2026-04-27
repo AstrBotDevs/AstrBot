@@ -62,8 +62,8 @@ class CuaScreenshotTool(FunctionTool):
                 },
                 "return_image_to_llm": {
                     "type": "boolean",
-                    "description": "Whether to include the screenshot image content in the tool result. Keep disabled for Gemini thinking models.",
-                    "default": False,
+                    "description": "Whether to include the screenshot image content in the tool result for model inspection.",
+                    "default": True,
                 },
             },
         }
@@ -73,7 +73,7 @@ class CuaScreenshotTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         send_to_user: bool = True,
-        return_image_to_llm: bool = False,
+        return_image_to_llm: bool = True,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Taking CUA screenshots"):
             return err
@@ -204,24 +204,34 @@ class CuaKeyPressTool(FunctionTool):
 @dataclass
 class CuaOpenBrowserTool(FunctionTool):
     name: str = "astrbot_cua_open_browser"
-    description: str = "Open Chromium in the CUA sandbox, optionally navigating to a URL, then capture a screenshot."
+    description: str = "Open a browser in the CUA sandbox, optionally navigating to a URL, then capture a screenshot."
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
                 "url": {
                     "type": "string",
-                    "description": "Optional URL to open in Chromium.",
+                    "description": "Optional URL to open in the browser.",
                     "default": "",
                 },
                 "wait_seconds": {
                     "type": "number",
                     "description": "Seconds to wait before taking the screenshot.",
-                    "default": 3,
+                    "default": 8,
                 },
                 "send_to_user": {
                     "type": "boolean",
                     "description": "Whether to send the screenshot image to the current conversation.",
+                    "default": True,
+                },
+                "debug": {
+                    "type": "boolean",
+                    "description": "Whether to include the internal shell command and shell result in the tool response.",
+                    "default": False,
+                },
+                "return_image_to_llm": {
+                    "type": "boolean",
+                    "description": "Whether to include the browser screenshot image content in the tool result for model inspection.",
                     "default": True,
                 },
             },
@@ -232,8 +242,10 @@ class CuaOpenBrowserTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         url: str = "",
-        wait_seconds: float = 3,
+        wait_seconds: float = 8,
         send_to_user: bool = True,
+        debug: bool = False,
+        return_image_to_llm: bool = True,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Opening CUA browser"):
             return err
@@ -254,18 +266,32 @@ class CuaOpenBrowserTool(FunctionTool):
             screenshot_result = await gui.screenshot(path)
             payload = {
                 "success": bool(shell_result.get("success", True)),
-                "command": command,
-                "shell": shell_result,
+                "browser": "auto",
+                "url": url,
                 **screenshot_result,
                 "path": path,
             }
-            payload.pop("base64", None)
+            image_data = payload.pop("base64", "")
+            if debug:
+                payload["debug"] = {"command": command, "shell": shell_result}
             if send_to_user:
                 await context.context.event.send(MessageChain().file_image(path))
                 payload["sent_to_user"] = True
-            return _to_json(payload)
+            content: list[mcp.types.TextContent | mcp.types.ImageContent] = [
+                mcp.types.TextContent(type="text", text=_to_json(payload))
+            ]
+            if return_image_to_llm:
+                content.append(
+                    mcp.types.ImageContent(
+                        type="image",
+                        data=str(image_data),
+                        mimeType=str(payload.get("mime_type", "image/png")),
+                    )
+                )
+            return mcp.types.CallToolResult(content=content)
         except Exception as e:
-            return f"Error opening CUA browser: {str(e)}"
+            detail = str(e) or type(e).__name__
+            return f"Error opening CUA browser: {detail}"
 
 
 def _new_screenshot_path(umo: str) -> str:
@@ -277,12 +303,25 @@ def _new_screenshot_path(umo: str) -> str:
 
 def _build_chromium_command(url: str = "") -> str:
     quoted_url = shlex.quote(url) if url else ""
+    direct_args = (
+        f"$browser --no-sandbox --disable-dev-shm-usage {quoted_url}"
+        if quoted_url
+        else "$browser --no-sandbox --disable-dev-shm-usage"
+    )
+    fallback_chromium_args = direct_args
+    fallback_firefox_args = (
+        f"$browser --no-remote {quoted_url}" if quoted_url else "$browser --no-remote"
+    )
     return (
         "browser=$(command -v chromium || command -v chromium-browser || "
         "command -v google-chrome || command -v firefox) && "
         'if echo "$browser" | grep -qi firefox; then '
-        f'su cua -c "DISPLAY=:1 $browser --no-remote {quoted_url}"; '
+        f"DISPLAY=${{DISPLAY:-:1}} {fallback_firefox_args} "
+        "|| "
+        f'su cua -c "DISPLAY=:1 {fallback_firefox_args}"; '
         "else "
-        f'su cua -c "DISPLAY=:1 $browser --no-sandbox --disable-dev-shm-usage {quoted_url}"; '
+        f"DISPLAY=${{DISPLAY:-:1}} {direct_args} "
+        "|| "
+        f'su cua -c "DISPLAY=:1 {fallback_chromium_args}"; '
         "fi"
     )
