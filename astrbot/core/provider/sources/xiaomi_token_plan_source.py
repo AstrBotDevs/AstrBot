@@ -46,11 +46,12 @@ class ProviderXiaomiTokenPlan(ProviderAnthropic):
         provider_config["api_base"] = "https://token-plan-cn.xiaomimimo.com/anthropic"
 
         # Xiaomi Token Plan requires the Authorization: Bearer <token> header.
-        key = provider_config.get("key", "")
-        actual_key = key[0] if isinstance(key, list) else key
-        provider_config.setdefault("custom_headers", {})["Authorization"] = (
-            f"Bearer {actual_key}"
-        )
+        keys = provider_config.get("key", [])
+        actual_key = keys[0] if isinstance(keys, list) and keys else keys
+        if actual_key:
+            provider_config.setdefault("custom_headers", {})["Authorization"] = (
+                f"Bearer {actual_key}"
+            )
 
         super().__init__(
             provider_config,
