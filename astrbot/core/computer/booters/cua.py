@@ -158,19 +158,47 @@ def _python3_requirement_error(operation: str, stderr: str) -> str:
     return f"CUA {operation} requires python3 in the sandbox image: {stderr}"
 
 
+def _process_result_with_python3_error(raw: Any, operation: str) -> ProcessResult:
+    proc = _normalize_process_result(raw)
+    if proc.stderr and _is_missing_python3_error(proc.stderr):
+        return ProcessResult(
+            stdout=proc.stdout,
+            stderr=_python3_requirement_error(operation, proc.stderr),
+            exit_code=proc.exit_code,
+            success=proc.success,
+        )
+    return proc
+
+
+async def _exec_python3_or_error(
+    shell: ShellComponent,
+    code: str,
+    *,
+    operation: str,
+    timeout: int | None = 30,
+) -> ProcessResult:
+    result = await shell.exec(f"python3 - <<'PY'\n{code}\nPY", timeout=timeout)
+    return _process_result_with_python3_error(result, operation)
+
+
 def _is_posix_os_type(os_type: str) -> bool:
     return os_type.lower() in _POSIX_OS_TYPES
 
 
+def _non_posix_filesystem_error(os_type: str) -> str:
+    return (
+        "CUA filesystem shell fallback is only supported for POSIX images; "
+        f"os_type={os_type!r} does not support the required shell commands."
+    )
+
+
 def _non_posix_filesystem_result(path: str, os_type: str) -> dict[str, Any]:
-    return {
-        "success": False,
-        "path": path,
-        "error": (
-            "CUA filesystem shell fallback is only supported for POSIX images; "
-            f"os_type={os_type!r} does not support the required shell commands."
-        ),
-    }
+    error = _non_posix_filesystem_error(os_type)
+    return {"success": False, "path": path, "error": error, "message": error}
+
+
+def _raise_non_posix_filesystem_error(os_type: str) -> None:
+    raise RuntimeError(_non_posix_filesystem_error(os_type))
 
 
 def _split_listing_entries(output: str) -> list[str]:
@@ -252,13 +280,14 @@ class CuaShellComponent(ShellComponent):
             command = _build_cua_background_command(command)
 
         result = await _maybe_await(self._exec_raw(command, **kwargs))
-        proc = _normalize_process_result(result)
-        stderr = proc.stderr
-        if background and stderr and _is_missing_python3_error(stderr):
-            stderr = _python3_requirement_error("background execution", stderr)
+        proc = (
+            _process_result_with_python3_error(result, "background execution")
+            if background
+            else _normalize_process_result(result)
+        )
         response = {
             "stdout": proc.stdout,
-            "stderr": stderr,
+            "stderr": proc.stderr,
             "exit_code": proc.exit_code,
             "success": proc.success,
         }
@@ -298,15 +327,11 @@ class CuaPythonComponent(PythonComponent):
             proc = _normalize_process_result(result)
         else:
             shell = CuaShellComponent(self._sandbox, os_type=self._os_type)
-            result = await shell.exec(f"python3 - <<'PY'\n{code}\nPY", timeout=timeout)
-            error = result.get("stderr", "")
-            if error and _is_missing_python3_error(error):
-                error = _python3_requirement_error("Python execution fallback", error)
-            proc = ProcessResult(
-                stdout=result.get("stdout", ""),
-                stderr=error,
-                exit_code=result.get("exit_code"),
-                success=bool(result.get("success", False)),
+            proc = await _exec_python3_or_error(
+                shell,
+                code,
+                operation="Python execution fallback",
+                timeout=timeout,
             )
 
         output_text = "" if silent else proc.stdout
@@ -341,6 +366,7 @@ class CuaFileSystemComponent(FileSystemComponent):
         self._shell = CuaShellComponent(sandbox, os_type=os_type)
         self._fs = getattr(sandbox, "filesystem", None)
         self._os_type = os_type.lower()
+        self._fallback = _PosixShellFileSystem(self._shell, self._os_type)
 
     async def create_file(
         self,
@@ -362,12 +388,7 @@ class CuaFileSystemComponent(FileSystemComponent):
     ) -> dict[str, Any]:
         read_file = None if self._fs is None else getattr(self._fs, "read_file", None)
         if read_file is None:
-            if not _is_posix_os_type(self._os_type):
-                return _non_posix_filesystem_result(path, self._os_type)
-            result = await self._shell.exec(f"cat {shlex.quote(path)}")
-            if result.get("stderr"):
-                return {"success": False, "path": path, "error": result["stderr"]}
-            content = result.get("stdout", "")
+            return await self._fallback.read_file(path, encoding, offset, limit)
         else:
             content = await _maybe_await(read_file(path))
         if isinstance(content, bytes):
@@ -390,12 +411,7 @@ class CuaFileSystemComponent(FileSystemComponent):
         _ = mode
         write_file = None if self._fs is None else getattr(self._fs, "write_file", None)
         if write_file is None:
-            if not _is_posix_os_type(self._os_type):
-                return _non_posix_filesystem_result(path, self._os_type)
-            result = await _write_base64_via_shell(
-                self._shell, path, content.encode(encoding)
-            )
-            return _write_result(path, result)
+            return await self._fallback.write_file(path, content, mode, encoding)
         else:
             await _maybe_await(write_file(path, content))
         return {"success": True, "path": path}
@@ -407,11 +423,7 @@ class CuaFileSystemComponent(FileSystemComponent):
                 self._fs, "delete_file", None
             )
         if delete is None:
-            if not _is_posix_os_type(self._os_type):
-                return _non_posix_filesystem_result(path, self._os_type)
-            result = await self._shell.exec(f"rm -rf {shlex.quote(path)}")
-            if result.get("stderr"):
-                return {"success": False, "path": path, "error": result["stderr"]}
+            return await self._fallback.delete_file(path)
         else:
             await _maybe_await(delete(path))
         return {"success": True, "path": path}
@@ -425,9 +437,7 @@ class CuaFileSystemComponent(FileSystemComponent):
         if list_dir is not None:
             entries = await _maybe_await(list_dir(path))
             return {"success": True, "path": path, "entries": entries}
-        if not _is_posix_os_type(self._os_type):
-            return _non_posix_filesystem_result(path, self._os_type)
-        return await _list_dir_via_shell(self._shell, path, show_hidden)
+        return await self._fallback.list_dir(path, show_hidden)
 
     async def search_files(
         self,
@@ -437,10 +447,7 @@ class CuaFileSystemComponent(FileSystemComponent):
         after_context: int | None = None,
         before_context: int | None = None,
     ) -> dict[str, Any]:
-        if not _is_posix_os_type(self._os_type):
-            return _non_posix_filesystem_result(path or ".", self._os_type)
-        return await search_files_via_shell(
-            self._shell,
+        return await self._fallback.search_files(
             pattern=pattern,
             path=path,
             glob=glob,
@@ -476,6 +483,90 @@ class CuaFileSystemComponent(FileSystemComponent):
             "path": path,
             "replacements": occurrences if replace_all else 1,
         }
+
+
+class _PosixShellFileSystem(FileSystemComponent):
+    def __init__(self, shell: CuaShellComponent, os_type: str) -> None:
+        self._shell = shell
+        self._os_type = os_type.lower()
+
+    def _ensure_posix(self, path: str) -> dict[str, Any] | None:
+        if _is_posix_os_type(self._os_type):
+            return None
+        return _non_posix_filesystem_result(path, self._os_type)
+
+    async def read_file(
+        self,
+        path: str,
+        encoding: str = "utf-8",
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        _ = encoding
+        if error := self._ensure_posix(path):
+            return error
+        result = await self._shell.exec(f"cat {shlex.quote(path)}")
+        if result.get("stderr"):
+            return {"success": False, "path": path, "error": result["stderr"]}
+        return {
+            "success": True,
+            "path": path,
+            "content": _slice_content_by_lines(
+                str(result.get("stdout", "")), offset=offset, limit=limit
+            ),
+        }
+
+    async def write_file(
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        _ = mode
+        if error := self._ensure_posix(path):
+            return error
+        result = await _write_base64_via_shell(
+            self._shell, path, content.encode(encoding)
+        )
+        return _write_result(path, result)
+
+    async def delete_file(self, path: str) -> dict[str, Any]:
+        if error := self._ensure_posix(path):
+            return error
+        result = await self._shell.exec(f"rm -rf {shlex.quote(path)}")
+        if result.get("stderr"):
+            return {"success": False, "path": path, "error": result["stderr"]}
+        return {"success": True, "path": path}
+
+    async def list_dir(
+        self,
+        path: str = ".",
+        show_hidden: bool = False,
+    ) -> dict[str, Any]:
+        if error := self._ensure_posix(path):
+            return error
+        return await _list_dir_via_shell(self._shell, path, show_hidden)
+
+    async def search_files(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        after_context: int | None = None,
+        before_context: int | None = None,
+    ) -> dict[str, Any]:
+        search_path = path or "."
+        if error := self._ensure_posix(search_path):
+            return error
+        return await search_files_via_shell(
+            self._shell,
+            pattern=pattern,
+            path=path,
+            glob=glob,
+            after_context=after_context,
+            before_context=before_context,
+        )
 
 
 async def _list_dir_via_shell(
@@ -728,8 +819,7 @@ class CuaBooter(ComputerBooter):
             await sandbox.download_file(remote_path, local_path)
             return
         if not _is_posix_os_type(self.os_type):
-            result = _non_posix_filesystem_result(remote_path, self.os_type)
-            raise RuntimeError(result["error"])
+            _raise_non_posix_filesystem_error(self.os_type)
         result = await self.shell.exec(f"base64 {shlex.quote(remote_path)}")
         if result.get("stderr"):
             raise RuntimeError(result["stderr"])

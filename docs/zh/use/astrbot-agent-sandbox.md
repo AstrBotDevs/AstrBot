@@ -69,7 +69,7 @@ CUA 本身还依赖具体运行方式：
 - macOS VM 通常依赖 CUA/Lume 相关运行时。
 - 云端 CUA 需要可用的 CUA API Key。
 
-具体宿主机要求、镜像支持情况和本地运行时安装方式，请参考 [Cua 官方文档](https://cua.ai/docs)。
+具体宿主机要求、镜像支持情况和本地运行时安装方式，请参考 [CUA 官方文档](https://cua.ai/docs)。
 
 ### 在 AstrBot 中配置 CUA
 
