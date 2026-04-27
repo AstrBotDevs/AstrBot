@@ -476,9 +476,59 @@ async def test_screenshot_tool_returns_image_and_sends_file(monkeypatch, tmp_pat
     image_parts = [part for part in result.content if part.type == "image"]
     text_parts = [part for part in result.content if part.type == "text"]
     payload = json.loads(text_parts[0].text)
-    assert image_parts[0].data == base64.b64encode(b"fake-png").decode()
+    assert image_parts == []
+    assert "base64" not in payload
     assert Path(payload["path"]).exists()
     assert sent_messages
+
+
+@pytest.mark.asyncio
+async def test_screenshot_tool_can_opt_in_to_llm_image_content(monkeypatch, tmp_path):
+    from astrbot.core.tools.computer_tools import cua as cua_tools
+    from astrbot.core.tools.computer_tools.cua import CuaScreenshotTool
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+        async def send(self, message):
+            pass
+
+    class FakeAstrContext:
+        event = FakeEvent()
+        context = FakeContext({"provider_settings": {"computer_use_require_admin": True}})
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    class FakeGUI:
+        async def screenshot(self, path: str):
+            Path(path).write_bytes(b"fake-png")
+            return {
+                "success": True,
+                "path": path,
+                "mime_type": "image/png",
+                "base64": base64.b64encode(b"fake-png").decode(),
+            }
+
+    class FakeBooter:
+        gui = FakeGUI()
+
+    async def fake_get_booter(context, session_id):
+        return FakeBooter()
+
+    monkeypatch.setattr(cua_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(cua_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    result = await CuaScreenshotTool().call(
+        FakeWrapper(), send_to_user=False, return_image_to_llm=True
+    )
+
+    image_parts = [part for part in result.content if part.type == "image"]
+    text_parts = [part for part in result.content if part.type == "text"]
+    payload = json.loads(text_parts[0].text)
+    assert image_parts[0].data == base64.b64encode(b"fake-png").decode()
+    assert "base64" not in payload
 
 
 @pytest.mark.asyncio

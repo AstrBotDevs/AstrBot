@@ -58,6 +58,11 @@ class CuaScreenshotTool(FunctionTool):
                     "description": "Whether to send the screenshot image to the current conversation.",
                     "default": True,
                 },
+                "return_image_to_llm": {
+                    "type": "boolean",
+                    "description": "Whether to include the screenshot image content in the tool result. Keep disabled for Gemini thinking models.",
+                    "default": False,
+                },
             },
         }
     )
@@ -66,6 +71,7 @@ class CuaScreenshotTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         send_to_user: bool = True,
+        return_image_to_llm: bool = False,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Taking CUA screenshots"):
             return err
@@ -77,16 +83,19 @@ class CuaScreenshotTool(FunctionTool):
             if send_to_user:
                 await context.context.event.send(MessageChain().file_image(path))
                 payload["sent_to_user"] = True
-            return mcp.types.CallToolResult(
-                content=[
-                    mcp.types.TextContent(type="text", text=_to_json(payload)),
+            image_data = payload.pop("base64", "")
+            content: list[mcp.types.TextContent | mcp.types.ImageContent] = [
+                mcp.types.TextContent(type="text", text=_to_json(payload))
+            ]
+            if return_image_to_llm:
+                content.append(
                     mcp.types.ImageContent(
                         type="image",
-                        data=str(payload.get("base64", "")),
+                        data=str(image_data),
                         mimeType=str(payload.get("mime_type", "image/png")),
-                    ),
-                ]
-            )
+                    )
+                )
+            return mcp.types.CallToolResult(content=content)
         except Exception as e:
             return f"Error taking CUA screenshot: {str(e)}"
 
