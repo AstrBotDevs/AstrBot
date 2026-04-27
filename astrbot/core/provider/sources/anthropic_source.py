@@ -39,7 +39,7 @@ class ProviderAnthropic(Provider):
         stop_reason: str | None = None,
     ) -> None:
         has_text_output = bool((llm_response.completion_text or "").strip())
-        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
         has_tool_output = bool(llm_response.tools_call_args)
         if has_text_output or has_reasoning_output or has_tool_output:
             return
