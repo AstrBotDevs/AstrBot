@@ -84,17 +84,6 @@ def _maybe_model_dump(value: Any) -> dict[str, Any]:
     return {}
 
 
-async def _call_first(
-    obj: Any, names: tuple[str, ...], *args: Any, **kwargs: Any
-) -> Any:
-    for name in names:
-        method = getattr(obj, name, None)
-        if method is None:
-            continue
-        return await _maybe_await(method(*args, **kwargs))
-    raise AttributeError(f"None of these methods exist: {', '.join(names)}")
-
-
 def _slice_content_by_lines(
     content: str,
     *,
@@ -169,16 +158,20 @@ def _split_listing_entries(output: str) -> list[str]:
 def _require_component_method(
     root: Any,
     component_name: str,
-    method_name: str,
+    method_names: str | tuple[str, ...],
 ) -> Any:
     component = getattr(root, component_name, None)
-    method = getattr(component, method_name, None) if component is not None else None
-    if method is None:
-        raise RuntimeError(
-            f"CUA sandbox does not provide `{component_name}.{method_name}`. "
-            "Please check the installed CUA SDK version and sandbox backend."
-        )
-    return method
+    names = (method_names,) if isinstance(method_names, str) else method_names
+    if component is not None:
+        for method_name in names:
+            method = getattr(component, method_name, None)
+            if method is not None:
+                return method
+    candidates = ", ".join(f"{component_name}.{name}" for name in names)
+    raise RuntimeError(
+        f"CUA sandbox does not provide any of: {candidates}. "
+        "Please check the installed CUA SDK version and sandbox backend."
+    )
 
 
 def _has_component_method(root: Any, component_name: str, method_name: str) -> bool:
@@ -190,6 +183,10 @@ class CuaShellComponent(ShellComponent):
     def __init__(self, sandbox: Any, os_type: str = "linux") -> None:
         self._sandbox = sandbox
         self._os_type = os_type.lower()
+        shell = sandbox.shell
+        self._exec_raw = getattr(shell, "exec", None) or getattr(shell, "run", None)
+        if self._exec_raw is None:
+            raise RuntimeError("CUA sandbox shell must provide `.exec` or `.run`.")
 
     async def exec(
         self,
@@ -225,9 +222,7 @@ class CuaShellComponent(ShellComponent):
                 }
             command = _build_cua_background_command(command)
 
-        result = await _call_first(
-            self._sandbox.shell, ("run", "exec"), command, **kwargs
-        )
+        result = await _maybe_await(self._exec_raw(command, **kwargs))
         proc = _normalize_process_result(result)
         stderr = proc.stderr
         if background and stderr and _is_missing_python3_error(stderr):
@@ -254,6 +249,12 @@ class CuaPythonComponent(PythonComponent):
     def __init__(self, sandbox: Any, os_type: str = "linux") -> None:
         self._sandbox = sandbox
         self._os_type = os_type
+        python = getattr(sandbox, "python", None)
+        self._python_exec = None
+        if python is not None:
+            self._python_exec = getattr(python, "exec", None) or getattr(
+                python, "run", None
+            )
 
     async def exec(
         self,
@@ -263,9 +264,8 @@ class CuaPythonComponent(PythonComponent):
         silent: bool = False,
     ) -> dict[str, Any]:
         _ = kernel_id
-        python = getattr(self._sandbox, "python", None)
-        if python is not None:
-            result = await _call_first(python, ("run", "exec"), code, timeout=timeout)
+        if self._python_exec is not None:
+            result = await _maybe_await(self._python_exec(code, timeout=timeout))
             proc = _normalize_process_result(result)
         else:
             shell = CuaShellComponent(self._sandbox, os_type=self._os_type)
@@ -321,8 +321,8 @@ class CuaFileSystemComponent(FileSystemComponent):
     ) -> dict[str, Any]:
         write_result = await self.write_file(path, content)
         if not write_result.get("success"):
-            return {**write_result, "mode": mode}
-        return {"success": True, "path": path, "mode": mode}
+            return {**write_result, "mode": mode, "mode_applied": False}
+        return {"success": True, "path": path, "mode": mode, "mode_applied": False}
 
     async def read_file(
         self,
@@ -335,7 +335,7 @@ class CuaFileSystemComponent(FileSystemComponent):
         if read_file is None:
             if not _is_posix_os_type(self._os_type):
                 return _non_posix_filesystem_result(path, self._os_type)
-            result = await self._shell.exec(f"cat {path!r}")
+            result = await self._shell.exec(f"cat {shlex.quote(path)}")
             if result.get("stderr"):
                 return {"success": False, "path": path, "error": result["stderr"]}
             content = result.get("stdout", "")
@@ -380,7 +380,7 @@ class CuaFileSystemComponent(FileSystemComponent):
         if delete is None:
             if not _is_posix_os_type(self._os_type):
                 return _non_posix_filesystem_result(path, self._os_type)
-            result = await self._shell.exec(f"rm -rf {path!r}")
+            result = await self._shell.exec(f"rm -rf {shlex.quote(path)}")
             if result.get("stderr"):
                 return {"success": False, "path": path, "error": result["stderr"]}
         else:
@@ -453,7 +453,7 @@ async def _list_dir_via_shell(
     show_hidden: bool,
 ) -> dict[str, Any]:
     flags = "-1A" if show_hidden else "-1"
-    result = await shell.exec(f"ls {flags} {path!r}")
+    result = await shell.exec(f"ls {flags} {shlex.quote(path)}")
     return {
         "success": not bool(result.get("stderr")),
         "path": path,
@@ -492,19 +492,9 @@ class CuaGUIComponent(GUIComponent):
         return {"success": bool(payload.get("success", True)), **payload}
 
     async def press_key(self, key: str) -> dict[str, Any]:
-        keyboard = getattr(self._sandbox, "keyboard", None)
-        press = None
-        if keyboard is not None:
-            press = (
-                getattr(keyboard, "press", None)
-                or getattr(keyboard, "key_press", None)
-                or getattr(keyboard, "press_key", None)
-            )
-        if press is None:
-            raise RuntimeError(
-                "CUA sandbox does not provide `keyboard.press`. "
-                "Please check the installed CUA SDK version and sandbox backend."
-            )
+        press = _require_component_method(
+            self._sandbox, "keyboard", ("press", "key_press", "press_key")
+        )
         result = await _maybe_await(press(key))
         payload = _maybe_model_dump(result)
         return {"success": bool(payload.get("success", True)), **payload}

@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import shlex
 from pathlib import Path
 
 import mcp
@@ -284,7 +285,25 @@ async def test_cua_list_dir_returns_entries_list_for_shell_fallback():
 
     assert result["success"] is True
     assert result["entries"] == ["ok"]
-    assert sandbox.shell.commands[0][0] == "ls -1 '.'"
+    assert sandbox.shell.commands[0][0] == "ls -1 ."
+
+
+@pytest.mark.asyncio
+async def test_cua_shell_filesystem_fallback_shell_quotes_paths():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    path = "folder/it's file.txt"
+    sandbox = FakeSandbox()
+    delattr(sandbox, "filesystem")
+    fs = CuaFileSystemComponent(sandbox)
+
+    await fs.read_file(path)
+    await fs.delete_file(path)
+    await fs.list_dir(path)
+
+    assert sandbox.shell.commands[0][0] == f"cat {shlex.quote(path)}"
+    assert sandbox.shell.commands[1][0] == f"rm -rf {shlex.quote(path)}"
+    assert sandbox.shell.commands[2][0] == f"ls -1 {shlex.quote(path)}"
 
 
 @pytest.mark.asyncio
@@ -299,6 +318,19 @@ async def test_cua_write_file_shell_fallback_uses_python_base64_decoder():
     command = sandbox.shell.commands[0][0]
     assert "python3 -c" in command
     assert "base64 -d" not in command
+
+
+@pytest.mark.asyncio
+async def test_cua_create_file_reports_mode_as_informational():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = FakeSandbox()
+
+    result = await CuaFileSystemComponent(sandbox).create_file("hello.txt", mode=0o600)
+
+    assert result["success"] is True
+    assert result["mode"] == 0o600
+    assert result["mode_applied"] is False
 
 
 @pytest.mark.asyncio
@@ -328,7 +360,7 @@ async def test_cua_list_dir_shell_fallback_returns_filename_only_entries():
     result = await CuaFileSystemComponent(sandbox).list_dir(".", show_hidden=True)
 
     assert result["entries"] == ["alpha.txt", "folder"]
-    assert sandbox.shell.commands[0][0] == "ls -1A '.'"
+    assert sandbox.shell.commands[0][0] == "ls -1A ."
 
 
 @pytest.mark.asyncio
@@ -473,6 +505,24 @@ async def test_cua_gui_reports_missing_mouse_or_keyboard():
         await gui.press_key("Enter")
 
 
+@pytest.mark.asyncio
+async def test_cua_gui_press_error_lists_probed_methods():
+    from astrbot.core.computer.booters.cua import CuaGUIComponent
+
+    class SandboxWithoutPress:
+        keyboard = object()
+
+    gui = CuaGUIComponent(SandboxWithoutPress())
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await gui.press_key("Enter")
+
+    message = str(exc_info.value)
+    assert "keyboard.press" in message
+    assert "keyboard.key_press" in message
+    assert "keyboard.press_key" in message
+
+
 def test_cua_capabilities_reflect_initialized_sandbox_gui_devices():
     from astrbot.core.computer.booters.cua import (
         CuaBooter,
@@ -508,6 +558,8 @@ def test_cua_capabilities_reflect_initialized_sandbox_gui_devices():
     )
 
     class ScreenshotOnlySandbox:
+        shell = FakeShell()
+
         async def screenshot(self):
             return b"fake-png"
 
