@@ -1,3 +1,6 @@
+from sqlalchemy import case, func, select
+from sqlmodel import col
+
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core import logger
@@ -7,6 +10,7 @@ from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_THREAD_ID_KEY,
 )
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
+from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .utils.rst_scene import RstScene
@@ -246,3 +250,62 @@ class ConversationCommands:
                 f"✅ Switched to new conversation: {cid[:4]}。"
             ),
         )
+
+    async def stats(self, message: AstrMessageEvent) -> None:
+        """Show token usage statistics for the current conversation."""
+        umo = message.unified_msg_origin
+        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
+
+        if not cid:
+            message.set_result(
+                MessageEventResult().message(
+                    "❌ You are not in a conversation. Use /new to create one."
+                ),
+            )
+            return
+
+        db = self.context.get_db()
+        async with db.get_db() as session:
+            result = await session.execute(
+                select(
+                    func.count(case((col(ProviderStat.id).is_not(None), 1))).label(
+                        "record_count",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_input_other), 0).label(
+                        "total_input_other",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_input_cached), 0).label(
+                        "total_input_cached",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_output), 0).label(
+                        "total_output",
+                    ),
+                ).where(
+                    col(ProviderStat.agent_type) == "internal",
+                    col(ProviderStat.conversation_id) == cid,
+                )
+            )
+            stats = result.one()
+
+        if stats.record_count == 0:
+            message.set_result(
+                MessageEventResult().message(
+                    "📊 No stats available for this conversation yet."
+                ),
+            )
+            return
+
+        total_input_other = stats.total_input_other
+        total_input_cached = stats.total_input_cached
+        total_output = stats.total_output
+        total_tokens = total_input_other + total_input_cached + total_output
+
+        ret = (
+            f"📊 Conversation Token usage (ID: {cid[:8]}...)\n"
+            f"Total:          {total_tokens:,}\n"
+            f"Input (cached): {total_input_cached:,}\n"
+            f"Input (other):  {total_input_other:,}\n"
+            f"Output:         {total_output:,}\n"
+        )
+
+        message.set_result(MessageEventResult().message(ret))
