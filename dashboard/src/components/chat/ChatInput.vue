@@ -342,10 +342,10 @@ interface Props {
   configId?: string | null;
   replyTo?: ReplyInfo | null;
   sendShortcut?: "enter" | "shift_enter";
-  configSelectorDisabled: boolean;
-  providerModelMenuDisabled: boolean;
-  uploadFilesDisabled: boolean;
-  recordDisabled: boolean;
+  configSelectorDisabled?: boolean;
+  providerModelMenuDisabled?: boolean;
+  uploadFilesDisabled?: boolean;
+  recordDisabled?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {

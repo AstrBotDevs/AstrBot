@@ -462,7 +462,11 @@ export function useMessages(options: UseMessagesOptions) {
 
   async function stopSession(sessionId: string) {
     if (!sessionId) return;
-    await axios.post(chatWidgetApi ? "/api/widget/stop" : "/api/chat/stop", { session_id: sessionId });
+    if (chatWidgetApi) {
+      await axios.post("/api/widget/stop", Object.assign({ session_id: sessionId }, chatWidgetApiPackage));
+    } else {
+      await axios.post("/api/chat/stop", { session_id: sessionId });
+    }
   }
 
   function cleanupConnections() {

@@ -6,7 +6,7 @@
       </div>
 
       <div v-else-if="!activeMessages.length" class="standalone-state">
-        <div class="welcome-title">{{ tm("welcome.title") }}</div>
+        <div class="welcome-title">{{ welcomeTitle ? welcomeTitle : tm("welcome.title") }}</div>
       </div>
 
       <div v-else class="message-list">
@@ -159,6 +159,10 @@
         @remove-file="removeFile"
         @paste-image="handlePaste"
         @file-select="handleFilesSelected"
+        :uploadFilesDisabled="!attachmentEnabled"
+        :providerModelMenuDisabled="widgetModel"
+        :config-selector-disabled="widgetModel"
+        :recordDisabled="!attachmentEnabled"
       />
     </section>
 
@@ -208,9 +212,24 @@ import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
 
-const props = withDefaults(defineProps<{ configId?: string | null }>(), {
-  configId: "default",
-});
+const props = withDefaults(
+  defineProps<{
+    configId?: string | null,
+    widgetModel?: boolean,
+    apiPackage?: Record<string, string> | null,
+    apiPackageData?: Record<string, string> | null,
+    attachmentEnabled?: boolean,
+    welcomeTitle?: string,
+  }>(),
+  {
+    configId: "default",
+    widgetModel: false,
+    apiPackage: null,
+    apiPackageData: null,
+    attachmentEnabled: true,
+    welcomeTitle: '',
+  }
+);
 
 setCustomComponents("chat-message", {
   ref: RefNode,
@@ -232,6 +251,10 @@ const imagePreview = reactive({ visible: false, url: "" });
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
 const customMarkdownTags = ["ref"];
 
+if (props.widgetModel) {
+  currSessionId.value = props.apiPackageData?.session_id ?? '';
+}
+
 const {
   stagedFiles,
   stagedImagesUrl,
@@ -245,6 +268,7 @@ const {
   removeFile,
   clearStaged,
   cleanupMediaCache,
+  chatWidgetSetApiPackage,
 } = useMediaHandling();
 
 const {
@@ -257,6 +281,8 @@ const {
   createLocalExchange,
   sendMessageStream,
   stopSession,
+  widgetSetApiPackage,
+  loadSessionMessages,
 } = useMessages({
   currentSessionId: currSessionId,
   onStreamUpdate: () => {
@@ -275,6 +301,16 @@ const transportMode = computed<TransportMode>(() =>
 onMounted(async () => {
   await ensureSession();
   inputRef.value?.focusInput();
+  if (props.widgetModel) {
+    initializing.value = true;
+    chatWidgetSetApiPackage(props.apiPackage ?? {});
+    widgetSetApiPackage(props.apiPackage ?? {});
+    loadSessionMessages(props.apiPackageData?.session_id ?? '')
+    .then()
+    .finally(() => {
+      initializing.value = false
+    });
+  }
 });
 
 onBeforeUnmount(() => {
@@ -314,20 +350,22 @@ async function sendCurrentMessage() {
   const selection = inputRef.value?.getCurrentSelection();
   const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
 
-  draft.value = "";
-  clearStaged({ revokeUrls: false });
-  scrollToBottom();
-
   sendMessageStream({
     sessionId,
     messageId,
     parts,
-    transport: transportMode.value,
+    transport: props.widgetModel ? 'sse' : transportMode.value,
     enableStreaming: enableStreaming.value,
-    selectedProvider: selection?.providerId || "",
-    selectedModel: selection?.modelName || "",
+    selectedProvider: props.widgetModel ? '' : (selection?.providerId || ""),
+    selectedModel: props.widgetModel ? '' : (selection?.modelName || ""),
     botRecord,
   });
+  // 等半秒后再清理，有些浏览器清理太快会导致图片显示异常
+  setTimeout(() => {
+    draft.value = "";
+    clearStaged({ revokeUrls: false });
+    scrollToBottom();
+  }, 500)
 }
 
 function buildOutgoingParts(text: string): MessagePart[] {
@@ -404,12 +442,24 @@ function messageRefs(message: ChatRecord) {
 function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
-  if (part.attachment_id)
+  if (part.attachment_id) {
+    if (props.widgetModel) {
+      const params = new URLSearchParams(props.apiPackage || {});
+      params.append('attachment_id', part.attachment_id);
+      return '/api/widget/file?' + params.toString();
+    }
     return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
       part.attachment_id,
     )}`;
-  if (part.filename)
+  }
+  if (part.filename) {
+    if (props.widgetModel) {
+      const params = new URLSearchParams(props.apiPackage || {});
+      params.append('filename', part.filename);
+      return '/api/widget/filename?' + params.toString();
+    }
     return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+  }
   return "";
 }
 
