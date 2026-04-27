@@ -83,7 +83,38 @@
           @delete-project="handleDeleteProject"
           @select-project="selectProject"
           @drop-sessions="dropDraggedSessionsOnProject"
-        />
+        >
+          <template #project-sessions>
+            <div class="project-inline-sessions">
+              <div
+                v-for="session in expandedProjectSessions"
+                :key="session.session_id"
+                class="session-item project-session-sidebar-item"
+                :class="{
+                  active: currSessionId === session.session_id,
+                }"
+                role="button"
+                tabindex="0"
+                draggable="true"
+                @click="selectProjectSession(session.session_id)"
+                @dragstart="startProjectSessionDrag($event, session.session_id)"
+                @dragend="finishProjectSessionDrag"
+                @keydown.enter="selectProjectSession(session.session_id)"
+                @keydown.space.prevent="
+                  selectProjectSession(session.session_id)
+                "
+              >
+                <span class="session-title">{{ sessionTitle(session) }}</span>
+              </div>
+              <div
+                v-if="!expandedProjectSessions.length"
+                class="empty-sessions expanded-project-empty"
+              >
+                {{ tm("project.noSessions") }}
+              </div>
+            </div>
+          </template>
+        </ProjectList>
       </div>
 
       <div
@@ -120,38 +151,6 @@
           @dragleave="handleSessionListDragLeave"
           @drop.prevent="dropDraggedProjectSessionsOut"
         >
-          <div
-            v-if="expandedProject"
-            class="expanded-project-sessions"
-            @dragover.stop
-            @drop.stop.prevent="finishProjectSessionDrag"
-          >
-            <div class="expanded-project-title">
-              {{ expandedProject.title }}
-            </div>
-            <div
-              v-for="session in expandedProjectSessions"
-              :key="session.session_id"
-              class="session-item project-session-sidebar-item"
-              role="button"
-              tabindex="0"
-              draggable="true"
-              @click="selectProjectSession(session.session_id)"
-              @dragstart="startProjectSessionDrag($event, session.session_id)"
-              @dragend="finishProjectSessionDrag"
-              @keydown.enter="selectProjectSession(session.session_id)"
-              @keydown.space.prevent="selectProjectSession(session.session_id)"
-            >
-              <span class="session-title">{{ sessionTitle(session) }}</span>
-            </div>
-            <div
-              v-if="!expandedProjectSessions.length"
-              class="empty-sessions expanded-project-empty"
-            >
-              {{ tm("project.noSessions") }}
-            </div>
-          </div>
-
           <div
             v-for="session in sessions"
             :key="session.session_id"
@@ -1646,6 +1645,7 @@ function toggleTheme() {
 .chat-ui {
   --chat-sidebar-bg: #fbfbfb;
   --chat-session-active-bg: #efefef;
+  --chat-session-current-bg: rgba(80, 150, 230, 0.12);
   --chat-session-selected-bg: rgba(80, 150, 230, 0.16);
   --chat-session-selected-bg-hover: rgba(80, 150, 230, 0.22);
   --chat-page-bg: rgb(var(--v-theme-background));
@@ -1674,6 +1674,7 @@ function toggleTheme() {
 .chat-ui.is-dark {
   --chat-sidebar-bg: #2d2d2d;
   --chat-session-active-bg: rgba(255, 255, 255, 0.08);
+  --chat-session-current-bg: rgba(96, 165, 250, 0.16);
   --chat-session-selected-bg: rgba(96, 165, 250, 0.18);
   --chat-session-selected-bg-hover: rgba(96, 165, 250, 0.24);
   --chat-border: rgba(255, 255, 255, 0.1);
@@ -1846,6 +1847,7 @@ function toggleTheme() {
 .session-drop-zone {
   display: flex;
   flex-direction: column;
+  flex: 1;
   gap: 8px;
   border-radius: 12px;
   transition:
@@ -1858,25 +1860,17 @@ function toggleTheme() {
   box-shadow: inset 0 0 0 1px rgba(80, 150, 230, 0.22);
 }
 
-.expanded-project-sessions {
+.project-inline-sessions {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  border-radius: 12px;
-  background: rgba(var(--v-theme-on-surface), 0.04);
-}
-
-.expanded-project-title {
-  padding: 2px 4px 4px;
-  color: var(--chat-muted);
-  font-size: 13px;
-  font-weight: 600;
+  gap: 4px;
+  padding: 2px 0 6px 28px;
 }
 
 .project-session-sidebar-item {
-  height: 34px;
-  padding: 7px 10px;
+  height: 36px;
+  padding: 8px 10px;
+  border-radius: 8px;
 }
 
 .expanded-project-empty {
@@ -1901,6 +1895,11 @@ function toggleTheme() {
 .session-item:hover,
 .session-item.active {
   background: var(--chat-session-active-bg);
+}
+
+.session-item.active {
+  background: var(--chat-session-current-bg);
+  box-shadow: inset 3px 0 0 rgba(80, 150, 230, 0.78);
 }
 
 .session-item.selected {

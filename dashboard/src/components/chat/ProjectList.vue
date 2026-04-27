@@ -28,48 +28,58 @@
           <span class="project-title">{{ tm("project.create") }}</span>
         </button>
 
-        <button
+        <div
           v-for="project in projects"
           :key="project.project_id"
-          class="project-row project-item"
-          :class="{
-            active: selectedProjectId === project.project_id,
-            'drop-ready':
-              dragActive && dropTargetProjectId === project.project_id,
-          }"
-          type="button"
-          @click="$emit('selectProject', project.project_id)"
-          @dragover.prevent="handleProjectDragOver(project.project_id)"
-          @dragleave="handleProjectDragLeave(project.project_id)"
-          @drop.prevent="handleProjectDrop(project.project_id)"
+          class="project-group"
         >
-          <span class="project-emoji">{{ project.emoji || "📁" }}</span>
-          <span class="project-title">{{ project.title }}</span>
-          <v-icon size="16" class="project-row-toggle">
-            {{
-              expandedProjectId === project.project_id
-                ? "mdi-chevron-up"
-                : "mdi-chevron-down"
-            }}
-          </v-icon>
-          <span class="project-actions">
-            <v-btn
-              icon="mdi-pencil"
-              size="x-small"
-              variant="text"
-              class="edit-project-btn"
-              @click.stop="$emit('editProject', project)"
-            />
-            <v-btn
-              icon="mdi-delete"
-              size="x-small"
-              variant="text"
-              class="delete-project-btn"
-              color="error"
-              @click.stop="handleDeleteProject(project)"
-            />
-          </span>
-        </button>
+          <button
+            class="project-row project-item"
+            :class="{
+              active: selectedProjectId === project.project_id,
+              expanded: expandedProjectId === project.project_id,
+              'drop-ready':
+                dragActive && dropTargetProjectId === project.project_id,
+            }"
+            type="button"
+            @click="$emit('selectProject', project.project_id)"
+            @dragover.prevent="handleProjectDragOver(project.project_id)"
+            @dragleave="handleProjectDragLeave(project.project_id)"
+            @drop.prevent="handleProjectDrop(project.project_id)"
+          >
+            <span class="project-emoji">{{ project.emoji || "📁" }}</span>
+            <span class="project-title">{{ project.title }}</span>
+            <v-icon size="16" class="project-row-toggle">
+              {{
+                expandedProjectId === project.project_id
+                  ? "mdi-chevron-up"
+                  : "mdi-chevron-down"
+              }}
+            </v-icon>
+            <span class="project-actions">
+              <v-btn
+                icon="mdi-pencil"
+                size="x-small"
+                variant="text"
+                class="edit-project-btn"
+                @click.stop="$emit('editProject', project)"
+              />
+              <v-btn
+                icon="mdi-delete"
+                size="x-small"
+                variant="text"
+                class="delete-project-btn"
+                color="error"
+                @click.stop="handleDeleteProject(project)"
+              />
+            </span>
+          </button>
+          <slot
+            v-if="expandedProjectId === project.project_id"
+            name="project-sessions"
+            :project="project"
+          />
+        </div>
       </div>
     </v-expand-transition>
   </div>
@@ -214,9 +224,12 @@ function handleProjectDrop(projectId: string) {
   background: var(--chat-session-active-bg);
 }
 
+.project-row.expanded {
+  background: var(--chat-session-active-bg);
+}
+
 .project-row.drop-ready {
-  outline: 1px dashed rgba(var(--v-theme-primary), 0.7);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px rgba(80, 150, 230, 0.28);
 }
 
 .project-item:hover .project-actions {
