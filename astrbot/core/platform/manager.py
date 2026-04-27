@@ -68,21 +68,25 @@ class PlatformManager:
 
     async def _terminate_inst_and_tasks(self, inst: Platform) -> None:
         client_id = inst.client_self_id
-        try:
-            if getattr(inst, "terminate", None):
-                try:
-                    await inst.terminate()
-                except asyncio.CancelledError:
-                    raise
-                except Exception as e:
-                    logger.error(
-                        "终止平台适配器失败: client_id=%s, error=%s",
-                        client_id,
-                        e,
-                    )
-                    logger.error(traceback.format_exc())
-        finally:
-            await self._stop_platform_task(client_id)
+
+        # Stop the platform run/wrapper tasks before awaiting adapter-specific
+        # shutdown hooks. Some websocket clients (for example qq-botpy) keep
+        # receiving events until their long-running task is cancelled, so
+        # awaiting terminate() first can leave a deleted adapter alive.
+        await self._stop_platform_task(client_id)
+
+        if getattr(inst, "terminate", None):
+            try:
+                await inst.terminate()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(
+                    "终止平台适配器失败: client_id=%s, error=%s",
+                    client_id,
+                    e,
+                )
+                logger.error(traceback.format_exc())
 
     async def initialize(self) -> None:
         """初始化所有平台适配器"""
