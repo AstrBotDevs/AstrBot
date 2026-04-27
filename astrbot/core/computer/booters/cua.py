@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import inspect
+import shlex
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +26,21 @@ async def _write_base64_via_shell(
     data: bytes,
 ) -> dict[str, Any]:
     encoded = base64.b64encode(data).decode("ascii")
-    return await shell.exec(f"base64 -d > {path!r} <<'EOF'\n{encoded}\nEOF")
+    decoder = (
+        "import base64,pathlib,sys; "
+        "pathlib.Path(sys.argv[1]).write_bytes(base64.b64decode(sys.stdin.read()))"
+    )
+    return await shell.exec(
+        f"python3 -c {shlex.quote(decoder)} {shlex.quote(path)} <<'EOF'\n{encoded}\nEOF"
+    )
+
+
+@dataclass(slots=True)
+class ProcessResult:
+    stdout: str
+    stderr: str
+    exit_code: int | None
+    success: bool
 
 
 def _maybe_model_dump(value: Any) -> dict[str, Any]:
@@ -72,6 +88,25 @@ def _result_text(payload: dict[str, Any], *keys: str) -> str:
     return ""
 
 
+def _normalize_process_result(raw: Any) -> ProcessResult:
+    payload = _maybe_model_dump(raw)
+    if not payload and isinstance(raw, str):
+        payload = {"stdout": raw}
+
+    stdout = _result_text(payload, "stdout", "output")
+    stderr = _result_text(payload, "stderr", "error")
+    exit_code = payload.get(
+        "exit_code", payload.get("returncode", 0 if not stderr else 1)
+    )
+    success = bool(payload.get("success", not stderr and exit_code in (0, None)))
+    return ProcessResult(
+        stdout=stdout,
+        stderr=stderr,
+        exit_code=exit_code,
+        success=success,
+    )
+
+
 def _split_listing_entries(output: str) -> list[str]:
     return [line for line in output.splitlines() if line.strip()]
 
@@ -89,6 +124,11 @@ def _require_component_method(
             "Please check the installed CUA SDK version and sandbox backend."
         )
     return method
+
+
+def _has_component_method(root: Any, component_name: str, method_name: str) -> bool:
+    component = getattr(root, component_name, None)
+    return getattr(component, method_name, None) is not None
 
 
 class CuaShellComponent(ShellComponent):
@@ -127,26 +167,16 @@ class CuaShellComponent(ShellComponent):
         result = await _call_first(
             self._sandbox.shell, ("run", "exec"), command, **kwargs
         )
-        payload = _maybe_model_dump(result)
-        if not payload and isinstance(result, str):
-            payload = {"stdout": result}
-
-        stdout = _result_text(payload, "stdout", "output")
-        stderr = _result_text(payload, "stderr", "error")
-        exit_code = payload.get(
-            "exit_code", payload.get("returncode", 0 if not stderr else 1)
-        )
+        proc = _normalize_process_result(result)
         response = {
-            "stdout": stdout,
-            "stderr": stderr,
-            "exit_code": exit_code,
-            "success": bool(
-                payload.get("success", not stderr and exit_code in (0, None))
-            ),
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
+            "exit_code": proc.exit_code,
+            "success": proc.success,
         }
         if background:
             try:
-                response["pid"] = int(stdout.strip().splitlines()[-1])
+                response["pid"] = int(proc.stdout.strip().splitlines()[-1])
             except Exception:
                 response["pid"] = None
         return response
@@ -167,19 +197,21 @@ class CuaPythonComponent(PythonComponent):
         python = getattr(self._sandbox, "python", None)
         if python is not None:
             result = await _call_first(python, ("run", "exec"), code, timeout=timeout)
-            payload = _maybe_model_dump(result)
+            proc = _normalize_process_result(result)
         else:
             shell = CuaShellComponent(self._sandbox)
             result = await shell.exec(f"python3 - <<'PY'\n{code}\nPY", timeout=timeout)
-            payload = {
-                "output": result.get("stdout", ""),
-                "error": result.get("stderr", ""),
-            }
+            proc = ProcessResult(
+                stdout=result.get("stdout", ""),
+                stderr=result.get("stderr", ""),
+                exit_code=result.get("exit_code"),
+                success=bool(result.get("success", False)),
+            )
 
-        output_text = "" if silent else _result_text(payload, "stdout", "output")
-        error_text = _result_text(payload, "stderr", "error")
+        output_text = "" if silent else proc.stdout
+        error_text = proc.stderr
         return {
-            "success": bool(payload.get("success", not error_text)),
+            "success": proc.success if not silent else not bool(error_text),
             "data": {
                 "output": {"text": output_text, "images": []},
                 "error": error_text,
@@ -465,15 +497,22 @@ class CuaBooter(ComputerBooter):
 
     @property
     def capabilities(self) -> tuple[str, ...] | None:
-        return (
-            "python",
-            "shell",
-            "filesystem",
-            "gui",
-            "screenshot",
-            "mouse",
-            "keyboard",
-        )
+        capabilities = ["python", "shell", "filesystem"]
+        if self._sandbox is None:
+            return tuple(capabilities)
+
+        has_screenshot = getattr(self._sandbox, "screenshot", None) is not None
+        has_mouse = _has_component_method(self._sandbox, "mouse", "click")
+        has_keyboard = _has_component_method(self._sandbox, "keyboard", "type")
+        if has_screenshot or has_mouse or has_keyboard:
+            capabilities.append("gui")
+        if has_screenshot:
+            capabilities.append("screenshot")
+        if has_mouse:
+            capabilities.append("mouse")
+        if has_keyboard:
+            capabilities.append("keyboard")
+        return tuple(capabilities)
 
     @property
     def fs(self) -> FileSystemComponent:

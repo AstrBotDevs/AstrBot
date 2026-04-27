@@ -191,7 +191,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool_mgr,
         booter: str | None = None,
     ) -> dict[str, FunctionTool]:
-        booter = "" if booter is None else str(booter)
+        booter = "" if booter is None else str(booter).lower()
         if runtime == "sandbox":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
             python_tool = tool_mgr.get_builtin_tool(PythonTool)

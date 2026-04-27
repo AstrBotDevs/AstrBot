@@ -29,6 +29,11 @@ class FakeShell:
         return {"stdout": "ok", "stderr": "", "exit_code": 0}
 
 
+class ProcessShapeShell:
+    async def run(self, command: str, **kwargs):
+        return {"output": "shape-ok", "returncode": 0}
+
+
 class FakePython:
     async def run(self, code: str, **kwargs):
         return {"output": "42", "error": ""}
@@ -230,6 +235,20 @@ async def test_cua_list_dir_returns_entries_list_for_shell_fallback():
 
 
 @pytest.mark.asyncio
+async def test_cua_write_file_shell_fallback_uses_python_base64_decoder():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = FakeSandbox()
+    delattr(sandbox, "filesystem")
+
+    await CuaFileSystemComponent(sandbox).write_file("hello.txt", "hello")
+
+    command = sandbox.shell.commands[0][0]
+    assert "python3 -c" in command
+    assert "base64 -d" not in command
+
+
+@pytest.mark.asyncio
 async def test_cua_list_dir_shell_fallback_returns_filename_only_entries():
     from astrbot.core.computer.booters.cua import CuaFileSystemComponent
 
@@ -259,6 +278,23 @@ async def test_cua_shell_and_python_accept_sync_sdk_methods():
 
 
 @pytest.mark.asyncio
+async def test_cua_shell_normalizes_output_returncode_shape():
+    from astrbot.core.computer.booters.cua import CuaShellComponent
+
+    sandbox = FakeSandbox()
+    sandbox.shell = ProcessShapeShell()
+
+    result = await CuaShellComponent(sandbox).exec("echo ok")
+
+    assert result == {
+        "stdout": "shape-ok",
+        "stderr": "",
+        "exit_code": 0,
+        "success": True,
+    }
+
+
+@pytest.mark.asyncio
 async def test_cua_gui_reports_missing_mouse_or_keyboard():
     from astrbot.core.computer.booters.cua import CuaGUIComponent
 
@@ -273,6 +309,31 @@ async def test_cua_gui_reports_missing_mouse_or_keyboard():
 
     with pytest.raises(RuntimeError, match="keyboard.*type"):
         await gui.type_text("hello")
+
+
+def test_cua_capabilities_reflect_initialized_sandbox_gui_devices():
+    from astrbot.core.computer.booters.cua import CuaBooter
+
+    booter = CuaBooter()
+    booter._sandbox = FakeSandbox()
+
+    assert booter.capabilities == (
+        "python",
+        "shell",
+        "filesystem",
+        "gui",
+        "screenshot",
+        "mouse",
+        "keyboard",
+    )
+
+    class ScreenshotOnlySandbox:
+        async def screenshot(self):
+            return b"fake-png"
+
+    booter._sandbox = ScreenshotOnlySandbox()
+
+    assert booter.capabilities == ("python", "shell", "filesystem", "gui", "screenshot")
 
 
 @pytest.mark.asyncio
@@ -334,6 +395,14 @@ def test_runtime_tool_selection_treats_none_booter_as_empty():
 
     assert "astrbot_execute_shell" in tools
     assert "astrbot_cua_screenshot" not in tools
+
+
+def test_runtime_tool_selection_normalizes_cua_booter_case():
+    manager = FunctionToolManager()
+
+    tools = FunctionToolExecutor._get_runtime_computer_tools("sandbox", manager, "CUA")
+
+    assert "astrbot_cua_screenshot" in tools
 
 
 def test_cua_is_exposed_in_sandbox_config_metadata():
