@@ -88,21 +88,25 @@
       <div v-if="!isSidebarCollapsed" class="session-list">
         <div v-if="isSessionSelectionMode" class="session-selection-toolbar">
           <span class="session-selection-count">
-            {{ selectedSessions.length }} selected
+            {{ tm("batch.selected", { count: selectedSessions.length }) }}
           </span>
-          <v-spacer />
-          <v-btn
-            size="x-small"
-            variant="text"
-            :disabled="!selectedSessions.length || deletingSelectedSessions"
-            :loading="deletingSelectedSessions"
-            @click="deleteSelectedSidebarSessions"
-          >
-            {{ tm("actions.deleteChat") }}
-          </v-btn>
-          <v-btn size="x-small" variant="text" @click="clearSessionSelection">
-            {{ t("core.common.cancel") }}
-          </v-btn>
+          <div class="session-selection-actions">
+            <button
+              class="session-selection-action danger"
+              type="button"
+              :disabled="!selectedSessions.length || deletingSelectedSessions"
+              @click="deleteSelectedSidebarSessions"
+            >
+              {{ tm("batch.delete") }}
+            </button>
+            <button
+              class="session-selection-action"
+              type="button"
+              @click="clearSessionSelection"
+            >
+              {{ t("core.common.cancel") }}
+            </button>
+          </div>
         </div>
 
         <div
@@ -128,17 +132,6 @@
           @keydown.enter="handleSessionItemClick(session.session_id)"
           @keydown.space.prevent="handleSessionItemClick(session.session_id)"
         >
-          <v-icon
-            v-if="isSessionSelectionMode"
-            size="18"
-            class="session-check-icon"
-          >
-            {{
-              isSessionSelected(session.session_id)
-                ? "mdi-checkbox-marked-circle"
-                : "mdi-checkbox-blank-circle-outline"
-            }}
-          </v-icon>
           <span v-if="!isSidebarCollapsed" class="session-title">{{
             sessionTitle(session)
           }}</span>
@@ -1091,9 +1084,8 @@ async function dropDraggedSessionsOnProject(projectId: string) {
 
 async function deleteSelectedSidebarSessions() {
   if (!selectedSessions.value.length || deletingSelectedSessions.value) return;
-  const message = tm("conversation.confirmDelete", {
-    name: `${selectedSessions.value.length} selected sessions`,
-  });
+  const count = selectedSessions.value.length;
+  const message = tm("batch.confirmDelete", { count });
   if (!(await askForConfirmation(message, confirmDialog))) return;
 
   deletingSelectedSessions.value = true;
@@ -1524,6 +1516,8 @@ function toggleTheme() {
 .chat-ui {
   --chat-sidebar-bg: #fbfbfb;
   --chat-session-active-bg: #efefef;
+  --chat-session-selected-bg: rgba(80, 150, 230, 0.16);
+  --chat-session-selected-bg-hover: rgba(80, 150, 230, 0.22);
   --chat-page-bg: rgb(var(--v-theme-background));
   --chat-border: rgba(var(--v-border-color), 0.16);
   --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
@@ -1550,6 +1544,8 @@ function toggleTheme() {
 .chat-ui.is-dark {
   --chat-sidebar-bg: #2d2d2d;
   --chat-session-active-bg: rgba(255, 255, 255, 0.08);
+  --chat-session-selected-bg: rgba(96, 165, 250, 0.18);
+  --chat-session-selected-bg-hover: rgba(96, 165, 250, 0.24);
   --chat-border: rgba(255, 255, 255, 0.1);
 }
 
@@ -1656,6 +1652,56 @@ function toggleTheme() {
   gap: 8px;
 }
 
+.session-selection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(80, 150, 230, 0.1);
+}
+
+.session-selection-count {
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.session-selection-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-selection-action {
+  min-height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--chat-muted);
+  padding: 0 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.session-selection-action:hover:not(:disabled) {
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.session-selection-action.danger {
+  color: rgb(var(--v-theme-error));
+}
+
+.session-selection-action:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .session-item {
   width: 100%;
   min-height: 38px;
@@ -1674,6 +1720,18 @@ function toggleTheme() {
 .session-item:hover,
 .session-item.active {
   background: var(--chat-session-active-bg);
+}
+
+.session-item.selected {
+  background: var(--chat-session-selected-bg);
+}
+
+.session-item.selected:hover {
+  background: var(--chat-session-selected-bg-hover);
+}
+
+.session-item.selection-mode:not(.selected) {
+  opacity: 0.82;
 }
 
 .session-title {
