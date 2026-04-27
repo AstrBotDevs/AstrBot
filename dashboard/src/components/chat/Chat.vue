@@ -1045,6 +1045,18 @@ function projectSessionsFor(projectId: string) {
   return projectSessionsById[projectId] || [];
 }
 
+function removeSessionsFromProjectCache(
+  projectId: string,
+  sessionIds: string[],
+) {
+  const existingSessions = projectSessionsById[projectId];
+  if (!existingSessions) return;
+  const movedSessionIds = new Set(sessionIds);
+  projectSessionsById[projectId] = existingSessions.filter(
+    (session) => !movedSessionIds.has(session.session_id),
+  );
+}
+
 async function loadExpandedProjectSessions() {
   await Promise.all(
     expandedProjectIds.value.map((id) => loadProjectSessions(id)),
@@ -1218,6 +1230,12 @@ async function dropDraggedSessionsOnProject(projectId: string) {
     );
     const movedCount = results.filter(Boolean).length;
     if (movedCount > 0) {
+      if (draggingSourceProjectId.value) {
+        removeSessionsFromProjectCache(
+          draggingSourceProjectId.value,
+          sessionIds,
+        );
+      }
       await getSessions();
       await loadProjectSessions(projectId);
       if (
