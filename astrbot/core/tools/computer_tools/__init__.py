@@ -2,7 +2,6 @@ from .cua import (
     CuaKeyboardTypeTool,
     CuaKeyPressTool,
     CuaMouseClickTool,
-    CuaOpenBrowserTool,
     CuaScreenshotTool,
 )
 from .fs import (
@@ -42,7 +41,6 @@ __all__ = [
     "CuaKeyPressTool",
     "CuaKeyboardTypeTool",
     "CuaMouseClickTool",
-    "CuaOpenBrowserTool",
     "CuaScreenshotTool",
     "EvaluateSkillCandidateTool",
     "ExecuteShellTool",

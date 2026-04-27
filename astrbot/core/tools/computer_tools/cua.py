@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 import json
-import shlex
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -200,107 +198,8 @@ class CuaKeyPressTool(FunctionTool):
             return f"Error pressing key in CUA desktop: {str(e)}"
 
 
-@builtin_tool(config=_CUA_TOOL_CONFIG)
-@dataclass
-class CuaOpenBrowserTool(FunctionTool):
-    name: str = "astrbot_cua_open_browser"
-    description: str = "Open a browser in the CUA sandbox, optionally navigating to a URL, then capture a screenshot."
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "Optional URL to open in the browser.",
-                    "default": "",
-                },
-                "wait_seconds": {
-                    "type": "number",
-                    "description": "Seconds to wait before taking the screenshot.",
-                    "default": 8,
-                },
-                "send_to_user": {
-                    "type": "boolean",
-                    "description": "Whether to send the screenshot image to the current conversation.",
-                    "default": True,
-                },
-                "debug": {
-                    "type": "boolean",
-                    "description": "Whether to include the internal shell command and shell result in the tool response.",
-                    "default": False,
-                },
-                "return_image_to_llm": {
-                    "type": "boolean",
-                    "description": "Whether to include the browser screenshot image content in the tool result for model inspection.",
-                    "default": True,
-                },
-            },
-        }
-    )
-
-    async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        url: str = "",
-        wait_seconds: float = 8,
-        send_to_user: bool = True,
-        debug: bool = False,
-        return_image_to_llm: bool = True,
-    ) -> ToolExecResult:
-        if err := check_admin_permission(context, "Opening CUA browser"):
-            return err
-        try:
-            booter = await get_booter(
-                context.context.context,
-                context.context.event.unified_msg_origin,
-            )
-            gui = getattr(booter, "gui", None)
-            if gui is None:
-                raise RuntimeError(
-                    "Current sandbox booter does not support CUA GUI capability."
-                )
-            command = _build_browser_command(url)
-            shell_result = await booter.shell.exec(command, background=True)
-            await asyncio.sleep(max(0, wait_seconds))
-            path = _new_screenshot_path(context.context.event.unified_msg_origin)
-            screenshot_result = await gui.screenshot(path)
-            payload = {
-                "success": bool(shell_result.get("success", True)),
-                "browser": "auto",
-                "url": url,
-                **screenshot_result,
-                "path": path,
-            }
-            image_data = payload.pop("base64", "")
-            if debug:
-                payload["debug"] = {"command": command, "shell": shell_result}
-            if send_to_user:
-                await context.context.event.send(MessageChain().file_image(path))
-                payload["sent_to_user"] = True
-            content: list[mcp.types.TextContent | mcp.types.ImageContent] = [
-                mcp.types.TextContent(type="text", text=_to_json(payload))
-            ]
-            if return_image_to_llm:
-                content.append(
-                    mcp.types.ImageContent(
-                        type="image",
-                        data=str(image_data),
-                        mimeType=str(payload.get("mime_type", "image/png")),
-                    )
-                )
-            return mcp.types.CallToolResult(content=content)
-        except Exception as e:
-            detail = str(e) or type(e).__name__
-            return f"Error opening CUA browser: {detail}"
-
-
 def _new_screenshot_path(umo: str) -> str:
     safe_prefix = uuid.uuid5(uuid.NAMESPACE_DNS, umo).hex[:12]
     screenshot_dir = Path(get_astrbot_temp_path()) / "cua_screenshots"
     screenshot_dir.mkdir(parents=True, exist_ok=True)
     return str(screenshot_dir / f"{safe_prefix}-{uuid.uuid4().hex}.png")
-
-
-def _build_browser_command(url: str = "") -> str:
-    quoted_url = shlex.quote(url) if url else ""
-    return f"chromium {quoted_url}" if quoted_url else "chromium"

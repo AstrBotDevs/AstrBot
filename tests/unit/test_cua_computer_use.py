@@ -380,7 +380,6 @@ def test_cua_tools_are_registered_as_builtin_tools():
         CuaKeyPressTool,
         CuaKeyboardTypeTool,
         CuaMouseClickTool,
-        CuaOpenBrowserTool,
         CuaScreenshotTool,
     )
 
@@ -390,7 +389,6 @@ def test_cua_tools_are_registered_as_builtin_tools():
     assert manager.get_builtin_tool(CuaMouseClickTool).name == "astrbot_cua_mouse_click"
     assert manager.get_builtin_tool(CuaKeyboardTypeTool).name == "astrbot_cua_keyboard_type"
     assert manager.get_builtin_tool(CuaKeyPressTool).name == "astrbot_cua_key_press"
-    assert manager.get_builtin_tool(CuaOpenBrowserTool).name == "astrbot_cua_open_browser"
 
 
 def test_cua_runtime_tools_are_available_to_handoffs():
@@ -402,7 +400,6 @@ def test_cua_runtime_tools_are_available_to_handoffs():
     assert "astrbot_cua_mouse_click" in tools
     assert "astrbot_cua_keyboard_type" in tools
     assert "astrbot_cua_key_press" in tools
-    assert "astrbot_cua_open_browser" in tools
 
 
 def test_runtime_tool_selection_treats_none_booter_as_empty():
@@ -455,222 +452,6 @@ async def test_cua_key_press_tool_presses_keyboard(monkeypatch):
 
     assert json.loads(result)["success"] is True
     assert sandbox.keyboard.pressed == ["Enter"]
-
-
-@pytest.mark.asyncio
-async def test_cua_open_browser_tool_launches_chromium_and_screenshots(monkeypatch, tmp_path):
-    from astrbot.core.tools.computer_tools import cua as cua_tools
-    from astrbot.core.tools.computer_tools.cua import CuaOpenBrowserTool
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-        async def send(self, message):
-            pass
-
-    class FakeAstrContext:
-        event = FakeEvent()
-        context = FakeContext({"provider_settings": {"computer_use_require_admin": True}})
-
-    class FakeWrapper:
-        context = FakeAstrContext()
-
-    shell_commands = []
-
-    class FakeShellComponent:
-        async def exec(self, command, background=False, **kwargs):
-            shell_commands.append((command, background, kwargs))
-            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
-
-    class FakeGUI:
-        async def screenshot(self, path: str):
-            Path(path).write_bytes(b"fake-png")
-            return {"success": True, "path": path, "mime_type": "image/png", "base64": ""}
-
-    class FakeBooter:
-        shell = FakeShellComponent()
-        gui = FakeGUI()
-
-    async def fake_get_booter(context, session_id):
-        return FakeBooter()
-
-    monkeypatch.setattr(cua_tools, "get_booter", fake_get_booter)
-    monkeypatch.setattr(cua_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
-
-    async def fake_sleep(seconds):
-        pass
-
-    monkeypatch.setattr(cua_tools.asyncio, "sleep", fake_sleep)
-
-    result = await CuaOpenBrowserTool().call(
-        FakeWrapper(), url="https://www.google.com/maps/dir/Tokyo/Osaka"
-    )
-    assert isinstance(result, mcp.types.CallToolResult)
-    text_parts = [part for part in result.content if part.type == "text"]
-    payload = json.loads(text_parts[0].text)
-
-    assert payload["success"] is True
-    assert payload["path"]
-    assert payload["browser"] == "auto"
-    assert payload["url"] == "https://www.google.com/maps/dir/Tokyo/Osaka"
-    assert "command" not in payload
-    assert "shell" not in payload
-    assert shell_commands[0][1] is True
-    assert shell_commands[0][0] == (
-        "chromium https://www.google.com/maps/dir/Tokyo/Osaka"
-    )
-
-
-@pytest.mark.asyncio
-async def test_cua_open_browser_tool_can_return_debug_payload(monkeypatch, tmp_path):
-    from astrbot.core.tools.computer_tools import cua as cua_tools
-    from astrbot.core.tools.computer_tools.cua import CuaOpenBrowserTool
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-        async def send(self, message):
-            pass
-
-    class FakeAstrContext:
-        event = FakeEvent()
-        context = FakeContext({"provider_settings": {"computer_use_require_admin": True}})
-
-    class FakeWrapper:
-        context = FakeAstrContext()
-
-    class FakeShellComponent:
-        async def exec(self, command, background=False, **kwargs):
-            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
-
-    class FakeGUI:
-        async def screenshot(self, path: str):
-            Path(path).write_bytes(b"fake-png")
-            return {"success": True, "path": path, "mime_type": "image/png", "base64": ""}
-
-    class FakeBooter:
-        shell = FakeShellComponent()
-        gui = FakeGUI()
-
-    async def fake_get_booter(context, session_id):
-        return FakeBooter()
-
-    monkeypatch.setattr(cua_tools, "get_booter", fake_get_booter)
-    monkeypatch.setattr(cua_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
-
-    async def fake_sleep(seconds):
-        pass
-
-    monkeypatch.setattr(cua_tools.asyncio, "sleep", fake_sleep)
-
-    result = await CuaOpenBrowserTool().call(
-        FakeWrapper(), url="https://example.com", debug=True
-    )
-    assert isinstance(result, mcp.types.CallToolResult)
-    text_parts = [part for part in result.content if part.type == "text"]
-    payload = json.loads(text_parts[0].text)
-
-    assert "debug" in payload
-    assert "command" in payload["debug"]
-    assert "shell" in payload["debug"]
-
-
-@pytest.mark.asyncio
-async def test_cua_open_browser_tool_returns_llm_image_and_waits_for_startup(
-    monkeypatch, tmp_path
-):
-    from astrbot.core.tools.computer_tools import cua as cua_tools
-    from astrbot.core.tools.computer_tools.cua import CuaOpenBrowserTool
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-        async def send(self, message):
-            pass
-
-    class FakeAstrContext:
-        event = FakeEvent()
-        context = FakeContext({"provider_settings": {"computer_use_require_admin": True}})
-
-    class FakeWrapper:
-        context = FakeAstrContext()
-
-    class FakeShellComponent:
-        async def exec(self, command, background=False, **kwargs):
-            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
-
-    class FakeGUI:
-        async def screenshot(self, path: str):
-            Path(path).write_bytes(b"fake-browser-png")
-            return {
-                "success": True,
-                "path": path,
-                "mime_type": "image/png",
-                "base64": base64.b64encode(b"fake-browser-png").decode(),
-            }
-
-    class FakeBooter:
-        shell = FakeShellComponent()
-        gui = FakeGUI()
-
-    async def fake_get_booter(context, session_id):
-        return FakeBooter()
-
-    sleep_calls = []
-
-    async def fake_sleep(seconds):
-        sleep_calls.append(seconds)
-
-    monkeypatch.setattr(cua_tools, "get_booter", fake_get_booter)
-    monkeypatch.setattr(cua_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
-    monkeypatch.setattr(cua_tools.asyncio, "sleep", fake_sleep)
-
-    result = await CuaOpenBrowserTool().call(FakeWrapper(), send_to_user=False)
-
-    assert isinstance(result, mcp.types.CallToolResult)
-    image_parts = [part for part in result.content if part.type == "image"]
-    text_parts = [part for part in result.content if part.type == "text"]
-    payload = json.loads(text_parts[0].text)
-    assert image_parts[0].data == base64.b64encode(b"fake-browser-png").decode()
-    assert "base64" not in payload
-    assert sleep_calls == [8]
-
-
-@pytest.mark.asyncio
-async def test_cua_open_browser_reports_blank_exception_type(monkeypatch):
-    from astrbot.core.tools.computer_tools import cua as cua_tools
-    from astrbot.core.tools.computer_tools.cua import CuaOpenBrowserTool
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        event = FakeEvent()
-        context = FakeContext({"provider_settings": {"computer_use_require_admin": True}})
-
-    class FakeWrapper:
-        context = FakeAstrContext()
-
-    class FakeShellComponent:
-        async def exec(self, command, background=False, **kwargs):
-            raise TimeoutError()
-
-    class FakeBooter:
-        shell = FakeShellComponent()
-        gui = object()
-
-    async def fake_get_booter(context, session_id):
-        return FakeBooter()
-
-    monkeypatch.setattr(cua_tools, "get_booter", fake_get_booter)
-
-    result = await CuaOpenBrowserTool().call(FakeWrapper())
-
-    assert result == "Error opening CUA browser: TimeoutError"
 
 
 def test_cua_is_exposed_in_sandbox_config_metadata():
