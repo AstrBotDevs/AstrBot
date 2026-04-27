@@ -1561,6 +1561,23 @@ class TestApplySandboxTools:
 
         assert "sandboxed environment" in req.system_prompt
 
+    def test_apply_sandbox_tools_with_cua_adds_gui_guidance(self, mock_context):
+        """Test that CUA sandbox guidance nudges reliable GUI workflows."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={"booter": "cua"},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert "chromium" in req.system_prompt
+        assert "background=true" in req.system_prompt
+        assert "astrbot_cua_screenshot" in req.system_prompt
+        assert "Do not use `firefox &`" in req.system_prompt
+
     def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
         """Test sandbox tools with shipyard booter configuration."""
         module = ama

@@ -1021,7 +1021,12 @@ def _apply_sandbox_tools(
     if booter == "cua":
         req.system_prompt += (
             "\n[CUA Desktop Control]\n"
-            "Use `astrbot_cua_screenshot` to inspect the current desktop before "
+            "When launching GUI apps, use `astrbot_execute_shell` with "
+            "background=true; do not append shell background operators manually. "
+            "Prefer `chromium` for browser tasks in the default CUA Linux sandbox. "
+            "Do not use `firefox &` unless the user confirms Firefox exists. "
+            "After launching or changing any GUI app, immediately call "
+            "`astrbot_cua_screenshot` to inspect the current desktop before "
             "clicking or typing. Use coordinates from screenshots for "
             "`astrbot_cua_mouse_click`, then `astrbot_cua_keyboard_type` for text input.\n"
         )
