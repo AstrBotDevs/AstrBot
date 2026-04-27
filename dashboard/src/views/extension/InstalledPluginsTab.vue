@@ -45,6 +45,7 @@ const {
   selectedPlugin,
   curr_namespace,
   updatingAll,
+  reinstallingFailedPluginDirName,
   readmeDialog,
   forceUpdateDialog,
   updateAllConfirmDialog,
@@ -112,6 +113,7 @@ const {
   failedPluginItems,
   getExtensions,
   reloadFailedPlugin,
+  reinstallFailedPlugin,
   checkUpdate,
   uninstallExtension,
   requestUninstallFailedPlugin,
@@ -465,16 +467,44 @@ const pinnedPlugins = computed(() => {
                           color="primary"
                           class="mr-2"
                           prepend-icon="mdi-refresh"
+                          :disabled="
+                            reinstallingFailedPluginDirName === plugin.dir_name
+                          "
                           @click="reloadFailedPlugin(plugin.dir_name)"
                         >
                           {{ tm("buttons.reload") }}
+                        </v-btn>
+                        <v-btn
+                          v-if="plugin.repo"
+                          size="small"
+                          variant="tonal"
+                          color="warning"
+                          class="mr-2"
+                          prepend-icon="mdi-package-variant-closed-sync"
+                          :loading="
+                            reinstallingFailedPluginDirName === plugin.dir_name
+                          "
+                          :disabled="
+                            reinstallingFailedPluginDirName === plugin.dir_name
+                          "
+                          @click="
+                            reinstallFailedPlugin(
+                              plugin.dir_name,
+                              plugin.display_name || plugin.name || plugin.dir_name,
+                            )
+                          "
+                        >
+                          {{ tm("card.actions.reinstall") }}
                         </v-btn>
                         <v-btn
                           size="small"
                           variant="tonal"
                           color="error"
                           prepend-icon="mdi-delete"
-                          :disabled="plugin.reserved"
+                          :disabled="
+                            plugin.reserved ||
+                            reinstallingFailedPluginDirName === plugin.dir_name
+                          "
                           @click="requestUninstallFailedPlugin(plugin.dir_name)"
                         >
                           {{ tm("buttons.uninstall") }}
