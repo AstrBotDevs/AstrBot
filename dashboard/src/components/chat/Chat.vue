@@ -92,19 +92,45 @@
                 class="session-item project-session-sidebar-item"
                 :class="{
                   active: currSessionId === session.session_id,
+                  selected: isSessionSelected(session.session_id),
+                  'selection-mode': isSessionSelectionMode,
                 }"
                 role="button"
                 tabindex="0"
                 draggable="true"
-                @click="selectProjectSession(session.session_id)"
+                @click="handleProjectSessionItemClick(session.session_id)"
+                @pointerdown="startSessionLongPress(session.session_id)"
+                @pointerup="cancelSessionLongPress"
+                @pointerleave="cancelSessionLongPress"
+                @pointercancel="cancelSessionLongPress"
                 @dragstart="startProjectSessionDrag($event, session.session_id)"
                 @dragend="finishProjectSessionDrag"
-                @keydown.enter="selectProjectSession(session.session_id)"
+                @keydown.enter="
+                  handleProjectSessionItemClick(session.session_id)
+                "
                 @keydown.space.prevent="
-                  selectProjectSession(session.session_id)
+                  handleProjectSessionItemClick(session.session_id)
                 "
               >
                 <span class="session-title">{{ sessionTitle(session) }}</span>
+                <div class="session-actions" @click.stop @pointerdown.stop>
+                  <v-btn
+                    icon="mdi-pencil-outline"
+                    size="x-small"
+                    variant="text"
+                    class="session-action-btn"
+                    :title="tm('conversation.editDisplayName')"
+                    @click="editSidebarSessionTitle(session)"
+                  />
+                  <v-btn
+                    icon="mdi-delete-outline"
+                    size="x-small"
+                    variant="text"
+                    class="session-action-btn"
+                    :title="tm('actions.deleteChat')"
+                    @click="deleteSidebarSession(session)"
+                  />
+                </div>
               </div>
               <div
                 v-if="!expandedProjectSessions.length"
@@ -1114,6 +1140,21 @@ function handleSessionItemClick(sessionId: string) {
   selectSession(sessionId);
 }
 
+function handleProjectSessionItemClick(sessionId: string) {
+  cancelSessionLongPress();
+  const clickSuppression = shouldSuppressClickAfterLongPress(
+    suppressNextSessionClick.value,
+  );
+  suppressNextSessionClick.value = clickSuppression.nextSuppressState;
+  if (clickSuppression.suppress) return;
+
+  if (isSessionSelectionMode.value) {
+    toggleSidebarSessionSelection(sessionId);
+    return;
+  }
+  selectProjectSession(sessionId);
+}
+
 function startSessionDrag(event: DragEvent, sessionId: string) {
   cancelSessionLongPress();
   draggingSessionIds.value = getDragSessionIds(
@@ -1159,7 +1200,12 @@ async function dropDraggedSessionsOnProject(projectId: string) {
 
 function startProjectSessionDrag(event: DragEvent, sessionId: string) {
   if (!expandedProjectId.value) return;
-  const payload = getProjectDragPayload(sessionId, expandedProjectId.value);
+  cancelSessionLongPress();
+  const payload = getProjectDragPayload(
+    sessionId,
+    expandedProjectId.value,
+    selectedSessions.value,
+  );
   draggingSessionIds.value = payload.sessionIds;
   draggingSourceProjectId.value = payload.sourceProjectId;
   event.dataTransfer?.setData(

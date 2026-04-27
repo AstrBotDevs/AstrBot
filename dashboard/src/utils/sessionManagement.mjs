@@ -21,9 +21,13 @@ export function toggleExpandedProject(currentProjectId, projectId) {
   return currentProjectId === projectId ? null : projectId;
 }
 
-export function getProjectDragPayload(sessionId, sourceProjectId) {
+export function getProjectDragPayload(
+  sessionId,
+  sourceProjectId,
+  selectedSessionIds = [],
+) {
   return {
-    sessionIds: [sessionId],
+    sessionIds: getDragSessionIds(sessionId, selectedSessionIds),
     sourceProjectId,
   };
 }

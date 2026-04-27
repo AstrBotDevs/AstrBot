@@ -45,3 +45,10 @@ test("getProjectDragPayload marks dragged project sessions with their source pro
     sourceProjectId: "p1",
   });
 });
+
+test("getProjectDragPayload drags selected project sessions together", () => {
+  assert.deepEqual(getProjectDragPayload("s1", "p1", ["s1", "s2"]), {
+    sessionIds: ["s1", "s2"],
+    sourceProjectId: "p1",
+  });
+});
