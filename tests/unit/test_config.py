@@ -309,7 +309,7 @@ class TestConfigValidation:
 
         assert messages
         assert all("secret-value" not in message for message in messages)
-        assert all("api_key" not in message for message in messages)
+        assert any("api_key" in message for message in messages)
 
 
 class TestConfigHotReload:

@@ -665,6 +665,8 @@ class CuaBooter(ComputerBooter):
             return _maybe_model_dump(
                 await sandbox.upload_file(str(local_path), file_name)
             )
+        if not _is_posix_os_type(self.os_type):
+            return _non_posix_filesystem_result(file_name, self.os_type)
         result = await _write_base64_via_shell(
             self.shell, file_name, local_path.read_bytes()
         )
@@ -679,7 +681,7 @@ class CuaBooter(ComputerBooter):
         if sandbox is not None and hasattr(sandbox, "download_file"):
             await sandbox.download_file(remote_path, local_path)
             return
-        result = await self.shell.exec(f"base64 {remote_path!r}")
+        result = await self.shell.exec(f"base64 {shlex.quote(remote_path)}")
         if result.get("stderr"):
             raise RuntimeError(result["stderr"])
         Path(local_path).parent.mkdir(parents=True, exist_ok=True)

@@ -239,6 +239,54 @@ def test_cua_default_config_matches_booter_defaults():
 
 
 @pytest.mark.asyncio
+async def test_cua_config_log_does_not_include_api_key(monkeypatch):
+    from astrbot.core.computer import computer_client
+
+    log_messages = []
+
+    class FakeCuaBooter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def boot(self, session_id: str):
+            self.session_id = session_id
+
+        async def available(self):
+            return True
+
+    monkeypatch.setattr(
+        computer_client, "_sync_skills_to_sandbox", lambda booter: asyncio.sleep(0)
+    )
+    monkeypatch.setitem(computer_client.session_booter, "cua-log-test", None)
+    computer_client.session_booter.pop("cua-log-test", None)
+    monkeypatch.setattr(
+        "astrbot.core.computer.booters.cua.CuaBooter",
+        FakeCuaBooter,
+        raising=False,
+    )
+    monkeypatch.setattr(computer_client.logger, "info", log_messages.append)
+
+    ctx = FakeContext(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "cua",
+                    "cua_local": False,
+                    "cua_api_key": "sk-secret-value",
+                },
+            }
+        }
+    )
+
+    await computer_client.get_booter(ctx, "cua-log-test")
+
+    assert log_messages
+    assert all("sk-secret-value" not in message for message in log_messages)
+    assert all("api_key" not in message for message in log_messages)
+
+
+@pytest.mark.asyncio
 async def test_cua_components_map_sdk_results(tmp_path):
     from astrbot.core.computer.booters.cua import (
         CuaFileSystemComponent,
@@ -454,6 +502,77 @@ async def test_cua_shell_background_rejects_non_posix_os_type():
         "success": False,
     }
     assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
+async def test_cua_upload_file_fallback_rejects_non_posix_os_type(tmp_path):
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    local_file = tmp_path / "upload.txt"
+    local_file.write_text("hello", encoding="utf-8")
+    sandbox = SandboxWithoutFilesystem()
+    booter = CuaBooter(os_type="windows")
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox, os_type="windows"),
+        python=CuaPythonComponent(sandbox, os_type="windows"),
+        fs=CuaFileSystemComponent(sandbox, os_type="windows"),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    result = await booter.upload_file(str(local_file), "remote.txt")
+
+    assert result["success"] is False
+    assert "filesystem shell fallback is only supported for POSIX" in result["error"]
+    assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
+async def test_cua_download_file_shell_quotes_remote_path(tmp_path):
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    class Base64Shell(FakeShell):
+        async def run(self, command: str, **kwargs):
+            self.commands.append((command, kwargs))
+            return {
+                "stdout": base64.b64encode(b"hello").decode(),
+                "stderr": "",
+                "exit_code": 0,
+            }
+
+    sandbox = SandboxWithoutFilesystem()
+    sandbox.shell = Base64Shell()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+    remote_path = "folder/it's file.txt"
+    local_path = tmp_path / "download.txt"
+
+    await booter.download_file(remote_path, str(local_path))
+
+    assert sandbox.shell.commands[0][0] == f"base64 {shlex.quote(remote_path)}"
+    assert local_path.read_bytes() == b"hello"
 
 
 @pytest.mark.asyncio
