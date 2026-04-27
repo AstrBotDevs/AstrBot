@@ -90,7 +90,7 @@ class LocalShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = None,
+        timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -123,7 +123,7 @@ class LocalShellComponent(ShellComponent):
                 shell=shell,
                 cwd=working_dir,
                 env=run_env,
-                timeout=timeout,
+                timeout=timeout or 300,
                 capture_output=True,
             )
             return {

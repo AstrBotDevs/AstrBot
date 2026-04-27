@@ -58,6 +58,11 @@ class ExecuteShellTool(FunctionTool):
                     "type": "string",
                     "description": "The shell command to execute in the current runtime shell (for example, cmd.exe on Windows). Equal to 'cd {working_dir} && {your_command}'.",
                 },
+                "timeout": {
+                    "type": "integer",
+                    "description": "Optional timeout in seconds for the command execution.",
+                    "default": 300,
+                },
                 "background": {
                     "type": "boolean",
                     "description": "Run the command in the background. Use the file read tool to read the output later.",
@@ -80,6 +85,7 @@ class ExecuteShellTool(FunctionTool):
         command: str,
         background: bool = False,
         env: dict = {},
+        timeout: int | None = 300,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Shell execution"):
             return permission_error
@@ -114,7 +120,7 @@ class ExecuteShellTool(FunctionTool):
                 cwd=cwd,
                 background=background,
                 env=env,
-                timeout=None,
+                timeout=timeout or 300,
             )
             if stdout_file:
                 result["stdout_file"] = stdout_file

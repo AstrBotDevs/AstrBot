@@ -32,7 +32,7 @@ class ShipyardShellWrapper:
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = None,
+        timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -58,7 +58,7 @@ class ShipyardShellWrapper:
 
         result = await self._shell.exec(
             run_command,
-            timeout=timeout or 10_000_000,
+            timeout=timeout or 300,
             cwd=cwd,
         )
         payload = _maybe_model_dump(result)
