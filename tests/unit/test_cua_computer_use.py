@@ -576,6 +576,34 @@ async def test_cua_download_file_shell_quotes_remote_path(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_cua_download_file_fallback_rejects_non_posix_os_type(tmp_path):
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    sandbox = SandboxWithoutFilesystem()
+    booter = CuaBooter(os_type="windows")
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox, os_type="windows"),
+        python=CuaPythonComponent(sandbox, os_type="windows"),
+        fs=CuaFileSystemComponent(sandbox, os_type="windows"),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    with pytest.raises(RuntimeError, match="filesystem shell fallback"):
+        await booter.download_file("remote.txt", str(tmp_path / "download.txt"))
+
+    assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
 async def test_cua_shell_background_reports_missing_python3_requirement():
     from astrbot.core.computer.booters.cua import CuaShellComponent
 
@@ -1016,3 +1044,100 @@ async def test_cua_tools_include_exception_type_for_blank_error(monkeypatch):
     assert await CuaMouseClickTool().call(FakeWrapper(), x=1, y=2) == (
         "Error clicking CUA desktop: BlankError"
     )
+
+
+@pytest.mark.asyncio
+async def test_cua_mouse_click_tool_happy_path_forwards_args_and_serializes_json(
+    monkeypatch,
+):
+    from astrbot.core.tools.computer_tools import cua as cua_tools
+    from astrbot.core.tools.computer_tools.cua import CuaMouseClickTool
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        event = FakeEvent()
+        context = FakeContext(
+            {"provider_settings": {"computer_use_require_admin": True}}
+        )
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    class FakeGui:
+        def __init__(self):
+            self.clicked_args = None
+
+        async def click(self, x: int, y: int, button: str = "left"):
+            self.clicked_args = (x, y, button)
+            return {"status": "ok", "x": x, "y": y, "button": button}
+
+    fake_gui = FakeGui()
+    get_gui_called = {"value": False}
+    wrapper = FakeWrapper()
+
+    async def fake_get_gui_component(context):
+        get_gui_called["value"] = True
+        assert context is wrapper
+        return fake_gui
+
+    monkeypatch.setattr(cua_tools, "_get_gui_component", fake_get_gui_component)
+
+    result = await CuaMouseClickTool().call(wrapper, x=10, y=20, button="right")
+
+    assert get_gui_called["value"] is True
+    assert fake_gui.clicked_args == (10, 20, "right")
+    assert json.loads(result) == {
+        "status": "ok",
+        "x": 10,
+        "y": 20,
+        "button": "right",
+    }
+
+
+@pytest.mark.asyncio
+async def test_cua_keyboard_type_tool_happy_path_forwards_args_and_serializes_json(
+    monkeypatch,
+):
+    from astrbot.core.tools.computer_tools import cua as cua_tools
+    from astrbot.core.tools.computer_tools.cua import CuaKeyboardTypeTool
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        event = FakeEvent()
+        context = FakeContext(
+            {"provider_settings": {"computer_use_require_admin": True}}
+        )
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    class FakeGui:
+        def __init__(self):
+            self.typed_text_args = None
+
+        async def type_text(self, text: str):
+            self.typed_text_args = (text,)
+            return {"status": "ok", "text": text}
+
+    fake_gui = FakeGui()
+    get_gui_called = {"value": False}
+    wrapper = FakeWrapper()
+
+    async def fake_get_gui_component(context):
+        get_gui_called["value"] = True
+        assert context is wrapper
+        return fake_gui
+
+    monkeypatch.setattr(cua_tools, "_get_gui_component", fake_get_gui_component)
+
+    result = await CuaKeyboardTypeTool().call(wrapper, text="Hello CUA")
+
+    assert get_gui_called["value"] is True
+    assert fake_gui.typed_text_args == ("Hello CUA",)
+    assert json.loads(result) == {"status": "ok", "text": "Hello CUA"}

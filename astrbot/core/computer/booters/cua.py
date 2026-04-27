@@ -681,6 +681,9 @@ class CuaBooter(ComputerBooter):
         if sandbox is not None and hasattr(sandbox, "download_file"):
             await sandbox.download_file(remote_path, local_path)
             return
+        if not _is_posix_os_type(self.os_type):
+            result = _non_posix_filesystem_result(remote_path, self.os_type)
+            raise RuntimeError(result["error"])
         result = await self.shell.exec(f"base64 {shlex.quote(remote_path)}")
         if result.get("stderr"):
             raise RuntimeError(result["stderr"])

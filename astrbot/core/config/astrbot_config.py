@@ -10,30 +10,6 @@ from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 logger = logging.getLogger("astrbot")
 
-SENSITIVE_CONFIG_PATH_PARTS = (
-    "api_key",
-    "apikey",
-    "access_token",
-    "auth_token",
-    "token",
-    "password",
-    "passwd",
-    "secret",
-    "credential",
-    "credentials",
-)
-
-
-def _redact_config_path(path: str) -> str:
-    parts = path.split(".")
-    redacted = [
-        "[REDACTED]"
-        if any(sensitive in part.lower() for sensitive in SENSITIVE_CONFIG_PATH_PARTS)
-        else part
-        for part in parts
-    ]
-    return ".".join(redacted)
-
 
 class RateLimitStrategy(enum.Enum):
     STALL = "stall"
@@ -127,10 +103,7 @@ class AstrBotConfig(dict):
         for key, value in refer_conf.items():
             if key not in conf:
                 # 配置项不存在，插入默认值
-                path_ = path + "." + key if path else key
-                logger.info(
-                    f"检查到配置项 {_redact_config_path(path_)} 不存在，已插入默认值"
-                )
+                logger.info("检查到配置项不存在，已插入默认值")
                 new_conf[key] = value
                 has_new = True
             elif conf[key] is None:
@@ -159,20 +132,12 @@ class AstrBotConfig(dict):
         # 检查是否存在参考配置中没有的配置项
         for key in list(conf.keys()):
             if key not in refer_conf:
-                path_ = path + "." + key if path else key
-                logger.info(
-                    f"检查到未知配置项 {_redact_config_path(path_)}，将从当前配置中删除"
-                )
+                logger.info("检查到未知配置项，将从当前配置中删除")
                 has_new = True
 
         # 顺序不一致也算作变更
         if list(conf.keys()) != list(new_conf.keys()):
-            if path:
-                logger.info(
-                    f"检查到配置项 {_redact_config_path(path)} 的子项顺序不一致，已重新排序"
-                )
-            else:
-                logger.info("检查到配置项顺序不一致，已重新排序")
+            logger.info("检查到配置项顺序不一致，已重新排序")
             has_new = True
 
         # 更新原始配置
