@@ -468,7 +468,9 @@ class CuaFileSystemComponent(FileSystemComponent):
                 "replacements": 0,
             }
         updated = content.replace(old_string, new_string, -1 if replace_all else 1)
-        await self.write_file(path, updated, encoding=encoding)
+        write_result = await self.write_file(path, updated, encoding=encoding)
+        if not write_result.get("success"):
+            return write_result
         return {
             "success": True,
             "path": path,

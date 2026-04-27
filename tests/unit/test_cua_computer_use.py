@@ -414,6 +414,36 @@ async def test_cua_write_file_shell_fallback_propagates_shell_failure():
 
 
 @pytest.mark.asyncio
+async def test_cua_edit_file_propagates_write_failure():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    class ReadableButFailingWriteShell:
+        def __init__(self):
+            self.commands = []
+
+        async def run(self, command: str, **kwargs):
+            self.commands.append((command, kwargs))
+            if command.startswith("cat "):
+                return {"stdout": "hello old", "stderr": "", "exit_code": 0}
+            return {
+                "stdout": "",
+                "stderr": "permission denied",
+                "exit_code": 1,
+                "success": False,
+            }
+
+    sandbox = FakeSandbox()
+    sandbox.shell = ReadableButFailingWriteShell()
+    delattr(sandbox, "filesystem")
+
+    result = await CuaFileSystemComponent(sandbox).edit_file("hello.txt", "old", "new")
+
+    assert result["success"] is False
+    assert result["stderr"] == "permission denied"
+    assert result["path"] == "hello.txt"
+
+
+@pytest.mark.asyncio
 async def test_cua_list_dir_shell_fallback_returns_filename_only_entries():
     from astrbot.core.computer.booters.cua import CuaFileSystemComponent
 

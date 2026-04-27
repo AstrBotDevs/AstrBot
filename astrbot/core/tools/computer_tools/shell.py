@@ -33,7 +33,7 @@ class ExecuteShellTool(FunctionTool):
                 "background": {
                     "type": "boolean",
                     "description": "Whether to run the command in the background.",
-                    "default": True,
+                    "default": False,
                 },
                 "env": {
                     "type": "object",
@@ -50,7 +50,7 @@ class ExecuteShellTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         command: str,
-        background: bool = True,
+        background: bool = False,
         env: dict[str, Any] | None = None,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Shell execution"):

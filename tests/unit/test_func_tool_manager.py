@@ -45,12 +45,12 @@ def test_computer_tools_are_registered_as_builtin_tools():
     tool = manager.get_builtin_tool(ExecuteShellTool)
 
     assert tool.name == "astrbot_execute_shell"
-    assert tool.parameters["properties"]["background"]["default"] is True
+    assert tool.parameters["properties"]["background"]["default"] is False
     assert manager.is_builtin_tool("astrbot_execute_shell") is True
 
 
 @pytest.mark.asyncio
-async def test_execute_shell_defaults_to_background(monkeypatch):
+async def test_execute_shell_defaults_to_foreground(monkeypatch):
     from astrbot.core.tools.computer_tools import shell as shell_tools
 
     calls = []
@@ -88,7 +88,7 @@ async def test_execute_shell_defaults_to_background(monkeypatch):
     )
 
     assert json.loads(result)["success"] is True
-    assert calls == [{"command": "chromium https://example.com", "background": True}]
+    assert calls == [{"command": "chromium https://example.com", "background": False}]
 
 
 @pytest.mark.asyncio
