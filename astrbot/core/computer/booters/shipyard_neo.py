@@ -122,7 +122,7 @@ class NeoShellComponent(ShellComponent):
 
         result = await self._sandbox.shell.exec(
             run_command,
-            timeout=timeout,
+            timeout=timeout or 10_000_000,
             cwd=cwd,
         )
         payload = _maybe_model_dump(result)
