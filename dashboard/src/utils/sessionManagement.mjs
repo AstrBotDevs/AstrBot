@@ -6,16 +6,8 @@ export function configureSessionDrag(event, sessionIds) {
     JSON.stringify(sessionIds),
   );
   if (event.dataTransfer) {
+    event.dataTransfer.setData("text/plain", sessionIds.join(","));
     event.dataTransfer.effectAllowed = "move";
-    if (
-      typeof document !== "undefined" &&
-      typeof event.dataTransfer.setDragImage === "function"
-    ) {
-      const dragImage = document.createElement("canvas");
-      dragImage.width = 1;
-      dragImage.height = 1;
-      event.dataTransfer.setDragImage(dragImage, 0, 0);
-    }
   }
 }
 

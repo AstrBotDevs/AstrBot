@@ -30,6 +30,7 @@ test("configureSessionDrag writes session ids and move effect", () => {
     writes.get("application/x-astrbot-session-ids"),
     JSON.stringify(["s1", "s2"]),
   );
+  assert.equal(writes.get("text/plain"), "s1,s2");
   assert.equal(event.dataTransfer.effectAllowed, "move");
 });
 

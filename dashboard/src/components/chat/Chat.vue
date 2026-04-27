@@ -1060,7 +1060,6 @@ async function selectProject(projectId: string) {
   } else {
     delete projectSessionsById[projectId];
   }
-  closeMobileSidebar();
 }
 
 async function loadProjectSessions(projectId = selectedProjectId.value) {
