@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 257 icons */
+/* Auto-generated MDI subset – 261 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -328,6 +328,10 @@
   content: "\F1634";
 }
 
+.mdi-database-search-outline::before {
+  content: "\F1636";
+}
+
 .mdi-delete::before {
   content: "\F01B4";
 }
@@ -552,6 +556,10 @@
   content: "\F0EFE";
 }
 
+.mdi-image-outline::before {
+  content: "\F0976";
+}
+
 .mdi-import::before {
   content: "\F02FA";
 }
@@ -730,6 +738,10 @@
 
 .mdi-package-variant::before {
   content: "\F03D6";
+}
+
+.mdi-package-variant-closed::before {
+  content: "\F03D7";
 }
 
 .mdi-page-first::before {
@@ -1042,6 +1054,10 @@
 
 .mdi-wrench::before {
   content: "\F05B7";
+}
+
+.mdi-wrench-outline::before {
+  content: "\F0BE0";
 }
 
 .mdi-zip-box::before {
