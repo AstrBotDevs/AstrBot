@@ -95,7 +95,8 @@
                   active: currSessionId === session.session_id,
                   selected: isSessionSelected(session.session_id),
                   'selection-mode': isSessionSelectionMode,
-                  'drop-before': isDropTarget(session.session_id),
+                  'drop-before': isDropTarget(session.session_id, 'before'),
+                  'drop-after': isDropTarget(session.session_id, 'after'),
                 }"
                 role="button"
                 tabindex="0"
@@ -117,8 +118,8 @@
                     project.project_id,
                   )
                 "
-                @dragend="finishProjectSessionDrag"
-                @dragover.prevent="markDropTarget(session.session_id)"
+                @dragend="finishSidebarSessionDrag"
+                @dragover.prevent="markDropTarget($event, session.session_id)"
                 @dragleave="clearDropTarget(session.session_id)"
                 @drop.stop.prevent="
                   dropProjectSessionsBefore(
@@ -213,7 +214,8 @@
                 !isProviderWorkspace && currSessionId === session.session_id,
               selected: isSessionSelected(session.session_id),
               'selection-mode': isSessionSelectionMode,
-              'drop-before': isDropTarget(session.session_id),
+              'drop-before': isDropTarget(session.session_id, 'before'),
+              'drop-after': isDropTarget(session.session_id, 'after'),
             }"
             role="button"
             tabindex="0"
@@ -224,8 +226,8 @@
             @pointerleave="cancelSessionLongPress"
             @pointercancel="cancelSessionLongPress"
             @dragstart="startSessionDrag($event, session.session_id)"
-            @dragend="finishSessionDrag"
-            @dragover.prevent="markDropTarget(session.session_id)"
+            @dragend="finishSidebarSessionDrag"
+            @dragover.prevent="markDropTarget($event, session.session_id)"
             @dragleave="clearDropTarget(session.session_id)"
             @drop.stop.prevent="dropSessionsBefore(session.session_id)"
             @keydown.enter="handleSessionItemClick(session.session_id)"
@@ -681,7 +683,9 @@ import { useSessionSelectionDrag } from "@/composables/useSessionSelectionDrag";
 import { useCustomizerStore } from "@/stores/customizer";
 import {
   configureSessionDrag,
+  moveSessionIdsAfter,
   moveSessionIdsBefore,
+  moveSessionIdsToEnd,
   toggleExpandedProjectIds,
 } from "@/utils/sessionManagement.mjs";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
@@ -786,6 +790,7 @@ const refsSidebarOpen = ref(false);
 const expandedProjectIds = ref<string[]>([]);
 const selectedProjectSessionSourceId = ref<string | null>(null);
 const dropTargetSessionId = ref<string | null>(null);
+const dropTargetPosition = ref<"before" | "after">("before");
 const {
   draggingSessionIds,
   draggingSourceProjectId,
@@ -1186,16 +1191,25 @@ function handleProjectSessionItemClick(
   selectProjectSession(sessionId, sourceProjectId);
 }
 
-function isDropTarget(sessionId: string) {
-  return dropTargetSessionId.value === sessionId;
+function isDropTarget(sessionId: string, position: "before" | "after") {
+  return (
+    dropTargetSessionId.value === sessionId &&
+    dropTargetPosition.value === position
+  );
 }
 
-function markDropTarget(sessionId: string) {
+function markDropTarget(event: DragEvent, sessionId: string) {
   if (
     !draggingSessionIds.value.length ||
     draggingSessionIds.value.includes(sessionId)
   ) {
     return;
+  }
+  const target = event.currentTarget as HTMLElement | null;
+  if (target) {
+    const rect = target.getBoundingClientRect();
+    dropTargetPosition.value =
+      event.clientY > rect.top + rect.height / 2 ? "after" : "before";
   }
   dropTargetSessionId.value = sessionId;
 }
@@ -1271,11 +1285,10 @@ async function dropSessionsBefore(targetSessionId: string) {
   }
 
   const currentSessionIds = sessions.value.map((session) => session.session_id);
-  const nextSessionIds = moveSessionIdsBefore(
-    currentSessionIds,
-    sessionIds,
-    targetSessionId,
-  );
+  const nextSessionIds =
+    dropTargetPosition.value === "after"
+      ? moveSessionIdsAfter(currentSessionIds, sessionIds, targetSessionId)
+      : moveSessionIdsBefore(currentSessionIds, sessionIds, targetSessionId);
 
   const currentSessionsById = new Map(
     sessions.value.map((session) => [session.session_id, session]),
@@ -1337,11 +1350,10 @@ async function dropProjectSessionsBefore(
   const currentSessionIds = projectSessionsFor(projectId).map(
     (session) => session.session_id,
   );
-  const nextSessionIds = moveSessionIdsBefore(
-    currentSessionIds,
-    sessionIds,
-    targetSessionId,
-  );
+  const nextSessionIds =
+    dropTargetPosition.value === "after"
+      ? moveSessionIdsAfter(currentSessionIds, sessionIds, targetSessionId)
+      : moveSessionIdsBefore(currentSessionIds, sessionIds, targetSessionId);
   if (nextSessionIds.join("\0") === currentSessionIds.join("\0")) {
     clearDropTarget();
     finishSessionDrag();
@@ -1382,7 +1394,8 @@ function startProjectSessionDrag(
   configureSessionDrag(event, payload.sessionIds);
 }
 
-function finishProjectSessionDrag() {
+function finishSidebarSessionDrag() {
+  clearDropTarget();
   finishSessionDrag();
 }
 
@@ -1397,21 +1410,39 @@ function handleSessionListDragLeave() {
 }
 
 async function dropDraggedProjectSessionsOut() {
-  if (!draggingSourceProjectId.value || !draggingSessionIds.value.length)
-    return;
   const sessionIds = [...draggingSessionIds.value];
+  const sourceProjectId = draggingSourceProjectId.value;
+  if (!sourceProjectId || !sessionIds.length) return;
+  const movedSessionIds = new Set(sessionIds);
+  const movedSessions = projectSessionsFor(sourceProjectId).filter((session) =>
+    movedSessionIds.has(session.session_id),
+  );
   try {
     const results = await Promise.all(
       sessionIds.map((sessionId) => removeSessionFromProject(sessionId)),
     );
     if (results.some(Boolean)) {
+      removeSessionsFromProjectCache(sourceProjectId, sessionIds);
+      const currentSessionIds = sessions.value.map(
+        (session) => session.session_id,
+      );
+      const nextSessionIds = moveSessionIdsToEnd(currentSessionIds, sessionIds);
+      const currentSessionsById = new Map(
+        sessions.value.map((session) => [session.session_id, session]),
+      );
+      for (const session of movedSessions) {
+        currentSessionsById.set(session.session_id, session);
+      }
+      sessions.value = nextSessionIds
+        .map((sessionId: string) => currentSessionsById.get(sessionId))
+        .filter((session: Session | undefined): session is Session =>
+          Boolean(session),
+        );
+      await reorderSessions(nextSessionIds);
       for (const sessionId of sessionIds) {
         sessionProjects[sessionId] = null;
       }
-      await getSessions();
-      if (draggingSourceProjectId.value) {
-        await loadProjectSessions(draggingSourceProjectId.value);
-      }
+      await loadProjectSessions(sourceProjectId);
     }
   } finally {
     clearDropTarget();
@@ -2119,19 +2150,38 @@ function toggleTheme() {
 
 .session-item.drop-before {
   margin-top: 12px;
+}
+
+.session-item.drop-after {
+  margin-bottom: 12px;
+}
+
+.session-item.drop-before {
   transform: translateY(2px);
 }
 
-.session-item.drop-before::before {
+.session-item.drop-after {
+  transform: translateY(-2px);
+}
+
+.session-item.drop-before::before,
+.session-item.drop-after::after {
   content: "";
   position: absolute;
   left: 10px;
   right: 10px;
-  top: -8px;
   height: 3px;
   border-radius: 999px;
   background: rgba(80, 150, 230, 0.72);
   box-shadow: 0 0 0 4px rgba(80, 150, 230, 0.12);
+}
+
+.session-item.drop-before::before {
+  top: -8px;
+}
+
+.session-item.drop-after::after {
+  bottom: -8px;
 }
 
 .session-item:hover,

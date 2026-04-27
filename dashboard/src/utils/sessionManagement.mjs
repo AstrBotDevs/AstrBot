@@ -7,6 +7,15 @@ export function configureSessionDrag(event, sessionIds) {
   );
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = "move";
+    if (
+      typeof document !== "undefined" &&
+      typeof event.dataTransfer.setDragImage === "function"
+    ) {
+      const dragImage = document.createElement("canvas");
+      dragImage.width = 1;
+      dragImage.height = 1;
+      event.dataTransfer.setDragImage(dragImage, 0, 0);
+    }
   }
 }
 
@@ -61,5 +70,31 @@ export function moveSessionIdsBefore(
     ...remainingSessionIds.slice(0, targetIndex),
     ...movingSessionIds,
     ...remainingSessionIds.slice(targetIndex),
+  ];
+}
+
+export function moveSessionIdsAfter(
+  currentSessionIds,
+  movingSessionIds,
+  targetSessionId,
+) {
+  const movingSet = new Set(movingSessionIds);
+  const remainingSessionIds = currentSessionIds.filter(
+    (id) => !movingSet.has(id),
+  );
+  const targetIndex = remainingSessionIds.indexOf(targetSessionId);
+  if (targetIndex === -1) return currentSessionIds;
+  return [
+    ...remainingSessionIds.slice(0, targetIndex + 1),
+    ...movingSessionIds,
+    ...remainingSessionIds.slice(targetIndex + 1),
+  ];
+}
+
+export function moveSessionIdsToEnd(currentSessionIds, movingSessionIds) {
+  const movingSet = new Set(movingSessionIds);
+  return [
+    ...currentSessionIds.filter((id) => !movingSet.has(id)),
+    ...movingSessionIds,
   ];
 }

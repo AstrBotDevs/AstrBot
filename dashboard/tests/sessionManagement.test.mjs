@@ -5,7 +5,9 @@ import {
   configureSessionDrag,
   getDragSessionIds,
   getProjectDragPayload,
+  moveSessionIdsAfter,
   moveSessionIdsBefore,
+  moveSessionIdsToEnd,
   toggleExpandedProjectIds,
   shouldSuppressClickAfterLongPress,
   toggleSessionSelection,
@@ -85,4 +87,20 @@ test("moveSessionIdsBefore moves one or more sessions before a target", () => {
     moveSessionIdsBefore(["s1", "s2", "s3", "s4"], ["s2", "s4"], "s1"),
     ["s2", "s4", "s1", "s3"],
   );
+});
+
+test("moveSessionIdsAfter moves one or more sessions after a target", () => {
+  assert.deepEqual(moveSessionIdsAfter(["s1", "s2", "s3"], ["s1"], "s3"), [
+    "s2",
+    "s3",
+    "s1",
+  ]);
+});
+
+test("moveSessionIdsToEnd appends sessions after the current list", () => {
+  assert.deepEqual(moveSessionIdsToEnd(["s1", "s2", "s3"], ["s1"]), [
+    "s2",
+    "s3",
+    "s1",
+  ]);
 });
