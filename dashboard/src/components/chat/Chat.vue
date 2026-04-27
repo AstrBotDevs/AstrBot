@@ -663,15 +663,11 @@ import {
 } from "@/composables/useMessages";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useProjects } from "@/composables/useProjects";
+import { useSessionSelectionDrag } from "@/composables/useSessionSelectionDrag";
 import { useCustomizerStore } from "@/stores/customizer";
 import {
   DRAG_MIME_SESSION_IDS,
-  DRAG_MIME_SOURCE_PROJECT_ID,
-  getDragSessionIds,
-  getProjectDragPayload,
-  shouldSuppressClickAfterLongPress,
   toggleExpandedProjectIds,
-  toggleSessionSelection,
 } from "@/utils/sessionManagement.mjs";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import {
@@ -772,13 +768,21 @@ const deletingSelectedSessions = ref(false);
 const refsSidebarOpen = ref(false);
 const expandedProjectIds = ref<string[]>([]);
 const selectedProjectSessionSourceId = ref<string | null>(null);
-const draggingSessionIds = ref<string[]>([]);
-const draggingSourceProjectId = ref<string | null>(null);
-const sessionListDropReady = ref(false);
-const isSessionSelectionMode = ref(false);
-const suppressNextSessionClick = ref(false);
-const sessionLongPressMs = 450;
-let sessionLongPressTimer: number | null = null;
+const {
+  draggingSessionIds,
+  draggingSourceProjectId,
+  sessionListDropReady,
+  isSessionSelectionMode,
+  isSessionSelected,
+  clearSessionSelection,
+  toggleSidebarSessionSelection,
+  startSessionLongPress,
+  cancelSessionLongPress,
+  consumeSuppressedSessionClick,
+  startSessionDragState,
+  startProjectSessionDragState,
+  finishSessionDrag,
+} = useSessionSelectionDrag(selectedSessions);
 const selectedRefs = ref<Record<string, unknown> | null>(null);
 const threadSelection = reactive<{
   visible: boolean;
@@ -1131,48 +1135,9 @@ async function deleteSidebarSession(session: Session) {
   }
 }
 
-function isSessionSelected(sessionId: string) {
-  return selectedSessions.value.includes(sessionId);
-}
-
-function clearSessionSelection() {
-  selectedSessions.value = [];
-  isSessionSelectionMode.value = false;
-}
-
-function toggleSidebarSessionSelection(sessionId: string) {
-  selectedSessions.value = toggleSessionSelection(
-    selectedSessions.value,
-    sessionId,
-  );
-  isSessionSelectionMode.value = selectedSessions.value.length > 0;
-}
-
-function startSessionLongPress(sessionId: string) {
-  cancelSessionLongPress();
-  sessionLongPressTimer = window.setTimeout(() => {
-    isSessionSelectionMode.value = true;
-    suppressNextSessionClick.value = true;
-    if (!isSessionSelected(sessionId)) {
-      selectedSessions.value = [...selectedSessions.value, sessionId];
-    }
-  }, sessionLongPressMs);
-}
-
-function cancelSessionLongPress() {
-  if (sessionLongPressTimer !== null) {
-    window.clearTimeout(sessionLongPressTimer);
-    sessionLongPressTimer = null;
-  }
-}
-
 function handleSessionItemClick(sessionId: string) {
   cancelSessionLongPress();
-  const clickSuppression = shouldSuppressClickAfterLongPress(
-    suppressNextSessionClick.value,
-  );
-  suppressNextSessionClick.value = clickSuppression.nextSuppressState;
-  if (clickSuppression.suppress) return;
+  if (consumeSuppressedSessionClick()) return;
 
   if (isSessionSelectionMode.value) {
     toggleSidebarSessionSelection(sessionId);
@@ -1187,11 +1152,7 @@ function handleProjectSessionItemClick(
 ) {
   selectedProjectSessionSourceId.value = sourceProjectId;
   cancelSessionLongPress();
-  const clickSuppression = shouldSuppressClickAfterLongPress(
-    suppressNextSessionClick.value,
-  );
-  suppressNextSessionClick.value = clickSuppression.nextSuppressState;
-  if (clickSuppression.suppress) return;
+  if (consumeSuppressedSessionClick()) return;
 
   if (isSessionSelectionMode.value) {
     toggleSidebarSessionSelection(sessionId);
@@ -1201,30 +1162,24 @@ function handleProjectSessionItemClick(
 }
 
 function startSessionDrag(event: DragEvent, sessionId: string) {
-  cancelSessionLongPress();
-  draggingSessionIds.value = getDragSessionIds(
-    sessionId,
-    selectedSessions.value,
-  );
+  const sessionIds = startSessionDragState(sessionId);
   event.dataTransfer?.setData(
     DRAG_MIME_SESSION_IDS,
-    JSON.stringify(draggingSessionIds.value),
+    JSON.stringify(sessionIds),
   );
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = "move";
   }
 }
 
-function finishSessionDrag() {
-  draggingSessionIds.value = [];
-  draggingSourceProjectId.value = null;
-  sessionListDropReady.value = false;
-}
-
 async function dropDraggedSessionsOnProject(projectId: string) {
   const sessionIds = [...draggingSessionIds.value];
   const sourceProjectId = draggingSourceProjectId.value;
   if (!sessionIds.length) return;
+  if (sourceProjectId === projectId) {
+    finishSessionDrag();
+    return;
+  }
   try {
     const results = await Promise.all(
       sessionIds.map((sessionId) => addSessionToProject(sessionId, projectId)),
@@ -1251,21 +1206,10 @@ function startProjectSessionDrag(
   sessionId: string,
   sourceProjectId: string,
 ) {
-  cancelSessionLongPress();
-  const payload = getProjectDragPayload(
-    sessionId,
-    sourceProjectId,
-    selectedSessions.value,
-  );
-  draggingSessionIds.value = payload.sessionIds;
-  draggingSourceProjectId.value = payload.sourceProjectId;
+  const payload = startProjectSessionDragState(sessionId, sourceProjectId);
   event.dataTransfer?.setData(
     DRAG_MIME_SESSION_IDS,
     JSON.stringify(payload.sessionIds),
-  );
-  event.dataTransfer?.setData(
-    DRAG_MIME_SOURCE_PROJECT_ID,
-    payload.sourceProjectId,
   );
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = "move";

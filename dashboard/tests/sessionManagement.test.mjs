@@ -5,7 +5,6 @@ import {
   getDragSessionIds,
   getProjectDragPayload,
   toggleExpandedProjectIds,
-  toggleExpandedProject,
   shouldSuppressClickAfterLongPress,
   toggleSessionSelection,
 } from "../src/utils/sessionManagement.mjs";
@@ -32,12 +31,6 @@ test("shouldSuppressClickAfterLongPress consumes only the first post-long-press 
     suppress: false,
     nextSuppressState: false,
   });
-});
-
-test("toggleExpandedProject expands one project and collapses it when clicked again", () => {
-  assert.equal(toggleExpandedProject(null, "p1"), "p1");
-  assert.equal(toggleExpandedProject("p1", "p1"), null);
-  assert.equal(toggleExpandedProject("p1", "p2"), "p2");
 });
 
 test("toggleExpandedProjectIds supports multiple expanded projects", () => {
