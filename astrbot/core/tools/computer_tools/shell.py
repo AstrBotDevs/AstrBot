@@ -60,7 +60,7 @@ class ExecuteShellTool(FunctionTool):
                 },
                 "background": {
                     "type": "boolean",
-                    "description": "Run the command in the background. Use the file read tool to read the output later.",
+                    "description": "Run the command in the background. Use the file read tool to read the output later. For long running commands, using this option.",
                     "default": False,
                 },
                 "timeout": {
@@ -123,7 +123,6 @@ class ExecuteShellTool(FunctionTool):
                 timeout=timeout or 300,
             )
             if stdout_file:
-                result["stdout_file"] = stdout_file
                 result["stdout"] = (
                     f"Command is running in the background. stdout/stderr is being "
                     f"written to `{stdout_file}`. Use astrbot_file_read_tool to read it."

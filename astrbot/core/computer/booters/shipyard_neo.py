@@ -13,6 +13,7 @@ from ..olayer import (
     ShellComponent,
 )
 from .base import ComputerBooter
+from .shell_background import build_detached_shell_command
 from .shipyard_search_file_util import search_files_via_shell
 
 try:
@@ -116,9 +117,7 @@ class NeoShellComponent(ShellComponent):
             run_command = f"{env_prefix} {run_command}"
 
         if background:
-            run_command = (
-                f"nohup sh -lc {shlex.quote(run_command)} >/dev/null 2>&1 & echo $!"
-            )
+            run_command = build_detached_shell_command(run_command)
 
         result = await self._sandbox.shell.exec(
             run_command,
