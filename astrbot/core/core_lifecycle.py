@@ -113,7 +113,7 @@ class AstrBotCoreLifecycle:
         provider_settings = getattr(pm, "provider_settings", None) or {}
         default_id = provider_settings.get("default_provider_id")
         fallback = pm.curr_provider_inst or providers[0]
-        fallback_id = (fallback.provider_config.get("id") or "unknown")
+        fallback_id = fallback.provider_config.get("id") or "unknown"
 
         if not default_id:
             if len(providers) <= 1:
@@ -128,10 +128,7 @@ class AstrBotCoreLifecycle:
             )
             return
 
-        found = any(
-            (p.provider_config.get("id") == default_id)
-            for p in providers
-        )
+        found = any((p.provider_config.get("id") == default_id) for p in providers)
         if not found:
             self._default_chat_provider_warning_emitted = True
             logger.warning(
