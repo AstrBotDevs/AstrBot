@@ -1573,6 +1573,13 @@ class TestApplySandboxTools:
 
         module._apply_sandbox_tools(config, req, "session-123")
 
+        assert req.func_tool is not None
+        tool_names = req.func_tool.names()
+        assert "astrbot_cua_screenshot" in tool_names
+        assert "astrbot_cua_mouse_click" in tool_names
+        assert "astrbot_cua_keyboard_type" in tool_names
+        assert "astrbot_cua_key_press" not in tool_names
+
         assert "Firefox" in req.system_prompt
         assert "background=true" in req.system_prompt
         assert 'firefox "https://example.com"' in req.system_prompt
