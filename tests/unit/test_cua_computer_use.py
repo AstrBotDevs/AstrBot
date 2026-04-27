@@ -34,6 +34,22 @@ class ProcessShapeShell:
         return {"output": "shape-ok", "returncode": 0}
 
 
+class CommandResultShapeShell:
+    def __init__(self, stdout: str = "shape-ok", stderr: str = "", returncode: int = 0):
+        self.commands = []
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
+
+    @property
+    def success(self):
+        return self.returncode == 0
+
+    async def run(self, command: str, **kwargs):
+        self.commands.append((command, kwargs))
+        return self
+
+
 class FakePython:
     async def run(self, code: str, **kwargs):
         return {"output": "42", "error": ""}
@@ -461,6 +477,38 @@ async def test_cua_shell_normalizes_output_returncode_shape():
         "exit_code": 0,
         "success": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_cua_shell_normalizes_command_result_object_shape():
+    from astrbot.core.computer.booters.cua import CuaShellComponent
+
+    sandbox = FakeSandbox()
+    sandbox.shell = CommandResultShapeShell(stdout="hello\n", returncode=0)
+
+    result = await CuaShellComponent(sandbox).exec("echo hello")
+
+    assert result == {
+        "stdout": "hello\n",
+        "stderr": "",
+        "exit_code": 0,
+        "success": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_cua_python_fallback_preserves_shell_command_result_stdout():
+    from astrbot.core.computer.booters.cua import CuaPythonComponent
+
+    sandbox = SandboxWithoutFilesystem()
+    sandbox.shell = CommandResultShapeShell(stdout="from python fallback\n")
+    delattr(sandbox, "python")
+
+    result = await CuaPythonComponent(sandbox).exec("print('from python fallback')")
+
+    assert result["success"] is True
+    assert result["output"] == "from python fallback\n"
+    assert result["data"]["output"]["text"] == "from python fallback\n"
 
 
 @pytest.mark.asyncio

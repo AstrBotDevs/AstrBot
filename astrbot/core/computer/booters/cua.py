@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import inspect
 import shlex
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -73,6 +73,8 @@ class ProcessResult:
 def _maybe_model_dump(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(value)
     if hasattr(value, "model_dump"):
         dumped = value.model_dump()
         if isinstance(dumped, dict):
@@ -81,6 +83,22 @@ def _maybe_model_dump(value: Any) -> dict[str, Any]:
         dumped = value.dict()
         if isinstance(dumped, dict):
             return dumped
+    attr_payload = {
+        key: getattr(value, key)
+        for key in (
+            "stdout",
+            "stderr",
+            "output",
+            "error",
+            "returncode",
+            "return_code",
+            "exit_code",
+            "success",
+        )
+        if hasattr(value, key)
+    }
+    if attr_payload:
+        return attr_payload
     return {}
 
 
