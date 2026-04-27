@@ -186,6 +186,22 @@
                         "description": "TTL песочницы Shipyard Neo",
                         "hint": "Время жизни песочницы в секундах."
                     },
+                    "cua_image": {
+                        "description": "Образ CUA",
+                        "hint": "Образ или тип ОС песочницы CUA. По умолчанию linux. Поддерживаемые значения зависят от установленного CUA SDK."
+                    },
+                    "cua_os_type": {
+                        "description": "Тип ОС CUA",
+                        "hint": "Тип операционной системы песочницы CUA. По умолчанию linux."
+                    },
+                    "cua_ttl": {
+                        "description": "TTL песочницы CUA",
+                        "hint": "Время жизни песочницы CUA в секундах. Фактическое поведение зависит от установленного CUA SDK."
+                    },
+                    "cua_telemetry_enabled": {
+                        "description": "Телеметрия CUA",
+                        "hint": "Разрешить CUA SDK отправлять телеметрию. По умолчанию выключено."
+                    },
                     "shipyard_endpoint": {
                         "description": "Эндпоинт Shipyard API",
                         "hint": "Адрес API для доступа к сервису Shipyard."

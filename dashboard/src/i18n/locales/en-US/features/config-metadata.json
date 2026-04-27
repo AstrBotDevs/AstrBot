@@ -186,6 +186,22 @@
             "description": "Shipyard Neo Sandbox TTL",
             "hint": "Sandbox time-to-live in seconds."
           },
+          "cua_image": {
+            "description": "CUA Image",
+            "hint": "CUA sandbox image or OS type. Defaults to linux. Supported values depend on the installed CUA SDK."
+          },
+          "cua_os_type": {
+            "description": "CUA OS Type",
+            "hint": "CUA sandbox operating system type. Defaults to linux."
+          },
+          "cua_ttl": {
+            "description": "CUA Sandbox TTL",
+            "hint": "CUA sandbox time-to-live in seconds. Actual behavior depends on the installed CUA SDK."
+          },
+          "cua_telemetry_enabled": {
+            "description": "CUA Telemetry",
+            "hint": "Allow the CUA SDK to send telemetry data. Disabled by default."
+          },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
             "hint": "API access address for Shipyard service."

@@ -188,6 +188,22 @@
             "description": "Shipyard Neo Sandbox 存活时间(秒)",
             "hint": "Shipyard Neo 沙箱的生存时间（秒）。"
           },
+          "cua_image": {
+            "description": "CUA 镜像",
+            "hint": "CUA 沙箱镜像/系统类型，默认 linux。可填写 linux、macos、windows、android，具体取决于 CUA SDK 支持。"
+          },
+          "cua_os_type": {
+            "description": "CUA 操作系统类型",
+            "hint": "CUA 沙箱操作系统类型，默认 linux。"
+          },
+          "cua_ttl": {
+            "description": "CUA Sandbox 存活时间(秒)",
+            "hint": "CUA 沙箱生存时间（秒）。当前作为会话配置保存，具体生效取决于 CUA SDK。"
+          },
+          "cua_telemetry_enabled": {
+            "description": "CUA 遥测",
+            "hint": "是否允许 CUA SDK 发送遥测数据。默认关闭。"
+          },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
             "hint": "Shipyard 服务的 API 访问地址。"
