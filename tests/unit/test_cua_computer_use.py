@@ -670,6 +670,38 @@ async def test_cua_gui_press_error_lists_probed_methods():
     assert "keyboard.press_key" in message
 
 
+@pytest.mark.asyncio
+async def test_cua_gui_caches_component_methods_after_initialization():
+    from astrbot.core.computer.booters.cua import CuaGUIComponent
+
+    class CountingMouse:
+        def __init__(self):
+            self.click_lookups = 0
+            self.clicks = []
+
+        def __getattribute__(self, name):
+            if name == "click":
+                object.__getattribute__(self, "__dict__")["click_lookups"] += 1
+            return object.__getattribute__(self, name)
+
+        async def click(self, x: int, y: int, button: str = "left"):
+            self.clicks.append((x, y, button))
+            return {"success": True}
+
+    class Sandbox:
+        def __init__(self):
+            self.mouse = CountingMouse()
+
+    sandbox = Sandbox()
+    gui = CuaGUIComponent(sandbox)
+
+    await gui.click(1, 2)
+    await gui.click(3, 4, button="right")
+
+    assert sandbox.mouse.click_lookups == 1
+    assert sandbox.mouse.clicks == [(1, 2, "left"), (3, 4, "right")]
+
+
 def test_cua_capabilities_reflect_initialized_sandbox_gui_devices():
     from astrbot.core.computer.booters.cua import (
         CuaBooter,

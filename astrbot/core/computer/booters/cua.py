@@ -155,20 +155,27 @@ def _split_listing_entries(output: str) -> list[str]:
     return [line for line in output.splitlines() if line.strip()]
 
 
-def _require_component_method(
-    root: Any,
+def _resolve_component_method(
+    component: Any,
+    method_names: str | tuple[str, ...],
+) -> Any | None:
+    if component is None:
+        return None
+    names = (method_names,) if isinstance(method_names, str) else method_names
+    for method_name in names:
+        method = getattr(component, method_name, None)
+        if method is not None:
+            return method
+    return None
+
+
+def _missing_component_method_error(
     component_name: str,
     method_names: str | tuple[str, ...],
-) -> Any:
-    component = getattr(root, component_name, None)
+) -> RuntimeError:
     names = (method_names,) if isinstance(method_names, str) else method_names
-    if component is not None:
-        for method_name in names:
-            method = getattr(component, method_name, None)
-            if method is not None:
-                return method
     candidates = ", ".join(f"{component_name}.{name}" for name in names)
-    raise RuntimeError(
+    return RuntimeError(
         f"CUA sandbox does not provide any of: {candidates}. "
         "Please check the installed CUA SDK version and sandbox backend."
     )
@@ -465,6 +472,13 @@ async def _list_dir_via_shell(
 class CuaGUIComponent(GUIComponent):
     def __init__(self, sandbox: Any) -> None:
         self._sandbox = sandbox
+        mouse = getattr(sandbox, "mouse", None)
+        keyboard = getattr(sandbox, "keyboard", None)
+        self._click = _resolve_component_method(mouse, "click")
+        self._type_text = _resolve_component_method(keyboard, "type")
+        self._press_key = _resolve_component_method(
+            keyboard, ("press", "key_press", "press_key")
+        )
 
     async def screenshot(self, path: str | None = None) -> dict[str, Any]:
         raw = await self._sandbox.screenshot()
@@ -480,22 +494,25 @@ class CuaGUIComponent(GUIComponent):
         }
 
     async def click(self, x: int, y: int, button: str = "left") -> dict[str, Any]:
-        click = _require_component_method(self._sandbox, "mouse", "click")
-        result = await _maybe_await(click(x, y, button=button))
+        if self._click is None:
+            raise _missing_component_method_error("mouse", "click")
+        result = await _maybe_await(self._click(x, y, button=button))
         payload = _maybe_model_dump(result)
         return {"success": bool(payload.get("success", True)), **payload}
 
     async def type_text(self, text: str) -> dict[str, Any]:
-        type_text = _require_component_method(self._sandbox, "keyboard", "type")
-        result = await _maybe_await(type_text(text))
+        if self._type_text is None:
+            raise _missing_component_method_error("keyboard", "type")
+        result = await _maybe_await(self._type_text(text))
         payload = _maybe_model_dump(result)
         return {"success": bool(payload.get("success", True)), **payload}
 
     async def press_key(self, key: str) -> dict[str, Any]:
-        press = _require_component_method(
-            self._sandbox, "keyboard", ("press", "key_press", "press_key")
-        )
-        result = await _maybe_await(press(key))
+        if self._press_key is None:
+            raise _missing_component_method_error(
+                "keyboard", ("press", "key_press", "press_key")
+            )
+        result = await _maybe_await(self._press_key(key))
         payload = _maybe_model_dump(result)
         return {"success": bool(payload.get("success", True)), **payload}
 
