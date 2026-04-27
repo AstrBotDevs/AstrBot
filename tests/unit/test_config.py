@@ -309,7 +309,27 @@ class TestConfigValidation:
 
         assert messages
         assert all("secret-value" not in message for message in messages)
-        assert any("api_key" in message for message in messages)
+        assert all("api_key" not in message for message in messages)
+        assert any("[REDACTED]" in message for message in messages)
+
+    def test_integrity_log_keeps_non_sensitive_config_path(
+        self, temp_config_path, monkeypatch
+    ):
+        """Non-sensitive paths remain useful for troubleshooting."""
+        from astrbot.core.config import astrbot_config
+
+        existing_config = {"provider_settings": {}}
+        default_config = {"provider_settings": {"enable": True}}
+        messages = []
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump(existing_config, f)
+
+        monkeypatch.setattr(astrbot_config.logger, "info", messages.append)
+
+        AstrBotConfig(config_path=temp_config_path, default_config=default_config)
+
+        assert any("provider_settings.enable" in message for message in messages)
+        assert all("[REDACTED]" not in message for message in messages)
 
 
 class TestConfigHotReload:
