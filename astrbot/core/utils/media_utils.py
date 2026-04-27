@@ -295,13 +295,56 @@ async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
     """Ensure the audio path points to wav format by extension/guess and convert when needed.
 
     If the file appears to already be wav, return it directly to avoid extra conversion.
+    Handles Tencent QQ special formats (silk / amr) that ffmpeg cannot decode.
     """
 
     if not audio_path:
         return audio_path
 
-    if _get_audio_magic_type(audio_path) == "wav":
+    audio_type = _get_audio_magic_type(audio_path)
+
+    if audio_type == "wav":
         return audio_path
+
+    if audio_type in ("silk",):
+        # Tencent Silk format (commonly used by QQ). ffmpeg cannot decode it.
+        from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
+
+        if not output_path:
+            from pathlib import Path
+            from uuid import uuid4
+
+            from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+            temp_dir = Path(get_astrbot_temp_path())
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            output_path = str(temp_dir / f"media_audio_{uuid4().hex}.wav")
+
+        logger.info(f"Detected Silk audio format, converting to wav: {audio_path}")
+        return await tencent_silk_to_wav(audio_path, output_path)
+
+    if audio_type in ("amr",):
+        # AMR from Tencent platforms may also be a variant that ffmpeg misdetects.
+        # Try ffmpeg first as it handles standard AMR correctly.
+        try:
+            return await convert_audio_to_wav(audio_path, output_path)
+        except Exception as e:
+            logger.warning(
+                f"ffmpeg failed to convert amr file, trying pyffmpeg fallback: {e}"
+            )
+            from astrbot.core.utils.tencent_record_helper import convert_to_pcm_wav
+
+            if not output_path:
+                from pathlib import Path
+                from uuid import uuid4
+
+                from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+                temp_dir = Path(get_astrbot_temp_path())
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                output_path = str(temp_dir / f"media_audio_{uuid4().hex}.wav")
+
+            return await convert_to_pcm_wav(audio_path, output_path)
 
     return await convert_audio_to_wav(audio_path, output_path)
 
@@ -341,7 +384,11 @@ def _get_audio_magic_type(audio_path: str) -> str:
     if header[:4] == b"ftyp" and b"mp4" in header[:8]:
         return "mp4"
 
-    if header[:8] == b"#!SILK_V3":
+    if (
+        header[:8] == b"#!SILK_V3"
+        or header[1:9] == b"#!SILK_V3"
+        or b"SILK" in header[:16]
+    ):
         return "silk"
 
     return ""
