@@ -1573,17 +1573,16 @@ class TestApplySandboxTools:
 
         module._apply_sandbox_tools(config, req, "session-123")
 
-        assert "Chromium" in req.system_prompt
+        assert "Firefox" in req.system_prompt
         assert "background=true" in req.system_prompt
+        assert 'firefox "https://example.com"' in req.system_prompt
         assert "astrbot_cua_screenshot" in req.system_prompt
         assert "astrbot_cua_key_press" not in req.system_prompt
         assert "return_image_to_llm" in req.system_prompt
         assert "astrbot_execute_shell" in req.system_prompt
         assert "\\n" in req.system_prompt
-        assert "input field pollution" in req.system_prompt
         assert "send_to_user=true" in req.system_prompt
-        assert "only the final result" in req.system_prompt
-        assert "Do not use `firefox &`" in req.system_prompt
+        assert "focused and empty or safe to append" in req.system_prompt
 
     def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
         """Test sandbox tools with shipyard booter configuration."""

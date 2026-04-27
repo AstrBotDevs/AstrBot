@@ -303,6 +303,25 @@ async def test_cua_shell_normalizes_output_returncode_shape():
 
 
 @pytest.mark.asyncio
+async def test_cua_shell_background_wrapper_detaches_via_python_subprocess():
+    from astrbot.core.computer.booters.cua import CuaShellComponent
+
+    sandbox = FakeSandbox()
+
+    await CuaShellComponent(sandbox).exec("chromium https://example.com", background=True)
+
+    command = sandbox.shell.commands[0][0]
+    assert command.startswith("python3 -c ")
+    assert "subprocess.Popen" in command
+    assert "start_new_session=True" in command
+    assert "stdout=subprocess.DEVNULL" in command
+    assert "stderr=subprocess.DEVNULL" in command
+    assert "time.sleep(0.2)" in command
+    assert "'chromium https://example.com'" in command
+    assert "&" not in command
+
+
+@pytest.mark.asyncio
 async def test_cua_gui_reports_missing_mouse_or_keyboard():
     from astrbot.core.computer.booters.cua import CuaGUIComponent
 

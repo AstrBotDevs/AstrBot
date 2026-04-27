@@ -160,9 +160,7 @@ class CuaShellComponent(ShellComponent):
         if env:
             kwargs["env"] = env
         if background:
-            command = (
-                f"nohup sh -lc {command!r} >/tmp/astrbot_cua_bg.log 2>&1 & echo $!"
-            )
+            command = _build_cua_background_command(command)
 
         result = await _call_first(
             self._sandbox.shell, ("run", "exec"), command, **kwargs
@@ -180,6 +178,19 @@ class CuaShellComponent(ShellComponent):
             except Exception:
                 response["pid"] = None
         return response
+
+
+def _build_cua_background_command(command: str) -> str:
+    launcher = (
+        "import subprocess,sys,time; "
+        'p=subprocess.Popen(["sh","-lc",sys.argv[1]], '
+        "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
+        "stderr=subprocess.DEVNULL, start_new_session=True); "
+        "time.sleep(0.2); "
+        "code=p.poll(); "
+        "sys.exit(0 if code is None else code)"
+    )
+    return f"python3 -c {shlex.quote(launcher)} {shlex.quote(command)}"
 
 
 class CuaPythonComponent(PythonComponent):

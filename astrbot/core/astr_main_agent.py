@@ -1021,26 +1021,14 @@ def _apply_sandbox_tools(
     if booter == "cua":
         req.system_prompt += (
             "\n[CUA Desktop Control]\n"
-            "When launching GUI apps, use `astrbot_execute_shell` with "
-            "background=true; do not append shell background operators manually. "
-            "For browser tasks, use `astrbot_execute_shell` with `background=true` "
-            "to launch Chromium in the default CUA Linux sandbox. "
-            "Do not use `firefox &` unless the user confirms Firefox exists. "
-            "After launching or changing any GUI app, immediately call "
-            "`astrbot_cua_screenshot` to inspect the current desktop before "
-            "clicking or typing; keep `return_image_to_llm` enabled unless the "
-            "provider cannot handle image tool results. "
-            "By default, set `send_to_user=true` on CUA screenshots after each "
-            "visible step so the user stays in control; only suppress user-visible "
-            "screenshots when the user explicitly asks for only the final result. "
-            "Use coordinates from screenshots for "
-            "`astrbot_cua_mouse_click`, and use `astrbot_cua_keyboard_type` for "
-            "text input. Prevent input field pollution: before typing, inspect the "
-            "screenshot, confirm the intended input is focused and empty or safe to "
-            "append to, and avoid typing into fields that already contain unrelated "
-            "text. For Enter, use `astrbot_cua_keyboard_type` with text=`\\n`. "
-            "For URL navigation, launch Chromium with "
-            "`astrbot_execute_shell` instead of using address-bar shortcuts.\n"
+            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
+            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
+            "After each visible step, call `astrbot_cua_screenshot` with "
+            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
+            "monitor progress. When typing, inspect the screenshot first and confirm "
+            "the target field is focused and empty or safe to append to. Use "
+            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
+            "for text input; use text=`\\n` for Enter.\n"
         )
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))

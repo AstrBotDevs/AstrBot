@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import dataclass, field
 
 from astrbot.api import FunctionTool
@@ -67,12 +68,22 @@ class ExecuteShellTool(FunctionTool):
                 current_workspace_root.mkdir(parents=True, exist_ok=True)
                 cwd = str(current_workspace_root)
 
+            effective_background = background and not _is_self_detached_command(command)
             result = await sb.shell.exec(
                 command,
                 cwd=cwd,
-                background=background,
+                background=effective_background,
                 env=env,
             )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return f"Error executing command: {str(e)}"
+            detail = str(e) or type(e).__name__
+            return f"Error executing command: {detail}"
+
+
+def _is_self_detached_command(command: str) -> bool:
+    stripped = command.strip()
+    return (
+        stripped.startswith("nohup ")
+        or re.search(r"(?:^|\s)&\s*$", stripped) is not None
+    )

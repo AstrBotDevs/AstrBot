@@ -89,6 +89,89 @@ async def test_execute_shell_defaults_to_background(monkeypatch):
     ]
 
 
+@pytest.mark.asyncio
+async def test_execute_shell_avoids_double_background_for_detached_commands(monkeypatch):
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+
+    calls = []
+
+    class FakeShell:
+        async def exec(self, command, cwd=None, background=False, env=None):
+            calls.append({"command": command, "background": background})
+            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
+
+    class FakeBooter:
+        shell = FakeShell()
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        context = FakeConfig()
+        event = FakeEvent()
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    async def fake_get_booter(context, session_id):
+        return FakeBooter()
+
+    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+
+    command = "nohup firefox >/tmp/astrbot-firefox.log 2>&1 &"
+    result = await ExecuteShellTool().call(
+        FakeWrapper(), command=command, background=True
+    )
+
+    assert json.loads(result)["success"] is True
+    assert calls == [{"command": command, "background": False}]
+
+
+@pytest.mark.asyncio
+async def test_execute_shell_reports_blank_exception_type(monkeypatch):
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+
+    class BlankError(Exception):
+        def __str__(self):
+            return ""
+
+    class FakeShell:
+        async def exec(self, command, cwd=None, background=False, env=None):
+            raise BlankError()
+
+    class FakeBooter:
+        shell = FakeShell()
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        context = FakeConfig()
+        event = FakeEvent()
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    async def fake_get_booter(context, session_id):
+        return FakeBooter()
+
+    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+
+    result = await ExecuteShellTool().call(FakeWrapper(), command="firefox")
+
+    assert result == "Error executing command: BlankError"
+
+
 def test_firecrawl_tools_are_registered_as_builtin_tools():
     manager = FunctionToolManager()
 
