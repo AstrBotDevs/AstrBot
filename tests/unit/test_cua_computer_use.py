@@ -68,9 +68,14 @@ class FakeMouse:
 class FakeKeyboard:
     def __init__(self):
         self.typed = []
+        self.pressed = []
 
     async def type(self, text: str):
         self.typed.append(text)
+        return {"success": True}
+
+    async def press(self, key: str):
+        self.pressed.append(key)
         return {"success": True}
 
 
@@ -208,6 +213,7 @@ async def test_cua_components_map_sdk_results(tmp_path):
     screenshot_result = await gui.screenshot(str(screenshot_path))
     click_result = await gui.click(10, 20, button="right")
     type_result = await gui.type_text("hello")
+    press_result = await gui.press_key("Enter")
 
     assert shell_result["stdout"] == "ok"
     assert python_result["data"]["output"]["text"] == "42"
@@ -216,8 +222,10 @@ async def test_cua_components_map_sdk_results(tmp_path):
     assert screenshot_result["mime_type"] == "image/png"
     assert click_result["success"] is True
     assert type_result["success"] is True
+    assert press_result["success"] is True
     assert sandbox.mouse.clicks == [(10, 20, "right")]
     assert sandbox.keyboard.typed == ["hello"]
+    assert sandbox.keyboard.pressed == ["Enter"]
 
 
 @pytest.mark.asyncio
@@ -310,6 +318,9 @@ async def test_cua_gui_reports_missing_mouse_or_keyboard():
     with pytest.raises(RuntimeError, match="keyboard.*type"):
         await gui.type_text("hello")
 
+    with pytest.raises(RuntimeError, match="keyboard.*press"):
+        await gui.press_key("Enter")
+
 
 def test_cua_capabilities_reflect_initialized_sandbox_gui_devices():
     from astrbot.core.computer.booters.cua import CuaBooter
@@ -366,8 +377,10 @@ async def test_cua_shutdown_clears_cached_components():
 
 def test_cua_tools_are_registered_as_builtin_tools():
     from astrbot.core.tools.computer_tools.cua import (
+        CuaKeyPressTool,
         CuaKeyboardTypeTool,
         CuaMouseClickTool,
+        CuaOpenBrowserTool,
         CuaScreenshotTool,
     )
 
@@ -376,6 +389,8 @@ def test_cua_tools_are_registered_as_builtin_tools():
     assert manager.get_builtin_tool(CuaScreenshotTool).name == "astrbot_cua_screenshot"
     assert manager.get_builtin_tool(CuaMouseClickTool).name == "astrbot_cua_mouse_click"
     assert manager.get_builtin_tool(CuaKeyboardTypeTool).name == "astrbot_cua_keyboard_type"
+    assert manager.get_builtin_tool(CuaKeyPressTool).name == "astrbot_cua_key_press"
+    assert manager.get_builtin_tool(CuaOpenBrowserTool).name == "astrbot_cua_open_browser"
 
 
 def test_cua_runtime_tools_are_available_to_handoffs():
@@ -386,6 +401,8 @@ def test_cua_runtime_tools_are_available_to_handoffs():
     assert "astrbot_cua_screenshot" in tools
     assert "astrbot_cua_mouse_click" in tools
     assert "astrbot_cua_keyboard_type" in tools
+    assert "astrbot_cua_key_press" in tools
+    assert "astrbot_cua_open_browser" in tools
 
 
 def test_runtime_tool_selection_treats_none_booter_as_empty():
@@ -403,6 +420,99 @@ def test_runtime_tool_selection_normalizes_cua_booter_case():
     tools = FunctionToolExecutor._get_runtime_computer_tools("sandbox", manager, "CUA")
 
     assert "astrbot_cua_screenshot" in tools
+
+
+@pytest.mark.asyncio
+async def test_cua_key_press_tool_presses_keyboard(monkeypatch):
+    from astrbot.core.tools.computer_tools import cua as cua_tools
+    from astrbot.core.tools.computer_tools.cua import CuaKeyPressTool
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        event = FakeEvent()
+        context = FakeContext({"provider_settings": {"computer_use_require_admin": True}})
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    sandbox = FakeSandbox()
+    from astrbot.core.computer.booters.cua import CuaGUIComponent
+
+    sandbox_gui = CuaGUIComponent(sandbox)
+
+    class FakeBooter:
+        gui = sandbox_gui
+
+    async def fake_get_booter(context, session_id):
+        return FakeBooter()
+
+    monkeypatch.setattr(cua_tools, "get_booter", fake_get_booter)
+
+    result = await CuaKeyPressTool().call(FakeWrapper(), key="Enter")
+
+    assert json.loads(result)["success"] is True
+    assert sandbox.keyboard.pressed == ["Enter"]
+
+
+@pytest.mark.asyncio
+async def test_cua_open_browser_tool_launches_chromium_and_screenshots(monkeypatch, tmp_path):
+    from astrbot.core.tools.computer_tools import cua as cua_tools
+    from astrbot.core.tools.computer_tools.cua import CuaOpenBrowserTool
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+        async def send(self, message):
+            pass
+
+    class FakeAstrContext:
+        event = FakeEvent()
+        context = FakeContext({"provider_settings": {"computer_use_require_admin": True}})
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    shell_commands = []
+
+    class FakeShellComponent:
+        async def exec(self, command, background=False, **kwargs):
+            shell_commands.append((command, background, kwargs))
+            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
+
+    class FakeGUI:
+        async def screenshot(self, path: str):
+            Path(path).write_bytes(b"fake-png")
+            return {"success": True, "path": path, "mime_type": "image/png", "base64": ""}
+
+    class FakeBooter:
+        shell = FakeShellComponent()
+        gui = FakeGUI()
+
+    async def fake_get_booter(context, session_id):
+        return FakeBooter()
+
+    monkeypatch.setattr(cua_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(cua_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    async def fake_sleep(seconds):
+        pass
+
+    monkeypatch.setattr(cua_tools.asyncio, "sleep", fake_sleep)
+
+    result = await CuaOpenBrowserTool().call(
+        FakeWrapper(), url="https://www.google.com/maps/dir/Tokyo/Osaka"
+    )
+    payload = json.loads(result)
+
+    assert payload["success"] is True
+    assert payload["path"]
+    assert shell_commands[0][1] is True
+    assert "chromium" in shell_commands[0][0]
+    assert "https://www.google.com/maps/dir/Tokyo/Osaka" in shell_commands[0][0]
 
 
 def test_cua_is_exposed_in_sandbox_config_metadata():

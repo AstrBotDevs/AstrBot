@@ -384,6 +384,24 @@ class CuaGUIComponent(GUIComponent):
         payload = _maybe_model_dump(result)
         return {"success": bool(payload.get("success", True)), **payload}
 
+    async def press_key(self, key: str) -> dict[str, Any]:
+        keyboard = getattr(self._sandbox, "keyboard", None)
+        press = None
+        if keyboard is not None:
+            press = (
+                getattr(keyboard, "press", None)
+                or getattr(keyboard, "key_press", None)
+                or getattr(keyboard, "press_key", None)
+            )
+        if press is None:
+            raise RuntimeError(
+                "CUA sandbox does not provide `keyboard.press`. "
+                "Please check the installed CUA SDK version and sandbox backend."
+            )
+        result = await _maybe_await(press(key))
+        payload = _maybe_model_dump(result)
+        return {"success": bool(payload.get("success", True)), **payload}
+
 
 def _screenshot_to_bytes(raw: Any) -> bytes:
     if isinstance(raw, (bytes, bytearray)):

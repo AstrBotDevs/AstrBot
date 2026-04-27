@@ -19,3 +19,7 @@ class GUIComponent(Protocol):
     async def type_text(self, text: str) -> dict[str, Any]:
         """Type text into the active UI target."""
         ...
+
+    async def press_key(self, key: str) -> dict[str, Any]:
+        """Press a keyboard key or shortcut."""
+        ...

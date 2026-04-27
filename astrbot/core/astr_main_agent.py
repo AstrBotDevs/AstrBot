@@ -48,7 +48,9 @@ from astrbot.core.tools.computer_tools import (
     CreateSkillCandidateTool,
     CreateSkillPayloadTool,
     CuaKeyboardTypeTool,
+    CuaKeyPressTool,
     CuaMouseClickTool,
+    CuaOpenBrowserTool,
     CuaScreenshotTool,
     EvaluateSkillCandidateTool,
     ExecuteShellTool,
@@ -1023,16 +1025,20 @@ def _apply_sandbox_tools(
             "\n[CUA Desktop Control]\n"
             "When launching GUI apps, use `astrbot_execute_shell` with "
             "background=true; do not append shell background operators manually. "
-            "Prefer `chromium` for browser tasks in the default CUA Linux sandbox. "
+            "Prefer `astrbot_cua_open_browser` for browser tasks. "
+            "If shell is needed, prefer `chromium` in the default CUA Linux sandbox. "
             "Do not use `firefox &` unless the user confirms Firefox exists. "
             "After launching or changing any GUI app, immediately call "
             "`astrbot_cua_screenshot` to inspect the current desktop before "
             "clicking or typing. Use coordinates from screenshots for "
-            "`astrbot_cua_mouse_click`, then `astrbot_cua_keyboard_type` for text input.\n"
+            "`astrbot_cua_mouse_click`, `astrbot_cua_keyboard_type` for text input, "
+            "and `astrbot_cua_key_press` for Enter, Ctrl+L, Tab, or Escape.\n"
         )
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyPressTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaOpenBrowserTool))
 
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
