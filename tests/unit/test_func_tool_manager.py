@@ -265,6 +265,24 @@ async def test_execute_shell_recognizes_commented_background_command(monkeypatch
     assert calls == [{"command": command, "background": False}]
 
 
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("echo '#'", False),
+        ("echo '&'", False),
+        ("echo foo#bar &", True),
+        ("echo 'unterminated", False),
+        ("firefox & # already detached", True),
+        ("nohup firefox >/tmp/astrbot-firefox.log 2>&1 &", True),
+        ("firefox", False),
+    ],
+)
+def test_is_self_detached_command_handles_quotes_and_comments(command, expected):
+    from astrbot.core.tools.computer_tools.shell import _is_self_detached_command
+
+    assert _is_self_detached_command(command) is expected
+
+
 @pytest.mark.asyncio
 async def test_execute_shell_reports_blank_exception_type(monkeypatch):
     from astrbot.core.tools.computer_tools import shell as shell_tools

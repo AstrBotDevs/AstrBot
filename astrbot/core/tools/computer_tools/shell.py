@@ -1,5 +1,5 @@
 import json
-import re
+import shlex
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -84,36 +84,23 @@ class ExecuteShellTool(FunctionTool):
 
 
 def _is_self_detached_command(command: str) -> bool:
-    stripped = _strip_shell_comment(command).strip()
-    lowered = stripped.lower()
-    return (
-        lowered.startswith("nohup ")
-        or lowered.startswith("setsid ")
-        or lowered.startswith("disown ")
-        or lowered.startswith("start ")
-        or lowered.startswith("start-process ")
-        or re.search(r"(?:^|\s)&\s*$", stripped) is not None
+    lex = shlex.shlex(command, posix=False)
+    lex.whitespace_split = True
+    lex.commenters = ""
+    try:
+        tokens = list(lex)
+    except ValueError:
+        return False
+    comment_index = next(
+        (index for index, token in enumerate(tokens) if token.startswith("#")),
+        None,
     )
+    if comment_index is not None:
+        tokens = tokens[:comment_index]
+    if not tokens:
+        return False
 
-
-def _strip_shell_comment(command: str) -> str:
-    in_single = False
-    in_double = False
-    escaped = False
-    for index, char in enumerate(command):
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\" and not in_single:
-            escaped = True
-            continue
-        if char == "'" and not in_double:
-            in_single = not in_single
-            continue
-        if char == '"' and not in_single:
-            in_double = not in_double
-            continue
-        if char == "#" and not in_single and not in_double:
-            if index == 0 or command[index - 1].isspace():
-                return command[:index]
-    return command
+    first = tokens[0].lower()
+    if first in {"nohup", "setsid", "disown", "start", "start-process"}:
+        return True
+    return tokens[-1] == "&"

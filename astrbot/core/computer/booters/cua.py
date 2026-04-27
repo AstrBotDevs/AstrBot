@@ -114,21 +114,21 @@ def _slice_content_by_lines(
     return "".join(selected)
 
 
-def _result_text(payload: dict[str, Any], *keys: str) -> str:
-    for key in keys:
-        value = payload.get(key)
-        if value is not None:
-            return str(value)
-    return ""
-
-
 def _normalize_process_result(raw: Any) -> ProcessResult:
+    """Best-effort normalization for the process shapes returned by CUA SDKs."""
     payload = _maybe_model_dump(raw)
     if not payload and isinstance(raw, str):
         payload = {"stdout": raw}
 
-    stdout = _result_text(payload, "stdout", "output")
-    stderr = _result_text(payload, "stderr", "error")
+    def first_text(*keys: str) -> str:
+        for key in keys:
+            value = payload.get(key)
+            if value is not None:
+                return str(value)
+        return ""
+
+    stdout = first_text("stdout", "output")
+    stderr = first_text("stderr", "error")
     exit_code = payload.get("exit_code")
     if exit_code is None:
         exit_code = payload.get("returncode")
@@ -158,7 +158,7 @@ def _python3_requirement_error(operation: str, stderr: str) -> str:
     return f"CUA {operation} requires python3 in the sandbox image: {stderr}"
 
 
-def _process_result_with_python3_error(raw: Any, operation: str) -> ProcessResult:
+def _normalize_with_python3_requirement(raw: Any, operation: str) -> ProcessResult:
     proc = _normalize_process_result(raw)
     if proc.stderr and _is_missing_python3_error(proc.stderr):
         return ProcessResult(
@@ -178,14 +178,14 @@ async def _exec_python3_or_error(
     timeout: int | None = 30,
 ) -> ProcessResult:
     result = await shell.exec(f"python3 - <<'PY'\n{code}\nPY", timeout=timeout)
-    return _process_result_with_python3_error(result, operation)
+    return _normalize_with_python3_requirement(result, operation)
 
 
 def _is_posix_os_type(os_type: str) -> bool:
     return os_type.lower() in _POSIX_OS_TYPES
 
 
-def _non_posix_filesystem_error(os_type: str) -> str:
+def _posix_fs_error_message(os_type: str) -> str:
     return (
         "CUA filesystem shell fallback is only supported for POSIX images; "
         f"os_type={os_type!r} does not support the required shell commands."
@@ -193,16 +193,12 @@ def _non_posix_filesystem_error(os_type: str) -> str:
 
 
 def _non_posix_filesystem_result(path: str, os_type: str) -> dict[str, Any]:
-    error = _non_posix_filesystem_error(os_type)
+    error = _posix_fs_error_message(os_type)
     return {"success": False, "path": path, "error": error, "message": error}
 
 
 def _raise_non_posix_filesystem_error(os_type: str) -> None:
-    raise RuntimeError(_non_posix_filesystem_error(os_type))
-
-
-def _split_listing_entries(output: str) -> list[str]:
-    return [line for line in output.splitlines() if line.strip()]
+    raise RuntimeError(_posix_fs_error_message(os_type))
 
 
 def _resolve_component_method(
@@ -281,7 +277,7 @@ class CuaShellComponent(ShellComponent):
 
         result = await _maybe_await(self._exec_raw(command, **kwargs))
         proc = (
-            _process_result_with_python3_error(result, "background execution")
+            _normalize_with_python3_requirement(result, "background execution")
             if background
             else _normalize_process_result(result)
         )
@@ -576,10 +572,11 @@ async def _list_dir_via_shell(
 ) -> dict[str, Any]:
     flags = "-1A" if show_hidden else "-1"
     result = await shell.exec(f"ls {flags} {shlex.quote(path)}")
+    stdout = result.get("stdout", "")
     return {
         "success": not bool(result.get("stderr")),
         "path": path,
-        "entries": _split_listing_entries(result.get("stdout", "")),
+        "entries": [line for line in stdout.splitlines() if line.strip()],
         "error": result.get("stderr", ""),
     }
 
@@ -633,18 +630,21 @@ class CuaGUIComponent(GUIComponent):
 
 
 def _screenshot_to_bytes(raw: Any) -> bytes:
+    def from_str(value: str) -> bytes:
+        if value.startswith("data:image"):
+            value = value.split(",", 1)[1]
+        try:
+            return base64.b64decode(value, validate=True)
+        except Exception:
+            candidate = Path(value)
+            if candidate.is_file():
+                return candidate.read_bytes()
+            return value.encode("utf-8")
+
     if isinstance(raw, (bytes, bytearray)):
         return bytes(raw)
     if isinstance(raw, str):
-        if raw.startswith("data:image"):
-            raw = raw.split(",", 1)[1]
-        try:
-            return base64.b64decode(raw, validate=True)
-        except Exception:
-            candidate = Path(raw)
-            if candidate.is_file():
-                return candidate.read_bytes()
-            return raw.encode("utf-8")
+        return from_str(raw)
     if hasattr(raw, "save"):
         import io
 
