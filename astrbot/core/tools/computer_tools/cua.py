@@ -276,7 +276,13 @@ def _new_screenshot_path(umo: str) -> str:
 
 
 def _build_chromium_command(url: str = "") -> str:
-    parts = ["chromium", "--no-sandbox", "--disable-dev-shm-usage"]
-    if url:
-        parts.append(url)
-    return " ".join(shlex.quote(part) for part in parts)
+    quoted_url = shlex.quote(url) if url else ""
+    return (
+        "browser=$(command -v chromium || command -v chromium-browser || "
+        "command -v google-chrome || command -v firefox) && "
+        'if echo "$browser" | grep -qi firefox; then '
+        f'su cua -c "DISPLAY=:1 $browser --no-remote {quoted_url}"; '
+        "else "
+        f'su cua -c "DISPLAY=:1 $browser --no-sandbox --disable-dev-shm-usage {quoted_url}"; '
+        "fi"
+    )

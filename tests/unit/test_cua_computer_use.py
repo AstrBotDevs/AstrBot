@@ -511,7 +511,10 @@ async def test_cua_open_browser_tool_launches_chromium_and_screenshots(monkeypat
     assert payload["success"] is True
     assert payload["path"]
     assert shell_commands[0][1] is True
-    assert "chromium" in shell_commands[0][0]
+    assert "command -v chromium" in shell_commands[0][0]
+    assert "command -v firefox" in shell_commands[0][0]
+    assert "su cua -c" in shell_commands[0][0]
+    assert "DISPLAY=:1" in shell_commands[0][0]
     assert "https://www.google.com/maps/dir/Tokyo/Osaka" in shell_commands[0][0]
 
 
