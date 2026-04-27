@@ -117,6 +117,13 @@
                   )
                 "
                 @dragend="finishProjectSessionDrag"
+                @dragover.prevent
+                @drop.stop.prevent="
+                  dropProjectSessionsBefore(
+                    project.project_id,
+                    session.session_id,
+                  )
+                "
                 @keydown.enter="
                   handleProjectSessionItemClick(
                     session.session_id,
@@ -668,6 +675,7 @@ import { useSessionSelectionDrag } from "@/composables/useSessionSelectionDrag";
 import { useCustomizerStore } from "@/stores/customizer";
 import {
   configureSessionDrag,
+  moveSessionIdsBefore,
   toggleExpandedProjectIds,
 } from "@/utils/sessionManagement.mjs";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
@@ -719,6 +727,7 @@ const {
   addSessionToProject,
   removeSessionFromProject,
   getProjectSessions,
+  reorderProjectSessions,
 } = useProjects();
 
 const {
@@ -1190,6 +1199,48 @@ async function dropDraggedSessionsOnProject(projectId: string) {
         await loadProjectSessions(sourceProjectId);
       }
       clearSessionSelection();
+    }
+  } finally {
+    finishSessionDrag();
+  }
+}
+
+async function dropProjectSessionsBefore(
+  projectId: string,
+  targetSessionId: string,
+) {
+  const sessionIds = [...draggingSessionIds.value];
+  const sourceProjectId = draggingSourceProjectId.value;
+  if (!sessionIds.length || sourceProjectId !== projectId) return;
+
+  const currentSessionIds = projectSessionsFor(projectId).map(
+    (session) => session.session_id,
+  );
+  const nextSessionIds = moveSessionIdsBefore(
+    currentSessionIds,
+    sessionIds,
+    targetSessionId,
+  );
+  if (nextSessionIds.join("\0") === currentSessionIds.join("\0")) {
+    finishSessionDrag();
+    return;
+  }
+
+  const currentSessionsById = new Map(
+    projectSessionsFor(projectId).map((session) => [
+      session.session_id,
+      session,
+    ]),
+  );
+  projectSessionsById[projectId] = nextSessionIds
+    .map((sessionId: string) => currentSessionsById.get(sessionId))
+    .filter((session: Session | undefined): session is Session =>
+      Boolean(session),
+    );
+
+  try {
+    if (!(await reorderProjectSessions(projectId, nextSessionIds))) {
+      await loadProjectSessions(projectId);
     }
   } finally {
     finishSessionDrag();

@@ -872,6 +872,13 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def reorder_project_sessions(
+        self, project_id: str, session_ids: list[str]
+    ) -> None:
+        """Persist the custom order of sessions in a project."""
+        ...
+
+    @abc.abstractmethod
     async def get_project_by_session(
         self, session_id: str, creator: str
     ) -> ChatUIProject | None:

@@ -5,6 +5,7 @@ import {
   configureSessionDrag,
   getDragSessionIds,
   getProjectDragPayload,
+  moveSessionIdsBefore,
   toggleExpandedProjectIds,
   shouldSuppressClickAfterLongPress,
   toggleSessionSelection,
@@ -72,4 +73,16 @@ test("getProjectDragPayload drags selected project sessions together", () => {
     sessionIds: ["s1", "s2"],
     sourceProjectId: "p1",
   });
+});
+
+test("moveSessionIdsBefore moves one or more sessions before a target", () => {
+  assert.deepEqual(moveSessionIdsBefore(["s1", "s2", "s3"], ["s3"], "s1"), [
+    "s3",
+    "s1",
+    "s2",
+  ]);
+  assert.deepEqual(
+    moveSessionIdsBefore(["s1", "s2", "s3", "s4"], ["s2", "s4"], "s1"),
+    ["s2", "s4", "s1", "s3"],
+  );
 });

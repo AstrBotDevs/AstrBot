@@ -432,6 +432,8 @@ class SessionProjectRelation(SQLModel, table=True):
     """Session ID from PlatformSession"""
     project_id: str = Field(nullable=False, max_length=36)
     """Project ID from ChatUIProject"""
+    position: int = Field(default=0, nullable=False)
+    """Custom order of the session within the project."""
 
     __table_args__ = (
         UniqueConstraint(

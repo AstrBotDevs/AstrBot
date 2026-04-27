@@ -62,6 +62,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_platform_message_history_checkpoint_column(conn)
+            await self._ensure_session_project_relation_position_column(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -123,6 +124,21 @@ class SQLiteDatabase(BaseDatabase):
                     "CREATE INDEX IF NOT EXISTS "
                     "ix_platform_message_history_llm_checkpoint_id "
                     "ON platform_message_history (llm_checkpoint_id)"
+                )
+            )
+
+    async def _ensure_session_project_relation_position_column(self, conn) -> None:
+        """Ensure project-session relations have a custom ordering column."""
+        result = await conn.execute(
+            text("PRAGMA table_info(session_project_relations)")
+        )
+        columns = {row[1] for row in result.fetchall()}
+
+        if "position" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE session_project_relations "
+                    "ADD COLUMN position INTEGER NOT NULL DEFAULT 0"
                 )
             )
 
@@ -1919,10 +1935,17 @@ class SQLiteDatabase(BaseDatabase):
                         col(SessionProjectRelation.session_id) == session_id,
                     ),
                 )
+                max_position_result = await session.execute(
+                    select(func.max(SessionProjectRelation.position)).where(
+                        col(SessionProjectRelation.project_id) == project_id,
+                    )
+                )
+                next_position = int(max_position_result.scalar() or 0) + 1
                 # Then create new relation
                 relation = SessionProjectRelation(
                     session_id=session_id,
                     project_id=project_id,
+                    position=next_position,
                 )
                 session.add(relation)
                 await session.flush()
@@ -1958,11 +1981,31 @@ class SQLiteDatabase(BaseDatabase):
                     == col(SessionProjectRelation.session_id),
                 )
                 .where(col(SessionProjectRelation.project_id) == project_id)
-                .order_by(desc(PlatformSession.updated_at))
+                .order_by(
+                    col(SessionProjectRelation.position),
+                    desc(PlatformSession.updated_at),
+                )
                 .limit(page_size)
                 .offset(offset),
             )
             return list(result.scalars().all())
+
+    async def reorder_project_sessions(
+        self, project_id: str, session_ids: list[str]
+    ) -> None:
+        """Persist the custom order of sessions in a project."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                for position, session_id in enumerate(session_ids, start=1):
+                    await session.execute(
+                        update(SessionProjectRelation)
+                        .where(
+                            col(SessionProjectRelation.project_id) == project_id,
+                            col(SessionProjectRelation.session_id) == session_id,
+                        )
+                        .values(position=position),
+                    )
 
     async def get_project_by_session(
         self, session_id: str, creator: str

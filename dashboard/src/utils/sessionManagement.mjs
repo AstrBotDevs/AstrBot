@@ -45,3 +45,21 @@ export function getProjectDragPayload(
     sourceProjectId,
   };
 }
+
+export function moveSessionIdsBefore(
+  currentSessionIds,
+  movingSessionIds,
+  targetSessionId,
+) {
+  const movingSet = new Set(movingSessionIds);
+  const remainingSessionIds = currentSessionIds.filter(
+    (id) => !movingSet.has(id),
+  );
+  const targetIndex = remainingSessionIds.indexOf(targetSessionId);
+  if (targetIndex === -1) return currentSessionIds;
+  return [
+    ...remainingSessionIds.slice(0, targetIndex),
+    ...movingSessionIds,
+    ...remainingSessionIds.slice(targetIndex),
+  ];
+}

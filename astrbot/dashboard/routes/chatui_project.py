@@ -21,6 +21,10 @@ class ChatUIProjectRoute(Route):
                 self.remove_session_from_project,
             ),
             "/chatui_project/get_sessions": ("GET", self.get_project_sessions),
+            "/chatui_project/reorder_sessions": (
+                "POST",
+                self.reorder_project_sessions,
+            ),
         }
         self.db = db
         self.register_routes()
@@ -244,3 +248,30 @@ class ChatUIProjectRoute(Route):
         ]
 
         return Response().ok(data=sessions_data).__dict__
+
+    async def reorder_project_sessions(self):
+        """Persist custom session order in a ChatUI project."""
+        post_data = await request.json
+
+        project_id = post_data.get("project_id")
+        session_ids = post_data.get("session_ids")
+
+        if not project_id:
+            return Response().error("Missing key: project_id").__dict__
+        if not isinstance(session_ids, list):
+            return Response().error("Missing key: session_ids").__dict__
+
+        username = g.get("username", "guest")
+        project = await self.db.get_chatui_project_by_id(project_id)
+        if not project:
+            return Response().error(f"Project {project_id} not found").__dict__
+        if project.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        project_sessions = await self.db.get_project_sessions(project_id)
+        project_session_ids = {session.session_id for session in project_sessions}
+        if any(session_id not in project_session_ids for session_id in session_ids):
+            return Response().error("Invalid session_ids").__dict__
+
+        await self.db.reorder_project_sessions(project_id, session_ids)
+        return Response().ok().__dict__
