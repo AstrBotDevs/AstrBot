@@ -57,6 +57,10 @@ def _result_text(payload: dict[str, Any], *keys: str) -> str:
     return ""
 
 
+def _split_listing_entries(output: str) -> list[str]:
+    return [line for line in output.splitlines() if line.strip()]
+
+
 class CuaShellComponent(ShellComponent):
     def __init__(self, sandbox: Any) -> None:
         self._sandbox = sandbox
@@ -285,7 +289,7 @@ class CuaFileSystemComponent(FileSystemComponent):
         return {
             "success": not bool(result.get("stderr")),
             "path": path,
-            "entries": result.get("stdout", ""),
+            "entries": _split_listing_entries(result.get("stdout", "")),
             "error": result.get("stderr", ""),
         }
 
@@ -319,7 +323,7 @@ class CuaGUIComponent(GUIComponent):
 
 
 def _screenshot_to_bytes(raw: Any) -> bytes:
-    if isinstance(raw, bytes | bytearray):
+    if isinstance(raw, (bytes, bytearray)):
         return bytes(raw)
     if isinstance(raw, str):
         if raw.startswith("data:image"):
@@ -415,6 +419,10 @@ class CuaBooter(ComputerBooter):
             await self._sandbox_cm.__aexit__(None, None, None)
             self._sandbox_cm = None
             self._sandbox = None
+            self._shell = None
+            self._python = None
+            self._fs = None
+            self._gui = None
 
     @property
     def capabilities(self) -> tuple[str, ...] | None:

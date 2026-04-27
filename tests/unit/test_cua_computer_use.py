@@ -170,6 +170,47 @@ async def test_cua_components_map_sdk_results(tmp_path):
     assert sandbox.keyboard.typed == ["hello"]
 
 
+@pytest.mark.asyncio
+async def test_cua_list_dir_returns_entries_list_for_shell_fallback():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = FakeSandbox()
+    delattr(sandbox, "filesystem")
+
+    result = await CuaFileSystemComponent(sandbox).list_dir(".")
+
+    assert result["success"] is True
+    assert result["entries"] == ["ok"]
+
+
+@pytest.mark.asyncio
+async def test_cua_shutdown_clears_cached_components():
+    from astrbot.core.computer.booters.cua import CuaBooter
+
+    closed = []
+
+    class FakeSandboxContext:
+        async def __aexit__(self, exc_type, exc, tb):
+            closed.append(True)
+
+    booter = CuaBooter()
+    booter._sandbox = FakeSandbox()
+    booter._sandbox_cm = FakeSandboxContext()
+    booter._shell = object()
+    booter._python = object()
+    booter._fs = object()
+    booter._gui = object()
+
+    await booter.shutdown()
+
+    assert closed == [True]
+    assert await booter.available() is False
+    assert booter._shell is None
+    assert booter._python is None
+    assert booter._fs is None
+    assert booter._gui is None
+
+
 def test_cua_tools_are_registered_as_builtin_tools():
     from astrbot.core.tools.computer_tools.cua import (
         CuaKeyboardTypeTool,
@@ -192,6 +233,15 @@ def test_cua_runtime_tools_are_available_to_handoffs():
     assert "astrbot_cua_screenshot" in tools
     assert "astrbot_cua_mouse_click" in tools
     assert "astrbot_cua_keyboard_type" in tools
+
+
+def test_runtime_tool_selection_treats_none_booter_as_empty():
+    manager = FunctionToolManager()
+
+    tools = FunctionToolExecutor._get_runtime_computer_tools("sandbox", manager, None)
+
+    assert "astrbot_execute_shell" in tools
+    assert "astrbot_cua_screenshot" not in tools
 
 
 def test_cua_is_exposed_in_sandbox_config_metadata():

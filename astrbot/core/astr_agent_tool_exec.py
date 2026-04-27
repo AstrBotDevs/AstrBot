@@ -191,6 +191,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool_mgr,
         booter: str | None = None,
     ) -> dict[str, FunctionTool]:
+        booter = "" if booter is None else str(booter)
         if runtime == "sandbox":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
             python_tool = tool_mgr.get_builtin_tool(PythonTool)
@@ -258,7 +259,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
             tool_mgr,
-            str(provider_settings.get("sandbox", {}).get("booter", "")),
+            provider_settings.get("sandbox", {}).get("booter"),
         )
 
         # Keep persona semantics aligned with the main agent: tools=None means
