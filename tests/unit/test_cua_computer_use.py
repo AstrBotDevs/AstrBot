@@ -517,18 +517,9 @@ async def test_cua_open_browser_tool_launches_chromium_and_screenshots(monkeypat
     assert "command" not in payload
     assert "shell" not in payload
     assert shell_commands[0][1] is True
-    assert "command -v chromium" in shell_commands[0][0]
-    assert "command -v firefox" in shell_commands[0][0]
-    assert "DISPLAY=${DISPLAY:-:1}" in shell_commands[0][0]
-    assert "su cua -c" in shell_commands[0][0]
-    assert shell_commands[0][0].index("DISPLAY=${DISPLAY:-:1}") < shell_commands[0][
-        0
-    ].index("su cua -c")
-    assert ">/tmp/astrbot-cua-browser.log" not in shell_commands[0][0]
-    assert " 2>&1 &" not in shell_commands[0][0]
-    assert "su cua -c" in shell_commands[0][0]
-    assert "DISPLAY=:1" in shell_commands[0][0]
-    assert "https://www.google.com/maps/dir/Tokyo/Osaka" in shell_commands[0][0]
+    assert shell_commands[0][0] == (
+        "chromium https://www.google.com/maps/dir/Tokyo/Osaka"
+    )
 
 
 @pytest.mark.asyncio

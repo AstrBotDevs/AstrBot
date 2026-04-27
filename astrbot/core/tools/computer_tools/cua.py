@@ -259,7 +259,7 @@ class CuaOpenBrowserTool(FunctionTool):
                 raise RuntimeError(
                     "Current sandbox booter does not support CUA GUI capability."
                 )
-            command = _build_chromium_command(url)
+            command = _build_browser_command(url)
             shell_result = await booter.shell.exec(command, background=True)
             await asyncio.sleep(max(0, wait_seconds))
             path = _new_screenshot_path(context.context.event.unified_msg_origin)
@@ -301,27 +301,6 @@ def _new_screenshot_path(umo: str) -> str:
     return str(screenshot_dir / f"{safe_prefix}-{uuid.uuid4().hex}.png")
 
 
-def _build_chromium_command(url: str = "") -> str:
+def _build_browser_command(url: str = "") -> str:
     quoted_url = shlex.quote(url) if url else ""
-    direct_args = (
-        f"$browser --no-sandbox --disable-dev-shm-usage {quoted_url}"
-        if quoted_url
-        else "$browser --no-sandbox --disable-dev-shm-usage"
-    )
-    fallback_chromium_args = direct_args
-    fallback_firefox_args = (
-        f"$browser --no-remote {quoted_url}" if quoted_url else "$browser --no-remote"
-    )
-    return (
-        "browser=$(command -v chromium || command -v chromium-browser || "
-        "command -v google-chrome || command -v firefox) && "
-        'if echo "$browser" | grep -qi firefox; then '
-        f"DISPLAY=${{DISPLAY:-:1}} {fallback_firefox_args} "
-        "|| "
-        f'su cua -c "DISPLAY=:1 {fallback_firefox_args}"; '
-        "else "
-        f"DISPLAY=${{DISPLAY:-:1}} {direct_args} "
-        "|| "
-        f'su cua -c "DISPLAY=:1 {fallback_chromium_args}"; '
-        "fi"
-    )
+    return f"chromium {quoted_url}" if quoted_url else "chromium"
