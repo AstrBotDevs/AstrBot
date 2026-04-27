@@ -1,3 +1,7 @@
+export const DRAG_MIME_SESSION_IDS = "application/x-astrbot-session-ids";
+export const DRAG_MIME_SOURCE_PROJECT_ID =
+  "application/x-astrbot-source-project-id";
+
 export function toggleSessionSelection(selectedSessionIds, sessionId) {
   return selectedSessionIds.includes(sessionId)
     ? selectedSessionIds.filter((id) => id !== sessionId)

@@ -645,6 +645,8 @@ import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useProjects } from "@/composables/useProjects";
 import { useCustomizerStore } from "@/stores/customizer";
 import {
+  DRAG_MIME_SESSION_IDS,
+  DRAG_MIME_SOURCE_PROJECT_ID,
   getDragSessionIds,
   getProjectDragPayload,
   shouldSuppressClickAfterLongPress,
@@ -911,6 +913,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  cancelSessionLongPress();
   cleanupMediaCache();
 });
 
@@ -1162,7 +1165,7 @@ function startSessionDrag(event: DragEvent, sessionId: string) {
     selectedSessions.value,
   );
   event.dataTransfer?.setData(
-    "application/x-astrbot-session-ids",
+    DRAG_MIME_SESSION_IDS,
     JSON.stringify(draggingSessionIds.value),
   );
   if (event.dataTransfer) {
@@ -1209,11 +1212,11 @@ function startProjectSessionDrag(event: DragEvent, sessionId: string) {
   draggingSessionIds.value = payload.sessionIds;
   draggingSourceProjectId.value = payload.sourceProjectId;
   event.dataTransfer?.setData(
-    "application/x-astrbot-session-ids",
+    DRAG_MIME_SESSION_IDS,
     JSON.stringify(payload.sessionIds),
   );
   event.dataTransfer?.setData(
-    "application/x-astrbot-source-project-id",
+    DRAG_MIME_SOURCE_PROJECT_ID,
     payload.sourceProjectId,
   );
   if (event.dataTransfer) {
@@ -1272,7 +1275,12 @@ async function deleteSelectedSidebarSessions() {
       await router.push(basePath());
     }
     if (result.failed_count > 0) {
-      toast.error(`${result.failed_count} sessions failed to delete`);
+      toast.error(
+        tm("batch.partialFailure", {
+          failed: result.failed_count,
+          total: count,
+        }),
+      );
     }
   } finally {
     deletingSelectedSessions.value = false;
