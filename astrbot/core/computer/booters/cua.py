@@ -356,11 +356,15 @@ class CuaBooter(ComputerBooter):
         os_type: str = "linux",
         ttl: int = 3600,
         telemetry_enabled: bool = False,
+        local: bool = True,
+        api_key: str = "",
     ) -> None:
         self.image = image
         self.os_type = os_type
         self.ttl = ttl
         self.telemetry_enabled = telemetry_enabled
+        self.local = local
+        self.api_key = api_key
         self._sandbox: Any | None = None
         self._sandbox_cm: Any | None = None
         self._shell: CuaShellComponent | None = None
@@ -412,6 +416,10 @@ class CuaBooter(ComputerBooter):
             kwargs["ttl"] = self.ttl
         if "telemetry_enabled" in parameters:
             kwargs["telemetry_enabled"] = self.telemetry_enabled
+        if "local" in parameters:
+            kwargs["local"] = self.local
+        if "api_key" in parameters and self.api_key:
+            kwargs["api_key"] = self.api_key
         return kwargs
 
     async def shutdown(self) -> None:

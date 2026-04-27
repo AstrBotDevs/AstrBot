@@ -204,6 +204,14 @@
             "description": "CUA 遥测",
             "hint": "是否允许 CUA SDK 发送遥测数据。默认关闭。"
           },
+          "cua_local": {
+            "description": "CUA 本地沙箱",
+            "hint": "是否优先使用 CUA 本地沙箱。默认开启，避免云端沙箱要求 CUA_API_KEY。关闭后可使用 CUA 云端沙箱。"
+          },
+          "cua_api_key": {
+            "description": "CUA API Key",
+            "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。"
+          },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
             "hint": "Shipyard 服务的 API 访问地址。"

@@ -202,6 +202,14 @@
             "description": "CUA Telemetry",
             "hint": "Allow the CUA SDK to send telemetry data. Disabled by default."
           },
+          "cua_local": {
+            "description": "CUA Local Sandbox",
+            "hint": "Prefer a local CUA sandbox. Enabled by default to avoid requiring CUA_API_KEY for cloud sandboxes. Disable this to use CUA cloud sandboxes."
+          },
+          "cua_api_key": {
+            "description": "CUA API Key",
+            "hint": "CUA cloud sandbox API key. Required only when local sandbox is disabled. You can also provide it via the CUA_API_KEY environment variable."
+          },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
             "hint": "API access address for Shipyard service."

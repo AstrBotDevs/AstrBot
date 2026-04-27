@@ -179,6 +179,8 @@ DEFAULT_CONFIG = {
             "cua_os_type": "linux",
             "cua_ttl": 3600,
             "cua_telemetry_enabled": False,
+            "cua_local": True,
+            "cua_api_key": "",
         },
         "image_compress_enabled": True,
         "image_compress_options": {
@@ -3371,6 +3373,26 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_local": {
+                        "description": "CUA Local Sandbox",
+                        "type": "bool",
+                        "hint": "是否优先使用 CUA 本地沙箱。默认开启，避免云端沙箱要求 CUA_API_KEY。关闭后可使用 CUA 云端沙箱。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_api_key": {
+                        "description": "CUA API Key",
+                        "type": "string",
+                        "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。",
+                        "obvious_hint": True,
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                            "provider_settings.sandbox.cua_local": False,
                         },
                     },
                     "provider_settings.sandbox.shipyard_endpoint": {

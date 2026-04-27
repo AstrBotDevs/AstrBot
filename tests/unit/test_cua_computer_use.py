@@ -98,8 +98,10 @@ async def test_get_booter_creates_cua_booter(monkeypatch):
             os_type: str,
             ttl: int,
             telemetry_enabled: bool,
+            local: bool,
+            api_key: str,
         ):
-            created.append((image, os_type, ttl, telemetry_enabled))
+            created.append((image, os_type, ttl, telemetry_enabled, local, api_key))
 
         async def boot(self, session_id: str):
             self.session_id = session_id
@@ -126,6 +128,8 @@ async def test_get_booter_creates_cua_booter(monkeypatch):
                     "cua_os_type": "linux",
                     "cua_ttl": 120,
                     "cua_telemetry_enabled": False,
+                    "cua_local": True,
+                    "cua_api_key": "",
                 },
             }
         }
@@ -134,7 +138,33 @@ async def test_get_booter_creates_cua_booter(monkeypatch):
     booter = await computer_client.get_booter(ctx, "cua-test")
 
     assert isinstance(booter, FakeCuaBooter)
-    assert created == [("linux", "linux", 120, False)]
+    assert created == [("linux", "linux", 120, False, True, "")]
+
+
+def test_cua_ephemeral_kwargs_include_local_when_supported():
+    from astrbot.core.computer.booters.cua import CuaBooter
+
+    def ephemeral(image, ttl=None, telemetry_enabled=None, local=None):
+        return image, ttl, telemetry_enabled, local
+
+    kwargs = CuaBooter(ttl=120, telemetry_enabled=False, local=True)._build_ephemeral_kwargs(
+        ephemeral
+    )
+
+    assert kwargs == {"ttl": 120, "telemetry_enabled": False, "local": True}
+
+
+def test_cua_ephemeral_kwargs_include_api_key_for_cloud_when_supported():
+    from astrbot.core.computer.booters.cua import CuaBooter
+
+    def ephemeral(image, local=None, api_key=None):
+        return image, local, api_key
+
+    kwargs = CuaBooter(local=False, api_key="sk-test")._build_ephemeral_kwargs(
+        ephemeral
+    )
+
+    assert kwargs == {"local": False, "api_key": "sk-test"}
 
 
 @pytest.mark.asyncio
@@ -254,6 +284,11 @@ def test_cua_is_exposed_in_sandbox_config_metadata():
     assert "provider_settings.sandbox.cua_os_type" in items
     assert "provider_settings.sandbox.cua_ttl" in items
     assert "provider_settings.sandbox.cua_telemetry_enabled" in items
+    assert "provider_settings.sandbox.cua_local" in items
+    assert "provider_settings.sandbox.cua_api_key" in items
+    assert items["provider_settings.sandbox.cua_api_key"]["condition"][
+        "provider_settings.sandbox.cua_local"
+    ] is False
 
 
 @pytest.mark.asyncio
