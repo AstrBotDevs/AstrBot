@@ -19,6 +19,26 @@ pnpm dev
 
 Runs on `http://localhost:3000` by default.
 
+## Pre-commit setup
+
+AstrBot uses [pre-commit](https://pre-commit.com/) hooks to automatically format and lint Python code before each commit. The hooks run `ruff check`, `ruff format`, and `pyupgrade` (see [`.pre-commit-config.yaml`](.pre-commit-config.yaml) for details).
+
+To set it up:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+After installation, the hooks will run automatically on `git commit`. You can also run them manually at any time:
+
+```bash
+ruff format .
+ruff check .
+```
+
+> **Note:** If you use VSCode, install the `Ruff` extension for real-time formatting and linting in the editor.
+
 ## Dev environment tips
 
 1. When modifying the WebUI, be sure to maintain componentization and clean code. Avoid duplicate code.
