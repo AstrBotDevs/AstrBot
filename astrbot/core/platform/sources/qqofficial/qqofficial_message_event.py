@@ -235,12 +235,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             plain_text = plain_text + "\n"
 
-        payload: dict = {
-            # "content": plain_text,
-            "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
-            "msg_type": 2,
-            "msg_id": self.message_obj.message_id,
-        }
+        # 根据消息链的 use_markdown_ 标记决定发送模式
+        use_md = getattr(self.send_buffer, "use_markdown_", None)
+        if use_md is False:
+            payload: dict = {
+                "content": plain_text,
+                "msg_type": 0,
+                "msg_id": self.message_obj.message_id,
+            }
+        else:
+            payload = {
+                "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
+                "msg_type": 2,
+                "msg_id": self.message_obj.message_id,
+            }
 
         if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
