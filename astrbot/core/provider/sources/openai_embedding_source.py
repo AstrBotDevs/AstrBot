@@ -14,6 +14,15 @@ from ..register import register_provider_adapter
     provider_type=ProviderType.EMBEDDING,
 )
 class OpenAIEmbeddingProvider(EmbeddingProvider):
+    _EMBEDDING_MODEL_HINTS = (
+        "embedding",
+        "bge",
+        "gte",
+        "e5",
+        "m3e",
+        "multilingual-e5",
+    )
+
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
         self.provider_config = provider_config
@@ -61,6 +70,29 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             **kwargs,
         )
         return [item.embedding for item in embeddings.data]
+
+    async def get_models(self) -> list[str]:
+        try:
+            models = await self.client.models.list()
+            all_model_ids = sorted(
+                {model.id for model in models.data if getattr(model, "id", None)}
+            )
+
+            embedding_model_ids = [
+                model_id
+                for model_id in all_model_ids
+                if self._looks_like_embedding_model(model_id)
+            ]
+
+            # Fall back to all model ids when no embedding-like names are detected.
+            return embedding_model_ids or all_model_ids
+        except Exception as e:
+            raise Exception(f"获取嵌入模型列表失败: {e!s}") from e
+
+    @classmethod
+    def _looks_like_embedding_model(cls, model_id: str) -> bool:
+        normalized = model_id.lower()
+        return any(hint in normalized for hint in cls._EMBEDDING_MODEL_HINTS)
 
     def _embedding_kwargs(self) -> dict:
         """构建嵌入请求的可选参数"""

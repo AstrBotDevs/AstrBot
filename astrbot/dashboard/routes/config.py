@@ -372,6 +372,10 @@ class ConfigRoute(Route):
             "/config/provider/list": ("GET", self.get_provider_config_list),
             "/config/provider/model_list": ("GET", self.get_provider_model_list),
             "/config/provider/get_embedding_dim": ("POST", self.get_embedding_dim),
+            "/config/provider/get_embedding_models": (
+                "POST",
+                self.get_embedding_models,
+            ),
             "/config/provider_sources/models": (
                 "GET",
                 self.get_provider_source_models,
@@ -844,6 +848,7 @@ class ConfigRoute(Route):
         if not provider_config:
             return Response().error("缺少参数 provider_config").__dict__
 
+        inst = None
         try:
             # 动态导入 EmbeddingProvider
             from astrbot.core.provider.provider import EmbeddingProvider
@@ -907,6 +912,80 @@ class ConfigRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"获取嵌入维度失败: {e!s}").__dict__
+        finally:
+            terminate_fn = getattr(inst, "terminate", None) if inst else None
+            if inspect.iscoroutinefunction(terminate_fn):
+                try:
+                    await terminate_fn()
+                except Exception:
+                    logger.warning("释放嵌入 provider 资源失败")
+
+    async def get_embedding_models(self):
+        """根据临时 provider_config 获取可用嵌入模型列表"""
+        post_data = await request.json
+        provider_config = post_data.get("provider_config", None)
+        if not provider_config:
+            return Response().error("缺少参数 provider_config").__dict__
+
+        inst = None
+        try:
+            from astrbot.core.provider.provider import EmbeddingProvider
+            from astrbot.core.provider.register import provider_cls_map
+
+            provider_type = provider_config.get("type", None)
+            if not provider_type:
+                return Response().error("provider_config 缺少 type 字段").__dict__
+
+            if provider_type not in provider_cls_map:
+                try:
+                    self.core_lifecycle.provider_manager.dynamic_import_provider(
+                        provider_type,
+                    )
+                except ImportError:
+                    logger.error(traceback.format_exc())
+                    return Response().error("提供商适配器加载失败").__dict__
+
+            if provider_type not in provider_cls_map:
+                return (
+                    Response()
+                    .error(f"未找到适用于 {provider_type} 的提供商适配器")
+                    .__dict__
+                )
+
+            provider_metadata = provider_cls_map[provider_type]
+            cls_type = provider_metadata.cls_type
+            if not cls_type:
+                return Response().error(f"无法找到 {provider_type} 的类").__dict__
+
+            inst = cls_type(provider_config, {})
+            if not isinstance(inst, EmbeddingProvider):
+                return Response().error("提供商不是 EmbeddingProvider 类型").__dict__
+
+            init_fn = getattr(inst, "initialize", None)
+            if inspect.iscoroutinefunction(init_fn):
+                await init_fn()
+
+            try:
+                models = await inst.get_models()
+            except NotImplementedError:
+                return (
+                    Response()
+                    .error("当前提供商暂不支持自动获取模型列表，请手动填写模型 ID")
+                    .__dict__
+                )
+
+            models = sorted(dict.fromkeys(models or []))
+            return Response().ok({"models": models}).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取嵌入模型列表失败: {e!s}").__dict__
+        finally:
+            terminate_fn = getattr(inst, "terminate", None) if inst else None
+            if inspect.iscoroutinefunction(terminate_fn):
+                try:
+                    await terminate_fn()
+                except Exception:
+                    logger.warning("释放嵌入 provider 资源失败")
 
     async def get_provider_source_models(self):
         """获取指定 provider_source 支持的模型列表

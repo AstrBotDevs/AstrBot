@@ -1,6 +1,6 @@
 <script setup>
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
@@ -88,6 +88,8 @@ const currentEditingLanguage = ref('json')
 const currentEditingTheme = ref('vs-light')
 let currentEditingKeyIterable = null
 const loadingEmbeddingDim = ref(false)
+const loadingEmbeddingModels = ref(false)
+const availableEmbeddingModels = ref([])
 
 function openEditorDialog(key, value, theme, language) {
   currentEditingKey.value = key
@@ -124,6 +126,39 @@ async function getEmbeddingDimensions(providerConfig) {
     loadingEmbeddingDim.value = false
   }
 }
+
+async function getEmbeddingModels(providerConfig) {
+  if (loadingEmbeddingModels.value) return
+
+  loadingEmbeddingModels.value = true
+  try {
+    const response = await axios.post('/api/config/provider/get_embedding_models', {
+      provider_config: providerConfig
+    })
+
+    if (response.data.status !== 'error' && Array.isArray(response.data.data?.models)) {
+      availableEmbeddingModels.value = response.data.data.models
+      useToast().success(`Fetched: ${response.data.data.models.length}`)
+    } else {
+      useToast().error(response.data.message)
+    }
+  } catch (error) {
+    console.error('Error getting embedding models:', error)
+  } finally {
+    loadingEmbeddingModels.value = false
+  }
+}
+
+watch(
+  () => [
+    props.iterable?.type,
+    props.iterable?.embedding_api_key,
+    props.iterable?.embedding_api_base
+  ],
+  () => {
+    availableEmbeddingModels.value = []
+  }
+)
 
 function getValueBySelector(obj, selector) {
   const keys = selector.split('.')
@@ -266,8 +301,11 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 :plugin-name="pluginName"
                 :config-key="getItemPath(key)"
                 :loading="loadingEmbeddingDim"
+                :loading-models="loadingEmbeddingModels"
+                :available-models="availableEmbeddingModels"
                 :show-fullscreen-btn="!!metadata[metadataKey].items[key]?.editor_mode"
                 @get-embedding-dim="getEmbeddingDimensions(iterable)"
+                @get-embedding-models="getEmbeddingModels(iterable)"
                 @open-fullscreen="openEditorDialog(key, iterable, metadata[metadataKey].items[key]?.editor_theme, metadata[metadataKey].items[key]?.editor_language)"
               />
             </v-col>
@@ -311,6 +349,9 @@ function hasVisibleItemsAfter(items, currentIndex) {
             :item-meta="metadata[metadataKey]"
             :plugin-name="pluginName"
             :config-key="getItemPath(metadataKey)"
+            :loading-models="loadingEmbeddingModels"
+            :available-models="availableEmbeddingModels"
+            @get-embedding-models="getEmbeddingModels(iterable)"
           />
         </v-col>
       </v-row>
