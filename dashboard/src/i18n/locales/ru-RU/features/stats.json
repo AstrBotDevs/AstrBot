@@ -67,7 +67,7 @@
     "callCount": "{count} вызовов",
     "avgTtft": "Средний TTFT",
     "avgDuration": "Среднее время ответа",
-    "avgTpm": "Средний TPM",
+    "avgTpm": "Средний Output TPM",
     "successRate": "Доля успешных вызовов"
   },
   "modelRanking": {

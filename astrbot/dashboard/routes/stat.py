@@ -243,6 +243,7 @@ class StatRoute(Route):
             total_by_umo: dict[str, int] = defaultdict(int)
             total_by_bucket: dict[int, int] = defaultdict(int)
             range_total_tokens = 0
+            range_total_output_tokens = 0
             range_total_calls = 0
             range_success_calls = 0
             range_ttft_total_ms = 0.0
@@ -275,6 +276,7 @@ class StatRoute(Route):
                     total_by_umo[record.umo or "unknown"] += token_total
                     total_by_bucket[bucket_ts] += token_total
                     range_total_tokens += token_total
+                    range_total_output_tokens += record.token_output
                     range_total_calls += 1
                     if record.status != "error":
                         range_success_calls += 1
@@ -371,7 +373,7 @@ class StatRoute(Route):
                             else 0
                         ),
                         "range_avg_tpm": (
-                            range_total_tokens / (range_duration_total_ms / 1000 / 60)
+                            range_total_output_tokens / (range_duration_total_ms / 1000 / 60)
                             if range_duration_total_ms > 0
                             else 0
                         ),
