@@ -1,3 +1,7 @@
+// Some IMEs emit Enter right after compositionend; treat that same-keystroke
+// window as composition so selecting a candidate does not send the message.
+const RECENT_COMPOSITION_END_THRESHOLD_MS = 100;
+
 /**
  * @param {KeyboardEvent} event
  * @param {boolean} compositionActive
@@ -14,7 +18,8 @@ export function isComposingEnter(
     typeof event.timeStamp === "number" &&
     typeof lastCompositionEndAt === "number" &&
     event.timeStamp >= lastCompositionEndAt &&
-    event.timeStamp - lastCompositionEndAt < 100;
+    event.timeStamp - lastCompositionEndAt <
+      RECENT_COMPOSITION_END_THRESHOLD_MS;
 
   return (
     event.key === "Enter" &&

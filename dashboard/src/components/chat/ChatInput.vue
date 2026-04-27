@@ -115,7 +115,7 @@
         @compositionstart="handleCompositionStart"
         @compositionend="handleCompositionEnd"
         @compositioncancel="handleCompositionEnd"
-        @blur="clearCompositionState"
+        @blur="clearCompositionState()"
         :disabled="disabled"
         placeholder="Ask AstrBot..."
         class="chat-textarea"
@@ -551,16 +551,14 @@ function handleCompositionStart() {
 
 function handleCompositionEnd(e: CompositionEvent) {
   lastCompositionEndAt.value = e.timeStamp;
-  resetComposingState();
+  clearCompositionState({ keepLastEndAt: true });
 }
 
-function resetComposingState() {
+function clearCompositionState({ keepLastEndAt = false } = {}) {
   isComposing.value = false;
-}
-
-function clearCompositionState() {
-  isComposing.value = false;
-  lastCompositionEndAt.value = null;
+  if (!keepLastEndAt) {
+    lastCompositionEndAt.value = null;
+  }
 }
 
 function handleKeyUp(e: KeyboardEvent) {
