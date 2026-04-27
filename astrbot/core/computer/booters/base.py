@@ -1,6 +1,7 @@
 from ..olayer import (
     BrowserComponent,
     FileSystemComponent,
+    GUIComponent,
     PythonComponent,
     ShellComponent,
 )
@@ -27,6 +28,10 @@ class ComputerBooter:
 
     @property
     def browser(self) -> BrowserComponent | None:
+        return None
+
+    @property
+    def gui(self) -> GUIComponent | None:
         return None
 
     async def boot(self, session_id: str) -> None: ...
