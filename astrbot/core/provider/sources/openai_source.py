@@ -663,6 +663,14 @@ class ProviderOpenAIOfficial(Provider):
                     if not hasattr(tc, "index") or tc.index is None:
                         tc.index = idx
             try:
+                # Fix for #6661: Add missing 'index' field to tool_call deltas
+                # Gemini and some OpenAI-compatible proxies omit this field
+                if chunk.choices:
+                    for choice in chunk.choices:
+                        if choice.delta and choice.delta.tool_calls:
+                            for idx, tc in enumerate(choice.delta.tool_calls):
+                                if not hasattr(tc, "index") or tc.index is None:
+                                    tc.index = idx
                 state.handle_chunk(chunk)
             except Exception as e:
                 logger.error("Saving chunk state error: " + str(e))
