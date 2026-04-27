@@ -1042,6 +1042,11 @@ def test_cua_is_exposed_in_sandbox_config_metadata():
     )
 
 
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+)
+
+
 @pytest.mark.asyncio
 async def test_screenshot_tool_returns_image_and_sends_file(monkeypatch, tmp_path):
     from astrbot.core.tools.computer_tools import cua as cua_tools
@@ -1099,6 +1104,89 @@ async def test_screenshot_tool_returns_image_and_sends_file(monkeypatch, tmp_pat
     assert image_parts[0].data == base64.b64encode(b"fake-png").decode()
     assert "base64" not in payload
     assert Path(payload["path"]).exists()
+    assert sent_messages
+
+
+@pytest.mark.parametrize(
+    "screenshot_shape",
+    [
+        "data_url",
+        "path_string",
+        "save_object",
+        "base64_dict",
+    ],
+)
+@pytest.mark.asyncio
+async def test_screenshot_tool_normalizes_supported_screenshot_shapes(
+    monkeypatch,
+    tmp_path,
+    screenshot_shape,
+):
+    from astrbot.core.computer.booters.cua import CuaGUIComponent
+    from astrbot.core.tools.computer_tools import cua as cua_tools
+    from astrbot.core.tools.computer_tools.cua import CuaScreenshotTool
+
+    sent_messages = []
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+        async def send(self, message):
+            sent_messages.append(message)
+
+    class FakeAstrContext:
+        event = FakeEvent()
+        context = FakeContext(
+            {
+                "provider_settings": {
+                    "computer_use_runtime": "sandbox",
+                    "computer_use_require_admin": True,
+                    "sandbox": {"booter": "cua"},
+                }
+            }
+        )
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    class SaveObject:
+        def save(self, output, format):
+            assert format == "PNG"
+            output.write(_PNG_BYTES)
+
+    class FakeSandbox:
+        async def screenshot(self):
+            if screenshot_shape == "data_url":
+                encoded = base64.b64encode(_PNG_BYTES).decode()
+                return f"data:image/png;base64,{encoded}"
+            if screenshot_shape == "path_string":
+                source_path = tmp_path / "source.png"
+                source_path.write_bytes(_PNG_BYTES)
+                return str(source_path)
+            if screenshot_shape == "save_object":
+                return SaveObject()
+            return {"base64": base64.b64encode(_PNG_BYTES).decode()}
+
+    class FakeBooter:
+        gui = CuaGUIComponent(FakeSandbox())
+
+    async def fake_get_booter(context, session_id):
+        return FakeBooter()
+
+    monkeypatch.setattr(cua_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(cua_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    result = await CuaScreenshotTool().call(FakeWrapper(), send_to_user=True)
+
+    assert isinstance(result, mcp.types.CallToolResult)
+    image_parts = [part for part in result.content if part.type == "image"]
+    text_parts = [part for part in result.content if part.type == "text"]
+    payload = json.loads(text_parts[0].text)
+    assert "base64" not in payload
+    assert payload["mime_type"] == "image/png"
+    assert Path(payload["path"]).read_bytes() == _PNG_BYTES
+    assert base64.b64decode(image_parts[0].data) == _PNG_BYTES
     assert sent_messages
 
 
