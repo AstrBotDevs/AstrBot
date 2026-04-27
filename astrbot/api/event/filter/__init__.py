@@ -29,6 +29,9 @@ from astrbot.core.star.register import register_on_platform_loaded as on_platfor
 from astrbot.core.star.register import register_on_plugin_error as on_plugin_error
 from astrbot.core.star.register import register_on_plugin_loaded as on_plugin_loaded
 from astrbot.core.star.register import register_on_plugin_unloaded as on_plugin_unloaded
+from astrbot.core.star.register import (
+    register_on_prompt_assembly as on_prompt_assembly,
+)
 from astrbot.core.star.register import register_on_using_llm_tool as on_using_llm_tool
 from astrbot.core.star.register import (
     register_on_waiting_llm_request as on_waiting_llm_request,
@@ -58,6 +61,7 @@ __all__ = [
     "on_astrbot_loaded",
     "on_decorating_result",
     "on_llm_request",
+    "on_prompt_assembly",
     "on_llm_response",
     "on_plugin_error",
     "on_plugin_loaded",

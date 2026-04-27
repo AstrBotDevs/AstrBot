@@ -140,6 +140,14 @@ class StarHandlerRegistry(Generic[T]):
     @overload
     def get_handlers_by_event_type(
         self,
+        event_type: Literal[EventType.OnPromptAssemblyEvent],
+        only_activated=True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
+
+    @overload
+    def get_handlers_by_event_type(
+        self,
         event_type: EventType,
         only_activated=True,
         plugins_name: list[str] | None = None,
@@ -239,6 +247,7 @@ class EventType(enum.Enum):
     OnPluginErrorEvent = enum.auto()  # 插件处理消息异常时
     OnPluginLoadedEvent = enum.auto()  # 插件加载完成
     OnPluginUnloadedEvent = enum.auto()  # 插件卸载完成
+    OnPromptAssemblyEvent = enum.auto()  # Prompt Assembly 组装完成、渲染前
 
 
 H = TypeVar("H", bound=Callable[..., Any])
