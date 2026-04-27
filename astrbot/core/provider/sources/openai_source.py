@@ -438,10 +438,46 @@ class ProviderOpenAIOfficial(Provider):
             image_fallback_used,
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
         return create_proxy_client("OpenAI", proxy)
+
+    def _create_openai_client(
+        self,
+        api_key: str | None = None,
+    ) -> AsyncOpenAI | AsyncAzureOpenAI:
+        """创建 OpenAI/Azure 客户端实例，将初始化逻辑解耦以便复用。"""
+        api_key = api_key or self.chosen_api_key
+        if "api_version" in self.provider_config:
+            # Using Azure OpenAI API
+            return AsyncAzureOpenAI(
+                api_key=api_key,
+                api_version=self.provider_config.get("api_version", None),
+                default_headers=self.custom_headers,
+                base_url=self.provider_config.get("api_base", ""),
+                timeout=self.timeout,
+                http_client=self._create_http_client(self.provider_config),
+            )
+        else:
+            # Using OpenAI Official API
+            return AsyncOpenAI(
+                api_key=api_key,
+                base_url=self.provider_config.get("api_base", None),
+                default_headers=self.custom_headers,
+                timeout=self.timeout,
+                http_client=self._create_http_client(self.provider_config),
+            )
+
+    def _ensure_client(self) -> None:
+        """确保 client 可用，仅在真实 API 调用前按需重建。"""
+        if self.client is None or not self._client_alive:
+            logger.warning("检测到 OpenAI client 已关闭或未初始化，正在重新创建...")
+            self.client = self._create_openai_client()
+            self._client_alive = True
+            self.default_params = inspect.signature(
+                self.client.chat.completions.create,
+            ).parameters.keys()
 
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
@@ -450,6 +486,8 @@ class ProviderOpenAIOfficial(Provider):
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
         self.custom_headers = provider_config.get("custom_headers", {})
+        self.client: AsyncOpenAI | AsyncAzureOpenAI | None = None
+        self._client_alive = False
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
 
@@ -459,25 +497,8 @@ class ProviderOpenAIOfficial(Provider):
             for key in self.custom_headers:
                 self.custom_headers[key] = str(self.custom_headers[key])
 
-        if "api_version" in provider_config:
-            # Using Azure OpenAI API
-            self.client = AsyncAzureOpenAI(
-                api_key=self.chosen_api_key,
-                api_version=provider_config.get("api_version", None),
-                default_headers=self.custom_headers,
-                base_url=provider_config.get("api_base", ""),
-                timeout=self.timeout,
-                http_client=self._create_http_client(provider_config),
-            )
-        else:
-            # Using OpenAI Official API
-            self.client = AsyncOpenAI(
-                api_key=self.chosen_api_key,
-                base_url=provider_config.get("api_base", None),
-                default_headers=self.custom_headers,
-                timeout=self.timeout,
-                http_client=self._create_http_client(provider_config),
-            )
+        self.client = self._create_openai_client()
+        self._client_alive = True
 
         self.default_params = inspect.signature(
             self.client.chat.completions.create,
@@ -509,6 +530,7 @@ class ProviderOpenAIOfficial(Provider):
         extra_body["reasoning_effort"] = "none"
 
     async def get_models(self):
+        self._ensure_client()
         try:
             models_str = []
             models = await self.client.models.list()
@@ -556,6 +578,7 @@ class ProviderOpenAIOfficial(Provider):
         payloads["messages"] = cleaned
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+        self._ensure_client()
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -609,6 +632,7 @@ class ProviderOpenAIOfficial(Provider):
         tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
+        self._ensure_client()
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -1191,7 +1215,10 @@ class ProviderOpenAIOfficial(Provider):
         retry_cnt = 0
         for retry_cnt in range(max_retries):
             try:
-                self.client.api_key = chosen_key
+                self.chosen_api_key = chosen_key
+                self._ensure_client()
+                if self.client is not None:
+                    self.client.api_key = chosen_key
                 llm_response = await self._query(payloads, func_tool)
                 break
             except Exception as e:
@@ -1262,7 +1289,10 @@ class ProviderOpenAIOfficial(Provider):
         retry_cnt = 0
         for retry_cnt in range(max_retries):
             try:
-                self.client.api_key = chosen_key
+                self.chosen_api_key = chosen_key
+                self._ensure_client()
+                if self.client is not None:
+                    self.client.api_key = chosen_key
                 async for response in self._query_stream(payloads, func_tool):
                     yield response
                 break
@@ -1316,13 +1346,15 @@ class ProviderOpenAIOfficial(Provider):
         return new_contexts
 
     def get_current_key(self) -> str:
-        return self.client.api_key
+        return self.chosen_api_key
 
     def get_keys(self) -> list[str]:
         return self.api_keys
 
     def set_key(self, key) -> None:
-        self.client.api_key = key
+        self.chosen_api_key = key
+        if self.client is not None:
+            self.client.api_key = key
 
     async def assemble_context(
         self,
@@ -1401,5 +1433,12 @@ class ProviderOpenAIOfficial(Provider):
         return image_data
 
     async def terminate(self):
+        """关闭 client 并将引用置为 None，确保后续仅在真实调用时重建。"""
         if self.client:
-            await self.client.close()
+            try:
+                await self.client.close()
+            except Exception as e:
+                logger.warning(f"关闭 OpenAI client 时出错: {e}")
+            finally:
+                self.client = None
+                self._client_alive = False
