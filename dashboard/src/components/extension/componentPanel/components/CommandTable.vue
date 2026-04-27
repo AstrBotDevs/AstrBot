@@ -141,8 +141,18 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
       </template>
 
       <template v-slot:item.description="{ item }">
-        <div class="text-body-2 text-medium-emphasis" style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        <div
+          class="text-body-2 text-medium-emphasis"
+          style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+        >
           {{ item.description || '-' }}
+          <v-tooltip
+            v-if="item.description"
+            activator="parent"
+            location="top"
+          >
+            {{ item.description }}
+          </v-tooltip>
         </div>
       </template>
 
