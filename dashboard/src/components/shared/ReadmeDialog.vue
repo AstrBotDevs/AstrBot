@@ -306,7 +306,7 @@ const requiresPluginName = computed(
 );
 
 async function fetchContent() {
-  if (requiresPluginName.value && !props.pluginName) return;
+  if (requiresPluginName.value && !props.pluginName && !props.repoUrl) return;
   const requestId = ++lastRequestId.value;
   loading.value = true;
   content.value = null;
@@ -317,6 +317,10 @@ async function fetchContent() {
     let params;
     if (requiresPluginName.value) {
       params = { name: props.pluginName };
+      // 如果提供了 repoUrl，优先使用远程获取
+      if (props.repoUrl) {
+        params.repo = props.repoUrl;
+      }
     } else if (props.mode === "first-notice") {
       params = { locale: locale.value };
     }
@@ -337,10 +341,10 @@ async function fetchContent() {
 }
 
 watch(
-  [() => props.show, () => props.pluginName, () => props.mode],
+  [() => props.show, () => props.pluginName, () => props.mode, () => props.repoUrl],
   ([show, name]) => {
     if (!show) return;
-    if (requiresPluginName.value && !name) return;
+    if (requiresPluginName.value && !name && !props.repoUrl) return;
     fetchContent();
   },
   { immediate: true },
