@@ -259,6 +259,23 @@ async def test_cua_shell_and_python_accept_sync_sdk_methods():
 
 
 @pytest.mark.asyncio
+async def test_cua_gui_reports_missing_mouse_or_keyboard():
+    from astrbot.core.computer.booters.cua import CuaGUIComponent
+
+    class SandboxWithoutGuiDevices:
+        async def screenshot(self):
+            return b"fake-png"
+
+    gui = CuaGUIComponent(SandboxWithoutGuiDevices())
+
+    with pytest.raises(RuntimeError, match="mouse.*click"):
+        await gui.click(1, 2)
+
+    with pytest.raises(RuntimeError, match="keyboard.*type"):
+        await gui.type_text("hello")
+
+
+@pytest.mark.asyncio
 async def test_cua_shutdown_clears_cached_components():
     from astrbot.core.computer.booters.cua import CuaBooter
 
@@ -393,3 +410,40 @@ async def test_screenshot_tool_returns_image_and_sends_file(monkeypatch, tmp_pat
     assert image_parts[0].data == base64.b64encode(b"fake-png").decode()
     assert Path(payload["path"]).exists()
     assert sent_messages
+
+
+@pytest.mark.asyncio
+async def test_cua_tools_return_permission_error_without_gui_lookup(monkeypatch):
+    from astrbot.core.tools.computer_tools import cua as cua_tools
+    from astrbot.core.tools.computer_tools.cua import (
+        CuaKeyboardTypeTool,
+        CuaMouseClickTool,
+        CuaScreenshotTool,
+    )
+
+    sent_messages = []
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "member"
+
+        async def send(self, message):
+            sent_messages.append(message)
+
+    class FakeAstrContext:
+        event = FakeEvent()
+        context = FakeContext({"provider_settings": {}})
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    async def fail_gui_lookup(context):
+        raise AssertionError("GUI lookup should not run after permission failure")
+
+    monkeypatch.setattr(cua_tools, "check_admin_permission", lambda *args: "denied")
+    monkeypatch.setattr(cua_tools, "_get_gui_component", fail_gui_lookup)
+
+    assert await CuaScreenshotTool().call(FakeWrapper()) == "denied"
+    assert await CuaMouseClickTool().call(FakeWrapper(), x=1, y=2) == "denied"
+    assert await CuaKeyboardTypeTool().call(FakeWrapper(), text="hello") == "denied"
+    assert sent_messages == []

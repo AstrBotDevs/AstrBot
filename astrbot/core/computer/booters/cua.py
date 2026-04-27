@@ -18,6 +18,15 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
+async def _write_base64_via_shell(
+    shell: ShellComponent,
+    path: str,
+    data: bytes,
+) -> dict[str, Any]:
+    encoded = base64.b64encode(data).decode("ascii")
+    return await shell.exec(f"base64 -d > {path!r} <<'EOF'\n{encoded}\nEOF")
+
+
 def _maybe_model_dump(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -65,6 +74,21 @@ def _result_text(payload: dict[str, Any], *keys: str) -> str:
 
 def _split_listing_entries(output: str) -> list[str]:
     return [line for line in output.splitlines() if line.strip()]
+
+
+def _require_component_method(
+    root: Any,
+    component_name: str,
+    method_name: str,
+) -> Any:
+    component = getattr(root, component_name, None)
+    method = getattr(component, method_name, None) if component is not None else None
+    if method is None:
+        raise RuntimeError(
+            f"CUA sandbox does not provide `{component_name}.{method_name}`. "
+            "Please check the installed CUA SDK version and sandbox backend."
+        )
+    return method
 
 
 class CuaShellComponent(ShellComponent):
@@ -264,8 +288,7 @@ class CuaFileSystemComponent(FileSystemComponent):
         if fs is not None and hasattr(fs, "write_file"):
             await fs.write_file(path, content)
         else:
-            encoded = base64.b64encode(content.encode(encoding)).decode()
-            await self._shell.exec(f"base64 -d > {path!r} <<'EOF'\n{encoded}\nEOF")
+            await _write_base64_via_shell(self._shell, path, content.encode(encoding))
         return {"success": True, "path": path}
 
     async def delete_file(self, path: str) -> dict[str, Any]:
@@ -318,12 +341,14 @@ class CuaGUIComponent(GUIComponent):
         }
 
     async def click(self, x: int, y: int, button: str = "left") -> dict[str, Any]:
-        result = await self._sandbox.mouse.click(x, y, button=button)
+        click = _require_component_method(self._sandbox, "mouse", "click")
+        result = await _maybe_await(click(x, y, button=button))
         payload = _maybe_model_dump(result)
         return {"success": bool(payload.get("success", True)), **payload}
 
     async def type_text(self, text: str) -> dict[str, Any]:
-        result = await self._sandbox.keyboard.type(text)
+        type_text = _require_component_method(self._sandbox, "keyboard", "type")
+        result = await _maybe_await(type_text(text))
         payload = _maybe_model_dump(result)
         return {"success": bool(payload.get("success", True)), **payload}
 
@@ -480,10 +505,8 @@ class CuaBooter(ComputerBooter):
             return _maybe_model_dump(
                 await self._sandbox.upload_file(str(local_path), file_name)
             )
-        content = local_path.read_bytes()
-        encoded = base64.b64encode(content).decode("ascii")
-        result = await self.shell.exec(
-            f"base64 -d > {file_name!r} <<'EOF'\n{encoded}\nEOF"
+        result = await _write_base64_via_shell(
+            self.shell, file_name, local_path.read_bytes()
         )
         return {
             "success": not bool(result.get("stderr")),
