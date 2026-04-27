@@ -9,7 +9,7 @@ import certifi
 import httpx
 
 from astrbot.core import logger
-from astrbot.core.utils.io import on_error
+from astrbot.core.utils.io import ensure_dir, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
 
@@ -56,7 +56,7 @@ class RepoZipUpdator:
         self, url: str, path: str, timeout: float = 1800.0
     ) -> None:
         target_path = Path(path)
-        target_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_dir(target_path.parent)
 
         try:
             async with self._create_httpx_client(timeout=timeout) as client:
@@ -233,7 +233,7 @@ class RepoZipUpdator:
 
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
         """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
-        os.makedirs(target_dir, exist_ok=True)
+        ensure_dir(target_dir)
         update_dir = ""
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = z.namelist()[0]
