@@ -134,6 +134,7 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
+        "save_failed_agent_history": False,
         "buffer_intermediate_messages": False,
         "sanitize_context_by_modalities": False,
         "max_quoted_fallback_images": 20,
@@ -2778,6 +2779,9 @@ CONFIG_METADATA_2 = {
                     "show_tool_call_result": {
                         "type": "bool",
                     },
+                    "save_failed_agent_history": {
+                        "type": "bool",
+                    },
                     "buffer_intermediate_messages": {
                         "type": "bool",
                     },
@@ -3556,6 +3560,14 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                             "provider_settings.show_tool_use_status": True,
+                        },
+                    },
+                    "provider_settings.save_failed_agent_history": {
+                        "description": "失败时保存本轮记录",
+                        "type": "bool",
+                        "hint": "启用后，当 Agent 本轮运行失败时（如模型返回空输出），也会将本轮记录保存到会话历史中，包括用户输入、工具调用记录和失败提示。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.buffer_intermediate_messages": {

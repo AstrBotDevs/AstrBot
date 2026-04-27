@@ -76,6 +76,9 @@ class InternalAgentSubStage(Stage):
             False,
         )
         self.show_reasoning = settings.get("display_reasoning_text", False)
+        self.save_failed_agent_history: bool = settings.get(
+            "save_failed_agent_history", False
+        )
         self.sanitize_context_by_modalities: bool = settings.get(
             "sanitize_context_by_modalities",
             False,
@@ -306,6 +309,7 @@ class InternalAgentSubStage(Stage):
                                 agent_runner.run_context.messages,
                                 agent_runner.stats,
                                 user_aborted=agent_runner.was_aborted(),
+                                save_failed_history=self.save_failed_agent_history,
                             )
 
                     elif streaming_response and not stream_to_general:
@@ -381,6 +385,7 @@ class InternalAgentSubStage(Stage):
                             agent_runner.run_context.messages,
                             agent_runner.stats,
                             user_aborted=agent_runner.was_aborted(),
+                            save_failed_history=self.save_failed_agent_history,
                         )
 
                     asyncio.create_task(
@@ -424,6 +429,7 @@ class InternalAgentSubStage(Stage):
         all_messages: list[Message],
         runner_stats: AgentStats | None,
         user_aborted: bool = False,
+        save_failed_history: bool = False,
     ) -> None:
         if not req or not req.conversation:
             return
@@ -445,22 +451,40 @@ class InternalAgentSubStage(Stage):
             not llm_response.completion_text
             and not req.tool_calls_result
             and not user_aborted
+            and not save_failed_history
         ):
             logger.debug("LLM 响应为空，不保存记录。")
             return
 
-        messages_to_save: list[Message] = []
+        if (
+            save_failed_history
+            and not llm_response.completion_text
+            and not req.tool_calls_result
+        ):
+            logger.debug(
+                "Saving failed agent history as save_failed_agent_history is enabled."
+            )
+            messages_to_save = all_messages + [
+                Message(
+                    role="assistant",
+                    content="[Agent run failed. History saved for debugging.]",
+                )
+            ]
+        else:
+            messages_to_save = all_messages
+
+        message_to_save: list[dict] = []
         skipped_initial_system = False
-        for message in all_messages:
+        for message in messages_to_save:
             if message.role == "system" and not skipped_initial_system:
                 skipped_initial_system = True
                 continue
-            if message.role in ["assistant", "user"] and message._no_save:
-                continue
-            messages_to_save.append(message)
+            skip = message.role in ["assistant", "user"] and message._no_save
+            if not skip:
+                message_to_save.append(message.model_dump())
 
         checkpoint_id = event.get_extra("llm_checkpoint_id")
-        message_to_save = dump_messages_with_checkpoints(messages_to_save)
+        message_to_save = dump_messages_with_checkpoints(message_to_save)
         if isinstance(checkpoint_id, str) and checkpoint_id:
             message_to_save.append(
                 CheckpointMessageSegment(
