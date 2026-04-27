@@ -37,7 +37,7 @@
             class="project-row project-item"
             :class="{
               active: selectedProjectId === project.project_id,
-              expanded: expandedProjectId === project.project_id,
+              expanded: expandedProjectIds.includes(project.project_id),
               'drop-ready':
                 dragActive && dropTargetProjectId === project.project_id,
             }"
@@ -51,7 +51,7 @@
             <span class="project-title">{{ project.title }}</span>
             <v-icon size="16" class="project-row-toggle">
               {{
-                expandedProjectId === project.project_id
+                expandedProjectIds.includes(project.project_id)
                   ? "mdi-chevron-up"
                   : "mdi-chevron-down"
               }}
@@ -75,7 +75,7 @@
             </span>
           </button>
           <slot
-            v-if="expandedProjectId === project.project_id"
+            v-if="expandedProjectIds.includes(project.project_id)"
             name="project-sessions"
             :project="project"
           />
@@ -103,14 +103,14 @@ interface Props {
   projects: Project[];
   initialExpanded?: boolean;
   selectedProjectId?: string | null;
-  expandedProjectId?: string | null;
+  expandedProjectIds?: string[];
   dragActive?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   initialExpanded: false,
   selectedProjectId: null,
-  expandedProjectId: null,
+  expandedProjectIds: () => [],
   dragActive: false,
 });
 

@@ -76,7 +76,7 @@
           v-if="!isSidebarCollapsed"
           :projects="projects"
           :selected-project-id="selectedProjectId"
-          :expanded-project-id="expandedProjectId"
+          :expanded-project-ids="expandedProjectIds"
           :drag-active="draggingSessionIds.length > 0"
           @create-project="openCreateProjectDialog"
           @edit-project="openEditProjectDialog"
@@ -84,10 +84,10 @@
           @select-project="selectProject"
           @drop-sessions="dropDraggedSessionsOnProject"
         >
-          <template #project-sessions>
+          <template #project-sessions="{ project }">
             <div class="project-inline-sessions">
               <div
-                v-for="session in expandedProjectSessions"
+                v-for="session in projectSessionsFor(project.project_id)"
                 :key="session.session_id"
                 class="session-item project-session-sidebar-item"
                 :class="{
@@ -98,18 +98,35 @@
                 role="button"
                 tabindex="0"
                 draggable="true"
-                @click="handleProjectSessionItemClick(session.session_id)"
+                @click="
+                  handleProjectSessionItemClick(
+                    session.session_id,
+                    project.project_id,
+                  )
+                "
                 @pointerdown="startSessionLongPress(session.session_id)"
                 @pointerup="cancelSessionLongPress"
                 @pointerleave="cancelSessionLongPress"
                 @pointercancel="cancelSessionLongPress"
-                @dragstart="startProjectSessionDrag($event, session.session_id)"
+                @dragstart="
+                  startProjectSessionDrag(
+                    $event,
+                    session.session_id,
+                    project.project_id,
+                  )
+                "
                 @dragend="finishProjectSessionDrag"
                 @keydown.enter="
-                  handleProjectSessionItemClick(session.session_id)
+                  handleProjectSessionItemClick(
+                    session.session_id,
+                    project.project_id,
+                  )
                 "
                 @keydown.space.prevent="
-                  handleProjectSessionItemClick(session.session_id)
+                  handleProjectSessionItemClick(
+                    session.session_id,
+                    project.project_id,
+                  )
                 "
               >
                 <span class="session-title">{{ sessionTitle(session) }}</span>
@@ -133,7 +150,7 @@
                 </div>
               </div>
               <div
-                v-if="!expandedProjectSessions.length"
+                v-if="!projectSessionsFor(project.project_id).length"
                 class="empty-sessions expanded-project-empty"
               >
                 {{ tm("project.noSessions") }}
@@ -236,7 +253,7 @@
             !isSidebarCollapsed &&
             !sessions.length &&
             !loadingSessions &&
-            !expandedProject
+            !expandedProjectIds.length
           "
           class="empty-sessions"
         >
@@ -415,8 +432,11 @@
       <ProjectView
         v-else-if="selectedProject"
         :project="selectedProject"
-        :sessions="projectSessions"
-        @select-session="selectProjectSession"
+        :sessions="projectSessionsFor(selectedProject.project_id)"
+        @select-session="
+          (sessionId) =>
+            selectProjectSession(sessionId, selectedProject!.project_id)
+        "
         @edit-session-title="editProjectSessionTitle"
         @delete-session="deleteProjectSession"
       >
@@ -650,7 +670,7 @@ import {
   getDragSessionIds,
   getProjectDragPayload,
   shouldSuppressClickAfterLongPress,
-  toggleExpandedProject,
+  toggleExpandedProjectIds,
   toggleSessionSelection,
 } from "@/utils/sessionManagement.mjs";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
@@ -733,7 +753,7 @@ const savingSessionTitle = ref(false);
 const messageEditDraft = ref("");
 const editingMessage = ref<ChatRecord | null>(null);
 const savingMessageEdit = ref(false);
-const projectSessions = ref<Session[]>([]);
+const projectSessionsById = reactive<Record<string, Session[]>>({});
 const loadingSessions = ref(false);
 const draft = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
@@ -750,7 +770,8 @@ const activeReasoningTarget = ref<{
 const deletingThread = ref(false);
 const deletingSelectedSessions = ref(false);
 const refsSidebarOpen = ref(false);
-const expandedProjectId = ref<string | null>(null);
+const expandedProjectIds = ref<string[]>([]);
+const selectedProjectSessionSourceId = ref<string | null>(null);
 const draggingSessionIds = ref<string[]>([]);
 const draggingSourceProjectId = ref<string | null>(null);
 const sessionListDropReady = ref(false);
@@ -860,9 +881,9 @@ const currentSession = computed(
     sessions.value.find(
       (session) => session.session_id === currSessionId.value,
     ) ||
-    projectSessions.value.find(
-      (session) => session.session_id === currSessionId.value,
-    ) ||
+    Object.values(projectSessionsById)
+      .flat()
+      .find((session) => session.session_id === currSessionId.value) ||
     null,
 );
 const sessionProject = computed(() =>
@@ -876,15 +897,6 @@ const selectedProject = computed(
     projects.value.find(
       (project) => project.project_id === selectedProjectId.value,
     ) || null,
-);
-const expandedProject = computed(
-  () =>
-    projects.value.find(
-      (project) => project.project_id === expandedProjectId.value,
-    ) || null,
-);
-const expandedProjectSessions = computed(() =>
-  expandedProjectId.value ? projectSessions.value : [],
 );
 const chatInputReplyTarget = computed(() =>
   replyTarget.value?.id == null
@@ -1006,36 +1018,48 @@ function openEditProjectDialog(project: Project) {
 
 async function selectProject(projectId: string) {
   showChatWorkspace();
-  expandedProjectId.value = toggleExpandedProject(
-    expandedProjectId.value,
+  expandedProjectIds.value = toggleExpandedProjectIds(
+    expandedProjectIds.value,
     projectId,
   );
-  selectedProjectId.value = expandedProjectId.value ? projectId : null;
+  selectedProjectId.value = expandedProjectIds.value.includes(projectId)
+    ? projectId
+    : null;
   currSessionId.value = "";
   replyTarget.value = null;
   await router.push(basePath());
-  if (expandedProjectId.value) {
+  if (expandedProjectIds.value.includes(projectId)) {
     await loadProjectSessions(projectId);
   } else {
-    projectSessions.value = [];
+    delete projectSessionsById[projectId];
   }
   closeMobileSidebar();
 }
 
 async function loadProjectSessions(projectId = selectedProjectId.value) {
-  if (!projectId) {
-    projectSessions.value = [];
-    return;
-  }
-  projectSessions.value = await getProjectSessions(projectId);
+  if (!projectId) return;
+  projectSessionsById[projectId] = await getProjectSessions(projectId);
+}
+
+function projectSessionsFor(projectId: string) {
+  return projectSessionsById[projectId] || [];
+}
+
+async function loadExpandedProjectSessions() {
+  await Promise.all(
+    expandedProjectIds.value.map((id) => loadProjectSessions(id)),
+  );
 }
 
 async function handleDeleteProject(projectId: string) {
   await deleteProjectById(projectId);
   if (selectedProjectId.value === projectId) {
     selectedProjectId.value = null;
-    projectSessions.value = [];
   }
+  expandedProjectIds.value = expandedProjectIds.value.filter(
+    (id) => id !== projectId,
+  );
+  delete projectSessionsById[projectId];
 }
 
 function openSessionTitleDialog(
@@ -1061,14 +1085,16 @@ async function saveSessionTitleDialog() {
       display_name: displayName,
     });
     updateSessionTitle(sessionId, displayName);
-    const projectSession = projectSessions.value.find(
-      (session) => session.session_id === sessionId,
-    );
-    if (projectSession) {
-      projectSession.display_name = displayName;
+    for (const projectSessions of Object.values(projectSessionsById)) {
+      const projectSession = projectSessions.find(
+        (session) => session.session_id === sessionId,
+      );
+      if (projectSession) {
+        projectSession.display_name = displayName;
+      }
     }
     if (refreshProjectSessionsAfterTitleSave.value) {
-      await loadProjectSessions();
+      await loadExpandedProjectSessions();
     }
     sessionTitleDialogOpen.value = false;
   } finally {
@@ -1143,7 +1169,11 @@ function handleSessionItemClick(sessionId: string) {
   selectSession(sessionId);
 }
 
-function handleProjectSessionItemClick(sessionId: string) {
+function handleProjectSessionItemClick(
+  sessionId: string,
+  sourceProjectId: string,
+) {
+  selectedProjectSessionSourceId.value = sourceProjectId;
   cancelSessionLongPress();
   const clickSuppression = shouldSuppressClickAfterLongPress(
     suppressNextSessionClick.value,
@@ -1155,7 +1185,7 @@ function handleProjectSessionItemClick(sessionId: string) {
     toggleSidebarSessionSelection(sessionId);
     return;
   }
-  selectProjectSession(sessionId);
+  selectProjectSession(sessionId, sourceProjectId);
 }
 
 function startSessionDrag(event: DragEvent, sessionId: string) {
@@ -1189,10 +1219,12 @@ async function dropDraggedSessionsOnProject(projectId: string) {
     const movedCount = results.filter(Boolean).length;
     if (movedCount > 0) {
       await getSessions();
-      const refreshProjectId =
-        selectedProjectId.value || expandedProjectId.value;
-      if (refreshProjectId) {
-        await loadProjectSessions(refreshProjectId);
+      await loadProjectSessions(projectId);
+      if (
+        draggingSourceProjectId.value &&
+        draggingSourceProjectId.value !== projectId
+      ) {
+        await loadProjectSessions(draggingSourceProjectId.value);
       }
       clearSessionSelection();
     }
@@ -1201,12 +1233,15 @@ async function dropDraggedSessionsOnProject(projectId: string) {
   }
 }
 
-function startProjectSessionDrag(event: DragEvent, sessionId: string) {
-  if (!expandedProjectId.value) return;
+function startProjectSessionDrag(
+  event: DragEvent,
+  sessionId: string,
+  sourceProjectId: string,
+) {
   cancelSessionLongPress();
   const payload = getProjectDragPayload(
     sessionId,
-    expandedProjectId.value,
+    sourceProjectId,
     selectedSessions.value,
   );
   draggingSessionIds.value = payload.sessionIds;
@@ -1251,8 +1286,8 @@ async function dropDraggedProjectSessionsOut() {
         sessionProjects[sessionId] = null;
       }
       await getSessions();
-      if (expandedProjectId.value) {
-        await loadProjectSessions(expandedProjectId.value);
+      if (draggingSourceProjectId.value) {
+        await loadProjectSessions(draggingSourceProjectId.value);
       }
     }
   } finally {
@@ -1287,7 +1322,13 @@ async function deleteSelectedSidebarSessions() {
   }
 }
 
-async function selectProjectSession(sessionId: string) {
+async function selectProjectSession(
+  sessionId: string,
+  sourceProjectId?: string,
+) {
+  if (sourceProjectId) {
+    selectedProjectSessionSourceId.value = sourceProjectId;
+  }
   selectedProjectId.value = null;
   await selectSession(sessionId);
 }
@@ -1298,7 +1339,7 @@ async function editProjectSessionTitle(sessionId: string, title: string) {
 
 async function deleteProjectSession(sessionId: string) {
   await deleteSession(sessionId);
-  await loadProjectSessions();
+  await loadProjectSessions(selectedProjectSessionSourceId.value || undefined);
 }
 
 async function saveProject(formData: ProjectFormData, projectId?: string) {

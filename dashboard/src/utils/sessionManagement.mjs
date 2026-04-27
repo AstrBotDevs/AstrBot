@@ -25,6 +25,12 @@ export function toggleExpandedProject(currentProjectId, projectId) {
   return currentProjectId === projectId ? null : projectId;
 }
 
+export function toggleExpandedProjectIds(currentProjectIds, projectId) {
+  return currentProjectIds.includes(projectId)
+    ? currentProjectIds.filter((id) => id !== projectId)
+    : [...currentProjectIds, projectId];
+}
+
 export function getProjectDragPayload(
   sessionId,
   sourceProjectId,

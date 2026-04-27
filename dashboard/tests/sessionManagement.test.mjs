@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   getDragSessionIds,
   getProjectDragPayload,
+  toggleExpandedProjectIds,
   toggleExpandedProject,
   shouldSuppressClickAfterLongPress,
   toggleSessionSelection,
@@ -37,6 +38,12 @@ test("toggleExpandedProject expands one project and collapses it when clicked ag
   assert.equal(toggleExpandedProject(null, "p1"), "p1");
   assert.equal(toggleExpandedProject("p1", "p1"), null);
   assert.equal(toggleExpandedProject("p1", "p2"), "p2");
+});
+
+test("toggleExpandedProjectIds supports multiple expanded projects", () => {
+  assert.deepEqual(toggleExpandedProjectIds([], "p1"), ["p1"]);
+  assert.deepEqual(toggleExpandedProjectIds(["p1"], "p2"), ["p1", "p2"]);
+  assert.deepEqual(toggleExpandedProjectIds(["p1", "p2"], "p1"), ["p2"]);
 });
 
 test("getProjectDragPayload marks dragged project sessions with their source project", () => {
