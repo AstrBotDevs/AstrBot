@@ -379,6 +379,7 @@ import {
     askForConfirmation as askForConfirmationDialog,
     useConfirmDialog
 } from '@/utils/confirmDialog';
+import { copyToClipboard } from '@/utils/clipboard';
 
 export default {
     name: 'ConversationPage',
@@ -638,10 +639,10 @@ export default {
         },
 
         async copyUmoSource(item) {
-            try {
-                await navigator.clipboard.writeText(this.formatUmoSource(item));
+            const ok = await copyToClipboard(this.formatUmoSource(item));
+            if (ok) {
                 this.showSuccessMessage(this.tm('messages.copySuccess'));
-            } catch (error) {
+            } else {
                 this.showErrorMessage(this.tm('messages.copyError'));
             }
         },

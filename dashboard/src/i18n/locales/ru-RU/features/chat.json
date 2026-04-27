@@ -137,9 +137,9 @@
   },
   "stats": {
     "tokens": "Токены",
-    "inputTokens": "Входящие",
+    "inputTokens": "Входящие (прочие)",
     "outputTokens": "Исходящие",
-    "cachedTokens": "Кэшированные",
+    "cachedTokens": "Входящие (кэш)",
     "duration": "Время",
     "ttft": "Время до первого токена"
   },

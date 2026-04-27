@@ -51,7 +51,7 @@
     "fullscreen": "全屏模式",
     "exitFullscreen": "退出全屏",
     "reply": "引用回复",
-    "providerConfig": "AI 配置",
+    "providerConfig": "模型配置",
     "toolsUsed": "已使用工具",
     "toolCallUsed": "已使用 {name} 工具",
     "pythonCodeAnalysis": "已使用 Python 代码分析"
@@ -137,9 +137,9 @@
   },
   "stats": {
     "tokens": "Token",
-    "inputTokens": "输入 Token",
+    "inputTokens": "输入（其他）",
     "outputTokens": "输出 Token",
-    "cachedTokens": "缓存 Token",
+    "cachedTokens": "输入（缓存）",
     "duration": "耗时",
     "ttft": "首字时间"
   },

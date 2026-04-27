@@ -5,6 +5,7 @@ import re
 import uuid
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 from quart import Response as QuartResponse
@@ -30,6 +31,16 @@ from .route import Response, Route, RouteContext
 
 # SSE heartbeat message to keep the connection alive during long-running operations
 SSE_HEARTBEAT = ": heartbeat\n\n"
+
+
+def _sanitize_upload_filename(filename: str | None) -> str:
+    if not filename:
+        return f"{uuid.uuid4()!s}"
+    normalized = filename.replace("\\", "/")
+    name = PurePosixPath(normalized).name.replace("\x00", "").strip()
+    if name in ("", ".", ".."):
+        return f"{uuid.uuid4()!s}"
+    return name
 
 
 @asynccontextmanager
@@ -333,7 +344,7 @@ class ChatRoute(Route):
             return Response().error("Missing key: file").__dict__
 
         file = post_data["file"]
-        filename = file.filename or f"{uuid.uuid4()!s}"
+        filename = _sanitize_upload_filename(file.filename)
         content_type = file.content_type or "application/octet-stream"
 
         # 根据 content_type 判断文件类型并添加扩展名
@@ -346,12 +357,16 @@ class ChatRoute(Route):
         else:
             attach_type = "file"
 
-        path = os.path.join(self.attachments_dir, filename)
-        await file.save(path)
+        attachments_dir = Path(self.attachments_dir).resolve(strict=False)
+        file_path = (attachments_dir / filename).resolve(strict=False)
+        if not file_path.is_relative_to(attachments_dir):
+            return Response().error("Invalid filename").__dict__
+
+        await file.save(str(file_path))
 
         # 创建 attachment 记录
         attachment = await self.db.insert_attachment(
-            path=path,
+            path=str(file_path),
             type=attach_type,
             mime_type=content_type,
         )
@@ -766,6 +781,44 @@ class ChatRoute(Route):
             message_accumulator = BotMessageAccumulator()
             agent_stats = {}
             refs = {}
+
+            async def flush_pending_bot_message():
+                nonlocal message_accumulator, agent_stats, refs
+                if not (message_accumulator.has_content() or refs or agent_stats):
+                    return None
+
+                message_parts_to_save = message_accumulator.build_message_parts(
+                    include_pending_tool_calls=True
+                )
+                plain_text = collect_plain_text_from_message_parts(
+                    message_parts_to_save
+                )
+
+                try:
+                    extracted_refs = self._extract_web_search_refs(
+                        plain_text,
+                        message_parts_to_save,
+                    )
+                except Exception as e:
+                    logger.exception(
+                        f"Failed to extract web search refs: {e}",
+                        exc_info=True,
+                    )
+                    extracted_refs = refs
+
+                saved_record = await self._save_bot_message(
+                    webchat_conv_id,
+                    message_parts_to_save,
+                    agent_stats,
+                    extracted_refs,
+                    llm_checkpoint_id,
+                    platform_history_id,
+                )
+                message_accumulator = BotMessageAccumulator()
+                agent_stats = {}
+                refs = {}
+                return saved_record
+
             try:
                 # Emit session_id first so clients can bind the stream immediately.
                 session_info = {
@@ -885,35 +938,7 @@ class ChatRoute(Route):
                                 should_save = True
 
                         if should_save:
-                            message_parts_to_save = (
-                                message_accumulator.build_message_parts(
-                                    include_pending_tool_calls=True
-                                )
-                            )
-                            plain_text = collect_plain_text_from_message_parts(
-                                message_parts_to_save
-                            )
-
-                            # 提取 web_search_tavily 引用
-                            try:
-                                refs = self._extract_web_search_refs(
-                                    plain_text,
-                                    message_parts_to_save,
-                                )
-                            except Exception as e:
-                                logger.exception(
-                                    f"Failed to extract web search refs: {e}",
-                                    exc_info=True,
-                                )
-
-                            saved_record = await self._save_bot_message(
-                                webchat_conv_id,
-                                message_parts_to_save,
-                                agent_stats,
-                                refs,
-                                llm_checkpoint_id,
-                                platform_history_id,
-                            )
+                            saved_record = await flush_pending_bot_message()
                             # 发送保存的消息信息给前端
                             if saved_record and not client_disconnected:
                                 saved_info = {
@@ -930,15 +955,18 @@ class ChatRoute(Route):
                                     yield f"data: {json.dumps(saved_info, ensure_ascii=False)}\n\n"
                                 except Exception:
                                     pass
-                            message_accumulator = BotMessageAccumulator()
-                            agent_stats = {}
-                            refs = {}
-
                         if msg_type == "end":
                             break
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
             finally:
+                try:
+                    await flush_pending_bot_message()
+                except Exception as e:
+                    logger.exception(
+                        f"Failed to persist pending webchat message: {e}",
+                        exc_info=True,
+                    )
                 webchat_queue_mgr.remove_back_queue(message_id)
 
         # 将消息放入会话特定的队列
