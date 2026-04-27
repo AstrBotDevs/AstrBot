@@ -11,7 +11,7 @@ from astrbot.core.computer.computer_client import get_booter, get_local_booter
 from astrbot.core.message.message_event_result import MessageChain
 
 from ..registry import builtin_tool
-from .util import check_admin_permission
+from .util import check_admin_permission, format_exception_message
 
 _OS_NAME = platform.system()
 _SANDBOX_PYTHON_TOOL_CONFIG = {
@@ -89,7 +89,7 @@ class PythonTool(FunctionTool):
             result = await sb.python.exec(code, silent=silent)
             return await handle_result(result, context.context.event)
         except Exception as e:
-            return f"Error executing code: {str(e)}"
+            return f"Error executing code: {format_exception_message(e)}"
 
 
 @builtin_tool(config=_LOCAL_PYTHON_TOOL_CONFIG)
@@ -113,4 +113,4 @@ class LocalPythonTool(FunctionTool):
             result = await sb.python.exec(code, silent=silent)
             return await handle_result(result, context.context.event)
         except Exception as e:
-            return f"Error executing code: {str(e)}"
+            return f"Error executing code: {format_exception_message(e)}"

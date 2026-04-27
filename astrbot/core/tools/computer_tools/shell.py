@@ -8,7 +8,12 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 
 from ..registry import builtin_tool
-from .util import check_admin_permission, is_local_runtime, workspace_root
+from .util import (
+    check_admin_permission,
+    format_exception_message,
+    is_local_runtime,
+    workspace_root,
+)
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
@@ -75,4 +80,4 @@ class ExecuteShellTool(FunctionTool):
             )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return f"Error executing command: {str(e)}"
+            return f"Error executing command: {format_exception_message(e)}"
