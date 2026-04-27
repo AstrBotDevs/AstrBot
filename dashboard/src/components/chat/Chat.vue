@@ -1804,8 +1804,9 @@ function toggleTheme() {
 
 .session-selection-count {
   color: rgb(var(--v-theme-on-surface));
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 22px;
 }
 
 .session-selection-actions {
@@ -1815,7 +1816,7 @@ function toggleTheme() {
 }
 
 .session-selection-action {
-  min-height: 28px;
+  min-height: 32px;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -1823,8 +1824,9 @@ function toggleTheme() {
   padding: 0 10px;
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 22px;
 }
 
 .session-selection-action:hover:not(:disabled) {
