@@ -96,7 +96,7 @@ class NeoShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 30,
+        timeout: int | None = None,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -116,11 +116,13 @@ class NeoShellComponent(ShellComponent):
             run_command = f"{env_prefix} {run_command}"
 
         if background:
-            run_command = f"nohup sh -lc {shlex.quote(run_command)} >/tmp/astrbot_bg.log 2>&1 & echo $!"
+            run_command = (
+                f"nohup sh -lc {shlex.quote(run_command)} >/dev/null 2>&1 & echo $!"
+            )
 
         result = await self._sandbox.shell.exec(
             run_command,
-            timeout=timeout or 30,
+            timeout=timeout,
             cwd=cwd,
         )
         payload = _maybe_model_dump(result)
@@ -136,7 +138,11 @@ class NeoShellComponent(ShellComponent):
                 pid = None
             return {
                 "pid": pid,
-                "stdout": stdout,
+                "stdout": (
+                    f"Command is running in the background. pid={pid}"
+                    if pid is not None
+                    else "Command was submitted in the background."
+                ),
                 "stderr": stderr,
                 "exit_code": exit_code,
                 "success": bool(payload.get("success", not stderr)),

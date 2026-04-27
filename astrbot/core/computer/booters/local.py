@@ -90,7 +90,7 @@ class LocalShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 30,
+        timeout: int | None = None,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
