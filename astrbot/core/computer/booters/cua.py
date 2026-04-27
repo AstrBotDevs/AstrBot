@@ -132,8 +132,9 @@ def _has_component_method(root: Any, component_name: str, method_name: str) -> b
 
 
 class CuaShellComponent(ShellComponent):
-    def __init__(self, sandbox: Any) -> None:
+    def __init__(self, sandbox: Any, os_type: str = "linux") -> None:
         self._sandbox = sandbox
+        self._os_type = os_type.lower()
 
     async def exec(
         self,
@@ -160,6 +161,13 @@ class CuaShellComponent(ShellComponent):
         if env:
             kwargs["env"] = env
         if background:
+            if self._os_type not in {"linux", "darwin", "macos"}:
+                return {
+                    "stdout": "",
+                    "stderr": "error: background shell execution is only supported for POSIX CUA images.",
+                    "exit_code": 2,
+                    "success": False,
+                }
             command = _build_cua_background_command(command)
 
         result = await _call_first(
@@ -186,6 +194,7 @@ def _build_cua_background_command(command: str) -> str:
         'p=subprocess.Popen(["sh","-lc",sys.argv[1]], '
         "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
         "stderr=subprocess.DEVNULL, start_new_session=True); "
+        "sys.stdout.write(str(p.pid)+chr(10)); sys.stdout.flush(); "
         "time.sleep(0.2); "
         "code=p.poll(); "
         "sys.exit(0 if code is None else code)"
@@ -194,8 +203,9 @@ def _build_cua_background_command(command: str) -> str:
 
 
 class CuaPythonComponent(PythonComponent):
-    def __init__(self, sandbox: Any) -> None:
+    def __init__(self, sandbox: Any, os_type: str = "linux") -> None:
         self._sandbox = sandbox
+        self._os_type = os_type
 
     async def exec(
         self,
@@ -210,7 +220,7 @@ class CuaPythonComponent(PythonComponent):
             result = await _call_first(python, ("run", "exec"), code, timeout=timeout)
             proc = _normalize_process_result(result)
         else:
-            shell = CuaShellComponent(self._sandbox)
+            shell = CuaShellComponent(self._sandbox, os_type=self._os_type)
             result = await shell.exec(f"python3 - <<'PY'\n{code}\nPY", timeout=timeout)
             proc = ProcessResult(
                 stdout=result.get("stdout", ""),
@@ -232,14 +242,10 @@ class CuaPythonComponent(PythonComponent):
         }
 
 
-class CuaFileSystemComponent(FileSystemComponent):
-    def __init__(self, sandbox: Any) -> None:
-        self._sandbox = sandbox
-        self._shell = CuaShellComponent(sandbox)
-
-    @property
-    def _filesystem(self) -> Any:
-        return getattr(self._sandbox, "filesystem", None)
+class _NativeFSAdapter:
+    def __init__(self, fs: Any, shell: CuaShellComponent) -> None:
+        self._fs = fs
+        self._shell = shell
 
     async def create_file(
         self,
@@ -257,14 +263,14 @@ class CuaFileSystemComponent(FileSystemComponent):
         offset: int | None = None,
         limit: int | None = None,
     ) -> dict[str, Any]:
-        fs = self._filesystem
-        if fs is not None and hasattr(fs, "read_file"):
-            content = await fs.read_file(path)
-        else:
+        read_file = getattr(self._fs, "read_file", None)
+        if read_file is None:
             result = await self._shell.exec(f"cat {path!r}")
             if result.get("stderr"):
                 return {"success": False, "path": path, "error": result["stderr"]}
             content = result.get("stdout", "")
+        else:
+            content = await _maybe_await(read_file(path))
         if isinstance(content, bytes):
             content = content.decode(encoding, errors="replace")
         return {
@@ -274,6 +280,140 @@ class CuaFileSystemComponent(FileSystemComponent):
                 str(content), offset=offset, limit=limit
             ),
         }
+
+    async def write_file(
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        _ = mode
+        write_file = getattr(self._fs, "write_file", None)
+        if write_file is None:
+            await _write_base64_via_shell(self._shell, path, content.encode(encoding))
+        else:
+            await _maybe_await(write_file(path, content))
+        return {"success": True, "path": path}
+
+    async def delete_file(self, path: str) -> dict[str, Any]:
+        delete = getattr(self._fs, "delete", None) or getattr(
+            self._fs, "delete_file", None
+        )
+        if delete is None:
+            await self._shell.exec(f"rm -rf {path!r}")
+        else:
+            await _maybe_await(delete(path))
+        return {"success": True, "path": path}
+
+    async def list_dir(
+        self,
+        path: str = ".",
+        show_hidden: bool = False,
+    ) -> dict[str, Any]:
+        list_dir = getattr(self._fs, "list_dir", None)
+        if list_dir is not None:
+            entries = await _maybe_await(list_dir(path))
+            return {"success": True, "path": path, "entries": entries}
+        return await _list_dir_via_shell(self._shell, path, show_hidden)
+
+
+class _ShellFSAdapter:
+    def __init__(self, shell: CuaShellComponent) -> None:
+        self._shell = shell
+
+    async def create_file(
+        self,
+        path: str,
+        content: str = "",
+        mode: int = 0o644,
+    ) -> dict[str, Any]:
+        await self.write_file(path, content)
+        return {"success": True, "path": path, "mode": mode}
+
+    async def read_file(
+        self,
+        path: str,
+        encoding: str = "utf-8",
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        _ = encoding
+        result = await self._shell.exec(f"cat {path!r}")
+        if result.get("stderr"):
+            return {"success": False, "path": path, "error": result["stderr"]}
+        return {
+            "success": True,
+            "path": path,
+            "content": _slice_content_by_lines(
+                str(result.get("stdout", "")), offset=offset, limit=limit
+            ),
+        }
+
+    async def write_file(
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        _ = mode
+        await _write_base64_via_shell(self._shell, path, content.encode(encoding))
+        return {"success": True, "path": path}
+
+    async def delete_file(self, path: str) -> dict[str, Any]:
+        await self._shell.exec(f"rm -rf {path!r}")
+        return {"success": True, "path": path}
+
+    async def list_dir(
+        self,
+        path: str = ".",
+        show_hidden: bool = False,
+    ) -> dict[str, Any]:
+        return await _list_dir_via_shell(self._shell, path, show_hidden)
+
+
+async def _list_dir_via_shell(
+    shell: CuaShellComponent,
+    path: str,
+    show_hidden: bool,
+) -> dict[str, Any]:
+    flags = "-1A" if show_hidden else "-1"
+    result = await shell.exec(f"ls {flags} {path!r}")
+    return {
+        "success": not bool(result.get("stderr")),
+        "path": path,
+        "entries": _split_listing_entries(result.get("stdout", "")),
+        "error": result.get("stderr", ""),
+    }
+
+
+class CuaFileSystemComponent(FileSystemComponent):
+    def __init__(self, sandbox: Any, os_type: str = "linux") -> None:
+        self._shell = CuaShellComponent(sandbox, os_type=os_type)
+        fs = getattr(sandbox, "filesystem", None)
+        self._impl = (
+            _NativeFSAdapter(fs, self._shell)
+            if fs is not None
+            else _ShellFSAdapter(self._shell)
+        )
+
+    async def create_file(
+        self,
+        path: str,
+        content: str = "",
+        mode: int = 0o644,
+    ) -> dict[str, Any]:
+        return await self._impl.create_file(path, content, mode)
+
+    async def read_file(
+        self,
+        path: str,
+        encoding: str = "utf-8",
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        return await self._impl.read_file(path, encoding, offset, limit)
 
     async def search_files(
         self,
@@ -326,44 +466,17 @@ class CuaFileSystemComponent(FileSystemComponent):
         mode: str = "w",
         encoding: str = "utf-8",
     ) -> dict[str, Any]:
-        _ = mode
-        fs = self._filesystem
-        if fs is not None and hasattr(fs, "write_file"):
-            await fs.write_file(path, content)
-        else:
-            await _write_base64_via_shell(self._shell, path, content.encode(encoding))
-        return {"success": True, "path": path}
+        return await self._impl.write_file(path, content, mode, encoding)
 
     async def delete_file(self, path: str) -> dict[str, Any]:
-        fs = self._filesystem
-        if fs is not None:
-            if hasattr(fs, "delete"):
-                await fs.delete(path)
-            elif hasattr(fs, "delete_file"):
-                await fs.delete_file(path)
-            else:
-                await self._shell.exec(f"rm -rf {path!r}")
-        else:
-            await self._shell.exec(f"rm -rf {path!r}")
-        return {"success": True, "path": path}
+        return await self._impl.delete_file(path)
 
     async def list_dir(
         self,
         path: str = ".",
         show_hidden: bool = False,
     ) -> dict[str, Any]:
-        fs = self._filesystem
-        if fs is not None and hasattr(fs, "list_dir"):
-            entries = await fs.list_dir(path)
-            return {"success": True, "path": path, "entries": entries}
-        flags = "-1A" if show_hidden else "-1"
-        result = await self._shell.exec(f"ls {flags} {path!r}")
-        return {
-            "success": not bool(result.get("stderr")),
-            "path": path,
-            "entries": _split_listing_entries(result.get("stdout", "")),
-            "error": result.get("stderr", ""),
-        }
+        return await self._impl.list_dir(path, show_hidden)
 
 
 class CuaGUIComponent(GUIComponent):
@@ -441,6 +554,16 @@ def _screenshot_to_bytes(raw: Any) -> bytes:
     raise TypeError(f"Unsupported CUA screenshot result: {type(raw)!r}")
 
 
+@dataclass(slots=True)
+class _CuaRuntime:
+    sandbox_cm: Any
+    sandbox: Any
+    shell: CuaShellComponent
+    python: CuaPythonComponent
+    fs: CuaFileSystemComponent
+    gui: CuaGUIComponent | None
+
+
 class CuaBooter(ComputerBooter):
     def __init__(
         self,
@@ -457,12 +580,7 @@ class CuaBooter(ComputerBooter):
         self.telemetry_enabled = telemetry_enabled
         self.local = local
         self.api_key = api_key
-        self._sandbox: Any | None = None
-        self._sandbox_cm: Any | None = None
-        self._shell: CuaShellComponent | None = None
-        self._python: CuaPythonComponent | None = None
-        self._fs: CuaFileSystemComponent | None = None
-        self._gui: CuaGUIComponent | None = None
+        self._runtime: _CuaRuntime | None = None
 
     async def boot(self, session_id: str) -> None:
         _ = session_id
@@ -476,12 +594,16 @@ class CuaBooter(ComputerBooter):
 
         image_obj = self._build_image(Image)
         ephemeral_kwargs = self._build_ephemeral_kwargs(Sandbox.ephemeral)
-        self._sandbox_cm = Sandbox.ephemeral(image_obj, **ephemeral_kwargs)
-        self._sandbox = await self._sandbox_cm.__aenter__()
-        self._shell = CuaShellComponent(self._sandbox)
-        self._python = CuaPythonComponent(self._sandbox)
-        self._fs = CuaFileSystemComponent(self._sandbox)
-        self._gui = CuaGUIComponent(self._sandbox)
+        sandbox_cm = Sandbox.ephemeral(image_obj, **ephemeral_kwargs)
+        sandbox = await sandbox_cm.__aenter__()
+        self._runtime = _CuaRuntime(
+            sandbox_cm=sandbox_cm,
+            sandbox=sandbox,
+            shell=CuaShellComponent(sandbox, os_type=self.os_type),
+            python=CuaPythonComponent(sandbox, os_type=self.os_type),
+            fs=CuaFileSystemComponent(sandbox, os_type=self.os_type),
+            gui=CuaGUIComponent(sandbox),
+        )
         logger.info(
             "[Computer] CUA sandbox booted: image=%s, os_type=%s",
             self.image,
@@ -515,24 +637,20 @@ class CuaBooter(ComputerBooter):
         return kwargs
 
     async def shutdown(self) -> None:
-        if self._sandbox_cm is not None:
-            await self._sandbox_cm.__aexit__(None, None, None)
-            self._sandbox_cm = None
-            self._sandbox = None
-            self._shell = None
-            self._python = None
-            self._fs = None
-            self._gui = None
+        if self._runtime is not None:
+            await self._runtime.sandbox_cm.__aexit__(None, None, None)
+            self._runtime = None
 
     @property
     def capabilities(self) -> tuple[str, ...] | None:
         capabilities = ["python", "shell", "filesystem"]
-        if self._sandbox is None:
+        if self._runtime is None:
             return tuple(capabilities)
 
-        has_screenshot = getattr(self._sandbox, "screenshot", None) is not None
-        has_mouse = _has_component_method(self._sandbox, "mouse", "click")
-        has_keyboard = _has_component_method(self._sandbox, "keyboard", "type")
+        sandbox = self._runtime.sandbox
+        has_screenshot = getattr(sandbox, "screenshot", None) is not None
+        has_mouse = _has_component_method(sandbox, "mouse", "click")
+        has_keyboard = _has_component_method(sandbox, "keyboard", "type")
         if has_screenshot or has_mouse or has_keyboard:
             capabilities.append("gui")
         if has_screenshot:
@@ -545,33 +663,34 @@ class CuaBooter(ComputerBooter):
 
     @property
     def fs(self) -> FileSystemComponent:
-        if self._fs is None:
+        if self._runtime is None:
             raise RuntimeError("CuaBooter is not initialized.")
-        return self._fs
+        return self._runtime.fs
 
     @property
     def python(self) -> PythonComponent:
-        if self._python is None:
+        if self._runtime is None:
             raise RuntimeError("CuaBooter is not initialized.")
-        return self._python
+        return self._runtime.python
 
     @property
     def shell(self) -> ShellComponent:
-        if self._shell is None:
+        if self._runtime is None:
             raise RuntimeError("CuaBooter is not initialized.")
-        return self._shell
+        return self._runtime.shell
 
     @property
     def gui(self) -> GUIComponent | None:
-        return self._gui
+        return None if self._runtime is None else self._runtime.gui
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         local_path = Path(path)
         if not local_path.is_file():
             return {"success": False, "error": f"File not found: {path}"}
-        if self._sandbox is not None and hasattr(self._sandbox, "upload_file"):
+        sandbox = None if self._runtime is None else self._runtime.sandbox
+        if sandbox is not None and hasattr(sandbox, "upload_file"):
             return _maybe_model_dump(
-                await self._sandbox.upload_file(str(local_path), file_name)
+                await sandbox.upload_file(str(local_path), file_name)
             )
         result = await _write_base64_via_shell(
             self.shell, file_name, local_path.read_bytes()
@@ -583,8 +702,9 @@ class CuaBooter(ComputerBooter):
         }
 
     async def download_file(self, remote_path: str, local_path: str) -> None:
-        if self._sandbox is not None and hasattr(self._sandbox, "download_file"):
-            await self._sandbox.download_file(remote_path, local_path)
+        sandbox = None if self._runtime is None else self._runtime.sandbox
+        if sandbox is not None and hasattr(sandbox, "download_file"):
+            await sandbox.download_file(remote_path, local_path)
             return
         result = await self.shell.exec(f"base64 {remote_path!r}")
         if result.get("stderr"):
@@ -593,4 +713,4 @@ class CuaBooter(ComputerBooter):
         Path(local_path).write_bytes(base64.b64decode(result.get("stdout", "")))
 
     async def available(self) -> bool:
-        return self._sandbox is not None
+        return self._runtime is not None

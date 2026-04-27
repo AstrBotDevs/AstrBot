@@ -2,13 +2,12 @@ import asyncio
 import base64
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
-import pytest
 import mcp
+import pytest
 
-from astrbot.core.config.default import CONFIG_METADATA_3
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.config.default import CONFIG_METADATA_3
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
 
@@ -134,7 +133,9 @@ async def test_get_booter_creates_cua_booter(monkeypatch):
         async def available(self):
             return True
 
-    monkeypatch.setattr(computer_client, "_sync_skills_to_sandbox", lambda booter: asyncio.sleep(0))
+    monkeypatch.setattr(
+        computer_client, "_sync_skills_to_sandbox", lambda booter: asyncio.sleep(0)
+    )
     monkeypatch.setitem(computer_client.session_booter, "cua-test", None)
     computer_client.session_booter.pop("cua-test", None)
     monkeypatch.setattr(
@@ -172,9 +173,9 @@ def test_cua_ephemeral_kwargs_include_local_when_supported():
     def ephemeral(image, ttl=None, telemetry_enabled=None, local=None):
         return image, ttl, telemetry_enabled, local
 
-    kwargs = CuaBooter(ttl=120, telemetry_enabled=False, local=True)._build_ephemeral_kwargs(
-        ephemeral
-    )
+    kwargs = CuaBooter(
+        ttl=120, telemetry_enabled=False, local=True
+    )._build_ephemeral_kwargs(ephemeral)
 
     assert kwargs == {"ttl": 120, "telemetry_enabled": False, "local": True}
 
@@ -308,17 +309,39 @@ async def test_cua_shell_background_wrapper_detaches_via_python_subprocess():
 
     sandbox = FakeSandbox()
 
-    await CuaShellComponent(sandbox).exec("chromium https://example.com", background=True)
+    await CuaShellComponent(sandbox).exec(
+        "chromium https://example.com", background=True
+    )
 
     command = sandbox.shell.commands[0][0]
     assert command.startswith("python3 -c ")
     assert "subprocess.Popen" in command
     assert "start_new_session=True" in command
+    assert "p.pid" in command
     assert "stdout=subprocess.DEVNULL" in command
     assert "stderr=subprocess.DEVNULL" in command
     assert "time.sleep(0.2)" in command
     assert "'chromium https://example.com'" in command
     assert "&" not in command
+
+
+@pytest.mark.asyncio
+async def test_cua_shell_background_rejects_non_posix_os_type():
+    from astrbot.core.computer.booters.cua import CuaShellComponent
+
+    sandbox = FakeSandbox()
+
+    result = await CuaShellComponent(sandbox, os_type="windows").exec(
+        "start notepad", background=True
+    )
+
+    assert result == {
+        "stdout": "",
+        "stderr": "error: background shell execution is only supported for POSIX CUA images.",
+        "exit_code": 2,
+        "success": False,
+    }
+    assert sandbox.shell.commands == []
 
 
 @pytest.mark.asyncio
@@ -342,10 +365,28 @@ async def test_cua_gui_reports_missing_mouse_or_keyboard():
 
 
 def test_cua_capabilities_reflect_initialized_sandbox_gui_devices():
-    from astrbot.core.computer.booters.cua import CuaBooter
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    def set_runtime(booter, sandbox):
+        shell = CuaShellComponent(sandbox)
+        booter._runtime = _CuaRuntime(
+            sandbox_cm=object(),
+            sandbox=sandbox,
+            shell=shell,
+            python=CuaPythonComponent(sandbox),
+            fs=CuaFileSystemComponent(sandbox),
+            gui=CuaGUIComponent(sandbox),
+        )
 
     booter = CuaBooter()
-    booter._sandbox = FakeSandbox()
+    set_runtime(booter, FakeSandbox())
 
     assert booter.capabilities == (
         "python",
@@ -361,14 +402,21 @@ def test_cua_capabilities_reflect_initialized_sandbox_gui_devices():
         async def screenshot(self):
             return b"fake-png"
 
-    booter._sandbox = ScreenshotOnlySandbox()
+    set_runtime(booter, ScreenshotOnlySandbox())
 
     assert booter.capabilities == ("python", "shell", "filesystem", "gui", "screenshot")
 
 
 @pytest.mark.asyncio
 async def test_cua_shutdown_clears_cached_components():
-    from astrbot.core.computer.booters.cua import CuaBooter
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
 
     closed = []
 
@@ -377,21 +425,21 @@ async def test_cua_shutdown_clears_cached_components():
             closed.append(True)
 
     booter = CuaBooter()
-    booter._sandbox = FakeSandbox()
-    booter._sandbox_cm = FakeSandboxContext()
-    booter._shell = object()
-    booter._python = object()
-    booter._fs = object()
-    booter._gui = object()
+    sandbox = FakeSandbox()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=FakeSandboxContext(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
 
     await booter.shutdown()
 
     assert closed == [True]
     assert await booter.available() is False
-    assert booter._shell is None
-    assert booter._python is None
-    assert booter._fs is None
-    assert booter._gui is None
+    assert booter._runtime is None
 
 
 def test_cua_tools_are_registered_as_builtin_tools():
@@ -405,7 +453,10 @@ def test_cua_tools_are_registered_as_builtin_tools():
 
     assert manager.get_builtin_tool(CuaScreenshotTool).name == "astrbot_cua_screenshot"
     assert manager.get_builtin_tool(CuaMouseClickTool).name == "astrbot_cua_mouse_click"
-    assert manager.get_builtin_tool(CuaKeyboardTypeTool).name == "astrbot_cua_keyboard_type"
+    assert (
+        manager.get_builtin_tool(CuaKeyboardTypeTool).name
+        == "astrbot_cua_keyboard_type"
+    )
 
 
 def test_cua_runtime_tools_are_available_to_handoffs():
@@ -448,9 +499,12 @@ def test_cua_is_exposed_in_sandbox_config_metadata():
     assert "provider_settings.sandbox.cua_telemetry_enabled" in items
     assert "provider_settings.sandbox.cua_local" in items
     assert "provider_settings.sandbox.cua_api_key" in items
-    assert items["provider_settings.sandbox.cua_api_key"]["condition"][
-        "provider_settings.sandbox.cua_local"
-    ] is False
+    assert (
+        items["provider_settings.sandbox.cua_api_key"]["condition"][
+            "provider_settings.sandbox.cua_local"
+        ]
+        is False
+    )
 
 
 @pytest.mark.asyncio
@@ -527,7 +581,9 @@ async def test_screenshot_tool_can_opt_in_to_llm_image_content(monkeypatch, tmp_
 
     class FakeAstrContext:
         event = FakeEvent()
-        context = FakeContext({"provider_settings": {"computer_use_require_admin": True}})
+        context = FakeContext(
+            {"provider_settings": {"computer_use_require_admin": True}}
+        )
 
     class FakeWrapper:
         context = FakeAstrContext()
@@ -576,7 +632,9 @@ async def test_screenshot_tool_can_opt_out_of_llm_image_content(monkeypatch, tmp
 
     class FakeAstrContext:
         event = FakeEvent()
-        context = FakeContext({"provider_settings": {"computer_use_require_admin": True}})
+        context = FakeContext(
+            {"provider_settings": {"computer_use_require_admin": True}}
+        )
 
     class FakeWrapper:
         context = FakeAstrContext()
@@ -646,3 +704,35 @@ async def test_cua_tools_return_permission_error_without_gui_lookup(monkeypatch)
     assert await CuaMouseClickTool().call(FakeWrapper(), x=1, y=2) == "denied"
     assert await CuaKeyboardTypeTool().call(FakeWrapper(), text="hello") == "denied"
     assert sent_messages == []
+
+
+@pytest.mark.asyncio
+async def test_cua_tools_include_exception_type_for_blank_error(monkeypatch):
+    from astrbot.core.tools.computer_tools import cua as cua_tools
+    from astrbot.core.tools.computer_tools.cua import CuaMouseClickTool
+
+    class BlankError(Exception):
+        def __str__(self):
+            return ""
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        event = FakeEvent()
+        context = FakeContext(
+            {"provider_settings": {"computer_use_require_admin": True}}
+        )
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    async def fail_gui_lookup(context):
+        raise BlankError()
+
+    monkeypatch.setattr(cua_tools, "_get_gui_component", fail_gui_lookup)
+
+    assert await CuaMouseClickTool().call(FakeWrapper(), x=1, y=2) == (
+        "Error clicking CUA desktop: BlankError"
+    )

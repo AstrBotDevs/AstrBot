@@ -28,6 +28,10 @@ def _to_json(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
 
 
+def _exception_detail(error: Exception) -> str:
+    return str(error) or type(error).__name__
+
+
 async def _get_gui_component(context: ContextWrapper[AstrAgentContext]) -> Any:
     booter = await get_booter(
         context.context.context,
@@ -97,7 +101,7 @@ class CuaScreenshotTool(FunctionTool):
                 )
             return mcp.types.CallToolResult(content=content)
         except Exception as e:
-            return f"Error taking CUA screenshot: {str(e)}"
+            return f"Error taking CUA screenshot: {_exception_detail(e)}"
 
 
 @builtin_tool(config=_CUA_TOOL_CONFIG)
@@ -134,7 +138,7 @@ class CuaMouseClickTool(FunctionTool):
             gui = await _get_gui_component(context)
             return _to_json(await gui.click(x, y, button=button))
         except Exception as e:
-            return f"Error clicking CUA desktop: {str(e)}"
+            return f"Error clicking CUA desktop: {_exception_detail(e)}"
 
 
 @builtin_tool(config=_CUA_TOOL_CONFIG)
@@ -163,7 +167,7 @@ class CuaKeyboardTypeTool(FunctionTool):
             gui = await _get_gui_component(context)
             return _to_json(await gui.type_text(text))
         except Exception as e:
-            return f"Error typing in CUA desktop: {str(e)}"
+            return f"Error typing in CUA desktop: {_exception_detail(e)}"
 
 
 def _new_screenshot_path(umo: str) -> str:
