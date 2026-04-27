@@ -32,7 +32,6 @@ from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,
-    CuaKeyPressTool,
     CuaMouseClickTool,
     CuaScreenshotTool,
     ExecuteShellTool,
@@ -216,13 +215,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 screenshot_tool = tool_mgr.get_builtin_tool(CuaScreenshotTool)
                 mouse_click_tool = tool_mgr.get_builtin_tool(CuaMouseClickTool)
                 keyboard_type_tool = tool_mgr.get_builtin_tool(CuaKeyboardTypeTool)
-                key_press_tool = tool_mgr.get_builtin_tool(CuaKeyPressTool)
                 tools.update(
                     {
                         screenshot_tool.name: screenshot_tool,
                         mouse_click_tool.name: mouse_click_tool,
                         keyboard_type_tool.name: keyboard_type_tool,
-                        key_press_tool.name: key_press_tool,
                     }
                 )
             return tools

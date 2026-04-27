@@ -377,7 +377,6 @@ async def test_cua_shutdown_clears_cached_components():
 
 def test_cua_tools_are_registered_as_builtin_tools():
     from astrbot.core.tools.computer_tools.cua import (
-        CuaKeyPressTool,
         CuaKeyboardTypeTool,
         CuaMouseClickTool,
         CuaScreenshotTool,
@@ -388,7 +387,6 @@ def test_cua_tools_are_registered_as_builtin_tools():
     assert manager.get_builtin_tool(CuaScreenshotTool).name == "astrbot_cua_screenshot"
     assert manager.get_builtin_tool(CuaMouseClickTool).name == "astrbot_cua_mouse_click"
     assert manager.get_builtin_tool(CuaKeyboardTypeTool).name == "astrbot_cua_keyboard_type"
-    assert manager.get_builtin_tool(CuaKeyPressTool).name == "astrbot_cua_key_press"
 
 
 def test_cua_runtime_tools_are_available_to_handoffs():
@@ -399,7 +397,7 @@ def test_cua_runtime_tools_are_available_to_handoffs():
     assert "astrbot_cua_screenshot" in tools
     assert "astrbot_cua_mouse_click" in tools
     assert "astrbot_cua_keyboard_type" in tools
-    assert "astrbot_cua_key_press" in tools
+    assert "astrbot_cua_key_press" not in tools
 
 
 def test_runtime_tool_selection_treats_none_booter_as_empty():
@@ -417,41 +415,6 @@ def test_runtime_tool_selection_normalizes_cua_booter_case():
     tools = FunctionToolExecutor._get_runtime_computer_tools("sandbox", manager, "CUA")
 
     assert "astrbot_cua_screenshot" in tools
-
-
-@pytest.mark.asyncio
-async def test_cua_key_press_tool_presses_keyboard(monkeypatch):
-    from astrbot.core.tools.computer_tools import cua as cua_tools
-    from astrbot.core.tools.computer_tools.cua import CuaKeyPressTool
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        event = FakeEvent()
-        context = FakeContext({"provider_settings": {"computer_use_require_admin": True}})
-
-    class FakeWrapper:
-        context = FakeAstrContext()
-
-    sandbox = FakeSandbox()
-    from astrbot.core.computer.booters.cua import CuaGUIComponent
-
-    sandbox_gui = CuaGUIComponent(sandbox)
-
-    class FakeBooter:
-        gui = sandbox_gui
-
-    async def fake_get_booter(context, session_id):
-        return FakeBooter()
-
-    monkeypatch.setattr(cua_tools, "get_booter", fake_get_booter)
-
-    result = await CuaKeyPressTool().call(FakeWrapper(), key="Enter")
-
-    assert json.loads(result)["success"] is True
-    assert sandbox.keyboard.pressed == ["Enter"]
 
 
 def test_cua_is_exposed_in_sandbox_config_metadata():

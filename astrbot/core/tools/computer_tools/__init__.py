@@ -1,6 +1,5 @@
 from .cua import (
     CuaKeyboardTypeTool,
-    CuaKeyPressTool,
     CuaMouseClickTool,
     CuaScreenshotTool,
 )
@@ -38,7 +37,6 @@ __all__ = [
     "BrowserExecTool",
     "CreateSkillCandidateTool",
     "CreateSkillPayloadTool",
-    "CuaKeyPressTool",
     "CuaKeyboardTypeTool",
     "CuaMouseClickTool",
     "CuaScreenshotTool",

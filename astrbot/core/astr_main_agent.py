@@ -48,7 +48,6 @@ from astrbot.core.tools.computer_tools import (
     CreateSkillCandidateTool,
     CreateSkillPayloadTool,
     CuaKeyboardTypeTool,
-    CuaKeyPressTool,
     CuaMouseClickTool,
     CuaScreenshotTool,
     EvaluateSkillCandidateTool,
@@ -1031,14 +1030,21 @@ def _apply_sandbox_tools(
             "`astrbot_cua_screenshot` to inspect the current desktop before "
             "clicking or typing; keep `return_image_to_llm` enabled unless the "
             "provider cannot handle image tool results. "
+            "By default, set `send_to_user=true` on CUA screenshots after each "
+            "visible step so the user stays in control; only suppress user-visible "
+            "screenshots when the user explicitly asks for only the final result. "
             "Use coordinates from screenshots for "
-            "`astrbot_cua_mouse_click`, `astrbot_cua_keyboard_type` for text input, "
-            "and `astrbot_cua_key_press` for Enter, Ctrl+L, Tab, or Escape.\n"
+            "`astrbot_cua_mouse_click`, and use `astrbot_cua_keyboard_type` for "
+            "text input. Prevent input field pollution: before typing, inspect the "
+            "screenshot, confirm the intended input is focused and empty or safe to "
+            "append to, and avoid typing into fields that already contain unrelated "
+            "text. For Enter, use `astrbot_cua_keyboard_type` with text=`\\n`. "
+            "For URL navigation, launch Chromium with "
+            "`astrbot_execute_shell` instead of using address-bar shortcuts.\n"
         )
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyPressTool))
 
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 

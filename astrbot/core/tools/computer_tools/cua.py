@@ -166,38 +166,6 @@ class CuaKeyboardTypeTool(FunctionTool):
             return f"Error typing in CUA desktop: {str(e)}"
 
 
-@builtin_tool(config=_CUA_TOOL_CONFIG)
-@dataclass
-class CuaKeyPressTool(FunctionTool):
-    name: str = "astrbot_cua_key_press"
-    description: str = "Press a key or shortcut in the CUA sandbox desktop."
-    parameters: dict = field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "key": {
-                    "type": "string",
-                    "description": "Key or shortcut to press, for example Enter, Escape, Tab, or Ctrl+L.",
-                },
-            },
-            "required": ["key"],
-        }
-    )
-
-    async def call(
-        self,
-        context: ContextWrapper[AstrAgentContext],
-        key: str,
-    ) -> ToolExecResult:
-        if err := check_admin_permission(context, "Using CUA keyboard"):
-            return err
-        try:
-            gui = await _get_gui_component(context)
-            return _to_json(await gui.press_key(key))
-        except Exception as e:
-            return f"Error pressing key in CUA desktop: {str(e)}"
-
-
 def _new_screenshot_path(umo: str) -> str:
     safe_prefix = uuid.uuid5(uuid.NAMESPACE_DNS, umo).hex[:12]
     screenshot_dir = Path(get_astrbot_temp_path()) / "cua_screenshots"
