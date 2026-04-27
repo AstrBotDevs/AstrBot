@@ -32,9 +32,16 @@
           v-for="project in projects"
           :key="project.project_id"
           class="project-row project-item"
-          :class="{ active: selectedProjectId === project.project_id }"
+          :class="{
+            active: selectedProjectId === project.project_id,
+            'drop-ready':
+              dragActive && dropTargetProjectId === project.project_id,
+          }"
           type="button"
           @click="$emit('selectProject', project.project_id)"
+          @dragover.prevent="handleProjectDragOver(project.project_id)"
+          @dragleave="handleProjectDragLeave(project.project_id)"
+          @drop.prevent="handleProjectDrop(project.project_id)"
         >
           <span class="project-emoji">{{ project.emoji || "📁" }}</span>
           <span class="project-title">{{ project.title }}</span>
@@ -79,11 +86,13 @@ interface Props {
   projects: Project[];
   initialExpanded?: boolean;
   selectedProjectId?: string | null;
+  dragActive?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   initialExpanded: false,
   selectedProjectId: null,
+  dragActive: false,
 });
 
 const emit = defineEmits<{
@@ -91,6 +100,7 @@ const emit = defineEmits<{
   createProject: [];
   editProject: [project: Project];
   deleteProject: [projectId: string];
+  dropSessions: [projectId: string];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -98,6 +108,7 @@ const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 
 const expanded = ref(props.initialExpanded);
+const dropTargetProjectId = ref<string | null>(null);
 
 // 从 localStorage 读取项目展开状态
 const savedProjectsExpandedState = localStorage.getItem("projectsExpanded");
@@ -114,6 +125,24 @@ async function handleDeleteProject(project: Project) {
   const message = tm("project.confirmDelete", { title: project.title });
   if (await askForConfirmation(message, confirmDialog)) {
     emit("deleteProject", project.project_id);
+  }
+}
+
+function handleProjectDragOver(projectId: string) {
+  if (!props.dragActive) return;
+  dropTargetProjectId.value = projectId;
+}
+
+function handleProjectDragLeave(projectId: string) {
+  if (dropTargetProjectId.value === projectId) {
+    dropTargetProjectId.value = null;
+  }
+}
+
+function handleProjectDrop(projectId: string) {
+  dropTargetProjectId.value = null;
+  if (props.dragActive) {
+    emit("dropSessions", projectId);
   }
 }
 </script>
@@ -171,8 +200,14 @@ async function handleDeleteProject(project: Project) {
 }
 
 .project-row:hover,
-.project-row.active {
+.project-row.active,
+.project-row.drop-ready {
   background: var(--chat-session-active-bg);
+}
+
+.project-row.drop-ready {
+  outline: 1px dashed rgba(var(--v-theme-primary), 0.7);
+  outline-offset: 2px;
 }
 
 .project-item:hover .project-actions {

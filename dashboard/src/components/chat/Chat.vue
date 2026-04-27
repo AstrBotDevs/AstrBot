@@ -51,7 +51,9 @@
             :class="{ 'mr-2': !isSidebarCollapsed }"
             >mdi-creation</v-icon
           >
-          <span v-if="!isSidebarCollapsed">{{ tm("actions.providerConfig") }}</span>
+          <span v-if="!isSidebarCollapsed">{{
+            tm("actions.providerConfig")
+          }}</span>
         </v-btn>
 
         <v-btn
@@ -74,29 +76,73 @@
           v-if="!isSidebarCollapsed"
           :projects="projects"
           :selected-project-id="selectedProjectId"
+          :drag-active="draggingSessionIds.length > 0"
           @create-project="openCreateProjectDialog"
           @edit-project="openEditProjectDialog"
           @delete-project="handleDeleteProject"
           @select-project="selectProject"
+          @drop-sessions="dropDraggedSessionsOnProject"
         />
       </div>
 
       <div v-if="!isSidebarCollapsed" class="session-list">
+        <div v-if="isSessionSelectionMode" class="session-selection-toolbar">
+          <span class="session-selection-count">
+            {{ selectedSessions.length }} selected
+          </span>
+          <v-spacer />
+          <v-btn
+            size="x-small"
+            variant="text"
+            :disabled="!selectedSessions.length || deletingSelectedSessions"
+            :loading="deletingSelectedSessions"
+            @click="deleteSelectedSidebarSessions"
+          >
+            {{ tm("actions.deleteChat") }}
+          </v-btn>
+          <v-btn size="x-small" variant="text" @click="clearSessionSelection">
+            {{ t("core.common.cancel") }}
+          </v-btn>
+        </div>
+
         <div
           v-for="session in sessions"
           :key="session.session_id"
           class="session-item"
-          :class="{ active: !isProviderWorkspace && currSessionId === session.session_id }"
+          :class="{
+            active:
+              !isProviderWorkspace && currSessionId === session.session_id,
+            selected: isSessionSelected(session.session_id),
+            'selection-mode': isSessionSelectionMode,
+          }"
           role="button"
           tabindex="0"
-          @click="selectSession(session.session_id)"
-          @keydown.enter="selectSession(session.session_id)"
-          @keydown.space.prevent="selectSession(session.session_id)"
+          draggable="true"
+          @click="handleSessionItemClick(session.session_id)"
+          @pointerdown="startSessionLongPress(session.session_id)"
+          @pointerup="cancelSessionLongPress"
+          @pointerleave="cancelSessionLongPress"
+          @pointercancel="cancelSessionLongPress"
+          @dragstart="startSessionDrag($event, session.session_id)"
+          @dragend="finishSessionDrag"
+          @keydown.enter="handleSessionItemClick(session.session_id)"
+          @keydown.space.prevent="handleSessionItemClick(session.session_id)"
         >
+          <v-icon
+            v-if="isSessionSelectionMode"
+            size="18"
+            class="session-check-icon"
+          >
+            {{
+              isSessionSelected(session.session_id)
+                ? "mdi-checkbox-marked-circle"
+                : "mdi-checkbox-blank-circle-outline"
+            }}
+          </v-icon>
           <span v-if="!isSidebarCollapsed" class="session-title">{{
             sessionTitle(session)
           }}</span>
-          <div class="session-actions" @click.stop>
+          <div class="session-actions" @click.stop @pointerdown.stop>
             <v-btn
               icon="mdi-pencil-outline"
               size="x-small"
@@ -285,8 +331,11 @@
     <main
       class="chat-main"
       :class="{
-        'empty-chat': !isProviderWorkspace &&
-          !selectedProject && !loadingMessages && !activeMessages.length,
+        'empty-chat':
+          !isProviderWorkspace &&
+          !selectedProject &&
+          !loadingMessages &&
+          !activeMessages.length,
       }"
     >
       <section v-if="isProviderWorkspace" class="provider-workspace-shell">
@@ -528,6 +577,11 @@ import {
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useProjects } from "@/composables/useProjects";
 import { useCustomizerStore } from "@/stores/customizer";
+import {
+  getDragSessionIds,
+  shouldSuppressClickAfterLongPress,
+  toggleSessionSelection,
+} from "@/utils/sessionManagement.mjs";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import {
   useI18n,
@@ -538,10 +592,13 @@ import type { Locale } from "@/i18n/types";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import { useToast } from "@/utils/toast";
 
-const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean }>(), {
-  chatboxMode: false,
-  active: true,
-});
+const props = withDefaults(
+  defineProps<{ chatboxMode?: boolean; active?: boolean }>(),
+  {
+    chatboxMode: false,
+    active: true,
+  },
+);
 
 const route = useRoute();
 const router = useRouter();
@@ -560,6 +617,8 @@ const {
   newSession,
   newChat,
   deleteSession,
+  batchDeleteSessions,
+  selectedSessions,
   updateSessionTitle,
 } = useSessions(props.chatboxMode);
 const {
@@ -617,7 +676,13 @@ const activeReasoningTarget = ref<{
   blockIndex: number;
 } | null>(null);
 const deletingThread = ref(false);
+const deletingSelectedSessions = ref(false);
 const refsSidebarOpen = ref(false);
+const draggingSessionIds = ref<string[]>([]);
+const isSessionSelectionMode = ref(false);
+const suppressNextSessionClick = ref(false);
+const sessionLongPressMs = 450;
+let sessionLongPressTimer: number | null = null;
 const selectedRefs = ref<Record<string, unknown> | null>(null);
 const threadSelection = reactive<{
   visible: boolean;
@@ -838,6 +903,7 @@ function sessionTitle(session: Session) {
 async function startNewChat() {
   showChatWorkspace();
   selectedProjectId.value = null;
+  clearSessionSelection();
   replyTarget.value = null;
   newChat();
   closeMobileSidebar();
@@ -931,6 +997,118 @@ async function deleteSidebarSession(session: Session) {
   if (wasCurrent) {
     selectedProjectId.value = null;
     await router.push(basePath());
+  }
+}
+
+function isSessionSelected(sessionId: string) {
+  return selectedSessions.value.includes(sessionId);
+}
+
+function clearSessionSelection() {
+  selectedSessions.value = [];
+  isSessionSelectionMode.value = false;
+}
+
+function toggleSidebarSessionSelection(sessionId: string) {
+  selectedSessions.value = toggleSessionSelection(
+    selectedSessions.value,
+    sessionId,
+  );
+  isSessionSelectionMode.value = selectedSessions.value.length > 0;
+}
+
+function startSessionLongPress(sessionId: string) {
+  cancelSessionLongPress();
+  sessionLongPressTimer = window.setTimeout(() => {
+    isSessionSelectionMode.value = true;
+    suppressNextSessionClick.value = true;
+    if (!isSessionSelected(sessionId)) {
+      selectedSessions.value = [...selectedSessions.value, sessionId];
+    }
+  }, sessionLongPressMs);
+}
+
+function cancelSessionLongPress() {
+  if (sessionLongPressTimer !== null) {
+    window.clearTimeout(sessionLongPressTimer);
+    sessionLongPressTimer = null;
+  }
+}
+
+function handleSessionItemClick(sessionId: string) {
+  cancelSessionLongPress();
+  const clickSuppression = shouldSuppressClickAfterLongPress(
+    suppressNextSessionClick.value,
+  );
+  suppressNextSessionClick.value = clickSuppression.nextSuppressState;
+  if (clickSuppression.suppress) return;
+
+  if (isSessionSelectionMode.value) {
+    toggleSidebarSessionSelection(sessionId);
+    return;
+  }
+  selectSession(sessionId);
+}
+
+function startSessionDrag(event: DragEvent, sessionId: string) {
+  cancelSessionLongPress();
+  draggingSessionIds.value = getDragSessionIds(
+    sessionId,
+    selectedSessions.value,
+  );
+  event.dataTransfer?.setData(
+    "application/x-astrbot-session-ids",
+    JSON.stringify(draggingSessionIds.value),
+  );
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+  }
+}
+
+function finishSessionDrag() {
+  draggingSessionIds.value = [];
+}
+
+async function dropDraggedSessionsOnProject(projectId: string) {
+  const sessionIds = [...draggingSessionIds.value];
+  if (!sessionIds.length) return;
+  try {
+    const results = await Promise.all(
+      sessionIds.map((sessionId) => addSessionToProject(sessionId, projectId)),
+    );
+    const movedCount = results.filter(Boolean).length;
+    if (movedCount > 0) {
+      await getSessions();
+      if (selectedProjectId.value === projectId) {
+        await loadProjectSessions(projectId);
+      }
+      clearSessionSelection();
+    }
+  } finally {
+    finishSessionDrag();
+  }
+}
+
+async function deleteSelectedSidebarSessions() {
+  if (!selectedSessions.value.length || deletingSelectedSessions.value) return;
+  const message = tm("conversation.confirmDelete", {
+    name: `${selectedSessions.value.length} selected sessions`,
+  });
+  if (!(await askForConfirmation(message, confirmDialog))) return;
+
+  deletingSelectedSessions.value = true;
+  try {
+    const result = await batchDeleteSessions([...selectedSessions.value]);
+    clearSessionSelection();
+    if (result.currentSessionDeleted) {
+      selectedProjectId.value = null;
+      await router.push(basePath());
+    }
+    if (result.failed_count > 0) {
+      toast.error(`${result.failed_count} sessions failed to delete`);
+    }
+  } finally {
+    deletingSelectedSessions.value = false;
   }
 }
 
@@ -1192,7 +1370,8 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
 
 async function createThreadFromSelection() {
   const message = threadSelection.message;
-  if (!currSessionId.value || !message?.id || !threadSelection.selectedText) return;
+  if (!currSessionId.value || !message?.id || !threadSelection.selectedText)
+    return;
   try {
     const response = await axios.post("/api/chat/thread/create", {
       session_id: currSessionId.value,
@@ -1258,7 +1437,8 @@ function openReasoningPanel(payload: {
 
 async function deleteThread(thread: ChatThread) {
   if (deletingThread.value) return;
-  if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog))) return;
+  if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog)))
+    return;
   deletingThread.value = true;
   try {
     await axios.post("/api/chat/thread/delete", {
@@ -1705,20 +1885,20 @@ kbd {
 }
 
 :deep(.hr-node) {
-    margin-top: 1.25rem;
-    margin-bottom: 1.25rem;
-    opacity: 0.5;
-    border-top-width: .3px;
+  margin-top: 1.25rem;
+  margin-bottom: 1.25rem;
+  opacity: 0.5;
+  border-top-width: 0.3px;
 }
 
 :deep(.paragraph-node) {
-    margin: .5rem 0;
-    line-height: 1.7;
+  margin: 0.5rem 0;
+  line-height: 1.7;
 }
 
 :deep(.list-node) {
-    margin-top: .5rem;
-    margin-bottom: .5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 @media (max-width: 760px) {
