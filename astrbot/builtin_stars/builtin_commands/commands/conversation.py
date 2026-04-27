@@ -290,8 +290,8 @@ class ConversationCommands:
         ret = (
             f"📊 Token usage (ID: {cid[:8]}...)\n"
             f"Total:          {total_tokens:,}\n"
-            f"Input (other):  {total_input_other:,}\n"
             f"Input (cached): {total_input_cached:,}\n"
+            f"Input (other):  {total_input_other:,}\n"
             f"Output:         {total_output:,}\n"
         )
 
