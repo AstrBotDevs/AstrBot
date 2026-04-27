@@ -12,6 +12,12 @@ from .base import ComputerBooter
 from .shipyard_search_file_util import search_files_via_shell
 
 
+async def _maybe_await(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
 def _maybe_model_dump(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -33,7 +39,7 @@ async def _call_first(
         method = getattr(obj, name, None)
         if method is None:
             continue
-        return await method(*args, **kwargs)
+        return await _maybe_await(method(*args, **kwargs))
     raise AttributeError(f"None of these methods exist: {', '.join(names)}")
 
 
@@ -284,7 +290,7 @@ class CuaFileSystemComponent(FileSystemComponent):
         if fs is not None and hasattr(fs, "list_dir"):
             entries = await fs.list_dir(path)
             return {"success": True, "path": path, "entries": entries}
-        flags = "-la" if show_hidden else "-l"
+        flags = "-1A" if show_hidden else "-1"
         result = await self._shell.exec(f"ls {flags} {path!r}")
         return {
             "success": not bool(result.get("stderr")),

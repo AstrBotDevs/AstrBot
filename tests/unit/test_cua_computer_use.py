@@ -81,6 +81,21 @@ class FakeSandbox:
         return b"fake-png"
 
 
+class SyncShell:
+    def __init__(self, stdout: str = "ok"):
+        self.commands = []
+        self.stdout = stdout
+
+    def run(self, command: str, **kwargs):
+        self.commands.append((command, kwargs))
+        return {"stdout": self.stdout, "stderr": "", "exit_code": 0}
+
+
+class SyncPython:
+    def run(self, code: str, **kwargs):
+        return {"output": "sync", "error": ""}
+
+
 def _agent_computer_use_items():
     return CONFIG_METADATA_3["ai_group"]["metadata"]["agent_computer_use"]["items"]
 
@@ -211,6 +226,36 @@ async def test_cua_list_dir_returns_entries_list_for_shell_fallback():
 
     assert result["success"] is True
     assert result["entries"] == ["ok"]
+    assert sandbox.shell.commands[0][0] == "ls -1 '.'"
+
+
+@pytest.mark.asyncio
+async def test_cua_list_dir_shell_fallback_returns_filename_only_entries():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = FakeSandbox()
+    sandbox.shell = SyncShell("alpha.txt\nfolder\n")
+    delattr(sandbox, "filesystem")
+
+    result = await CuaFileSystemComponent(sandbox).list_dir(".", show_hidden=True)
+
+    assert result["entries"] == ["alpha.txt", "folder"]
+    assert sandbox.shell.commands[0][0] == "ls -1A '.'"
+
+
+@pytest.mark.asyncio
+async def test_cua_shell_and_python_accept_sync_sdk_methods():
+    from astrbot.core.computer.booters.cua import CuaPythonComponent, CuaShellComponent
+
+    sandbox = FakeSandbox()
+    sandbox.shell = SyncShell()
+    sandbox.python = SyncPython()
+
+    shell_result = await CuaShellComponent(sandbox).exec("echo ok")
+    python_result = await CuaPythonComponent(sandbox).exec("print('ok')")
+
+    assert shell_result["stdout"] == "ok"
+    assert python_result["data"]["output"]["text"] == "sync"
 
 
 @pytest.mark.asyncio
