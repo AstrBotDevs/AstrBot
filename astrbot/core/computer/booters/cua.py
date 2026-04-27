@@ -610,14 +610,19 @@ class CuaBooter(ComputerBooter):
         ephemeral_kwargs = self._build_ephemeral_kwargs(Sandbox.ephemeral)
         sandbox_cm = Sandbox.ephemeral(image_obj, **ephemeral_kwargs)
         sandbox = await sandbox_cm.__aenter__()
-        self._runtime = _CuaRuntime(
-            sandbox_cm=sandbox_cm,
-            sandbox=sandbox,
-            shell=CuaShellComponent(sandbox, os_type=self.os_type),
-            python=CuaPythonComponent(sandbox, os_type=self.os_type),
-            fs=CuaFileSystemComponent(sandbox, os_type=self.os_type),
-            gui=CuaGUIComponent(sandbox),
-        )
+        try:
+            self._runtime = _CuaRuntime(
+                sandbox_cm=sandbox_cm,
+                sandbox=sandbox,
+                shell=CuaShellComponent(sandbox, os_type=self.os_type),
+                python=CuaPythonComponent(sandbox, os_type=self.os_type),
+                fs=CuaFileSystemComponent(sandbox, os_type=self.os_type),
+                gui=CuaGUIComponent(sandbox),
+            )
+        except Exception:
+            await sandbox_cm.__aexit__(None, None, None)
+            self._runtime = None
+            raise
         logger.info(
             "[Computer] CUA sandbox booted: image=%s, os_type=%s",
             self.image,

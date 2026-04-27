@@ -303,6 +303,50 @@ async def test_cua_config_log_does_not_include_api_key(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_booter_shuts_down_client_when_skill_sync_fails(monkeypatch):
+    from astrbot.core.computer import computer_client
+
+    shutdowns = []
+
+    class FakeCuaBooter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def boot(self, session_id: str):
+            self.session_id = session_id
+
+        async def shutdown(self):
+            shutdowns.append(self.session_id)
+
+    async def fail_sync(booter):
+        raise RuntimeError("sync failed")
+
+    monkeypatch.setattr(computer_client, "_sync_skills_to_sandbox", fail_sync)
+    monkeypatch.setitem(computer_client.session_booter, "cua-sync-fail", None)
+    computer_client.session_booter.pop("cua-sync-fail", None)
+    monkeypatch.setattr(
+        "astrbot.core.computer.booters.cua.CuaBooter",
+        FakeCuaBooter,
+        raising=False,
+    )
+
+    ctx = FakeContext(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "cua"},
+            }
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="sync failed"):
+        await computer_client.get_booter(ctx, "cua-sync-fail")
+
+    assert len(shutdowns) == 1
+    assert "cua-sync-fail" not in computer_client.session_booter
+
+
+@pytest.mark.asyncio
 async def test_cua_components_map_sdk_results(tmp_path):
     from astrbot.core.computer.booters.cua import (
         CuaFileSystemComponent,
@@ -701,6 +745,57 @@ async def test_cua_download_file_fallback_rejects_non_posix_os_type(tmp_path):
         await booter.download_file("remote.txt", str(tmp_path / "download.txt"))
 
     assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
+async def test_cua_boot_cleans_up_sandbox_when_component_setup_fails(monkeypatch):
+    from astrbot.core.computer.booters import cua as cua_booter
+
+    closed = []
+
+    class FakeSandboxContext:
+        async def __aenter__(self):
+            return FakeSandbox()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            closed.append((exc_type, exc, tb))
+
+    class FakeImage:
+        @staticmethod
+        def linux():
+            return "linux-image"
+
+    class FakeSandboxFactory:
+        @staticmethod
+        def ephemeral(image, **kwargs):
+            return FakeSandboxContext()
+
+    class BrokenShellComponent:
+        def __init__(self, sandbox, os_type="linux"):
+            raise RuntimeError("component setup failed")
+
+    original_import = __import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "cua":
+
+            class FakeCuaModule:
+                Image = FakeImage
+                Sandbox = FakeSandboxFactory
+
+            return FakeCuaModule()
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+    monkeypatch.setattr(cua_booter, "CuaShellComponent", BrokenShellComponent)
+
+    booter = cua_booter.CuaBooter()
+
+    with pytest.raises(RuntimeError, match="component setup failed"):
+        await booter.boot("session")
+
+    assert len(closed) == 1
+    assert booter._runtime is None
 
 
 @pytest.mark.asyncio

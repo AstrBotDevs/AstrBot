@@ -508,6 +508,14 @@ async def get_booter(
             await _sync_skills_to_sandbox(client)
         except Exception as e:
             logger.error(f"Error booting sandbox for session {session_id}: {e}")
+            try:
+                await client.shutdown()
+            except Exception as shutdown_error:
+                logger.warning(
+                    "Failed to shutdown sandbox after boot error for session %s: %s",
+                    session_id,
+                    shutdown_error,
+                )
             raise e
 
         session_booter[session_id] = client
