@@ -1223,6 +1223,7 @@ function finishSessionDrag() {
 
 async function dropDraggedSessionsOnProject(projectId: string) {
   const sessionIds = [...draggingSessionIds.value];
+  const sourceProjectId = draggingSourceProjectId.value;
   if (!sessionIds.length) return;
   try {
     const results = await Promise.all(
@@ -1230,19 +1231,13 @@ async function dropDraggedSessionsOnProject(projectId: string) {
     );
     const movedCount = results.filter(Boolean).length;
     if (movedCount > 0) {
-      if (draggingSourceProjectId.value) {
-        removeSessionsFromProjectCache(
-          draggingSourceProjectId.value,
-          sessionIds,
-        );
+      if (sourceProjectId) {
+        removeSessionsFromProjectCache(sourceProjectId, sessionIds);
       }
       await getSessions();
       await loadProjectSessions(projectId);
-      if (
-        draggingSourceProjectId.value &&
-        draggingSourceProjectId.value !== projectId
-      ) {
-        await loadProjectSessions(draggingSourceProjectId.value);
+      if (sourceProjectId && sourceProjectId !== projectId) {
+        await loadProjectSessions(sourceProjectId);
       }
       clearSessionSelection();
     }
