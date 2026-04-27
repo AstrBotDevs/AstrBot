@@ -82,6 +82,8 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
 
     title: str | None = Field(default=None, max_length=255)
     persona_id: str | None = Field(default=None)
+    is_reset: bool = Field(default=False, nullable=False)
+    """标记此对话是否由 reset 命令创建。True 表示从 reset 重置而来，False 表示正常新建。"""
     token_usage: int = Field(default=0, nullable=False)
     """content is a list of OpenAI-formated messages in list[dict] format.
     token_usage is the total token value of the messages.
@@ -512,6 +514,8 @@ class Conversation:
     updated_at: int = 0
     token_usage: int = 0
     """对话的总 token 数量。AstrBot 会保留最近一次 LLM 请求返回的总 token 数，方便统计。token_usage 可能为 0，表示未知。"""
+    is_reset: bool = False
+    """标记此对话是否由 reset 命令创建。True 表示从 reset 重置而来，False 表示正常新建。"""
 
 
 class Personality(TypedDict):

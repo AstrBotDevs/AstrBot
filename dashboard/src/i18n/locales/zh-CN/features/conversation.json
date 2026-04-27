@@ -27,6 +27,7 @@
       "type": "消息类型",
       "cid": "对话 ID",
       "umo": "消息会话来源",
+      "isReset": "来源",
       "sessionId": "会话 ID",
       "createdAt": "创建时间",
       "updatedAt": "更新时间",

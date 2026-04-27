@@ -339,6 +339,7 @@ class SQLiteDatabase(BaseDatabase):
         cid=None,
         created_at=None,
         updated_at=None,
+        is_reset=False,
     ):
         kwargs = {}
         if cid:
@@ -356,6 +357,7 @@ class SQLiteDatabase(BaseDatabase):
                     platform_id=platform_id,
                     title=title,
                     persona_id=persona_id,
+                    is_reset=is_reset,
                     **kwargs,
                 )
                 session.add(new_conversation)
