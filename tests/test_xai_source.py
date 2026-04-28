@@ -131,10 +131,52 @@ async def test_xai_responses_combines_native_and_function_tools():
             {
                 "type": "function",
                 "name": "lookup",
+                "strict": False,
                 "description": "Lookup an item",
                 "parameters": {"type": "object", "properties": {}},
             },
         ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_xai_responses_ignores_legacy_flat_web_search_fields():
+    provider = _make_xai_responses_provider(
+        {
+            "xai_native_search": True,
+            "allowed_domains": ["example.com"],
+            "xai_native_search_enable_image_understanding": True,
+        }
+    )
+    provider.client.responses = _FakeResponsesClient(
+        response=SimpleNamespace(id="resp_1", output_text="ok", usage=None)
+    )
+    try:
+        await provider.text_chat(prompt="search")
+
+        assert "tools" not in provider.client.responses.calls[0]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_xai_responses_ignores_legacy_flat_x_search_fields():
+    provider = _make_xai_responses_provider(
+        {
+            "xai_x_search": True,
+            "allowed_x_handles": ["grok"],
+            "xai_x_search_enable_image_understanding": True,
+            "xai_x_search_enable_video_understanding": True,
+        }
+    )
+    provider.client.responses = _FakeResponsesClient(
+        response=SimpleNamespace(id="resp_1", output_text="ok", usage=None)
+    )
+    try:
+        await provider.text_chat(prompt="search")
+
+        assert "tools" not in provider.client.responses.calls[0]
     finally:
         await provider.terminate()
 

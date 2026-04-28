@@ -52,19 +52,11 @@ class ProviderXAIResponses(ProviderOpenAIResponses):
 
     def _build_xai_web_search_tool(self) -> dict | None:
         config = self._get_grouped_config("xai_web_search_config")
-        enabled = config.get(
-            "enabled",
-            self.provider_config.get("xai_native_search", False),
-        )
-        if not bool(enabled):
+        if not bool(config.get("enabled", False)):
             return None
 
-        allowed_domains = self._as_non_empty_str_list(
-            config.get("allowed_domains", self.provider_config.get("allowed_domains"))
-        )
-        excluded_domains = self._as_non_empty_str_list(
-            config.get("excluded_domains", self.provider_config.get("excluded_domains"))
-        )
+        allowed_domains = self._as_non_empty_str_list(config.get("allowed_domains"))
+        excluded_domains = self._as_non_empty_str_list(config.get("excluded_domains"))
         if allowed_domains and excluded_domains:
             raise ValueError(
                 "xAI Responses web search cannot set both allowed_domains and "
@@ -80,30 +72,15 @@ class ProviderXAIResponses(ProviderOpenAIResponses):
             tool["enable_image_understanding"] = bool(
                 config.get("enable_image_understanding")
             )
-        elif "xai_native_search_enable_image_understanding" in self.provider_config:
-            tool["enable_image_understanding"] = bool(
-                self.provider_config.get("xai_native_search_enable_image_understanding")
-            )
-        elif "enable_image_understanding" in self.provider_config:
-            tool["enable_image_understanding"] = bool(
-                self.provider_config.get("enable_image_understanding")
-            )
         return tool
 
     def _build_xai_x_search_tool(self) -> dict | None:
         config = self._get_grouped_config("xai_x_search_config")
-        enabled = config.get("enabled", self.provider_config.get("xai_x_search", False))
-        if not bool(enabled):
+        if not bool(config.get("enabled", False)):
             return None
-        allowed_x_handles = self._as_non_empty_str_list(
-            config.get(
-                "allowed_x_handles", self.provider_config.get("allowed_x_handles")
-            )
-        )
+        allowed_x_handles = self._as_non_empty_str_list(config.get("allowed_x_handles"))
         excluded_x_handles = self._as_non_empty_str_list(
-            config.get(
-                "excluded_x_handles", self.provider_config.get("excluded_x_handles")
-            )
+            config.get("excluded_x_handles")
         )
         tool = {"type": "x_search"}
         if allowed_x_handles:
@@ -114,17 +91,9 @@ class ProviderXAIResponses(ProviderOpenAIResponses):
             tool["enable_image_understanding"] = bool(
                 config.get("enable_image_understanding")
             )
-        elif "xai_x_search_enable_image_understanding" in self.provider_config:
-            tool["enable_image_understanding"] = bool(
-                self.provider_config.get("xai_x_search_enable_image_understanding")
-            )
         if "enable_video_understanding" in config:
             tool["enable_video_understanding"] = bool(
                 config.get("enable_video_understanding")
-            )
-        elif "xai_x_search_enable_video_understanding" in self.provider_config:
-            tool["enable_video_understanding"] = bool(
-                self.provider_config.get("xai_x_search_enable_video_understanding")
             )
 
         return tool

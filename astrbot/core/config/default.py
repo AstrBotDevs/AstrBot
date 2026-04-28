@@ -1947,7 +1947,7 @@ CONFIG_METADATA_2 = {
                             "enable_image_understanding": {
                                 "description": "启用图片理解",
                                 "type": "bool",
-                                "hint": "传递给 xAI Responses web_search 工具。",
+                                "hint": "传允许模型在搜索过程中分析图片。",
                             },
                         },
                     },
@@ -1977,12 +1977,12 @@ CONFIG_METADATA_2 = {
                             "enable_image_understanding": {
                                 "description": "启用图片理解",
                                 "type": "bool",
-                                "hint": "传递给 xAI Responses x_search 工具。",
+                                "hint": "允许模型在搜索过程中分析X帖子中的图片。",
                             },
                             "enable_video_understanding": {
                                 "description": "启用视频理解",
                                 "type": "bool",
-                                "hint": "传递给 xAI Responses x_search 工具。",
+                                "hint": "允许模型在搜索过程中分析X帖子中的视频。",
                             },
                         },
                     },
