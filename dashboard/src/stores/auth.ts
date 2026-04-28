@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { router } from '@/router';
 import axios from 'axios';
+import { createLoginProof, type LoginChallenge } from '@/utils/authLoginProof';
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -11,9 +12,17 @@ export const useAuthStore = defineStore("auth", {
   actions: {
     async login(username: string, password: string): Promise<void> {
       try {
+        const challengeRes = await axios.post('/api/auth/login/challenge');
+        const challenge = challengeRes.data?.data as LoginChallenge | undefined;
+        if (!challenge) {
+          return Promise.reject('Failed to initialize secure login');
+        }
+
+        const passwordProof = await createLoginProof(password, challenge);
         const res = await axios.post('/api/auth/login', {
           username: username,
-          password: password
+          challenge_id: challenge.challenge_id,
+          password_proof: passwordProof
         });
     
         if (res.data.status === 'error') {
@@ -23,7 +32,17 @@ export const useAuthStore = defineStore("auth", {
         this.username = res.data.data.username
         localStorage.setItem('user', this.username);
         localStorage.setItem('token', res.data.data.token);
-        localStorage.setItem('change_pwd_hint', res.data.data?.change_pwd_hint);
+        if (res.data.data?.change_pwd_hint || res.data.data?.legacy_pwd_hint) {
+          localStorage.setItem('change_pwd_hint', 'true');
+          if (res.data.data?.legacy_pwd_hint) {
+            localStorage.setItem('legacy_pwd_hint', 'true');
+          } else {
+            localStorage.removeItem('legacy_pwd_hint');
+          }
+        } else {
+          localStorage.removeItem('change_pwd_hint');
+          localStorage.removeItem('legacy_pwd_hint');
+        }
         
         const onboardingCompleted = await this.checkOnboardingCompleted();
         this.returnUrl = null;
@@ -69,6 +88,8 @@ export const useAuthStore = defineStore("auth", {
       this.username = '';
       localStorage.removeItem('user');
       localStorage.removeItem('token');
+      localStorage.removeItem('change_pwd_hint');
+      localStorage.removeItem('legacy_pwd_hint');
       router.push('/auth/login');
     },
     has_token(): boolean {

@@ -3,7 +3,6 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import axios from 'axios';
 import Logo from '@/components/shared/Logo.vue';
-import { md5 } from 'js-md5';
 import { useAuthStore } from '@/stores/auth';
 import { useCommonStore } from '@/stores/common';
 import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue';
@@ -18,6 +17,7 @@ import { useLanguageSwitcher } from '@/i18n/composables';
 import type { Locale } from '@/i18n/types';
 import AboutPage from '@/views/AboutPage.vue';
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
+import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 
 enableKatex();
 enableMermaid();
@@ -30,6 +30,7 @@ const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
 const LAST_CHAT_ROUTE_KEY = 'astrbot:last_chat_route';
 let dialog = ref(false);
 let accountWarning = ref(false)
+let accountWarningLegacy = ref(false);
 let updateStatusDialog = ref(false);
 let aboutDialog = ref(false);
 const username = localStorage.getItem('user');
@@ -99,7 +100,10 @@ const releasesHeader = computed(() => [
 const formValid = ref(true);
 const passwordRules = computed(() => [
   (v: string) => !!v || t('core.header.accountDialog.validation.passwordRequired'),
-  (v: string) => v.length >= 8 || t('core.header.accountDialog.validation.passwordMinLength')
+  (v: string) => v.length >= 12 || t('core.header.accountDialog.validation.passwordMinLength'),
+  (v: string) => /[A-Z]/.test(v) || t('core.header.accountDialog.validation.passwordUppercase'),
+  (v: string) => /[a-z]/.test(v) || t('core.header.accountDialog.validation.passwordLowercase'),
+  (v: string) => /\d/.test(v) || t('core.header.accountDialog.validation.passwordDigit')
 ]);
 const confirmPasswordRules = computed(() => [
   (v: string) => !newPassword.value || !!v || t('core.header.accountDialog.validation.passwordRequired'),
@@ -224,9 +228,9 @@ function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  const passwordHash = password.value ? md5(password.value) : '';
-  const newPasswordHash = newPassword.value ? md5(newPassword.value) : '';
-  const confirmPasswordHash = confirmPassword.value ? md5(confirmPassword.value) : '';
+  const passwordHash = password.value ? password.value : '';
+  const newPasswordHash = newPassword.value ? newPassword.value : '';
+  const confirmPasswordHash = confirmPassword.value ? confirmPassword.value : '';
 
   axios.post('/api/auth/account/edit', {
     password: passwordHash,
@@ -270,17 +274,36 @@ function getVersion() {
       botCurrVersion.value = "v" + res.data.data.version;
       dashboardCurrentVersion.value = res.data.data?.dashboard_version;
       let change_pwd_hint = res.data.data?.change_pwd_hint;
-      if (change_pwd_hint) {
+      const legacy_pwd_hint = res.data.data?.legacy_pwd_hint;
+      if (change_pwd_hint || legacy_pwd_hint) {
         dialog.value = true;
         accountWarning.value = true;
+        accountWarningLegacy.value = !!legacy_pwd_hint;
         localStorage.setItem('change_pwd_hint', 'true');
+        if (legacy_pwd_hint) {
+          localStorage.setItem('legacy_pwd_hint', 'true');
+        } else {
+          localStorage.removeItem('legacy_pwd_hint');
+        }
       } else {
+        accountWarningLegacy.value = false;
         localStorage.removeItem('change_pwd_hint');
+        localStorage.removeItem('legacy_pwd_hint');
       }
     })
     .catch((err) => {
       console.log(err);
     });
+}
+
+function initPasswordWarningFromStorage() {
+  const hasChangePwdHint = localStorage.getItem('change_pwd_hint') === 'true';
+  const hasLegacyPwdHint = localStorage.getItem('legacy_pwd_hint') === 'true';
+  if (hasChangePwdHint || hasLegacyPwdHint) {
+    dialog.value = true;
+    accountWarning.value = true;
+    accountWarningLegacy.value = hasLegacyPwdHint;
+  }
 }
 
 function checkUpdate() {
@@ -391,6 +414,7 @@ function handleLogoClick() {
 
 getVersion();
 checkUpdate();
+initPasswordWarningFromStorage();
 
 const commonStore = useCommonStore();
 commonStore.createEventSource(); // log
@@ -891,14 +915,18 @@ onMounted(async () => {
     </v-dialog>
 
     <!-- 账户对话框 -->
-    <v-dialog v-model="dialog" persistent :max-width="$vuetify.display.xs ? '90%' : '500'">
+      <v-dialog v-model="dialog" persistent :max-width="$vuetify.display.xs ? '90%' : '500'">
       <v-card class="account-dialog">
         <v-card-text class="py-6">
-          <div class="d-flex flex-column align-center mb-6">
-            <logo :title="t('core.header.logoTitle')" :subtitle="t('core.header.accountDialog.title')"></logo>
+          <div class="account-dialog-header mb-6">
+            <div class="d-flex justify-space-between align-center w-100">
+              <img width="80" src="@/assets/images/icon-no-shadow.svg" alt="AstrBot Logo">
+            </div>
+            <div class="ml-2" style="font-size: 26px;">{{ t('core.header.logoTitle') }}</div>
+            <div class="mt-2 ml-2" style="font-size: 14px; color: grey;">{{ t('core.header.accountDialog.title') }}</div>
           </div>
           <v-alert v-if="accountWarning" type="warning" variant="tonal" border="start" class="mb-4">
-            <strong>{{ t('core.header.accountDialog.securityWarning') }}</strong>
+            <strong>{{ t(accountWarningLegacy ? 'core.header.accountDialog.securityWarningLegacy' : 'core.header.accountDialog.securityWarning') }}</strong>
           </v-alert>
 
           <v-alert v-if="accountEditStatus.success" type="success" variant="tonal" border="start" class="mb-4">
@@ -937,8 +965,6 @@ onMounted(async () => {
             {{ t('core.header.accountDialog.form.defaultCredentials') }}
           </div>
         </v-card-text>
-
-        <v-divider></v-divider>
 
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
@@ -1006,6 +1032,20 @@ onMounted(async () => {
 
 .account-dialog .v-avatar:hover {
   transform: scale(1.05);
+}
+
+.account-dialog-header {
+  .theme-toggle-btn {
+    opacity: 0.85;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
+
+.theme-toggle-btn {
+  margin-left: 0;
 }
 
 /* 响应式布局样式 */

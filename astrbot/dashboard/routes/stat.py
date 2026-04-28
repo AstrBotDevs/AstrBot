@@ -12,7 +12,7 @@ from pathlib import Path
 import aiohttp
 import psutil
 from quart import request
-from sqlmodel import select
+from sqlmodel import col, select
 
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.config import VERSION
@@ -21,6 +21,10 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.migration.helper import check_migration_needed_v4
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.auth_password import (
+    is_default_dashboard_password,
+    is_legacy_dashboard_password,
+)
 from astrbot.core.utils.io import get_dashboard_version
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 from astrbot.core.utils.version_comparator import VersionComparator
@@ -76,7 +80,7 @@ class StatRoute(Route):
         password = self.config["dashboard"]["password"]
         return (
             username == "astrbot"
-            and password == "77b90590a8945a7d36c963981a307dc9"
+            and is_default_dashboard_password(password)
             and not DEMO_MODE
         )
 
@@ -90,6 +94,9 @@ class StatRoute(Route):
                     "version": VERSION,
                     "dashboard_version": await get_dashboard_version(),
                     "change_pwd_hint": self.is_default_cred(),
+                    "legacy_pwd_hint": is_legacy_dashboard_password(
+                        self.config["dashboard"]["password"]
+                    ),
                     "need_migration": need_migration,
                 },
             )
@@ -226,7 +233,7 @@ class StatRoute(Route):
                         ProviderStat.agent_type == "internal",
                         ProviderStat.created_at >= query_start_utc,
                     )
-                    .order_by(ProviderStat.created_at.asc())
+                    .order_by(col(ProviderStat.created_at).asc())
                 )
                 records = result.scalars().all()
 
