@@ -279,6 +279,9 @@ class AstrBotCoreLifecycle:
         # Leave other runtime initializations (plugin reload, provider init, etc.)
         # to `bootstrap_runtime`.
 
+        # Initialize dashboard shutdown event (matches full initialize behavior)
+        self.dashboard_shutdown_event = asyncio.Event()
+
     async def bootstrap_runtime(self) -> None:
         """Compatibility method for runtime bootstrap (deferred initialization).
 
@@ -339,6 +342,9 @@ class AstrBotCoreLifecycle:
                 logger.error(
                     "Failed cleaning up plugins after runtime bootstrap failure",
                 )
+
+            # Reset event_bus to None so callers can detect partial init
+            self.event_bus = None
 
             try:
                 if getattr(self, "provider_manager", None) and hasattr(

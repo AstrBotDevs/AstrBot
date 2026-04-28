@@ -722,10 +722,10 @@ class TestAstrBotCoreLifecycleInitialize:
         )
         mocks["create_task"].side_effect = record_create_task
 
+        lifecycle.load_pipeline_scheduler = load_pipeline_scheduler
+
         with patch_initialize_test_mocks(mock_astrbot_config, mocks):
             await lifecycle.initialize_core()
-
-
             await lifecycle.bootstrap_runtime()
 
         assert call_order == [
