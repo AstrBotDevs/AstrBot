@@ -6,13 +6,15 @@ from quart import request
 
 from astrbot import logger
 from astrbot.core import DEMO_MODE
+from astrbot.core.db import BaseDatabase
 
 from .route import Response, Route, RouteContext
 
 
 class AuthRoute(Route):
-    def __init__(self, context: RouteContext) -> None:
+    def __init__(self, context: RouteContext, db: BaseDatabase) -> None:
         super().__init__(context)
+        self.db = db
         self.routes = {
             "/auth/login": ("POST", self.login),
             "/auth/account/edit": ("POST", self.edit_account),
@@ -72,8 +74,14 @@ class AuthRoute(Route):
             if confirm_pwd != new_pwd:
                 return Response().error("两次输入的新密码不一致").__dict__
             self.config["dashboard"]["password"] = new_pwd
+
+        old_username = self.config["dashboard"]["username"]
         if new_username:
             self.config["dashboard"]["username"] = new_username
+
+        # Migrate webchat user data before saving config to keep them in sync.
+        if new_username and new_username != old_username:
+            await self.db.migrate_user_webchat_data(old_username, new_username)
 
         self.config.save_config()
 
