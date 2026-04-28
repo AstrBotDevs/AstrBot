@@ -58,6 +58,155 @@ async def _poll_webchat_stream_result(back_queue, username: str):
     return result, False
 
 
+def extract_reasoning_from_message_parts(message_parts: list[dict]) -> str:
+    reasoning_parts: list[str] = []
+    for part in message_parts:
+        if part.get("type") != "think":
+            continue
+        think = part.get("think")
+        if isinstance(think, str) and think:
+            reasoning_parts.append(think)
+    return "".join(reasoning_parts)
+
+
+def collect_plain_text_from_message_parts(message_parts: list[dict]) -> str:
+    text_parts: list[str] = []
+    for part in message_parts:
+        if part.get("type") != "plain":
+            continue
+        text = part.get("text")
+        if isinstance(text, str) and text:
+            text_parts.append(text)
+    return "".join(text_parts)
+
+
+def _sanitize_upload_filename(filename: str) -> str:
+    """Sanitize an uploaded filename by removing path traversal, fakepath, null bytes."""
+    if not filename:
+        import uuid
+
+        return uuid.uuid4().hex[:16]
+    # Remove null bytes
+    filename = filename.replace("\x00", "")
+    # Strip Windows drive and fakepath prefix
+    filename = re.sub(r"^[A-Za-z]:\\+fakepath\\+", "", filename, flags=re.IGNORECASE)
+    # Strip any remaining path components (both POSIX and Windows)
+    filename = filename.replace("\\", "/")
+    filename = filename.rstrip("/")
+    filename = filename.split("/")[-1]
+    if not filename or filename in (".", ".."):
+        import uuid
+
+        return uuid.uuid4().hex[:16]
+    return filename
+
+
+class BotMessageAccumulator:
+    def __init__(self) -> None:
+        self.parts: list[dict] = []
+        self.pending_text = ""
+        self.pending_tool_calls: dict[str, dict] = {}
+
+    def has_content(self) -> bool:
+        return bool(self.parts or self.pending_text or self.pending_tool_calls)
+
+    def add_plain(
+        self,
+        result_text: str,
+        *,
+        chain_type: str | None,
+        streaming: bool,
+    ) -> None:
+        if chain_type == "tool_call":
+            self._flush_pending_text()
+            self._store_tool_call(result_text)
+            return
+        if chain_type == "tool_call_result":
+            self._flush_pending_text()
+            self._store_tool_call_result(result_text)
+            return
+        if chain_type == "reasoning":
+            self._flush_pending_text()
+            self._append_think_part(result_text)
+            return
+        if streaming:
+            self.pending_text += result_text
+        else:
+            self.pending_text = result_text
+
+    def add_attachment(self, part: dict | None) -> None:
+        if not part:
+            return
+        self._flush_pending_text()
+        self.parts.append(part)
+
+    def build_message_parts(
+        self, *, include_pending_tool_calls: bool = False
+    ) -> list[dict]:
+        self._flush_pending_text()
+        if include_pending_tool_calls and self.pending_tool_calls:
+            for tool_call in self.pending_tool_calls.values():
+                self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
+            self.pending_tool_calls = {}
+        return self.parts
+
+    def plain_text(self) -> str:
+        return collect_plain_text_from_message_parts(self.build_message_parts())
+
+    def reasoning_text(self) -> str:
+        return extract_reasoning_from_message_parts(self.build_message_parts())
+
+    def _flush_pending_text(self) -> None:
+        if not self.pending_text:
+            return
+        if self.parts and self.parts[-1].get("type") == "plain":
+            last_text = self.parts[-1].get("text")
+            self.parts[-1]["text"] = f"{last_text or ''}{self.pending_text}"
+        else:
+            self.parts.append({"type": "plain", "text": self.pending_text})
+        self.pending_text = ""
+
+    def _append_think_part(self, text: str) -> None:
+        if not text:
+            return
+        if self.parts and self.parts[-1].get("type") == "think":
+            last_text = self.parts[-1].get("think")
+            self.parts[-1]["think"] = f"{last_text or ''}{text}"
+        else:
+            self.parts.append({"type": "think", "think": text})
+
+    def _store_tool_call(self, result_text: str) -> None:
+        tool_call = self._parse_json_object(result_text)
+        if not tool_call:
+            return
+        tool_call_id = str(tool_call.get("id") or "")
+        if not tool_call_id:
+            return
+        self.pending_tool_calls[tool_call_id] = tool_call
+
+    def _store_tool_call_result(self, result_text: str) -> None:
+        tool_result = self._parse_json_object(result_text)
+        if not tool_result:
+            return
+        tool_call_id = str(tool_result.get("id") or "")
+        if not tool_call_id:
+            return
+        tool_call = self.pending_tool_calls.pop(tool_call_id, None) or {
+            "id": tool_call_id
+        }
+        tool_call["result"] = tool_result.get("result")
+        tool_call["finished_ts"] = tool_result.get("ts")
+        self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
+
+    @staticmethod
+    def _parse_json_object(raw_text: str) -> dict | None:
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+
 class ChatRoute(Route):
     def __init__(
         self,
