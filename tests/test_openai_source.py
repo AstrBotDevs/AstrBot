@@ -274,6 +274,36 @@ async def test_groq_payload_drops_reasoning_content_from_assistant_history():
 
 
 @pytest.mark.asyncio
+async def test_openai_payload_handles_none_think_content():
+    """Test that _finally_convert_payload handles think content being None."""
+    provider = _make_provider()
+    try:
+        # Test case where think content might be None
+        payloads = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "think", "think": None},  # type: ignore
+                        {"type": "text", "text": "final answer"},
+                    ],
+                }
+            ]
+        }
+
+        # Should not raise TypeError: unsupported operand type(s) for +=: 'NoneType' and 'str'
+        provider._finally_convert_payload(payloads)
+
+        assistant_message = payloads["messages"][0]
+        assert assistant_message["content"] == [
+            {"type": "text", "text": "final answer"}
+        ]
+    finally:
+        await provider.terminate()
+
+
+
+@pytest.mark.asyncio
 async def test_handle_api_error_content_moderated_without_images_raises():
     provider = _make_provider(
         {"image_moderation_error_patterns": ["file:content-moderated"]}
