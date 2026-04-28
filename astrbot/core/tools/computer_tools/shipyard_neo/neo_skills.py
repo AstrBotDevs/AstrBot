@@ -10,6 +10,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.tools.computer_tools.util import check_admin_permission
+from astrbot.core.tools.registry import builtin_tool
 
 
 def _to_jsonable(model_like: Any) -> Any:
@@ -63,6 +64,7 @@ class NeoSkillToolBase(FunctionTool):
             return f"{self.error_prefix} {error_action}: {e!s}"
 
 
+@builtin_tool
 @dataclass
 class GetExecutionHistoryTool(NeoSkillToolBase):
     name: str = "astrbot_get_execution_history"
@@ -109,6 +111,7 @@ class GetExecutionHistoryTool(NeoSkillToolBase):
         )
 
 
+@builtin_tool
 @dataclass
 class AnnotateExecutionTool(NeoSkillToolBase):
     name: str = "astrbot_annotate_execution"
@@ -146,6 +149,7 @@ class AnnotateExecutionTool(NeoSkillToolBase):
         )
 
 
+@builtin_tool
 @dataclass
 class CreateSkillPayloadTool(NeoSkillToolBase):
     name: str = "astrbot_create_skill_payload"
@@ -193,6 +197,7 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
         )
 
 
+@builtin_tool
 @dataclass
 class GetSkillPayloadTool(NeoSkillToolBase):
     name: str = "astrbot_get_skill_payload"
@@ -219,6 +224,7 @@ class GetSkillPayloadTool(NeoSkillToolBase):
         )
 
 
+@builtin_tool
 @dataclass
 class CreateSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_create_skill_candidate"
@@ -272,6 +278,7 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
         )
 
 
+@builtin_tool
 @dataclass
 class ListSkillCandidatesTool(NeoSkillToolBase):
     name: str = "astrbot_list_skill_candidates"
@@ -309,6 +316,7 @@ class ListSkillCandidatesTool(NeoSkillToolBase):
         )
 
 
+@builtin_tool
 @dataclass
 class EvaluateSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_evaluate_skill_candidate"
@@ -349,6 +357,7 @@ class EvaluateSkillCandidateTool(NeoSkillToolBase):
         )
 
 
+@builtin_tool
 @dataclass
 class PromoteSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_promote_skill_candidate"
@@ -419,6 +428,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
             return f"Error promoting skill candidate: {e!s}"
 
 
+@builtin_tool
 @dataclass
 class ListSkillReleasesTool(NeoSkillToolBase):
     name: str = "astrbot_list_skill_releases"
@@ -459,6 +469,7 @@ class ListSkillReleasesTool(NeoSkillToolBase):
         )
 
 
+@builtin_tool
 @dataclass
 class RollbackSkillReleaseTool(NeoSkillToolBase):
     name: str = "astrbot_rollback_skill_release"
@@ -485,6 +496,7 @@ class RollbackSkillReleaseTool(NeoSkillToolBase):
         )
 
 
+@builtin_tool
 @dataclass
 class SyncSkillReleaseTool(NeoSkillToolBase):
     name: str = "astrbot_sync_skill_release"
