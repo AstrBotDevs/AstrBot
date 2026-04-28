@@ -171,6 +171,52 @@
                   </div>
                 </div>
               </v-timeline-item>
+
+              <v-timeline-item
+                :dot-color="
+                  computerUseStepState === 'completed' ? 'success' : 'primary'
+                "
+                :icon="
+                  computerUseStepState === 'completed'
+                    ? 'mdi-check'
+                    : 'mdi-numeric-4'
+                "
+                fill-dot
+                size="small"
+              >
+                <div class="pl-2">
+                  <div
+                    class="text-h6 font-weight-bold mb-1"
+                    :class="{
+                      'text-medium-emphasis': providerStepState !== 'completed',
+                    }"
+                  >
+                    {{ tm("onboard.step3Title") }}
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    {{ tm("onboard.step3Desc") }}
+                  </p>
+                  <div class="d-flex align-center">
+                    <v-btn
+                      color="primary"
+                      variant="flat"
+                      rounded="pill"
+                      class="px-6"
+                      :disabled="providerStepState !== 'completed'"
+                      href="https://docs.astrbot.app/usage/computer-use"
+                      target="_blank"
+                    >
+                      {{ tm("onboard.learnMore") }}
+                    </v-btn>
+                    <div
+                      v-if="computerUseStepState === 'completed'"
+                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3"
+                    >
+                      {{ tm("onboard.completed") }}
+                    </div>
+                  </div>
+                </div>
+              </v-timeline-item>
             </v-timeline>
           </v-card>
         </v-col>
@@ -337,6 +383,7 @@ const apiBaseUrl = ref(apiStore.apiBaseUrl || "http://127.0.0.1:6185");
 
 const platformStepState = ref<StepState>("pending");
 const providerStepState = ref<StepState>("pending");
+const computerUseStepState = ref<StepState>("pending");
 const welcomeAnnouncementRaw = ref<unknown>(null);
 
 function resolveWelcomeAnnouncement(raw: unknown, currentLocale: string) {
