@@ -64,7 +64,9 @@ async def test_execute_shell_defaults_to_foreground(monkeypatch):
     calls = []
 
     class FakeShell:
-        async def exec(self, command, cwd=None, background=False, env=None, timeout=None):
+        async def exec(
+            self, command, cwd=None, background=False, env=None, timeout=None
+        ):
             calls.append({"command": command, "background": background})
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
 
@@ -109,8 +111,9 @@ async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
     calls = []
 
     class FakeShell:
-        async def exec(self, command, cwd=None, background=False, env=None, timeout=None):
-            assert env is not None
+        async def exec(
+            self, command, cwd=None, background=False, env=None, timeout=None
+        ):
             env["MUTATED_BY_FAKE_SHELL"] = command
             calls.append(env)
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
@@ -156,8 +159,9 @@ async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
     calls = []
 
     class FakeShell:
-        async def exec(self, command, cwd=None, background=False, env=None, timeout=None):
-            assert env is not None
+        async def exec(
+            self, command, cwd=None, background=False, env=None, timeout=None
+        ):
             env["MUTATED_BY_FAKE_SHELL"] = command
             calls.append(env)
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
@@ -203,7 +207,9 @@ async def test_execute_shell_avoids_double_background_for_detached_commands(
     calls = []
 
     class FakeShell:
-        async def exec(self, command, cwd=None, background=False, env=None, timeout=None):
+        async def exec(
+            self, command, cwd=None, background=False, env=None, timeout=None
+        ):
             calls.append({"command": command, "background": background})
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
 
@@ -249,7 +255,9 @@ async def test_execute_shell_recognizes_commented_background_command(monkeypatch
     calls = []
 
     class FakeShell:
-        async def exec(self, command, cwd=None, background=False, env=None, timeout=None):
+        async def exec(
+            self, command, cwd=None, background=False, env=None, timeout=None
+        ):
             calls.append({"command": command, "background": background})
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
 
@@ -315,7 +323,9 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
             return ""
 
     class FakeShell:
-        async def exec(self, command, cwd=None, background=False, env=None, timeout=None):
+        async def exec(
+            self, command, cwd=None, background=False, env=None, timeout=None
+        ):
             raise BlankError()
 
     class FakeBooter:

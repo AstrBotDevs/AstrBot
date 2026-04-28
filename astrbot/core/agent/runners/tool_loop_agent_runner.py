@@ -1293,7 +1293,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     model=self.req.model,
                     session_id=self.req.session_id,
                     extra_user_content_parts=self.req.extra_user_content_parts,
-                    tool_choice="required",
+                    # tool_choice="required",
                     abort_signal=self._abort_signal,
                 )
                 if requery_resp:
@@ -1319,7 +1319,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         model=self.req.model,
                         session_id=self.req.session_id,
                         extra_user_content_parts=self.req.extra_user_content_parts,
-                        tool_choice="required",
+                        # tool_choice="required",
                         abort_signal=self._abort_signal,
                     )
                     if repair_resp:

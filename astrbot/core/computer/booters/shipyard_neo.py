@@ -13,6 +13,7 @@ from ..olayer import (
     ShellComponent,
 )
 from .base import ComputerBooter
+from .shell_background import build_detached_shell_command
 from .shipyard_search_file_util import search_files_via_shell
 
 try:
@@ -96,7 +97,7 @@ class NeoShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 30,
+        timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -116,11 +117,11 @@ class NeoShellComponent(ShellComponent):
             run_command = f"{env_prefix} {run_command}"
 
         if background:
-            run_command = f"nohup sh -lc {shlex.quote(run_command)} >/tmp/astrbot_bg.log 2>&1 & echo $!"
+            run_command = build_detached_shell_command(run_command)
 
         result = await self._sandbox.shell.exec(
             run_command,
-            timeout=timeout or 30,
+            timeout=timeout or 300,
             cwd=cwd,
         )
         payload = _maybe_model_dump(result)
@@ -136,7 +137,11 @@ class NeoShellComponent(ShellComponent):
                 pid = None
             return {
                 "pid": pid,
-                "stdout": stdout,
+                "stdout": (
+                    f"Command is running in the background. pid={pid}"
+                    if pid is not None
+                    else "Command was submitted in the background."
+                ),
                 "stderr": stderr,
                 "exit_code": exit_code,
                 "success": bool(payload.get("success", not stderr)),
