@@ -41,19 +41,29 @@ def test_platform_base_import():
     assert len(Platform.__abstractmethods__) > 0  # type: ignore[attr-defined]
 
 
-def test_main_py_import():
-    """main.py entry point can be imported without syntax errors."""
-    import importlib.util
-    import sys
+def test_compile_all():
+    """All modules compile without syntax errors (simulates PKGBUILD ``check()``)."""
+    import pathlib
 
-    spec = importlib.util.spec_from_file_location("main", "main.py")
-    assert spec is not None, "main.py must be importable"
-    # Only load the module — don't execute it (it starts the bot)
-    mod = importlib.util.module_from_spec(spec)
-    # Check for syntax errors by compiling
-    with open("main.py") as f:
-        compile(f.read(), "main.py", "exec")
-    assert True
+    root = pathlib.Path("astrbot")
+    errors = []
+    for f in sorted(root.rglob("*.py")):
+        if "migrations" in f.parts or "__pycache__" in f.parts:
+            continue
+        try:
+            compile(f.read_bytes(), str(f), "exec")
+        except SyntaxError as e:
+            errors.append(f"{f}: {e}")
+    assert not errors, f"Compile errors:\n" + "\n".join(errors[:10])
+
+
+def test_cli_entry():
+    """astrbot CLI entry point function exists (``astrbot:cli``)."""
+    import importlib
+
+    mod = importlib.import_module("astrbot.cli.__main__")
+    cli = getattr(mod, "cli", None)
+    assert cli is not None, "astrbot.cli.__main__.cli must exist"
 
 
 def test_sqlite_implements_all_abstract():
