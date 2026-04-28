@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 260 icons */
+/* Auto-generated MDI subset – 267 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -416,6 +416,10 @@
   content: "\F022E";
 }
 
+.mdi-file-delimited-outline::before {
+  content: "\F0EA5";
+}
+
 .mdi-file-document::before {
   content: "\F0219";
 }
@@ -592,8 +596,32 @@
   content: "\F0318";
 }
 
+.mdi-language-css3::before {
+  content: "\F031C";
+}
+
+.mdi-language-html5::before {
+  content: "\F031D";
+}
+
+.mdi-language-javascript::before {
+  content: "\F031E";
+}
+
 .mdi-language-markdown::before {
   content: "\F0354";
+}
+
+.mdi-language-markdown-outline::before {
+  content: "\F0F5B";
+}
+
+.mdi-language-python::before {
+  content: "\F0320";
+}
+
+.mdi-language-typescript::before {
+  content: "\F06E6";
 }
 
 .mdi-layers-outline::before {

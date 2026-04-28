@@ -933,7 +933,7 @@ async function sendCurrentMessage() {
 
     draft.value = "";
     replyTarget.value = null;
-    clearStaged();
+    clearStaged({ revokeUrls: false });
     scrollToBottom();
 
     sendMessageStream({

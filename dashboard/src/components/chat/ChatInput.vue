@@ -50,6 +50,10 @@
         ref="inputField"
         v-model="localPrompt"
         @keydown="handleKeyDown"
+        @compositionstart="handleCompositionStart"
+        @compositionend="handleCompositionEnd"
+        @compositioncancel="handleCompositionEnd"
+        @blur="clearCompositionState()"
         :disabled="disabled"
         placeholder="Ask AstrBot..."
         class="chat-textarea"
@@ -304,6 +308,7 @@ import {
 import { useDisplay } from "vuetify";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
+import { isComposingEnter } from "@/utils/imeInput.mjs";
 import ConfigSelector from "./ConfigSelector.vue";
 import ProviderModelMenu from "./ProviderModelMenu.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
@@ -375,6 +380,8 @@ const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
 );
 const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
+const isComposing = ref(false);
+const lastCompositionEndAt = ref<number | null>(null);
 const isDragging = ref(false);
 let dragLeaveTimeout: number | null = null;
 
@@ -396,6 +403,44 @@ const canSend = computed(() => {
     (props.stagedFiles && props.stagedFiles.length > 0)
   );
 });
+
+const fileTypeStyles: Record<
+  string,
+  { color: string; icon: string; label: string }
+> = {
+  pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
+  txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
+  md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
+  doc: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOC" },
+  docx: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOCX" },
+  xls: { color: "#217346", icon: "mdi-file-excel-box", label: "XLS" },
+  xlsx: { color: "#217346", icon: "mdi-file-excel-box", label: "XLSX" },
+  csv: { color: "#217346", icon: "mdi-file-delimited-outline", label: "CSV" },
+  zip: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "ZIP" },
+  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
+  js: { color: "#b8860b", icon: "mdi-language-javascript", label: "JS" },
+  ts: { color: "#3178c6", icon: "mdi-language-typescript", label: "TS" },
+  html: { color: "#e34c26", icon: "mdi-language-html5", label: "HTML" },
+  css: { color: "#264de4", icon: "mdi-language-css3", label: "CSS" },
+  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
+};
+
+function fileExtension(file: StagedFileInfo) {
+  const name = file.original_name || file.filename || "";
+  const extension = name.split(".").pop()?.toLowerCase() || "";
+  return extension === name.toLowerCase() ? "" : extension;
+}
+
+function filePresentation(file: StagedFileInfo) {
+  const extension = fileExtension(file);
+  return (
+    fileTypeStyles[extension] || {
+      color: "#607d8b",
+      icon: "mdi-file-document-outline",
+      label: extension ? extension.slice(0, 4).toUpperCase() : "FILE",
+    }
+  );
+}
 
 // Ctrl+B 长按录音相关
 const ctrlKeyDown = ref(false);
@@ -445,6 +490,10 @@ function handleKeyDown(e: KeyboardEvent) {
     return;
   }
 
+  if (isComposingEnter(e, isComposing.value, lastCompositionEndAt.value)) {
+    return;
+  }
+
   const isSendHotkey =
     e.ctrlKey ||
     e.metaKey ||
@@ -461,6 +510,23 @@ function handleKeyDown(e: KeyboardEvent) {
       emit("send");
     }
     return;
+  }
+}
+
+function handleCompositionStart() {
+  isComposing.value = true;
+  lastCompositionEndAt.value = null;
+}
+
+function handleCompositionEnd(e: CompositionEvent) {
+  lastCompositionEndAt.value = e.timeStamp;
+  clearCompositionState({ keepLastEndAt: true });
+}
+
+function clearCompositionState({ keepLastEndAt = false } = {}) {
+  isComposing.value = false;
+  if (!keepLastEndAt) {
+    lastCompositionEndAt.value = null;
   }
 }
 
@@ -562,6 +628,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  clearCompositionState();
   if (inputField.value) {
     inputField.value.removeEventListener("paste", handlePaste);
   }
