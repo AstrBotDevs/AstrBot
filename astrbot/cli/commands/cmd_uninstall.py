@@ -4,7 +4,7 @@ from pathlib import Path
 
 import click
 
-from astrbot.core.utils.astrbot_path import astrbot_paths
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_root
 
 
 @click.command()
@@ -19,9 +19,9 @@ def uninstall(yes: bool, keep_data: bool) -> None:
     if os.environ.get("ASTRBOT_SYSTEMD") == "1":
         yes = True
 
-    dot_astrbot = astrbot_paths.root / ".astrbot"
-    lock_file = astrbot_paths.root / "astrbot.lock"
-    data_dir = astrbot_paths.data
+    dot_astrbot = Path(get_astrbot_root()) / ".astrbot"
+    lock_file = Path(get_astrbot_root()) / "astrbot.lock"
+    data_dir = Path(get_astrbot_data_path())
     removable_paths: list[Path] = [dot_astrbot, lock_file]
 
     if not keep_data:
@@ -36,7 +36,7 @@ def uninstall(yes: bool, keep_data: bool) -> None:
         click.echo("Keeping data directory as requested.")
 
     if yes or click.confirm(
-        f"Are you sure you want to remove AstrBot data at {astrbot_paths.root}? \n"
+        f"Are you sure you want to remove AstrBot data at {Path(get_astrbot_root())}? \n"
         f"This will delete:\n"
         f" - {data_dir} (Config, Plugins, Database)\n"
         f" - {dot_astrbot}\n"

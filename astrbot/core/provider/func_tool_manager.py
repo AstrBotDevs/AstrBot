@@ -572,6 +572,7 @@ class FunctionToolManager:
                 await self._terminate_mcp_client(name)
 
         lifecycle_task = asyncio.create_task(lifecycle(), name=f"mcp-client:{name}")
+        assert mcp_client is not None
         async with self._runtime_lock:
             self._mcp_server_runtime[name] = _MCPServerRuntime(
                 name=name,

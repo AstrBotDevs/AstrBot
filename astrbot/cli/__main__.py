@@ -9,32 +9,33 @@ import click
 from click.shell_completion import get_completion_class
 
 from . import __version__
-from .commands import conf, init, plug, run, uninstall
+from .commands import bk, conf, init, plug, run, uninstall
 from .i18n import t
 
 
 def print_version_detail() -> None:
     """Print detailed version info (same for --version and version command)"""
-    from astrbot.core.utils.astrbot_path import astrbot_paths
+    from astrbot.core.utils.astrbot_path import get_astrbot_root
 
+    astrbot_root = get_astrbot_root()
     click.echo(f"AstrBot:         {__version__}")
     click.echo(f"Python:          {sys.version.split()[0]}")
     click.echo(f"System:          {platform.system()} {platform.release()}")
     click.echo(f"Machine:         {platform.machine()}")
 
-    git_root = Path(astrbot_paths.root) / ".git"
+    git_root = Path(astrbot_root) / ".git"
     if git_root.exists():
         import subprocess
 
         try:
             git_hash = subprocess.check_output(
                 ["git", "rev-parse", "--short", "HEAD"],
-                cwd=str(astrbot_paths.root),
+                cwd=astrbot_root,
                 text=True,
             ).strip()
             git_branch = subprocess.check_output(
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                cwd=str(astrbot_paths.root),
+                cwd=astrbot_root,
                 text=True,
             ).strip()
             click.echo(f"Git Branch:      {git_branch}")
@@ -42,7 +43,7 @@ def print_version_detail() -> None:
         except Exception:
             pass
 
-    click.echo(f"AstrBot Root:    {astrbot_paths.root}")
+    click.echo(f"AstrBot Root:    {astrbot_root}")
     click.echo(f"Platform:        {platform.platform()}")
 
 
@@ -123,6 +124,7 @@ cli.add_command(help)
 cli.add_command(plug)
 cli.add_command(conf)
 cli.add_command(uninstall)
+cli.add_command(bk)
 
 
 @click.command()

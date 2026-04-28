@@ -19,7 +19,7 @@ _COMPUTER_RUNTIME_TOOL_CONFIG = {
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
-class ExecuteShellTool(FunctionTool):
+class ExecuteShellTool(FunctionTool[AstrAgentContext]):
     name: str = "astrbot_execute_shell"
     description: str = "Execute a command in the shell."
     parameters: dict = field(
@@ -46,7 +46,7 @@ class ExecuteShellTool(FunctionTool):
         }
     )
 
-    async def call(
+    async def call(  # type: ignore[override]
         self,
         context: ContextWrapper[AstrAgentContext],
         command: str,

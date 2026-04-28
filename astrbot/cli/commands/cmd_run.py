@@ -185,21 +185,17 @@ def run(
 
         os.environ["ASTRBOT_CLI"] = "1"
 
-        from astrbot.core.utils.astrbot_path import astrbot_paths
+        from astrbot.core.utils.astrbot_path import get_astrbot_root
 
-        # Resolve astrbot_root with the following precedence:
-        # 1. CLI --root parameter
-        # 2. ASTRBOT_ROOT environment variable
-        # 3. packaged default astrbot_paths.root
         if root:
             os.environ["ASTRBOT_ROOT"] = root
             astrbot_root = Path(root)
         elif os.environ.get("ASTRBOT_ROOT"):
             astrbot_root = Path(os.environ["ASTRBOT_ROOT"])
         else:
-            astrbot_root = astrbot_paths.root
+            astrbot_root = Path(get_astrbot_root())
 
-        if not astrbot_paths.is_root:
+        if not (astrbot_root / ".astrbot").exists():
             raise click.ClickException(
                 f"{astrbot_root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
             )

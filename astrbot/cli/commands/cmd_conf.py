@@ -6,6 +6,7 @@ import hashlib
 import json
 import zoneinfo
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import click
@@ -13,7 +14,10 @@ from filelock import FileLock, Timeout
 
 from astrbot.cli.i18n import t
 from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.utils.astrbot_path import astrbot_paths
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_root,
+)
 
 
 # --- Validators ---
@@ -77,13 +81,13 @@ CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
 
 
 def _load_config() -> dict[str, Any]:
-    root = astrbot_paths.root
-    if not astrbot_paths.is_root:
+    root = Path(get_astrbot_root())
+    if not (Path(get_astrbot_root()) / ".astrbot").exists():
         raise click.ClickException(
             f"{root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
         )
 
-    config_path = astrbot_paths.data / "cmd_config.json"
+    config_path = Path(get_astrbot_data_path()) / "cmd_config.json"
     if not config_path.exists():
         config_path.write_text(
             json.dumps(DEFAULT_CONFIG, ensure_ascii=False, indent=2),
@@ -97,7 +101,7 @@ def _load_config() -> dict[str, Any]:
 
 
 def _save_config(config: dict[str, Any]) -> None:
-    config_path = astrbot_paths.data / "cmd_config.json"
+    config_path = Path(get_astrbot_data_path()) / "cmd_config.json"
     config_path.write_text(
         json.dumps(config, ensure_ascii=False, indent=2),
         encoding="utf-8-sig",
@@ -206,7 +210,7 @@ def get_config(key: str | None = None) -> None:
 
 def _check_astrbot_not_running() -> None:
     """Refuse to proceed if astrbot is currently running (lock file held)."""
-    lock_file = astrbot_paths.root / "astrbot.lock"
+    lock_file = Path(get_astrbot_root()) / "astrbot.lock"
     if not lock_file.exists():
         return
     lock = FileLock(lock_file, timeout=1)
