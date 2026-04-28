@@ -41,6 +41,35 @@ def test_platform_base_import():
     assert len(Platform.__abstractmethods__) > 0  # type: ignore[attr-defined]
 
 
+def test_main_py_import():
+    """main.py entry point can be imported without syntax errors."""
+    import importlib.util
+    import sys
+
+    spec = importlib.util.spec_from_file_location("main", "main.py")
+    assert spec is not None, "main.py must be importable"
+    # Only load the module — don't execute it (it starts the bot)
+    mod = importlib.util.module_from_spec(spec)
+    # Check for syntax errors by compiling
+    with open("main.py") as f:
+        compile(f.read(), "main.py", "exec")
+    assert True
+
+
+def test_sqlite_implements_all_abstract():
+    """SQLiteDatabase implements every abstract method of BaseDatabase."""
+    from astrbot.core.db import BaseDatabase
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    missing = [
+        m
+        for m in BaseDatabase.__abstractmethods__  # type: ignore[attr-defined]
+        if not hasattr(SQLiteDatabase, m)
+        or getattr(SQLiteDatabase, m) is getattr(BaseDatabase, m, None)
+    ]
+    assert not missing, f"SQLiteDatabase missing abstract methods: {missing}"
+
+
 def test_auth_route_import():
     """AuthRoute class definition is importable."""
     from astrbot.dashboard.routes.auth import AuthRoute
