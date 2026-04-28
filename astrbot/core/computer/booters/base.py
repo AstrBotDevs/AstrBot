@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from astrbot.core.computer.olayer import (
     BrowserComponent,
     FileSystemComponent,
+    GUIComponent,
     PythonComponent,
     ShellComponent,
 )
@@ -43,9 +44,11 @@ class ComputerBooter(abc.ABC):
     def browser(self) -> BrowserComponent | None:
         return None
 
-    @abc.abstractmethod
-    async def boot(self, session_id: str) -> None:
-        raise NotImplementedError("Subclass must implement boot method")
+    @property
+    def gui(self) -> GUIComponent | None:
+        return None
+
+    async def boot(self, session_id: str) -> None: ...
 
     @abc.abstractmethod
     async def shutdown(self) -> None:

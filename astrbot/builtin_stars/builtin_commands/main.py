@@ -114,6 +114,11 @@ class Main(star.Star):
         """删除白名单｡dwl <sid>"""
         await self.admin_c.dwl(event, sid)
 
+    @filter.command("stats")
+    async def stats(self, message: AstrMessageEvent) -> None:
+        """Show token usage statistics for the current conversation"""
+        await self.conversation_c.stats(message)
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")
     async def provider(

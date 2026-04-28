@@ -10,7 +10,12 @@ from .openai_source import ProviderOpenAIOfficial
 class ProviderOpenRouter(ProviderOpenAIOfficial):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
-        custom_headers = self.client._custom_headers
-        custom_headers["HTTP-Referer"] = "https://github.com/AstrBotDevs/AstrBot"
-        custom_headers["X-OpenRouter-Title"] = "AstrBot"
-        custom_headers["X-OpenRouter-Categories"] = "general-chat,personal-agent"
+        # Reference to: https://openrouter.ai/docs/api/reference/overview#headers
+        self.client._custom_headers["HTTP-Referer"] = (  # type: ignore
+            "https://github.com/AstrBotDevs/AstrBot"
+        )
+        self.client._custom_headers["X-OpenRouter-Title"] = "AstrBot"  # type: ignore
+        self.client._custom_headers["X-OpenRouter-Categories"] = (
+            "general-chat,personal-agent"  # type: ignore
+        )
+        self.reasoning_key = "reasoning"

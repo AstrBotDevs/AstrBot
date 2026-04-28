@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator, Iterator
 
 from packaging.requirements import Requirement
 
+from astrbot.core.utils.desktop_core_lock import get_desktop_core_lock_constraints
 from astrbot.core.utils.requirements_utils import (
     canonicalize_distribution_name,
     collect_installed_distribution_versions,
@@ -100,10 +101,14 @@ class CoreConstraintsProvider:
 
     @contextlib.contextmanager
     def constraints_file(self) -> Iterator[str | None]:
-        """Synchronous context manager kept for backward compatibility with tests and
-        synchronous callers. Creates a temporary constraints file and yields its path.
-        """
-        constraints = _get_core_constraints(self._core_dist_name)
+        constraints = tuple(
+            dict.fromkeys(
+                (
+                    *_get_core_constraints(self._core_dist_name),
+                    *get_desktop_core_lock_constraints(),
+                )
+            )
+        )
         if not constraints:
             yield None
             return

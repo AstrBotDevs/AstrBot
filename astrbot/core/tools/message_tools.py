@@ -16,6 +16,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -153,7 +154,16 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         context: ContextWrapper[AstrAgentContext],
         **kwargs,
     ) -> ToolExecResult:
-        session = kwargs.get("session") or context.context.event.unified_msg_origin
+        # Security: only AstrBot admins can send messages to other sessions.
+        # Non-admin users are always restricted to their own session.
+        # See https://github.com/AstrBotDevs/AstrBot/issues/7822
+        current_session = context.context.event.unified_msg_origin
+        session = kwargs.get("session") or current_session
+        if session != current_session:
+            if permission_error := check_admin_permission(
+                context, "Send message to another session"
+            ):
+                return permission_error
         messages = kwargs.get("messages")
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."

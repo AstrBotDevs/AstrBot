@@ -602,7 +602,7 @@ class AstrBotDashboard:
 
         if not cert_file or not key_file:
             logger.warning(
-                "dashboard.ssl.enable 已启用，但未同时配置 cert_file 和 key_file，SSL 配置将不会生效。",
+                "dashboard.ssl.enable is set, but cert_file or key_file is missing. SSL disabled.",
             )
             return False, {}
 
@@ -610,12 +610,12 @@ class AstrBotDashboard:
         key_path = Path(key_file).expanduser()
         if not cert_path.is_file():
             logger.warning(
-                f"dashboard.ssl.enable 已启用，但 SSL 证书文件不存在: {cert_path}，SSL 配置将不会生效。",
+                f"dashboard.ssl.enable is set, but cert file is missing: {cert_path}. SSL disabled.",
             )
             return False, {}
         if not key_path.is_file():
             logger.warning(
-                f"dashboard.ssl.enable 已启用，但 SSL 私钥文件不存在: {key_path}，SSL 配置将不会生效。",
+                f"dashboard.ssl.enable is set, but key file is missing: {key_path}. SSL disabled.",
             )
             return False, {}
 
@@ -628,7 +628,7 @@ class AstrBotDashboard:
             ca_path = Path(ca_certs).expanduser()
             if not ca_path.is_file():
                 logger.warning(
-                    f"dashboard.ssl.enable 已启用，但 SSL CA 证书文件不存在: {ca_path}，SSL 配置将不会生效。",
+                    f"dashboard.ssl.enable is set, but CA cert file is missing: {ca_path}. SSL disabled.",
                 )
                 return False, {}
             resolved_ssl_config["ca_certs"] = str(ca_path.resolve())
@@ -668,39 +668,14 @@ class AstrBotDashboard:
                 ssl_config,
             )
 
-        # Port priority: explicit dashboard env vars > shared ASTRBOT_PORT > config > default.
-        env_port = (
-            os.environ.get("DASHBOARD_PORT")
-            or os.environ.get("ASTRBOT_DASHBOARD_PORT")
-            or os.environ.get("ASTRBOT_PORT")
-        )
-        json_port = dashboard_config.get("port")
-        port_value: str | int | None
-        if env_port is not None:
-            port_value = env_port
+        if not enable:
+            logger.info("WebUI disabled.")
+            return None
+
+        logger.info("Starting WebUI at %s://%s:%s", scheme, host, port)
+        if host == "0.0.0.0":
             logger.info(
-                "[Dashboard] Using port from environment variable: %s",
-                env_port,
-            )
-        elif json_port is not None:
-            port_value = json_port
-            logger.info("[Dashboard] Using port from cmd_config.json: %s", json_port)
-        else:
-            port_value = 6185
-            logger.info("[Dashboard] Using default port: 6185")
-        resolved_port = _resolve_dashboard_value(port_value, field_name="port")
-        if resolved_port is None:
-            raise ValueError("Port configuration is missing")
-        port = int(resolved_port)
-        ssl_enable = _parse_env_bool(
-            os.environ.get("DASHBOARD_SSL_ENABLE")
-            or os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE")
-            or os.environ.get("ASTRBOT_SSL_ENABLE"),
-            bool(ssl_config.get("enable", False)),
-        )
-        if ssl_enable and not resolved_ssl_config:
-            ssl_enable, resolved_ssl_config = self._resolve_dashboard_ssl_config(
-                ssl_config,
+                "WebUI listens on all interfaces. Check security. Set dashboard.host in data/cmd_config.json to change it.",
             )
 
         scheme = "https" if ssl_enable else "http"
@@ -727,7 +702,19 @@ class AstrBotDashboard:
                 info = self.get_process_using_port(port)
                 raise RuntimeError(f"端口 {port} 已被占用\n{info}")
 
-        self._print_access_urls(host, port, scheme, self.enable_webui)
+        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI is ready\n\n"]
+        parts.append(f"   ➜  Local: {scheme}://localhost:{port}\n")
+        for ip in ip_addr:
+            parts.append(f"   ➜  Network: {scheme}://{ip}:{port}\n")
+        parts.append("   ➜  Default username/password: astrbot / astrbot\n ✨✨✨\n")
+        display = "".join(parts)
+
+        if not ip_addr:
+            display += (
+                "Set dashboard.host in data/cmd_config.json to enable remote access.\n"
+            )
+
+        logger.info(display)
 
         # 配置 Hypercorn
         config = HyperConfig()

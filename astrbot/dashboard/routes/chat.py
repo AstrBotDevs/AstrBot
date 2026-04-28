@@ -5,8 +5,8 @@ import re
 import uuid
 from contextlib import asynccontextmanager
 from copy import deepcopy
-from pathlib import Path
-from typing import cast
+from pathlib import Path, PurePosixPath
+from typing import Any, cast
 
 import anyio
 from quart import g, make_response, request, send_file
@@ -31,6 +31,16 @@ from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from .route import Response, Route, RouteContext
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
+
+
+def _sanitize_upload_filename(filename: str | None) -> str:
+    if not filename:
+        return f"{uuid.uuid4()!s}"
+    normalized = filename.replace("\\", "/")
+    name = PurePosixPath(normalized).name.replace("\x00", "").strip()
+    if name in ("", ".", ".."):
+        return f"{uuid.uuid4()!s}"
+    return name
 
 
 @asynccontextmanager
@@ -58,6 +68,179 @@ async def _poll_webchat_stream_result(back_queue, username: str):
 
 def _resolve_path(path: str) -> Path:
     return Path(path).resolve(strict=False)
+
+
+def normalize_legacy_reasoning_message_parts(
+    message_parts: list[dict] | None,
+    reasoning: str = "",
+) -> list[dict]:
+    parts: list[dict] = []
+    for part in message_parts or []:
+        if not isinstance(part, dict):
+            continue
+        copied = dict(part)
+        if copied.get("type") == "reasoning":
+            copied = {"type": "think", "think": copied.get("text", "")}
+        parts.append(copied)
+    if reasoning and not any(part.get("type") == "think" for part in parts):
+        parts.insert(0, {"type": "think", "think": reasoning})
+    return parts
+
+
+def extract_reasoning_from_message_parts(message_parts: list[dict]) -> str:
+    reasoning_parts: list[str] = []
+    for part in message_parts:
+        if part.get("type") != "think":
+            continue
+        think = part.get("think")
+        if isinstance(think, str) and think:
+            reasoning_parts.append(think)
+    return "".join(reasoning_parts)
+
+
+def collect_plain_text_from_message_parts(message_parts: list[dict]) -> str:
+    text_parts: list[str] = []
+    for part in message_parts:
+        if part.get("type") != "plain":
+            continue
+        text = part.get("text")
+        if isinstance(text, str) and text:
+            text_parts.append(text)
+    return "".join(text_parts)
+
+
+def build_bot_history_content(
+    message_parts: list[dict],
+    *,
+    agent_stats: dict | None = None,
+    refs: dict | None = None,
+    include_legacy_reasoning_field: bool = True,
+) -> dict[str, Any]:
+    normalized_parts = normalize_legacy_reasoning_message_parts(message_parts)
+    content: dict[str, Any] = {"type": "bot", "message": normalized_parts}
+    reasoning = extract_reasoning_from_message_parts(normalized_parts)
+    if reasoning and include_legacy_reasoning_field:
+        # Keep the legacy field for old clients while the canonical structure
+        # moves to message parts.
+        content["reasoning"] = reasoning
+    if agent_stats:
+        content["agent_stats"] = agent_stats
+    if refs:
+        content["refs"] = refs
+    return content
+
+
+class BotMessageAccumulator:
+    def __init__(self) -> None:
+        self.parts: list[dict] = []
+        self.pending_text = ""
+        self.pending_tool_calls: dict[str, dict] = {}
+
+    def has_content(self) -> bool:
+        return bool(self.parts or self.pending_text or self.pending_tool_calls)
+
+    def add_plain(
+        self,
+        result_text: str,
+        *,
+        chain_type: str | None,
+        streaming: bool,
+    ) -> None:
+        if chain_type == "tool_call":
+            self._flush_pending_text()
+            self._store_tool_call(result_text)
+            return
+
+        if chain_type == "tool_call_result":
+            self._flush_pending_text()
+            self._store_tool_call_result(result_text)
+            return
+
+        if chain_type == "reasoning":
+            self._flush_pending_text()
+            self._append_think_part(result_text)
+            return
+
+        if streaming:
+            self.pending_text += result_text
+        else:
+            self.pending_text = result_text
+
+    def add_attachment(self, part: dict | None) -> None:
+        if not part:
+            return
+        self._flush_pending_text()
+        self.parts.append(part)
+
+    def build_message_parts(
+        self, *, include_pending_tool_calls: bool = False
+    ) -> list[dict]:
+        self._flush_pending_text()
+        if include_pending_tool_calls and self.pending_tool_calls:
+            for tool_call in self.pending_tool_calls.values():
+                self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
+            self.pending_tool_calls = {}
+        return self.parts
+
+    def plain_text(self) -> str:
+        return collect_plain_text_from_message_parts(self.build_message_parts())
+
+    def reasoning_text(self) -> str:
+        return extract_reasoning_from_message_parts(self.build_message_parts())
+
+    def _flush_pending_text(self) -> None:
+        if not self.pending_text:
+            return
+
+        if self.parts and self.parts[-1].get("type") == "plain":
+            last_text = self.parts[-1].get("text")
+            self.parts[-1]["text"] = f"{last_text or ''}{self.pending_text}"
+        else:
+            self.parts.append({"type": "plain", "text": self.pending_text})
+        self.pending_text = ""
+
+    def _append_think_part(self, text: str) -> None:
+        if not text:
+            return
+
+        if self.parts and self.parts[-1].get("type") == "think":
+            last_text = self.parts[-1].get("think")
+            self.parts[-1]["think"] = f"{last_text or ''}{text}"
+        else:
+            self.parts.append({"type": "think", "think": text})
+
+    def _store_tool_call(self, result_text: str) -> None:
+        tool_call = self._parse_json_object(result_text)
+        if not tool_call:
+            return
+        tool_call_id = str(tool_call.get("id") or "")
+        if not tool_call_id:
+            return
+        self.pending_tool_calls[tool_call_id] = tool_call
+
+    def _store_tool_call_result(self, result_text: str) -> None:
+        tool_result = self._parse_json_object(result_text)
+        if not tool_result:
+            return
+
+        tool_call_id = str(tool_result.get("id") or "")
+        if not tool_call_id:
+            return
+
+        tool_call = self.pending_tool_calls.pop(tool_call_id, None) or {
+            "id": tool_call_id
+        }
+        tool_call["result"] = tool_result.get("result")
+        tool_call["finished_ts"] = tool_result.get("ts")
+        self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
+
+    @staticmethod
+    def _parse_json_object(raw_text: str) -> dict | None:
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
 
 
 class ChatRoute(Route):
@@ -160,7 +343,7 @@ class ChatRoute(Route):
         if "file" not in post_data:
             return Response().error("Missing key: file").to_json()
         file = post_data["file"]
-        filename = file.filename or f"{uuid.uuid4()!s}"
+        filename = _sanitize_upload_filename(file.filename)
         content_type = file.content_type or "application/octet-stream"
         if content_type.startswith("image"):
             attach_type = "image"
@@ -170,10 +353,17 @@ class ChatRoute(Route):
             attach_type = "video"
         else:
             attach_type = "file"
-        path = os.path.join(self.attachments_dir, filename)
-        await file.save(path)
+
+        attachments_dir = Path(self.attachments_dir).resolve(strict=False)
+        file_path = (attachments_dir / filename).resolve(strict=False)
+        if not file_path.is_relative_to(attachments_dir):
+            return Response().error("Invalid filename").__dict__
+
+        await file.save(str(file_path))
+
+        # 创建 attachment 记录
         attachment = await self.db.insert_attachment(
-            path=path,
+            path=str(file_path),
             type=attach_type,
             mime_type=content_type,
         )
@@ -516,26 +706,19 @@ class ChatRoute(Route):
     async def _save_bot_message(
         self,
         webchat_conv_id: str,
-        text: str,
-        media_parts: list,
-        reasoning: str,
+        message_parts: list[dict],
         agent_stats: dict,
         refs: dict,
         llm_checkpoint_id: str | None = None,
         platform_history_id: str = "webchat",
     ):
-        """保存 bot 消息到历史记录,返回保存的记录"""
-        bot_message_parts = []
-        bot_message_parts.extend(media_parts)
-        if text:
-            bot_message_parts.append({"type": "plain", "text": text})
-        new_his: dict[str, Any] = {"type": "bot", "message": bot_message_parts}
-        if reasoning:
-            new_his["reasoning"] = reasoning
-        if agent_stats:
-            new_his["agent_stats"] = agent_stats
-        if refs:
-            new_his["refs"] = refs
+        """保存 bot 消息到历史记录，返回保存的记录"""
+        new_his = build_bot_history_content(
+            message_parts,
+            agent_stats=agent_stats,
+            refs=refs,
+        )
+
         record = await self.platform_history_mgr.insert(
             platform_id=platform_history_id,
             user_id=webchat_conv_id,
@@ -587,12 +770,60 @@ class ChatRoute(Route):
 
         async def stream():
             client_disconnected = False
-            accumulated_parts = []
-            accumulated_text = ""
-            accumulated_reasoning = ""
-            tool_calls = {}
+            message_accumulator = BotMessageAccumulator()
             agent_stats = {}
             refs = {}
+
+            async def flush_pending_bot_message():
+                nonlocal message_accumulator, agent_stats, refs
+                if not (message_accumulator.has_content() or refs or agent_stats):
+                    return None
+
+                message_parts_to_save = message_accumulator.build_message_parts(
+                    include_pending_tool_calls=True
+                )
+                plain_text = collect_plain_text_from_message_parts(
+                    message_parts_to_save
+                )
+
+                try:
+                    extracted_refs = self._extract_web_search_refs(
+                        plain_text,
+                        message_parts_to_save,
+                    )
+                except Exception as e:
+                    logger.exception(
+                        f"Failed to extract web search refs: {e}",
+                        exc_info=True,
+                    )
+                    extracted_refs = refs
+
+                saved_record = await self._save_bot_message(
+                    webchat_conv_id,
+                    message_parts_to_save,
+                    agent_stats,
+                    extracted_refs,
+                    llm_checkpoint_id,
+                    platform_history_id,
+                )
+                message_accumulator = BotMessageAccumulator()
+                agent_stats = {}
+                refs = {}
+                return saved_record
+
+            def build_attachment_saved_event(part: dict | None) -> str | None:
+                if not part or not part.get("attachment_id") or not part.get("type"):
+                    return None
+
+                payload = {
+                    "type": "attachment_saved",
+                    "data": {
+                        "id": part["attachment_id"],
+                        "type": part["type"],
+                    },
+                }
+                return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
             try:
                 session_info = {
                     "type": "session_id",
@@ -660,87 +891,68 @@ class ChatRoute(Route):
                             logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接｡")
                             client_disconnected = True
                         if msg_type == "plain":
-                            chain_type = result.get("chain_type")
-                            if chain_type == "tool_call":
-                                tool_call = json.loads(result_text)
-                                tool_calls[tool_call.get("id")] = tool_call
-                                if accumulated_text:
-                                    accumulated_parts.append(
-                                        {"type": "plain", "text": accumulated_text},
-                                    )
-                                    accumulated_text = ""
-                            elif chain_type == "tool_call_result":
-                                tcr = json.loads(result_text)
-                                tc_id = tcr.get("id")
-                                if tc_id in tool_calls:
-                                    tool_calls[tc_id]["result"] = tcr.get("result")
-                                    tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
-                                    accumulated_parts.append(
-                                        {
-                                            "type": "tool_call",
-                                            "tool_calls": [tool_calls[tc_id]],
-                                        },
-                                    )
-                                    tool_calls.pop(tc_id, None)
-                            elif chain_type == "reasoning":
-                                accumulated_reasoning += result_text
-                            elif streaming:
-                                accumulated_text += result_text
-                            else:
-                                accumulated_text = result_text
+                            message_accumulator.add_plain(
+                                result_text,
+                                chain_type=chain_type,
+                                streaming=streaming,
+                            )
                         elif msg_type == "image":
                             filename = result_text.replace("[IMAGE]", "")
                             part = await self._create_attachment_from_file(
                                 filename,
                                 "image",
                             )
-                            if part:
-                                accumulated_parts.append(part)
+                            message_accumulator.add_attachment(part)
+                            if attachment_saved_event := build_attachment_saved_event(
+                                part
+                            ):
+                                yield attachment_saved_event
                         elif msg_type == "record":
                             filename = result_text.replace("[RECORD]", "")
                             part = await self._create_attachment_from_file(
                                 filename,
                                 "record",
                             )
-                            if part:
-                                accumulated_parts.append(part)
+                            message_accumulator.add_attachment(part)
+                            if attachment_saved_event := build_attachment_saved_event(
+                                part
+                            ):
+                                yield attachment_saved_event
                         elif msg_type == "file":
                             filename = result_text.replace("[FILE]", "")
                             part = await self._create_attachment_from_file(
                                 filename,
                                 "file",
                             )
-                            if part:
-                                accumulated_parts.append(part)
-                        if msg_type == "end":
-                            break
-                        elif (streaming and msg_type == "complete") or not streaming:
-                            if (
-                                chain_type == "tool_call"
-                                or chain_type == "tool_call_result"
+                            message_accumulator.add_attachment(part)
+                            if attachment_saved_event := build_attachment_saved_event(
+                                part
                             ):
-                                continue
-                            try:
-                                refs = self._extract_web_search_refs(
-                                    accumulated_text,
-                                    accumulated_parts,
-                                )
-                            except Exception as e:
-                                logger.exception(
-                                    f"Failed to extract web search refs: {e}",
-                                    exc_info=True,
-                                )
-                            saved_record = await self._save_bot_message(
-                                webchat_conv_id,
-                                accumulated_text,
-                                accumulated_parts,
-                                accumulated_reasoning,
-                                agent_stats,
-                                refs,
-                                llm_checkpoint_id,
-                                platform_history_id,
+                                yield attachment_saved_event
+                        elif msg_type == "video":
+                            filename = result_text.replace("[VIDEO]", "")
+                            part = await self._create_attachment_from_file(
+                                filename, "video"
                             )
-                            if saved_record and (not client_disconnected):
+                            message_accumulator.add_attachment(part)
+                            if attachment_saved_event := build_attachment_saved_event(
+                                part
+                            ):
+                                yield attachment_saved_event
+
+                        should_save = False
+                        if msg_type == "end":
+                            should_save = message_accumulator.has_content() or bool(
+                                refs or agent_stats
+                            )
+                        elif (streaming and msg_type == "complete") or not streaming:
+                            if chain_type not in ("tool_call", "tool_call_result"):
+                                should_save = True
+
+                        if should_save:
+                            saved_record = await flush_pending_bot_message()
+                            # 发送保存的消息信息给前端
+                            if saved_record and not client_disconnected:
                                 saved_info = {
                                     "type": "message_saved",
                                     "data": {
@@ -755,14 +967,18 @@ class ChatRoute(Route):
                                     yield f"data: {json.dumps(saved_info, ensure_ascii=False)}\n\n"
                                 except Exception:
                                     pass
-                            accumulated_parts = []
-                            accumulated_text = ""
-                            accumulated_reasoning = ""
-                            agent_stats = {}
-                            refs = {}
+                        if msg_type == "end":
+                            break
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
             finally:
+                try:
+                    await flush_pending_bot_message()
+                except Exception as e:
+                    logger.exception(
+                        f"Failed to persist pending webchat message: {e}",
+                        exc_info=True,
+                    )
                 webchat_queue_mgr.remove_back_queue(message_id)
 
         chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id)

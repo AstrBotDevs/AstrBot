@@ -150,15 +150,15 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 timeout=aiohttp.ClientTimeout(total=1800),
             ) as resp:
                 if resp.status != 200:
-                    raise Exception(f"下载文件失败: {resp.status}")
+                    logger.error(
+                        f"Failed to download file from {url}. HTTP status code: {resp.status}"
+                    )
                 total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    logger.info(
-                        f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}",
-                    )
-                async with await anyio.open_file(path, "wb") as f:
+                    print(f"Downloading: {url} | Size: {total_size / 1024:.2f} KB")
+                with open(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
                         if not chunk:
@@ -172,13 +172,15 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                                 else 1
                             )
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            logger.info(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
+                            print(
+                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
+                                end="",
                             )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证(仅在证书验证失败时作为fallback)
         logger.warning(
-            "SSL 证书验证失败,已关闭 SSL 验证(不安全,仅用于临时下载)｡请检查目标服务器的证书配置｡",
+            f"SSL certificate verification failed for {url}. "
+            "Falling back to unverified connection (CERT_NONE). "
         )
         logger.warning(
             f"SSL certificate verification failed for {url}. "
@@ -199,10 +201,8 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    logger.info(
-                        f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}",
-                    )
-                async with await anyio.open_file(path, "wb") as f:
+                    print(f"Size: {total_size / 1024:.2f} KB | URL: {url}")
+                with open(path, "wb") as f:
                     while True:
                         chunk = await resp.content.read(8192)
                         if not chunk:
@@ -212,8 +212,9 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                         if show_progress:
                             elapsed_time = time.time() - start_time
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            logger.info(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
+                            print(
+                                f"\rProgress: {downloaded_size / total_size:.2%} Speed: {speed:.2f} KB/s",
+                                end="",
                             )
     if show_progress:
         logger.info("下载完成")
@@ -303,106 +304,35 @@ async def download_dashboard(
     else:
         zip_path = anyio.Path(path)
 
-    # 缓存机制
-    cache_dir = anyio.Path(get_astrbot_data_path()) / "cache"
-    if not await cache_dir.exists():
-        await cache_dir.mkdir(parents=True, exist_ok=True)
-
-    use_cache = False
-
-    # Only use cache if not requesting "latest" (we don't know the version yet)
-    if not latest and version:
-        cache_name = f"dashboard_{version}.zip"
-        cache_path = cache_dir / cache_name
-
-        if await cache_path.exists():
-            logger.info(f"发现本地缓存的管理面板文件: {cache_path}")
-            try:
-                with zipfile.ZipFile(str(cache_path), "r") as z:
-                    if z.testzip() is None:
-                        logger.info("缓存文件校验通过,将直接使用缓存｡")
-                        if str(cache_path) != str(zip_path):
-                            shutil.copy(str(cache_path), str(zip_path))
-                        use_cache = True
-                    else:
-                        logger.warning("缓存文件损坏,将重新下载｡")
-                        await cache_path.unlink()
-            except zipfile.BadZipFile:
-                logger.warning("缓存文件损坏 (BadZipFile),将重新下载｡")
-                await cache_path.unlink()
-        if not use_cache:
-            if latest or len(str(version)) != 40:
-                ver_name = "latest" if latest else version
-                dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
-                logger.info(
-                    f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}",
-                )
-                try:
-                    await download_file(
-                        dashboard_release_url,
-                        str(zip_path),
-                        show_progress=True,
-                    )
-                except BaseException as _:
-                    try:
-                        if latest:
-                            dashboard_release_url = "https://github.com/AstrBotDevs/AstrBot/releases/latest/download/dist.zip"
-                        else:
-                            dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{version}/dist.zip"
-                        if proxy:
-                            dashboard_release_url = f"{proxy}/{dashboard_release_url}"
-                        await download_file(
-                            dashboard_release_url,
-                            str(zip_path),
-                            show_progress=True,
-                        )
-                    except Exception as e:
-                        if not latest:
-                            logger.warning(
-                                f"下载指定版本({version})失败: {e},尝试下载最新版本｡",
-                            )
-                            await download_dashboard(
-                                path=path,
-                                extract_path=extract_path,
-                                latest=True,
-                                proxy=proxy,
-                            )
-                            return
-                        raise e
-            else:
-                url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
-                logger.info(f"准备下载指定版本的 AstrBot WebUI: {url}")
-                if proxy:
-                    url = f"{proxy}/{url}"
-                await download_file(url, str(zip_path), show_progress=True)
-
-            # 下载完成后存入缓存
+    if latest or len(str(version)) != 40:
+        ver_name = "latest" if latest else version
+        dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
+        logger.info(
+            f"Downloading AstrBot WebUI from {dashboard_release_url}",
+        )
         try:
-            save_cache_name = None
-            if not latest and version:
-                save_cache_name = f"dashboard_{version}.zip"
+            await download_file(
+                dashboard_release_url,
+                str(zip_path),
+                show_progress=True,
+            )
+        except BaseException as _:
+            if latest:
+                dashboard_release_url = "https://github.com/AstrBotDevs/AstrBot/releases/latest/download/dist.zip"
             else:
-                # 尝试从下载的文件中读取版本号
-                try:
-                    with zipfile.ZipFile(zip_path, "r") as z:
-                        for v_path in ["dist/assets/version", "assets/version"]:
-                            try:
-                                with z.open(v_path) as f:
-                                    v = f.read().decode("utf-8").strip()
-                                    save_cache_name = f"dashboard_{v}.zip"
-                                    break
-                            except KeyError:
-                                continue
-                except Exception:
-                    pass
-
-            if save_cache_name:
-                cache_save_path = cache_dir / save_cache_name
-                if str(zip_path) != str(cache_save_path):
-                    shutil.copy(zip_path, cache_save_path)
-                    logger.info(f"已缓存管理面板文件至: {cache_save_path}")
-        except Exception as e:
-            logger.warning(f"缓存管理面板文件失败: {e}")
-
+                dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{version}/dist.zip"
+            if proxy:
+                dashboard_release_url = f"{proxy}/{dashboard_release_url}"
+            await download_file(
+                dashboard_release_url,
+                str(zip_path),
+                show_progress=True,
+            )
+    else:
+        url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
+        logger.info(f"Downloading AstrBot WebUI from {url}")
+        if proxy:
+            url = f"{proxy}/{url}"
+        await download_file(url, str(zip_path), show_progress=True)
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(extract_path)

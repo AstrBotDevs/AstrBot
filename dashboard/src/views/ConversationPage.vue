@@ -561,9 +561,10 @@ import { useCustomizerStore } from "@/stores/customizer";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import MessageList from "@/components/chat/MessageList.vue";
 import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+    askForConfirmation as askForConfirmationDialog,
+    useConfirmDialog
+} from '@/utils/confirmDialog';
+import { copyToClipboard } from '@/utils/clipboard';
 
 export default {
   name: "ConversationPage",
@@ -748,10 +749,498 @@ export default {
       return this.customizerStore.uiTheme === "PurpleThemeDark";
     },
 
-    // 将对话历史转换为 MessageList 组件期望的格式
-    formattedMessages() {
-      return this.conversationHistory.map((msg) => {
-        console.info("处理消息:", msg.role, msg.content);
+    mounted() {
+        this.fetchConversations();
+    },
+
+    methods: {
+        // Monaco编辑器挂载后的回调
+        onMonacoMounted(editor) {
+            this.monacoEditor = editor;
+            // 添加JSON格式校验
+            editor.onDidChangeModelContent(() => {
+                try {
+                    JSON.parse(this.editedHistory);
+                    // 有效的JSON格式
+                    editor.getAction('editor.action.formatDocument').run();
+                } catch (e) {
+                    // 无效的JSON格式，不做处理，Monaco编辑器会自动提示
+                }
+            });
+        },
+
+        // 处理表格选项变更（页面大小等）
+        handleTableOptions(options) {
+            // 处理页面大小变更
+            if (options.itemsPerPage !== this.pagination.page_size) {
+                this.pagination.page_size = options.itemsPerPage;
+                this.pagination.page = 1; // 重置到第一页
+                this.fetchConversations();
+            }
+        },
+
+        // 从会话ID解析平台和消息类型信息
+        parseSessionId(userId) {
+            if (!userId) return { platform: 'default', messageType: 'default', sessionId: '' };
+
+            // 使用冒号进行分割，格式: platform:messageType:sessionId
+            const parts = userId.split(':');
+
+            if (parts.length >= 3) {
+                return {
+                    platform: parts[0] || 'default',
+                    messageType: parts[1] || 'default',
+                    sessionId: parts.slice(2).join(':') // 保留可能包含冒号的后续部分
+                };
+            }
+
+            return { platform: 'default', messageType: 'default', sessionId: userId };
+        },
+
+        // 获取消息类型的显示文本
+        getMessageTypeDisplay(messageType) {
+            const typeMap = {
+                'GroupMessage': this.tm('messageTypes.group'),
+                'FriendMessage': this.tm('messageTypes.friend'),
+                'default': this.tm('messageTypes.unknown')
+            };
+
+            return typeMap[messageType] || typeMap.default;
+        },
+
+        formatUmoSource(item) {
+            if (!item?.sessionInfo) {
+                return item?.user_id || this.tm('status.unknown');
+            }
+
+            if (this.umoDisplayMode === 'raw') {
+                return item.user_id || this.tm('status.unknown');
+            }
+
+            const platform = item.sessionInfo.platform || this.tm('status.unknown');
+            const messageType = this.getMessageTypeDisplay(item.sessionInfo.messageType);
+            const sessionId = item.sessionInfo.sessionId || this.tm('status.unknown');
+            return `${platform}:${messageType}:${sessionId}`;
+        },
+
+        async copyUmoSource(item) {
+            const ok = await copyToClipboard(this.formatUmoSource(item));
+            if (ok) {
+                this.showSuccessMessage(this.tm('messages.copySuccess'));
+            } else {
+                this.showErrorMessage(this.tm('messages.copyError'));
+            }
+        },
+
+        // 获取对话列表
+        fetchConversations: (() => {
+            let controller = new AbortController();
+
+            return async function () {
+                // 新请求前停止之前的请求
+                controller?.abort()
+                controller = new AbortController();
+
+                this.loading = true;
+                try {
+                    // 准备请求参数，包含分页和筛选条件
+                    const params = {
+                        page: this.pagination.page,
+                        page_size: this.pagination.page_size
+                    };
+
+                    // 添加筛选条件 - 处理combobox的混合数据格式
+                    if (this.platformFilter.length > 0) {
+                        const platforms = this.platformFilter.map(item =>
+                            typeof item === 'object' ? item.value : item
+                        );
+                        params.platforms = platforms.join(',');
+                    }
+
+                    if (this.messageTypeFilter.length > 0) {
+                        params.message_types = this.messageTypeFilter.join(',');
+                    }
+
+                    if (this.search) {
+                        params.search = this.search.trim();
+                    }
+
+                    // 添加排除条件
+                    params.exclude_ids = 'astrbot';
+                    params.exclude_platforms = 'webchat';
+
+                    const response = await axios.get('/api/conversation/list', {
+                        signal: controller.signal,
+                        params
+                    });
+
+                    this.lastAppliedFilters = { ...this.currentFilters }; // 记录已应用的筛选条件
+
+                    if (response.data.status === "ok") {
+                        const data = response.data.data;
+
+                        if (!data || !data.conversations) {
+                            console.error('API 返回数据格式不符合预期:', data);
+                            this.showErrorMessage(this.tm('messages.fetchError'));
+                            return;
+                        }
+
+                        // 处理会话数据，解析sessionId
+                        this.conversations = (data.conversations || []).map(conv => {
+                            // 为每个会话添加会话信息
+                            conv.sessionInfo = this.parseSessionId(conv.user_id);
+                            return conv;
+                        });
+
+                        // 更新分页信息
+                        if (data.pagination) {
+                            this.pagination = {
+                                page: data.pagination.page || 1,
+                                page_size: data.pagination.page_size || 20,
+                                total: data.pagination.total || 0,
+                                total_pages: data.pagination.total_pages || 1
+                            };
+                        } else {
+                            console.warn('API 响应中没有分页信息');
+                        }
+                    } else {
+                        this.showErrorMessage(response.data.message || this.tm('messages.fetchError'));
+                    }
+                } catch (error) {
+                    if (axios.isCancel(error)) return;
+                    
+                    console.error('获取对话列表出错:', error);
+                    if (error.response) {
+                        console.error('错误响应数据:', error.response.data);
+                        console.error('错误状态码:', error.response.status);
+                    }
+                    this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.fetchError'));
+                } finally {
+                    this.loading = false;
+                }
+            }
+        })(),
+
+        // 查看对话详情
+        async viewConversation(item) {
+            this.selectedConversation = item;
+            this.loading = true;
+            this.isEditingHistory = false;
+
+            try {
+                console.log(`正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`);
+                const response = await axios.post('/api/conversation/detail', {
+                    user_id: item.user_id,
+                    cid: item.cid
+                });
+
+                if (response.data.status === "ok") {
+                    try {
+                        const historyData = response.data.data.history || '[]';
+                        this.conversationHistory = JSON.parse(historyData);
+                        this.editedHistory = JSON.stringify(this.conversationHistory, null, 2);
+                    } catch (e) {
+                        this.conversationHistory = [];
+                        this.editedHistory = '[]';
+                        console.error('解析对话历史失败:', e);
+                    }
+                    this.dialogView = true;
+                } else {
+                    this.showErrorMessage(response.data.message || this.tm('messages.historyError'));
+                }
+            } catch (error) {
+                console.error('获取对话详情出错:', error);
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.historyError'));
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        // 保存对话历史的修改
+        async saveHistoryChanges() {
+            if (!this.selectedConversation) return;
+
+            this.savingHistory = true;
+
+            try {
+                // 验证JSON格式
+                let historyJson;
+                try {
+                    historyJson = JSON.parse(this.editedHistory);
+                } catch (e) {
+                    this.showErrorMessage(this.tm('messages.invalidJson'));
+                    return;
+                }
+
+                const response = await axios.post('/api/conversation/update_history', {
+                    user_id: this.selectedConversation.user_id,
+                    cid: this.selectedConversation.cid,
+                    history: historyJson
+                });
+
+                if (response.data.status === "ok") {
+                    this.conversationHistory = historyJson;
+                    this.showSuccessMessage(this.tm('messages.historySaveSuccess'));
+                    this.isEditingHistory = false;
+                } else {
+                    this.showErrorMessage(response.data.message || this.tm('messages.historySaveError'));
+                }
+            } catch (error) {
+                console.error('更新对话历史出错:', error);
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.historySaveError'));
+            } finally {
+                this.savingHistory = false;
+            }
+        },
+
+        // 关闭对话历史对话框
+        async closeHistoryDialog() {
+            if (this.isEditingHistory) {
+                if (await askForConfirmationDialog(this.tm('dialogs.view.confirmClose'), this.confirmDialog)) {
+                    this.dialogView = false;
+                }
+            } else {
+                this.dialogView = false;
+            }
+        },
+
+        // 编辑对话
+        editConversation(item) {
+            this.selectedConversation = item;
+            this.editedItem = Object.assign({}, item);
+            this.dialogEdit = true;
+        },
+
+        // 保存编辑后的对话
+        async saveConversation() {
+            if (!this.$refs.form.validate()) return;
+
+            this.loading = true;
+            try {
+                const response = await axios.post('/api/conversation/update', {
+                    user_id: this.editedItem.user_id,
+                    cid: this.editedItem.cid,
+                    title: this.editedItem.title
+                });
+
+                if (response.data.status === "ok") {
+                    // 更新本地数据
+                    const index = this.conversations.findIndex(item => item.user_id === this.editedItem.user_id && item.cid === this.editedItem.cid
+                    );
+
+                    if (index !== -1) {
+                        this.conversations[index].title = this.editedItem.title;
+                    }
+
+                    this.dialogEdit = false;
+                    this.showSuccessMessage(this.tm('messages.saveSuccess'));
+
+                    // 刷新数据
+                    this.fetchConversations();
+                } else {
+                    this.showErrorMessage(response.data.message || this.tm('messages.saveError'));
+                }
+            } catch (error) {
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.saveError'));
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        // 确认删除对话
+        confirmDeleteConversation(item) {
+            this.selectedConversation = item;
+            this.dialogDelete = true;
+        },
+
+        // 删除对话
+        async deleteConversation() {
+            this.loading = true;
+            try {
+                const response = await axios.post('/api/conversation/delete', {
+                    user_id: this.selectedConversation.user_id,
+                    cid: this.selectedConversation.cid
+                });
+
+                if (response.data.status === "ok") {
+                    const index = this.conversations.findIndex(item => item.user_id === this.selectedConversation.user_id && item.cid === this.selectedConversation.cid
+                    );
+
+                    if (index !== -1) {
+                        this.conversations.splice(index, 1);
+                    }
+
+                    this.dialogDelete = false;
+                    this.showSuccessMessage(this.tm('messages.deleteSuccess'));
+                } else {
+                    this.showErrorMessage(response.data.message || this.tm('messages.deleteError'));
+                }
+            } catch (error) {
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.deleteError'));
+            } finally {
+                this.loading = false;
+                this.selectedItems = this.selectedItems.filter(item =>
+                    !(item.user_id === this.selectedConversation.user_id && item.cid === this.selectedConversation.cid)
+                );
+                this.selectedConversation = null;
+            }
+        },
+
+        // 处理页面大小变更
+        onPageSizeChange() {
+            this.pagination.page = 1; // 重置到第一页
+            this.fetchConversations();
+        },
+
+        // 确认批量删除
+        confirmBatchDelete() {
+            if (this.selectedItems.length === 0) {
+                this.showErrorMessage(this.tm('messages.noItemSelected'));
+                return;
+            }
+            this.dialogBatchDelete = true;
+        },
+
+        // 从选择中移除项目
+        removeFromSelection(item) {
+            const index = this.selectedItems.findIndex(selected =>
+                selected.user_id === item.user_id && selected.cid === item.cid
+            );
+            if (index !== -1) {
+                this.selectedItems.splice(index, 1);
+            }
+        },
+
+        // 批量删除对话
+        async batchDeleteConversations() {
+            if (this.selectedItems.length === 0) {
+                this.showErrorMessage(this.tm('messages.noItemSelected'));
+                return;
+            }
+
+            this.loading = true;
+            try {
+                // 准备批量删除的数据
+                const conversations = this.selectedItems.map(item => ({
+                    user_id: item.user_id,
+                    cid: item.cid
+                }));
+
+                const response = await axios.post('/api/conversation/delete', {
+                    conversations: conversations
+                });
+
+                if (response.data.status === "ok") {
+                    const result = response.data.data;
+                    this.dialogBatchDelete = false;
+                    this.selectedItems = []; // 清空选择
+
+                    // 显示结果消息
+                    if (result.failed_count > 0) {
+                        this.showErrorMessage(
+                            this.tm('messages.batchDeletePartial', {
+                                deleted: result.deleted_count,
+                                failed: result.failed_count
+                            })
+                        );
+                    } else {
+                        this.showSuccessMessage(
+                            this.tm('messages.batchDeleteSuccess', {
+                                count: result.deleted_count
+                            })
+                        );
+                    }
+
+                    // 刷新列表
+                    this.fetchConversations();
+                } else {
+                    this.showErrorMessage(response.data.message || this.tm('messages.batchDeleteError'));
+                }
+            } catch (error) {
+                console.error('批量删除对话出错:', error);
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.batchDeleteError'));
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        // 导出选中的对话
+        async exportConversations() {
+            if (this.selectedItems.length === 0) {
+                this.showErrorMessage(this.tm('messages.noItemSelectedForExport'));
+                return;
+            }
+
+            this.loading = true;
+            try {
+                // 准备导出的数据
+                const conversations = this.selectedItems.map(item => ({
+                    user_id: item.user_id,
+                    cid: item.cid
+                }));
+
+                const response = await axios.post('/api/conversation/export', {
+                    conversations: conversations
+                }, {
+                    responseType: 'blob' // 重要：告诉 axios 响应是一个 blob
+                });
+
+                // 创建一个下载链接
+                const url = window.URL.createObjectURL(response.data);
+                const link = document.createElement('a');
+                link.href = url;
+                
+                // 生成文件名（使用时间戳）
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const filename = `conversations_export_${timestamp}.jsonl`;
+                
+                link.setAttribute('download', filename);
+                document.body.appendChild(link);
+                link.click();
+                
+                // 清理
+                link.remove();
+                window.URL.revokeObjectURL(url);
+                
+                this.showSuccessMessage(this.tm('messages.exportSuccess'));
+            } catch (error) {
+                console.error(this.tm('messages.exportError'), error);
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.exportError'));
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        // 格式化时间戳
+        formatTimestamp(timestamp) {
+            if (!timestamp) return this.tm('status.unknown');
+
+            const date = new Date(timestamp * 1000);
+            const locale = this.locale || 'zh-CN';
+            return new Intl.DateTimeFormat(locale, {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            }).format(date);
+        },
+
+        // 显示成功消息
+        showSuccessMessage(message) {
+            this.message = message;
+            this.messageType = 'success';
+            this.showMessage = true;
+        },
+
+        // 显示错误消息
+        showErrorMessage(message) {
+            this.message = message;
+            this.messageType = 'error';
+            this.showMessage = true;
+        },
 
         // 将消息内容转换为 MessagePart[] 格式
         const messageParts = this.convertContentToMessageParts(msg.content);

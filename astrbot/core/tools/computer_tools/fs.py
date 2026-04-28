@@ -43,7 +43,7 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.file_read_utils import read_file_tool_result
-from astrbot.core.message.components import File
+from astrbot.core.message.components import File, Image
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_skills_path,
     get_astrbot_system_tmp_path,
@@ -64,6 +64,7 @@ _COMPUTER_RUNTIME_TOOL_CONFIG = {
 _SANDBOX_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "sandbox",
 }
+_IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 def _restricted_env_path_labels(umo: str) -> list[str]:
@@ -730,11 +731,21 @@ class FileDownloadTool(FunctionTool):
             if also_send_to_user:
                 try:
                     name = os.path.basename(local_path)
+                    if Path(local_path).suffix.lower() in _IMAGE_FILE_SUFFIXES:
+                        message_component = Image.fromFileSystem(local_path)
+                        sent_as = "image"
+                    else:
+                        message_component = File(name=name, file=local_path)
+                        sent_as = "file"
                     await context.context.event.send(
-                        MessageChain(chain=[File(name=name, file=local_path)]),
+                        MessageChain(chain=[message_component])
                     )
                 except Exception as e:
                     logger.error(f"Error sending file message: {e}")
+                    return (
+                        f"File downloaded successfully to {local_path} "
+                        f"but sending to user failed: {e}"
+                    )
 
                 # remove
                 # try:
@@ -742,7 +753,10 @@ class FileDownloadTool(FunctionTool):
                 # except Exception as e:
                 #     logger.error(f"Error removing temp file {local_path}: {e}")
 
-                return f"File downloaded successfully to {local_path} and sent to user."
+                return (
+                    f"File downloaded successfully to {local_path} "
+                    f"and sent to user as {sent_as}."
+                )
 
             return f"File downloaded successfully to {local_path}"
         except Exception as e:

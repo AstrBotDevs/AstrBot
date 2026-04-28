@@ -62,7 +62,7 @@ class ProviderAnthropic(Provider):
         stop_reason: str | None = None,
     ) -> None:
         has_text_output = bool((llm_response.completion_text or "").strip())
-        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
         has_tool_output = bool(llm_response.tools_call_args)
         if has_text_output or has_reasoning_output or has_tool_output:
             return
@@ -218,18 +218,37 @@ class ProviderAnthropic(Provider):
                     },
                 )
             elif message["role"] == "tool":
-                new_messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": message["tool_call_id"],
-                                "content": message["content"] or "<empty response>",
-                            },
-                        ],
-                    },
+                tool_result_block = {
+                    "type": "tool_result",
+                    "tool_use_id": message["tool_call_id"],
+                    "content": message["content"] or "<empty response>",
+                }
+                last_message = new_messages[-1] if new_messages else None
+                last_content = (
+                    last_message.get("content")
+                    if isinstance(last_message, dict)
+                    else None
                 )
+                can_append_to_previous_tool_results = (
+                    last_message is not None
+                    and last_message.get("role") == "user"
+                    and isinstance(last_content, list)
+                    and len(last_content) > 0
+                    and all(
+                        isinstance(block, dict) and block.get("type") == "tool_result"
+                        for block in last_content
+                    )
+                )
+
+                if can_append_to_previous_tool_results:
+                    last_content.append(tool_result_block)
+                else:
+                    new_messages.append(
+                        {
+                            "role": "user",
+                            "content": [tool_result_block],
+                        },
+                    )
             elif message["role"] == "user":
                 if isinstance(message.get("content"), list):
                     converted_content = []

@@ -367,6 +367,83 @@ class TestApplyKb:
         assert req.func_tool is not None
 
 
+class TestBuiltinToolInjection:
+    """Tests for builtin tool injection paths."""
+
+    @pytest.mark.asyncio
+    async def test_apply_web_search_tools_uses_builtin_tool_manager(
+        self, mock_event, mock_context
+    ):
+        """Test web search tool injection through the builtin tool manager."""
+        module = ama
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {
+                "web_search": True,
+                "websearch_provider": "baidu_ai_search",
+            }
+        }
+        builtin_tool = MagicMock(spec=FunctionTool)
+        builtin_tool.name = "web_search_baidu"
+        tool_mgr = MagicMock()
+        tool_mgr.get_builtin_tool.return_value = builtin_tool
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        await module._apply_web_search_tools(mock_event, req, mock_context)
+
+        tool_mgr.get_builtin_tool.assert_called_once_with(module.BaiduWebSearchTool)
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("web_search_baidu") is builtin_tool
+
+    @pytest.mark.asyncio
+    async def test_apply_web_search_tools_adds_firecrawl_search_and_extract_tools(
+        self, mock_event, mock_context
+    ):
+        """Test Firecrawl web search injects search and extract tools."""
+        module = ama
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {
+                "web_search": True,
+                "websearch_provider": "firecrawl",
+            }
+        }
+        search_tool = MagicMock(spec=FunctionTool)
+        search_tool.name = "web_search_firecrawl"
+        extract_tool = MagicMock(spec=FunctionTool)
+        extract_tool.name = "firecrawl_extract_web_page"
+        tool_mgr = MagicMock()
+        tool_mgr.get_builtin_tool.side_effect = [search_tool, extract_tool]
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        await module._apply_web_search_tools(mock_event, req, mock_context)
+
+        assert tool_mgr.get_builtin_tool.call_args_list == [
+            ((module.FirecrawlWebSearchTool,),),
+            ((module.FirecrawlExtractWebPageTool,),),
+        ]
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("web_search_firecrawl") is search_tool
+        assert req.func_tool.get_tool("firecrawl_extract_web_page") is extract_tool
+
+    def test_proactive_cron_job_tools_uses_builtin_tool_manager(self, mock_context):
+        """Test cron tool injection through the builtin tool manager."""
+        module = ama
+        req = ProviderRequest()
+        tool_mgr = MagicMock()
+
+        future_task_tool = MagicMock(spec=FunctionTool)
+        future_task_tool.name = "future_task"
+        tool_mgr.get_builtin_tool.return_value = future_task_tool
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        module._proactive_cron_job_tools(req, mock_context)
+
+        tool_mgr.get_builtin_tool.assert_called_once_with(module.FutureTaskTool)
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("future_task") is future_task_tool
+
+
 class TestApplyFileExtract:
     """Tests for _apply_file_extract function."""
 
@@ -1526,3 +1603,197 @@ class TestApplyLlmSafetyMode:
         module._apply_llm_safety_mode(config, req)
 
         assert "You are running in Safe Mode" in req.system_prompt
+
+
+class TestApplySandboxTools:
+    """Tests for _apply_sandbox_tools function."""
+
+    def test_apply_sandbox_tools_creates_toolset_if_none(self, mock_context):
+        """Test that ToolSet is created when func_tool is None."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        req = ProviderRequest(prompt="Test", func_tool=None)
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert req.func_tool is not None
+        assert isinstance(req.func_tool, ToolSet)
+
+    def test_apply_sandbox_tools_adds_required_tools(self, mock_context):
+        """Test that all required sandbox tools are added."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        req = ProviderRequest(prompt="Test", func_tool=None)
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        tool_names = req.func_tool.names()
+        assert "astrbot_execute_shell" in tool_names
+        assert "astrbot_execute_ipython" in tool_names
+        assert "astrbot_upload_file" in tool_names
+        assert "astrbot_download_file" in tool_names
+
+    def test_apply_sandbox_tools_adds_sandbox_prompt(self, mock_context):
+        """Test that sandbox mode prompt is added to system_prompt."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert "sandboxed environment" in req.system_prompt
+
+    def test_apply_sandbox_tools_with_cua_adds_gui_guidance(self, mock_context):
+        """Test that CUA sandbox guidance nudges reliable GUI workflows."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={"booter": "cua"},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert req.func_tool is not None
+        tool_names = req.func_tool.names()
+        assert "astrbot_cua_screenshot" in tool_names
+        assert "astrbot_cua_mouse_click" in tool_names
+        assert "astrbot_cua_keyboard_type" in tool_names
+        assert "astrbot_cua_key_press" not in tool_names
+
+        assert "Firefox" in req.system_prompt
+        assert "background=true" in req.system_prompt
+        assert 'firefox "https://example.com"' in req.system_prompt
+        assert "astrbot_cua_screenshot" in req.system_prompt
+        assert "astrbot_cua_key_press" not in req.system_prompt
+        assert "return_image_to_llm" in req.system_prompt
+        assert "astrbot_execute_shell" in req.system_prompt
+        assert "\\n" in req.system_prompt
+        assert "send_to_user=true" in req.system_prompt
+        assert "focused and empty or safe to append" in req.system_prompt
+
+    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
+        """Test sandbox tools with shipyard booter configuration."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={
+                "booter": "shipyard",
+                "shipyard_endpoint": "https://shipyard.example.com",
+                "shipyard_access_token": "test-token",
+            },
+        )
+        req = ProviderRequest(prompt="Test", func_tool=None)
+
+        monkeypatch.delenv("SHIPYARD_ENDPOINT", raising=False)
+        monkeypatch.delenv("SHIPYARD_ACCESS_TOKEN", raising=False)
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
+        assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
+
+    def test_apply_sandbox_tools_shipyard_missing_endpoint(self, mock_context):
+        """Test that shipyard config is skipped when endpoint is missing."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={
+                "booter": "shipyard",
+                "shipyard_endpoint": "",
+                "shipyard_access_token": "test-token",
+            },
+        )
+        req = ProviderRequest(prompt="Test", func_tool=None)
+
+        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
+            module._apply_sandbox_tools(config, req, "session-123")
+
+        mock_logger.error.assert_called_once()
+        assert (
+            "Shipyard sandbox configuration is incomplete"
+            in mock_logger.error.call_args[0][0]
+        )
+
+    def test_apply_sandbox_tools_shipyard_missing_access_token(self, mock_context):
+        """Test that shipyard config is skipped when access token is missing."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={
+                "booter": "shipyard",
+                "shipyard_endpoint": "https://shipyard.example.com",
+                "shipyard_access_token": "",
+            },
+        )
+        req = ProviderRequest(prompt="Test", func_tool=None)
+
+        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
+            module._apply_sandbox_tools(config, req, "session-123")
+
+        mock_logger.error.assert_called_once()
+
+    def test_apply_sandbox_tools_preserves_existing_toolset(self, mock_context):
+        """Test that existing tools are preserved when adding sandbox tools."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        existing_toolset = ToolSet()
+        existing_tool = MagicMock()
+        existing_tool.name = "existing_tool"
+        existing_toolset.add_tool(existing_tool)
+        req = ProviderRequest(prompt="Test", func_tool=existing_toolset)
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert "existing_tool" in req.func_tool.names()
+        assert "astrbot_execute_shell" in req.func_tool.names()
+
+    def test_apply_sandbox_tools_appends_to_existing_system_prompt(self, mock_context):
+        """Test that sandbox prompt is appended to existing system prompt."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert req.system_prompt.startswith("Base prompt")
+        assert "sandboxed environment" in req.system_prompt
+
+    def test_apply_sandbox_tools_with_none_system_prompt(self, mock_context):
+        """Test that sandbox prompt is applied when system_prompt is None."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt=None)
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert isinstance(req.system_prompt, str)
+        assert "sandboxed environment" in req.system_prompt

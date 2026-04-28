@@ -1,5 +1,5 @@
-import datetime
-from typing import TypedDict
+from sqlalchemy import case, func, select
+from sqlmodel import col
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -7,8 +7,8 @@ from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_PROVIDER_TYPE,
     DEERFLOW_THREAD_ID_KEY,
 )
-from astrbot.core.platform.astr_message_event import MessageSession
-from astrbot.core.platform.message_type import MessageType
+from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
+from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .utils.rst_scene import RstScene
@@ -288,122 +288,61 @@ class ConversationCommands:
             MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})｡"),
         )
 
-    async def groupnew_conv(self, message: AstrMessageEvent, sid: str = "") -> None:
-        """创建新群聊对话"""
-        if sid:
-            session = str(
-                MessageSession(
-                    platform_name=message.platform_meta.id,
-                    message_type=MessageType("GroupMessage"),
-                    session_id=sid,
-                ),
-            )
-            cpersona = await self._get_current_persona_id(session)
-            cid = await self.context.conversation_manager.new_conversation(
-                session,
-                message.get_platform_id(),
-                persona_id=cpersona,
-            )
-            message.set_result(
-                MessageEventResult().message(
-                    f"群聊 {session} 已切换到新对话: 新对话({cid[:4]})｡",
-                ),
-            )
-        else:
-            message.set_result(
-                MessageEventResult().message("请输入群聊 ID｡/groupnew 群聊ID｡"),
-            )
-
-    async def switch_conv(
-        self,
-        message: AstrMessageEvent,
-        index: int | None = None,
-    ) -> None:
-        """通过 /ls 前面的序号切换对话"""
-        if not isinstance(index, int):
-            message.set_result(
-                MessageEventResult().message("类型错误,请输入数字对话序号｡"),
-            )
-            return
-        if index is None:
-            message.set_result(
-                MessageEventResult().message(
-                    "请输入对话序号｡/switch 对话序号｡/ls 查看对话 /new 新建对话",
-                ),
-            )
-            return
-        conversations = await self.context.conversation_manager.get_conversations(
-            message.unified_msg_origin,
-        )
-        if index > len(conversations) or index < 1:
-            message.set_result(
-                MessageEventResult().message("对话序号错误,请使用 /ls 查看"),
-            )
-        else:
-            conversation = conversations[index - 1]
-            title = conversation.title or "新对话"
-            await self.context.conversation_manager.switch_conversation(
-                message.unified_msg_origin,
-                conversation.cid,
-            )
-            message.set_result(
-                MessageEventResult().message(
-                    f"切换到对话: {title}({conversation.cid[:4]})｡",
-                ),
-            )
-
-    async def rename_conv(self, message: AstrMessageEvent, new_name: str = "") -> None:
-        """重命名对话"""
-        if not new_name:
-            message.set_result(MessageEventResult().message("请输入新的对话名称｡"))
-            return
-        await self.context.conversation_manager.update_conversation_title(
-            message.unified_msg_origin,
-            new_name,
-        )
-        message.set_result(MessageEventResult().message("重命名对话成功｡"))
-
-    async def del_conv(self, message: AstrMessageEvent) -> None:
-        """删除当前对话"""
+    async def stats(self, message: AstrMessageEvent) -> None:
+        """Show token usage statistics for the current conversation."""
         umo = message.unified_msg_origin
-        cfg = self.context.get_config(umo=umo)
-        is_unique_session = cfg["platform_settings"]["unique_session"]
-        if (
-            message.get_group_id()
-            and (not is_unique_session)
-            and (message.role != "admin")
-        ):
+        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
+
+        if not cid:
             message.set_result(
                 MessageEventResult().message(
-                    f"会话处于群聊,并且未开启独立会话,并且您 (ID {message.get_sender_id()}) 不是管理员,因此没有权限删除当前对话｡",
+                    "❌ You are not in a conversation. Use /new to create one."
                 ),
             )
             return
-        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
-        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
-            active_event_registry.stop_all(umo, exclude=message)
-            await sp.remove_async(
-                scope="umo",
-                scope_id=umo,
-                key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
+
+        db = self.context.get_db()
+        async with db.get_db() as session:
+            result = await session.execute(
+                select(
+                    func.count(case((col(ProviderStat.id).is_not(None), 1))).label(
+                        "record_count",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_input_other), 0).label(
+                        "total_input_other",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_input_cached), 0).label(
+                        "total_input_cached",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_output), 0).label(
+                        "total_output",
+                    ),
+                ).where(
+                    col(ProviderStat.agent_type) == "internal",
+                    col(ProviderStat.conversation_id) == cid,
+                )
             )
-            message.set_result(MessageEventResult().message("重置对话成功｡"))
-            return
-        session_curr_cid = (
-            await self.context.conversation_manager.get_curr_conversation_id(umo)
-        )
-        if not session_curr_cid:
+            stats = result.one()
+
+        if stats.record_count == 0:
             message.set_result(
                 MessageEventResult().message(
-                    "当前未处于对话状态,请 /switch 序号 切换或 /new 创建｡",
+                    "📊 No stats available for this conversation yet."
                 ),
             )
             return
-        active_event_registry.stop_all(umo, exclude=message)
-        await self.context.conversation_manager.delete_conversation(
-            umo,
-            session_curr_cid,
+
+        total_input_other = stats.total_input_other
+        total_input_cached = stats.total_input_cached
+        total_output = stats.total_output
+        total_tokens = total_input_other + total_input_cached + total_output
+
+        ret = (
+            f"📊 Conversation Token usage (ID: {cid[:8]}...)\n"
+            f"Total:          {total_tokens:,}\n"
+            f"Input (cached): {total_input_cached:,}\n"
+            f"Input (other):  {total_input_other:,}\n"
+            f"Output:         {total_output:,}\n"
         )
-        ret = "删除当前对话成功｡不再处于对话状态,使用 /switch 序号 切换到其他对话或 /new 创建｡"
-        message.set_extra("_clean_ltm_session", True)
+
         message.set_result(MessageEventResult().message(ret))

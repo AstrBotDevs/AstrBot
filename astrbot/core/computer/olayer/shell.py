@@ -11,7 +11,7 @@ class ShellComponent(Protocol):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 30,
+        timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
         session_id: str | None = None,

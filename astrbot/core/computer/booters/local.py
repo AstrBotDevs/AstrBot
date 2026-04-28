@@ -100,7 +100,7 @@ class LocalShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 30,
+        timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
         session_id: str | None = None,
@@ -108,15 +108,40 @@ class LocalShellComponent(ShellComponent):
         if not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
 
-        key = session_id or "default"
-        session = PersistentShellSession.get_or_create(key)
-        return await session.exec(
-            command,
-            cwd=cwd,
-            env=env,
-            timeout=timeout,
-            background=background,
-        )
+        def _run() -> dict[str, Any]:
+            run_env = os.environ.copy()
+            if env:
+                run_env.update({str(k): str(v) for k, v in env.items()})
+            working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
+            if background:
+                # `command` is intentionally executed through the current shell so
+                # local computer-use behavior matches existing tool semantics.
+                # Safety relies on `_is_safe_command()` and the allowed-root checks.
+                proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+                    command,
+                    shell=shell,
+                    cwd=working_dir,
+                    env=run_env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
+            # `command` is intentionally executed through the current shell so
+            # local computer-use behavior matches existing tool semantics.
+            # Safety relies on `_is_safe_command()` and the allowed-root checks.
+            result = subprocess.run(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+                command,
+                shell=shell,
+                cwd=working_dir,
+                env=run_env,
+                timeout=timeout or 300,
+                capture_output=True,
+            )
+            return {
+                "stdout": _decode_shell_output(result.stdout),
+                "stderr": _decode_shell_output(result.stderr),
+                "exit_code": result.returncode,
+            }
 
     @staticmethod
     async def shutdown_all() -> None:
