@@ -19,11 +19,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-        python-version:
-          - '3.12'
         include:
+          - os: ubuntu-latest
+            python-version: '3.12'
           - os: macos-latest
             python-version: '3.12'
           - os: windows-latest

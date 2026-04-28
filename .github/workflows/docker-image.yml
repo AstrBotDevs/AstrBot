@@ -44,16 +44,11 @@ jobs:
         if: github.event_name == 'schedule' && steps.check-commits.outputs.has_commits == 'false'
         run: exit 0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.3
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          version: 10.28.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
+          pnpm-version: 10.28.2
           node-version: '24.13.0'
-          cache: "pnpm"
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Build Dashboard
@@ -165,16 +160,11 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.3
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          version: 10.28.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
+          pnpm-version: 10.28.2
           node-version: '24.13.0'
-          cache: "pnpm"
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Build Dashboard
