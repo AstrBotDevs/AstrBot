@@ -58,13 +58,10 @@ jobs:
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Build dashboard dist
-        shell: bash
-        working-directory: dashboard
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
-          echo "${{ steps.tag.outputs.tag }}" > dist/assets/version
-          zip -r "AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" dist
+        uses: ./.github/actions/build-dashboard
+        with:
+          version: ${{ steps.tag.outputs.tag }}
+          archive-name: AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip
 
       - name: Upload dashboard artifact
         uses: actions/upload-artifact@v7.0.1

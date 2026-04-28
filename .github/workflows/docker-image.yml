@@ -52,15 +52,9 @@ jobs:
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Build Dashboard
-        run: |
-          cd dashboard
-          pnpm install --frozen-lockfile
-          pnpm run build
-          mkdir -p dist/assets
-          git rev-parse HEAD > dist/assets/version
-          cd ..
-          mkdir -p data
-          cp -r dashboard/dist data/
+        uses: ./.github/actions/build-dashboard
+        with:
+          copy-dist-to: data
 
       - name: Determine test image tags
         id: test-meta
@@ -168,15 +162,9 @@ jobs:
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Build Dashboard
-        run: |
-          cd dashboard
-          pnpm install --frozen-lockfile
-          pnpm run build
-          mkdir -p dist/assets
-          git rev-parse HEAD > dist/assets/version
-          cd ..
-          mkdir -p data
-          cp -r dashboard/dist data/
+        uses: ./.github/actions/build-dashboard
+        with:
+          copy-dist-to: data
 
       - name: Set QEMU
         uses: docker/setup-qemu-action@v4.0.0

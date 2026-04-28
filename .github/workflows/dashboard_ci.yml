@@ -27,21 +27,10 @@ jobs:
           node-version: '24.13.0'
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
-      - name: Install and Build
-        working-directory: dashboard
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
-
-      - name: Inject Commit SHA
-        id: get_sha
-        run: |
-          commit_sha="$(git rev-parse HEAD)"
-          echo "COMMIT_SHA=$commit_sha" >> "$GITHUB_ENV"
-          mkdir -p dashboard/dist/assets
-          echo "$commit_sha" > dashboard/dist/assets/version
-          cd dashboard
-          zip -r dist.zip dist
+      - name: Build dashboard dist
+        uses: ./.github/actions/build-dashboard
+        with:
+          archive-name: dist.zip
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v7.0.1

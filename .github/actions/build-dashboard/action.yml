@@ -1,0 +1,46 @@
+name: Build dashboard
+description: Build the dashboard and optionally package or copy the dist output.
+
+inputs:
+  version:
+    description: Version string to write into dist/assets/version. Defaults to the checked-out commit SHA.
+    required: false
+    default: ""
+  archive-name:
+    description: Optional zip file name to create under the dashboard directory.
+    required: false
+    default: ""
+  copy-dist-to:
+    description: Optional repository-relative directory to receive dashboard/dist.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Build dashboard dist
+      shell: bash
+      run: |
+        cd dashboard
+        pnpm install --frozen-lockfile
+        pnpm run build
+        mkdir -p dist/assets
+        version="${{ inputs.version }}"
+        if [ -z "$version" ]; then
+          version="$(git rev-parse HEAD)"
+        fi
+        echo "$version" > dist/assets/version
+
+    - name: Archive dashboard dist
+      if: ${{ inputs.archive-name != '' }}
+      shell: bash
+      run: |
+        cd dashboard
+        zip -r "${{ inputs.archive-name }}" dist
+
+    - name: Copy dashboard dist
+      if: ${{ inputs.copy-dist-to != '' }}
+      shell: bash
+      run: |
+        mkdir -p "${{ inputs.copy-dist-to }}"
+        cp -r dashboard/dist "${{ inputs.copy-dist-to }}/"
