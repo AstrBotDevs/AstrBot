@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import functools
 import shlex
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from shipyard import ShipyardClient, Spec
 
