@@ -1,6 +1,8 @@
 """
-Dynamic SubAgent Manager
-Manages dynamically created subagents for task decomposition and parallel processing
+SubAgent Manager
+Manages subagents for task decomposition and parallel processing.
+Supports both statically configured subagents (from subagent_orchestrator) and
+dynamically created subagents at runtime.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
 @dataclass
-class DynamicSubAgentConfig:
+class SubAgentConfig:
     name: str
     system_prompt: str = ""
     tools: set[str] | None = None
@@ -46,9 +48,9 @@ class SubAgentExecutionResult:
 
 
 @dataclass
-class DynamicSubAgentSession:
+class SubAgentSession:
     session_id: str
-    subagents: dict = field(default_factory=dict)  # 存储DynamicSubAgentConfig对象
+    subagents: dict = field(default_factory=dict)  # 存储SubAgentConfig对象
     handoff_tools: dict = field(default_factory=dict)
     subagent_status: dict = field(
         default_factory=dict
@@ -66,22 +68,22 @@ class DynamicSubAgentSession:
     background_task_counters: dict = field(default_factory=dict)
 
 
-class DynamicSubAgentManager:
+class SubAgentManager:
     _sessions: dict = {}
     _max_subagent_count: int = 3
     _auto_cleanup_per_turn: bool = True
     _shared_context_enabled: bool = False
-    _shared_context_maxlen: int = 200  # 公共上下文保留的历史消息条数
-    _max_subagent_history: int = 500  # 每个subagent最多保留的历史消息条数
-    _execution_timeout: float = 600.0  # SubAgent 执行超时时间（秒） 总时长
+    _shared_context_maxlen: int = 300  # 公共上下文保留的历史消息条数
+    _subagent_history_maxlen: int = 300  # 每个subagent最多保留的历史消息条数
+    _execution_timeout: float = 1200.0  # SubAgent 执行超时时间（秒） 总时长
     _tools_blacklist: set[str] = {
         "send_shared_context_for_main_agent",
-        "create_dynamic_subagent",
+        "create_subagent",
         "protect_subagent",
         "unprotect_subagent",
         "reset_subagent",
-        "remove_dynamic_subagent",
-        "list_dynamic_subagent",
+        "remove_subagent",
+        "list_subagents",
         "wait_for_subagent",
         "view_shared_context",
     }
@@ -90,7 +92,7 @@ class DynamicSubAgentManager:
         "astrbot_execute_python",
     }
 
-    _HEADER_TEMPLATE = """# Dynamic Sub-Agent Capability
+    _HEADER_TEMPLATE = """# Sub-Agent Capability
 You can dynamically create and manage sub-agents with isolated instructions, tools and skills.
 {quota_info}
 
@@ -102,7 +104,7 @@ You can dynamically create and manage sub-agents with isolated instructions, too
 ## Workflow
 
 1. **Plan**: Break down the user request → identify subtask dependencies → determine which can run in parallel
-2. **Create**: Use `create_dynamic_subagent` for each subtask
+2. **Create**: Use `create_subagent` for each subtask
 3. **Delegate**: Use `transfer_to_<name>` to assign work
 4. **Collect**: Gather results from all sub-agents
     """
@@ -189,19 +191,19 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         max_subagent_count: int = 10,
         auto_cleanup_per_turn: bool = True,
         shared_context_enabled: bool = False,
-        shared_context_maxlen: int = 200,
-        max_subagent_history: int = 500,
+        shared_context_maxlen: int = 300,
+        subagent_history_maxlen: int = 300,
         tools_blacklist: list[str] = None,
         tools_inherent: list[str] = None,
-        execution_timeout: float = 600.0,
+        execution_timeout: float = 1200.0,
         **kwargs,
     ) -> None:
-        """Configure DynamicSubAgentManager settings"""
+        """Configure SubAgentManager settings"""
         cls._max_subagent_count = max_subagent_count
         cls._auto_cleanup_per_turn = auto_cleanup_per_turn
         cls._shared_context_enabled = shared_context_enabled
         cls._shared_context_maxlen = shared_context_maxlen
-        cls._max_subagent_history = max_subagent_history
+        cls._subagent_history_maxlen = subagent_history_maxlen
         cls._execution_timeout = execution_timeout
         if tools_inherent is None:
             cls._tools_inherent = {
@@ -213,13 +215,13 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         if tools_blacklist is None:
             cls._tools_blacklist = {
                 "send_shared_context_for_main_agent",
-                "create_dynamic_subagent",
+                "create_subagent",
                 "stop_subagent",
                 "protect_subagent",
                 "unprotect_subagent",
                 "reset_subagent",
-                "remove_dynamic_subagent",
-                "list_dynamic_subagent",
+                "remove_subagent",
+                "list_subagents",
                 "wait_for_subagent",
                 "view_shared_context",
             }
@@ -267,7 +269,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
                 # 所有subagent都被清理，清除公共上下文
                 cls.clear_shared_context(session_id)
                 logger.debug(
-                    "[EnhancedSubAgent:SharedContext] All subagents cleaned, cleared shared context"
+                    "[SubAgent:SharedContext] All subagents cleaned, cleared shared context"
                 )
             else:
                 # 清理已删除agent的上下文
@@ -286,7 +288,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         session = cls._get_or_create_session(session_id)
         session.protected_agents.add(agent_name)
         logger.debug(
-            "[EnhancedSubAgent:History] Initialized history for protected agent: %s",
+            "[SubAgent:History] Initialized history for protected agent: %s",
             agent_name,
         )
 
@@ -296,6 +298,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
     ) -> None:
         """Update conversation history for a subagent"""
         session = cls.get_session(session_id)
+
         if not session or agent_name not in session.protected_agents:
             return
 
@@ -323,13 +326,13 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
                 filtered_messages.append(msg)
 
         session.subagent_histories[agent_name].extend(filtered_messages)
-        if cls._max_subagent_history < len(session.subagent_histories[agent_name]):
+        if cls._subagent_history_maxlen < len(session.subagent_histories[agent_name]):
             session.subagent_histories[agent_name] = session.subagent_histories[
                 agent_name
-            ][-cls._max_subagent_history :]
+            ][-cls._subagent_history_maxlen :]
 
         logger.debug(
-            "[EnhancedSubAgent:History] Saved messages for %s, current len=%d",
+            "[SubAgent:History] Saved messages for %s, current len=%d",
             agent_name,
             len(session.subagent_histories[agent_name]),
         )
@@ -430,13 +433,9 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         if agent_name in session.subagents:
             if agent_name in session.subagent_histories:
                 session.subagent_histories.pop(agent_name, None)
-                # session.subagent_status.pop(agent_name, None)
-                # session.background_task_counters.pop(agent_name, None)
                 if session.shared_context_enabled:
                     cls.cleanup_shared_context_by_agent(session_id, agent_name)
-                logger.debug(
-                    "[EnhancedSubAgent:History] Cleared history for: %s", agent_name
-                )
+                logger.debug("[SubAgent:History] Cleared history for: %s", agent_name)
             return "__HISTORY_CLEARED__"
         else:
             return f"__HISTORY_CLEARED_FAILED__: Agent name {agent_name} not found. Available names {list(session.subagents.keys())}"
@@ -486,7 +485,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         }
         session.shared_context.append(message)
         logger.debug(
-            "[EnhancedSubAgent:SharedContext] [%s] %s -> %s: %s...",
+            "[SubAgent:SharedContext] [%s] %s -> %s: %s...",
             context_type,
             sender,
             target,
@@ -667,7 +666,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         removed = original_len - len(session.shared_context)
         if removed > 0:
             logger.debug(
-                "[EnhancedSubAgent:SharedContext] Removed %d messages related to %s",
+                "[SubAgent:SharedContext] Removed %d messages related to %s",
                 removed,
                 agent_name,
             )
@@ -679,7 +678,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         if not session:
             return
         session.shared_context.clear()
-        logger.debug("[EnhancedSubAgent:SharedContext] Cleared all shared context")
+        logger.debug("[SubAgent:SharedContext] Cleared all shared context")
 
     @classmethod
     def is_protected(cls, session_id: str, agent_name: str) -> bool:
@@ -695,7 +694,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         session = cls._get_or_create_session(session_id)
         session.shared_context_enabled = enabled
         logger.info(
-            "[EnhancedSubAgent:SharedContext] Shared context %s",
+            "[SubAgent:SharedContext] Shared context %s",
             "enabled" if enabled else "disabled",
         )
 
@@ -706,20 +705,27 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
             session.subagent_status[agent_name] = status
 
     @classmethod
-    def get_session(cls, session_id: str) -> DynamicSubAgentSession | None:
+    def get_session(cls, session_id: str) -> SubAgentSession | None:
         return cls._sessions.get(session_id, None)
 
     @classmethod
-    def _get_or_create_session(cls, session_id: str) -> DynamicSubAgentSession:
+    def _get_or_create_session(cls, session_id: str) -> SubAgentSession:
         if session_id not in cls._sessions:
-            cls._sessions[session_id] = DynamicSubAgentSession(session_id=session_id)
+            cls._sessions[session_id] = SubAgentSession(session_id=session_id)
         return cls._sessions[session_id]
 
     @classmethod
     async def create_subagent(
-        cls, session_id: str, config: DynamicSubAgentConfig
+        cls, session_id: str, config: SubAgentConfig, protected: bool = False
     ) -> tuple:
+        """Create a subagent (dynamic or static).
 
+        Args:
+            session_id: Session ID
+            config: SubAgent configuration
+            protected: If True, the subagent will not be auto-cleaned per turn.
+                       Static subagents from config should be protected.
+        """
         session = cls._get_or_create_session(session_id)
         if config.name not in session.subagents:
             # Check max count limit
@@ -764,7 +770,70 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
             session.subagent_histories[config.name] = []
         # 初始化subagent状态
         cls.set_subagent_status(session_id, config.name, "IDLE")
-        logger.info("[EnhancedSubAgent:Create] Created subagent: %s", config.name)
+        # 如果标记为protected，则加入protected集合
+        if protected:
+            session.protected_agents.add(config.name)
+        logger.info(
+            "[SubAgent:Create] Created subagent: %s (protected=%s)",
+            config.name,
+            protected,
+        )
+        return f"transfer_to_{config.name}", handoff_tool
+
+    @classmethod
+    async def register_static_subagent(
+        cls,
+        session_id: str,
+        handoff_tool: HandoffTool,
+        skills: set[str] | None = None,
+        workdir: str | None = None,
+    ) -> tuple:
+        """Register a static subagent (from subagent_orchestrator config) into SubAgentManager.
+
+        Static subagents are always protected from auto-cleanup.
+        Returns (tool_name, handoff_tool) same as create_subagent.
+        """
+        agent = handoff_tool.agent
+        config = SubAgentConfig(
+            name=agent.name,
+            system_prompt=agent.instructions or "",
+            tools=set(agent.tools) if agent.tools else set(),
+            skills=skills or set(),
+            provider_id=getattr(handoff_tool, "provider_id", None),
+            description=f"Delegate to {agent.name} agent",
+            workdir=workdir,
+        )
+
+        session = cls._get_or_create_session(session_id)
+        if (
+            config.name not in session.subagents
+        ):  # if the static agent already exists, pass
+            if session.shared_context_enabled:
+                cls.register_inherent_tool("send_shared_context")
+            if config.tools is None:
+                config.tools = set()
+            session.subagents[config.name] = config
+            agent = Agent(
+                name=config.name,
+                instructions=config.system_prompt,
+                tools=list(config.tools),
+            )
+            handoff_tool = HandoffTool(
+                agent=agent,
+                tool_description=config.description
+                or f"Delegate to {config.name} agent",
+            )
+            if config.provider_id:
+                handoff_tool.provider_id = config.provider_id
+            session.handoff_tools[config.name] = handoff_tool
+
+            if config.name not in session.subagent_histories:
+                session.subagent_histories[config.name] = []
+
+            cls.set_subagent_status(session_id, config.name, "IDLE")
+            session.protected_agents.add(config.name)
+        else:
+            pass
         return f"transfer_to_{config.name}", handoff_tool
 
     @classmethod
@@ -775,7 +844,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         else:
             cleaned = list(session.subagents.keys())
             for name in cleaned:
-                logger.info("[EnhancedSubAgent:Cleanup] Cleaned: %s", name)
+                logger.info("[SubAgent:Cleanup] Cleaned: %s", name)
             return {"status": "cleaned", "cleaned_agents": cleaned}
 
     @classmethod
@@ -811,14 +880,14 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
                 session.shared_context.clear()
                 session.subagent_background_results.clear()
                 session.background_task_counters.clear()
-                logger.info("[EnhancedSubAgent:Cleanup] All subagents cleaned.")
+                logger.info("[SubAgent:Cleanup] All subagents cleaned.")
                 return "__SUBAGENT_REMOVED__: All subagents have been removed."
         else:
             if agent_name not in session.subagents:
                 return f"__SUBAGENT_REMOVE_FAILED__: {agent_name} not found. Available subagent names {list(session.subagents.keys())}"
             else:
                 _remove_by_name(agent_name)
-                logger.info("[EnhancedSubAgent:Cleanup] Cleaned: %s", agent_name)
+                logger.info("[SubAgent:Cleanup] Cleaned: %s", agent_name)
                 return f"__SUBAGENT_REMOVED__: Subagent {agent_name} has been removed."
 
     @classmethod
@@ -874,7 +943,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
 
     @classmethod
     def _ensure_task_store(
-        cls, session: DynamicSubAgentSession, agent_name: str
+        cls, session: SubAgentSession, agent_name: str
     ) -> dict[str, SubAgentExecutionResult]:
         if agent_name not in session.subagent_background_results:
             session.subagent_background_results[agent_name] = {}
@@ -1082,11 +1151,9 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
 
 
 @dataclass
-class CreateDynamicSubAgentTool(FunctionTool):
-    name: str = "create_dynamic_subagent"
-    description: str = (
-        "Create a dynamic subagent. After creation, use transfer_to_{name} tool."
-    )
+class CreateSubAgentTool(FunctionTool):
+    name: str = "create_subagent"
+    description: str = "Create a subagent. After creation, use transfer_to_{name} tool."
 
     parameters: dict = field(
         default_factory=lambda: {
@@ -1212,7 +1279,7 @@ class CreateDynamicSubAgentTool(FunctionTool):
             workdir = get_astrbot_temp_path()
 
         session_id = context.context.event.unified_msg_origin
-        config = DynamicSubAgentConfig(
+        config = SubAgentConfig(
             name=name,
             system_prompt=system_prompt,
             tools=set(tools),
@@ -1220,7 +1287,7 @@ class CreateDynamicSubAgentTool(FunctionTool):
             workdir=workdir,
         )
 
-        tool_name, handoff_tool = await DynamicSubAgentManager.create_subagent(
+        tool_name, handoff_tool = await SubAgentManager.create_subagent(
             session_id=session_id, config=config
         )
         if handoff_tool:
@@ -1230,16 +1297,16 @@ class CreateDynamicSubAgentTool(FunctionTool):
 
 
 @dataclass
-class RemoveDynamicSubagentTool(FunctionTool):
-    name: str = "remove_dynamic_subagent"
-    description: str = "Remove dynamic subagent by name."
+class RemoveSubagentTool(FunctionTool):
+    name: str = "remove_subagent"
+    description: str = "Remove subagent by name. Use 'all' to remove all subagents."
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
                 "name": {
                     "type": "string",
-                    "description": "Subagent name to remove. Use 'all' to remove all dynamic subagents.",
+                    "description": "Subagent name to remove. Use 'all' to remove all subagents.",
                 }
             },
             "required": ["name"],
@@ -1251,7 +1318,7 @@ class RemoveDynamicSubagentTool(FunctionTool):
         if not name:
             return "Error: name required"
         session_id = context.context.event.unified_msg_origin
-        remove_status = DynamicSubAgentManager.remove_subagent(session_id, name)
+        remove_status = SubAgentManager.remove_subagent(session_id, name)
         if remove_status == "__SUBAGENT_REMOVED__":
             return f"Cleaned {name} Subagent"
         else:
@@ -1259,9 +1326,9 @@ class RemoveDynamicSubagentTool(FunctionTool):
 
 
 @dataclass
-class ListDynamicSubagentsTool(FunctionTool):
-    name: str = "list_dynamic_subagents"
-    description: str = "List dynamic subagents with their status."
+class ListSubagentsTool(FunctionTool):
+    name: str = "list_subagents"
+    description: str = "List subagents with their status."
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -1278,7 +1345,7 @@ class ListDynamicSubagentsTool(FunctionTool):
     async def call(self, context, **kwargs) -> str:
         include_status = kwargs.get("include_status", True)
         session_id = context.context.event.unified_msg_origin
-        session = DynamicSubAgentManager.get_session(session_id)
+        session = SubAgentManager.get_session(session_id)
         if not session or not session.subagents:
             return "No subagents"
 
@@ -1286,7 +1353,7 @@ class ListDynamicSubagentsTool(FunctionTool):
         for name, config in session.subagents.items():
             protected = " (protected)" if name in session.protected_agents else ""
             if include_status:
-                status = DynamicSubAgentManager.get_subagent_status(session_id, name)
+                status = SubAgentManager.get_subagent_status(session_id, name)
                 lines.append(f" {name}{protected} [{status}]\ttools:{config.tools}")
             else:
                 lines.append(f" - {name}{protected}\ttools:{config.tools}")
@@ -1314,10 +1381,10 @@ class ProtectSubagentTool(FunctionTool):
         if not name:
             return "Error: name required"
         session_id = context.context.event.unified_msg_origin
-        session = DynamicSubAgentManager._get_or_create_session(session_id)
+        session = SubAgentManager._get_or_create_session(session_id)
         if name not in session.subagents:
             return f"Error: Subagent {name} not found. Available subagents: {session.subagents.keys()}"
-        DynamicSubAgentManager.protect_subagent(session_id, name)
+        SubAgentManager.protect_subagent(session_id, name)
         return f"Subagent {name} is now protected from auto cleanup"
 
 
@@ -1342,7 +1409,7 @@ class UnprotectSubagentTool(FunctionTool):
         if not name:
             return "Error: name required"
         session_id = context.context.event.unified_msg_origin
-        session = DynamicSubAgentManager.get_session(session_id)
+        session = SubAgentManager.get_session(session_id)
         if not session:
             return "Error: No session found"
         if name in session.protected_agents:
@@ -1372,7 +1439,7 @@ class ResetSubAgentTool(FunctionTool):
         if not name:
             return "Error: name required"
         session_id = context.context.event.unified_msg_origin
-        reset_status = DynamicSubAgentManager.clear_subagent_history(session_id, name)
+        reset_status = SubAgentManager.clear_subagent_history(session_id, name)
         if reset_status == "__HISTORY_CLEARED__":
             return f"Subagent {name} was reset"
         else:
@@ -1414,7 +1481,7 @@ Types: 'message' (to other agents), 'system' (global announcements)."""
         if not content:
             return "Error: content is required"
         session_id = context.context.event.unified_msg_origin
-        add_status = DynamicSubAgentManager.add_shared_context(
+        add_status = SubAgentManager.add_shared_context(
             session_id, "System", context_type, content, target
         )
         if add_status == "__SHARED_CONTEXT_ADDED__":
@@ -1465,7 +1532,7 @@ If you want to send a result to the main agent, do not use this tool, just retur
         if not content:
             return "Error: content is required"
         session_id = context.context.event.unified_msg_origin
-        add_status = DynamicSubAgentManager.add_shared_context(
+        add_status = SubAgentManager.add_shared_context(
             session_id, sender, context_type, content, target
         )
         if add_status == "__SHARED_CONTEXT_ADDED__":
@@ -1490,7 +1557,7 @@ inter-agent messages, and system announcements."""
 
     async def call(self, context, **kwargs) -> str:
         session_id = context.context.event.unified_msg_origin
-        shared_context = DynamicSubAgentManager.get_shared_context(session_id)
+        shared_context = SubAgentManager.get_shared_context(session_id)
 
         if not shared_context:
             return "Shared context is empty."
@@ -1563,7 +1630,7 @@ parameter
         poll_interval = kwargs.get("poll_interval", 5)
 
         session_id = context.context.event.unified_msg_origin
-        session = DynamicSubAgentManager.get_session(session_id)
+        session = SubAgentManager.get_session(session_id)
 
         if not session:
             return "Error: No session found"
@@ -1572,7 +1639,7 @@ parameter
 
         # 如果没有指定 task_id，尝试获取最新创建的 pending 任务
         if not task_id:
-            pending_tasks = DynamicSubAgentManager.get_pending_subagent_tasks(
+            pending_tasks = SubAgentManager.get_pending_subagent_tasks(
                 session_id, subagent_name
             )
             if pending_tasks:
@@ -1580,16 +1647,14 @@ parameter
                 task_id = pending_tasks[-1]
             else:
                 # 没有 pending 任务，检查是否有已完成的最新任务
-                latest = DynamicSubAgentManager.get_subagent_result(
-                    session_id, subagent_name
-                )
+                latest = SubAgentManager.get_subagent_result(session_id, subagent_name)
                 if latest:
                     return f"SubAgent '{subagent_name}' has no pending tasks. Latest completed task id: {latest.task_id}. Task id {latest.task_id} Results:\n{latest.result}"
                 return f"Error: SubAgent '{subagent_name}' has no tasks."
         start_time = time.time()
 
         while time.time() - start_time < timeout:
-            session = DynamicSubAgentManager.get_session(session_id)
+            session = SubAgentManager.get_session(session_id)
             if not session:
                 return "Error: Session Not Found"
             if subagent_name not in session.subagents:
@@ -1597,14 +1662,12 @@ parameter
                     f"Error: SubAgent '{subagent_name}' not found. It may be removed."
                 )
 
-            status = DynamicSubAgentManager.get_subagent_status(
-                session_id, subagent_name
-            )
+            status = SubAgentManager.get_subagent_status(session_id, subagent_name)
 
             if status == "IDLE":
                 return f"Error: SubAgent '{subagent_name}' is running no tasks."
             elif status == "COMPLETED":
-                result = DynamicSubAgentManager.get_subagent_result(
+                result = SubAgentManager.get_subagent_result(
                     session_id, subagent_name, task_id
                 )
                 if result and (result.result != "" or result.completed_at > 0):
@@ -1612,7 +1675,7 @@ parameter
                 else:
                     return f"SubAgent '{subagent_name}' task {task_id} execution completed with empty results."
             elif status == "FAILED":
-                result = DynamicSubAgentManager.get_subagent_result(
+                result = SubAgentManager.get_subagent_result(
                     session_id, subagent_name, task_id
                 )
                 if result and (result.result != "" or result.completed_at > 0):
@@ -1634,9 +1697,9 @@ parameter
 
 
 # Tool instances
-CREATE_DYNAMIC_SUBAGENT_TOOL = CreateDynamicSubAgentTool()
-REMOVE_DYNAMIC_SUBAGENT_TOOL = RemoveDynamicSubagentTool()
-LIST_DYNAMIC_SUBAGENTS_TOOL = ListDynamicSubagentsTool()
+CREATE_SUBAGENT_TOOL = CreateSubAgentTool()
+REMOVE_SUBAGENT_TOOL = RemoveSubagentTool()
+LIST_SUBAGENTS_TOOL = ListSubagentsTool()
 RESET_SUBAGENT_TOOL = ResetSubAgentTool()
 PROTECT_SUBAGENT_TOOL = ProtectSubagentTool()
 UNPROTECT_SUBAGENT_TOOL = UnprotectSubagentTool()

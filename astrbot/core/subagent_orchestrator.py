@@ -15,8 +15,9 @@ if TYPE_CHECKING:
 class SubAgentOrchestrator:
     """Loads subagent definitions from config and registers handoff tools.
 
-    This is intentionally lightweight: it does not execute agents itself.
-    Execution happens via HandoffTool in FunctionToolExecutor.
+    Static subagents from config are registered into SubAgentManager so they
+    can enjoy unified lifecycle management, shared context, history retention,
+    and other advanced features alongside dynamically created subagents.
     """
 
     def __init__(
@@ -61,6 +62,7 @@ class SubAgentOrchestrator:
             if provider_id is not None:
                 provider_id = str(provider_id).strip() or None
             tools = item.get("tools", [])
+            skills = item.get("skills", [])
             begin_dialogs = None
 
             if persona_data:
@@ -79,6 +81,13 @@ class SubAgentOrchestrator:
                 tools = []
             else:
                 tools = [str(t).strip() for t in tools if str(t).strip()]
+
+            if skills is None:
+                skills = []
+            elif not isinstance(skills, list):
+                skills = []
+            else:
+                skills = [str(s).strip() for s in skills if str(s).strip()]
 
             agent = Agent[AstrAgentContext](
                 name=name,
@@ -102,3 +111,45 @@ class SubAgentOrchestrator:
             logger.info(f"Registered subagent handoff tool: {handoff.name}")
 
         self.handoffs = handoffs
+
+    async def register_static_subagents_to_manager(self, session_id: str) -> None:
+        """Register all static subagents (from config) into SubAgentManager.
+
+        This makes static subagents enjoy the same unified management as
+        dynamically created subagents: shared context, history retention,
+        lifecycle management, etc.
+
+        Static subagents are always protected from auto-cleanup.
+        """
+
+        try:
+            from astrbot.core.subagent_manager import SubAgentManager
+        except ImportError:
+            return
+
+        for handoff in self.handoffs:
+            try:
+                # Extract skills from the agent's config if available
+                skills = set()
+                workdir = None
+                # Try to get skills from the handoff tool or agent
+                agent = handoff.agent
+                # The agent.tools may contain skill names; we pass them along
+                # SubAgentManager will filter and build skills prompt as needed
+                await SubAgentManager.register_static_subagent(
+                    session_id=session_id,
+                    handoff_tool=handoff,
+                    skills=skills,
+                    workdir=workdir,
+                )
+                logger.debug(
+                    "[SubAgentOrchestrator] Registered static subagent '%s' to SubAgentManager for session %s",
+                    agent.name,
+                    session_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[SubAgentOrchestrator] Failed to register static subagent '%s' to manager: %s",
+                    getattr(handoff.agent, "name", "unknown"),
+                    e,
+                )

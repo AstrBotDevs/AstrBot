@@ -1507,11 +1507,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return None
 
         try:
-            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+            from astrbot.core.subagent_manager import SubAgentManager
 
-            dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(
-                session_id
-            )
+            dynamic_handoffs = SubAgentManager.get_handoff_tools_for_session(session_id)
         except Exception:
             return None
 
@@ -1530,7 +1528,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         new_tool_name = parts[1]
         new_tool_obj_name = parts[2]
-        logger.info(f"[EnhancedSubAgent] Tool created: {new_tool_name}")
+        logger.info(f"[SubAgent] Tool created: {new_tool_name}")
 
         run_context_context = getattr(self.run_context, "context", None)
         event = (
@@ -1541,11 +1539,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
 
         try:
-            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+            from astrbot.core.subagent_manager import SubAgentManager
 
-            handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(session_id)
+            handoffs = SubAgentManager.get_handoff_tools_for_session(session_id)
         except Exception as e:
-            logger.warning(f"[EnhancedSubAgent] Failed to load dynamic handoffs: {e}")
+            logger.warning(f"[SubAgent] Failed to load dynamic handoffs: {e}")
             return
 
         for handoff in handoffs:
@@ -1555,5 +1553,5 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             ):
                 if self.req.func_tool:
                     self.req.func_tool.add_tool(handoff)
-                logger.info(f"[EnhancedSubAgent] Added {handoff.name} to func_tool set")
+                logger.info(f"[SubAgent] Added {handoff.name} to func_tool set")
                 break

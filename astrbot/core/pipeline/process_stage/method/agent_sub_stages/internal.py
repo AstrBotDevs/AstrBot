@@ -143,7 +143,6 @@ class InternalAgentSubStage(Stage):
             add_cron_tools=self.add_cron_tools,
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
-            enhanced_subagent=conf.get("enhanced_subagent", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
@@ -393,20 +392,18 @@ class InternalAgentSubStage(Stage):
                     )
                 finally:
                     # clean all subagents if enabled
-                    if build_cfg.enhanced_subagent.get("enabled"):
+                    if build_cfg.subagent_orchestrator.get("main_enable"):
                         try:
-                            from astrbot.core.dynamic_subagent_manager import (
-                                DynamicSubAgentManager,
+                            from astrbot.core.subagent_manager import (
+                                SubAgentManager,
                             )
 
                             session_id = event.unified_msg_origin
-                            if DynamicSubAgentManager.is_auto_cleanup_per_turn():
-                                DynamicSubAgentManager.cleanup_session_turn_end(
-                                    session_id
-                                )
+                            if SubAgentManager.is_auto_cleanup_per_turn():
+                                SubAgentManager.cleanup_session_turn_end(session_id)
                         except Exception as e:
                             logger.warning(
-                                f"[EnhancedSubAgent] Cleanup on agent done failed: {e}"
+                                f"[SubAgent] Cleanup on agent done failed: {e}"
                             )
 
                     if runner_registered and agent_runner is not None:

@@ -41,6 +41,7 @@ from astrbot.core.provider.register import llm_tools
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
+from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.tools.computer_tools import (
     AnnotateExecutionTool,
     BrowserBatchExecTool,
@@ -163,7 +164,6 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
-    enhanced_subagent: dict = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -492,6 +492,9 @@ async def _ensure_persona_and_skills(
         for tool in so.handoffs:
             req.func_tool.add_tool(tool)
 
+        # add subagent manager tools
+        await _apply_subagent_manager_tools(orch_cfg, req, event, so)
+
         # check duplicates
         if remove_dup:
             handoff_names = {tool.name for tool in so.handoffs}
@@ -505,8 +508,12 @@ async def _ensure_persona_and_skills(
             .get("subagent_orchestrator", {})
             .get("router_system_prompt", "")
         ).strip()
+
         if router_prompt:
-            req.system_prompt += f"\n{router_prompt}\n"
+            dynamic_cfg = orch_cfg.get("dynamic_agents", {})  # 未启用dynamic时才注入router_prompt，否则由subagent_manager注入
+            if not dynamic_cfg.get("enabled", False):
+                req.system_prompt += f"\n{router_prompt}\n"
+
     try:
         event.trace.record(
             "sel_persona",
@@ -936,102 +943,87 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
         )
 
 
-def _apply_enhanced_subagent_tools(
-    config: MainAgentBuildConfig, req: ProviderRequest, event: AstrMessageEvent
+async def _apply_subagent_manager_tools(
+    orch_config: dict,
+    req: ProviderRequest,
+    event: AstrMessageEvent,
+    so: SubAgentOrchestrator,
 ) -> None:
-    """Apply enhanced SubAgent tools and system prompt
+    """Apply SubAgent tools and system prompt
 
     When enabled:
-    1. Inject enhanced capability prompt into system prompt
-    2. Register dynamic SubAgent management tools
+    1. Inject subagent capability prompt into system prompt
+    2. Register SubAgent management tools
     3. Register session's transfer_to_xxx tools
     """
-    if not config.enhanced_subagent.get("enabled", False):
+
+    if not orch_config.get("main_enable", False):
         return
 
     if req.func_tool is None:
         req.func_tool = ToolSet()
 
     try:
-        from astrbot.core.dynamic_subagent_manager import (
-            CREATE_DYNAMIC_SUBAGENT_TOOL,
-            LIST_DYNAMIC_SUBAGENTS_TOOL,
+        from astrbot.core.subagent_manager import (
+            CREATE_SUBAGENT_TOOL,
+            LIST_SUBAGENTS_TOOL,
             PROTECT_SUBAGENT_TOOL,
-            REMOVE_DYNAMIC_SUBAGENT_TOOL,
+            REMOVE_SUBAGENT_TOOL,
             RESET_SUBAGENT_TOOL,
             SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT,
             UNPROTECT_SUBAGENT_TOOL,
             VIEW_SHARED_CONTEXT_TOOL,
             WAIT_FOR_SUBAGENT_TOOL,
-            DynamicSubAgentManager,
+            SubAgentManager,
         )
 
-        # Register dynamic SubAgent management tools
-        req.func_tool.add_tool(CREATE_DYNAMIC_SUBAGENT_TOOL)
-        req.func_tool.add_tool(RESET_SUBAGENT_TOOL)
-        req.func_tool.add_tool(REMOVE_DYNAMIC_SUBAGENT_TOOL)
-        req.func_tool.add_tool(LIST_DYNAMIC_SUBAGENTS_TOOL)
-        if DynamicSubAgentManager.is_auto_cleanup_per_turn():
-            req.func_tool.add_tool(PROTECT_SUBAGENT_TOOL)
-            req.func_tool.add_tool(UNPROTECT_SUBAGENT_TOOL)
-        if DynamicSubAgentManager.is_shared_context_enabled():
-            req.func_tool.add_tool(VIEW_SHARED_CONTEXT_TOOL)
-            req.func_tool.add_tool(SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT)
-        req.func_tool.add_tool(WAIT_FOR_SUBAGENT_TOOL)
-
-        # Configure logger
-
-        # Configure DynamicSubAgentManager with settings
-        shared_context_enabled = config.enhanced_subagent.get(
-            "shared_context_enabled", False
-        )
-        DynamicSubAgentManager.configure(
-            max_subagent_count=config.enhanced_subagent.get("max_subagent_count"),
-            auto_cleanup_per_turn=config.enhanced_subagent.get("auto_cleanup_per_turn"),
+        # Configure SubAgentManager with settings from subagent_orchestrator
+        dynamic_cfg = orch_config.get("dynamic_agents", {})
+        enable_dynamic = dynamic_cfg.get("enabled", False)
+        shared_context_enabled = orch_config.get("shared_context_enabled", False)
+        SubAgentManager.configure(
+            max_subagent_count=dynamic_cfg.get("max_dynamic_subagent_count", 3),
+            auto_cleanup_per_turn=dynamic_cfg.get("auto_cleanup_per_turn", True),
             shared_context_enabled=shared_context_enabled,
-            shared_context_maxlen=config.enhanced_subagent.get(
-                "shared_context_maxlen", 200
-            ),
-            max_subagent_history=config.enhanced_subagent.get(
-                "max_subagent_history", 500
-            ),
-            tools_blacklist=config.enhanced_subagent.get("tools_blacklist", None),
-            tools_inherent=config.enhanced_subagent.get("tools_inherent", None),
-            execution_timeout=config.enhanced_subagent.get("execution_timeout", 600),
+            shared_context_maxlen=orch_config.get("shared_context_maxlen", 300),
+            subagent_history_maxlen=orch_config.get("subagent_history_maxlen", 300),
+            tools_blacklist=dynamic_cfg.get("tools_blacklist", None),
+            tools_inherent=dynamic_cfg.get("tools_inherent", None),
+            execution_timeout=orch_config.get("execution_timeout", 1200),
         )
 
         # Enable shared context if configured
         if shared_context_enabled:
-            DynamicSubAgentManager.set_shared_context_enabled(
-                event.unified_msg_origin, True
-            )
-        session_id = event.unified_msg_origin
-        # Inject enhanced system prompt
-        task_router_prompt = DynamicSubAgentManager.build_task_router_prompt(session_id)
+            SubAgentManager.set_shared_context_enabled(event.unified_msg_origin, True)
 
-        req.system_prompt = f"{req.system_prompt or ''}\n{task_router_prompt}\n"
-        # Register existing handoff tools from config
-        plugin_context = getattr(event, "_plugin_context", None)
-        if plugin_context and plugin_context.subagent_orchestrator:
-            so = plugin_context.subagent_orchestrator
-            if hasattr(so, "handoffs"):
-                for tool in so.handoffs:
-                    req.func_tool.add_tool(tool)
+        session_id = event.unified_msg_origin
+        # Register static subagents from config into SubAgentManager for unified management
+        await so.register_static_subagents_to_manager(session_id)
+
+        # Register dynamic subagent management tools (only when dynamic creation is enabled)
+        if enable_dynamic:
+            req.func_tool.add_tool(CREATE_SUBAGENT_TOOL)
+            req.func_tool.add_tool(RESET_SUBAGENT_TOOL)
+            req.func_tool.add_tool(REMOVE_SUBAGENT_TOOL)
+            req.func_tool.add_tool(LIST_SUBAGENTS_TOOL)
+            if SubAgentManager.is_auto_cleanup_per_turn():
+                req.func_tool.add_tool(PROTECT_SUBAGENT_TOOL)
+                req.func_tool.add_tool(UNPROTECT_SUBAGENT_TOOL)
+            if SubAgentManager.is_shared_context_enabled():
+                req.func_tool.add_tool(VIEW_SHARED_CONTEXT_TOOL)
+                req.func_tool.add_tool(SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT)
+            req.func_tool.add_tool(WAIT_FOR_SUBAGENT_TOOL)
+
+            # Inject subagent capability system prompt for dynamic creation
+            task_router_prompt = SubAgentManager.build_task_router_prompt(session_id)
+            req.system_prompt = f"{req.system_prompt or ''}\n{task_router_prompt}\n"
+
         # Register dynamically created handoff tools
-        dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(
-            session_id
-        )
-        # Prevent duplication of name with the original subagent tool
-        existing_names = {t.name for t in req.func_tool.tools}
+        dynamic_handoffs = SubAgentManager.get_handoff_tools_for_session(session_id)
         for handoff in dynamic_handoffs:
-            if handoff.name not in existing_names:
-                req.func_tool.add_tool(handoff)
-            else:
-                logger.warning(
-                    "[EnhancedSubAgent] Failed to create due to duplicate names between the enhanced sub agent and the original sub agent."
-                )
+            req.func_tool.add_tool(handoff)
     except ImportError as e:
-        logger.warning(f"[EnhancedSubAgent] Cannot import module: {e}")
+        logger.warning(f"[SubAgent] Cannot import module: {e}")
 
 
 def _apply_sandbox_tools(
@@ -1419,10 +1411,6 @@ async def build_main_agent(
         _apply_sandbox_tools(config, req, req.session_id)
     elif config.computer_use_runtime == "local":
         _apply_local_env_tools(req, plugin_context)
-
-    if config.enhanced_subagent.get("enabled", False):
-        # Apply enhanced SubAgent tools
-        _apply_enhanced_subagent_tools(config, req, event)
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(
