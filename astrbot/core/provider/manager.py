@@ -570,7 +570,9 @@ class ProviderManager:
             return
 
         logger.info(
-            f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商 ...",
+            "Loading model %s(%s) ...",
+            provider_config["type"],
+            provider_config["id"],
         )
 
         # 动态导入
@@ -591,7 +593,7 @@ class ProviderManager:
 
         if provider_config["type"] not in provider_cls_map:
             logger.error(
-                f"未找到适用于 {provider_config['type']}({provider_config['id']}) 的提供商适配器，请检查是否已经安装或者名称填写错误。已跳过。",
+                f"Provider adapter not found: {provider_config['type']}({provider_config['id']}). Skipped.",
                 exc_info=True,
             )
             return
@@ -625,7 +627,7 @@ class ProviderManager:
                     ):
                         self.curr_stt_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。",
+                            f"Selected {provider_config['type']}({provider_config['id']}) as default STT provider",
                         )
                     if not self.curr_stt_provider_inst:
                         self.curr_stt_provider_inst = inst
@@ -648,7 +650,7 @@ class ProviderManager:
                     ):
                         self.curr_tts_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。",
+                            f"Selected {provider_config['type']}({provider_config['id']}) as default TTS provider",
                         )
                     if not self.curr_tts_provider_inst:
                         self.curr_tts_provider_inst = inst
@@ -674,7 +676,7 @@ class ProviderManager:
                     ):
                         self.curr_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。",
+                            f"Selected {provider_config['type']}({provider_config['id']}) as default chat model provider",
                         )
                     if not self.curr_provider_inst:
                         self.curr_provider_inst = inst
