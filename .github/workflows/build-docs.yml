@@ -1,4 +1,4 @@
-name: release
+name: Deploy Docs
 
 on:
   push:
@@ -6,28 +6,28 @@ on:
       - 'v*'
   workflow_dispatch:
 
+env:
+  PNPM_VERSION: 10.28.2
+  NODE_VERSION: '24.13.0'
+
 jobs:
   build:
     runs-on: ubuntu-latest # 运行环境
     steps:
       - name: checkout
         uses: actions/checkout@v6
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5.0.0
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          version: 10.28.2
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24.13.0"
-          cache: "pnpm"
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          node-version: ${{ env.NODE_VERSION }}
           cache-dependency-path: docs/pnpm-lock.yaml
       - name: Install dependencies
+        working-directory: docs
         run: pnpm install --frozen-lockfile
-        working-directory: './docs'
       - name: Build docs
+        working-directory: docs
         run: pnpm run docs:build
-        working-directory: './docs'
       - name: scp
         uses: appleboy/scp-action@v1.0.0
         with:

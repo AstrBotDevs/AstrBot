@@ -3,8 +3,22 @@ name: AstrBot Dashboard CI
 on:
   push:
     branches: [ "master" ]
+    paths:
+      - '.github/workflows/dashboard_ci.yml'
+      - '.github/actions/build-dashboard/**'
+      - '.github/actions/setup-pnpm-node/**'
+      - 'dashboard/**'
   pull_request:
     branches: [ "master" ]
+    paths:
+      - '.github/workflows/dashboard_ci.yml'
+      - '.github/actions/build-dashboard/**'
+      - '.github/actions/setup-pnpm-node/**'
+      - 'dashboard/**'
+
+env:
+  PNPM_VERSION: 10.28.2
+  NODE_VERSION: '24.13.0'
 
 jobs:
   build:
@@ -14,35 +28,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5.0.0
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          version: 10.28.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24.13.0'
-          cache: "pnpm"
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          node-version: ${{ env.NODE_VERSION }}
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
-      - name: Install and Build
-        working-directory: dashboard
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
-
-      - name: Inject Commit SHA
-        id: get_sha
-        run: |
-          echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          mkdir -p dashboard/dist/assets
-          echo $COMMIT_SHA > dashboard/dist/assets/version
-          cd dashboard
-          zip -r dist.zip dist
+      - name: Build dashboard dist
+        uses: ./.github/actions/build-dashboard
+        with:
+          archive-name: dist.zip
 
       - name: Archive production artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: dist-without-markdown
           path: |

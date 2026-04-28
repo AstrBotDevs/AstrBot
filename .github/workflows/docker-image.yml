@@ -9,6 +9,10 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
+env:
+  PNPM_VERSION: 10.28.2
+  NODE_VERSION: '24.13.0'
+
 jobs:
   build-nightly-image:
     if: github.repository == 'AstrBotDevs/AstrBot' && github.event_name == 'schedule'
@@ -23,7 +27,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
-          fetch-tag: true
+          fetch-tags: true
 
       - name: Check for new commits today
         if: github.event_name == 'schedule'
@@ -33,35 +37,36 @@ jobs:
           commits=$(git log --since="24 hours ago" --oneline)
           if [ -z "$commits" ]; then
             echo "No commits in the last 24 hours, skipping build"
-            echo "has_commits=false" >> $GITHUB_OUTPUT
+            echo "has_commits=false" >> "$GITHUB_OUTPUT"
           else
             echo "Found commits in the last 24 hours:"
             echo "$commits"
-            echo "has_commits=true" >> $GITHUB_OUTPUT
+            echo "has_commits=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Exit if no commits
         if: github.event_name == 'schedule' && steps.check-commits.outputs.has_commits == 'false'
         run: exit 0
 
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          node-version: ${{ env.NODE_VERSION }}
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
       - name: Build Dashboard
-        run: |
-          cd dashboard
-          npm install
-          npm run build
-          mkdir -p dist/assets
-          echo $(git rev-parse HEAD) > dist/assets/version
-          cd ..
-          mkdir -p data
-          cp -r dashboard/dist data/
+        uses: ./.github/actions/build-dashboard
+        with:
+          copy-dist-to: data
 
       - name: Determine test image tags
         id: test-meta
         run: |
           short_sha=$(echo "${GITHUB_SHA}" | cut -c1-12)
           build_date=$(date +%Y%m%d)
-          echo "short_sha=$short_sha" >> $GITHUB_OUTPUT
-          echo "build_date=$build_date" >> $GITHUB_OUTPUT
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
 
       - name: Set QEMU
         uses: docker/setup-qemu-action@v4.0.0
@@ -93,9 +98,11 @@ jobs:
           ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-latest
           ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-${{ steps.test-meta.outputs.build_date }}-${{ steps.test-meta.outputs.short_sha }}"
           fi
-          echo "tags<<EOF" >> $GITHUB_OUTPUT
-          echo "$TAGS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "tags<<EOF"
+            echo "$TAGS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and Push Nightly Image
         uses: docker/build-push-action@v7.1.0
@@ -120,19 +127,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          fetch-depth: 1
-          fetch-tag: true
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Get latest tag (only on manual trigger)
         id: get-latest-tag
         if: github.event_name == 'workflow_dispatch'
         run: |
           tag=$(git describe --tags --abbrev=0)
-          echo "latest_tag=$tag" >> $GITHUB_OUTPUT
+          echo "latest_tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Checkout to latest tag (only on manual trigger)
         if: github.event_name == 'workflow_dispatch'
-        run: git checkout ${{ steps.get-latest-tag.outputs.latest_tag }}
+        run: git checkout "${{ steps.get-latest-tag.outputs.latest_tag }}"
 
       - name: Compute release metadata
         id: release-meta
@@ -143,24 +150,25 @@ jobs:
             version="${GITHUB_REF#refs/tags/}"
           fi
           if [[ "$version" == *"beta"* ]] || [[ "$version" == *"alpha"* ]]; then
-            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
             echo "Version $version marked as pre-release"
           else
-            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
             echo "Version $version marked as stable"
           fi
-          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          node-version: ${{ env.NODE_VERSION }}
+          cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Build Dashboard
-        run: |
-          cd dashboard
-          npm install
-          npm run build
-          mkdir -p dist/assets
-          echo $(git rev-parse HEAD) > dist/assets/version
-          cd ..
-          mkdir -p data
-          cp -r dashboard/dist data/
+        uses: ./.github/actions/build-dashboard
+        with:
+          copy-dist-to: data
 
       - name: Set QEMU
         uses: docker/setup-qemu-action@v4.0.0
