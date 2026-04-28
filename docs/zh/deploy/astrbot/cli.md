@@ -5,80 +5,12 @@
 >
 > 以下教程默认您的设备上已经安装 Python，并且版本 `>=3.10`
 
-
-## 🚀 一行命令快速部署
-
-> [!TIP]
-> 如果你希望一步到位，只需要一个命令就能完成从克隆到启动的全过程，请使用下面的脚本。
-
-::: details Linux / macOS / WSL
-
-```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/AstrBotDevs/AstrBot/master/docs/scripts/deploy-cli.sh)"
-```
-
-该脚本会自动完成以下步骤：
-1. 检测并提示安装必要的依赖（git、curl、python>=3.12、uv）
-2. 克隆 AstrBot 官方仓库
-3. 使用 `uv sync` 安装项目依赖
-4. 启动 AstrBot 并打印访问链接
-
-> [!TIP]
-> 你也可以克隆仓库后本地运行脚本：
-> ```bash
-> git clone https://github.com/AstrBotDevs/AstrBot.git
-> cd AstrBot
-> bash docs/scripts/deploy-cli.sh
-> ```
-
-::: details Windows（PowerShell 7+）
-
-> [!WARNING]
-> 建议使用 [PowerShell 7](https://github.com/PowerShell/PowerShell/releases) 以获得最佳体验。
-
-**原生 Windows（PowerShell 7+）一行命令：**
-
-```powershell
-irm https://raw.githubusercontent.com/AstrBotDevs/AstrBot/master/docs/scripts/deploy-cli.ps1 | iex
-```
-
-> [!TIP]
-> 你也可以克隆仓库后本地运行脚本：
-> ```powershell
-> git clone https://github.com/AstrBotDevs/AstrBot.git
-> cd AstrBot
-> .\docs\scripts\deploy-cli.ps1
-> ```
-
-该脚本会自动完成以下步骤：
-1. 检测并提示安装必要的依赖（git、curl、python>=3.12、uv）
-2. 克隆 AstrBot 官方仓库
-3. 使用 `uv sync` 安装项目依赖
-4. 启动 AstrBot 并打印访问链接
-
-**或者使用 WSL 调用 bash 脚本：**
-
-```powershell
-# 克隆仓库后运行部署脚本（WSL 方式）
-git clone https://github.com/AstrBotDevs/AstrBot.git; cd AstrBot; wsl bash docs/scripts/deploy-cli.sh
-```
-
-> [!NOTE]
-> 如果你更喜欢在 Windows 原生环境运行，推荐使用上面的 PowerShell 脚本。WSL 方式适合需要在 Linux 环境下运行的用户，或使用 [Docker 部署](./docker.md)。
-:::
-
-
----
-
-
-
-
 ## 下载/克隆仓库
 
 如果你的电脑上安装了 `git`，你可以通过以下命令来下载源码：
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot.git
+git clone https://github.com/AstrBotDevs/AstrBot
 # 上面的代码默认会拉取最新的提交的源码，如果你需要拉取最新稳定发行版本的源码，可以使用以下命令：
 # git clone --depth=1 --branch $(git ls-remote --tags --sort='-v:refname' https://github.com/AstrBotDevs/AstrBot.git | head -n1 | awk -F/ '{print $3}') https://github.com/AstrBotDevs/AstrBot.git
 cd AstrBot
