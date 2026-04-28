@@ -257,6 +257,7 @@ async def test_ensure_vec_db_clears_stale_init_error(
     helper.chunker = MagicMock()
     helper.init_error = "Previous initialization failed"
     helper.kb_dir = Path("/tmp/test_kb") / mock_knowledge_base.kb_id
+    helper.kb_dir.mkdir(parents=True, exist_ok=True)
     helper.kb_medias_dir = helper.kb_dir / "medias" / mock_knowledge_base.kb_id
     helper.kb_files_dir = helper.kb_dir / "files" / mock_knowledge_base.kb_id
 
@@ -266,7 +267,7 @@ async def test_ensure_vec_db_clears_stale_init_error(
     mock_vec_db.close = AsyncMock()
 
     with patch(
-        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
+        "astrbot.core.knowledge_base.kb_helper.FaissVecDB",
         return_value=mock_vec_db,
     ):
         # Execute _ensure_vec_db
