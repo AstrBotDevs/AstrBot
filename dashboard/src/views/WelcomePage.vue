@@ -171,10 +171,80 @@
                   </div>
                 </div>
               </v-timeline-item>
+
+              <v-timeline-item
+                :dot-color="
+                  computerAccessStepState === 'completed' ? 'success' : 'primary'
+                "
+                icon="mdi-numeric-4"
+                fill-dot
+                size="small"
+              >
+                <div class="pl-2">
+                  <div class="d-flex align-center mb-1">
+                    <div class="text-h6 font-weight-bold">
+                      {{ tm("onboard.step3Title") }}
+                    </div>
+                    <v-btn
+                      icon
+                      variant="text"
+                      density="comfortable"
+                      size="small"
+                      class="ml-1"
+                      @click="showComputerAccessHelpDialog = true"
+                    >
+                      <span class="text-body-2 font-weight-bold">?</span>
+                    </v-btn>
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    {{ tm("onboard.step3Desc") }}
+                  </p>
+                  <div class="d-flex flex-wrap align-center ga-3">
+                    <v-select
+                      v-model="computerAccessRuntime"
+                      :items="computerAccessOptions"
+                      item-title="title"
+                      item-value="value"
+                      :label="tm('onboard.step3SelectLabel')"
+                      :loading="savingComputerAccess"
+                      :disabled="savingComputerAccess"
+                      hide-details
+                      density="comfortable"
+                      variant="outlined"
+                      class="computer-access-select"
+                    />
+                  </div>
+                </div>
+              </v-timeline-item>
             </v-timeline>
           </v-card>
         </v-col>
       </v-row>
+
+      <v-dialog v-model="showComputerAccessHelpDialog" max-width="640">
+        <v-card>
+          <v-card-title class="text-h3 font-weight-bold pa-4">
+            {{ tm("onboard.step3HelpTitle") }}
+          </v-card-title>
+          <v-card-text>
+            <ol class="computer-access-help-list">
+              <li>{{ tm("onboard.step3HelpItem1") }}</li>
+              <li>{{ tm("onboard.step3HelpItem2") }}</li>
+              <li>{{ tm("onboard.step3HelpItem3") }}</li>
+            </ol>
+          </v-card-text>
+          <v-card-actions class="px-6 pb-4">
+            <v-spacer />
+            <v-btn
+              color="primary"
+              variant="text"
+              @click="showComputerAccessHelpDialog = false"
+            >
+              {{ tm("onboard.step3HelpClose") }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
       <v-row class="px-4 mt-4">
         <v-col cols="12">
@@ -316,6 +386,7 @@ interface ApiError {
 }
 
 type StepState = "pending" | "completed" | "skipped";
+type ComputerAccessRuntime = "local" | "none";
 
 const { tm } = useModuleI18n("features/welcome");
 const { locale, t } = useI18n();
@@ -337,6 +408,11 @@ const apiBaseUrl = ref(apiStore.apiBaseUrl || "http://127.0.0.1:6185");
 
 const platformStepState = ref<StepState>("pending");
 const providerStepState = ref<StepState>("pending");
+const showComputerAccessHelpDialog = ref(false);
+const computerAccessStepState = ref<StepState>("pending");
+const computerAccessRuntime = ref<ComputerAccessRuntime>("none");
+const savedComputerAccessRuntime = ref<ComputerAccessRuntime>("none");
+const savingComputerAccess = ref(false);
 const welcomeAnnouncementRaw = ref<unknown>(null);
 
 function resolveWelcomeAnnouncement(raw: unknown, currentLocale: string) {
