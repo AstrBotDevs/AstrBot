@@ -1188,6 +1188,14 @@
         "description": "Disable thinking mode",
         "hint": "Close Ollama thinking mode."
       },
+      "deepseek_thinking_enabled": {
+        "description": "Enable thinking mode",
+        "hint": "Controls thinking on/off."
+      },
+      "deepseek_reasoning_effort": {
+        "description": "Reasoning effort",
+        "hint": "Takes effect only when thinking is enabled. Options: high / max."
+      },
       "custom_extra_body": {
         "description": "Custom request body parameters",
         "hint": "Add extra parameters to requests, such as temperature, top_p, max_tokens, etc.",

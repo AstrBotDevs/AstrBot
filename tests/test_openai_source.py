@@ -1724,3 +1724,97 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert messages[1] == {"role": "user", "content": "again"}
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_apply_provider_specific_request_overrides_disables_deepseek_thinking():
+    provider = _make_provider(
+        {
+            "provider": "deepseek",
+            "deepseek_thinking_enabled": False,
+            "deepseek_reasoning_effort": "max",
+        }
+    )
+    try:
+        payloads = {
+            "model": "deepseek-v4-pro",
+            "messages": [{"role": "user", "content": "hello"}],
+            "reasoning_effort": "max",
+        }
+        extra_body = {
+            "reasoning": {"effort": "high"},
+            "reasoning_effort": "high",
+            "think": True,
+        }
+
+        provider._apply_provider_specific_request_overrides(payloads, extra_body)
+
+        assert "reasoning_effort" not in payloads
+        assert extra_body["thinking"] == {"type": "disabled"}
+        assert "reasoning" not in extra_body
+        assert "reasoning_effort" not in extra_body
+        assert "think" not in extra_body
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_injects_deepseek_thinking_and_reasoning_effort(monkeypatch):
+    provider = _make_provider(
+        {
+            "provider": "deepseek",
+            "deepseek_thinking_enabled": True,
+            "deepseek_reasoning_effort": "max",
+            "custom_extra_body": {
+                "thinking": {"type": "disabled"},
+                "reasoning_effort": "high",
+                "temperature": 0.1,
+            },
+        }
+    )
+    try:
+        captured_kwargs = {}
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "deepseek-v4-pro",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "ok",
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            )
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        await provider._query(
+            payloads={
+                "model": "deepseek-v4-pro",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+            tools=None,
+        )
+
+        extra_body = captured_kwargs["extra_body"]
+        assert captured_kwargs["reasoning_effort"] == "max"
+        assert extra_body["thinking"] == {"type": "enabled"}
+        assert "reasoning_effort" not in extra_body
+        assert extra_body["temperature"] == 0.1
+    finally:
+        await provider.terminate()

@@ -371,6 +371,15 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       source.ollama_disable_thinking = false
     }
 
+    if (source.provider === 'deepseek') {
+      if (source.deepseek_thinking_enabled === undefined) {
+        source.deepseek_thinking_enabled = true
+      }
+      if (!source.deepseek_reasoning_effort) {
+        source.deepseek_reasoning_effort = 'high'
+      }
+    }
+
     return source
   }
 

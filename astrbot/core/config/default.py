@@ -1281,6 +1281,8 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
+                        "deepseek_thinking_enabled": True,
+                        "deepseek_reasoning_effort": "high",
                     },
                     "Zhipu": {
                         "id": "zhipu",
@@ -1982,6 +1984,17 @@ CONFIG_METADATA_2 = {
                         "description": "关闭思考模式",
                         "type": "bool",
                         "hint": "关闭 Ollama 思考模式。",
+                    },
+                    "deepseek_thinking_enabled": {
+                        "description": "开启思考模式",
+                        "type": "bool",
+                        "hint": "控制思考开关。",
+                    },
+                    "deepseek_reasoning_effort": {
+                        "description": "思考强度",
+                        "type": "string",
+                        "options": ["high", "max"],
+                        "hint": "仅开启思考模式生效，可选 high / max。",
                     },
                     "custom_extra_body": {
                         "description": "自定义请求体参数",
