@@ -6,6 +6,10 @@ on:
       - 'v*'
   workflow_dispatch:
 
+env:
+  PNPM_VERSION: 10.28.2
+  NODE_VERSION: '24.13.0'
+
 jobs:
   build:
     runs-on: ubuntu-latest # 运行环境
@@ -15,8 +19,8 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
         with:
-          pnpm-version: 10.28.2
-          node-version: "24.13.0"
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          node-version: ${{ env.NODE_VERSION }}
           cache-dependency-path: docs/pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

@@ -17,6 +17,10 @@ on:
 permissions:
   contents: write
 
+env:
+  PNPM_VERSION: 10.28.2
+  NODE_VERSION: '24.13.0'
+
 jobs:
   build-dashboard:
     name: Build Dashboard
@@ -53,8 +57,8 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
         with:
-          pnpm-version: 10.28.2
-          node-version: '24.13.0'
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          node-version: ${{ env.NODE_VERSION }}
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Build dashboard dist

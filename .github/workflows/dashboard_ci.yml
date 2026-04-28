@@ -5,12 +5,20 @@ on:
     branches: [ "master" ]
     paths:
       - '.github/workflows/dashboard_ci.yml'
+      - '.github/actions/build-dashboard/**'
+      - '.github/actions/setup-pnpm-node/**'
       - 'dashboard/**'
   pull_request:
     branches: [ "master" ]
     paths:
       - '.github/workflows/dashboard_ci.yml'
+      - '.github/actions/build-dashboard/**'
+      - '.github/actions/setup-pnpm-node/**'
       - 'dashboard/**'
+
+env:
+  PNPM_VERSION: 10.28.2
+  NODE_VERSION: '24.13.0'
 
 jobs:
   build:
@@ -23,8 +31,8 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
         with:
-          pnpm-version: 10.28.2
-          node-version: '24.13.0'
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          node-version: ${{ env.NODE_VERSION }}
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Build dashboard dist
