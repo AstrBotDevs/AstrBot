@@ -289,10 +289,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         #   Light tool schema does not include tool parameters.
         #   This can reduce token usage when tools have large descriptions.
         # See #4681
-        self.tool_schema_mode = tool_schema_mode
+        self.tool_schema_mode = self._normalize_tool_schema_mode(
+            tool_schema_mode, provider, request
+        )
         self._tool_schema_param_set = None
         self._skill_like_raw_tool_set = None
-        if tool_schema_mode == "skills_like":
+        if self.tool_schema_mode == "skills_like":
             tool_set = self.req.func_tool
             if not tool_set:
                 return
@@ -321,6 +323,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+
+    @staticmethod
+    def _normalize_tool_schema_mode(
+        tool_schema_mode: str | None,
+        provider: Provider,
+        request: ProviderRequest,
+    ) -> str | None:
+        if tool_schema_mode != "skills_like":
+            return tool_schema_mode
+
+        model = (request.model or provider.get_model() or "").lower().strip()
+        model_name = model.rsplit("/", 1)[-1]
+        if model_name not in {"deepseek-v4-flash", "deepseek-v4-pro"}:
+            return tool_schema_mode
+
+        logger.info(
+            "DeepSeek V4 does not support skills-like light tool schemas; "
+            "using full tool schemas for function calling."
+        )
+        return "full"
 
     def _read_tool_hint(self) -> str:
         if self.read_tool is not None:

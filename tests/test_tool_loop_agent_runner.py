@@ -1274,6 +1274,40 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
 
 
 @pytest.mark.asyncio
+async def test_deepseek_v4_uses_full_tool_schema_instead_of_skills_like():
+    provider = MockProvider()
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    tool_set = ToolSet(tools=[tool])
+    req = ProviderRequest(
+        prompt="test",
+        func_tool=tool_set,
+        contexts=[],
+        model="deepseek-v4-flash",
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=req,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(Any, MockToolExecutor()),
+        agent_hooks=MockHooks(),
+        tool_schema_mode="skills_like",
+    )
+
+    assert runner.tool_schema_mode == "full"
+    assert runner.req.func_tool is tool_set
+    assert runner.req.func_tool.tools[0].parameters == tool.parameters
+    assert runner.req.func_tool.tools[0].handler is tool.handler
+    assert runner._tool_schema_param_set is None
+
+
+@pytest.mark.asyncio
 async def test_follow_up_accepted_when_active_and_not_stopping(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
