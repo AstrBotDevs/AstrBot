@@ -1012,7 +1012,9 @@ class ProviderOpenAIOfficial(Provider):
                 for part in message["content"]:
                     if part.get("type") == "think":
                         reasoning_content_present = True
-                        reasoning_content += str(part.get("think"))
+                        reasoning_content = (reasoning_content or "") + str(
+                            part.get("think")
+                        )
                     else:
                         new_content.append(part)
                 # Some providers (Grok, etc.) reject empty content lists.
