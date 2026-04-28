@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 # Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
 # License: Apache License 2.0
-from typing import Any, ClassVar, Literal, TypeGuard
+
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import (
     BaseModel,
@@ -15,14 +14,10 @@ from pydantic import (
 from pydantic_core import core_schema
 
 
-def _is_str_keyed_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
-
-
 class ContentPart(BaseModel):
     """A part of the content in a message."""
 
-    __content_part_registry: ClassVar[dict[str, type[ContentPart]]] = {}
+    __content_part_registry: ClassVar[dict[str, type["ContentPart"]]] = {}
 
     type: Literal["text", "think", "image_url", "audio_url"]
 
@@ -39,25 +34,23 @@ class ContentPart(BaseModel):
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls,
-        source_type: object,
-        handler: GetCoreSchemaHandler,
+        cls, source_type: Any, handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
         # If we're dealing with the base ContentPart class, use custom validation
         if cls.__name__ == "ContentPart":
 
-            def validate_content_part(value: object) -> ContentPart:
+            def validate_content_part(value: Any) -> Any:
                 # if it's already an instance of a ContentPart subclass, return it
-                if isinstance(value, cls):
+                if hasattr(value, "__class__") and issubclass(value.__class__, cls):
                     return value
 
                 # if it's a dict with a type field, dispatch to the appropriate subclass
-                if _is_str_keyed_dict(value):
-                    type_value = value.get("type")
-                    if isinstance(type_value, str):
-                        target_class = cls.__content_part_registry.get(type_value)
-                        if target_class is not None:
-                            return target_class.model_validate(value)
+                if isinstance(value, dict) and "type" in value:
+                    type_value: Any | None = cast(dict[str, Any], value).get("type")
+                    if not isinstance(type_value, str):
+                        raise ValueError(f"Cannot validate {value} as ContentPart")
+                    target_class = cls.__content_part_registry[type_value]
+                    return target_class.model_validate(value)
 
                 raise ValueError(f"Cannot validate {value} as ContentPart")
 
@@ -68,25 +61,27 @@ class ContentPart(BaseModel):
 
 
 class TextPart(ContentPart):
-    """>>> TextPart(text="Hello, world!").model_dump()
+    """
+    >>> TextPart(text="Hello, world!").model_dump()
     {'type': 'text', 'text': 'Hello, world!'}
     """
 
-    type: Literal["text"] = "text"
+    type: str = "text"
     text: str
 
 
 class ThinkPart(ContentPart):
-    """>>> ThinkPart(think="I think I need to think about this.").model_dump()
+    """
+    >>> ThinkPart(think="I think I need to think about this.").model_dump()
     {'type': 'think', 'think': 'I think I need to think about this.', 'encrypted': None}
     """
 
-    type: Literal["think"] = "think"
+    type: str = "think"
     think: str
     encrypted: str | None = None
     """Encrypted thinking content, or signature."""
 
-    def merge_in_place(self, other: object) -> bool:
+    def merge_in_place(self, other: Any) -> bool:
         if not isinstance(other, ThinkPart):
             return False
         if self.encrypted:
@@ -98,7 +93,8 @@ class ThinkPart(ContentPart):
 
 
 class ImageURLPart(ContentPart):
-    """>>> ImageURLPart(image_url="http://example.com/image.jpg").model_dump()
+    """
+    >>> ImageURLPart(image_url="http://example.com/image.jpg").model_dump()
     {'type': 'image_url', 'image_url': 'http://example.com/image.jpg'}
     """
 
@@ -108,12 +104,13 @@ class ImageURLPart(ContentPart):
         id: str | None = None
         """The ID of the image, to allow LLMs to distinguish different images."""
 
-    type: Literal["image_url"] = "image_url"
+    type: str = "image_url"
     image_url: ImageURL
 
 
 class AudioURLPart(ContentPart):
-    """>>> AudioURLPart(audio_url=AudioURLPart.AudioURL(url="https://example.com/audio.mp3")).model_dump()
+    """
+    >>> AudioURLPart(audio_url=AudioURLPart.AudioURL(url="https://example.com/audio.mp3")).model_dump()
     {'type': 'audio_url', 'audio_url': {'url': 'https://example.com/audio.mp3', 'id': None}}
     """
 
@@ -123,12 +120,13 @@ class AudioURLPart(ContentPart):
         id: str | None = None
         """The ID of the audio, to allow LLMs to distinguish different audios."""
 
-    type: Literal["audio_url"] = "audio_url"
+    type: str = "audio_url"
     audio_url: AudioURL
 
 
 class ToolCall(BaseModel):
-    """A tool call requested by the assistant.
+    """
+    A tool call requested by the assistant.
 
     >>> ToolCall(
     ...     id="123",
@@ -150,7 +148,7 @@ class ToolCall(BaseModel):
     """The ID of the tool call."""
     function: FunctionBody
     """The function body of the tool call."""
-    extra_content: dict[str, object] | None = None
+    extra_content: dict[str, Any] | None = None
     """Extra metadata for the tool call."""
 
     @model_serializer(mode="wrap")
@@ -217,7 +215,7 @@ class Message(BaseModel):
         # other all cases: content is required
         if self.content is None:
             raise ValueError(
-                "content is required unless role='assistant' and tool_calls is not None",
+                "content is required unless role='assistant' and tool_calls is not None"
             )
         return self
 
@@ -334,8 +332,6 @@ def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
         dumped.append(message.model_dump())
         if message._checkpoint_after is not None:
             dumped.append(
-                CheckpointMessageSegment(
-                    content=message._checkpoint_after,
-                ).model_dump(),
+                CheckpointMessageSegment(content=message._checkpoint_after).model_dump()
             )
     return dumped

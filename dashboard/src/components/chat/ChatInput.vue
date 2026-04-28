@@ -1,6 +1,7 @@
 <template>
   <div
     class="input-area fade-in"
+    :class="{ 'is-dark': isDark }"
     @dragover.prevent="handleDragOver"
     @dragleave.prevent="handleDragLeave"
     @drop.prevent="handleDrop"
@@ -14,45 +15,41 @@
         border: isDark ? 'none' : '1px solid #e0e0e0',
         borderRadius: '24px',
         boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
-        backgroundColor: isDark ? 'rgba(15, 15, 22, 0.6)' : 'transparent',
+        backgroundColor: isDark ? '#2d2d2d' : 'transparent',
         position: 'relative',
-        transition: 'min-height 0.2s ease, padding 0.2s ease',
       }"
     >
       <!-- 拖拽上传遮罩 -->
       <transition name="fade">
         <div v-if="isDragging" class="drop-overlay">
           <div class="drop-overlay-content">
-            <v-icon size="48" color="primary"> mdi-cloud-upload </v-icon>
+            <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
             <span class="drop-text">{{ tm("input.dropToUpload") }}</span>
           </div>
         </div>
       </transition>
       <!-- 引用预览区 -->
       <transition name="slideReply" @after-leave="handleReplyAfterLeave">
-        <div v-if="props.replyTo && !isReplyClosing" class="reply-preview">
+        <div class="reply-preview" v-if="props.replyTo && !isReplyClosing">
           <div class="reply-content">
-            <v-icon size="small" class="reply-icon"> mdi-reply </v-icon>
+            <v-icon size="small" class="reply-icon">mdi-reply</v-icon>
             "<span class="reply-text">{{ props.replyTo.selectedText }}</span
             >"
           </div>
           <v-btn
+            @click="handleClearReply"
             class="remove-reply-btn"
             icon="mdi-close"
             size="x-small"
             color="grey"
             variant="text"
-            @click="handleClearReply"
           />
         </div>
       </transition>
       <textarea
         ref="inputField"
         v-model="localPrompt"
-        @compositionstart="handleCompositionStart"
-        @compositionend="handleCompositionEnd"
-        @compositioncancel="handleCompositionEnd"
-        @blur="clearCompositionState()"
+        @keydown="handleKeyDown"
         :disabled="disabled"
         placeholder="Ask AstrBot..."
         class="chat-textarea"
@@ -66,17 +63,15 @@
           outline: none;
           border: 1px solid var(--v-theme-border);
           border-radius: 12px;
-          padding: 16px 20px;
-          min-height: 40px;
+          padding: 12px 18px;
+          min-height: 34px;
           max-height: 200px;
           overflow-y: auto;
           font-family: inherit;
           font-size: 16px;
           background-color: var(--v-theme-surface);
-          transition: height 0.16s ease;
         "
-        @keydown="handleKeyDown"
-      />
+      ></textarea>
       <div
         style="
           display: flex;
@@ -103,12 +98,12 @@
             location="top start"
             :close-on-content-click="false"
           >
-            <template #activator="{ props: activatorProps }">
+            <template v-slot:activator="{ props: activatorProps }">
               <v-btn
                 v-bind="activatorProps"
                 icon="mdi-plus"
-                variant="text"
-                color="primary"
+                variant="outlined"
+                class="input-neutral-btn input-outline-control"
               />
             </template>
 
@@ -118,8 +113,8 @@
               rounded="md"
               @click="triggerImageInput"
             >
-              <template #prepend>
-                <v-icon icon="mdi-file-upload-outline" size="small" />
+              <template v-slot:prepend>
+                <v-icon icon="mdi-file-upload" size="small"></v-icon>
               </template>
               <v-list-item-title>
                 {{ tm("input.upload") }}
@@ -141,11 +136,8 @@
               rounded="md"
               @click="$emit('toggleStreaming')"
             >
-              <template #prepend>
-                <v-icon
-                  :icon="enableStreaming ? 'mdi-flash' : 'mdi-flash-off'"
-                  size="small"
-                />
+              <template v-slot:prepend>
+                <v-icon icon="mdi-lightning-bolt" size="small"></v-icon>
               </template>
               <v-list-item-title>
                 {{
@@ -173,11 +165,11 @@
           "
         >
           <input
-            ref="imageInputRef"
             type="file"
+            ref="imageInputRef"
+            @change="handleFileSelect"
             style="display: none"
             multiple
-            @change="handleFileSelect"
           />
           <v-progress-circular
             v-if="disabled && !mobile"
@@ -189,7 +181,7 @@
           <!-- <v-btn @click="$emit('openLiveMode')"
                         icon
                         variant="text"
-                        color="purple"
+                        color="purple" 
                         size="small"
                     >
                         <v-icon icon="mdi-phone-in-talk" variant="text" plain></v-icon>
@@ -198,17 +190,16 @@
                         </v-tooltip>
                     </v-btn> -->
           <v-btn
+            @click="handleRecordClick"
             icon
             variant="text"
-            :color="isRecording ? 'error' : 'primary'"
-            class="record-btn"
-            @click="handleRecordClick"
+            class="record-btn input-icon-btn"
           >
             <v-icon
               :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'"
               variant="text"
               plain
-            />
+            ></v-icon>
             <v-tooltip activator="parent" location="top">
               {{
                 isRecording ? tm("voice.speaking") : tm("voice.startRecording")
@@ -216,26 +207,24 @@
             </v-tooltip>
           </v-btn>
           <v-btn
-            v-if="isRunning && !canSend"
             icon
-            variant="tonal"
-            color="primary"
-            class="send-btn"
+            v-if="isRunning && !canSend"
             @click="$emit('stop')"
+            variant="tonal"
+            class="send-btn input-action-btn"
           >
-            <v-icon icon="mdi-stop" variant="text" plain />
+            <v-icon icon="mdi-stop" variant="text" plain></v-icon>
             <v-tooltip activator="parent" location="top">
               {{ tm("input.stopGenerating") }}
             </v-tooltip>
           </v-btn>
           <v-btn
             v-else
-            icon="mdi-send"
-            variant="tonal"
-            color="primary"
-            :disabled="!canSend"
-            class="send-btn"
             @click="$emit('send')"
+            icon="mdi-arrow-up"
+            variant="tonal"
+            :disabled="!canSend"
+            class="send-btn input-action-btn"
           />
         </div>
       </div>
@@ -243,12 +232,12 @@
 
     <!-- 附件预览区 -->
     <div
+      class="attachments-preview"
       v-if="
         stagedImagesUrl.length > 0 ||
         stagedAudioUrl ||
         (stagedFiles && stagedFiles.length > 0)
       "
-      class="attachments-preview"
     >
       <div
         v-for="(img, index) in stagedImagesUrl"
@@ -257,27 +246,27 @@
       >
         <img :src="img" class="preview-image" />
         <v-btn
+          @click="$emit('removeImage', index)"
           class="remove-attachment-btn"
           icon="mdi-close"
           size="small"
           color="error"
           variant="text"
-          @click="$emit('removeImage', index)"
         />
       </div>
 
       <div v-if="stagedAudioUrl" class="audio-preview">
         <v-chip color="primary" variant="tonal" class="audio-chip">
-          <v-icon start icon="mdi-microphone" size="small" />
+          <v-icon start icon="mdi-microphone" size="small"></v-icon>
           {{ tm("voice.recording") }}
         </v-chip>
         <v-btn
+          @click="$emit('removeAudio')"
           class="remove-attachment-btn"
           icon="mdi-close"
           size="small"
           color="error"
           variant="text"
-          @click="$emit('removeAudio')"
         />
       </div>
 
@@ -287,16 +276,16 @@
         class="file-preview"
       >
         <v-chip color="primary" variant="tonal" class="file-chip">
-          <v-icon start icon="mdi-file-document-outline" size="small" />
+          <v-icon start icon="mdi-file-document-outline" size="small"></v-icon>
           <span class="file-name-preview">{{ file.original_name }}</span>
         </v-chip>
         <v-btn
+          @click="$emit('removeFile', index)"
           class="remove-attachment-btn"
           icon="mdi-close"
           size="small"
           color="error"
           variant="text"
-          @click="$emit('removeFile', index)"
         />
       </div>
     </div>
@@ -315,7 +304,6 @@ import {
 import { useDisplay } from "vuetify";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
-import { isComposingEnter } from "@/utils/imeInput.mjs";
 import ConfigSelector from "./ConfigSelector.vue";
 import ProviderModelMenu from "./ProviderModelMenu.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
@@ -330,7 +318,7 @@ interface StagedFileInfo {
 }
 
 interface ReplyInfo {
-  messageId: number;
+  messageId: string | number;
   selectedText?: string;
 }
 
@@ -376,8 +364,9 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
-// 从新的预设getter获取
-const isDark = computed(() => useCustomizerStore().isDarkTheme);
+const isDark = computed(
+  () => useCustomizerStore().uiTheme === "PurpleThemeDark",
+);
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
@@ -387,8 +376,6 @@ const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
 const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
 const isDragging = ref(false);
-const isComposing = ref(false);
-const lastCompositionEndAt = ref<number | null>(null);
 let dragLeaveTimeout: number | null = null;
 
 const localPrompt = computed({
@@ -409,44 +396,6 @@ const canSend = computed(() => {
     (props.stagedFiles && props.stagedFiles.length > 0)
   );
 });
-
-const fileTypeStyles: Record<
-  string,
-  { color: string; icon: string; label: string }
-> = {
-  pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
-  txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
-  md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
-  doc: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOC" },
-  docx: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOCX" },
-  xls: { color: "#217346", icon: "mdi-file-excel-box", label: "XLS" },
-  xlsx: { color: "#217346", icon: "mdi-file-excel-box", label: "XLSX" },
-  csv: { color: "#217346", icon: "mdi-file-delimited-outline", label: "CSV" },
-  zip: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "ZIP" },
-  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
-  js: { color: "#b8860b", icon: "mdi-language-javascript", label: "JS" },
-  ts: { color: "#3178c6", icon: "mdi-language-typescript", label: "TS" },
-  html: { color: "#e34c26", icon: "mdi-language-html5", label: "HTML" },
-  css: { color: "#264de4", icon: "mdi-language-css3", label: "CSS" },
-  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
-};
-
-function fileExtension(file: StagedFileInfo) {
-  const name = file.original_name || file.filename || "";
-  const extension = name.split(".").pop()?.toLowerCase() || "";
-  return extension === name.toLowerCase() ? "" : extension;
-}
-
-function filePresentation(file: StagedFileInfo) {
-  const extension = fileExtension(file);
-  return (
-    fileTypeStyles[extension] || {
-      color: "#607d8b",
-      icon: "mdi-file-document-outline",
-      label: extension ? extension.slice(0, 4).toUpperCase() : "FILE",
-    }
-  );
-}
 
 // Ctrl+B 长按录音相关
 const ctrlKeyDown = ref(false);
@@ -496,10 +445,6 @@ function handleKeyDown(e: KeyboardEvent) {
     return;
   }
 
-  if (isComposingEnter(e, isComposing.value, lastCompositionEndAt.value)) {
-    return;
-  }
-
   const isSendHotkey =
     e.ctrlKey ||
     e.metaKey ||
@@ -516,23 +461,6 @@ function handleKeyDown(e: KeyboardEvent) {
       emit("send");
     }
     return;
-  }
-}
-
-function handleCompositionStart() {
-  isComposing.value = true;
-  lastCompositionEndAt.value = null;
-}
-
-function handleCompositionEnd(e: CompositionEvent) {
-  lastCompositionEndAt.value = e.timeStamp;
-  clearCompositionState({ keepLastEndAt: true });
-}
-
-function clearCompositionState({ keepLastEndAt = false } = {}) {
-  isComposing.value = false;
-  if (!keepLastEndAt) {
-    lastCompositionEndAt.value = null;
   }
 }
 
@@ -637,7 +565,6 @@ onBeforeUnmount(() => {
   if (inputField.value) {
     inputField.value.removeEventListener("paste", handlePaste);
   }
-  clearCompositionState();
   document.removeEventListener("keyup", handleKeyUp);
 });
 
@@ -648,42 +575,99 @@ defineExpose({
 </script>
 
 <style scoped>
-/* Dark mode input container glass */
-.v-theme--bluebusinessdarktheme :deep(.input-container),
-.v-theme--bluebusinessdarktheme ::v-deep(.input-container) {
-  background: rgba(15, 15, 22, 0.6) !important;
-  backdrop-filter: blur(16px) saturate(1.2) !important;
-  border: 1px solid rgba(0, 242, 255, 0.08) !important;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.3) !important;
-}
-
-/* Light mode: clean white frosted glass */
-.v-theme--bluebusinesstheme :deep(.input-container),
-.v-theme--bluebusinesstheme ::v-deep(.input-container) {
-  background: rgba(255, 255, 255, 0.9) !important;
-  backdrop-filter: blur(20px) saturate(1.1) !important;
-  border: 1px solid rgba(0, 49, 83, 0.1) !important;
-  box-shadow: 0 2px 12px rgba(26, 46, 60, 0.08) !important;
-}
-
-/* Fix placeholder visibility in dark mode */
-.v-theme--bluebusinessdarktheme .chat-textarea::placeholder {
-  color: rgba(228, 225, 230, 0.35) !important;
-  opacity: 1 !important;
-}
-
-/* Fix placeholder visibility in light mode */
-.v-theme--bluebusinesstheme .chat-textarea::placeholder {
-  color: rgba(26, 46, 80, 0.35) !important;
-  opacity: 1 !important;
-}
-
 .input-area {
-  padding: 16px;
+  padding: 12px 16px 0;
   background-color: transparent;
   position: relative;
   border-top: 1px solid var(--v-theme-border);
   flex-shrink: 0;
+}
+
+.input-neutral-btn {
+  color: #6f6f6f !important;
+}
+
+.input-neutral-btn:hover {
+  background: #efefef;
+}
+
+.input-neutral-btn--tonal {
+  background: #efefef;
+  color: #4f4f4f !important;
+}
+
+.input-neutral-btn--tonal:hover {
+  background: #e7e7e7;
+}
+
+.input-action-btn {
+  background: #5594c6 !important;
+  color: #fff !important;
+}
+
+.input-action-btn:hover {
+  background: #4c86b3 !important;
+}
+
+.input-action-btn:disabled {
+  background: rgba(85, 148, 198, 0.24) !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.input-icon-btn {
+  background: transparent !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  margin-right: 8px;
+}
+
+.input-icon-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.04) !important;
+}
+
+.input-outline-control {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  border-color: rgba(var(--v-theme-on-surface), 0.18) !important;
+  background: transparent !important;
+}
+
+.input-outline-control:hover {
+  border-color: rgba(var(--v-theme-on-surface), 0.34) !important;
+  background: rgba(var(--v-theme-on-surface), 0.04) !important;
+}
+
+.input-area.is-dark .input-neutral-btn {
+  color: rgba(255, 255, 255, 0.78) !important;
+}
+
+.input-area.is-dark .input-neutral-btn:hover,
+.input-area.is-dark .input-neutral-btn--tonal {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.input-area.is-dark .input-outline-control {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  background: transparent !important;
+}
+
+.input-area.is-dark .input-outline-control:hover {
+  border-color: rgba(255, 255, 255, 0.42) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.input-area.is-dark .input-action-btn {
+  background: rgb(var(--v-theme-on-surface)) !important;
+  color: rgb(var(--v-theme-surface)) !important;
+}
+
+.input-area.is-dark .input-action-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.86) !important;
+}
+
+.input-area.is-dark .input-action-btn:disabled {
+  background: rgba(var(--v-theme-on-surface), 0.14) !important;
+  color: rgba(var(--v-theme-on-surface), 0.4) !important;
 }
 
 /* 拖拽上传遮罩 */
@@ -882,20 +866,28 @@ defineExpose({
 @media (max-width: 768px) {
   .input-area {
     padding: 0 !important;
-    padding-bottom: 10px !important;
   }
 
   .input-container {
     width: 100% !important;
     max-width: 100% !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+  }
+
+  .input-outline-control {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
   }
 
   .input-area textarea,
   .chat-textarea {
-    min-height: 32px !important;
-    max-height: 160px !important;
+    min-height: 28px !important;
+    max-height: 140px !important;
     font-size: 16px !important;
-    padding: 16px 16px 12px 16px !important;
+    line-height: 20px !important;
+    padding: 8px 14px 7px !important;
   }
 }
 </style>

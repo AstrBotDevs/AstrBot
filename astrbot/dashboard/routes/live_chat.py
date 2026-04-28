@@ -7,7 +7,6 @@ import uuid
 import wave
 from typing import Any
 
-import anyio
 import jwt
 from quart import websocket
 
@@ -24,32 +23,12 @@ from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queu
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
-from .chat import (
-    BotMessageAccumulator,
-    build_bot_history_content,
-    collect_plain_text_from_message_parts,
-)
 from .route import Route, RouteContext
 
 
 class LiveChatSession:
     """Live Chat 会话管理器"""
 
-class _ReceiveTimeoutSentinel:
-    """Sentinel value indicating a receive timeout."""
-
-
-_RECEIVE_TIMEOUT = _ReceiveTimeoutSentinel()
-
-
-class _QueueTimeoutSentinel:
-    pass
-
-
-_QUEUE_TIMEOUT = _QueueTimeoutSentinel()
-
-
-class ClientSession:
     def __init__(self, session_id: str, username: str) -> None:
         self.session_id = session_id
         self.username = username
@@ -77,11 +56,11 @@ class ClientSession:
             self.audio_frames.append(data)
 
     async def end_speaking(self, stamp: str) -> tuple[str | None, float]:
-        """结束说话,返回组装的 WAV 文件路径和耗时"""
+        """结束说话，返回组装的 WAV 文件路径和耗时"""
         start_time = time.time()
         if not self.is_speaking or stamp != self.current_stamp:
             logger.warning(
-                f"[Live Chat] stamp 不匹配或未在说话状态: {stamp} vs {self.current_stamp}",
+                f"[Live Chat] stamp 不匹配或未在说话状态: {stamp} vs {self.current_stamp}"
             )
             return None, 0.0
 
@@ -97,7 +76,7 @@ class ClientSession:
             os.makedirs(temp_dir, exist_ok=True)
             audio_path = os.path.join(temp_dir, f"live_audio_{uuid.uuid4()}.wav")
 
-            # 假设前端发送的是 PCM 数据,采样率 16000Hz,单声道,16位
+            # 假设前端发送的是 PCM 数据，采样率 16000Hz，单声道，16位
             with wave.open(audio_path, "wb") as wav_file:
                 wav_file.setnchannels(1)  # 单声道
                 wav_file.setsampwidth(2)  # 16位 = 2字节
@@ -107,7 +86,7 @@ class ClientSession:
 
             self.temp_audio_path = audio_path
             logger.info(
-                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {(await anyio.Path(audio_path).stat()).st_size} bytes",
+                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {os.path.getsize(audio_path)} bytes"
             )
             return audio_path, time.time() - start_time
 
@@ -115,11 +94,11 @@ class ClientSession:
             logger.error(f"[Live Chat] 组装 WAV 文件失败: {e}", exc_info=True)
             return None, 0.0
 
-    async def cleanup(self) -> None:
+    def cleanup(self) -> None:
         """清理临时文件"""
-        if self.temp_audio_path and await anyio.Path(self.temp_audio_path).exists():
+        if self.temp_audio_path and os.path.exists(self.temp_audio_path):
             try:
-                await anyio.Path(self.temp_audio_path).unlink()
+                os.remove(self.temp_audio_path)
                 logger.debug(f"[Live Chat] 已删除临时文件: {self.temp_audio_path}")
             except Exception as e:
                 logger.warning(f"[Live Chat] 删除临时文件失败: {e}")
@@ -140,7 +119,6 @@ class LiveChatRoute(Route):
         self.db = db
         self.plugin_manager = core_lifecycle.plugin_manager
         self.platform_history_mgr = core_lifecycle.platform_message_history_manager
-        assert self.platform_history_mgr
         self.sessions: dict[str, LiveChatSession] = {}
         self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
         self.legacy_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
@@ -151,60 +129,17 @@ class LiveChatRoute(Route):
         self.app.websocket("/api/unified_chat/ws")(self.unified_chat_ws)
 
     async def live_chat_ws(self) -> None:
-        """Legacy Live Chat WebSocket 处理器(默认 ct=live)"""
+        """Legacy Live Chat WebSocket 处理器（默认 ct=live）"""
         await self._unified_ws_loop(force_ct="live")
 
     async def unified_chat_ws(self) -> None:
-        """Unified Chat WebSocket 处理器(支持 ct=live/chat)"""
+        """Unified Chat WebSocket 处理器（支持 ct=live/chat）"""
         await self._unified_ws_loop(force_ct=None)
-
-    async def _ensure_runtime_ready(self) -> bool:
-        if is_runtime_request_ready(self.core_lifecycle):
-            return True
-        await websocket.close(
-            1013,
-            get_runtime_guard_message(self.core_lifecycle),
-        )
-        return False
-
-    async def _recv_ws_json_guarded(
-        self,
-        *,
-        wait_timeout: float = 1.0,
-    ) -> dict[str, Any] | _ReceiveTimeoutSentinel | None:
-        if not await self._ensure_runtime_ready():
-            return None
-        try:
-            message = await asyncio.wait_for(
-                websocket.receive_json(),
-                timeout=wait_timeout,
-            )
-        except asyncio.TimeoutError:
-            return _RECEIVE_TIMEOUT
-        if not await self._ensure_runtime_ready():
-            return None
-        return message
-
-    async def _guarded_queue_get(
-        self,
-        back_queue: asyncio.Queue,
-        *,
-        wait_timeout: float,
-    ) -> dict[str, Any] | _QueueTimeoutSentinel | None:
-        if not await self._ensure_runtime_ready():
-            return None
-        try:
-            result = await asyncio.wait_for(back_queue.get(), timeout=wait_timeout)
-        except asyncio.TimeoutError:
-            return _QUEUE_TIMEOUT
-        if not await self._ensure_runtime_ready():
-            return None
-        return result
 
     async def _unified_ws_loop(self, force_ct: str | None = None) -> None:
         """统一 WebSocket 循环"""
-        # WebSocket 不能通过 header 传递 token,需要从 query 参数获取
-        # 注意:WebSocket 上下文使用 websocket.args 而不是 request.args
+        # WebSocket 不能通过 header 传递 token，需要从 query 参数获取
+        # 注意：WebSocket 上下文使用 websocket.args 而不是 request.args
         token = websocket.args.get("token")
         if not token:
             await websocket.close(1008, "Missing authentication token")
@@ -221,9 +156,6 @@ class LiveChatRoute(Route):
             await websocket.close(1008, "Invalid token")
             return
 
-        if not await self._ensure_runtime_ready():
-            return
-
         session_id = f"webchat_live!{username}!{uuid.uuid4()}"
         live_session = LiveChatSession(session_id, username)
         self.sessions[session_id] = live_session
@@ -232,11 +164,7 @@ class LiveChatRoute(Route):
 
         try:
             while True:
-                message = await self._recv_ws_json_guarded()
-                if isinstance(message, _ReceiveTimeoutSentinel):
-                    continue
-                if message is None:
-                    return
+                message = await websocket.receive_json()
                 ct = force_ct or message.get("ct", "live")
                 if ct == "chat":
                     await self._handle_chat_message(live_session, message)
@@ -250,16 +178,14 @@ class LiveChatRoute(Route):
             # 清理会话
             if session_id in self.sessions:
                 await self._cleanup_chat_subscriptions(live_session)
-                await live_session.cleanup()
+                live_session.cleanup()
                 del self.sessions[session_id]
             logger.info(f"[Live Chat] WebSocket 连接关闭: {username}")
 
     async def _create_attachment_from_file(
-        self,
-        filename: str,
-        attach_type: str,
+        self, filename: str, attach_type: str
     ) -> dict | None:
-        """从本地文件创建 attachment 并返回消息部分｡"""
+        """从本地文件创建 attachment 并返回消息部分。"""
         return await create_attachment_part_from_existing_file(
             filename,
             attach_type=attach_type,
@@ -269,12 +195,15 @@ class LiveChatRoute(Route):
         )
 
     def _extract_web_search_refs(
-        self,
-        accumulated_text: str,
-        accumulated_parts: list,
+        self, accumulated_text: str, accumulated_parts: list
     ) -> dict:
-        """从消息中提取 web_search 引用｡"""
-        supported = ["web_search_tavily", "web_search_bocha"]
+        """从消息中提取 web_search 引用。"""
+        supported = [
+            "web_search_baidu",
+            "web_search_tavily",
+            "web_search_bocha",
+            "web_search_brave",
+        ]
         web_search_results = {}
         tool_call_parts = [
             p
@@ -285,7 +214,7 @@ class LiveChatRoute(Route):
         for part in tool_call_parts:
             for tool_call in part["tool_calls"]:
                 if tool_call.get("name") not in supported or not tool_call.get(
-                    "result",
+                    "result"
                 ):
                     continue
                 try:
@@ -321,21 +250,28 @@ class LiveChatRoute(Route):
     async def _save_bot_message(
         self,
         webchat_conv_id: str,
-        message_parts: list[dict],
+        text: str,
+        media_parts: list,
+        reasoning: str,
         agent_stats: dict,
         refs: dict,
         llm_checkpoint_id: str | None = None,
     ):
         """保存 bot 消息到历史记录。"""
-        new_his = build_bot_history_content(
-            message_parts,
-            agent_stats=agent_stats,
-            refs=refs,
-        )
+        bot_message_parts = []
+        bot_message_parts.extend(media_parts)
+        if text:
+            bot_message_parts.append({"type": "plain", "text": text})
 
-        mgr = self.platform_history_mgr
-        assert mgr is not None
-        return await mgr.insert(
+        new_his = {"type": "bot", "message": bot_message_parts}
+        if reasoning:
+            new_his["reasoning"] = reasoning
+        if agent_stats:
+            new_his["agent_stats"] = agent_stats
+        if refs:
+            new_his["refs"] = refs
+
+        return await self.platform_history_mgr.insert(
             platform_id="webchat",
             user_id=webchat_conv_id,
             content=new_his,
@@ -355,16 +291,11 @@ class LiveChatRoute(Route):
         request_id: str,
     ) -> None:
         back_queue = webchat_queue_mgr.get_or_create_back_queue(
-            request_id,
-            chat_session_id,
+            request_id, chat_session_id
         )
         try:
             while True:
-                result = await self._guarded_queue_get(back_queue, wait_timeout=1)
-                if isinstance(result, _QueueTimeoutSentinel):
-                    continue
-                if result is None:
-                    break
+                result = await back_queue.get()
                 if not result:
                     continue
                 await self._send_chat_payload(session, {"ct": "chat", **result})
@@ -413,11 +344,9 @@ class LiveChatRoute(Route):
         session.chat_subscription_tasks.clear()
 
     async def _handle_chat_message(
-        self,
-        session: LiveChatSession,
-        message: dict,
+        self, session: LiveChatSession, message: dict
     ) -> None:
-        """处理 Chat Mode 消息(ct=chat)"""
+        """处理 Chat Mode 消息（ct=chat）"""
         msg_type = message.get("t")
 
         if msg_type == "bind":
@@ -528,7 +457,6 @@ class LiveChatRoute(Route):
         llm_checkpoint_id = str(uuid.uuid4())
 
         try:
-            pending_bot_message_flusher = None
             chat_queue = webchat_queue_mgr.get_or_create_queue(session_id)
             await chat_queue.put(
                 (
@@ -571,76 +499,22 @@ class LiveChatRoute(Route):
                 },
             )
 
-            message_accumulator = BotMessageAccumulator()
+            accumulated_parts = []
+            accumulated_text = ""
+            accumulated_reasoning = ""
+            tool_calls = {}
             agent_stats = {}
-            refs: dict[str, Any] = {}
-
-            async def flush_pending_bot_message():
-                nonlocal message_accumulator, agent_stats, refs
-                if not (message_accumulator.has_content() or refs or agent_stats):
-                    return None
-
-                message_parts_to_save = message_accumulator.build_message_parts(
-                    include_pending_tool_calls=True
-                )
-                plain_text = collect_plain_text_from_message_parts(
-                    message_parts_to_save
-                )
-                try:
-                    extracted_refs = self._extract_web_search_refs(
-                        plain_text,
-                        message_parts_to_save,
-                    )
-                except Exception as e:
-                    logger.exception(
-                        f"[Live Chat] Failed to extract web search refs: {e}",
-                        exc_info=True,
-                    )
-                    extracted_refs = refs
-
-                saved_record = await self._save_bot_message(
-                    session_id,
-                    message_parts_to_save,
-                    agent_stats,
-                    extracted_refs,
-                    llm_checkpoint_id,
-                )
-                message_accumulator = BotMessageAccumulator()
-                agent_stats = {}
-                refs = {}
-                return saved_record
-
-            pending_bot_message_flusher = flush_pending_bot_message
-
-            async def send_attachment_saved_event(part: dict | None) -> None:
-                if not part or not part.get("attachment_id") or not part.get("type"):
-                    return
-
-                await self._send_chat_payload(
-                    session,
-                    {
-                        "ct": "chat",
-                        "type": "attachment_saved",
-                        "data": {
-                            "id": part["attachment_id"],
-                            "type": part["type"],
-                        },
-                    },
-                )
+            refs = {}
 
             while True:
-                if not await self._ensure_runtime_ready():
-                    break
                 if session.should_interrupt:
                     session.should_interrupt = False
-                    await flush_pending_bot_message()
                     break
 
-                result = await self._guarded_queue_get(back_queue, wait_timeout=1)
-                if isinstance(result, _QueueTimeoutSentinel):
+                try:
+                    result = await asyncio.wait_for(back_queue.get(), timeout=1)
+                except asyncio.TimeoutError:
                     continue
-                if result is None:
-                    break
 
                 if not result:
                     continue
@@ -671,36 +545,68 @@ class LiveChatRoute(Route):
                 await self._send_chat_payload(session, outgoing)
 
                 if msg_type == "plain":
-                    message_accumulator.add_plain(
-                        result_text,
-                        chain_type=chain_type,
-                        streaming=streaming,
-                    )
+                    if chain_type == "tool_call":
+                        try:
+                            tool_call = json.loads(result_text)
+                            tool_calls[tool_call.get("id")] = tool_call
+                            if accumulated_text:
+                                accumulated_parts.append(
+                                    {"type": "plain", "text": accumulated_text}
+                                )
+                                accumulated_text = ""
+                        except Exception:
+                            pass
+                    elif chain_type == "tool_call_result":
+                        try:
+                            tcr = json.loads(result_text)
+                            tc_id = tcr.get("id")
+                            if tc_id in tool_calls:
+                                tool_calls[tc_id]["result"] = tcr.get("result")
+                                tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
+                                accumulated_parts.append(
+                                    {
+                                        "type": "tool_call",
+                                        "tool_calls": [tool_calls[tc_id]],
+                                    }
+                                )
+                                tool_calls.pop(tc_id, None)
+                        except Exception:
+                            pass
+                    elif chain_type == "reasoning":
+                        accumulated_reasoning += result_text
+                    elif streaming:
+                        accumulated_text += result_text
+                    else:
+                        accumulated_text = result_text
                 elif msg_type == "image":
                     filename = str(result_text).replace("[IMAGE]", "")
                     part = await self._create_attachment_from_file(filename, "image")
-                    message_accumulator.add_attachment(part)
-                    await send_attachment_saved_event(part)
+                    if part:
+                        accumulated_parts.append(part)
                 elif msg_type == "record":
                     filename = str(result_text).replace("[RECORD]", "")
                     part = await self._create_attachment_from_file(filename, "record")
-                    message_accumulator.add_attachment(part)
-                    await send_attachment_saved_event(part)
+                    if part:
+                        accumulated_parts.append(part)
                 elif msg_type == "file":
                     filename = str(result_text).replace("[FILE]", "").split("|", 1)[0]
                     part = await self._create_attachment_from_file(filename, "file")
-                    message_accumulator.add_attachment(part)
-                    await send_attachment_saved_event(part)
+                    if part:
+                        accumulated_parts.append(part)
                 elif msg_type == "video":
                     filename = str(result_text).replace("[VIDEO]", "").split("|", 1)[0]
                     part = await self._create_attachment_from_file(filename, "video")
-                    message_accumulator.add_attachment(part)
-                    await send_attachment_saved_event(part)
+                    if part:
+                        accumulated_parts.append(part)
 
                 should_save = False
                 if msg_type == "end":
                     should_save = bool(
-                        message_accumulator.has_content() or refs or agent_stats
+                        accumulated_parts
+                        or accumulated_text
+                        or accumulated_reasoning
+                        or refs
+                        or agent_stats
                     )
                 elif (streaming and msg_type == "complete") or not streaming:
                     if chain_type not in (
@@ -711,7 +617,26 @@ class LiveChatRoute(Route):
                         should_save = True
 
                 if should_save:
-                    saved_record = await flush_pending_bot_message()
+                    try:
+                        refs = self._extract_web_search_refs(
+                            accumulated_text,
+                            accumulated_parts,
+                        )
+                    except Exception as e:
+                        logger.exception(
+                            f"[Live Chat] Failed to extract web search refs: {e}",
+                            exc_info=True,
+                        )
+
+                    saved_record = await self._save_bot_message(
+                        session_id,
+                        accumulated_text,
+                        accumulated_parts,
+                        accumulated_reasoning,
+                        agent_stats,
+                        refs,
+                        llm_checkpoint_id,
+                    )
                     if saved_record:
                         await self._send_chat_payload(
                             session,
@@ -721,12 +646,18 @@ class LiveChatRoute(Route):
                                 "data": {
                                     "id": saved_record.id,
                                     "created_at": to_utc_isoformat(
-                                        saved_record.created_at,
+                                        saved_record.created_at
                                     ),
                                     "llm_checkpoint_id": llm_checkpoint_id,
                                 },
                             },
                         )
+
+                    accumulated_parts = []
+                    accumulated_text = ""
+                    accumulated_reasoning = ""
+                    agent_stats = {}
+                    refs = {}
 
                 if msg_type == "end":
                     break
@@ -738,24 +669,16 @@ class LiveChatRoute(Route):
                 {
                     "ct": "chat",
                     "t": "error",
-                    "data": f"处理失败: {e!s}",
+                    "data": f"处理失败: {str(e)}",
                     "code": "PROCESSING_ERROR",
                 },
             )
         finally:
-            try:
-                if pending_bot_message_flusher is not None:
-                    await pending_bot_message_flusher()
-            except Exception as e:
-                logger.exception(
-                    f"[Live Chat] Failed to persist pending chat message: {e}",
-                    exc_info=True,
-                )
             session.is_processing = False
             webchat_queue_mgr.remove_back_queue(message_id)
 
     async def _build_chat_message_parts(self, message: list[dict]) -> list[dict]:
-        """构建 chat websocket 用户消息段(复用 webchat 逻辑)"""
+        """构建 chat websocket 用户消息段（复用 webchat 逻辑）"""
         return await build_webchat_message_parts(
             message,
             get_attachment_by_id=self.db.get_attachment_by_id,
@@ -801,7 +724,7 @@ class LiveChatRoute(Route):
                 await websocket.send_json({"t": "error", "data": "音频组装失败"})
                 return
 
-            # 处理音频:STT -> LLM -> TTS
+            # 处理音频：STT -> LLM -> TTS
             await self._process_audio(session, audio_path, assemble_duration)
 
         elif msg_type == "interrupt":
@@ -810,16 +733,13 @@ class LiveChatRoute(Route):
             logger.info(f"[Live Chat] 用户打断: {session.username}")
 
     async def _process_audio(
-        self,
-        session: LiveChatSession,
-        audio_path: str,
-        assemble_duration: float,
+        self, session: LiveChatSession, audio_path: str, assemble_duration: float
     ) -> None:
-        """处理音频:STT -> LLM -> 流式 TTS"""
+        """处理音频：STT -> LLM -> 流式 TTS"""
         try:
             # 发送 WAV 组装耗时
             await websocket.send_json(
-                {"t": "metrics", "data": {"wav_assemble_time": assemble_duration}},
+                {"t": "metrics", "data": {"wav_assemble_time": assemble_duration}}
             )
             wav_assembly_finish_time = time.time()
 
@@ -827,14 +747,7 @@ class LiveChatRoute(Route):
             session.should_interrupt = False
 
             # 1. STT - 语音转文字
-            pm = self.plugin_manager
-            if pm is None or pm.context is None:
-                logger.error("[Live Chat] Plugin manager not available")
-                await websocket.send_json(
-                    {"t": "error", "data": "Plugin manager not available"},
-                )
-                return
-            ctx = pm.context
+            ctx = self.plugin_manager.context
             stt_provider = ctx.provider_manager.stt_provider_insts[0]
 
             if not stt_provider:
@@ -843,7 +756,7 @@ class LiveChatRoute(Route):
                 return
 
             await websocket.send_json(
-                {"t": "metrics", "data": {"stt": stt_provider.meta().type}},
+                {"t": "metrics", "data": {"stt": stt_provider.meta().type}}
             )
 
             user_text = await stt_provider.get_text(audio_path)
@@ -857,7 +770,7 @@ class LiveChatRoute(Route):
                 {
                     "t": "user_msg",
                     "data": {"text": user_text, "ts": int(time.time() * 1000)},
-                },
+                }
             )
 
             # 2. 构造消息事件并发送到 pipeline
@@ -883,17 +796,13 @@ class LiveChatRoute(Route):
 
             try:
                 while True:
-                    if not await self._ensure_runtime_ready():
-                        break
                     if session.should_interrupt:
-                        # 用户打断,停止处理
+                        # 用户打断，停止处理
                         logger.info("[Live Chat] 检测到用户打断")
                         await websocket.send_json({"t": "stop_play"})
                         # 保存消息并标记为被打断
                         await self._save_interrupted_message(
-                            session,
-                            user_text,
-                            bot_text,
+                            session, user_text, bot_text
                         )
                         # 清空队列中未处理的消息
                         while not back_queue.empty():
@@ -903,14 +812,10 @@ class LiveChatRoute(Route):
                                 break
                         break
 
-                    result = await self._guarded_queue_get(
-                        back_queue,
-                        wait_timeout=0.5,
-                    )
-                    if isinstance(result, _QueueTimeoutSentinel):
+                    try:
+                        result = await asyncio.wait_for(back_queue.get(), timeout=0.5)
+                    except asyncio.TimeoutError:
                         continue
-                    if result is None:
-                        break
 
                     if not result:
                         continue
@@ -918,7 +823,7 @@ class LiveChatRoute(Route):
                     result_message_id = result.get("message_id")
                     if result_message_id != message_id:
                         logger.warning(
-                            f"[Live Chat] 消息 ID 不匹配: {result_message_id} != {message_id}",
+                            f"[Live Chat] 消息 ID 不匹配: {result_message_id} != {message_id}"
                         )
                         continue
 
@@ -937,7 +842,7 @@ class LiveChatRoute(Route):
                                         "llm_total_time": stats.get("end_time", 0)
                                         - stats.get("start_time", 0),
                                     },
-                                },
+                                }
                             )
                         except Exception as e:
                             logger.error(f"[Live Chat] 解析 AgentStats 失败: {e}")
@@ -950,7 +855,7 @@ class LiveChatRoute(Route):
                                 {
                                     "t": "metrics",
                                     "data": stats,
-                                },
+                                }
                             )
                         except Exception as e:
                             logger.error(f"[Live Chat] 解析 TTSStats 失败: {e}")
@@ -974,9 +879,9 @@ class LiveChatRoute(Route):
                                 {
                                     "t": "metrics",
                                     "data": {
-                                        "speak_to_first_frame": speak_to_first_frame_latency,
+                                        "speak_to_first_frame": speak_to_first_frame_latency
                                     },
-                                },
+                                }
                             )
 
                         text = result.get("text")
@@ -985,7 +890,7 @@ class LiveChatRoute(Route):
                                 {
                                     "t": "bot_text_chunk",
                                     "data": {"text": text},
-                                },
+                                }
                             )
 
                         # 发送音频数据给前端
@@ -993,14 +898,14 @@ class LiveChatRoute(Route):
                             {
                                 "t": "response",
                                 "data": data,  # base64 编码的音频数据
-                            },
+                            }
                         )
 
                     elif result_type in ["complete", "end"]:
                         # 处理完成
                         logger.info(f"[Live Chat] Bot 回复完成: {bot_text}")
 
-                        # 如果没有音频流,发送 bot 消息文本
+                        # 如果没有音频流，发送 bot 消息文本
                         if not audio_playing:
                             await websocket.send_json(
                                 {
@@ -1009,7 +914,7 @@ class LiveChatRoute(Route):
                                         "text": bot_text,
                                         "ts": int(time.time() * 1000),
                                     },
-                                },
+                                }
                             )
 
                         # 发送结束标记
@@ -1021,7 +926,7 @@ class LiveChatRoute(Route):
                             {
                                 "t": "metrics",
                                 "data": {"wav_to_tts_total_time": wav_to_tts_duration},
-                            },
+                            }
                         )
                         break
             finally:
@@ -1029,31 +934,28 @@ class LiveChatRoute(Route):
 
         except Exception as e:
             logger.error(f"[Live Chat] 处理音频失败: {e}", exc_info=True)
-            await websocket.send_json({"t": "error", "data": f"处理失败: {e!s}"})
+            await websocket.send_json({"t": "error", "data": f"处理失败: {str(e)}"})
 
         finally:
             session.is_processing = False
             session.should_interrupt = False
 
     async def _save_interrupted_message(
-        self,
-        session: LiveChatSession,
-        user_text: str,
-        bot_text: str,
+        self, session: LiveChatSession, user_text: str, bot_text: str
     ) -> None:
         """保存被打断的消息"""
         interrupted_text = bot_text + " [用户打断]"
         logger.info(f"[Live Chat] 保存打断消息: {interrupted_text}")
 
-        # 简单记录到日志,实际保存逻辑可以后续完善
+        # 简单记录到日志，实际保存逻辑可以后续完善
         try:
             timestamp = int(time.time() * 1000)
             logger.info(
-                f"[Live Chat] 用户消息: {user_text} (session: {session.session_id}, ts: {timestamp})",
+                f"[Live Chat] 用户消息: {user_text} (session: {session.session_id}, ts: {timestamp})"
             )
             if bot_text:
                 logger.info(
-                    f"[Live Chat] Bot 消息(打断): {interrupted_text} (session: {session.session_id}, ts: {timestamp})",
+                    f"[Live Chat] Bot 消息（打断）: {interrupted_text} (session: {session.session_id}, ts: {timestamp})"
                 )
         except Exception as e:
             logger.error(f"[Live Chat] 记录消息失败: {e}", exc_info=True)

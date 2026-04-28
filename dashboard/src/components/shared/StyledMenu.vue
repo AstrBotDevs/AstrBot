@@ -1,12 +1,17 @@
 <template>
   <v-menu v-bind="$attrs" :close-on-content-click="closeOnContentClick">
-    <template #activator="{ props: activatorProps }">
-      <slot name="activator" :props="activatorProps" />
+    <template v-slot:activator="{ props: activatorProps }">
+      <slot name="activator" :props="activatorProps"></slot>
     </template>
-
-    <v-card class="styled-menu-card" elevation="8" rounded="lg">
+    
+    <v-card
+      class="styled-menu-card"
+      :class="{ 'styled-menu-card-borderless': noBorder }"
+      elevation="8"
+      rounded="lg"
+    >
       <v-list density="compact" class="styled-menu-list pa-1">
-        <slot />
+        <slot></slot>
       </v-list>
     </v-card>
   </v-menu>
@@ -14,17 +19,16 @@
 
 <script setup lang="ts">
 defineOptions({
-  inheritAttrs: false,
-});
+  inheritAttrs: false
+})
 
-withDefaults(
-  defineProps<{
-    closeOnContentClick?: boolean;
-  }>(),
-  {
-    closeOnContentClick: true,
-  },
-);
+withDefaults(defineProps<{
+  closeOnContentClick?: boolean
+  noBorder?: boolean
+}>(), {
+  closeOnContentClick: true,
+  noBorder: false
+})
 </script>
 
 <style>

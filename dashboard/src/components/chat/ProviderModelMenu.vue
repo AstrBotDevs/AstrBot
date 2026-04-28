@@ -1,8 +1,7 @@
 <template>
-
     <v-menu v-model="menuOpen" :close-on-content-click="false" location="top" @update:model-value="handleMenuToggle">
         <template v-slot:activator="{ props: menuProps }">
-            <v-chip v-bind="menuProps" class="text-none provider-chip" variant="tonal" :size="chipSize">
+            <v-chip v-bind="menuProps" class="text-none provider-chip" variant="outlined" size="small">
                 <v-icon start size="14">mdi-creation</v-icon>
                 <span v-if="selectedProviderId">
                     {{ selectedProviderId }}
@@ -61,88 +60,78 @@
             </v-card-text>
         </v-card>
     </v-menu>
-
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { useDisplay } from "vuetify";
-import axios from "@/utils/request";
+import { ref, computed, onMounted } from 'vue';
+import axios from 'axios';
 
 interface ModelMetadata {
-  modalities?: { input?: string[] };
-  tool_call?: boolean;
-  reasoning?: boolean;
+    modalities?: { input?: string[] };
+    tool_call?: boolean;
+    reasoning?: boolean;
 }
 
 interface ProviderConfig {
-  id: string;
-  model: string;
-  api_base?: string;
-  model_metadata?: ModelMetadata;
-  enable?: boolean;
+    id: string;
+    model: string;
+    api_base?: string;
+    model_metadata?: ModelMetadata;
+    enable?: boolean;
 }
 
-const { mobile } = useDisplay();
-
 const providerConfigs = ref<ProviderConfig[]>([]);
-const selectedProviderId = ref("");
-const searchQuery = ref("");
+const selectedProviderId = ref('');
+const searchQuery = ref('');
 const menuOpen = ref(false);
 
-const chipSize = computed(() => (mobile.value ? "x-small" : "small"));
-
 const filteredProviders = computed(() => {
-  if (!searchQuery.value) {
-    return providerConfigs.value;
-  }
-  const query = searchQuery.value.toLowerCase();
-  return providerConfigs.value.filter(
-    (p) =>
-      p.id.toLowerCase().includes(query) ||
-      p.model.toLowerCase().includes(query),
-  );
+    if (!searchQuery.value) {
+        return providerConfigs.value;
+    }
+    const query = searchQuery.value.toLowerCase();
+    return providerConfigs.value.filter(p => 
+        p.id.toLowerCase().includes(query) || 
+        p.model.toLowerCase().includes(query)
+    );
 });
 
 function loadFromStorage() {
-  const savedProvider = localStorage.getItem("selectedProvider");
-  if (savedProvider) {
-    selectedProviderId.value = savedProvider;
-  }
+    const savedProvider = localStorage.getItem('selectedProvider');
+    if (savedProvider) {
+        selectedProviderId.value = savedProvider;
+    }
 }
 
 function saveToStorage() {
-  if (selectedProviderId.value) {
-    localStorage.setItem("selectedProvider", selectedProviderId.value);
-  }
+    if (selectedProviderId.value) {
+        localStorage.setItem('selectedProvider', selectedProviderId.value);
+    }
 }
 
 function loadProviderConfigs() {
-  axios
-    .get("/api/config/provider/list", {
-      params: { provider_type: "chat_completion" },
-    })
-    .then((response) => {
-      if (response.data.status === "ok") {
-        // 过滤掉 enable 为 false 的配置
-        providerConfigs.value = (response.data.data || []).filter(
-          (p: ProviderConfig) => p.enable !== false,
-        );
-      }
-    })
-    .catch((error) => {
-      console.error("获取提供商列表失败:", error);
+    axios.get('/api/config/provider/list', {
+        params: { provider_type: 'chat_completion' }
+    }).then(response => {
+        if (response.data.status === 'ok') {
+            // 过滤掉 enable 为 false 的配置
+            providerConfigs.value = (response.data.data || []).filter(
+                (p: ProviderConfig) => p.enable !== false
+            );
+        }
+    }).catch(error => {
+        console.error('获取提供商列表失败:', error);
     });
 }
 
 function selectProvider(provider: ProviderConfig) {
-  selectedProviderId.value = provider.id;
-  saveToStorage();
+    selectedProviderId.value = provider.id;
+    saveToStorage();
 }
 
 function supportsImageInput(provider: ProviderConfig): boolean {
-  const inputs = provider.model_metadata?.modalities?.input || [];
-  return inputs.includes("image");
+    const inputs = provider.model_metadata?.modalities?.input || [];
+    return inputs.includes('image');
 }
 
 function supportsAudioInput(provider: ProviderConfig): boolean {
@@ -151,90 +140,105 @@ function supportsAudioInput(provider: ProviderConfig): boolean {
 }
 
 function supportsToolCall(provider: ProviderConfig): boolean {
-  return Boolean(provider.model_metadata?.tool_call);
+    return Boolean(provider.model_metadata?.tool_call);
 }
 
 function supportsReasoning(provider: ProviderConfig): boolean {
-  return Boolean(provider.model_metadata?.reasoning);
+    return Boolean(provider.model_metadata?.reasoning);
 }
 
 function getCurrentSelection() {
-  const provider = providerConfigs.value.find(
-    (p) => p.id === selectedProviderId.value,
-  );
-  return {
-    providerId: selectedProviderId.value,
-    modelName: provider?.model || "",
-  };
+    const provider = providerConfigs.value.find(p => p.id === selectedProviderId.value);
+    return {
+        providerId: selectedProviderId.value,
+        modelName: provider?.model || ''
+    };
 }
 
 function handleMenuToggle(isOpen: boolean) {
-  if (isOpen) {
-    // 每次打开菜单时重新获取数据
-    loadProviderConfigs();
-  }
+    if (isOpen) {
+        // 每次打开菜单时重新获取数据
+        loadProviderConfigs();
+    }
 }
 
 onMounted(() => {
-  loadFromStorage();
-  loadProviderConfigs();
+    loadFromStorage();
+    loadProviderConfigs();
 });
 
 defineExpose({
-  getCurrentSelection,
+    getCurrentSelection
 });
 </script>
 
 <style scoped>
 .provider-chip {
-  cursor: pointer;
+    cursor: pointer;
+    height: 36px !important;
+    min-height: 36px !important;
+    border-color: rgba(var(--v-theme-on-surface), 0.18) !important;
+    background: transparent !important;
+    color: rgba(var(--v-theme-on-surface), 0.78) !important;
+}
+
+.provider-chip:hover {
+    border-color: rgba(var(--v-theme-on-surface), 0.34) !important;
+    background: rgba(var(--v-theme-on-surface), 0.04) !important;
 }
 
 .provider-menu-card {
-  border-radius: 12px !important;
+    border-radius: 12px !important;
 }
 
 .provider-menu-list {
-  max-height: 280px;
-  overflow-y: auto;
+    max-height: 280px;
+    overflow-y: auto;
 }
 
 .provider-menu-item {
-  margin-bottom: 2px;
-  border-radius: 8px !important;
-  min-height: 44px !important;
+    margin-bottom: 2px;
+    border-radius: 8px !important;
+    min-height: 44px !important;
 }
 
 .provider-menu-item:hover {
-  background-color: rgba(103, 58, 183, 0.05);
+    background-color: rgba(103, 58, 183, 0.05);
 }
 
 .provider-menu-item.v-list-item--active {
-  background-color: rgba(103, 58, 183, 0.1);
+    background-color: rgba(103, 58, 183, 0.1);
 }
 
 .provider-subtitle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .model-name {
-  font-size: 12px;
-  color: var(--v-theme-secondaryText);
+    font-size: 12px;
+    color: var(--v-theme-secondaryText);
 }
 
 .meta-icons {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .empty-hint {
-  font-size: 12px;
-  color: var(--v-theme-secondaryText);
-  text-align: center;
-  padding: 16px;
-  opacity: 0.6;
+    font-size: 12px;
+    color: var(--v-theme-secondaryText);
+    text-align: center;
+    padding: 16px;
+    opacity: 0.6;
+}
+
+@media (max-width: 768px) {
+    .provider-chip {
+        height: 32px !important;
+        min-height: 32px !important;
+    }
 }
 </style>

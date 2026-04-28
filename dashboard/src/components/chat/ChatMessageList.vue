@@ -24,54 +24,6 @@
 
         <div class="message-stack">
           <div
-            v-if="isUserMessage(msg) && userAttachmentParts(msg).length"
-            class="sent-attachments"
-            :class="{ 'images-only': hasImageOnlyAttachments(msg) }"
-          >
-            <template
-              v-for="(part, attachmentIndex) in userAttachmentParts(msg)"
-              :key="`${msgIndex}-attachment-${attachmentIndex}-${part.type}`"
-            >
-              <button
-                v-if="part.type === 'image'"
-                class="sent-attachment-card sent-image-card"
-                type="button"
-                @click="openImage(partUrl(part))"
-              >
-                <img :src="partUrl(part)" :alt="part.filename || 'image'" />
-              </button>
-
-              <div v-else class="sent-attachment-card sent-file-card">
-                <div
-                  class="sent-attachment-icon"
-                  :style="{ color: attachmentPresentation(part).color }"
-                >
-                  <v-icon :icon="attachmentPresentation(part).icon" size="24" />
-                  <span class="sent-attachment-ext">
-                    {{ attachmentPresentation(part).label }}
-                  </span>
-                </div>
-                <span class="sent-attachment-name">
-                  {{ attachmentName(part) }}
-                </span>
-                <v-btn
-                  v-if="part.type === 'file'"
-                  icon="mdi-download"
-                  size="x-small"
-                  variant="text"
-                  :loading="
-                    downloadingFiles.has(
-                      part.attachment_id || part.filename || '',
-                    )
-                  "
-                  @click="downloadPart(part)"
-                />
-              </div>
-            </template>
-          </div>
-
-          <div
-            v-if="shouldShowMessageBubble(msg)"
             class="message-bubble"
             :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
             @mouseup="handleMouseUp($event, msg)"
@@ -129,7 +81,7 @@
               />
 
               <template
-                v-for="(part, partIndex) in bubbleParts(msg)"
+                v-for="(part, partIndex) in messageParts(msg)"
                 :key="`${msgIndex}-${partIndex}-${part.type}`"
               >
                 <button
@@ -465,37 +417,6 @@ function messageParts(message: ChatRecord): MessagePart[] {
   return [];
 }
 
-function isAttachmentPart(part: MessagePart) {
-  return ["image", "record", "video", "file"].includes(part.type);
-}
-
-function userAttachmentParts(message: ChatRecord) {
-  if (!isUserMessage(message)) return [];
-  return messageParts(message).filter(isAttachmentPart);
-}
-
-function hasImageOnlyAttachments(message: ChatRecord) {
-  const attachments = userAttachmentParts(message);
-  return (
-    attachments.length > 0 &&
-    attachments.every((part) => part.type === "image")
-  );
-}
-
-function bubbleParts(message: ChatRecord) {
-  if (!isUserMessage(message)) return messageParts(message);
-  return messageParts(message).filter((part) => !isAttachmentPart(part));
-}
-
-function shouldShowMessageBubble(message: ChatRecord) {
-  return (
-    !isUserMessage(message) ||
-    isEditingMessage(message) ||
-    messageContent(message).isLoading ||
-    bubbleParts(message).length > 0
-  );
-}
-
 function isMessageStreaming(message: ChatRecord, messageIndex: number) {
   return (
     props.isStreaming &&
@@ -559,74 +480,6 @@ function hasNonReasoningContent(message: ChatRecord) {
     if (part.type === "plain") return Boolean(String(part.text || "").trim());
     return true;
   });
-}
-
-const attachmentTypeStyles: Record<
-  string,
-  { color: string; icon: string; label: string }
-> = {
-  pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
-  txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
-  md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
-  markdown: {
-    color: "#1976d2",
-    icon: "mdi-language-markdown-outline",
-    label: "MD",
-  },
-  doc: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOC" },
-  docx: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOCX" },
-  xls: { color: "#217346", icon: "mdi-file-excel-box", label: "XLS" },
-  xlsx: { color: "#217346", icon: "mdi-file-excel-box", label: "XLSX" },
-  csv: { color: "#217346", icon: "mdi-file-delimited-outline", label: "CSV" },
-  ppt: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPT" },
-  pptx: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPTX" },
-  zip: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "ZIP" },
-  rar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "RAR" },
-  "7z": { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "7Z" },
-  tar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "TAR" },
-  gz: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "GZ" },
-  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
-  yaml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YAML" },
-  yml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YML" },
-  js: { color: "#b8860b", icon: "mdi-language-javascript", label: "JS" },
-  ts: { color: "#3178c6", icon: "mdi-language-typescript", label: "TS" },
-  html: { color: "#e34c26", icon: "mdi-language-html5", label: "HTML" },
-  css: { color: "#264de4", icon: "mdi-language-css3", label: "CSS" },
-  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
-  java: { color: "#b07219", icon: "mdi-language-java", label: "JAVA" },
-  mp3: { color: "#00897b", icon: "mdi-file-music-outline", label: "MP3" },
-  wav: { color: "#00897b", icon: "mdi-file-music-outline", label: "WAV" },
-  flac: { color: "#00897b", icon: "mdi-file-music-outline", label: "FLAC" },
-  mp4: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MP4" },
-  mov: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MOV" },
-  webm: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "WEBM" },
-};
-
-function attachmentName(part: MessagePart) {
-  return part.embedded_file?.filename || part.filename || part.type || "file";
-}
-
-function attachmentExtension(part: MessagePart) {
-  const name = attachmentName(part);
-  const extension = name.split(".").pop()?.toLowerCase() || "";
-  return extension === name.toLowerCase() ? "" : extension;
-}
-
-function attachmentPresentation(part: MessagePart) {
-  if (part.type === "record") {
-    return { color: "#00897b", icon: "mdi-microphone", label: "AUDIO" };
-  }
-  if (part.type === "video") {
-    return { color: "#5e35b1", icon: "mdi-file-video-outline", label: "VIDEO" };
-  }
-  const extension = attachmentExtension(part);
-  return (
-    attachmentTypeStyles[extension] || {
-      color: "#607d8b",
-      icon: "mdi-file-document-outline",
-      label: extension ? extension.slice(0, 4).toUpperCase() : "FILE",
-    }
-  );
 }
 
 function handleMouseUp(event: MouseEvent, message: ChatRecord) {
@@ -895,103 +748,12 @@ function formatDuration(seconds: number) {
 }
 
 .message-stack {
-  display: flex;
-  flex-direction: column;
   max-width: min(760px, 82%);
 }
 
 .from-user .message-stack {
   align-items: flex-end;
   max-width: 60%;
-}
-
-.sent-attachments {
-  display: flex;
-  max-width: 100%;
-  gap: 10px;
-  margin-bottom: 8px;
-  padding: 2px 2px 4px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-}
-
-.sent-attachment-card {
-  position: relative;
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  height: 64px;
-  overflow: hidden;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  border-radius: 12px;
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  color: rgb(var(--v-theme-on-surface));
-}
-
-.sent-image-card {
-  width: 64px;
-  padding: 0;
-  border: 0;
-  cursor: zoom-in;
-}
-
-.sent-image-card img {
-  width: 100%;
-  height: 100%;
-  border-radius: 11px;
-  object-fit: cover;
-}
-
-.sent-attachments.images-only {
-  max-width: min(420px, 100%);
-}
-
-.sent-attachments.images-only .sent-image-card {
-  width: 180px;
-  height: 180px;
-}
-
-.sent-attachments.images-only .sent-image-card img {
-  object-fit: cover;
-  background: rgba(var(--v-theme-on-surface), 0.04);
-}
-
-.sent-file-card {
-  width: 220px;
-  padding: 8px 10px;
-}
-
-.sent-attachment-icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  min-width: 34px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-}
-
-.sent-attachment-ext {
-  max-width: 58px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 12px;
-}
-
-.sent-attachment-name {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  line-height: 18px;
 }
 
 .bot-avatar {
@@ -1333,21 +1095,6 @@ function formatDuration(seconds: number) {
 
   .from-user .message-stack {
     max-width: 82%;
-  }
-
-  .sent-file-card {
-    width: min(220px, calc(100vw - 28px));
-    height: 58px;
-  }
-
-  .sent-image-card {
-    width: 58px;
-    height: 58px;
-  }
-
-  .sent-attachments.images-only .sent-image-card {
-    width: min(180px, calc(100vw - 52px));
-    height: min(180px, calc(100vw - 52px));
   }
 
   .message-bubble {
