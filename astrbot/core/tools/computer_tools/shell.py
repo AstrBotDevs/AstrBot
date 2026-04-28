@@ -105,8 +105,11 @@ class ExecuteShellTool(FunctionTool[AstrAgentContext]):
                 current_workspace_root.mkdir(parents=True, exist_ok=True)
                 cwd = str(current_workspace_root)
 
+            env = dict(env or {})
+            effective_background = background and not _is_self_detached_command(command)
+
             stdout_file: str | None = None
-            if background:
+            if effective_background:
                 local_runtime = is_local_runtime(context)
                 stdout_file = _build_background_output_path(
                     local_runtime=local_runtime,
@@ -117,8 +120,6 @@ class ExecuteShellTool(FunctionTool[AstrAgentContext]):
                     local_runtime=local_runtime,
                 )
 
-            env = dict(env or {})
-            effective_background = background and not _is_self_detached_command(command)
             result = await sb.shell.exec(
                 command,
                 cwd=cwd,
