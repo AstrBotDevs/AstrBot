@@ -1100,7 +1100,51 @@
             },
             "xai_native_search": {
                 "description": "Включить нативный поиск",
-                "hint": "Если включено, использует Live Search от xAI для веб-запросов (тарифицируется отдельно). Применимо только к провайдерам xAI."
+                "hint": "Если включено, использует Live Search от xAI Chat Completions для веб-запросов (тарифицируется отдельно). Применимо только к провайдерам xAI Chat Completions."
+            },
+            "xai_web_search_config": {
+                "description": "Инструмент xAI Web Search",
+                "hint": "Настройки инструмента веб-поиска для xAI Responses.",
+                "enabled": {
+                    "description": "Включить Web Search",
+                    "hint": "Если включено, регистрирует инструмент web_search в xAI Responses API (тарифицируется отдельно)."
+                },
+                "allowed_domains": {
+                    "description": "Разрешенные домены поиска",
+                    "hint": "Искать только в этих доменах; нельзя использовать вместе с excluded_domains."
+                },
+                "excluded_domains": {
+                    "description": "Исключенные домены поиска",
+                    "hint": "Исключает эти домены; нельзя использовать вместе с allowed_domains."
+                },
+                "enable_image_understanding": {
+                    "description": "Включить понимание изображений",
+                    "hint": "Передается в инструмент xAI Responses web_search."
+                }
+            },
+            "xai_x_search_config": {
+                "description": "Инструмент xAI X Search",
+                "hint": "Настройки инструмента поиска X/Twitter для xAI Responses.",
+                "enabled": {
+                    "description": "Включить X Search",
+                    "hint": "Если включено, регистрирует инструмент x_search в xAI Responses API (тарифицируется отдельно)."
+                },
+                "allowed_x_handles": {
+                    "description": "Разрешенные аккаунты X",
+                    "hint": "Искать только в этих аккаунтах X. Не указывайте @."
+                },
+                "excluded_x_handles": {
+                    "description": "Исключенные аккаунты X",
+                    "hint": "Исключает эти аккаунты X. Не указывайте @."
+                },
+                "enable_image_understanding": {
+                    "description": "Включить понимание изображений",
+                    "hint": "Передается в инструмент xAI Responses x_search."
+                },
+                "enable_video_understanding": {
+                    "description": "Включить понимание видео",
+                    "hint": "Передается в инструмент xAI Responses x_search."
+                }
             },
             "rerank_api_base": {
                 "description": "Base URL API модели Rerank",

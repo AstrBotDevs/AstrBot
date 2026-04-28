@@ -259,7 +259,57 @@ function getSpecialSubtype(value) {
         :key="itemKey"
         class="config-item"
       >
-        <v-row v-if="!itemMeta?.invisible" class="config-row">
+        <div
+          v-if="itemMeta?.type === 'object' && !itemMeta?.invisible"
+          class="nested-object"
+        >
+          <div v-if="shouldShowItem(itemMeta, itemKey)" class="nested-container">
+            <div class="config-section mb-2">
+              <v-list-item-title class="config-title">
+                {{ translateIfKey(itemMeta?.description) || itemKey }}
+                <span class="property-key">({{ itemKey }})</span>
+              </v-list-item-title>
+              <v-list-item-subtitle class="config-hint" v-if="itemMeta?.hint">
+                <span v-html="renderHint(itemMeta.hint)"></span>
+              </v-list-item-subtitle>
+            </div>
+            <div
+              v-for="([childKey, childMeta], childIndex) in Object.entries(itemMeta.items || {})"
+              :key="childKey"
+            >
+              <template v-if="!childMeta?.invisible && shouldShowItem(childMeta, `${itemKey}.${childKey}`)">
+                <v-row class="config-row">
+                  <v-col cols="12" sm="6" class="property-info">
+                    <v-list-item density="compact">
+                      <v-list-item-title class="property-name">
+                        {{ translateIfKey(childMeta?.description) || childKey }}
+                        <span class="property-key">({{ childKey }})</span>
+                      </v-list-item-title>
+                      <v-list-item-subtitle class="property-hint">
+                        <span v-if="childMeta?.obvious_hint && childMeta?.hint" class="important-hint">‼️</span>
+                        <span v-html="renderHint(childMeta?.hint)"></span>
+                      </v-list-item-subtitle>
+                    </v-list-item>
+                  </v-col>
+                  <v-col cols="12" sm="6" class="config-input">
+                    <ConfigItemRenderer
+                      v-model="createSelectorModel(`${itemKey}.${childKey}`).value"
+                      :item-meta="childMeta || null"
+                      :show-fullscreen-btn="!!childMeta?.editor_mode"
+                      @open-fullscreen="openEditorDialog(childKey, createSelectorModel(itemKey).value, childMeta?.editor_theme, childMeta?.editor_language)"
+                    />
+                  </v-col>
+                </v-row>
+                <v-divider
+                  v-if="hasVisibleEntriesAfter(Object.entries(itemMeta.items || {}), childIndex)"
+                  class="config-divider"
+                ></v-divider>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <v-row v-if="!itemMeta?.invisible && itemMeta?.type !== 'object'" class="config-row">
           <v-col cols="12" sm="6" class="property-info">
             <v-list-item density="compact">
               <v-list-item-title class="property-name">
@@ -339,7 +389,57 @@ function getSpecialSubtype(value) {
               :key="itemKey"
               class="config-item"
             >
-              <v-row v-if="!itemMeta?.invisible" class="config-row">
+              <div
+                v-if="itemMeta?.type === 'object' && !itemMeta?.invisible"
+                class="nested-object"
+              >
+                <div v-if="shouldShowItem(itemMeta, itemKey)" class="nested-container">
+                  <div class="config-section mb-2">
+                    <v-list-item-title class="config-title">
+                      {{ translateIfKey(itemMeta?.description) || itemKey }}
+                      <span class="property-key">({{ itemKey }})</span>
+                    </v-list-item-title>
+                    <v-list-item-subtitle class="config-hint" v-if="itemMeta?.hint">
+                      <span v-html="renderHint(itemMeta.hint)"></span>
+                    </v-list-item-subtitle>
+                  </div>
+                  <div
+                    v-for="([childKey, childMeta], childIndex) in Object.entries(itemMeta.items || {})"
+                    :key="childKey"
+                  >
+                    <template v-if="!childMeta?.invisible && shouldShowItem(childMeta, `${itemKey}.${childKey}`)">
+                      <v-row class="config-row">
+                        <v-col cols="12" sm="6" class="property-info">
+                          <v-list-item density="compact">
+                            <v-list-item-title class="property-name">
+                              {{ translateIfKey(childMeta?.description) || childKey }}
+                              <span class="property-key">({{ childKey }})</span>
+                            </v-list-item-title>
+                            <v-list-item-subtitle class="property-hint">
+                              <span v-if="childMeta?.obvious_hint && childMeta?.hint" class="important-hint">‼️</span>
+                              <span v-html="renderHint(childMeta?.hint)"></span>
+                            </v-list-item-subtitle>
+                          </v-list-item>
+                        </v-col>
+                        <v-col cols="12" sm="6" class="config-input">
+                          <ConfigItemRenderer
+                            v-model="createSelectorModel(`${itemKey}.${childKey}`).value"
+                            :item-meta="childMeta || null"
+                            :show-fullscreen-btn="!!childMeta?.editor_mode"
+                            @open-fullscreen="openEditorDialog(childKey, createSelectorModel(itemKey).value, childMeta?.editor_theme, childMeta?.editor_language)"
+                          />
+                        </v-col>
+                      </v-row>
+                      <v-divider
+                        v-if="hasVisibleEntriesAfter(Object.entries(itemMeta.items || {}), childIndex)"
+                        class="config-divider"
+                      ></v-divider>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <v-row v-if="!itemMeta?.invisible && itemMeta?.type !== 'object'" class="config-row">
                 <v-col cols="12" sm="6" class="property-info">
                   <v-list-item density="compact">
                     <v-list-item-title class="property-name">

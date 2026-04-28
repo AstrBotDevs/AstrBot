@@ -1,4 +1,7 @@
+from astrbot.core.agent.tool import ToolSet
+
 from ..register import register_provider_adapter
+from .openai_responses_source import ProviderOpenAIResponses
 from .openai_source import ProviderOpenAIOfficial
 
 
@@ -27,3 +30,112 @@ class ProviderXAI(ProviderOpenAIOfficial):
     def _finally_convert_payload(self, payloads: dict) -> None:
         self._maybe_inject_xai_search(payloads)
         super()._finally_convert_payload(payloads)
+
+
+@register_provider_adapter("xai_responses", "xAI Responses API Provider Adapter")
+class ProviderXAIResponses(ProviderOpenAIResponses):
+    def _get_grouped_config(self, key: str) -> dict:
+        config = self.provider_config.get(key)
+        if isinstance(config, dict):
+            return config
+        return {}
+
+    @staticmethod
+    def _as_non_empty_str_list(value) -> list[str]:
+        if isinstance(value, str):
+            value = [value]
+        if not isinstance(value, list):
+            return []
+        return [
+            item.strip() for item in value if isinstance(item, str) and item.strip()
+        ]
+
+    def _build_xai_web_search_tool(self) -> dict | None:
+        config = self._get_grouped_config("xai_web_search_config")
+        enabled = config.get(
+            "enabled",
+            self.provider_config.get("xai_native_search", False),
+        )
+        if not bool(enabled):
+            return None
+
+        allowed_domains = self._as_non_empty_str_list(
+            config.get("allowed_domains", self.provider_config.get("allowed_domains"))
+        )
+        excluded_domains = self._as_non_empty_str_list(
+            config.get("excluded_domains", self.provider_config.get("excluded_domains"))
+        )
+        if allowed_domains and excluded_domains:
+            raise ValueError(
+                "xAI Responses web search cannot set both allowed_domains and "
+                "excluded_domains."
+            )
+
+        tool = {"type": "web_search"}
+        if allowed_domains:
+            tool["filters"] = {"allowed_domains": allowed_domains}
+        elif excluded_domains:
+            tool["filters"] = {"excluded_domains": excluded_domains}
+        if "enable_image_understanding" in config:
+            tool["enable_image_understanding"] = bool(
+                config.get("enable_image_understanding")
+            )
+        elif "xai_native_search_enable_image_understanding" in self.provider_config:
+            tool["enable_image_understanding"] = bool(
+                self.provider_config.get("xai_native_search_enable_image_understanding")
+            )
+        elif "enable_image_understanding" in self.provider_config:
+            tool["enable_image_understanding"] = bool(
+                self.provider_config.get("enable_image_understanding")
+            )
+        return tool
+
+    def _build_xai_x_search_tool(self) -> dict | None:
+        config = self._get_grouped_config("xai_x_search_config")
+        enabled = config.get("enabled", self.provider_config.get("xai_x_search", False))
+        if not bool(enabled):
+            return None
+        allowed_x_handles = self._as_non_empty_str_list(
+            config.get(
+                "allowed_x_handles", self.provider_config.get("allowed_x_handles")
+            )
+        )
+        excluded_x_handles = self._as_non_empty_str_list(
+            config.get(
+                "excluded_x_handles", self.provider_config.get("excluded_x_handles")
+            )
+        )
+        tool = {"type": "x_search"}
+        if allowed_x_handles:
+            tool["allowed_x_handles"] = allowed_x_handles
+        if excluded_x_handles:
+            tool["excluded_x_handles"] = excluded_x_handles
+        if "enable_image_understanding" in config:
+            tool["enable_image_understanding"] = bool(
+                config.get("enable_image_understanding")
+            )
+        elif "xai_x_search_enable_image_understanding" in self.provider_config:
+            tool["enable_image_understanding"] = bool(
+                self.provider_config.get("xai_x_search_enable_image_understanding")
+            )
+        if "enable_video_understanding" in config:
+            tool["enable_video_understanding"] = bool(
+                config.get("enable_video_understanding")
+            )
+        elif "xai_x_search_enable_video_understanding" in self.provider_config:
+            tool["enable_video_understanding"] = bool(
+                self.provider_config.get("xai_x_search_enable_video_understanding")
+            )
+
+        return tool
+
+    def _build_response_tools(self, tools: ToolSet | None) -> list[dict]:
+        response_tools: list[dict] = []
+        xai_web_search = self._build_xai_web_search_tool()
+        if xai_web_search:
+            response_tools.append(xai_web_search)
+        xai_x_search = self._build_xai_x_search_tool()
+        if xai_x_search:
+            response_tools.append(xai_x_search)
+        response_tools.extend(self._responses_function_tools(tools))
+        return response_tools
