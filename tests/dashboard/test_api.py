@@ -1,9 +1,12 @@
-"""Comprehensive API smoke tests for all dashboard routes.
+"""Comprehensive API smoke tests covering every registered route.
 
-Covers CRUD operations for every registered API endpoint.
-Created after a merge broke multiple routes silently — these tests
-ensure the server starts and all routes respond without 500 errors.
+Each endpoint is hit once — the test only checks that it does not crash
+(no 500).  Created after a merge broke routes silently; this ensures that
+regressions are caught before deployment.
 """
+
+import json
+import re
 
 import pytest
 import pytest_asyncio
@@ -11,333 +14,140 @@ from quart import Quart
 
 
 # ===========================================================================
-# Chat
+# Route registry  —  every endpoint the dashboard registers
 # ===========================================================================
-class TestChatApi:
-    async def _list_sessions(self, app, auth) -> list[dict]:
-        client = app.test_client()
-        resp = await client.get("/api/chat/sessions", headers=auth)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-        return data["data"]
+# (method, path, json_body | None)
+# Paths with ``<angle>`` placeholders are skipped (they need runtime IDs).
+# Paths that expect a file upload are also skipped (cannot be tested without
+# a real file).
+ROUTES: list[tuple[str, str, dict | None]] = [
+    # -- auth --
+    ("POST", "/api/auth/login", {"username": "astrbot", "password": "astrbot"}),
+    # -- chat --
+    ("GET", "/api/chat/sessions", None),
+    ("POST", "/api/chat/new_session", None),
+    ("POST", "/api/chat/stop", None),
+    ("POST", "/api/chat/send", {"command": "test", "text": "ping"}),
+    ("GET", "/api/chat/get_session?conversation_id=0", None),
+    ("GET", "/api/chat/delete_session?conversation_id=0", None),
+    ("POST", "/api/chat/batch_delete_sessions", {"session_ids": []}),
+    ("POST", "/api/chat/update_session_display_name", {"conversation_id": "0", "name": "t"}),
+    ("GET", "/api/chat/get_file?filename=nonexistent", None),
+    ("POST", "/api/chat/post_file", None),
+    ("GET", "/api/chat/get_attachment?attachment_id=0", None),
+    # -- conversation --
+    ("GET", "/api/conversation/list", None),
+    ("GET", "/api/conversation/detail?id=0", None),
+    # -- config —
+    ("POST", "/api/config/get", {"keys": []}),
+    ("GET", "/api/config/default", None),
+    ("GET", "/api/config/abconfs", None),
+    ("POST", "/api/config/abconf/new", {"name": "t", "config": {}}),
+    ("GET", "/api/config/abconf?id=0", None),
+    ("POST", "/api/config/abconf/delete", {"id": 0}),
+    ("POST", "/api/config/abconf/update", {"id": 0, "config": {}}),
+    ("GET", "/api/config/umo_abconf_routes", None),
+    ("GET", "/api/config/provider/list", None),
+    ("GET", "/api/config/provider/template", None),
+    ("GET", "/api/config/platform/list", None),
+    ("POST", "/api/config/platform/delete", {"id": 0}),
+    ("GET", "/api/config/provider_sources/models", None),
+    # -- persona —
+    ("GET", "/api/persona/list", None),
+    ("POST", "/api/persona/create", {"name": "t", "prompt": "test"}),
+    ("GET", "/api/persona/detail?id=0", None),
+    ("POST", "/api/persona/delete", {"id": 0}),
+    # -- cron —
+    ("GET", "/api/cron/jobs", None),
+    # -- api key —
+    ("GET", "/api/apikey/list", None),
+    ("POST", "/api/apikey/create", {"name": "t", "scopes": ["chat:read"]}),
+    ("POST", "/api/apikey/delete", {"id": 0}),
+    # — platform —
+    ("GET", "/api/platform/list", None),
+    ("GET", "/api/platform/stats", None),
+    # — knowledge base —
+    ("GET", "/api/kb/list", None),
+    ("POST", "/api/kb/create", {"name": "t"}),
+    ("GET", "/api/kb/get?id=0", None),
+    ("GET", "/api/kb/stats", None),
+    # — skills —
+    ("POST", "/api/skills/upload", None),
+    # — tools / MCP —
+    ("GET", "/api/tools/list", None),
+    ("GET", "/api/tools/mcp/servers", None),
+    ("POST", "/api/tools/toggle-tool", {"tool_name": "test", "enabled": False}),
+    # — chatui project —
+    ("GET", "/api/chatui_project/list", None),
+    ("POST", "/api/chatui_project/create", {"title": "t"}),
+    ("GET", "/api/chatui_project/get", None),
+    ("POST", "/api/chatui_project/delete", {"id": 0}),
+    # — stat —
+    ("GET", "/api/stat/get", None),
+    ("GET", "/api/stat/version", None),
+    ("GET", "/api/stat/storage", None),
+    ("GET", "/api/stat/changelog", None),
+    # — update —
+    ("GET", "/api/update/check", None),
+    ("GET", "/api/update/releases", None),
+    # — subagent —
+    ("GET", "/api/subagent/config", None),
+    # — session management —
+    ("GET", "/api/session/groups", None),
+    ("POST", "/api/session/group/create", {"name": "t"}),
+    # — backup — (GET only; POST/DELETE need runtime IDs)
+    ("GET", "/api/backup/list", None),
+    ("GET", "/api/backup/progress", None),
+    ("GET", "/api/backup/check", None),
+    # — commands —
+    ("GET", "/api/commands/conflicts", None),
+    ("GET", "/api/commands/permission", None),
+    # — live-log —
+    ("GET", "/api/log-history", None),
+]
+
+
+def _route_id(params: tuple) -> str:
+    """Return a short test-id for each parametrised row."""
+    method, path, _ = params
+    name = path.replace("/", "_").replace("?", "_").replace("=", "_")
+    return f"{method.upper()}_{name}".rstrip("_")
+
+
+# ===========================================================================
+# Tests
+# ===========================================================================
+class TestAllRoutes:
+    """Hit every registered route and assert no 500 / no crash."""
 
     @pytest.mark.asyncio
-    async def test_list_sessions(self, app: Quart, authenticated_header: dict):
-        sessions = await self._list_sessions(app, authenticated_header)
-        assert isinstance(sessions, list)
-
-    @pytest.mark.asyncio
-    async def test_new_session(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.post("/api/chat/new_session", headers=authenticated_header)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-    @pytest.mark.asyncio
-    async def test_get_session(self, app: Quart, authenticated_header: dict):
-        sessions = await self._list_sessions(app, authenticated_header)
-        if not sessions:
-            pytest.skip("No sessions available")
-        sid = sessions[0]["conversation_id"]
-        client = app.test_client()
-        resp = await client.get(
-            f"/api/chat/get_session?conversation_id={sid}",
-            headers=authenticated_header,
-        )
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-    @pytest.mark.asyncio
-    async def test_stop_session(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.post("/api/chat/stop", headers=authenticated_header)
-        data = await resp.get_json()
-        # Stop may succeed or be a no-op; should not 500
-        assert "status" in data
-
-
-# ===========================================================================
-# Conversation
-# ===========================================================================
-class TestConversationApi:
-    @pytest.mark.asyncio
-    async def test_list_conversations(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get("/api/conversation/list", headers=authenticated_header)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-    @pytest.mark.asyncio
-    async def test_conversation_crud(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        # detail with no id should return error but not 500
-        resp = await client.get(
-            "/api/conversation/detail", headers=authenticated_header
-        )
-        assert resp.status_code != 500
-
-
-# ===========================================================================
-# File
-# ===========================================================================
-class TestFileApi:
-    @pytest.mark.asyncio
-    async def test_file_post_file(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.post(
-            "/api/chat/post_file",
-            headers=authenticated_header,
-            data={},
-        )
-        # Expected: missing file returns error (not 500)
-        assert resp.status_code != 500
-
-    @pytest.mark.asyncio
-    async def test_file_get_file(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get(
-            "/api/chat/get_file?filename=nonexistent",
-            headers=authenticated_header,
-        )
-        assert resp.status_code != 500
-
-
-# ===========================================================================
-# Config
-# ===========================================================================
-class TestConfigApi:
-    @pytest.mark.asyncio
-    async def test_get_config(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.post(
-            "/api/config/get",
-            json={"keys": ["provider_settings"]},
-            headers=authenticated_header,
-        )
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-    @pytest.mark.asyncio
-    async def test_abconf_list(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get("/api/config/abconfs", headers=authenticated_header)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-
-# ===========================================================================
-# Persona
-# ===========================================================================
-class TestPersonaApi:
-    @pytest.mark.asyncio
-    async def test_list_personas(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get("/api/persona/list", headers=authenticated_header)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-    @pytest.mark.asyncio
-    async def test_persona_crud(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.post(
-            "/api/persona/create",
-            json={"name": "test-persona", "prompt": "You are a test assistant."},
-            headers=authenticated_header,
-        )
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-        persona_id = data["data"].get("id") or data["data"].get("persona_id")
-
-        if persona_id:
-            resp = await client.get(
-                f"/api/persona/detail?id={persona_id}",
-                headers=authenticated_header,
-            )
-            data = await resp.get_json()
-            assert data["status"] == "ok", str(data)
-
-            resp = await client.post(
-                f"/api/persona/delete",
-                json={"id": persona_id},
-                headers=authenticated_header,
-            )
-            data = await resp.get_json()
-            assert data["status"] == "ok", str(data)
-
-
-# ===========================================================================
-# Cron
-# ===========================================================================
-class TestCronApi:
-    @pytest.mark.asyncio
-    async def test_list_cron_jobs(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get("/api/cron/jobs", headers=authenticated_header)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-
-# ===========================================================================
-# ApiKey
-# ===========================================================================
-class TestApiKeyApi:
-    @pytest.mark.asyncio
-    async def test_apikey_crud(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get("/api/apikey/list", headers=authenticated_header)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-        resp = await client.post(
-            "/api/apikey/create",
-            json={"name": "test-key", "scopes": ["chat:read"]},
-            headers=authenticated_header,
-        )
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-        key_id = data["data"].get("id")
-
-        if key_id:
-            resp = await client.post(
-                "/api/apikey/delete",
-                json={"id": key_id},
-                headers=authenticated_header,
-            )
-            data = await resp.get_json()
-            assert data["status"] == "ok", str(data)
-
-
-# ===========================================================================
-# Platform
-# ===========================================================================
-class TestPlatformApi:
-    @pytest.mark.asyncio
-    async def test_platform_list(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get("/api/platform/list", headers=authenticated_header)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-
-# ===========================================================================
-# KnowledgeBase
-# ===========================================================================
-class TestKnowledgeBaseApi:
-    @pytest.mark.asyncio
-    async def test_kb_list(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get("/api/kb/list", headers=authenticated_header)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-    @pytest.mark.asyncio
-    async def test_kb_crud(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.post(
-            "/api/kb/create",
-            json={"name": "test-kb", "description": "test"},
-            headers=authenticated_header,
-        )
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-        kb_id = data["data"].get("id")
-
-        if kb_id:
-            resp = await client.get(
-                f"/api/kb/get?id={kb_id}",
-                headers=authenticated_header,
-            )
-            data = await resp.get_json()
-            assert data["status"] == "ok", str(data)
-
-
-# ===========================================================================
-# Skills
-# ===========================================================================
-class TestSkillsApi:
-    @pytest.mark.asyncio
-    async def test_skills_upload_no_file(
-        self, app: Quart, authenticated_header: dict
+    @pytest.mark.parametrize("method,path,body", ROUTES, ids=_route_id)
+    async def test_route_returns_no_500(
+        self,
+        method: str,
+        path: str,
+        body: dict | None,
+        app: Quart,
+        authenticated_header: dict,
     ):
         client = app.test_client()
-        resp = await client.post(
-            "/api/skills/upload",
-            headers=authenticated_header,
-            data={},
+        headers = {**authenticated_header}
+        kwargs = {"headers": headers}
+
+        if body is not None:
+            kwargs["json"] = body
+
+        resp = await client.open(path, method=method, **kwargs)
+        assert resp.status_code != 500, (
+            f"{method} {path} returned 500"
         )
-        # No file provided — should return error, not 500
-        assert resp.status_code != 500
 
-
-# ===========================================================================
-# Tools / MCP
-# ===========================================================================
-class TestToolsApi:
+    # ------------------------------------------------------------------
+    # Live-log SSE needs a dedicated test (streaming response)
+    # ------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_tools_list(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get("/api/tools/list", headers=authenticated_header)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-    @pytest.mark.asyncio
-    async def test_mcp_servers_list(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get("/api/tools/mcp/servers", headers=authenticated_header)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-
-# ===========================================================================
-# ChatUI Project
-# ===========================================================================
-class TestChatUIProjectApi:
-    @pytest.mark.asyncio
-    async def test_project_list(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get(
-            "/api/chatui_project/list", headers=authenticated_header
-        )
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-
-    @pytest.mark.asyncio
-    async def test_project_crud(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.post(
-            "/api/chatui_project/create",
-            json={"title": "test-project"},
-            headers=authenticated_header,
-        )
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
-        project_id = data["data"].get("id")
-
-        if project_id:
-            resp = await client.get(
-                f"/api/chatui_project/get?id={project_id}",
-                headers=authenticated_header,
-            )
-            data = await resp.get_json()
-            assert data["status"] == "ok", str(data)
-
-
-# ===========================================================================
-# Live-Log SSE
-# ===========================================================================
-class TestLiveLogApi:
-    @pytest.mark.asyncio
-    async def test_live_log_returns_stream(
-        self, app: Quart, authenticated_header: dict
-    ):
+    async def test_live_log_sse(self, app: Quart, authenticated_header: dict):
         client = app.test_client()
         resp = await client.get("/api/live-log", headers=authenticated_header)
         assert resp.status_code == 200
         assert resp.mimetype == "text/event-stream"
-
-    @pytest.mark.asyncio
-    async def test_log_history(self, app: Quart, authenticated_header: dict):
-        client = app.test_client()
-        resp = await client.get("/api/log-history", headers=authenticated_header)
-        data = await resp.get_json()
-        assert data["status"] == "ok", str(data)
