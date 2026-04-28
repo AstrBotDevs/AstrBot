@@ -1,7 +1,6 @@
 import json
 import shlex
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from typing import Any
 
 from astrbot.api import FunctionTool
@@ -16,12 +15,7 @@ from .util import check_admin_permission, is_local_runtime, workspace_root
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
 }
-
-
-class BackgroundKind(Enum):
-    EXPLICIT_LAUNCHER = auto()
-    TRAILING_AMP = auto()
-    NONE = auto()
+_EXPLICIT_BACKGROUND_LAUNCHERS = {"nohup", "setsid", "disown", "start", "start-process"}
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
@@ -81,6 +75,16 @@ class ExecuteShellTool(FunctionTool):
                 command,
                 background,
             )
+            if background and not prepared_command.strip():
+                return json.dumps(
+                    {
+                        "success": False,
+                        "stdout": "",
+                        "stderr": "error: empty shell command after removing background operator.",
+                        "exit_code": 2,
+                    },
+                    ensure_ascii=False,
+                )
             result = await sb.shell.exec(
                 prepared_command,
                 cwd=cwd,
@@ -97,31 +101,27 @@ def _prepare_shell_background(command: str, background: bool) -> tuple[str, bool
     if not background:
         return command, False
 
-    kind = _background_kind(command)
-    if kind is BackgroundKind.EXPLICIT_LAUNCHER:
+    tokens, has_explicit_launcher, has_trailing_amp = _classify_background(command)
+    if has_explicit_launcher:
         return command, False
-    if kind is BackgroundKind.TRAILING_AMP:
-        stripped_command = _strip_plain_trailing_background_operator(command)
-        if stripped_command is not None:
-            return stripped_command, True
-        return command, True
+    if has_trailing_amp:
+        return " ".join(tokens[:-1]), True
     return command, True
 
 
-def _background_kind(command: str) -> BackgroundKind:
+def _classify_background(command: str) -> tuple[list[str], bool, bool]:
     tokens = _command_tokens_before_comment(command)
     if not tokens:
-        return BackgroundKind.NONE
+        return tokens, False, False
 
-    if tokens[0].lower() in {"nohup", "setsid", "disown", "start", "start-process"}:
-        return BackgroundKind.EXPLICIT_LAUNCHER
-    if tokens[-1] == "&":
-        return BackgroundKind.TRAILING_AMP
-    return BackgroundKind.NONE
+    has_explicit_launcher = tokens[0].lower() in _EXPLICIT_BACKGROUND_LAUNCHERS
+    has_trailing_amp = tokens[-1] == "&"
+    return tokens, has_explicit_launcher, has_trailing_amp
 
 
 def _is_self_detached_command(command: str) -> bool:
-    return _background_kind(command) is not BackgroundKind.NONE
+    _, has_explicit_launcher, has_trailing_amp = _classify_background(command)
+    return has_explicit_launcher or has_trailing_amp
 
 
 def _command_tokens_before_comment(command: str) -> list[str]:
@@ -139,12 +139,3 @@ def _command_tokens_before_comment(command: str) -> list[str]:
     if comment_index is not None:
         tokens = tokens[:comment_index]
     return tokens
-
-
-def _strip_plain_trailing_background_operator(command: str) -> str | None:
-    tokens = _command_tokens_before_comment(command)
-    if not tokens or tokens[-1] != "&":
-        return None
-
-    stripped = " ".join(tokens[:-1])
-    return stripped if stripped else ""
