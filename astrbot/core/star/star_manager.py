@@ -570,7 +570,7 @@ class PluginManager:
         except InvalidSpecifier:
             return (
                 False,
-                "astrbot_version 格式无效，请使用 PEP 440 版本范围格式，例如 >=4.16,<5。",
+                "Invalid astrbot_version. Use a PEP 440 range, e.g. >=4.16,<5.",
             )
 
         try:
@@ -578,13 +578,13 @@ class PluginManager:
         except InvalidVersion:
             return (
                 False,
-                f"AstrBot 当前版本 {VERSION} 无法被解析，无法校验插件版本范围。",
+                f"Invalid current AstrBot version: {VERSION}. Cannot check plugin version range.",
             )
 
         if not specifier.contains(current_version, prereleases=True):
             return (
                 False,
-                f"当前 AstrBot 版本为 {VERSION}，不满足插件要求的 astrbot_version: {normalized_spec}",
+                f"AstrBot {VERSION} does not satisfy plugin astrbot_version: {normalized_spec}",
             )
         return True, None
 
@@ -874,7 +874,7 @@ class PluginManager:
                 if specified_dir_name and root_dir_name != specified_dir_name:
                     continue
 
-                logger.info(f"正在载入插件 {root_dir_name} ...")
+                logger.info("Loading plugin %s ...", root_dir_name)
 
                 # 尝试导入模块
                 try:
@@ -993,7 +993,7 @@ class PluginManager:
                             setattr(metadata.star_cls, "author", p_author)
                             setattr(metadata.star_cls, "plugin_id", plugin_id)
                     else:
-                        logger.info(f"插件 {metadata.name} 已被禁用。")
+                        logger.info("Plugin %s is disabled.", metadata.name)
 
                     metadata.module = module
                     metadata.root_dir_name = root_dir_name

@@ -1,8 +1,10 @@
 import json
 import os
 import uuid
-from dataclasses import dataclass, field
 from pathlib import Path
+import shlex
+from dataclasses import dataclass, field
+from typing import Any
 
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
@@ -84,8 +86,8 @@ class ExecuteShellTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         command: str,
         background: bool = False,
-        env: dict = {},
         timeout: int | None = 300,
+        env: dict[str, Any] | None = None,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Shell execution"):
             return permission_error
@@ -115,10 +117,12 @@ class ExecuteShellTool(FunctionTool):
                     local_runtime=local_runtime,
                 )
 
+            env = dict(env or {})
+            effective_background = background and not _is_self_detached_command(command)
             result = await sb.shell.exec(
                 command,
                 cwd=cwd,
-                background=background,
+                background=effective_background,
                 env=env,
                 timeout=timeout or 300,
             )
@@ -129,4 +133,28 @@ class ExecuteShellTool(FunctionTool):
                 )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return f"Error executing command: {str(e)}"
+            detail = str(e) or type(e).__name__
+            return f"Error executing command: {detail}"
+
+
+def _is_self_detached_command(command: str) -> bool:
+    lex = shlex.shlex(command, posix=False)
+    lex.whitespace_split = True
+    lex.commenters = ""
+    try:
+        tokens = list(lex)
+    except ValueError:
+        return False
+    comment_index = next(
+        (index for index, token in enumerate(tokens) if token.startswith("#")),
+        None,
+    )
+    if comment_index is not None:
+        tokens = tokens[:comment_index]
+    if not tokens:
+        return False
+
+    first = tokens[0].lower()
+    if first in {"nohup", "setsid", "disown", "start", "start-process"}:
+        return True
+    return tokens[-1] == "&"

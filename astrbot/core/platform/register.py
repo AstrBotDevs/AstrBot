@@ -57,7 +57,7 @@ def register_platform_adapter(
         )
         platform_registry.append(pm)
         platform_cls_map[adapter_name] = cls
-        logger.debug(f"平台适配器 {adapter_name} 已注册")
+        logger.debug("Platform adapter registered: %s", adapter_name)
         return cls
 
     return decorator
