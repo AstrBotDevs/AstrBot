@@ -72,7 +72,6 @@ from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
 )
-from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
@@ -280,7 +279,7 @@ async def _apply_file_extract(
         logger.error("Unsupported file extract provider: %s", config.file_extract_prov)
         return
 
-    for file_content, file_name in zip(file_contents, file_names):
+    for file_content, file_name in zip(file_contents, file_names, strict=False):
         req.contexts.append(
             {
                 "role": "system",
@@ -627,7 +626,7 @@ def _get_quoted_message_parser_settings(
     overrides = provider_settings.get("quoted_message_parser")
     if not isinstance(overrides, dict):
         return DEFAULT_QUOTED_MESSAGE_SETTINGS
-    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
+    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)  # type: ignore[arg-type]
 
 
 def _get_image_compress_args(
@@ -640,8 +639,11 @@ def _get_image_compress_args(
     if not isinstance(enabled, bool):
         enabled = True
 
-    raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
+    raw_options = provider_settings.get("image_compress_options")
+    if isinstance(raw_options, dict):
+        options = dict(raw_options.items())
+    else:
+        options = {}
 
     max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
     if not isinstance(max_size, int):
@@ -752,7 +754,7 @@ async def _process_quote_message(
                 compress_path
                 and compress_path != path
                 and os.path.exists(compress_path)
-            ):
+            ):  # noqa: PNT120
                 try:
                     os.remove(compress_path)
                 except Exception as exc:  # noqa: BLE001
@@ -863,7 +865,7 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 # 保留 MCP 工具
                 new_tool_set.add_tool(tool)
                 continue
-            mp = tool.handler_module_path
+            mp = getattr(tool, "handler_module_path", None)
             if not mp:
                 # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
                 # 不应受到会话插件过滤影响。
@@ -1330,7 +1332,7 @@ async def build_main_agent(
             req.func_tool = ToolSet()
         req.func_tool.add_tool(
             plugin_context.get_llm_tool_manager().get_builtin_tool(
-                SendMessageToUserTool
+                "send_message_to_user"
             )
         )
 
