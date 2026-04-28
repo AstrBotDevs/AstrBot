@@ -14,6 +14,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -23,12 +24,13 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
     description: str = (
-        "Send message to the current user/session. "
+        "Send message to the user. "
         "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
         "Use this tool to send media files (`image`, `record`, `video`, `file`), "
         "or when you need to proactively message the user (such as cron job). "
         "For normal text replies, you can output directly. "
-        "This tool always sends the message to the current user's session and CANNOT send to other sessions."
+        "Optionally specify a `session` to send the message to a different session (admin only). "
+        "If no session is specified, the message is sent to the current user's session."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -67,6 +69,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         "required": ["type"],
                     },
                 },
+            },
+            "session": {
+                "type": "string",
+                "description": "Optional. Target session string. Defaults to current session. Only AstrBot admins can send to other sessions.",
             },
             "required": ["messages"],
         }
@@ -115,11 +121,16 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        # SECURITY FIX: Always use the current session (the user who triggered the tool).
-        # Previously, the tool accepted a user-controlled "session" parameter, which allowed
-        # attackers to send arbitrary messages to arbitrary sessions (groups/chats).
+        # Security: only AstrBot admins can send messages to other sessions.
+        # Non-admin users are always restricted to their own session.
         # See https://github.com/AstrBotDevs/AstrBot/issues/7822
-        session = context.context.event.unified_msg_origin
+        current_session = context.context.event.unified_msg_origin
+        session = kwargs.get("session") or current_session
+        if session != current_session:
+            if permission_error := check_admin_permission(
+                context, "Send message to another session"
+            ):
+                return permission_error
         messages = kwargs.get("messages")
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
