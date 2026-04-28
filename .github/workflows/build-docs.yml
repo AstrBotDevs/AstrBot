@@ -23,11 +23,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache-dependency-path: docs/pnpm-lock.yaml
       - name: Install dependencies
+        working-directory: docs
         run: pnpm install --frozen-lockfile
-        working-directory: './docs'
       - name: Build docs
+        working-directory: docs
         run: pnpm run docs:build
-        working-directory: './docs'
       - name: scp
         uses: appleboy/scp-action@v1.0.0
         with:
