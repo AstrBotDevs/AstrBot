@@ -169,6 +169,144 @@ async def test_handle_api_error_model_not_vlm_after_fallback_raises():
 
 
 @pytest.mark.asyncio
+async def test_handle_api_error_context_length_removes_orphaned_tool_messages():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "Run tool"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "search", "arguments": "{}"},
+                        }
+                    ],
+                },
+                {"role": "tool", "content": "Tool result", "tool_call_id": "call_1"},
+                {"role": "assistant", "content": "Final answer"},
+            ]
+        }
+        context_query = payloads["messages"]
+
+        success, *_rest = await provider._handle_api_error(
+            Exception("maximum context length exceeded"),
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        assert payloads["messages"] == [
+            {"role": "system", "content": "system"},
+            {"role": "assistant", "content": "Final answer"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_fix_tool_call_pairs_in_dict_context_removes_partial_multi_tool_chain():
+    provider = _make_provider()
+    try:
+        full_chain = [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "Run multiple tools"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "tool_a", "arguments": "{}"},
+                    },
+                    {
+                        "id": "call_2",
+                        "type": "function",
+                        "function": {"name": "tool_b", "arguments": "{}"},
+                    },
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "name": "tool_a",
+                "content": "result a",
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_2",
+                "name": "tool_b",
+                "content": "result b",
+            },
+            {"role": "assistant", "content": "Final answer"},
+        ]
+
+        assert provider._fix_tool_call_pairs_in_dict_context(full_chain) == full_chain
+
+        missing_assistant = full_chain[:2] + full_chain[3:]
+        assert provider._fix_tool_call_pairs_in_dict_context(missing_assistant) == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "Run multiple tools"},
+            {"role": "assistant", "content": "Final answer"},
+        ]
+
+        missing_one_tool = full_chain[:-2] + [full_chain[-1]]
+        assert provider._fix_tool_call_pairs_in_dict_context(missing_one_tool) == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "Run multiple tools"},
+            {"role": "assistant", "content": "Final answer"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_handle_api_error_context_length_preserves_remaining_valid_messages():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "old question"},
+                {"role": "assistant", "content": "old answer"},
+                {"role": "user", "content": "new question"},
+                {"role": "assistant", "content": "new answer"},
+            ]
+        }
+        context_query = payloads["messages"]
+
+        success, *_rest = await provider._handle_api_error(
+            Exception("maximum context length exceeded"),
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        assert payloads["messages"] == [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "new question"},
+            {"role": "assistant", "content": "new answer"},
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_handle_api_error_content_moderated_with_unserializable_body():
     provider = _make_provider({"image_moderation_error_patterns": ["blocked"]})
     try:
