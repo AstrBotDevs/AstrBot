@@ -320,6 +320,29 @@ class FunctionToolManager:
                 self.func_list.pop(i)
                 break
 
+    def _find_mcp_tool_by_original_name(self, name: str) -> MCPTool | None:
+        """按原始（命名空间前）名查找 MCP 工具，active 优先。"""
+        matches = [
+            f
+            for f in self.func_list
+            if isinstance(f, MCPTool) and f.original_tool_name == name
+        ]
+
+        if not matches:
+            return None
+
+        active_matches = [f for f in matches if getattr(f, "active", True)]
+        candidates = active_matches or matches
+
+        if len(candidates) > 1:
+            candidates.sort(key=lambda f: f.name)
+            logger.warning(
+                f"Multiple MCP tools found with original name '{name}': "
+                f"{[f.name for f in candidates]}. Using {candidates[0].name}"
+            )
+
+        return candidates[0]
+
     def get_func(self, name) -> FuncTool | None:
         # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
         # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
@@ -330,7 +353,13 @@ class FunctionToolManager:
         for f in reversed(self.func_list):
             if f.name == name:
                 return f
+
         if isinstance(name, str):
+            # 老 persona 配置按原始 MCP 名回查
+            mcp_tool = self._find_mcp_tool_by_original_name(name)
+            if mcp_tool is not None:
+                return mcp_tool
+
             try:
                 builtin_tool = self.get_builtin_tool(name)
             except KeyError:
@@ -573,6 +602,13 @@ class FunctionToolManager:
 
         lifecycle_task = asyncio.create_task(lifecycle(), name=f"mcp-client:{name}")
         async with self._runtime_lock:
+            # After successful initialization mcp_client is logically non-None;
+            # raise explicitly so this invariant still holds under `python -O`
+            # (which strips `assert`).
+            if mcp_client is None:
+                raise RuntimeError(
+                    f"MCP client {name} unexpectedly None after successful initialization"
+                )
             self._mcp_server_runtime[name] = _MCPServerRuntime(
                 name=name,
                 client=mcp_client,

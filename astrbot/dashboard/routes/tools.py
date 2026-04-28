@@ -83,6 +83,14 @@ class ToolsRoute(Route):
                 )
                 mcp_servers = {}
 
+            # 按 server 名预分组 MCP 工具，避免每台服务器都扫一遍 func_list
+            mcp_tools_by_server: dict[str, list[MCPTool]] = {}
+            for f in self.tool_mgr.func_list:
+                if isinstance(f, MCPTool):
+                    mcp_tools_by_server.setdefault(f.mcp_server_name, []).append(f)
+
+            runtime_view = self.tool_mgr.mcp_server_runtime_view
+
             # 获取所有服务器并添加它们的工具列表
             for name, server_config in mcp_servers.items():
                 if not isinstance(server_config, dict):
@@ -101,15 +109,19 @@ class ToolsRoute(Route):
                     if key != "active":  # active 已经处理
                         server_info[key] = value
 
-                # 如果MCP客户端已初始化，从客户端获取工具名称
-                for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
-                    if name_key == name:
-                        mcp_client = runtime.client
-                        server_info["tools"] = [tool.name for tool in mcp_client.tools]
-                        server_info["errlogs"] = mcp_client.server_errlogs
-                        break
+                # tools 为 namespaced 名（与 personaForm.tools 匹配），
+                # original_tool_names 为原始名（给 UI 显示）
+                runtime = runtime_view.get(name)
+                if runtime is not None:
+                    mcp_tools = mcp_tools_by_server.get(name, [])
+                    server_info["tools"] = [f.name for f in mcp_tools]
+                    server_info["original_tool_names"] = [
+                        f.original_tool_name for f in mcp_tools
+                    ]
+                    server_info["errlogs"] = runtime.client.server_errlogs
                 else:
                     server_info["tools"] = []
+                    server_info["original_tool_names"] = []
 
                 servers.append(server_info)
 
@@ -470,6 +482,7 @@ class ToolsRoute(Route):
                 if self.tool_mgr.is_builtin_tool(tool.name):
                     origin = "builtin"
                     origin_name = "AstrBot Core"
+                    display_name = tool.name
                     readonly = True
                     builtin_config_statuses = get_builtin_tool_config_statuses(
                         tool.name,
@@ -483,18 +496,25 @@ class ToolsRoute(Route):
                 elif isinstance(tool, MCPTool):
                     origin = "mcp"
                     origin_name = tool.mcp_server_name
+                    # Format: <ServerName>_<ToolName> for MCP tools
+                    # Normalize server name for display
+                    normalized_server = tool.mcp_server_name.replace(" ", "")
+                    display_name = f"{normalized_server}_{tool.original_tool_name}"
                 elif tool.handler_module_path and star_map.get(
                     tool.handler_module_path
                 ):
                     star = star_map[tool.handler_module_path]
                     origin = "plugin"
                     origin_name = star.name
+                    display_name = tool.name
                 else:
                     origin = "unknown"
                     origin_name = "unknown"
+                    display_name = tool.name
 
                 tool_info = {
-                    "name": tool.name,
+                    "name": tool.name,  # Keep namespaced name for internal use
+                    "display_name": display_name,  # Friendly name for display
                     "description": tool.description,
                     "parameters": tool.parameters,
                     "active": tool.active,

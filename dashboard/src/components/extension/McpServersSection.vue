@@ -52,7 +52,7 @@
                             </v-card-title>
                             <v-card-text>
                               <ul>
-                                <li v-for="(tool, idx) in item.tools" :key="idx" style="margin: 8px 0px;">{{ tool }}</li>
+                                <li v-for="(tool, idx) in (item.original_tool_names || item.tools)" :key="idx" style="margin: 8px 0px;">{{ tool }}</li>
                               </ul>
                             </v-card-text>
                             <v-card-actions class="d-flex justify-end">
