@@ -31,7 +31,9 @@
             {{ tm("actions.toolCallUsed", { name: toolCall.name ?? "" }) }}
             <span style="opacity: 0.6">{{
               toolCall.finished_ts
-                ? formatDuration((toolCall.finished_ts ?? 0) - (toolCall.ts ?? 0))
+                ? formatDuration(
+                    (toolCall.finished_ts ?? 0) - (toolCall.ts ?? 0),
+                  )
                 : getElapsedTime(toolCall.ts ?? 0)
             }}</span>
             <v-icon
@@ -178,11 +180,7 @@
             renderPart.part?.embedded_file?.filename
           }}</span>
           <v-icon
-            v-if="
-              downloadingFiles?.has(
-                renderPart.part?.embedded_file?.attachment_id ?? "",
-              )
-            "
+            v-if="isFileDownloading(renderPart)"
             size="small"
             class="download-icon"
             >mdi-loading mdi-spin</v-icon
@@ -235,7 +233,8 @@ const emitDownloadFile = (file: unknown): void => {
   emit("download-file", file);
 };
 
-const isMarkdownCodeFence = (text: string): boolean => /^(```|~~~)/.test(text.trim());
+const isMarkdownCodeFence = (text: string): boolean =>
+  /^(```|~~~)/.test(text.trim());
 
 const looksLikeStandaloneHtml = (text: string): boolean => {
   const normalized = text.trim();
@@ -303,11 +302,44 @@ const isIPythonTool = (toolCall: { name?: string }): boolean => {
   );
 };
 
-interface PendingToolCall { name?: string; finished_ts?: number; ts?: number; id?: string; args?: unknown; result?: unknown; [key: string]: unknown }
+interface PendingToolCall {
+  name?: string;
+  finished_ts?: number;
+  ts?: number;
+  id?: string;
+  args?: unknown;
+  result?: unknown;
+  [key: string]: unknown;
+}
 
-const getRenderParts = (messageParts: MessagePart[]): Array<{ type: string; toolCalls?: PendingToolCall[]; toolCall?: PendingToolCall; part?: MessagePart; key?: string }> => {
+const isFileDownloading = (renderPart: {
+  type: string;
+  part?: { embedded_file?: { attachment_id?: string } };
+}): boolean => {
+  const downloadSet = props.downloadingFiles;
+  if (!downloadSet) return false;
+  const attachmentId = renderPart?.part?.embedded_file?.attachment_id;
+  if (!attachmentId) return false;
+  return downloadSet.has(attachmentId);
+};
+
+const getRenderParts = (
+  messageParts: MessagePart[],
+): Array<{
+  type: string;
+  toolCalls?: PendingToolCall[];
+  toolCall?: PendingToolCall;
+  part?: MessagePart;
+  key?: string;
+}> => {
   if (!Array.isArray(messageParts)) return [];
-  const rendered: Array<{ type: string; toolCalls?: PendingToolCall[]; toolCall?: PendingToolCall; part?: MessagePart; key?: string }> = [];
+  const rendered: Array<{
+    type: string;
+    toolCalls?: PendingToolCall[];
+    toolCall?: PendingToolCall;
+    part?: MessagePart;
+    key?: string;
+  }> = [];
   let pendingToolCalls: PendingToolCall[] = [];
   let groupIndex = 0;
 

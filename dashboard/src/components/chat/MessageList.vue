@@ -145,12 +145,15 @@
                     }}</span>
                     <v-icon
                       v-if="
-                        downloadingFiles.has(part.embedded_file.attachment_id ?? "")
+                        downloadingFiles.has(
+                          part.embedded_file.attachment_id || '',
+                        )
                       "
                       size="small"
                       class="download-icon"
                       >mdi-loading mdi-spin</v-icon
                     >
+
                     <v-icon v-else size="small" class="download-icon"
                       >mdi-download</v-icon
                     >
@@ -504,7 +507,14 @@ export default defineComponent({
                 typeof toolCall.result === "string"
                   ? JSON.parse(toolCall.result)
                   : toolCall.result
-              ) as { results?: Array<{ index: string; url: string; title: string; snippet: string }> };
+              ) as {
+                results?: Array<{
+                  index: string;
+                  url: string;
+                  title: string;
+                  snippet: string;
+                }>;
+              };
 
               if (resultData.results && Array.isArray(resultData.results)) {
                 resultData.results.forEach((item) => {
@@ -557,8 +567,9 @@ export default defineComponent({
         return;
       }
 
-      const messageItems =
-        (this.$refs.messageContainer as HTMLElement | null)?.querySelectorAll(".message-item");
+      const messageItems = (
+        this.$refs.messageContainer as HTMLElement | null
+      )?.querySelectorAll(".message-item");
       let messageIndex = -1;
       if (messageItems) {
         for (let i = 0; i < messageItems.length; i++) {
@@ -614,7 +625,9 @@ export default defineComponent({
 
     // 获取被引用消息的内容
     getReplyContent(messageId: string | number | undefined): string {
-      const replyMsg = this.messages.find((m: ChatRecord) => m.id === messageId);
+      const replyMsg = this.messages.find(
+        (m: ChatRecord) => m.id === messageId,
+      );
       if (!replyMsg) {
         return this.tm("reply.notFound");
       }
@@ -900,8 +913,7 @@ export default defineComponent({
     initCodeCopyButtons(): void {
       this.$nextTick(() => {
         if (this.isUnmounted) return;
-        const container =
-          this.$refs.messageContainer as HTMLElement | null;
+        const container = this.$refs.messageContainer as HTMLElement | null;
         const codeBlocks = container?.querySelectorAll("pre code") || [];
         codeBlocks.forEach((codeBlock) => {
           const pre = codeBlock.parentElement;
@@ -1114,7 +1126,10 @@ export default defineComponent({
 
     // Get input tokens (input_other + input_cached)
     getInputTokens(
-      tokenUsage: { input_other?: number; input_cached?: number } | null | undefined,
+      tokenUsage:
+        | { input_other?: number; input_cached?: number }
+        | null
+        | undefined,
     ): number {
       if (!tokenUsage) return 0;
       return (tokenUsage.input_other || 0) + (tokenUsage.input_cached || 0);
@@ -1154,7 +1169,7 @@ export default defineComponent({
       this.$emit("openRefs", refs);
     },
   },
-};
+});
 </script>
 
 <style scoped>
