@@ -11,6 +11,8 @@ from astrbot.core.message.components import (
     File,
     Image,
     Json,
+    Node,
+    Nodes,
     Plain,
     Record,
     Reply,
@@ -25,7 +27,7 @@ ReplyHistoryGetter = Callable[
     Awaitable[tuple[list[dict], str | None, str | None] | None],
 ]
 
-MEDIA_PART_TYPES = {"image", "record", "file", "video"}
+MEDIA_PART_TYPES = {"image", "record", "file", "video", "node"}
 
 
 def strip_message_parts_path_fields(message_parts: list[dict]) -> list[dict]:
@@ -38,6 +40,72 @@ def webchat_message_parts_have_content(message_parts: list[dict]) -> bool:
         and (part.get("text") or part.get("attachment_id") or part.get("filename"))
         for part in message_parts
     )
+
+
+
+def _parse_node_content(
+    content_parts: list[dict],
+    *,
+    strict: bool = False,
+    verify_media_path_exists: bool = True,
+) -> list:
+    """递归解析 node 的 content 为 AstrBot 消息组件列表。"""
+    inner_components = []
+    for nc in content_parts:
+        nc_type = str(nc.get("type", "plain"))
+        if nc_type == "plain":
+            inner_components.append(Plain(text=str(nc.get("text", ""))))
+        elif nc_type == "image":
+            nc_src = nc.get("path") or nc.get("url") or nc.get("file", "")
+            if nc_src.startswith("http"):
+                inner_components.append(Image.fromURL(nc_src))
+            elif nc_src:
+                inner_components.append(Image.fromFileSystem(nc_src))
+        elif nc_type == "record":
+            nc_src = nc.get("path") or nc.get("url") or nc.get("file", "")
+            if nc_src.startswith("http"):
+                inner_components.append(Record(url=nc_src))
+            elif nc_src:
+                inner_components.append(Record.fromFileSystem(nc_src))
+        elif nc_type == "node":
+            # 递归处理嵌套的 node
+            nested_content = _parse_node_content(
+                nc.get("content", []),
+                strict=strict,
+                verify_media_path_exists=verify_media_path_exists,
+            )
+            inner_components.append(
+                Node(
+                    content=nested_content,
+                    uin=str(nc.get("uin", "0")),
+                    name=str(nc.get("name", "")),
+                )
+            )
+    return inner_components
+
+
+def _append_node_to_components(
+    components: list,
+    part: dict,
+    *,
+    strict: bool = False,
+    verify_media_path_exists: bool = True,
+) -> None:
+    """将 node part 解析并追加到 components 列表，连续的 node 合并为 Nodes。"""
+    inner_components = _parse_node_content(
+        part.get("content", []),
+        strict=strict,
+        verify_media_path_exists=verify_media_path_exists,
+    )
+    node = Node(
+        content=inner_components,
+        uin=str(part.get("uin", "0")),
+        name=str(part.get("name", "")),
+    )
+    if components and isinstance(components[-1], Nodes):
+        components[-1].nodes.append(node)
+    else:
+        components.append(Nodes([node]))
 
 
 async def parse_webchat_message_parts(
@@ -127,6 +195,15 @@ async def parse_webchat_message_parts(
             )
             continue
 
+        if part_type == "node":
+            _append_node_to_components(
+                components, part,
+                strict=strict,
+                verify_media_path_exists=verify_media_path_exists,
+            )
+            has_content = True
+            continue
+
         if part_type not in MEDIA_PART_TYPES:
             if strict:
                 raise ValueError(f"unsupported message part type: {part_type}")
@@ -205,6 +282,11 @@ async def build_webchat_message_parts(
             )
             continue
 
+        if part_type == "node":
+            # 合并转发消息节点，直接透传给解析层
+            message_parts.append(part)
+            continue
+
         if part_type not in MEDIA_PART_TYPES:
             if strict:
                 raise ValueError(f"unsupported message part type: {part_type}")
@@ -270,6 +352,15 @@ def webchat_message_parts_to_message_chain(
                     chain=[],
                 )
             )
+            continue
+
+        if part_type == "node":
+            _append_node_to_components(
+                components, part,
+                strict=strict,
+                verify_media_path_exists=verify_media_path_exists,
+            )
+            has_content = True
             continue
 
         if part_type not in MEDIA_PART_TYPES:
