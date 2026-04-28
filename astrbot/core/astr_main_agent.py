@@ -393,6 +393,10 @@ async def _ensure_persona_and_skills(
         event, extract_persona_custom_error_message_from_persona(persona)
     )
 
+    # Ensure system_prompt is a string before any +=
+    if req.system_prompt is None:
+        req.system_prompt = ""
+
     if persona:
         # Inject persona system prompt
         if prompt := persona["prompt"]:
