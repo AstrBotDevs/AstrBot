@@ -99,7 +99,7 @@ def load_yaml_metadata(plugin_dir: Path) -> dict[str, Any]:
         try:
             data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
-                return dict[str, Any](data)
+                return data
             return {}
         except Exception as e:
             click.echo(f"Failed to read {yaml_path}: {e}", err=True)
