@@ -55,6 +55,8 @@ from ..register import register_provider_adapter
 )
 class ProviderOpenAIOfficial(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
+    _TOOL_CALL_ID_DEDUPE_MIN_LEN = 16
+    _TOOL_CALL_NAME_DEDUPE_MIN_LEN = 8
 
     @classmethod
     def _truncate_error_text_candidate(cls, text: str) -> str:
@@ -68,6 +70,13 @@ class ProviderOpenAIOfficial(Provider):
             return json.dumps(value, ensure_ascii=False, default=str)
         except Exception:
             return None
+
+    @staticmethod
+    def _dedupe_self_concatenated(value: str, *, min_len: int) -> str:
+        if not value or len(value) < min_len or (len(value) % 2) != 0:
+            return value
+        half = len(value) // 2
+        return value[:half] if value[:half] == value[half:] else value
 
     def _get_image_moderation_error_patterns(self) -> list[str]:
         """Return configured moderation patterns (case-insensitive substring match, not regex)."""
@@ -894,14 +903,30 @@ class ProviderOpenAIOfficial(Provider):
                             args = {}
                     else:
                         args = tool_call.function.arguments
+                    tool_call_id = (
+                        self._dedupe_self_concatenated(
+                            tool_call.id,
+                            min_len=self._TOOL_CALL_ID_DEDUPE_MIN_LEN,
+                        )
+                        if isinstance(tool_call.id, str)
+                        else tool_call.id
+                    )
+                    tool_call_name = (
+                        self._dedupe_self_concatenated(
+                            tool_call.function.name,
+                            min_len=self._TOOL_CALL_NAME_DEDUPE_MIN_LEN,
+                        )
+                        if isinstance(tool_call.function.name, str)
+                        else tool_call.function.name
+                    )
                     args_ls.append(args)
-                    func_name_ls.append(tool_call.function.name)
-                    tool_call_ids.append(tool_call.id)
+                    func_name_ls.append(tool_call_name)
+                    tool_call_ids.append(tool_call_id)
 
                     # gemini-2.5 / gemini-3 series extra_content handling
                     extra_content = getattr(tool_call, "extra_content", None)
                     if extra_content is not None:
-                        tool_call_extra_content_dict[tool_call.id] = extra_content
+                        tool_call_extra_content_dict[tool_call_id] = extra_content
 
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
