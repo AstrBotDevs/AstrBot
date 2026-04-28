@@ -104,6 +104,7 @@ DEFAULT_CONFIG = {
         "fallback_chat_models": [],
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
+        "image_caption_wait_for_context_order": True,
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
@@ -3098,6 +3099,11 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "留空代表不使用，可用于非多模态模型",
+                    },
+                    "provider_settings.image_caption_wait_for_context_order": {
+                        "description": "图片转述时等待上下文顺序",
+                        "type": "bool",
+                        "hint": "开启后，同一会话中图片转述完成前，后续消息将等待，以保证上下文顺序正确；关闭后，后续消息立即响应，但上下文中图片描述可能在后续消息之后。",
                     },
                     "provider_stt_settings.enable": {
                         "description": "启用语音转文本",

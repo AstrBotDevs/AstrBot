@@ -17,6 +17,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
+    pre_caption_images,
 )
 from astrbot.core.message.components import File, Image, Record, Video
 from astrbot.core.message.message_event_result import (
@@ -195,6 +196,16 @@ class InternalAgentSubStage(Stage):
             except Exception:
                 logger.warning("send_typing failed", exc_info=True)
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
+
+            if not event.get_extra("provider_request"):
+                plugin_context = self.ctx.plugin_manager.context
+                cfg = plugin_context.get_config(umo=event.unified_msg_origin).get(
+                    "provider_settings", {}
+                )
+                if cfg.get("image_caption_wait_for_context_order", True):
+                    await pre_caption_images(event, plugin_context, cfg)
+                else:
+                    event.set_extra("_skip_img_caption", True)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")

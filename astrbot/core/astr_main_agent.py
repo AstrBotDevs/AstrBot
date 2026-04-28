@@ -547,6 +547,50 @@ async def _request_img_caption(
     return llm_resp.completion_text
 
 
+_PRE_CAPTION_RESULT_KEY = "_pre_caption_result"
+
+
+async def pre_caption_images(
+    event: AstrMessageEvent,
+    plugin_context: Context,
+    cfg: dict,
+) -> None:
+    """在 session lock 外提前完成图片描述，结果写入 event extra。
+
+    由 pipeline 在获取 session lock 之前调用，避免图片描述慢速 LLM
+    调用占用 session lock，阻塞后续消息处理。
+    """
+    img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
+    if not img_cap_prov_id:
+        return
+
+    image_components = [
+        comp for comp in event.message_obj.message if isinstance(comp, Image)
+    ]
+    if not image_components:
+        return
+
+    try:
+        image_urls = []
+        for comp in image_components:
+            path = await comp.convert_to_file_path()
+            compressed = await _compress_image_for_provider(path, cfg)
+            if _is_generated_compressed_image_path(path, compressed):
+                event.track_temporary_local_file(compressed)
+            image_urls.append(compressed)
+
+        caption = await _request_img_caption(
+            img_cap_prov_id,
+            cfg,
+            image_urls,
+            plugin_context,
+        )
+        event.set_extra(_PRE_CAPTION_RESULT_KEY, caption or "")
+    except Exception as exc:  # noqa: BLE001
+        logger.error("预处理图片描述失败: %s", exc, exc_info=True)
+        event.set_extra(_PRE_CAPTION_RESULT_KEY, None)
+
+
 async def _ensure_img_caption(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -554,6 +598,17 @@ async def _ensure_img_caption(
     plugin_context: Context,
     image_caption_provider: str,
 ) -> None:
+    if event.get_extra("_skip_img_caption"):
+        return
+
+    pre_caption = event.get_extra(_PRE_CAPTION_RESULT_KEY)
+    if pre_caption:
+        req.extra_user_content_parts.append(
+            TextPart(text=f"<image_caption>{pre_caption}</image_caption>")
+        )
+        req.image_urls = []
+        return
+
     try:
         compressed_urls = []
         for url in req.image_urls:
