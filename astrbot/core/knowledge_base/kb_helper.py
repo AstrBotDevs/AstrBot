@@ -9,6 +9,7 @@ import aiofiles
 
 from astrbot.core import logger
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
+from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
     EmbeddingProvider,

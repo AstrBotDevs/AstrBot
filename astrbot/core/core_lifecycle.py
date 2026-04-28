@@ -17,14 +17,6 @@ import traceback
 from asyncio import Queue
 from enum import Enum
 
-
-class LifecycleState(Enum):
-    CREATED = "created"
-    CORE_READY = "core_ready"
-    RUNTIME_READY = "runtime_ready"
-    RUNTIME_FAILED = "runtime_failed"
-
-
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -50,6 +42,13 @@ from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
 
 from . import astrbot_config, html_renderer
 from .event_bus import EventBus
+
+
+class LifecycleState(Enum):
+    CREATED = "created"
+    CORE_READY = "core_ready"
+    RUNTIME_READY = "runtime_ready"
+    RUNTIME_FAILED = "runtime_failed"
 
 
 class AstrBotCoreLifecycle:
@@ -526,7 +525,7 @@ class AstrBotCoreLifecycle:
         self.start_time = int(time.time())
 
         # 初始化当前任务列表
-        self.curr_tasks: list[asyncio.Task] = []
+        self.curr_tasks = []
 
         # 根据配置实例化各个平台适配器
         await self.platform_manager.initialize()
