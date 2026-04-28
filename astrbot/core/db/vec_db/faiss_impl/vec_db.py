@@ -109,13 +109,22 @@ class FaissVecDB(BaseVecDB):
 
         start = time.time()
         logger.debug(f"Generating embeddings for {len(contents)} contents...")
-        vectors = await self.embedding_provider.get_embeddings_batch(
-            contents,
-            batch_size=batch_size,
-            tasks_limit=tasks_limit,
-            max_retries=max_retries,
-            progress_callback=progress_callback,
-        )
+        try:
+            vectors = await self.embedding_provider.get_embeddings_batch(
+                contents,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+        except KnowledgeBaseUploadError:
+            raise
+        except Exception as exc:
+            raise KnowledgeBaseUploadError(
+                stage="embedding",
+                user_message=f"向量化失败：批量生成嵌入向量时出错。{exc}",
+                details={"content_count": content_count},
+            ) from exc
         end = time.time()
         logger.debug(
             f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds.",
