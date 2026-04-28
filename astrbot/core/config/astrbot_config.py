@@ -103,7 +103,8 @@ class AstrBotConfig(dict):
         for key, value in refer_conf.items():
             if key not in conf:
                 # 配置项不存在，插入默认值
-                logger.info("检查到配置项不存在，已插入默认值")
+                path_ = path + "." + key if path else key
+                logger.info("Config key missing; added default.")
                 new_conf[key] = value
                 has_new = True
             elif conf[key] is None:
@@ -132,12 +133,16 @@ class AstrBotConfig(dict):
         # 检查是否存在参考配置中没有的配置项
         for key in list(conf.keys()):
             if key not in refer_conf:
-                logger.info("检查到未知配置项，将从当前配置中删除")
+                path_ = path + "." + key if path else key
+                logger.info("Config key removed: %s", path_)
                 has_new = True
 
         # 顺序不一致也算作变更
         if list(conf.keys()) != list(new_conf.keys()):
-            logger.info("检查到配置项顺序不一致，已重新排序")
+            if path:
+                logger.info("Config key order fixed: %s", path)
+            else:
+                logger.info("Config key order fixed")
             has_new = True
 
         # 更新原始配置

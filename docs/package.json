@@ -1,7 +1,7 @@
 {
   "scripts": {
     "docs:dev": "vitepress dev --host",
-    "docs:build": "vitepress build",
+    "docs:build": "node scripts/copy-deploy-cli.mjs && vitepress build",
     "docs:preview": "vitepress preview"
   },
   "devDependencies": {
