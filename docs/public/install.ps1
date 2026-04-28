@@ -1,4 +1,4 @@
-﻿# deploy-cli.ps1 - Install astrbot with uv on Windows PowerShell.
+# deploy-cli.ps1 - Install astrbot with uv on Windows PowerShell.
 
 #Requires -Version 7.0
 
