@@ -100,7 +100,11 @@
       "passwordLowercase": "密码必须包含至少一个小写字母",
       "passwordDigit": "密码必须包含至少一个数字",
       "passwordMatch": "两次输入的密码不一致",
-      "usernameMinLength": "用户名长度至少3位"
+      "usernameMinLength": "用户名长度至少3位",
+      "strengthWeak": "弱",
+      "strengthFair": "一般",
+      "strengthGood": "好",
+      "strengthStrong": "强"
     },
     "actions": {
       "save": "保存修改",

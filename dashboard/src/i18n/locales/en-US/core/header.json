@@ -100,7 +100,11 @@
       "passwordLowercase": "Password must include at least one lowercase letter",
       "passwordDigit": "Password must include at least one digit",
       "passwordMatch": "Passwords do not match",
-      "usernameMinLength": "Username must be at least 3 characters"
+      "usernameMinLength": "Username must be at least 3 characters",
+      "strengthWeak": "Weak",
+      "strengthFair": "Fair",
+      "strengthGood": "Good",
+      "strengthStrong": "Strong"
     },
     "actions": {
       "save": "Save Changes",

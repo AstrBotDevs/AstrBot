@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 274 icons */
+/* Auto-generated MDI subset – 260 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -220,6 +220,10 @@
   content: "\F0765";
 }
 
+.mdi-circle-outline::before {
+  content: "\F0766";
+}
+
 .mdi-circle-small::before {
   content: "\F09DF";
 }
@@ -242,10 +246,6 @@
 
 .mdi-cloud-upload::before {
   content: "\F0167";
-}
-
-.mdi-code-braces::before {
-  content: "\F0169";
 }
 
 .mdi-code-json::before {
@@ -416,10 +416,6 @@
   content: "\F022E";
 }
 
-.mdi-file-delimited-outline::before {
-  content: "\F0EA5";
-}
-
 .mdi-file-document::before {
   content: "\F0219";
 }
@@ -438,10 +434,6 @@
 
 .mdi-file-excel-box::before {
   content: "\F021C";
-}
-
-.mdi-file-music-outline::before {
-  content: "\F0E2A";
 }
 
 .mdi-file-outline::before {
@@ -464,14 +456,6 @@
   content: "\F0A4D";
 }
 
-.mdi-file-upload-outline::before {
-  content: "\F0A4E";
-}
-
-.mdi-file-video-outline::before {
-  content: "\F0E2C";
-}
-
 .mdi-file-word-box::before {
   content: "\F022D";
 }
@@ -482,14 +466,6 @@
 
 .mdi-filter-variant::before {
   content: "\F0236";
-}
-
-.mdi-flash::before {
-  content: "\F0241";
-}
-
-.mdi-flash-off::before {
-  content: "\F0243";
 }
 
 .mdi-folder::before {
@@ -616,36 +592,8 @@
   content: "\F0318";
 }
 
-.mdi-language-css3::before {
-  content: "\F031C";
-}
-
-.mdi-language-html5::before {
-  content: "\F031D";
-}
-
-.mdi-language-java::before {
-  content: "\F0B37";
-}
-
-.mdi-language-javascript::before {
-  content: "\F031E";
-}
-
 .mdi-language-markdown::before {
   content: "\F0354";
-}
-
-.mdi-language-markdown-outline::before {
-  content: "\F0F5B";
-}
-
-.mdi-language-python::before {
-  content: "\F0320";
-}
-
-.mdi-language-typescript::before {
-  content: "\F06E6";
 }
 
 .mdi-layers-outline::before {
@@ -906,10 +854,6 @@
 
 .mdi-robot-outline::before {
   content: "\F167A";
-}
-
-.mdi-send::before {
-  content: "\F048A";
 }
 
 .mdi-server::before {

@@ -145,6 +145,48 @@ const usernameRules = computed(() => [
     t("core.header.accountDialog.validation.usernameMinLength"),
 ]);
 
+// 密码强度校验
+const passwordChecks = computed(() => [
+  {
+    key: "minLength",
+    label: t("core.header.accountDialog.validation.passwordMinLength"),
+    pass: newPassword.value.length >= 12,
+  },
+  {
+    key: "uppercase",
+    label: t("core.header.accountDialog.validation.passwordUppercase"),
+    pass: /[A-Z]/.test(newPassword.value),
+  },
+  {
+    key: "lowercase",
+    label: t("core.header.accountDialog.validation.passwordLowercase"),
+    pass: /[a-z]/.test(newPassword.value),
+  },
+  {
+    key: "digit",
+    label: t("core.header.accountDialog.validation.passwordDigit"),
+    pass: /\d/.test(newPassword.value),
+  },
+]);
+const passwordStrengthPercent = computed(() => {
+  const passed = passwordChecks.value.filter((c) => c.pass).length;
+  return (passed / passwordChecks.value.length) * 100;
+});
+const passwordStrengthColor = computed(() => {
+  const pct = passwordStrengthPercent.value;
+  if (pct <= 25) return "error";
+  if (pct <= 50) return "warning";
+  if (pct <= 75) return "info";
+  return "success";
+});
+const passwordStrengthText = computed(() => {
+  const pct = passwordStrengthPercent.value;
+  if (pct <= 25) return t("core.header.accountDialog.validation.strengthWeak");
+  if (pct <= 50) return t("core.header.accountDialog.validation.strengthFair");
+  if (pct <= 75) return t("core.header.accountDialog.validation.strengthGood");
+  return t("core.header.accountDialog.validation.strengthStrong");
+});
+
 // 显示密码相关
 const showPassword = ref(false);
 const showNewPassword = ref(false);
@@ -1178,6 +1220,40 @@ const isChristmas = computed(() => {
             class="mb-4"
             @click:append-inner="showNewPassword = !showNewPassword"
           />
+
+          <!-- 密码强度指示器 -->
+          <div v-if="newPassword.length > 0" class="mb-4">
+            <v-progress-linear
+              :model-value="passwordStrengthPercent"
+              :color="passwordStrengthColor"
+              height="6"
+              rounded
+              class="mb-2"
+            />
+            <div class="d-flex align-center mb-2">
+              <span
+                class="text-caption font-weight-medium"
+                :class="`text-${passwordStrengthColor}`"
+              >
+                {{ passwordStrengthText }}
+              </span>
+            </div>
+            <div class="password-checklist">
+              <div
+                v-for="check in passwordChecks"
+                :key="check.key"
+                class="d-flex align-center mb-1"
+                :class="check.pass ? 'text-success' : 'text-medium-emphasis'"
+              >
+                <v-icon
+                  :icon="check.pass ? 'mdi-check-circle' : 'mdi-circle-outline'"
+                  size="small"
+                  class="mr-1"
+                />
+                <span class="text-caption">{{ check.label }}</span>
+              </div>
+            </div>
+          </div>
 
           <v-text-field
             v-model="confirmPassword"
