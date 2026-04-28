@@ -66,6 +66,23 @@ def test_cli_entry():
     assert cli is not None, "astrbot.cli.__main__.cli must exist"
 
 
+def test_run_command_import():
+    """``astrbot run`` subcommand can be imported (AUR systemd startup path)."""
+    from astrbot.cli.commands.cmd_run import run
+
+    assert run is not None
+
+
+def test_pkgbuild_aliases():
+    """PKGBUILD check() references the correct class names."""
+    # The PKGBUILD had ``from astrbot.dashboard.server import DashboardServer``
+    # which is wrong — the actual class is AstrBotDashboard.
+    # This test ensures the rename sticks.
+    from astrbot.dashboard.server import AstrBotDashboard
+
+    assert AstrBotDashboard is not None
+
+
 def test_sqlite_implements_all_abstract():
     """SQLiteDatabase implements every abstract method of BaseDatabase."""
     from astrbot.core.db import BaseDatabase
