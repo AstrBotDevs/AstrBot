@@ -132,6 +132,12 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
     async def fake_serve(app, config, shutdown_trigger):
         return config
 
+    def capture(messages):
+        def append(message, *args):
+            messages.append(message % args if args else message)
+
+        return append
+
     try:
         core_lifecycle_td.astrbot_config["dashboard"]["ssl"] = {
             "enable": True,
@@ -142,21 +148,22 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
         monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
         monkeypatch.setattr(
             "astrbot.dashboard.server.logger.warning",
-            lambda message: warning_messages.append(message),
+            capture(warning_messages),
         )
         monkeypatch.setattr(
             "astrbot.dashboard.server.logger.info",
-            lambda message: info_messages.append(message),
+            capture(info_messages),
         )
 
         config = await server.run()
 
         assert getattr(config, "certfile", None) is None
         assert getattr(config, "keyfile", None) is None
-        assert any("cert_file 和 key_file" in message for message in warning_messages)
         assert any(
-            "正在启动 WebUI, 监听地址: http://" in message for message in info_messages
+            "cert_file or key_file is missing" in message
+            for message in warning_messages
         )
+        assert any("Starting WebUI at http://" in message for message in info_messages)
     finally:
         core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
 

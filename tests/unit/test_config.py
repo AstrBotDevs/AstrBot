@@ -303,14 +303,17 @@ class TestConfigValidation:
         with open(temp_config_path, "w", encoding="utf-8-sig") as f:
             json.dump(existing_config, f)
 
-        monkeypatch.setattr(astrbot_config.logger, "info", messages.append)
+        def capture_info(message, *args):
+            messages.append(message % args if args else message)
+
+        monkeypatch.setattr(astrbot_config.logger, "info", capture_info)
 
         AstrBotConfig(config_path=temp_config_path, default_config=default_config)
 
         assert messages
         assert all("secret-value" not in message for message in messages)
         assert all("api_key" not in message for message in messages)
-        assert any("配置项不存在" in message for message in messages)
+        assert any("Config key missing" in message for message in messages)
 
 
 class TestConfigHotReload:
