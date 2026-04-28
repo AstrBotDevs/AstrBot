@@ -733,7 +733,7 @@ async function handleSendMessage() {
 
   // 清空输入和附件和引用
   prompt.value = "";
-  clearStaged();
+  clearStaged({ revokeUrls: false });
   clearReply();
 
   // 获取选择的提供商和模型

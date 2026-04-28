@@ -226,7 +226,7 @@ async function handleSendMessage() {
 
     // 清空输入和附件
     prompt.value = "";
-    clearStaged();
+    clearStaged({ revokeUrls: false });
 
     // 获取选择的提供商和模型
     const selection = chatInputRef.value?.getCurrentSelection();

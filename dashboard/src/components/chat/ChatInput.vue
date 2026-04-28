@@ -16,6 +16,7 @@
         boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
         backgroundColor: isDark ? 'rgba(15, 15, 22, 0.6)' : 'transparent',
         position: 'relative',
+        transition: 'min-height 0.2s ease, padding 0.2s ease',
       }"
     >
       <!-- 拖拽上传遮罩 -->
@@ -72,6 +73,7 @@
           font-family: inherit;
           font-size: 16px;
           background-color: var(--v-theme-surface);
+          transition: height 0.16s ease;
         "
         @keydown="handleKeyDown"
       />
@@ -407,6 +409,44 @@ const canSend = computed(() => {
     (props.stagedFiles && props.stagedFiles.length > 0)
   );
 });
+
+const fileTypeStyles: Record<
+  string,
+  { color: string; icon: string; label: string }
+> = {
+  pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
+  txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
+  md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
+  doc: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOC" },
+  docx: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOCX" },
+  xls: { color: "#217346", icon: "mdi-file-excel-box", label: "XLS" },
+  xlsx: { color: "#217346", icon: "mdi-file-excel-box", label: "XLSX" },
+  csv: { color: "#217346", icon: "mdi-file-delimited-outline", label: "CSV" },
+  zip: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "ZIP" },
+  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
+  js: { color: "#b8860b", icon: "mdi-language-javascript", label: "JS" },
+  ts: { color: "#3178c6", icon: "mdi-language-typescript", label: "TS" },
+  html: { color: "#e34c26", icon: "mdi-language-html5", label: "HTML" },
+  css: { color: "#264de4", icon: "mdi-language-css3", label: "CSS" },
+  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
+};
+
+function fileExtension(file: StagedFileInfo) {
+  const name = file.original_name || file.filename || "";
+  const extension = name.split(".").pop()?.toLowerCase() || "";
+  return extension === name.toLowerCase() ? "" : extension;
+}
+
+function filePresentation(file: StagedFileInfo) {
+  const extension = fileExtension(file);
+  return (
+    fileTypeStyles[extension] || {
+      color: "#607d8b",
+      icon: "mdi-file-document-outline",
+      label: extension ? extension.slice(0, 4).toUpperCase() : "FILE",
+    }
+  );
+}
 
 // Ctrl+B 长按录音相关
 const ctrlKeyDown = ref(false);
