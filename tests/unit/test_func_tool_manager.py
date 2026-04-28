@@ -114,6 +114,7 @@ async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
         async def exec(
             self, command, cwd=None, background=False, env=None, timeout=None
         ):
+            assert env is not None
             env["MUTATED_BY_FAKE_SHELL"] = command
             calls.append(env)
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
@@ -162,6 +163,7 @@ async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
         async def exec(
             self, command, cwd=None, background=False, env=None, timeout=None
         ):
+            assert env is not None
             env["MUTATED_BY_FAKE_SHELL"] = command
             calls.append(env)
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
