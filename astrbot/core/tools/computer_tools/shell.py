@@ -1,6 +1,7 @@
 import json
 import shlex
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import Any
 
 from astrbot.api import FunctionTool
@@ -15,6 +16,12 @@ from .util import check_admin_permission, is_local_runtime, workspace_root
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
 }
+
+
+class BackgroundKind(Enum):
+    EXPLICIT_LAUNCHER = auto()
+    TRAILING_AMP = auto()
+    NONE = auto()
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
@@ -89,30 +96,32 @@ class ExecuteShellTool(FunctionTool):
 def _prepare_shell_background(command: str, background: bool) -> tuple[str, bool]:
     if not background:
         return command, False
-    if _uses_explicit_background_launcher(command):
-        return command, False
 
-    stripped_command = _strip_plain_trailing_background_operator(command)
-    if stripped_command is not None:
-        return stripped_command, True
+    kind = _background_kind(command)
+    if kind is BackgroundKind.EXPLICIT_LAUNCHER:
+        return command, False
+    if kind is BackgroundKind.TRAILING_AMP:
+        stripped_command = _strip_plain_trailing_background_operator(command)
+        if stripped_command is not None:
+            return stripped_command, True
+        return command, True
     return command, True
 
 
-def _uses_explicit_background_launcher(command: str) -> bool:
+def _background_kind(command: str) -> BackgroundKind:
     tokens = _command_tokens_before_comment(command)
     if not tokens:
-        return False
-    return tokens[0].lower() in {"nohup", "setsid", "disown", "start", "start-process"}
+        return BackgroundKind.NONE
+
+    if tokens[0].lower() in {"nohup", "setsid", "disown", "start", "start-process"}:
+        return BackgroundKind.EXPLICIT_LAUNCHER
+    if tokens[-1] == "&":
+        return BackgroundKind.TRAILING_AMP
+    return BackgroundKind.NONE
 
 
 def _is_self_detached_command(command: str) -> bool:
-    tokens = _command_tokens_before_comment(command)
-    if not tokens:
-        return False
-
-    if _uses_explicit_background_launcher(command):
-        return True
-    return tokens[-1] == "&"
+    return _background_kind(command) is not BackgroundKind.NONE
 
 
 def _command_tokens_before_comment(command: str) -> list[str]:
@@ -133,57 +142,9 @@ def _command_tokens_before_comment(command: str) -> list[str]:
 
 
 def _strip_plain_trailing_background_operator(command: str) -> str | None:
-    effective_end = _command_effective_end(command)
-    tail = command[:effective_end].rstrip()
-    if not tail.endswith("&"):
-        return None
-    if not _is_unquoted_char_at(tail, len(tail) - 1):
+    tokens = _command_tokens_before_comment(command)
+    if not tokens or tokens[-1] != "&":
         return None
 
-    stripped = tail[:-1].rstrip()
-    return stripped if stripped != tail else None
-
-
-def _command_effective_end(command: str) -> int:
-    quote: str | None = None
-    escaped = False
-    for index, char in enumerate(command):
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\" and quote != "'":
-            escaped = True
-            continue
-        if char in {"'", '"'}:
-            if quote is None:
-                quote = char
-            elif quote == char:
-                quote = None
-            continue
-        if (
-            char == "#"
-            and quote is None
-            and (index == 0 or command[index - 1].isspace())
-        ):
-            return index
-    return len(command)
-
-
-def _is_unquoted_char_at(command: str, target_index: int) -> bool:
-    quote: str | None = None
-    escaped = False
-    for index, char in enumerate(command):
-        if index == target_index:
-            return quote is None and not escaped
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\" and quote != "'":
-            escaped = True
-            continue
-        if char in {"'", '"'}:
-            if quote is None:
-                quote = char
-            elif quote == char:
-                quote = None
-    return False
+    stripped = " ".join(tokens[:-1])
+    return stripped if stripped else ""
