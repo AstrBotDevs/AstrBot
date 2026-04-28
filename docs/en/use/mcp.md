@@ -96,6 +96,48 @@ Configure it in the AstrBot WebUI:
 
 That's it.
 
+## OAuth 2.0 MCP Servers
+
+AstrBot now supports OAuth 2.0 login for remote MCP servers directly in the WebUI.
+
+A typical HTTP MCP configuration looks like this:
+
+```json
+{
+    "transport": "streamable_http",
+    "url": "https://example.com/mcp",
+    "headers": {},
+    "timeout": 5,
+    "sse_read_timeout": 300,
+    "oauth2": {
+        "grant_type": "authorization_code",
+        "client_name": "AstrBot MCP Client"
+    }
+}
+```
+
+If the server uses pre-issued client credentials, switch to `client_credentials`:
+
+```json
+{
+    "transport": "streamable_http",
+    "url": "https://example.com/mcp",
+    "oauth2": {
+        "grant_type": "client_credentials",
+        "client_id": "your-client-id",
+        "client_secret": "your-client-secret",
+        "scope": "read write"
+    }
+}
+```
+
+In the MCP server dialog inside the WebUI:
+
+1. Paste a JSON configuration that includes the `oauth2` field.
+2. Click `OAuth 2.0 Login`.
+3. Complete the login flow in the newly opened authorization page.
+4. Return to AstrBot, wait until authorization completes, then test or save the server.
+
 Reference links:
 
 1. Learn how to use MCP here: [Model Context Protocol](https://modelcontextprotocol.io/introduction)

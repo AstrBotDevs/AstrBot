@@ -18,6 +18,7 @@
       "useTemplateStdio": "Stdio Template",
       "useTemplateStreamableHttp": "Streamable HTTP Template",
       "useTemplateSse": "SSE Template",
+      "useTemplateOauth2": "OAuth 2.0 Template",
       "sync": "Sync MCP Servers"
     },
     "empty": "No MCP servers available, click Add Server to add one",
@@ -25,7 +26,10 @@
       "noTools": "No available tools",
       "availableTools": "Available tools",
       "configSummary": "Config: {keys}",
-      "noConfig": "No configuration set"
+      "noConfig": "No configuration set",
+      "oauthAuthorized": "OAuth 2.0 authorized",
+      "oauthLoginRequired": "OAuth 2.0 login required",
+      "oauthClientCredentials": "OAuth 2.0 client_credentials"
     }
   },
   "functionTools": {
@@ -92,7 +96,17 @@
         "cancel": "Cancel",
         "save": "Save",
         "testConnection": "Test Connection",
+        "oauthLogin": "OAuth 2.0 Login",
         "sync": "Sync"
+      },
+      "oauth": {
+        "status": {
+          "notAuthorized": "Authorization code OAuth 2.0 was detected. Complete login before saving.",
+          "awaitingUser": "Waiting for user authorization. Please use the link or QR code below.",
+          "authorizing": "Completing the OAuth authorization.",
+          "authorized": "OAuth 2.0 authorization completed.",
+          "failed": "OAuth 2.0 authorization failed."
+        }
       },
       "tips": {
         "timeoutConfig": "Please configure tool call timeout separately in the configuration page",
@@ -166,6 +180,10 @@
     "toggleToolSuccess": "Tool status toggled successfully!",
     "toggleToolReadonly": "Builtin tools are read-only and cannot be enabled or disabled.",
     "toggleToolError": "Failed to toggle tool status: {error}",
-    "testError": "Test connection failed: {error}"
+    "testError": "Test connection failed: {error}",
+    "oauthPopupOpened": "The OAuth login page has been opened. Complete authorization in the new window.",
+    "oauthPopupBlocked": "The browser blocked the OAuth popup. Allow popups and try again.",
+    "oauthAuthorized": "OAuth 2.0 authorization completed!",
+    "oauthStartError": "Failed to start OAuth 2.0 authorization: {error}"
   }
 }

@@ -16,6 +16,11 @@ import aiohttp
 from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+from astrbot.core.agent.mcp_oauth import (
+    MCPOAuthManager,
+    get_mcp_oauth_state,
+    has_mcp_oauth_config,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.tools.registry import (
     ensure_builtin_tools_loaded,
@@ -225,6 +230,7 @@ class FunctionToolManager:
         self._timeout_warn_lock = threading.Lock()
         self._runtime_lock = asyncio.Lock()
         self._mcp_starting: set[str] = set()
+        self._mcp_oauth_manager = MCPOAuthManager()
         self._init_timeout_default = _resolve_timeout(
             timeout=None,
             env_name=MCP_INIT_TIMEOUT_ENV,
@@ -711,7 +717,7 @@ class FunctionToolManager:
 
     @staticmethod
     async def test_mcp_server_connection(config: dict) -> list[str]:
-        if "url" in config:
+        if "url" in config and not has_mcp_oauth_config(config):
             success, error_msg = await _quick_test_mcp_connection(config)
             if not success:
                 raise Exception(error_msg)
@@ -726,6 +732,43 @@ class FunctionToolManager:
             logger.debug("Cleaning up MCP client after testing connection.")
             await mcp_client.cleanup()
         return tool_names
+
+    async def get_mcp_oauth_state(self, config: dict) -> dict[str, Any]:
+        return await get_mcp_oauth_state(config)
+
+    async def start_mcp_oauth_authorization(
+        self,
+        config: dict,
+        *,
+        callback_base_url: str,
+        server_name: str | None = None,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        flow = await self._mcp_oauth_manager.start_authorization(
+            config,
+            callback_base_url=callback_base_url,
+            server_name=server_name,
+            force=force,
+        )
+        return self._mcp_oauth_manager.get_flow_status(flow.flow_id)
+
+    def get_mcp_oauth_flow_status(self, flow_id: str) -> dict[str, Any]:
+        return self._mcp_oauth_manager.get_flow_status(flow_id)
+
+    async def submit_mcp_oauth_callback(
+        self,
+        flow_id: str | None,
+        *,
+        code: str | None,
+        state: str | None,
+        error: str | None,
+    ) -> None:
+        await self._mcp_oauth_manager.submit_callback(
+            flow_id,
+            code=code,
+            state=state,
+            error=error,
+        )
 
     async def enable_mcp_server(
         self,
