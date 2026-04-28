@@ -124,7 +124,7 @@ async def test_update_kb_raises_error_and_preserves_old_instance_when_reinit_fai
     with patch.object(KBHelper, "initialize", new_callable=AsyncMock) as mock_init:
         mock_init.side_effect = Exception("Embedding provider unavailable")
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(KnowledgeBaseUploadError) as exc_info:
             await kb_mgr.update_kb(
                 kb_id=mock_knowledge_base.kb_id,
                 kb_name="updated_kb",
@@ -183,6 +183,7 @@ async def test_update_kb_raises_user_facing_error_for_dimension_mismatch(
                 embedding_provider_id="new-embedding-provider",
             )
 
+    assert exc_info.value.stage == "embedding"
     assert "知识库索引维度与当前嵌入模型维度不一致" in str(exc_info.value)
     assert kb_mgr.kb_insts[mock_knowledge_base.kb_id] is old_helper
     assert old_helper.kb.kb_name == "test_kb"

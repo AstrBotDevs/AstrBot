@@ -249,7 +249,7 @@ class KnowledgeBaseManager:
                 f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败，继续使用旧实例: {e}",
                 exc_info=True,
             )
-            raise ValueError(str(e)) from e
+            raise
         except Exception as e:
             # Roll back in-memory settings and keep current helper available.
             rollback_state()
