@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import zoneinfo
 from collections.abc import Callable
@@ -14,9 +13,10 @@ from filelock import FileLock, Timeout
 
 from astrbot.cli.i18n import t
 from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.utils.astrbot_path import (
-    get_astrbot_data_path,
-    get_astrbot_root,
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_root
+from astrbot.core.utils.auth_password import (
+    hash_dashboard_password,
+    validate_dashboard_password,
 )
 
 # --- Validators ---
@@ -49,7 +49,11 @@ def _validate_dashboard_username(value: str) -> str:
 def _validate_dashboard_password(value: str) -> str:
     if not value:
         raise click.ClickException(t("config_password_empty"))
-    return hashlib.md5(value.encode()).hexdigest()
+    try:
+        validate_dashboard_password(value)
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+    return hash_dashboard_password(value)
 
 
 def _validate_timezone(value: str) -> str:
