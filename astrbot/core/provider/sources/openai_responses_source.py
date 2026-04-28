@@ -146,7 +146,11 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 converted.append(tool)
                 continue
             function = tool.get("function", {})
-            item = {"type": "function", "name": function.get("name", "")}
+            item = {
+                "type": "function",
+                "name": function.get("name", ""),
+                "strict": False,
+            }
             if function.get("description"):
                 item["description"] = function["description"]
             if "parameters" in function:

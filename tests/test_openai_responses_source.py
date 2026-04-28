@@ -162,6 +162,7 @@ async def test_responses_function_tools_are_flat_function_schemas():
             {
                 "type": "function",
                 "name": "lookup",
+                "strict": False,
                 "description": "Lookup an item",
                 "parameters": {
                     "type": "object",
