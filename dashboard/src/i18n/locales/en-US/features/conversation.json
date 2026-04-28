@@ -27,6 +27,7 @@
       "type": "Type",
       "cid": "Conversation ID",
       "umo": "Unified Message Origin",
+      "isReset": "Source",
       "sessionId": "Session ID",
       "createdAt": "Created At",
       "updatedAt": "Updated At",
