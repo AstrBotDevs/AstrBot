@@ -1108,7 +1108,7 @@
         "hint": "xAI Responses 的网页搜索工具配置。",
         "enabled": {
           "description": "启用 Web Search",
-          "hint": "启用后，将向 xAI Responses API 注册 web_search 工具（按需计费）。"
+          "hint": "启用后，将向 xAI Responses API 注册 web_search 工具。"
         },
         "allowed_domains": {
           "description": "允许搜索的域名",
@@ -1128,7 +1128,7 @@
         "hint": "xAI Responses 的 X/Twitter 搜索工具配置。",
         "enabled": {
           "description": "启用 X Search",
-          "hint": "启用后，将向 xAI Responses API 注册 x_search 工具（按需计费）。"
+          "hint": "启用后，将向 xAI Responses API 注册 x_search 工具。"
         },
         "allowed_x_handles": {
           "description": "允许搜索的 X 账号",
