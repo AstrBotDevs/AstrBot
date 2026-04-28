@@ -459,6 +459,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             case botpy.interaction.Interaction():
                 # 按钮点击回调的回复：按 chat_type 路由
                 # chat_type: 0=频道 / 1=群 / 2=C2C
+                #
+                # 已知限制：本分支不上传 QQ 富媒体（msg_type=7），因此不支持语音/视频/文件
+                if record_file_path or video_file_source or file_source:
+                    logger.warning(
+                        "[QQOfficial] Interaction 回调暂不支持发送语音/视频/文件，"
+                        "本次发送已跳过（chain 中检测到非图片媒体）。"
+                    )
+                    return None
                 chat_type = source.chat_type
                 if chat_type == 1 and source.group_openid:
                     ret = await self._send_with_stream_newline_fix(
