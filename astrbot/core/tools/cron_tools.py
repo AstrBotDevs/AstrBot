@@ -263,7 +263,9 @@ class CreateActiveCronTool(FutureTaskTool):
         self.parameters = params
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
     ) -> ToolExecResult:
         # Force action to 'create' when this convenience tool is used.
         kwargs.setdefault("action", "create")
@@ -283,7 +285,9 @@ class DeleteCronJobTool(FutureTaskTool):
         self.parameters = params
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
     ) -> ToolExecResult:
         kwargs.setdefault("action", "delete")
         return await super().call(context, **kwargs)
@@ -295,7 +299,9 @@ class ListCronJobsTool(FutureTaskTool):
         self.name = "list_future_tasks"
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs,
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
     ) -> ToolExecResult:
         kwargs.setdefault("action", "list")
         return await super().call(context, **kwargs)

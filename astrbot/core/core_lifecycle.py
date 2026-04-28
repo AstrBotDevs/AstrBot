@@ -331,7 +331,8 @@ class AstrBotCoreLifecycle:
             try:
                 # attempt graceful termination of partial runtime subsystems
                 if getattr(self, "plugin_manager", None) and hasattr(
-                    self.plugin_manager, "cleanup_loaded_plugins",
+                    self.plugin_manager,
+                    "cleanup_loaded_plugins",
                 ):
                     await self.plugin_manager.cleanup_loaded_plugins()
             except Exception:
@@ -341,7 +342,8 @@ class AstrBotCoreLifecycle:
 
             try:
                 if getattr(self, "provider_manager", None) and hasattr(
-                    self.provider_manager, "terminate",
+                    self.provider_manager,
+                    "terminate",
                 ):
                     await self.provider_manager.terminate()
             except Exception:
@@ -351,7 +353,8 @@ class AstrBotCoreLifecycle:
 
             try:
                 if getattr(self, "platform_manager", None) and hasattr(
-                    self.platform_manager, "terminate",
+                    self.platform_manager,
+                    "terminate",
                 ):
                     await self.platform_manager.terminate()
             except Exception:
@@ -361,7 +364,8 @@ class AstrBotCoreLifecycle:
 
             try:
                 if getattr(self, "kb_manager", None) and hasattr(
-                    self.kb_manager, "terminate",
+                    self.kb_manager,
+                    "terminate",
                 ):
                     await self.kb_manager.terminate()
             except Exception:
@@ -639,7 +643,9 @@ class AstrBotCoreLifecycle:
 
         # Terminate plugins if plugin_manager and context exist
         if getattr(self, "plugin_manager", None) and getattr(
-            self.plugin_manager, "context", None,
+            self.plugin_manager,
+            "context",
+            None,
         ):
             try:
                 for plugin in self.plugin_manager.context.get_all_stars():

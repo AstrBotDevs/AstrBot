@@ -5,6 +5,8 @@ import uuid
 import aiofiles
 import anyio
 
+from typing import Any
+
 from astrbot.core import logger
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
@@ -14,7 +16,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 try:
     import genie_tts as genie
 except ImportError:
-    genie = None  # type: ignore
+    genie: Any = None
 
 
 @register_provider_adapter(
@@ -39,12 +41,12 @@ class GenieTTSProvider(TTSProvider):
         refer_text = provider_config.get("genie_refer_text", "")
 
         try:
-            genie.load_character(  # type: ignore
+            genie.load_character(
                 character_name=self.character_name,
                 language=language,
                 onnx_model_dir=model_dir,
             )
-            genie.set_reference_audio(  # type: ignore
+            genie.set_reference_audio(
                 character_name=self.character_name,
                 audio_path=refer_audio_path,
                 audio_text=refer_text,
@@ -66,7 +68,7 @@ class GenieTTSProvider(TTSProvider):
 
         def _generate(save_path: str) -> None:
             assert genie is not None
-            genie.tts(  # type: ignore
+            genie.tts(
                 character_name=self.character_name,
                 text=text,
                 save_path=save_path,
@@ -105,7 +107,7 @@ class GenieTTSProvider(TTSProvider):
 
                 def _generate(save_path: str, t: str) -> None:
                     assert genie is not None
-                    genie.tts(  # type: ignore
+                    genie.tts(
                         character_name=self.character_name,
                         text=t,
                         save_path=save_path,

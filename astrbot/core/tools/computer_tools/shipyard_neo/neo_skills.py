@@ -83,7 +83,7 @@ class GetExecutionHistoryTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         exec_type: str | None = None,
@@ -126,7 +126,7 @@ class AnnotateExecutionTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         execution_id: str,
@@ -177,7 +177,7 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         payload: dict[str, Any] | list[Any],
@@ -207,7 +207,7 @@ class GetSkillPayloadTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         payload_ref: str,
@@ -252,7 +252,7 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         skill_key: str,
@@ -289,7 +289,7 @@ class ListSkillCandidatesTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         status: str | None = None,
@@ -327,7 +327,7 @@ class EvaluateSkillCandidateTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         candidate_id: str,
@@ -379,7 +379,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         candidate_id: str,
@@ -437,7 +437,7 @@ class ListSkillReleasesTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         skill_key: str | None = None,
@@ -473,7 +473,7 @@ class RollbackSkillReleaseTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         release_id: str,
@@ -503,7 +503,7 @@ class SyncSkillReleaseTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         release_id: str | None = None,

@@ -237,10 +237,12 @@ class Context:
         }
         if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
             other_kwargs.setdefault(
-                "tool_result_overflow_dir", get_astrbot_system_tmp_path(),
+                "tool_result_overflow_dir",
+                get_astrbot_system_tmp_path(),
             )
             other_kwargs.setdefault(
-                "read_tool", request.func_tool.get_tool("astrbot_file_read_tool"),
+                "read_tool",
+                request.func_tool.get_tool("astrbot_file_read_tool"),
             )
 
         await agent_runner.reset(

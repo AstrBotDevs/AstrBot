@@ -32,7 +32,7 @@ def _get_local_tools() -> list[ToolSchema]:
 
     shell = ExecuteShellTool()
     python = LocalPythonTool()
-    return [shell, python]  # type: ignore[return-value]
+    return [shell, python]
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ class ComputerToolProvider:
             SyncSkillReleaseTool,
         )
 
-        all_tools: list[ToolSchema] = [  # type: ignore
+        all_tools: list[ToolSchema] = [
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),

@@ -3,6 +3,7 @@ import base64
 import logging
 import os
 import uuid
+from typing import Any
 
 import aiofiles
 import aiohttp
@@ -18,8 +19,8 @@ try:
 except (
     ImportError
 ):  # pragma: no cover - older dashscope versions without Qwen TTS support
-    MultiModalConversation = None  # type: ignore
-    _MultiModalConversationType = None  # type: ignore
+    MultiModalConversation: Any = None
+    _MultiModalConversationType: Any = None
 
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
@@ -85,7 +86,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             logging.warning(
                 "No voice specified for Qwen TTS model, using default 'Cherry'.",
             )
-        return MultiModalConversation.call(**kwargs)  # type: ignore[call-arg]
+        return MultiModalConversation.call(**kwargs)
 
     async def _synthesize_with_qwen_tts(
         self,

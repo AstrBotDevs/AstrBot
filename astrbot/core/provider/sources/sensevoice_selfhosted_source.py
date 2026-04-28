@@ -9,9 +9,9 @@ from datetime import datetime
 from typing import Protocol
 
 import anyio
-from funasr_onnx import SenseVoiceSmall  # type: ignore
+from funasr_onnx import SenseVoiceSmall
 from funasr_onnx.utils.postprocess_utils import (
-    rich_transcription_postprocess,  # type: ignore
+    rich_transcription_postprocess,
 )
 
 from astrbot.core import logger

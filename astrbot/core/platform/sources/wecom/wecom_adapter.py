@@ -109,7 +109,7 @@ class WecomServer:
             raise
         else:
             # parse_message returns a BaseMessage (wechatpy). Keep a typed reference.
-            msg: BaseMessage = parse_message(xml)  # type: ignore[assignment]
+            msg: BaseMessage = parse_message(xml)  # type: ignore
             logger.info(f"解析成功: {msg}")
             if self.callback:
                 await self.callback(msg)
@@ -141,7 +141,8 @@ class WecomPlatformAdapter(Platform):
         # prefer required access for fields we expect to exist
         self.settingss = platform_settings
         api_base_url = platform_config.get(
-            "api_base_url", "https://qyapi.weixin.qq.com/cgi-bin/",
+            "api_base_url",
+            "https://qyapi.weixin.qq.com/cgi-bin/",
         )
         self.unified_webhook_mode = bool(
             platform_config.get("unified_webhook_mode", False),
@@ -173,10 +174,10 @@ class WecomPlatformAdapter(Platform):
             # attach runtime attributes onto client for use at runtime
             # assign runtime-only attributes directly; signal to type-checkers that these attributes may not be
             # statically declared on WeChatClient with a precise attr-defined ignore instead of blanket ignores.
-            self.client.kf = self.wechat_kf_api  # type: ignore[attr-defined]
-            self.client.kf_message = self.wechat_kf_message_api  # type: ignore[attr-defined]
+            self.client.kf = self.wechat_kf_api  # type: ignore
+            self.client.kf_message = self.wechat_kf_message_api  # type: ignore
         # ensure API_BASE_URL is set as string (assign directly, it's a runtime extension)
-        self.client.API_BASE_URL = self.api_base_url  # type: ignore[attr-defined]
+        self.client.API_BASE_URL = self.api_base_url  # type: ignore
 
         async def callback(msg: BaseMessage) -> None:
             # parse_message may yield messages with .type and ._data; normalize _data to dict

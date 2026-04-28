@@ -86,19 +86,23 @@ class InternalAgentSubStage(Stage):
         self.file_extract_enabled: bool = file_extract_conf.get("enable", False)
         self.file_extract_prov: str = file_extract_conf.get("provider", "moonshotai")
         self.file_extract_msh_api_key: str = file_extract_conf.get(
-            "moonshotai_api_key", "",
+            "moonshotai_api_key",
+            "",
         )
 
         # 上下文管理相关
         self.context_limit_reached_strategy: str = settings.get(
-            "context_limit_reached_strategy", "truncate_by_turns",
+            "context_limit_reached_strategy",
+            "truncate_by_turns",
         )
         self.llm_compress_instruction: str = settings.get(
-            "llm_compress_instruction", "",
+            "llm_compress_instruction",
+            "",
         )
         self.llm_compress_keep_recent: int = settings.get("llm_compress_keep_recent", 4)
         self.llm_compress_provider_id: str = settings.get(
-            "llm_compress_provider_id", "",
+            "llm_compress_provider_id",
+            "",
         )
         self.max_context_length = settings["max_context_length"]  # int
         self.dequeue_context_length: int = min(
@@ -110,7 +114,8 @@ class InternalAgentSubStage(Stage):
 
         self.llm_safety_mode = settings.get("llm_safety_mode", True)
         self.safety_mode_strategy = settings.get(
-            "safety_mode_strategy", "system_prompt",
+            "safety_mode_strategy",
+            "system_prompt",
         )
 
         self.computer_use_runtime = settings.get("computer_use_runtime")
@@ -148,7 +153,9 @@ class InternalAgentSubStage(Stage):
         )
 
     async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str,
+        self,
+        event: AstrMessageEvent,
+        provider_wake_prefix: str,
     ) -> AsyncGenerator[None, None]:
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False

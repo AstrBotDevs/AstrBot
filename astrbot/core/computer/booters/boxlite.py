@@ -176,7 +176,7 @@ class BoxliteBooter(ComputerBooter):
             session_id,
         )
         random_port = random.randint(20000, 30000)
-        self.box = boxlite.SimpleBox(  # type: ignore[unresolved-attribute]
+        self.box = boxlite.SimpleBox(  # type: ignore
             image="soulter/shipyard-ship",
             memory_mib=512,
             cpus=1,
@@ -197,17 +197,17 @@ class BoxliteBooter(ComputerBooter):
             sb_url=f"http://127.0.0.1:{random_port}",
         )
         self._fs = ShipyardFileSystemComponent(
-            client=self.mocked,  # type: ignore[arg-type]
+            client=self.mocked,
             ship_id=self.box.id,
             session_id=session_id,
         )
         self._python = ShipyardPythonComponent(
-            client=self.mocked,  # type: ignore[arg-type]
+            client=self.mocked,
             ship_id=self.box.id,
             session_id=session_id,
         )
         self._shell = ShipyardShellComponent(
-            client=self.mocked,  # type: ignore[arg-type]
+            client=self.mocked,
             ship_id=self.box.id,
             session_id=session_id,
         )
@@ -251,7 +251,7 @@ class BoxliteBooter(ComputerBooter):
             PythonTool,
         )
 
-        return (  # type: ignore[return-value]
+        return (  # type: ignore
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),

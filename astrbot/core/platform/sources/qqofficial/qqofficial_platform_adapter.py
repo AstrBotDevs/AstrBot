@@ -149,7 +149,9 @@ class QQOfficialPlatformAdapter(Platform):
 
         # typed client
         self.client: botClient = botClient(
-            intents=self.intents, bot_log=False, timeout=20,
+            intents=self.intents,
+            bot_log=False,
+            timeout=20,
         )
         self.client.set_platform(self)
         self._session_last_message_id: dict[str, str] = {}
@@ -366,7 +368,8 @@ class QQOfficialPlatformAdapter(Platform):
         ext = Path(filename).suffix.lower()
         source_ext = ext or ".audio"
         source_path = os.path.join(
-            temp_dir, f"qqofficial_{uuid.uuid4().hex}{source_ext}",
+            temp_dir,
+            f"qqofficial_{uuid.uuid4().hex}{source_ext}",
         )
         await download_file(url, source_path)
         return Record(file=source_path, url=source_path)
@@ -401,7 +404,8 @@ class QQOfficialPlatformAdapter(Platform):
                     try:
                         msg.append(
                             await QQOfficialPlatformAdapter._prepare_audio_attachment(
-                                url, filename,
+                                url,
+                                filename,
                             ),
                         )
                     except Exception as e:
@@ -461,8 +465,7 @@ class QQOfficialPlatformAdapter(Platform):
         | botpy.message.C2CMessage,
         message_type: MessageType,
     ) -> AstrBotMessage:
-        """Normalize incoming botpy message into AstrBotMessage with safe string fields.
-        """
+        """Normalize incoming botpy message into AstrBotMessage with safe string fields."""
         abm = AstrBotMessage()
         abm.type = message_type
         abm.timestamp = int(time.time())
@@ -484,7 +487,8 @@ class QQOfficialPlatformAdapter(Platform):
                 abm.group_id = str(getattr(message, "group_openid", "") or "")
             else:
                 abm.sender = MessageMember(
-                    str(getattr(message.author, "user_openid", "") or ""), "",
+                    str(getattr(message.author, "user_openid", "") or ""),
+                    "",
                 )
             abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
                 (getattr(message, "content", "") or "").strip(),

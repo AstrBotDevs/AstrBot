@@ -78,7 +78,7 @@ class PythonTool(FunctionTool):
     description: str = f"Run codes in an IPython shell. Current OS: {_OS_NAME}."
     parameters: dict = field(default_factory=lambda: param_schema)
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         code: str,
@@ -108,7 +108,7 @@ class LocalPythonTool(FunctionTool):
 
     parameters: dict = field(default_factory=lambda: param_schema)
 
-    async def call(  # type: ignore[override]
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         code: str,
