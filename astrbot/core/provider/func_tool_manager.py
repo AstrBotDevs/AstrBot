@@ -340,7 +340,7 @@ class FunctionToolManager:
             return builtin_tool
         return None
 
-    def get_builtin_tool(self, tool: str | type[FuncTool]) -> FuncTool:
+    def get_builtin_tool(self, tool: Any) -> FuncTool:
         ensure_builtin_tools_loaded()
 
         if isinstance(tool, str):

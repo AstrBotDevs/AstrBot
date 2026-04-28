@@ -3,6 +3,8 @@ import json
 import pytest
 
 from astrbot.core import sp
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.tools.computer_tools.shell import ExecuteShellTool
 from astrbot.core.tools.message_tools import SendMessageToUserTool
@@ -10,6 +12,27 @@ from astrbot.core.tools.web_search_tools import (
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
 )
+
+
+def _make_fake_wrapper_class():
+    class FakeConfig:
+        def get_config(self, umo):
+            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        context = FakeConfig()
+        event = FakeEvent()
+
+    class FakeWrapper(ContextWrapper[AstrAgentContext]):
+        def __init__(self):
+            self.context = FakeAstrContext()  # type: ignore[assignment]
+            self.messages = []
+
+    return FakeWrapper
 
 
 def test_get_builtin_tool_by_class_returns_cached_instance():
@@ -65,20 +88,7 @@ async def test_execute_shell_defaults_to_foreground(monkeypatch):
     class FakeBooter:
         shell = FakeShell()
 
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
+    FakeWrapper = _make_fake_wrapper_class()
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
@@ -89,6 +99,7 @@ async def test_execute_shell_defaults_to_foreground(monkeypatch):
         FakeWrapper(), command="chromium https://example.com"
     )
 
+    assert isinstance(result, str)
     assert json.loads(result)["success"] is True
     assert calls == [{"command": "chromium https://example.com", "background": False}]
 
@@ -111,20 +122,7 @@ async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
     class FakeBooter:
         shell = FakeShell()
 
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
+    FakeWrapper = _make_fake_wrapper_class()
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
@@ -158,20 +156,7 @@ async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
     class FakeBooter:
         shell = FakeShell()
 
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
+    FakeWrapper = _make_fake_wrapper_class()
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
@@ -203,20 +188,7 @@ async def test_execute_shell_avoids_double_background_for_detached_commands(
     class FakeBooter:
         shell = FakeShell()
 
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
+    FakeWrapper = _make_fake_wrapper_class()
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
@@ -228,6 +200,7 @@ async def test_execute_shell_avoids_double_background_for_detached_commands(
         FakeWrapper(), command=command, background=True
     )
 
+    assert isinstance(result, str)
     assert json.loads(result)["success"] is True
     assert calls == [{"command": command, "background": False}]
 
@@ -248,20 +221,7 @@ async def test_execute_shell_recognizes_commented_background_command(monkeypatch
     class FakeBooter:
         shell = FakeShell()
 
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
+    FakeWrapper = _make_fake_wrapper_class()
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
@@ -273,6 +233,7 @@ async def test_execute_shell_recognizes_commented_background_command(monkeypatch
         FakeWrapper(), command=command, background=True
     )
 
+    assert isinstance(result, str)
     assert json.loads(result)["success"] is True
     assert calls == [{"command": command, "background": False}]
 
@@ -312,20 +273,7 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
     class FakeBooter:
         shell = FakeShell()
 
-    class FakeConfig:
-        def get_config(self, umo):
-            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
-
-    class FakeEvent:
-        unified_msg_origin = "umo"
-        role = "admin"
-
-    class FakeAstrContext:
-        context = FakeConfig()
-        event = FakeEvent()
-
-    class FakeWrapper:
-        context = FakeAstrContext()
+    FakeWrapper = _make_fake_wrapper_class()
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
