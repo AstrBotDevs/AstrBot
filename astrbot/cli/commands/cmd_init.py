@@ -9,7 +9,7 @@ from filelock import FileLock, Timeout
 
 from astrbot.cli.utils import DashboardManager
 from astrbot.core.config.default import DEFAULT_CONFIG
-from astrbot.core.utils.astrbot_path import astrbot_paths
+from astrbot.core.utils.astrbot_path import get_astrbot_root
 
 
 async def initialize_astrbot(
@@ -65,7 +65,7 @@ async def initialize_astrbot(
     if not env_file.exists():
         tmpl_candidates = [
             Path("/opt/astrbot/config.template"),
-            getattr(astrbot_paths, "project_root", Path.cwd()) / "config.template",
+            Path.cwd() / "config.template",
             Path.cwd() / "config.template",
         ]
         tmpl = None
@@ -157,7 +157,7 @@ def init(
     if os.environ.get("ASTRBOT_SYSTEMD") == "1":
         yes = True
 
-    astrbot_root = Path(root) if root else astrbot_paths.root
+    astrbot_root = Path(root) if root else Path(get_astrbot_root())
     lock_file = astrbot_root / "astrbot.lock"
     lock = FileLock(lock_file, timeout=5)
 
