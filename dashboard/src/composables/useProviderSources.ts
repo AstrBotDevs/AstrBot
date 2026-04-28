@@ -337,7 +337,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       dashscope_tts: 'text_to_speech',
       azure_tts: 'text_to_speech',
       minimax_tts_api: 'text_to_speech',
-      volcengine_tts: 'text_to_speech'
+      volcengine_tts: 'text_to_speech',
+      glm_asr: 'speech_to_text',
+      glm_tts: 'text_to_speech'
     }
     return oldVersionProviderTypeMapping[provider.type]
   }

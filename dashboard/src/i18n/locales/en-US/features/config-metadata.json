@@ -1662,6 +1662,18 @@
       "auto_save_history": {
         "description": "Conversation history managed by Coze",
         "hint": "When enabled, Coze manages conversation history. AstrBot's locally saved context will not take effect (read-only), and operations on AstrBot context will not apply. If disabled, AstrBot manages the context."
+      },
+      "glm_tts_voice": {
+        "description": "Voice",
+        "hint": "GLM-TTS voice. Available voices: tongtong, chuichui, xiaochen, jam, kazi, douji, luodo."
+      },
+      "glm_tts_speed": {
+        "description": "Speech rate",
+        "hint": "Speech speed for synthesis, range [0.5, 2.0], default 1.0."
+      },
+      "glm_tts_volume": {
+        "description": "Volume",
+        "hint": "Volume for synthesis, range (0, 10], default 1.0."
       }
     }
   },
