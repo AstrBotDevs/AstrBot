@@ -40,7 +40,7 @@ async def test_insert_batch_raises_friendly_error_for_embedding_count_mismatch()
         )
 
     assert exc_info.value.stage == "embedding"
-    assert "expected_contents" in exc_info.value.details
+    assert "期望 2，实际 1" in str(exc_info.value)
     assert exc_info.value.details["expected_contents"] == 2
     assert exc_info.value.details["actual_vectors"] == 1
     vec_db.document_storage.insert_documents_batch.assert_not_awaited()
@@ -94,3 +94,23 @@ def test_embedding_storage_rejects_existing_index_dimension_mismatch() -> None:
         "index_dimension": 768,
         "provider_dimension": 1536,
     }
+
+
+def test_embedding_storage_accepts_existing_index_dimension_match() -> None:
+    mock_index = MagicMock()
+    mock_index.d = 768
+
+    with (
+        patch(
+            "astrbot.core.db.vec_db.faiss_impl.embedding_storage.os.path.exists",
+            return_value=True,
+        ),
+        patch(
+            "astrbot.core.db.vec_db.faiss_impl.embedding_storage.faiss.read_index",
+            return_value=mock_index,
+        ),
+    ):
+        storage = EmbeddingStorage(768, "existing-index.faiss")
+
+    assert storage.index is mock_index
+    assert storage.dimension == 768

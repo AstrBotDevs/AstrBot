@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from astrbot.core import logger
+from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
 
@@ -198,6 +199,19 @@ class KnowledgeBaseManager:
         }
         previous_init_error = kb_helper.init_error
 
+        def rollback_state() -> None:
+            kb.kb_name = previous_state["kb_name"]
+            kb.description = previous_state["description"]
+            kb.emoji = previous_state["emoji"]
+            kb.embedding_provider_id = previous_state["embedding_provider_id"]
+            kb.rerank_provider_id = previous_state["rerank_provider_id"]
+            kb.chunk_size = previous_state["chunk_size"]
+            kb.chunk_overlap = previous_state["chunk_overlap"]
+            kb.top_k_dense = previous_state["top_k_dense"]
+            kb.top_k_sparse = previous_state["top_k_sparse"]
+            kb.top_m_final = previous_state["top_m_final"]
+            kb_helper.init_error = previous_init_error
+
         if kb_name is not None:
             kb.kb_name = kb_name
         if description is not None:
@@ -229,24 +243,21 @@ class KnowledgeBaseManager:
 
         try:
             await new_helper.initialize()
-        except Exception as e:
-            # Roll back in-memory settings and keep current helper available.
-            kb.kb_name = previous_state["kb_name"]
-            kb.description = previous_state["description"]
-            kb.emoji = previous_state["emoji"]
-            kb.embedding_provider_id = previous_state["embedding_provider_id"]
-            kb.rerank_provider_id = previous_state["rerank_provider_id"]
-            kb.chunk_size = previous_state["chunk_size"]
-            kb.chunk_overlap = previous_state["chunk_overlap"]
-            kb.top_k_dense = previous_state["top_k_dense"]
-            kb.top_k_sparse = previous_state["top_k_sparse"]
-            kb.top_m_final = previous_state["top_m_final"]
-            kb_helper.init_error = previous_init_error
+        except KnowledgeBaseUploadError as e:
+            rollback_state()
             logger.error(
                 f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败，继续使用旧实例: {e}",
                 exc_info=True,
             )
-            return kb_helper
+            raise ValueError(str(e)) from e
+        except Exception as e:
+            # Roll back in-memory settings and keep current helper available.
+            rollback_state()
+            logger.error(
+                f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败，继续使用旧实例: {e}",
+                exc_info=True,
+            )
+            raise ValueError(f"知识库重新初始化失败：{e}") from e
 
         async with self.kb_db.get_db() as session:
             session.add(kb)
