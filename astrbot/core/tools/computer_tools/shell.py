@@ -44,7 +44,7 @@ def _redirect_background_stdout_command(
     output_path: str,
     local_runtime: bool,
 ) -> str:
-    return f"{command} > {_quote_redirect_path(output_path, local_runtime=local_runtime)} 2>&1"
+    return f"({command}) > {_quote_redirect_path(output_path, local_runtime=local_runtime)} 2>&1"
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
