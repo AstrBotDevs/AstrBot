@@ -322,7 +322,7 @@ class AstrBotDashboard:
 
         if not cert_file or not key_file:
             logger.warning(
-                "dashboard.ssl.enable 已启用，但未同时配置 cert_file 和 key_file，SSL 配置将不会生效。",
+                "dashboard.ssl.enable is set, but cert_file or key_file is missing. SSL disabled.",
             )
             return False, {}
 
@@ -330,12 +330,12 @@ class AstrBotDashboard:
         key_path = Path(key_file).expanduser()
         if not cert_path.is_file():
             logger.warning(
-                f"dashboard.ssl.enable 已启用，但 SSL 证书文件不存在: {cert_path}，SSL 配置将不会生效。",
+                f"dashboard.ssl.enable is set, but cert file is missing: {cert_path}. SSL disabled.",
             )
             return False, {}
         if not key_path.is_file():
             logger.warning(
-                f"dashboard.ssl.enable 已启用，但 SSL 私钥文件不存在: {key_path}，SSL 配置将不会生效。",
+                f"dashboard.ssl.enable is set, but key file is missing: {key_path}. SSL disabled.",
             )
             return False, {}
 
@@ -348,7 +348,7 @@ class AstrBotDashboard:
             ca_path = Path(ca_certs).expanduser()
             if not ca_path.is_file():
                 logger.warning(
-                    f"dashboard.ssl.enable 已启用，但 SSL CA 证书文件不存在: {ca_path}，SSL 配置将不会生效。",
+                    f"dashboard.ssl.enable is set, but CA cert file is missing: {ca_path}. SSL disabled.",
                 )
                 return False, {}
             resolved_ssl_config["ca_certs"] = str(ca_path.resolve())

@@ -104,7 +104,7 @@ class AstrBotConfig(dict):
             if key not in conf:
                 # 配置项不存在，插入默认值
                 path_ = path + "." + key if path else key
-                logger.info("Config key missing; added default: %s", path_)
+                logger.info("Config key missing; added default.")
                 new_conf[key] = value
                 has_new = True
             elif conf[key] is None:
