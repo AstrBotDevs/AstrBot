@@ -27,10 +27,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         "Send message to the user. "
         "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
         "Use this tool to send media files (`image`, `record`, `video`, `file`), "
-        "or when you need to proactively message the user (such as cron job). "
-        "For normal text replies, you can output directly. "
-        "Optionally specify a `session` to send the message to a different session (admin only). "
-        "If no session is specified, the message is sent to the current user's session."
+        "or when you need to proactively message the user(such as cron job). For normal text replies, you can output directly."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -69,10 +66,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         "required": ["type"],
                     },
                 },
-            },
-            "session": {
-                "type": "string",
-                "description": "Optional. Target session string. Defaults to current session. Only AstrBot admins can send to other sessions.",
+                "session": {
+                    "type": "string",
+                    "description": "Optional. Target session string. Defaults to current session.",
+                },
             },
             "required": ["messages"],
         }
