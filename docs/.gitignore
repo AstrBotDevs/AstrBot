@@ -6,3 +6,5 @@ node_modules/
 *dist
 scripts/deploy-cli.sh
 scripts/deploy-cli.ps1
+public/scripts/deploy-cli.sh
+public/scripts/deploy-cli.ps1
