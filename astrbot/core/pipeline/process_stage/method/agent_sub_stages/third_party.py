@@ -24,7 +24,6 @@ from astrbot.core.persona_error_reply import (
 if TYPE_CHECKING:
     from astrbot.core.agent.runners.base import BaseAgentRunner
     from astrbot.core.provider.entities import LLMResponse
-from astrbot.core.agent.tool_session_manager import ToolSessionManager
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.pipeline.context import PipelineContext, call_event_hook
 from astrbot.core.pipeline.stage import Stage
@@ -425,7 +424,6 @@ class ThirdPartyAgentSubStage(Stage):
                 run_context=AgentContextWrapper(
                     context=astr_agent_ctx,
                     tool_call_timeout=120,
-                    session_manager=ToolSessionManager(),
                 ),
                 tool_executor=FunctionToolExecutor(),
                 agent_hooks=MAIN_AGENT_HOOKS,

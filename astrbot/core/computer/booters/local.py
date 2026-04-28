@@ -15,6 +15,7 @@ from astrbot.core.computer.olayer import (
     PythonComponent,
     ShellComponent,
 )
+from astrbot.core.computer.shell_session import PersistentShellSession
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_root,
@@ -92,10 +93,6 @@ def _decode_bytes_with_fallback(
     return output.decode("utf-8", errors="replace")
 
 
-def _decode_shell_output(output: bytes | None) -> str:
-    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
-
-
 @dataclass
 class LocalShellComponent(ShellComponent):
     async def exec(
@@ -106,47 +103,24 @@ class LocalShellComponent(ShellComponent):
         timeout: int | None = 30,
         shell: bool = True,
         background: bool = False,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
         if not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
 
-        def _run() -> dict[str, Any]:
-            run_env = os.environ.copy()
-            if env:
-                run_env.update({str(k): str(v) for k, v in env.items()})
-            working_dir = _ensure_safe_path(cwd) if cwd else get_astrbot_root()
-            if background:
-                # `command` is intentionally executed through the current shell so
-                # local computer-use behavior matches existing tool semantics.
-                # Safety relies on `_is_safe_command()` and the allowed-root checks.
-                proc = subprocess.Popen(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                    command,
-                    shell=shell,
-                    cwd=working_dir,
-                    env=run_env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
-            # `command` is intentionally executed through the current shell so
-            # local computer-use behavior matches existing tool semantics.
-            # Safety relies on `_is_safe_command()` and the allowed-root checks.
-            result = subprocess.run(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                command,
-                check=False,
-                shell=shell,
-                cwd=working_dir,
-                env=run_env,
-                timeout=timeout,
-                capture_output=True,
-            )
-            return {
-                "stdout": _decode_shell_output(result.stdout),
-                "stderr": _decode_shell_output(result.stderr),
-                "exit_code": result.returncode,
-            }
+        key = session_id or "default"
+        session = PersistentShellSession.get_or_create(key)
+        return await session.exec(
+            command,
+            cwd=cwd,
+            env=env,
+            timeout=timeout,
+            background=background,
+        )
 
-        return await asyncio.to_thread(_run)
+    @staticmethod
+    async def shutdown_all() -> None:
+        await PersistentShellSession.cleanup_all()
 
 
 @dataclass
@@ -204,7 +178,13 @@ class LocalFileSystemComponent(FileSystemComponent):
 
         return await asyncio.to_thread(_run)
 
-    async def read_file(self, path: str, encoding: str = "utf-8") -> dict[str, Any]:
+    async def read_file(
+        self,
+        path: str,
+        encoding: str = "utf-8",
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             abs_path = _ensure_safe_path(path)
             with open(abs_path, "rb") as f:
@@ -213,7 +193,86 @@ class LocalFileSystemComponent(FileSystemComponent):
                 raw_content,
                 preferred_encoding=encoding,
             )
+            if offset is not None:
+                lines = content.splitlines(keepends=True)
+                start = offset
+                if limit is not None:
+                    lines = lines[start : start + limit]
+                else:
+                    lines = lines[start:]
+                content = "".join(lines)
+            elif limit is not None:
+                lines = content.splitlines(keepends=True)[:limit]
+                content = "".join(lines)
             return {"success": True, "content": content}
+
+        return await asyncio.to_thread(_run)
+
+    async def search_files(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        after_context: int | None = None,
+        before_context: int | None = None,
+    ) -> dict[str, Any]:
+        """Search file contents using grep-like pattern matching."""
+
+        def _run() -> dict[str, Any]:
+            search_path = _ensure_safe_path(path) if path else "."
+            cmd = ["grep", "-rn", pattern, search_path]
+            if after_context is not None:
+                cmd.extend(["-A", str(after_context)])
+            if before_context is not None:
+                cmd.extend(["-B", str(before_context)])
+            if glob:
+                cmd.extend(["--include", glob])
+            try:
+                result = subprocess.run(
+                    cmd,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                return {
+                    "success": True,
+                    "output": result.stdout,
+                    "error": result.stderr if result.returncode != 0 else "",
+                }
+            except subprocess.TimeoutExpired:
+                return {
+                    "success": False,
+                    "output": "",
+                    "error": "Search timed out.",
+                }
+
+        return await asyncio.to_thread(_run)
+
+    async def edit_file(
+        self,
+        path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        def _run() -> dict[str, Any]:
+            abs_path = _ensure_safe_path(path)
+            with open(abs_path, encoding=encoding) as f:
+                content = f.read()
+            if replace_all:
+                new_content = content.replace(old_string, new_string)
+            else:
+                new_content = content.replace(old_string, new_string, 1)
+            if new_content == content:
+                return {
+                    "success": False,
+                    "error": f"String '{old_string}' not found in file.",
+                }
+            with open(abs_path, "w", encoding=encoding) as f:
+                f.write(new_content)
+            return {"success": True, "path": abs_path}
 
         return await asyncio.to_thread(_run)
 
@@ -269,6 +328,7 @@ class LocalBooter(ComputerBooter):
         logger.info(f"Local computer booter initialized for session: {session_id}")
 
     async def shutdown(self) -> None:
+        await LocalShellComponent.shutdown_all()
         logger.info("Local computer booter shutdown complete.")
 
     @property

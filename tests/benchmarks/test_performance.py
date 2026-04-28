@@ -45,24 +45,33 @@ class PerformanceBenchmark:
         self.tracemalloc = tracemalloc
 
     def run(self, func: Callable, *args, **kwargs) -> BenchmarkResult:
-        """Run a function multiple times and measure performance."""
-        gc.collect()
-        self.tracemalloc.start()
-        snapshot_before = self.tracemalloc.take_snapshot()
+        """Run a function multiple times and measure performance.
 
+        Throughput and memory are measured in separate passes so that
+        ``tracemalloc`` (which can be 7-10× slower) does not distort the
+        timing numbers.
+        """
+        gc.collect()
+
+        # Pass 1 — throughput (no tracemalloc overhead)
         start = asyncio.get_event_loop().time()
         for _ in range(self.operations):
             func(*args, **kwargs)
         end = asyncio.get_event_loop().time()
 
-        snapshot_after = self.tracemalloc.take_snapshot()
-        self.tracemalloc.stop()
-
         total_time = (end - start) * 1000  # ms
         avg_time = total_time / self.operations
         ops_per_sec = self.operations / ((end - start) if (end - start) > 0 else 0.001)
 
-        # Calculate memory delta
+        # Pass 2 — memory delta (tracemalloc, fewer iterations)
+        gc.collect()
+        self.tracemalloc.start()
+        snapshot_before = self.tracemalloc.take_snapshot()
+        mem_ops = min(self.operations, 1000)
+        for _ in range(mem_ops):
+            func(*args, **kwargs)
+        snapshot_after = self.tracemalloc.take_snapshot()
+        self.tracemalloc.stop()
         top_stats = snapshot_after.compare_to(snapshot_before, 'lineno')
         memory_delta_kb = sum(stat.size_diff for stat in top_stats) / 1024
 

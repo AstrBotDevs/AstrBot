@@ -10,6 +10,7 @@ import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
@@ -72,7 +73,6 @@ from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
 )
-from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
@@ -284,7 +284,7 @@ async def _apply_file_extract(
         logger.error("Unsupported file extract provider: %s", config.file_extract_prov)
         return
 
-    for file_content, file_name in zip(file_contents, file_names):
+    for file_content, file_name in zip(file_contents, file_names, strict=False):
         req.contexts.append(
             {
                 "role": "system",
@@ -632,7 +632,7 @@ def _get_quoted_message_parser_settings(
     overrides = provider_settings.get("quoted_message_parser")
     if not isinstance(overrides, dict):
         return DEFAULT_QUOTED_MESSAGE_SETTINGS
-    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
+    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)  # type: ignore
 
 
 def _get_image_compress_args(
@@ -645,8 +645,10 @@ def _get_image_compress_args(
     if not isinstance(enabled, bool):
         enabled = True
 
-    raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
+    raw_options = provider_settings.get("image_compress_options")
+    options: dict[str, Any] = {}
+    if isinstance(raw_options, dict):
+        options = {str(k): v for k, v in raw_options.items()}
 
     max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
     if not isinstance(max_size, int):
@@ -753,15 +755,18 @@ async def _process_quote_message(
         except BaseException as exc:
             logger.error("处理引用图片失败: %s", exc)
         finally:
-            if (
-                compress_path
-                and compress_path != path
-                and os.path.exists(compress_path)
-            ):
-                try:
-                    os.remove(compress_path)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Fail to remove temporary compressed image: %s", exc)
+            if compress_path and compress_path != path:
+                from anyio import Path as AnyioPath
+
+                compress_file = AnyioPath(compress_path)
+                if await compress_file.exists():
+                    try:
+                        await compress_file.unlink()
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "Fail to remove temporary compressed image: %s",
+                            exc,
+                        )
 
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
@@ -868,7 +873,7 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 # 保留 MCP 工具
                 new_tool_set.add_tool(tool)
                 continue
-            mp = tool.handler_module_path
+            mp = getattr(tool, "handler_module_path", None)
             if not mp:
                 # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
                 # 不应受到会话插件过滤影响。
@@ -1342,7 +1347,7 @@ async def build_main_agent(
             req.func_tool = ToolSet()
         req.func_tool.add_tool(
             plugin_context.get_llm_tool_manager().get_builtin_tool(
-                SendMessageToUserTool,
+                "send_message_to_user",
             ),
         )
 

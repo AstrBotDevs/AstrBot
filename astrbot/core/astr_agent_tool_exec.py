@@ -111,13 +111,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return sanitized
 
     @classmethod
-    async def execute(cls, tool, run_context, session_manager=None, **tool_args):
+    async def execute(cls, tool, run_context, **tool_args):
         """执行函数调用｡
 
         Args:
             tool: The tool to execute.
             run_context: The run context.
-            session_manager: Optional ToolSessionManager for stateful tool execution.
             **tool_args: Tool-specific arguments.
             **kwargs: 函数调用的参数｡
 
@@ -507,14 +506,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         cron_event.role = event.role
-        from astrbot.core.computer.computer_tool_provider import ComputerToolProvider
 
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
             streaming_response=ctx.get_config()
             .get("provider_settings", {})
             .get("stream", False),
-            tool_providers=[ComputerToolProvider()],
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
@@ -589,9 +586,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         elif is_override_call:
             awaitable = tool.call
             method_name = "call"
-        elif hasattr(tool, "run"):
-            awaitable = tool.run
-            method_name = "run"
+        else:
+            awaitable = getattr(tool, "run", None)
+            if awaitable is not None:
+                method_name = "run"
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
         sdk_plugin_bridge = getattr(

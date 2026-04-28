@@ -14,6 +14,7 @@ class ShellComponent(Protocol):
         timeout: int | None = 30,
         shell: bool = True,
         background: bool = False,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
         """Execute shell command"""
         ...

@@ -11,6 +11,9 @@ from astrbot.core.star.star_handler import StarHandlerMetadata
 from . import HandlerFilter
 from .custom_filter import CustomFilter
 
+_BOOL_TRUE = frozenset({"true", "yes", "1"})
+_BOOL_FALSE = frozenset({"false", "no", "0"})
+
 
 class GreedyStr(str):
     """标记指令完成其他参数接收后的所有剩余文本｡"""
@@ -137,16 +140,19 @@ class CommandFilter(HandlerFilter):
                         # 如果 param_type_or_default_val 是字符串,直接赋值
                         result[param_name] = params[i]
                     elif param_type_or_default_val is bool:
-                        # 处理布尔类型
-                        lower_param = str(params[i]).lower()
-                        if lower_param in ["true", "yes", "1"]:
-                            result[param_name] = True
-                        elif lower_param in ["false", "no", "0"]:
-                            result[param_name] = False
+                        v = params[i]
+                        if isinstance(v, str):
+                            v_lower = v.lower()
+                            if v_lower in _BOOL_TRUE:
+                                result[param_name] = True
+                            elif v_lower in _BOOL_FALSE:
+                                result[param_name] = False
+                            else:
+                                raise ValueError(
+                                    f"参数 {param_name} 必须是布尔值(true/false, yes/no, 1/0)｡",
+                                )
                         else:
-                            raise ValueError(
-                                f"参数 {param_name} 必须是布尔值(true/false, yes/no, 1/0)｡",
-                            )
+                            result[param_name] = bool(v)
                     elif isinstance(param_type_or_default_val, int):
                         result[param_name] = int(params[i])
                     elif isinstance(param_type_or_default_val, float):

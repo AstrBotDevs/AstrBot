@@ -195,7 +195,7 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
                 if not isinstance(prop_schema, dict):
                     continue
 
-                original_prop_schema = original_properties.get(prop_name, {})
+                original_prop_schema = (original_properties or {}).get(prop_name, {})
                 prop_required = (
                     original_prop_schema.get("required")
                     if isinstance(original_prop_schema, dict)
