@@ -3,6 +3,10 @@
 import os
 from typing import Any, TypedDict
 
+from astrbot.builtin_stars.web_searcher.provider_constants import (
+    DEFAULT_WEB_SEARCH_PROVIDER,
+    WEB_SEARCH_PROVIDER_OPTIONS,
+)
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 

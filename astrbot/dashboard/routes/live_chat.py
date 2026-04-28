@@ -35,6 +35,21 @@ from .route import Route, RouteContext
 class LiveChatSession:
     """Live Chat 会话管理器"""
 
+class _ReceiveTimeoutSentinel:
+    """Sentinel value indicating a receive timeout."""
+
+
+_RECEIVE_TIMEOUT = _ReceiveTimeoutSentinel()
+
+
+class _QueueTimeoutSentinel:
+    pass
+
+
+_QUEUE_TIMEOUT = _QueueTimeoutSentinel()
+
+
+class ClientSession:
     def __init__(self, session_id: str, username: str) -> None:
         self.session_id = session_id
         self.username = username

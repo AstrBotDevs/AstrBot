@@ -11,10 +11,13 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
+from astrbot.core.tools.computer_tools.util import (
+    check_admin_permission,
+    is_local_runtime,
+    workspace_root,
+)
+from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
-
-from ..registry import builtin_tool
-from .util import check_admin_permission, is_local_runtime, workspace_root
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
@@ -133,7 +136,9 @@ class ExecuteShellTool(FunctionTool):
             if is_local_runtime(context):
                 exec_kwargs["session_id"] = context.context.event.unified_msg_origin
             else:
-                exec_kwargs["cwd"] = cwd
+                exec_kwargs["cwd"] = (
+                    None  # remote runtime; cwd is managed by the sandbox
+                )
 
             result = await sb.shell.exec(**exec_kwargs)
             if stdout_file:
