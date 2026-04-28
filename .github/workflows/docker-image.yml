@@ -45,7 +45,7 @@ jobs:
         run: exit 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4.3.0
+        uses: pnpm/action-setup@v6.0.3
         with:
           version: 10.28.2
 
@@ -166,7 +166,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4.3.0
+        uses: pnpm/action-setup@v6.0.3
         with:
           version: 10.28.2
 
