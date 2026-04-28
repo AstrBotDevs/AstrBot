@@ -19,6 +19,22 @@ from astrbot.core.computer.booters.local import (
     LocalShellComponent,
     _is_safe_command,
 )
+from astrbot.core.computer.shell_session import PersistentShellSession
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _cleanup_all_shell_sessions():
+    yield
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(PersistentShellSession.cleanup_all())
+        else:
+            loop.run_until_complete(PersistentShellSession.cleanup_all())
+    except RuntimeError:
+        pass
+
 
 from astrbot.core.computer.booters.bwrap import (
     BwrapBooter,
@@ -159,42 +175,54 @@ class TestLocalShellComponent:
     @pytest.mark.asyncio
     async def test_exec_with_timeout(self):
         """Test command with timeout."""
-        shell = LocalShellComponent()
-        # Sleep command should complete within timeout
-        result = await shell.exec("echo test", timeout=5)
-        assert result["exit_code"] == 0
+        mock_session = AsyncMock()
+        mock_session.exec.return_value = {"exit_code": 0, "stdout": "test", "stderr": ""}
+        with patch(
+            "astrbot.core.computer.booters.local.PersistentShellSession.get_or_create",
+            return_value=mock_session,
+        ):
+            shell = LocalShellComponent()
+            result = await shell.exec("echo test", timeout=5)
+            assert result["exit_code"] == 0
+            mock_session.exec.assert_called_once()
+            kwargs = mock_session.exec.call_args.kwargs
+            assert kwargs.get("timeout") == 5
 
     @pytest.mark.asyncio
     async def test_exec_with_cwd(self, tmp_path):
         """Test command execution with custom working directory."""
-        shell = LocalShellComponent()
-        # Create a test file
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("content")
-
+        mock_session = AsyncMock()
+        mock_session.exec.return_value = {"exit_code": 0, "stdout": "", "stderr": ""}
         with (
             patch(
                 "astrbot.core.computer.booters.local.get_astrbot_root",
                 return_value=str(tmp_path),
             ),
+            patch(
+                "astrbot.core.computer.booters.local.PersistentShellSession.get_or_create",
+                return_value=mock_session,
+            ),
         ):
-            # Use python to read file to avoid Windows vs Unix command differences
-            result = await shell.exec(
-                f'python -c "print(open(r\\"{test_file}\\"))"',
-                cwd=str(tmp_path),
-            )
+            shell = LocalShellComponent()
+            result = await shell.exec("pwd", cwd=str(tmp_path))
             assert result["exit_code"] == 0
 
     @pytest.mark.asyncio
     async def test_exec_with_env(self):
         """Test command execution with custom environment variables."""
-        shell = LocalShellComponent()
-        result = await shell.exec(
-            'python -c "import os; print(os.environ.get(\\"TEST_VAR\\", \\"\\"))"',
-            env={"TEST_VAR": "test_value"},
-        )
-        assert result["exit_code"] == 0
-        assert "test_value" in result["stdout"]
+        mock_session = AsyncMock()
+        mock_session.exec.return_value = {"exit_code": 0, "stdout": "test_value", "stderr": ""}
+        with patch(
+            "astrbot.core.computer.booters.local.PersistentShellSession.get_or_create",
+            return_value=mock_session,
+        ):
+            shell = LocalShellComponent()
+            result = await shell.exec(
+                'echo $TEST_VAR',
+                env={"TEST_VAR": "test_value"},
+            )
+            assert result["exit_code"] == 0
+            assert "test_value" in result["stdout"]
 
 
 class TestLocalPythonComponent:

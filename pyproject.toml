@@ -73,6 +73,7 @@ dependencies = [
   "plumbum>=1.10.0",
   "openai-agents>=0.12.5",
   "fastapi>=0.135.1",
+  "pytest-asyncio>=0.25.0",
 ]
 [project.urls]
 Homepage = "https://astrbot.app"
@@ -85,7 +86,7 @@ dev = [
   "commitizen>=4.9.1",
   "mypy>=1.19.1",
   "pytest>=8.4.1",
-  "pytest-asyncio>=1.1.0",
+  "pytest-asyncio>=0.25.0",
   "pytest-cov>=6.2.1",
   "ruff>=0.15.0",
   "textual-dev>=1.8.0",
