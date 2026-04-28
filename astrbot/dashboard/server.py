@@ -668,20 +668,30 @@ class AstrBotDashboard:
                 ssl_config,
             )
 
-        if not enable:
+        if not self.enable_webui:
             logger.info("WebUI disabled.")
             return None
+
+        port_value = (
+            os.environ.get("DASHBOARD_PORT")
+            or os.environ.get("ASTRBOT_DASHBOARD_PORT")
+            or dashboard_config.get("port", 6185)
+        )
+        port = _resolve_dashboard_value(port_value, field_name="port")
+        if not isinstance(port, int) or port < 1 or port > 65535:
+            raise ValueError("Dashboard port must be an integer between 1 and 65535")
+
+        scheme = "https" if ssl_enable else "http"
+        ip_addr: list[IPv4Address | IPv6Address] = get_local_ip_addresses()
+        binds: list[str] = [self._build_bind(host, port)]
+        if host == "::" and platform.system() in ("Windows", "Darwin"):
+            binds.append(self._build_bind("0.0.0.0", port))
 
         logger.info("Starting WebUI at %s://%s:%s", scheme, host, port)
         if host == "0.0.0.0":
             logger.info(
                 "WebUI listens on all interfaces. Check security. Set dashboard.host in data/cmd_config.json to change it.",
             )
-
-        scheme = "https" if ssl_enable else "http"
-        binds: list[str] = [self._build_bind(host, port)]
-        if host == "::" and platform.system() in ("Windows", "Darwin"):
-            binds.append(self._build_bind("0.0.0.0", port))
 
         if self.enable_webui:
             logger.info(

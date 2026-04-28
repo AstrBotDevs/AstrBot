@@ -801,7 +801,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         if site:
             sites = [s.strip() for s in site.replace("|", ",").split(",") if s.strip()]
             if sites:
-                payload["search_filter"] = {"match": {"site": sites[:100]}}
+                payload["search_filter"] = {"match": {"site": sites[:100]}}  # type: ignore
 
         results = await _baidu_search(provider_settings, payload)
         if not results:
