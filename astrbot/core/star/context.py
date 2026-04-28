@@ -101,6 +101,9 @@ class Context:
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
         self.subagent_orchestrator = subagent_orchestrator
+        self.registered_web_apis: list = []
+        self._register_tasks: list[Awaitable] = []
+        self._star_manager = None
 
     async def llm_generate(
         self,
@@ -703,6 +706,11 @@ class Context:
                 CommandFilter(command_name=command_name, handler_md=md),
             )
         star_handlers_registry.append(md)
+
+    def reset_runtime_registrations(self) -> None:
+        """Reset runtime registration containers (web APIs and tasks)."""
+        self.registered_web_apis.clear()
+        self._register_tasks.clear()
 
     def register_task(self, task: Awaitable, desc: str) -> None:
         """[DEPRECATED]注册一个异步任务。
