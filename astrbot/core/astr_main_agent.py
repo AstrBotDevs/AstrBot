@@ -1022,6 +1022,8 @@ def _apply_sandbox_tools(
         req.system_prompt += (
             "\n[CUA Desktop Control]\n"
             "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
+            "Do not append `&`, `nohup`, or other shell background operators; "
+            "the tool handles detaching when `background=true`. "
             'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
             "After each visible step, call `astrbot_cua_screenshot` with "
             "`send_to_user=true` and `return_image_to_llm=true` so the user can "

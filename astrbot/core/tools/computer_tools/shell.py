@@ -15,6 +15,7 @@ from .util import check_admin_permission, is_local_runtime, workspace_root
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
 }
+_EXPLICIT_BACKGROUND_LAUNCHERS = {"nohup", "setsid", "disown", "start", "start-process"}
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
@@ -32,7 +33,7 @@ class ExecuteShellTool(FunctionTool):
                 },
                 "background": {
                     "type": "boolean",
-                    "description": "Whether to run the command in the background.",
+                    "description": "Whether to run the command in the background. Do not append shell background operators such as `&`; pass the foreground command and use this flag instead.",
                     "default": False,
                 },
                 "env": {
@@ -70,9 +71,22 @@ class ExecuteShellTool(FunctionTool):
                 cwd = str(current_workspace_root)
 
             env = dict(env or {})
-            effective_background = background and not _is_self_detached_command(command)
-            result = await sb.shell.exec(
+            prepared_command, effective_background = _prepare_shell_background(
                 command,
+                background,
+            )
+            if background and not prepared_command.strip():
+                return json.dumps(
+                    {
+                        "success": False,
+                        "stdout": "",
+                        "stderr": "error: empty shell command after removing background operator.",
+                        "exit_code": 2,
+                    },
+                    ensure_ascii=False,
+                )
+            result = await sb.shell.exec(
+                prepared_command,
                 cwd=cwd,
                 background=effective_background,
                 env=env,
@@ -83,24 +97,45 @@ class ExecuteShellTool(FunctionTool):
             return f"Error executing command: {detail}"
 
 
+def _prepare_shell_background(command: str, background: bool) -> tuple[str, bool]:
+    if not background:
+        return command, False
+
+    tokens, has_explicit_launcher, has_trailing_amp = _classify_background(command)
+    if has_explicit_launcher:
+        return command, False
+    if has_trailing_amp:
+        return " ".join(tokens[:-1]), True
+    return command, True
+
+
+def _classify_background(command: str) -> tuple[list[str], bool, bool]:
+    tokens = _command_tokens_before_comment(command)
+    if not tokens:
+        return tokens, False, False
+
+    has_explicit_launcher = tokens[0].lower() in _EXPLICIT_BACKGROUND_LAUNCHERS
+    has_trailing_amp = tokens[-1] == "&"
+    return tokens, has_explicit_launcher, has_trailing_amp
+
+
 def _is_self_detached_command(command: str) -> bool:
+    _, has_explicit_launcher, has_trailing_amp = _classify_background(command)
+    return has_explicit_launcher or has_trailing_amp
+
+
+def _command_tokens_before_comment(command: str) -> list[str]:
     lex = shlex.shlex(command, posix=False)
     lex.whitespace_split = True
     lex.commenters = ""
     try:
         tokens = list(lex)
     except ValueError:
-        return False
+        return []
     comment_index = next(
         (index for index, token in enumerate(tokens) if token.startswith("#")),
         None,
     )
     if comment_index is not None:
         tokens = tokens[:comment_index]
-    if not tokens:
-        return False
-
-    first = tokens[0].lower()
-    if first in {"nohup", "setsid", "disown", "start", "start-process"}:
-        return True
-    return tokens[-1] == "&"
+    return tokens

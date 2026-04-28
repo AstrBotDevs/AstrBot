@@ -1582,6 +1582,7 @@ class TestApplySandboxTools:
 
         assert "Firefox" in req.system_prompt
         assert "background=true" in req.system_prompt
+        assert "Do not append `&`" in req.system_prompt
         assert 'firefox "https://example.com"' in req.system_prompt
         assert "astrbot_cua_screenshot" in req.system_prompt
         assert "astrbot_cua_key_press" not in req.system_prompt
