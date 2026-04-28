@@ -487,6 +487,9 @@ class ProviderOpenAIOfficial(Provider):
         self.set_model(model)
 
         self.reasoning_key = "reasoning_content"
+        self._deepseek_reasoning_effort_cached: str | None = None
+        self._deepseek_reasoning_effort_cached_source: Any = None
+        self._deepseek_reasoning_effort_cache_ready = False
 
     @staticmethod
     def _config_flag_enabled(value: Any, default: bool = False) -> bool:
@@ -514,15 +517,31 @@ class ProviderOpenAIOfficial(Provider):
 
     def _deepseek_reasoning_effort(self) -> str:
         value = self.provider_config.get("deepseek_reasoning_effort", "high")
+        if (
+            self._deepseek_reasoning_effort_cache_ready
+            and self._deepseek_reasoning_effort_cached_source == value
+            and self._deepseek_reasoning_effort_cached is not None
+        ):
+            return self._deepseek_reasoning_effort_cached
+
+        normalized_value = "high"
         if isinstance(value, str):
             normalized = value.strip().lower()
             if normalized in {"high", "max"}:
-                return normalized
-        if value not in (None, ""):
+                normalized_value = normalized
+            elif value not in (None, ""):
+                logger.warning(
+                    f"Invalid DeepSeek reasoning effort: {value}, falling back to high"
+                )
+        elif value not in (None, ""):
             logger.warning(
                 f"Invalid DeepSeek reasoning effort: {value}, falling back to high"
             )
-        return "high"
+
+        self._deepseek_reasoning_effort_cached = normalized_value
+        self._deepseek_reasoning_effort_cached_source = value
+        self._deepseek_reasoning_effort_cache_ready = True
+        return normalized_value
 
     def _apply_provider_specific_extra_body_overrides(
         self, extra_body: dict[str, Any]
@@ -552,10 +571,8 @@ class ProviderOpenAIOfficial(Provider):
                 "type": "enabled" if thinking_enabled else "disabled"
             }
             if thinking_enabled:
-                payloads.setdefault(
-                    "reasoning_effort",
-                    self._deepseek_reasoning_effort(),
-                )
+                # Provider config is the canonical DeepSeek reasoning setting.
+                payloads["reasoning_effort"] = self._deepseek_reasoning_effort()
             else:
                 payloads.pop("reasoning_effort", None)
 

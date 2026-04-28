@@ -1759,6 +1759,59 @@ async def test_apply_provider_specific_request_overrides_disables_deepseek_think
 
 
 @pytest.mark.asyncio
+async def test_apply_provider_specific_request_overrides_prefers_deepseek_config_reasoning_effort():
+    provider = _make_provider(
+        {
+            "provider": "deepseek",
+            "deepseek_thinking_enabled": True,
+            "deepseek_reasoning_effort": "max",
+        }
+    )
+    try:
+        payloads = {
+            "model": "deepseek-v4-pro",
+            "messages": [{"role": "user", "content": "hello"}],
+            "reasoning_effort": "high",
+        }
+        extra_body = {
+            "reasoning_effort": "high",
+            "thinking": {"type": "disabled"},
+        }
+
+        provider._apply_provider_specific_request_overrides(payloads, extra_body)
+
+        assert payloads["reasoning_effort"] == "max"
+        assert extra_body["thinking"] == {"type": "enabled"}
+        assert "reasoning_effort" not in extra_body
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_deepseek_reasoning_effort_warns_once_for_invalid_config(monkeypatch):
+    provider = _make_provider(
+        {
+            "provider": "deepseek",
+            "deepseek_reasoning_effort": "invalid",
+        }
+    )
+    warnings: list[str] = []
+    try:
+        monkeypatch.setattr(
+            "astrbot.core.provider.sources.openai_source.logger.warning",
+            warnings.append,
+        )
+
+        assert provider._deepseek_reasoning_effort() == "high"
+        assert provider._deepseek_reasoning_effort() == "high"
+        assert warnings == [
+            "Invalid DeepSeek reasoning effort: invalid, falling back to high"
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_query_injects_deepseek_thinking_and_reasoning_effort(monkeypatch):
     provider = _make_provider(
         {
@@ -1807,6 +1860,7 @@ async def test_query_injects_deepseek_thinking_and_reasoning_effort(monkeypatch)
             payloads={
                 "model": "deepseek-v4-pro",
                 "messages": [{"role": "user", "content": "hello"}],
+                "reasoning_effort": "high",
             },
             tools=None,
         )
