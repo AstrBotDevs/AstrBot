@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
 from astrbot.core.utils.core_constraints import CoreConstraintsProvider
+from astrbot.core.utils.desktop_core_lock import get_desktop_core_lock_modules
 from astrbot.core.utils.requirements_utils import (
     canonicalize_distribution_name as _canonicalize_distribution_name,
 )
@@ -808,6 +809,12 @@ def _ensure_plugin_dependencies_preferred(
         requested_requirements,
         target_site_packages,
     )
+    if not candidate_modules:
+        return
+
+    locked_modules = get_desktop_core_lock_modules()
+    if locked_modules:
+        candidate_modules = candidate_modules.difference(locked_modules)
     if not candidate_modules:
         return
 
