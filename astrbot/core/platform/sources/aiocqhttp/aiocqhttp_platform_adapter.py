@@ -44,6 +44,7 @@ class AiocqhttpAdapter(Platform):
         self.settings = platform_settings
         self.host = platform_config["ws_reverse_host"]
         self.port = platform_config["ws_reverse_port"]
+        self.prefer_base64 = platform_config.get("prefer_base64", True)
 
         self.metadata = PlatformMetadata(
             name="aiocqhttp",
@@ -122,6 +123,7 @@ class AiocqhttpAdapter(Platform):
             event=None,  # 这里不需要 event，因为是通过 session 发送的
             is_group=is_group,
             session_id=session_id,
+            prefer_base64=self.prefer_base64,
         )
         await super().send_by_session(session, message_chain)
 
@@ -488,6 +490,7 @@ class AiocqhttpAdapter(Platform):
             platform_meta=self.meta(),
             session_id=message.session_id,
             bot=self.bot,
+            prefer_base64=self.prefer_base64,
         )
 
         self.commit_event(message_event)

@@ -1,7 +1,9 @@
 import asyncio
+import pathlib
 import re
 from collections.abc import AsyncGenerator
 
+import aiofiles.os
 from aiocqhttp import CQHttp, Event
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -27,15 +29,62 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         bot: CQHttp,
+        prefer_base64: bool = True,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
+        self.prefer_base64 = prefer_base64
 
     @staticmethod
-    async def _from_segment_to_dict(segment: BaseMessageComponent) -> dict:
+    async def _resolve_file_uri(
+        segment: Image | Record,
+        prefer_base64: bool = True,
+    ) -> str | None:
+        """尝试从 Image/Record 中提取可以直接透传给协议端的 file URI。
+
+        当 prefer_base64 为 True 时直接返回 None，走 base64 兜底，
+        保证跨服务器部署时的兼容性。
+        """
+        if prefer_base64:
+            return None
+
+        # 取原始值：Image 优先用 url，没有再取 file；Record 只有 file
+        if isinstance(segment, Image):
+            raw = segment.url or segment.file
+        else:
+            raw = segment.file
+        if not raw:
+            return None
+
+        # 协议端能直接处理的格式，原样透传
+        if raw.startswith(("file:///", "http://", "https://", "base64://")):
+            return raw
+
+        # 裸路径 → file:// URI（异步检查，不阻塞事件循环）
+        p = pathlib.Path(raw)
+        if p.is_absolute() and await aiofiles.os.path.exists(raw):
+            return p.as_uri()
+
+        return None
+
+    @staticmethod
+    async def _from_segment_to_dict(
+        segment: BaseMessageComponent,
+        prefer_base64: bool = True,
+    ) -> dict:
         """修复部分字段"""
         if isinstance(segment, Image | Record):
-            # For Image and Record segments, we convert them to base64
+            # 根据 prefer_base64 配置决定是否尝试透传
+            file_uri = await AiocqhttpMessageEvent._resolve_file_uri(
+                segment,
+                prefer_base64=prefer_base64,
+            )
+            if file_uri is not None:
+                return {
+                    "type": segment.type.lower(),
+                    "data": {"file": file_uri},
+                }
+            # 兜底：走 base64
             bs64 = await segment.convert_to_base64()
             return {
                 "type": segment.type.lower(),
@@ -44,20 +93,14 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 },
             }
         if isinstance(segment, File):
-            # For File segments, we need to handle the file differently
             d = await segment.to_dict()
             file_val = d.get("data", {}).get("file", "")
             if file_val:
-                import pathlib
-
                 try:
-                    # 使用 pathlib 处理路径，能更好地处理 Windows/Linux 差异
                     path_obj = pathlib.Path(file_val)
-                    # 如果是绝对路径且不包含协议头 (://)，则转换为标准的 file: URI
                     if path_obj.is_absolute() and "://" not in file_val:
                         d["data"]["file"] = path_obj.as_uri()
                 except Exception:
-                    # 如果不是合法路径（例如已经是特定的特殊字符串），则跳过转换
                     pass
             return d
         if isinstance(segment, Video):
@@ -67,22 +110,31 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         return segment.toDict()
 
     @staticmethod
-    async def _parse_onebot_json(message_chain: MessageChain):
+    async def _parse_onebot_json(
+        message_chain: MessageChain,
+        prefer_base64: bool = True,
+    ):
         """解析成 OneBot json 格式"""
         ret = []
         for segment in message_chain.chain:
             if isinstance(segment, At):
                 # At 组件后插入一个空格，避免与后续文本粘连
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, prefer_base64=prefer_base64
+                )
                 ret.append(d)
                 ret.append({"type": "text", "data": {"text": " "}})
             elif isinstance(segment, Plain):
                 if not segment.text.strip():
                     continue
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, prefer_base64=prefer_base64
+                )
                 ret.append(d)
             else:
-                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(
+                    segment, prefer_base64=prefer_base64
+                )
                 ret.append(d)
         return ret
 
@@ -119,6 +171,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         event: Event | None = None,
         is_group: bool = False,
         session_id: str | None = None,
+        prefer_base64: bool = True,
     ) -> None:
         """发送消息至 QQ 协议端（aiocqhttp）。
 
@@ -127,7 +180,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             message_chain (MessageChain): 要发送的消息链
             event (Event | None, optional): aiocqhttp 事件对象.
             is_group (bool, optional): 是否为群消息.
-            session_id (str | None, optional): 会话 ID（群号或 QQ 号
+            session_id (str | None, optional): 会话 ID（群号或 QQ 号）
+            prefer_base64 (bool, optional): 是否优先 base64 编码发送媒体.
 
         """
         # 转发消息、文件消息不能和普通消息混在一起发送
@@ -135,7 +189,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             isinstance(seg, Node | Nodes | File) for seg in message_chain.chain
         )
         if not send_one_by_one:
-            ret = await cls._parse_onebot_json(message_chain)
+            ret = await cls._parse_onebot_json(
+                message_chain, prefer_base64=prefer_base64
+            )
             if not ret:
                 return
             await cls._dispatch_send(bot, event, is_group, session_id, ret)
@@ -156,10 +212,12 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     payload["user_id"] = session_id
                     await bot.call_action("send_private_forward_msg", **payload)
             elif isinstance(seg, File):
-                d = await cls._from_segment_to_dict(seg)
+                d = await cls._from_segment_to_dict(seg, prefer_base64=prefer_base64)
                 await cls._dispatch_send(bot, event, is_group, session_id, [d])
             else:
-                messages = await cls._parse_onebot_json(MessageChain([seg]))
+                messages = await cls._parse_onebot_json(
+                    MessageChain([seg]), prefer_base64=prefer_base64
+                )
                 if not messages:
                     continue
                 await cls._dispatch_send(bot, event, is_group, session_id, messages)
@@ -178,6 +236,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             event=event,  # 不强制要求一定是 Event
             is_group=is_group,
             session_id=session_id,
+            prefer_base64=self.prefer_base64,
         )
         await super().send(message)
 
