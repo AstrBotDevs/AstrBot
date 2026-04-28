@@ -137,7 +137,7 @@ class QQCKeyboard(BaseMessageComponent):
     """
 
     type: str = "qqc_keyboard"  # type: ignore[assignment]
-    rows: list[list[QQCButton]] = []
+    rows: list[list[QQCButton]]
 
     MAX_ROWS: ClassVar[int] = 5
     MAX_BUTTONS_PER_ROW: ClassVar[int] = 5

@@ -354,7 +354,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         **retry_payload,
                     ),
                     payload=payload,
-                    plain_text=plain_text,
                     stream=stream,
                 )
 
@@ -411,7 +410,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                             stream=stream,
                         ),
                         payload=payload,
-                        plain_text=plain_text,
                         stream=stream,
                     )
                 else:
@@ -421,7 +419,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                             **retry_payload,
                         ),
                         payload=payload,
-                        plain_text=plain_text,
                         stream=stream,
                     )
                 logger.debug(f"Message sent to C2C: {ret}")
@@ -437,7 +434,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         **retry_payload,
                     ),
                     payload=payload,
-                    plain_text=plain_text,
                     stream=stream,
                 )
 
@@ -452,7 +448,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         **retry_payload,
                     ),
                     payload=payload,
-                    plain_text=plain_text,
                     stream=stream,
                 )
 
@@ -475,7 +470,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                             **retry_payload,
                         ),
                         payload=payload,
-                        plain_text=plain_text,
                         stream=stream,
                     )
                 elif chat_type == 2 and source.user_openid:
@@ -485,7 +479,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                             **retry_payload,
                         ),
                         payload=payload,
-                        plain_text=plain_text,
                         stream=stream,
                     )
                 elif chat_type == 0 and source.channel_id:
@@ -500,7 +493,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                             **retry_payload,
                         ),
                         payload=guild_payload,
-                        plain_text=plain_text,
                         stream=stream,
                     )
                 else:
@@ -580,14 +572,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self,
         send_func,
         payload: dict,
-        plain_text: str,
         stream: dict | None = None,
     ):
-        """发送包装：流式 markdown 分片若因缺失换行被拒，补 `\\n` 重试一次。
-
-        `plain_text` 参数保留仅为兼容原调用点签名，当前未使用。
-        """
-        del plain_text  # not used after removing markdown-not-allowed fallback
+        """发送包装：流式 markdown 分片若因缺失换行被拒，补 `\\n` 重试一次。"""
         try:
             return await send_func(payload)
         except botpy.errors.ServerError as err:
