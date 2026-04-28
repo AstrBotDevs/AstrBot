@@ -338,6 +338,36 @@ def register_on_platform_loaded(**kwargs):
     return decorator
 
 
+def register_on_raw_platform_event(
+    platform_name: str | None = None,
+    platform_id: str | None = None,
+    event_type: str | None = None,
+    **kwargs,
+):
+    """当平台接收到原始事件时。
+
+    Hook 参数:
+        event
+
+    说明:
+        该 hook 不经过消息 pipeline，直接接收平台原始 payload。
+        首版建议通过 platform_name/platform_id/event_type 做精确匹配。
+    """
+
+    if platform_name is not None:
+        kwargs["raw_platform_name"] = platform_name
+    if platform_id is not None:
+        kwargs["raw_platform_id"] = platform_id
+    if event_type is not None:
+        kwargs["raw_event_type"] = event_type
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnRawPlatformEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
 def register_on_plugin_error(**kwargs):
     """当插件处理消息异常时触发。
 

@@ -13,6 +13,7 @@ from astrbot.core.utils.metrics import Metric
 from .astr_message_event import AstrMessageEvent
 from .message_session import MessageSesion
 from .platform_metadata import PlatformMetadata
+from .raw_platform_event import RawPlatformEvent
 
 
 class PlatformStatus(Enum):
@@ -41,6 +42,9 @@ class Platform(abc.ABC):
         # 维护了消息平台的事件队列，EventBus 会从这里取出事件并处理。
         self._event_queue = event_queue
         self.client_self_id = uuid.uuid4().hex
+
+        # 全局配置引用，由 PlatformManager 注入
+        self._astrbot_config: dict | None = None
 
         # 平台运行状态
         self._status: PlatformStatus = PlatformStatus.PENDING
@@ -163,3 +167,26 @@ class Platform(abc.ABC):
             NotImplementedError: 平台未实现统一 Webhook 模式
         """
         raise NotImplementedError(f"平台 {self.meta().name} 未实现统一 Webhook 模式")
+
+    async def emit_raw_platform_event(
+        self,
+        payload: Any,
+        *,
+        meta: dict[str, Any] | None = None,
+        plugins_name: list[str] | None = None,
+    ) -> bool:
+        """发射平台原始事件到框架级 hook。"""
+        from astrbot.core.pipeline.context_utils import call_raw_platform_event_hook
+
+        if plugins_name is None and self._astrbot_config is not None:
+            plugin_set = self._astrbot_config.get("plugin_set", ["*"])
+            if plugin_set != ["*"]:
+                plugins_name = plugin_set
+
+        event = RawPlatformEvent(
+            payload=payload,
+            platform_meta=self.meta(),
+            meta=meta,
+            plugins_name=plugins_name,
+        )
+        return await call_raw_platform_event_hook(event)

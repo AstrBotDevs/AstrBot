@@ -8,6 +8,7 @@ from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Toke
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from astrbot.api import logger
+from astrbot.core.platform.platform import Platform
 
 # remove logger handler
 for handler in logging.root.handlers[:]:
@@ -16,7 +17,11 @@ for handler in logging.root.handlers[:]:
 
 class QQOfficialWebhook:
     def __init__(
-        self, config: dict, event_queue: asyncio.Queue, botpy_client: Client
+        self,
+        config: dict,
+        event_queue: asyncio.Queue,
+        botpy_client: Client,
+        platform: Platform,
     ) -> None:
         self.appid = config["appid"]
         self.secret = config["secret"]
@@ -39,6 +44,7 @@ class QQOfficialWebhook:
         )
         self.client = botpy_client
         self.event_queue = event_queue
+        self.platform = platform
         self.shutdown_event = asyncio.Event()
         # Deduplication cache for webhook retry callbacks.
         self._seen_event_ids: dict[str, float] = {}
@@ -104,10 +110,18 @@ class QQOfficialWebhook:
         opcode = msg.get("op")
         data = msg.get("d")
 
+        context = {
+            "opcode": opcode,
+            "event_type": event,
+            "is_validation": opcode == 13,
+            "request_path": getattr(request, "path", ""),
+            "request_method": getattr(request, "method", ""),
+        }
+        stopped = await self.platform.emit_raw_platform_event(msg, meta=context)
+
         if opcode == 13:
             # validation
             signed = await self.webhook_validation(cast(dict, data))
-            print(signed)
             return signed
 
         event_id = msg.get("id")
@@ -126,7 +140,7 @@ class QQOfficialWebhook:
                 return {"opcode": 12}
             self._seen_event_ids[event_id] = now
 
-        if event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
+        if not stopped and event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
             event = msg["t"].lower()
             try:
                 func = self._connection.parser[event]
