@@ -819,6 +819,19 @@ class ChatRoute(Route):
                 refs = {}
                 return saved_record
 
+            def build_attachment_saved_event(part: dict | None) -> str | None:
+                if not part or not part.get("attachment_id") or not part.get("type"):
+                    return None
+
+                payload = {
+                    "type": "attachment_saved",
+                    "data": {
+                        "id": part["attachment_id"],
+                        "type": part["type"],
+                    },
+                }
+                return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
             try:
                 # Emit session_id first so clients can bind the stream immediately.
                 session_info = {
@@ -908,12 +921,20 @@ class ChatRoute(Route):
                                 filename, "image"
                             )
                             message_accumulator.add_attachment(part)
+                            if attachment_saved_event := build_attachment_saved_event(
+                                part
+                            ):
+                                yield attachment_saved_event
                         elif msg_type == "record":
                             filename = result_text.replace("[RECORD]", "")
                             part = await self._create_attachment_from_file(
                                 filename, "record"
                             )
                             message_accumulator.add_attachment(part)
+                            if attachment_saved_event := build_attachment_saved_event(
+                                part
+                            ):
+                                yield attachment_saved_event
                         elif msg_type == "file":
                             # 格式: [FILE]filename
                             filename = result_text.replace("[FILE]", "")
@@ -921,12 +942,20 @@ class ChatRoute(Route):
                                 filename, "file"
                             )
                             message_accumulator.add_attachment(part)
+                            if attachment_saved_event := build_attachment_saved_event(
+                                part
+                            ):
+                                yield attachment_saved_event
                         elif msg_type == "video":
                             filename = result_text.replace("[VIDEO]", "")
                             part = await self._create_attachment_from_file(
                                 filename, "video"
                             )
                             message_accumulator.add_attachment(part)
+                            if attachment_saved_event := build_attachment_saved_event(
+                                part
+                            ):
+                                yield attachment_saved_event
 
                         should_save = False
                         if msg_type == "end":
