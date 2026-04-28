@@ -305,18 +305,21 @@ class AstrBotDashboard:
         ssl_config: dict,
     ) -> tuple[bool, dict[str, str]]:
         cert_file = (
-            os.environ.get("DASHBOARD_SSL_CERT")
+            os.environ.get("ASTRBOT_SSL_CERT")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_CERT")
+            or os.environ.get("DASHBOARD_SSL_CERT")
             or ssl_config.get("cert_file", "")
         )
         key_file = (
-            os.environ.get("DASHBOARD_SSL_KEY")
+            os.environ.get("ASTRBOT_SSL_KEY")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_KEY")
+            or os.environ.get("DASHBOARD_SSL_KEY")
             or ssl_config.get("key_file", "")
         )
         ca_certs = (
-            os.environ.get("DASHBOARD_SSL_CA_CERTS")
+            os.environ.get("ASTRBOT_SSL_CA_CERTS")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_CA_CERTS")
+            or os.environ.get("DASHBOARD_SSL_CA_CERTS")
             or ssl_config.get("ca_certs", "")
         )
 
@@ -359,13 +362,15 @@ class AstrBotDashboard:
         ip_addr = []
         dashboard_config = self.core_lifecycle.astrbot_config.get("dashboard", {})
         port = (
-            os.environ.get("DASHBOARD_PORT")
+            os.environ.get("ASTRBOT_PORT")
             or os.environ.get("ASTRBOT_DASHBOARD_PORT")
+            or os.environ.get("DASHBOARD_PORT")
             or dashboard_config.get("port", 6185)
         )
         host = (
-            os.environ.get("DASHBOARD_HOST")
+            os.environ.get("ASTRBOT_HOST")
             or os.environ.get("ASTRBOT_DASHBOARD_HOST")
+            or os.environ.get("DASHBOARD_HOST")
             or dashboard_config.get("host", "0.0.0.0")
         )
         enable = dashboard_config.get("enable", True)
@@ -373,8 +378,9 @@ class AstrBotDashboard:
         if not isinstance(ssl_config, dict):
             ssl_config = {}
         ssl_enable = _parse_env_bool(
-            os.environ.get("DASHBOARD_SSL_ENABLE")
-            or os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE"),
+            os.environ.get("ASTRBOT_SSL_ENABLE")
+            or os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE")
+            or os.environ.get("DASHBOARD_SSL_ENABLE"),
             bool(ssl_config.get("enable", False)),
         )
         resolved_ssl_config: dict[str, str] = {}

@@ -1,8 +1,12 @@
 import json
+from typing import cast
 
 import pytest
 
 from astrbot.core import sp
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.tools.computer_tools.shell import ExecuteShellTool
 from astrbot.core.tools.message_tools import SendMessageToUserTool
@@ -15,7 +19,9 @@ from astrbot.core.tools.web_search_tools import (
 def test_get_builtin_tool_by_class_returns_cached_instance():
     manager = FunctionToolManager()
 
-    tool_by_class = manager.get_builtin_tool(SendMessageToUserTool)
+    tool_by_class = manager.get_builtin_tool(
+        cast(type[FunctionTool], SendMessageToUserTool)
+    )
     tool_by_name = manager.get_builtin_tool("send_message_to_user")
 
     assert tool_by_class is tool_by_name
@@ -33,7 +39,9 @@ def test_builtin_tool_ignores_inactivated_llm_tools():
     )
 
     try:
-        tool = manager.get_builtin_tool(SendMessageToUserTool)
+        tool = manager.get_builtin_tool(
+            cast(type[FunctionTool], SendMessageToUserTool)
+        )
         assert tool.active is True
     finally:
         sp.put("inactivated_llm_tools", [], scope="global", scope_id="global")
@@ -42,7 +50,7 @@ def test_builtin_tool_ignores_inactivated_llm_tools():
 def test_computer_tools_are_registered_as_builtin_tools():
     manager = FunctionToolManager()
 
-    tool = manager.get_builtin_tool(ExecuteShellTool)
+    tool = manager.get_builtin_tool(cast(type[FunctionTool], ExecuteShellTool))
 
     assert tool.name == "astrbot_execute_shell"
     assert tool.parameters["properties"]["background"]["default"] is False
@@ -77,8 +85,10 @@ async def test_execute_shell_defaults_to_foreground(monkeypatch):
         context = FakeConfig()
         event = FakeEvent()
 
-    class FakeWrapper:
-        context = FakeAstrContext()
+    class FakeWrapper(ContextWrapper[AstrAgentContext]):
+        def __init__(self):
+            self.context = FakeAstrContext()  # type: ignore[assignment]
+            self.messages = []
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
@@ -89,6 +99,7 @@ async def test_execute_shell_defaults_to_foreground(monkeypatch):
         FakeWrapper(), command="chromium https://example.com"
     )
 
+    assert isinstance(result, str)
     assert json.loads(result)["success"] is True
     assert calls == [{"command": "chromium https://example.com", "background": False}]
 
@@ -103,6 +114,7 @@ async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
         async def exec(
             self, command, cwd=None, background=False, env=None, timeout=None
         ):
+            assert env is not None
             env["MUTATED_BY_FAKE_SHELL"] = command
             calls.append(env)
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
@@ -122,8 +134,10 @@ async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
         context = FakeConfig()
         event = FakeEvent()
 
-    class FakeWrapper:
-        context = FakeAstrContext()
+    class FakeWrapper(ContextWrapper[AstrAgentContext]):
+        def __init__(self):
+            self.context = FakeAstrContext()  # type: ignore[assignment]
+            self.messages = []
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
@@ -149,6 +163,7 @@ async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
         async def exec(
             self, command, cwd=None, background=False, env=None, timeout=None
         ):
+            assert env is not None
             env["MUTATED_BY_FAKE_SHELL"] = command
             calls.append(env)
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
@@ -168,8 +183,10 @@ async def test_execute_shell_copies_user_env_before_execution(monkeypatch):
         context = FakeConfig()
         event = FakeEvent()
 
-    class FakeWrapper:
-        context = FakeAstrContext()
+    class FakeWrapper(ContextWrapper[AstrAgentContext]):
+        def __init__(self):
+            self.context = FakeAstrContext()  # type: ignore[assignment]
+            self.messages = []
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
@@ -213,8 +230,10 @@ async def test_execute_shell_avoids_double_background_for_detached_commands(
         context = FakeConfig()
         event = FakeEvent()
 
-    class FakeWrapper:
-        context = FakeAstrContext()
+    class FakeWrapper(ContextWrapper[AstrAgentContext]):
+        def __init__(self):
+            self.context = FakeAstrContext()  # type: ignore[assignment]
+            self.messages = []
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
@@ -226,6 +245,7 @@ async def test_execute_shell_avoids_double_background_for_detached_commands(
         FakeWrapper(), command=command, background=True
     )
 
+    assert isinstance(result, str)
     assert json.loads(result)["success"] is True
     assert calls == [{"command": command, "background": False}]
 
@@ -258,8 +278,10 @@ async def test_execute_shell_recognizes_commented_background_command(monkeypatch
         context = FakeConfig()
         event = FakeEvent()
 
-    class FakeWrapper:
-        context = FakeAstrContext()
+    class FakeWrapper(ContextWrapper[AstrAgentContext]):
+        def __init__(self):
+            self.context = FakeAstrContext()  # type: ignore[assignment]
+            self.messages = []
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
@@ -271,6 +293,7 @@ async def test_execute_shell_recognizes_commented_background_command(monkeypatch
         FakeWrapper(), command=command, background=True
     )
 
+    assert isinstance(result, str)
     assert json.loads(result)["success"] is True
     assert calls == [{"command": command, "background": False}]
 
@@ -322,8 +345,10 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
         context = FakeConfig()
         event = FakeEvent()
 
-    class FakeWrapper:
-        context = FakeAstrContext()
+    class FakeWrapper(ContextWrapper[AstrAgentContext]):
+        def __init__(self):
+            self.context = FakeAstrContext()  # type: ignore[assignment]
+            self.messages = []
 
     async def fake_get_booter(context, session_id):
         return FakeBooter()
@@ -338,8 +363,12 @@ async def test_execute_shell_reports_blank_exception_type(monkeypatch):
 def test_firecrawl_tools_are_registered_as_builtin_tools():
     manager = FunctionToolManager()
 
-    search_tool = manager.get_builtin_tool(FirecrawlWebSearchTool)
-    extract_tool = manager.get_builtin_tool(FirecrawlExtractWebPageTool)
+    search_tool = manager.get_builtin_tool(
+        cast(type[FunctionTool], FirecrawlWebSearchTool)
+    )
+    extract_tool = manager.get_builtin_tool(
+        cast(type[FunctionTool], FirecrawlExtractWebPageTool)
+    )
 
     assert search_tool.name == "web_search_firecrawl"
     assert extract_tool.name == "firecrawl_extract_web_page"
