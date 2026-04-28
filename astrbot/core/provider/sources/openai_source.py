@@ -591,7 +591,29 @@ class ProviderOpenAIOfficial(Provider):
             stream=False,
             extra_body=extra_body,
         )
-
+        
+        # --- 新增：兼容某些 API 强制返回 SSE 格式的 Bug ---
+        if isinstance(completion, str):
+            logger.warning(f"检测到 API 返回了字符串而非对象，尝试自动修复: {completion[:100]}...")
+            try:
+                # 如果是 data:{...} 格式，去掉 "data:" 并解析 JSON
+                json_str = completion.strip()
+                if json_str.startswith("data:"):
+                    json_str = json_str[5:].strip()
+                
+                # 尝试解析 JSON
+                completion_dict = json.loads(json_str)
+                
+                # 重新构造 ChatCompletion 对象
+                completion = ChatCompletion.construct(**completion_dict)
+                logger.info("成功将字符串响应转换为 ChatCompletion 对象。")
+                
+            except Exception as e:
+                logger.error(f"自动修复失败: {e}")
+                # 如果修复失败，继续抛出原始错误
+                raise Exception(f"API 返回格式错误且无法修复：{type(completion)}: {completion}。")
+        # ---------------------------------------------------
+        
         if not isinstance(completion, ChatCompletion):
             raise Exception(
                 f"API 返回的 completion 类型错误：{type(completion)}: {completion}。",
