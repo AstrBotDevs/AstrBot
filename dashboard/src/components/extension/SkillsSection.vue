@@ -590,6 +590,74 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import ItemCard from "@/components/shared/ItemCard.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 
+interface Skill {
+  name: string;
+  active: boolean;
+  description: string | null;
+  path: string;
+  source_type: string;
+}
+
+interface UploadResultEntry {
+  name?: string;
+  error?: string;
+  filename?: string;
+}
+
+type UploadStatus = 'waiting' | 'uploading' | 'success' | 'error' | 'skipped';
+
+interface UploadItem {
+  id: string;
+  file: File;
+  name: string;
+  size: number;
+  status: UploadStatus;
+  validationMessage: string;
+  filenameKey: string;
+}
+
+interface NeoCandidate {
+  id: string;
+  skill_key: string;
+  status: string;
+  latest_score: number | null;
+  payload_ref: string | null;
+}
+
+interface NeoRelease {
+  id: string;
+  skill_key: string;
+  stage: string;
+  version: string;
+  is_active: boolean;
+  active?: boolean;
+}
+
+interface SandboxCache {
+  ready: boolean;
+  count: number;
+  updated_at: string | null;
+}
+
+interface UploadStateCounts {
+  total: number;
+  waiting: number;
+  uploading: number;
+  success: number;
+  error: number;
+  skipped: number;
+}
+
+interface SkillsListPayload {
+  runtime?: string;
+  sandbox_cache?: {
+    ready?: boolean;
+    count?: number;
+    updated_at?: string | null;
+  };
+  skills?: Skill[];
+}
+
 const STATUS_WAITING = "waiting";
 const STATUS_UPLOADING = "uploading";
 const STATUS_SUCCESS = "success";
@@ -604,31 +672,31 @@ export default {
     const { tm } = useModuleI18n("features/extension");
 
     const mode = ref("local");
-    const skills = ref([]);
+    const skills = ref<Skill[]>([]);
     const loading = ref(false);
     const runtime = ref("local");
-    const sandboxCache = reactive({ ready: false, count: 0, updated_at: null });
+    const sandboxCache = reactive<SandboxCache>({ ready: false, count: 0, updated_at: null });
     const uploading = ref(false);
     const uploadDialog = ref(false);
-    const uploadInput = ref(null);
-    const uploadItems = ref([]);
+    const uploadInput = ref<HTMLInputElement | null>(null);
+    const uploadItems = ref<UploadItem[]>([]);
     const isUploadDragging = ref(false);
-    const itemLoading = reactive({});
+    const itemLoading = reactive<Record<string, boolean>>({});
     const deleteDialog = ref(false);
     const deleting = ref(false);
-    const skillToDelete = ref(null);
-    const snackbar = reactive({ show: false, message: "", color: "success" });
+    const skillToDelete = ref<Skill | null>(null);
+    const snackbar = reactive<{ show: boolean; message: string; color: string }>({ show: false, message: "", color: "success" });
 
     const neoLoading = ref(false);
-    const neoCandidates = ref([]);
-    const neoReleases = ref([]);
-    const neoFilters = reactive({
+    const neoCandidates = ref<NeoCandidate[]>([]);
+    const neoReleases = ref<NeoRelease[]>([]);
+    const neoFilters = reactive<{ skill_key: string; status: string; stage: string }>({
       skill_key: "",
       status: "",
       stage: "",
     });
-    const candidatePromoteLoading = reactive({});
-    const payloadDialog = reactive({
+    const candidatePromoteLoading = reactive<Record<string, boolean>>({});
+    const payloadDialog = reactive<{ show: boolean; content: string }>({
       show: false,
       content: "",
     });
@@ -655,10 +723,10 @@ export default {
     ]);
 
     const activeReleaseCount = computed(
-      () => neoReleases.value.filter((item) => item?.is_active).length,
+      () => neoReleases.value.filter((item: NeoRelease) => item?.is_active).length,
     );
     const uploadStateCounts = computed(() =>
-      uploadItems.value.reduce(
+      uploadItems.value.reduce<UploadStateCounts>(
         (counts, item) => {
           counts.total += 1;
           counts[item.status] += 1;
@@ -676,7 +744,7 @@ export default {
     );
     const hasUploadableItems = computed(() =>
       uploadItems.value.some(
-        (item) =>
+        (item: UploadItem) =>
           item.status === STATUS_WAITING || item.status === STATUS_ERROR,
       ),
     );
@@ -708,13 +776,13 @@ export default {
       },
     ]);
 
-    const showMessage = (message, color = "success") => {
+    const showMessage = (message: string, color: string = "success"): void => {
       snackbar.message = message;
       snackbar.color = color;
       snackbar.show = true;
     };
 
-    const normalizeSkillsPayload = (res) => {
+    const normalizeSkillsPayload = (res: { data?: { data?: Skill[] | SkillsListPayload } }): Skill[] => {
       const payload = res?.data?.data || [];
       if (Array.isArray(payload)) {
         runtime.value = "local";
@@ -731,41 +799,41 @@ export default {
       return payload.skills || [];
     };
 
-    const sourceTypeLabel = (sourceType) => {
+    const sourceTypeLabel = (sourceType: string): string => {
       if (sourceType === "sandbox_only") return tm("skills.sourceSandboxOnly");
       if (sourceType === "both") return tm("skills.sourceBoth");
       return tm("skills.sourceLocalOnly");
     };
 
-    const sourceTypeColor = (sourceType) => {
+    const sourceTypeColor = (sourceType: string): string => {
       if (sourceType === "sandbox_only") return "indigo";
       if (sourceType === "both") return "success";
       return "primary";
     };
 
-    const isSandboxPresetSkill = (skill) =>
+    const isSandboxPresetSkill = (skill: Skill): boolean =>
       skill?.source_type === "sandbox_only";
 
-    const normalizeNeoItemsPayload = (res) => {
+    const normalizeNeoItemsPayload = <T>(res: { data?: { data?: T[] | { items?: T[] } } }): T[] => {
       const payload = res?.data?.data || [];
       if (Array.isArray(payload)) return payload;
       if (Array.isArray(payload.items)) return payload.items;
       return [];
     };
 
-    const formatFileSize = (size) => {
+    const formatFileSize = (size: number): string => {
       if (!Number.isFinite(size) || size <= 0) return "0 B";
       if (size < 1024) return `${size} B`;
       if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
       return `${(size / (1024 * 1024)).toFixed(1)} MB`;
     };
 
-    const normalizeUploadName = (name) =>
+    const normalizeUploadName = (name: string): string =>
       String(name || "")
         .trim()
         .toLowerCase();
 
-    const buildUploadItem = (file, status, validationMessage) => ({
+    const buildUploadItem = (file: File, status: UploadStatus, validationMessage: string): UploadItem => ({
       id: `upload-${nextUploadItemId++}`,
       file,
       name: file.name,
@@ -775,7 +843,7 @@ export default {
       filenameKey: normalizeUploadName(file.name),
     });
 
-    const uploadStatusLabel = (status) => {
+    const uploadStatusLabel = (status: UploadStatus): string => {
       if (status === STATUS_UPLOADING) return tm("skills.statusUploading");
       if (status === STATUS_SUCCESS) return tm("skills.statusSuccess");
       if (status === STATUS_ERROR) return tm("skills.statusError");
@@ -783,10 +851,10 @@ export default {
       return tm("skills.statusWaiting");
     };
 
-    const statusChipClass = (status) =>
+    const statusChipClass = (status: string): string =>
       `skills-status-chip skills-status-chip--${status}`;
 
-    const resetUploadState = () => {
+    const resetUploadState = (): void => {
       uploadItems.value = [];
       isUploadDragging.value = false;
       if (uploadInput.value) {
@@ -794,25 +862,25 @@ export default {
       }
     };
 
-    const openUploadDialog = () => {
+    const openUploadDialog = (): void => {
       uploadDialog.value = true;
     };
 
-    const closeUploadDialog = () => {
+    const closeUploadDialog = (): void => {
       if (uploading.value) return;
       uploadDialog.value = false;
     };
 
-    const openUploadPicker = () => {
+    const openUploadPicker = (): void => {
       if (uploading.value) return;
       uploadInput.value?.click();
     };
 
-    const addUploadFiles = (filesToAdd) => {
+    const addUploadFiles = (filesToAdd: File[]): void => {
       const existingNames = new Set(
-        uploadItems.value.map((item) => item.filenameKey),
+        uploadItems.value.map((item: UploadItem) => item.filenameKey),
       );
-      const nextItems = [];
+      const nextItems: UploadItem[] = [];
 
       for (const file of filesToAdd) {
         if (!file?.name) continue;
@@ -851,15 +919,16 @@ export default {
       }
     };
 
-    const handleUploadSelection = (event) => {
-      const selected = Array.from(event?.target?.files || []);
+    const handleUploadSelection = (event: Event): void => {
+      const target = event?.target as HTMLInputElement | null;
+      const selected = Array.from(target?.files || []);
       addUploadFiles(selected);
       if (uploadInput.value) {
         uploadInput.value.value = "";
       }
     };
 
-    const handleUploadDrop = (event) => {
+    const handleUploadDrop = (event: DragEvent): void => {
       isUploadDragging.value = false;
       if (uploading.value) {
         return;
@@ -867,13 +936,16 @@ export default {
       addUploadFiles(Array.from(event?.dataTransfer?.files || []));
     };
 
-    const removeUploadItem = (itemId) => {
+    const removeUploadItem = (itemId: string): void => {
       uploadItems.value = uploadItems.value.filter(
-        (item) => item.id !== itemId,
+        (item: UploadItem) => item.id !== itemId,
       );
     };
 
-    const takeFirstMatch = (matchMap, filenameKey) => {
+    const takeFirstMatch = (
+      matchMap: Map<string, UploadResultEntry[]>,
+      filenameKey: string,
+    ): UploadResultEntry | null => {
       const matches = matchMap.get(filenameKey) || [];
       const entry = matches.shift() || null;
       if (matches.length === 0) {
@@ -882,20 +954,29 @@ export default {
       return entry;
     };
 
-    const buildResultMap = (items = []) => {
-      const resultMap = new Map();
+    const buildResultMap = (
+      items: UploadResultEntry[] = [],
+    ): Map<string, UploadResultEntry[]> => {
+      const resultMap = new Map<string, UploadResultEntry[]>();
       for (const item of items) {
-        const filenameKey = normalizeUploadName(item?.filename);
+        const filenameKey = normalizeUploadName(item?.filename || "");
         if (!filenameKey) continue;
         if (!resultMap.has(filenameKey)) {
           resultMap.set(filenameKey, []);
         }
-        resultMap.get(filenameKey).push(item);
+        resultMap.get(filenameKey)!.push(item);
       }
       return resultMap;
     };
 
-    const applyUploadResults = (attemptedItems, payload) => {
+    const applyUploadResults = (
+      attemptedItems: UploadItem[],
+      payload: {
+        succeeded?: UploadResultEntry[];
+        failed?: UploadResultEntry[];
+        skipped?: UploadResultEntry[];
+      },
+    ): void => {
       const succeededMap = buildResultMap(payload?.succeeded);
       const failedMap = buildResultMap(payload?.failed);
       const skippedMap = buildResultMap(payload?.skipped);
@@ -931,12 +1012,12 @@ export default {
       }
     };
 
-    const fetchSkills = async () => {
+    const fetchSkills = async (): Promise<void> => {
       loading.value = true;
       try {
         const res = await axios.get("/api/skills");
         skills.value = normalizeSkillsPayload(res);
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.loadFailed"), "error");
       } finally {
         loading.value = false;
@@ -944,11 +1025,11 @@ export default {
     };
 
     const handleApiResponse = (
-      res,
-      successMessage,
-      failureMessageDefault,
-      onSuccess,
-    ) => {
+      res: { data?: { status?: string; message?: string } },
+      successMessage: string,
+      failureMessageDefault: string,
+      onSuccess?: () => void,
+    ): void => {
       if (res && res.data && res.data.status === "ok") {
         showMessage(successMessage, "success");
         if (onSuccess) onSuccess();
@@ -959,9 +1040,9 @@ export default {
       }
     };
 
-    const uploadSkillBatch = async () => {
+    const uploadSkillBatch = async (): Promise<void> => {
       const attemptedItems = uploadItems.value.filter(
-        (item) =>
+        (item: UploadItem) =>
           item.status === STATUS_WAITING || item.status === STATUS_ERROR,
       );
       if (attemptedItems.length === 0) return;
@@ -1005,7 +1086,7 @@ export default {
         if (succeededCount > 0) {
           await fetchSkills();
         }
-      } catch (_err) {
+      } catch (_err: unknown) {
         for (const item of attemptedItems) {
           item.status = STATUS_ERROR;
           item.validationMessage = tm("skills.validationUploadFailed");
@@ -1016,7 +1097,7 @@ export default {
       }
     };
 
-    const toggleSkill = async (skill) => {
+    const toggleSkill = async (skill: Skill): Promise<void> => {
       if (isSandboxPresetSkill(skill)) {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
@@ -1036,14 +1117,14 @@ export default {
             skill.active = nextActive;
           },
         );
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.updateFailed"), "error");
       } finally {
         itemLoading[skill.name] = false;
       }
     };
 
-    const confirmDelete = (skill) => {
+    const confirmDelete = (skill: Skill): void => {
       if (isSandboxPresetSkill(skill)) {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
@@ -1052,7 +1133,7 @@ export default {
       deleteDialog.value = true;
     };
 
-    const deleteSkill = async () => {
+    const deleteSkill = async (): Promise<void> => {
       if (!skillToDelete.value) return;
       deleting.value = true;
       try {
@@ -1068,14 +1149,14 @@ export default {
             await fetchSkills();
           },
         );
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.deleteFailed"), "error");
       } finally {
         deleting.value = false;
       }
     };
 
-    const downloadSkill = async (skill) => {
+    const downloadSkill = async (skill: Skill): Promise<void> => {
       if (isSandboxPresetSkill(skill)) {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
@@ -1096,29 +1177,29 @@ export default {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
         showMessage(tm("skills.downloadSuccess"), "success");
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.downloadFailed"), "error");
       } finally {
         itemLoading[skill.name] = false;
       }
     };
 
-    const fetchNeoCandidates = async () => {
+    const fetchNeoCandidates = async (): Promise<void> => {
       const params = {
         skill_key: neoFilters.skill_key || undefined,
         status: neoFilters.status || undefined,
       };
       const res = await axios.get("/api/skills/neo/candidates", { params });
-      neoCandidates.value = normalizeNeoItemsPayload(res);
+      neoCandidates.value = normalizeNeoItemsPayload<NeoCandidate>(res);
     };
 
-    const fetchNeoReleases = async () => {
+    const fetchNeoReleases = async (): Promise<void> => {
       const params = {
         skill_key: neoFilters.skill_key || undefined,
         stage: neoFilters.stage || undefined,
       };
       const res = await axios.get("/api/skills/neo/releases", { params });
-      neoReleases.value = normalizeNeoItemsPayload(res).map((item) => {
+      neoReleases.value = normalizeNeoItemsPayload<NeoRelease>(res).map((item: NeoRelease) => {
         if (!item || typeof item !== "object") {
           return item;
         }
@@ -1129,7 +1210,7 @@ export default {
       });
     };
 
-    const loadNeoAvailability = async () => {
+    const loadNeoAvailability = async (): Promise<void> => {
       try {
         const res = await axios.get("/api/config/get");
         const config = res?.data?.data?.config || {};
@@ -1139,7 +1220,7 @@ export default {
         const booter = providerSettings?.sandbox?.booter || "";
         neoEnabled.value =
           currentRuntime === "sandbox" && booter === "shipyard_neo";
-      } catch (_err) {
+      } catch (_err: unknown) {
         neoEnabled.value = false;
       }
 
@@ -1149,18 +1230,18 @@ export default {
       }
     };
 
-    const fetchNeoData = async () => {
+    const fetchNeoData = async (): Promise<void> => {
       neoLoading.value = true;
       try {
         await Promise.all([fetchNeoCandidates(), fetchNeoReleases()]);
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.neoLoadFailed"), "error");
       } finally {
         neoLoading.value = false;
       }
     };
 
-    const evaluateCandidate = async (candidate, passed) => {
+    const evaluateCandidate = async (candidate: NeoCandidate, passed: boolean): Promise<void> => {
       try {
         const res = await axios.post("/api/skills/neo/evaluate", {
           candidate_id: candidate.id,
@@ -1176,20 +1257,20 @@ export default {
             await fetchNeoCandidates();
           },
         );
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.neoEvaluateFailed"), "error");
       }
     };
 
-    const candidatePromoteLoadingKey = (candidateId, stage) =>
+    const candidatePromoteLoadingKey = (candidateId: string, stage: string): string =>
       `${candidateId}:${stage}`;
-    const isCandidatePromoteLoading = (candidateId, stage) =>
+    const isCandidatePromoteLoading = (candidateId: string, stage: string): boolean =>
       !!candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)];
-    const isCandidatePromoting = (candidateId) =>
+    const isCandidatePromoting = (candidateId: string): boolean =>
       isCandidatePromoteLoading(candidateId, "canary") ||
       isCandidatePromoteLoading(candidateId, "stable");
 
-    const promoteCandidate = async (candidate, stage) => {
+    const promoteCandidate = async (candidate: NeoCandidate, stage: 'canary' | 'stable'): Promise<void> => {
       const candidateId = candidate?.id;
       if (!candidateId) return;
       const loadingKey = candidatePromoteLoadingKey(candidateId, stage);
@@ -1214,14 +1295,14 @@ export default {
         if (stage === "stable") {
           await fetchSkills();
         }
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.neoPromoteFailed"), "error");
       } finally {
         candidatePromoteLoading[loadingKey] = false;
       }
     };
 
-    const rollbackRelease = async (release) => {
+    const rollbackRelease = async (release: NeoRelease): Promise<void> => {
       try {
         const res = await axios.post("/api/skills/neo/rollback", {
           release_id: release.id,
@@ -1234,12 +1315,12 @@ export default {
             await fetchNeoData();
           },
         );
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.neoRollbackFailed"), "error");
       }
     };
 
-    const deactivateRelease = async (release) => {
+    const deactivateRelease = async (release: NeoRelease): Promise<void> => {
       try {
         const res = await axios.post("/api/skills/neo/rollback", {
           release_id: release.id,
@@ -1252,12 +1333,12 @@ export default {
             await fetchNeoData();
           },
         );
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.neoDeactivateFailed"), "error");
       }
     };
 
-    const handleReleaseLifecycleAction = async (release) => {
+    const handleReleaseLifecycleAction = async (release: NeoRelease): Promise<void> => {
       if (release?.is_active) {
         await deactivateRelease(release);
         return;
@@ -1265,7 +1346,7 @@ export default {
       await rollbackRelease(release);
     };
 
-    const syncRelease = async (release) => {
+    const syncRelease = async (release: NeoRelease): Promise<void> => {
       try {
         const res = await axios.post("/api/skills/neo/sync", {
           release_id: release.id,
@@ -1278,12 +1359,12 @@ export default {
             await fetchSkills();
           },
         );
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.neoSyncFailed"), "error");
       }
     };
 
-    const viewPayload = async (payloadRef) => {
+    const viewPayload = async (payloadRef: string): Promise<void> => {
       if (!payloadRef) return;
       try {
         const res = await axios.get("/api/skills/neo/payload", {
@@ -1299,12 +1380,12 @@ export default {
         const payload = res?.data?.data || {};
         payloadDialog.content = JSON.stringify(payload, null, 2);
         payloadDialog.show = true;
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.neoPayloadFailed"), "error");
       }
     };
 
-    const deleteCandidate = async (candidate) => {
+    const deleteCandidate = async (candidate: NeoCandidate): Promise<void> => {
       try {
         const res = await axios.post("/api/skills/neo/delete-candidate", {
           candidate_id: candidate.id,
@@ -1318,12 +1399,12 @@ export default {
             await fetchNeoData();
           },
         );
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.neoDeleteFailed"), "error");
       }
     };
 
-    const deleteRelease = async (release) => {
+    const deleteRelease = async (release: NeoRelease): Promise<void> => {
       try {
         const res = await axios.post("/api/skills/neo/delete-release", {
           release_id: release.id,
@@ -1337,12 +1418,12 @@ export default {
             await fetchNeoData();
           },
         );
-      } catch (_err) {
+      } catch (_err: unknown) {
         showMessage(tm("skills.neoDeleteFailed"), "error");
       }
     };
 
-    const refreshCurrentMode = async () => {
+    const refreshCurrentMode = async (): Promise<void> => {
       if (mode.value === "neo") {
         await loadNeoAvailability();
         if (neoEnabled.value) {
@@ -1355,7 +1436,7 @@ export default {
       }
     };
 
-    watch(mode, async (nextMode) => {
+    watch(mode, async (nextMode: string) => {
       if (nextMode === "neo") {
         await loadNeoAvailability();
         if (neoEnabled.value) {
@@ -1366,7 +1447,7 @@ export default {
       }
     });
 
-    watch(uploadDialog, (isOpen) => {
+    watch(uploadDialog, (isOpen: boolean) => {
       if (!isOpen && !uploading.value) {
         resetUploadState();
       }

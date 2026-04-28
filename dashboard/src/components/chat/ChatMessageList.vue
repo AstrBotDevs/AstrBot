@@ -398,7 +398,7 @@ const customMarkdownTags = ["ref"];
 const downloadingFiles = ref(new Set<string>());
 const imagePreview = reactive({ visible: false, url: "" });
 const refsSidebarOpen = ref(false);
-const selectedRefs = ref<Record<string, unknown> | null>(null);
+const selectedRefs = ref<Record<string, unknown> | undefined>(undefined);
 const listRoot = ref<HTMLElement | null>(null);
 const avatarSize = computed(() => (props.variant === "thread" ? 36 : 56));
 
@@ -605,7 +605,7 @@ function handleOpenRefs(refs: unknown) {
     return;
   }
   selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : undefined;
   refsSidebarOpen.value = true;
 }
 

@@ -269,23 +269,56 @@
 </template>
 
 <script setup lang="ts">
-import axios from "@/utils/request";
+import axios, { AxiosError } from "@/utils/request";
 import { computed, onMounted, ref } from "vue";
 import { useTheme } from "vuetify";
 import { useModuleI18n } from "@/i18n/composables";
+
+interface CronJobItem {
+  job_id: string;
+  name?: string;
+  description?: string;
+  session?: string;
+  enabled: boolean;
+  run_once: boolean;
+  cron_expression?: string;
+  run_at?: string;
+  timezone?: string;
+  next_run_time?: string | null;
+  last_run_at?: string | null;
+  job_type?: string;
+  payload?: { session?: string };
+}
+
+interface NewJobForm {
+  run_once: boolean;
+  name: string;
+  note: string;
+  cron_expression: string;
+  run_at: string;
+  session: string;
+  timezone: string;
+  enabled: boolean;
+}
+
+interface SnackbarState {
+  show: boolean;
+  message: string;
+  color: "success" | "error" | "warning";
+}
 
 const { tm } = useModuleI18n("features/cron");
 const theme = useTheme();
 
 const isDark = computed(() => theme.global.current.value.dark);
 const loading = ref(false);
-const jobs = ref<any[]>([]);
+const jobs = ref<CronJobItem[]>([]);
 const proactivePlatforms = ref<
   { id: string; name: string; display_name?: string }[]
 >([]);
 const createDialog = ref(false);
 const creating = ref(false);
-const newJob = ref({
+const newJob = ref<NewJobForm>({
   run_once: false,
   name: "",
   note: "",
@@ -296,7 +329,7 @@ const newJob = ref({
   enabled: true,
 });
 
-const snackbar = ref({ show: false, message: "", color: "success" });
+const snackbar = ref<SnackbarState>({ show: false, message: "", color: "success" });
 
 const proactivePlatformText = computed(() =>
   proactivePlatforms.value
@@ -352,13 +385,13 @@ function toast(
   snackbar.value = { show: true, message, color };
 }
 
-function parseTimeValue(value: any): number {
+function parseTimeValue(value: string | null | undefined): number {
   if (!value) return 0;
   const ts = new Date(value).getTime();
   return Number.isNaN(ts) ? 0 : ts;
 }
 
-function formatTime(val: any): string {
+function formatTime(val: string | null | undefined): string {
   if (!val) return tm("table.notAvailable");
   try {
     return new Date(val).toLocaleString();
@@ -367,7 +400,7 @@ function formatTime(val: any): string {
   }
 }
 
-function jobTypeLabel(item: any): string {
+function jobTypeLabel(item: CronJobItem): string {
   if (item.run_once) return tm("table.type.once");
   const type = item.job_type || "active_agent";
   const map: Record<string, string> = {
@@ -377,14 +410,26 @@ function jobTypeLabel(item: any): string {
   return map[type] || tm("table.type.unknown", { type });
 }
 
-function scheduleLabel(item: any): string {
+function scheduleLabel(item: CronJobItem): string {
   if (item.run_once) return formatTime(item.run_at);
   return item.cron_expression || tm("table.notAvailable");
 }
 
-function scheduleMeta(item: any): string {
+function scheduleMeta(item: CronJobItem): string {
   if (item.run_once) return tm("table.type.once");
   return item.timezone || tm("table.timezoneLocal");
+}
+
+interface ApiPlatformItem {
+  id?: string;
+  type?: string;
+  display_name?: string;
+  meta?: {
+    id?: string;
+    name?: string;
+    display_name?: string;
+    support_proactive_message?: boolean;
+  };
 }
 
 async function loadJobs() {
@@ -392,16 +437,22 @@ async function loadJobs() {
   try {
     const res = await axios.get("/api/cron/jobs");
     if (res.data.status === "ok") {
-      const data = Array.isArray(res.data.data) ? res.data.data : [];
-      jobs.value = data.map((job: any) => ({
+      const data: CronJobItem[] = Array.isArray(res.data.data)
+        ? res.data.data
+        : [];
+      jobs.value = data.map((job) => ({
         ...job,
         session: job?.payload?.session || job?.session || "",
       }));
     } else {
       toast(res.data.message || tm("messages.loadFailed"), "error");
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm("messages.loadFailed"), "error");
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      toast(e.response?.data?.message || tm("messages.loadFailed"), "error");
+    } else {
+      toast(tm("messages.loadFailed"), "error");
+    }
   } finally {
     loading.value = false;
   }
@@ -412,8 +463,8 @@ async function loadPlatforms() {
     const res = await axios.get("/api/platform/stats");
     if (res.data.status === "ok" && Array.isArray(res.data.data?.platforms)) {
       proactivePlatforms.value = res.data.data.platforms
-        .filter((p: any) => p?.meta?.support_proactive_message)
-        .map((p: any) => ({
+        .filter((p: ApiPlatformItem) => p?.meta?.support_proactive_message)
+        .map((p: ApiPlatformItem) => ({
           id: p?.id || p?.meta?.id || "unknown",
           name: p?.meta?.name || p?.type || "",
           display_name: p?.meta?.display_name || p?.display_name,
@@ -424,7 +475,7 @@ async function loadPlatforms() {
   }
 }
 
-async function toggleJob(job: any) {
+async function toggleJob(job: CronJobItem) {
   try {
     const res = await axios.patch(`/api/cron/jobs/${job.job_id}`, {
       enabled: job.enabled,
@@ -433,13 +484,17 @@ async function toggleJob(job: any) {
       toast(res.data.message || tm("messages.updateFailed"), "error");
       await loadJobs();
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm("messages.updateFailed"), "error");
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      toast(e.response?.data?.message || tm("messages.updateFailed"), "error");
+    } else {
+      toast(tm("messages.updateFailed"), "error");
+    }
     await loadJobs();
   }
 }
 
-async function deleteJob(job: any) {
+async function deleteJob(job: CronJobItem) {
   try {
     const res = await axios.delete(`/api/cron/jobs/${job.job_id}`);
     if (res.data.status === "ok") {
@@ -448,8 +503,12 @@ async function deleteJob(job: any) {
     } else {
       toast(res.data.message || tm("messages.deleteFailed"), "error");
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm("messages.deleteFailed"), "error");
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      toast(e.response?.data?.message || tm("messages.deleteFailed"), "error");
+    } else {
+      toast(tm("messages.deleteFailed"), "error");
+    }
   }
 }
 
@@ -499,8 +558,12 @@ async function createJob() {
     } else {
       toast(res.data.message || tm("messages.createFailed"), "error");
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm("messages.createFailed"), "error");
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      toast(e.response?.data?.message || tm("messages.createFailed"), "error");
+    } else {
+      toast(tm("messages.createFailed"), "error");
+    }
   } finally {
     creating.value = false;
   }

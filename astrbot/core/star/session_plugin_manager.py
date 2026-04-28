@@ -1,6 +1,6 @@
 """会话插件管理器 - 负责管理每个会话的插件启停状态"""
 
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -19,17 +19,20 @@ def _normalize_session_plugin_config(value: object) -> dict[str, SessionPluginSe
         if not isinstance(session_id, str) or not isinstance(raw_settings, dict):
             continue
         settings: SessionPluginSettings = {}
-        raw_dict: dict[str, object] = raw_settings
-        enabled_plugins = raw_dict.get("enabled_plugins")
+        enabled_plugins = raw_settings.get("enabled_plugins")
         if isinstance(enabled_plugins, list) and all(
             isinstance(plugin_name, str) for plugin_name in enabled_plugins
         ):
-            settings["enabled_plugins"] = enabled_plugins
-        disabled_plugins = raw_dict.get("disabled_plugins")
+            settings["enabled_plugins"] = [
+                p for p in enabled_plugins if isinstance(p, str)
+            ]
+        disabled_plugins = raw_settings.get("disabled_plugins")
         if isinstance(disabled_plugins, list) and all(
             isinstance(plugin_name, str) for plugin_name in disabled_plugins
         ):
-            settings["disabled_plugins"] = disabled_plugins
+            settings["disabled_plugins"] = [
+                p for p in disabled_plugins if isinstance(p, str)
+            ]
         config[session_id] = settings
     return config
 
@@ -57,9 +60,14 @@ class SessionPluginManager:
                 default={},
             ),
         )
-        session_config = session_plugin_config.get(session_id, {})
-        enabled_plugins = session_config.get("enabled_plugins", [])
-        disabled_plugins = session_config.get("disabled_plugins", [])
+        session_config = session_plugin_config.get(session_id)
+        enabled_plugins: list[str] = []
+        disabled_plugins: list[str] = []
+        if session_config is not None:
+            if "enabled_plugins" in session_config:
+                enabled_plugins = session_config["enabled_plugins"]
+            if "disabled_plugins" in session_config:
+                disabled_plugins = session_config["disabled_plugins"]
         if plugin_name in disabled_plugins:
             return False
         if plugin_name in enabled_plugins:
@@ -69,8 +77,8 @@ class SessionPluginManager:
     @staticmethod
     async def filter_handlers_by_session(
         event: AstrMessageEvent,
-        handlers: list,
-    ) -> list:
+        handlers: list[Any],
+    ) -> list[Any]:
         """根据会话配置过滤处理器列表
 
         Args:
@@ -93,8 +101,10 @@ class SessionPluginManager:
                 default={},
             ),
         )
-        session_config = session_plugin_config.get(session_id, {})
-        disabled_plugins = session_config.get("disabled_plugins", [])
+        session_config = session_plugin_config.get(session_id)
+        disabled_plugins: list[str] = []
+        if session_config is not None and "disabled_plugins" in session_config:
+            disabled_plugins = session_config["disabled_plugins"]
         for handler in handlers:
             plugin = star_map.get(handler.handler_module_path)
             if not plugin:

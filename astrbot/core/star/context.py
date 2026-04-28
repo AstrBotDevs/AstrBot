@@ -48,6 +48,7 @@ logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
+    from astrbot.core.star.star_manager import PluginManager
 
 
 class PlatformManagerProtocol(Protocol):
@@ -56,12 +57,6 @@ class PlatformManagerProtocol(Protocol):
 
 class Context:
     """暴露给插件的接口上下文。"""
-
-    registered_web_apis: list = []
-
-    # 向后兼容的变量
-    _register_tasks: list[Awaitable] = []
-    _star_manager = None
 
     def __init__(
         self,
@@ -101,9 +96,9 @@ class Context:
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
         self.subagent_orchestrator = subagent_orchestrator
-        self.registered_web_apis: list = []
+        self._registered_web_apis: list = []
         self._register_tasks: list[Awaitable] = []
-        self._star_manager = None
+        self._star_manager: PluginManager | None = None
 
     async def llm_generate(
         self,
@@ -410,7 +405,9 @@ class Context:
             provider_type=ProviderType.TEXT_TO_SPEECH,
             umo=umo,
         )
-        if prov and not isinstance(prov, TTSProvider):
+        if prov is None:
+            return None
+        if not isinstance(prov, TTSProvider):
             raise ValueError("返回的 Provider 不是 TTSProvider 类型")
         return prov
 
@@ -431,7 +428,9 @@ class Context:
             provider_type=ProviderType.SPEECH_TO_TEXT,
             umo=umo,
         )
-        if prov and not isinstance(prov, STTProvider):
+        if prov is None:
+            return None
+        if not isinstance(prov, STTProvider):
             raise ValueError("返回的 Provider 不是 STTProvider 类型")
         return prov
 
@@ -529,8 +528,8 @@ class Context:
     def register_web_api(
         self,
         route: str,
-        view_handler: Awaitable,
-        methods: list,
+        view_handler: Callable[..., Awaitable[Any]],
+        methods: list[str],
         desc: str,
     ) -> None:
         """注册 Web API。
@@ -545,11 +544,11 @@ class Context:
             如果相同路由和方法已注册，会替换现有的 API。
 
         """
-        for idx, api in enumerate(self.registered_web_apis):
+        for idx, api in enumerate(self._registered_web_apis):
             if api[0] == route and methods == api[2]:
-                self.registered_web_apis[idx] = (route, view_handler, methods, desc)
+                self._registered_web_apis[idx] = (route, view_handler, methods, desc)
                 return
-        self.registered_web_apis.append((route, view_handler, methods, desc))
+        self._registered_web_apis.append((route, view_handler, methods, desc))
 
     """
     以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。
@@ -642,9 +641,11 @@ class Context:
         """
         md = StarHandlerMetadata(
             event_type=EventType.OnLLMRequestEvent,
-            handler_full_name=func_obj.__module__ + "_" + func_obj.__name__,
-            handler_name=func_obj.__name__,
-            handler_module_path=func_obj.__module__,
+            handler_full_name=getattr(func_obj, "__module__", "")
+            + "_"
+            + getattr(func_obj, "__qualname__", getattr(func_obj, "__name__", "")),
+            handler_name=getattr(func_obj, "__qualname__", getattr(func_obj, "__name__", "")),
+            handler_module_path=getattr(func_obj, "__module__", ""),
             handler=func_obj,
             event_filters=[],
             desc=desc,
@@ -672,8 +673,8 @@ class Context:
         desc: str,
         priority: int,
         awaitable: Callable[..., Awaitable[Any]],
-        use_regex=False,
-        ignore_prefix=False,
+        use_regex: bool = False,
+        ignore_prefix: bool = False,
     ) -> None:
         """[DEPRECATED]注册一个命令。
 
@@ -692,9 +693,11 @@ class Context:
         """
         md = StarHandlerMetadata(
             event_type=EventType.AdapterMessageEvent,
-            handler_full_name=awaitable.__module__ + "_" + awaitable.__name__,
-            handler_name=awaitable.__name__,
-            handler_module_path=awaitable.__module__,
+            handler_full_name=getattr(awaitable, "__module__", "")
+            + "_"
+            + getattr(awaitable, "__qualname__", getattr(awaitable, "__name__", "")),
+            handler_name=getattr(awaitable, "__qualname__", getattr(awaitable, "__name__", "")),
+            handler_module_path=getattr(awaitable, "__module__", ""),
             handler=awaitable,
             event_filters=[],
             desc=desc,
@@ -709,7 +712,7 @@ class Context:
 
     def reset_runtime_registrations(self) -> None:
         """Reset runtime registration containers (web APIs and tasks)."""
-        self.registered_web_apis.clear()
+        self._registered_web_apis.clear()
         self._register_tasks.clear()
 
     def register_task(self, task: Awaitable, desc: str) -> None:

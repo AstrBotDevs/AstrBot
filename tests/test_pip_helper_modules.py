@@ -226,11 +226,8 @@ def test_plan_missing_requirements_install_returns_none_when_missing_names_canno
 
     monkeypatch.setattr(
         requirements_utils,
-        "classify_missing_requirements_from_lines",
-        lambda lines: requirements_utils.MissingRequirementsAnalysis(
-            missing_names=frozenset({"botocore"}),
-            version_mismatch_names=frozenset(),
-        ),
+        "find_missing_requirements_from_lines",
+        lambda lines: {"botocore"},
     )
 
     plan = requirements_utils.plan_missing_requirements_install(str(requirements_path))
@@ -241,7 +238,7 @@ def test_plan_missing_requirements_install_returns_none_when_missing_names_canno
     assert plan.fallback_reason == "unmapped missing requirement names"
 
 
-def test_classify_missing_requirements_from_lines_tracks_missing_and_version_mismatches(
+def test_find_missing_requirements_from_lines_tracks_missing_and_version_mismatches(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -255,13 +252,11 @@ def test_classify_missing_requirements_from_lines_tracks_missing_and_version_mis
         lambda: ["/tmp/site-packages"],
     )
 
-    analysis = requirements_utils.classify_missing_requirements_from_lines(
+    missing = requirements_utils.find_missing_requirements_from_lines(
         ["boto3>=2.0", "botocore"]
     )
 
-    assert analysis is not None
-    assert analysis.missing_names == frozenset({"boto3", "botocore"})
-    assert analysis.version_mismatch_names == frozenset({"boto3"})
+    assert missing == {"boto3", "botocore"}
 
 
 def test_plan_missing_requirements_install_loads_requirement_lines_once(
@@ -321,7 +316,6 @@ def test_plan_missing_requirements_install_tracks_version_mismatches(
 
     assert plan is not None
     assert plan.missing_names == frozenset({"boto3", "botocore"})
-    assert plan.version_mismatch_names == frozenset({"boto3"})
     assert plan.install_lines == ("boto3>=2.0", "botocore")
 
 

@@ -233,8 +233,8 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue"]);
 
 const dialog = ref(false);
-const localItems = ref([]);
-const originalItems = ref([]);
+const localItems = ref<string[]>([]);
+const originalItems = ref<string[]>([]);
 const newItem = ref("");
 const editIndex = ref(-1);
 const editItem = ref("");
@@ -244,8 +244,8 @@ const isSingleItemMode = computed(
   () => (props.modelValue?.length ?? 0) <= 1 && props.preferSingleItem,
 );
 const singleItemValue = computed({
-  get: () => props.modelValue?.[0] ?? "",
-  set: (value) => {
+  get: (): string => (props.modelValue?.[0] as string | undefined) ?? "",
+  set: (value: string) => {
     // 如果值为空或只有空白字符，emit 空数组
     if (value.trim() === "") {
       emit("update:modelValue", []);
@@ -280,8 +280,8 @@ const batchImportPreviewCount = computed(() => {
 // 监听 modelValue 变化，同步到 localItems，并清理空字符串
 watch(
   () => props.modelValue,
-  (newValue) => {
-    localItems.value = [...(newValue || [])];
+  (newValue: unknown[]) => {
+    localItems.value = [...(newValue || [])] as string[];
 
     // 自动清理只包含空字符串的数组
     if (newValue && newValue.length > 0) {
@@ -300,8 +300,8 @@ watch(
 );
 
 function openDialog() {
-  localItems.value = [...(props.modelValue || [])];
-  originalItems.value = [...(props.modelValue || [])];
+  localItems.value = [...(props.modelValue || [])] as string[];
+  originalItems.value = [...(props.modelValue || [])] as string[];
   dialog.value = true;
   editIndex.value = -1;
   editItem.value = "";
@@ -315,11 +315,11 @@ function addItem() {
   }
 }
 
-function removeItem(index) {
+function removeItem(index: number) {
   localItems.value.splice(index, 1);
 }
 
-function startEdit(index, item) {
+function startEdit(index: number, item: string) {
   editIndex.value = index;
   editItem.value = item;
 }

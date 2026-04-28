@@ -1,6 +1,7 @@
 import os
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 import anyio
 
@@ -13,7 +14,7 @@ from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.message.components import File
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
-from .permissions import check_admin_permission
+from astrbot.core.tools.computer_tools.util import check_admin_permission
 
 # @dataclass
 # class CreateFileTool(FunctionTool):
@@ -105,11 +106,12 @@ class FileUploadTool(FunctionTool):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        local_path: str,
-    ) -> str:
+        **kwargs: Any,
+    ) -> ToolExecResult:
+        local_path: str = kwargs["local_path"]
         if permission_error := check_admin_permission(context, "File upload/download"):
             return permission_error
         sb = await get_booter(
@@ -170,12 +172,13 @@ class FileDownloadTool(FunctionTool):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        remote_path: str,
-        also_send_to_user: bool = True,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        remote_path: str = kwargs["remote_path"]
+        also_send_to_user: bool = kwargs.get("also_send_to_user", True)
         if permission_error := check_admin_permission(context, "File upload/download"):
             return permission_error
         sb = await get_booter(

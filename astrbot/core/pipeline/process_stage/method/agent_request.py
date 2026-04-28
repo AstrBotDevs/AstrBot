@@ -45,5 +45,11 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        async for _ in self.agent_sub_stage.process(event):
-            yield None
+        if isinstance(self.agent_sub_stage, InternalAgentSubStage):
+            async for _ in self.agent_sub_stage.process(
+                event, self.prov_wake_prefix
+            ):
+                yield None
+        else:
+            async for _ in self.agent_sub_stage.process(event):
+                yield None

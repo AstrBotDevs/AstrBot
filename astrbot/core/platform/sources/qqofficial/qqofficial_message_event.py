@@ -163,7 +163,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ret_id = getattr(ret, "id", None)
         return str(ret_id) if ret_id is not None else None
 
-    async def _post_send(self, stream: dict | None = None):
+    async def _post_send(self, stream: dict | None = None, **kwargs):
         if not self.send_buffer:
             return None
         source = self.message_obj.raw_message

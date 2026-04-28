@@ -44,8 +44,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                 config=types.EmbedContentConfig(output_dimensionality=self.get_dim()),
             )
             assert result.embeddings is not None
-            assert result.embeddings[0].values is not None
-            return result.embeddings[0].values
+            values = result.embeddings[0].values
+            assert values is not None
+            return values
         except APIError as e:
             raise Exception(f"Gemini Embedding API请求失败: {e.message}")
 
@@ -60,8 +61,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             assert result.embeddings is not None
             embeddings: list[list[float]] = []
             for embedding in result.embeddings:
-                assert embedding.values is not None
-                embeddings.append(embedding.values)
+                vals = embedding.values
+                assert vals is not None
+                embeddings.append(vals)
             return embeddings
         except APIError as e:
             raise Exception(f"Gemini Embedding API批量请求失败: {e.message}")

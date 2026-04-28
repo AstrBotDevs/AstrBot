@@ -210,6 +210,14 @@ import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
 import ProviderPage from "@/views/ProviderPage.vue";
 
+interface Provider {
+  id: string;
+  type?: string;
+  provider_type?: string;
+  model?: string;
+  provider?: string;
+}
+
 const props = defineProps({
   modelValue: {
     type: [String, Array],
@@ -237,10 +245,10 @@ const emit = defineEmits(["update:modelValue"]);
 const { tm } = useModuleI18n("core.shared");
 
 const dialog = ref(false);
-const providerList = ref([]);
+const providerList = ref<Provider[]>([]);
 const loading = ref(false);
 const selectedProvider = ref("");
-const selectedProviders = ref([]);
+const selectedProviders = ref<string[]>([]);
 const providerDrawer = ref(false);
 
 const hasSelection = computed(() => {
@@ -315,7 +323,7 @@ async function loadProviders() {
   }
 }
 
-function matchesProviderSubtype(provider, subtype) {
+function matchesProviderSubtype(provider: Provider, subtype: string): boolean {
   if (!subtype) {
     return true;
   }
@@ -326,7 +334,7 @@ function matchesProviderSubtype(provider, subtype) {
   return candidates.includes(normalized);
 }
 
-function selectProvider(provider) {
+function selectProvider(provider: { id: string }): void {
   if (props.multiple) {
     if (!provider.id) {
       selectedProviders.value = [];
@@ -364,21 +372,21 @@ function cancelSelection() {
   dialog.value = false;
 }
 
-function isProviderSelected(providerId) {
+function isProviderSelected(providerId: string): boolean {
   if (props.multiple) {
     return selectedProviders.value.includes(providerId);
   }
   return selectedProvider.value === providerId;
 }
 
-function removeSelected(providerId) {
+function removeSelected(providerId: string): void {
   const idx = selectedProviders.value.indexOf(providerId);
   if (idx >= 0) {
     selectedProviders.value.splice(idx, 1);
   }
 }
 
-function moveSelected(index, delta) {
+function moveSelected(index: number, delta: number): void {
   const targetIndex = index + delta;
   if (
     targetIndex < 0 ||

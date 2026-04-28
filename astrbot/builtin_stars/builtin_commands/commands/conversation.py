@@ -1,7 +1,10 @@
+import datetime
+from typing import TypedDict
+
 from sqlalchemy import case, func, select
 from sqlmodel import col
 
-from astrbot.api import sp, star
+from astrbot.api import logger, sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_PROVIDER_TYPE,
@@ -57,6 +60,56 @@ def _normalize_alter_cmd_config(value: object) -> dict[str, AlterCmdPluginConfig
                 plugin_config["reset"] = reset_config
         config[plugin_name] = plugin_config
     return config
+
+
+async def _clear_third_party_agent_runner_state(
+    context: star.Context,
+    session_id: str,
+    provider_type: str,
+) -> None:
+    """清理第三方 Agent Runner 的状态: 先删除远端资源,再清理本地存储的状态。
+
+    Args:
+        context: 星尘上下文。
+        session_id: 会话 ID (unified_msg_origin)。
+        provider_type: 提供商类型 (如 deerflow)。
+    """
+    provider_config = context.provider_manager.get_provider_config_by_id(
+        provider_type,
+        merged=True,
+    )
+    if provider_config:
+        try:
+            client = DeerFlowAPIClient(
+                api_base=provider_config.get("deerflow_api_base", ""),
+                api_key=provider_config.get("deerflow_api_key", ""),
+                auth_header=provider_config.get("deerflow_auth_header", ""),
+                proxy=provider_config.get("proxy"),
+            )
+            try:
+                thread_id = await sp.get_async(
+                    scope="umo",
+                    scope_id=session_id,
+                    key=DEERFLOW_THREAD_ID_KEY,
+                )
+                if thread_id:
+                    await client.delete_thread(thread_id, timeout=20)
+            except Exception:
+                logger.exception(
+                    f"清理 {provider_type} Agent Runner 远程线程失败",
+                )
+            finally:
+                await client.close()
+        except Exception:
+            logger.exception(
+                f"初始化 {provider_type} Agent Runner 客户端失败",
+            )
+
+    await sp.remove_async(
+        scope="umo",
+        scope_id=session_id,
+        key=DEERFLOW_THREAD_ID_KEY,
+    )
 
 
 class ConversationCommands:

@@ -535,14 +535,20 @@ class AstrBotCoreLifecycle:
 
         asyncio.create_task(update_llm_metadata())
 
+        # Mark runtime ready now that the full initialize() path has completed.
+        self._set_lifecycle_state(LifecycleState.RUNTIME_READY)
+        self.runtime_bootstrap_error = None
+
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""
         # 创建一个异步任务来执行事件总线的 dispatch() 方法
         # dispatch是一个无限循环的协程, 从事件队列中获取事件并处理
-        event_bus_task = asyncio.create_task(
-            self.event_bus.dispatch(),
-            name="event_bus",
-        )
+        event_bus_task = None
+        if self.event_bus:
+            event_bus_task = asyncio.create_task(
+                self.event_bus.dispatch(),
+                name="event_bus",
+            )
         cron_task = None
         if self.cron_manager:
             cron_task = asyncio.create_task(
@@ -561,7 +567,10 @@ class AstrBotCoreLifecycle:
         for task in self.star_context._register_tasks:
             extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
 
-        tasks_ = [event_bus_task, *(extra_tasks or [])]
+        tasks_ = []
+        if event_bus_task:
+            tasks_.append(event_bus_task)
+        tasks_.extend(extra_tasks or [])
         if cron_task:
             tasks_.append(cron_task)
         if temp_dir_cleaner_task:
@@ -624,7 +633,7 @@ class AstrBotCoreLifecycle:
         instead of raising AttributeError.
         """
         # Stop temp dir cleaner if present
-        if getattr(self, "temp_dir_cleaner", None):
+        if self.temp_dir_cleaner is not None:
             try:
                 await self.temp_dir_cleaner.stop()
             except Exception:
@@ -640,7 +649,7 @@ class AstrBotCoreLifecycle:
                     logger.exception("Error cancelling task")
 
         # Shutdown cron manager if present
-        if getattr(self, "cron_manager", None):
+        if self.cron_manager is not None:
             try:
                 await self.cron_manager.shutdown()
             except Exception:
@@ -683,7 +692,7 @@ class AstrBotCoreLifecycle:
                 logger.exception("Error terminating kb_manager")
 
         # Signal dashboard shutdown if event exists
-        if getattr(self, "dashboard_shutdown_event", None):
+        if self.dashboard_shutdown_event is not None:
             try:
                 self.dashboard_shutdown_event.set()
             except Exception:
@@ -705,7 +714,8 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
-        self.dashboard_shutdown_event.set()
+        if self.dashboard_shutdown_event is not None:
+            self.dashboard_shutdown_event.set()
         threading.Thread(
             target=self.astrbot_updator._reboot,
             name="restart",

@@ -354,7 +354,7 @@ class DiscordPlatformAdapter(Platform):
         logger.info("[Discord] Shutting down adapter...")
         self.shutdown_event.set()
         logger.info("[Discord] Cleaning up commands...")
-        if self.enable_command_register and self.client:
+        if self.enable_command_register and self.client and self._polling_task is not None:
             try:
                 await asyncio.wait_for(
                     self.client.sync_commands(

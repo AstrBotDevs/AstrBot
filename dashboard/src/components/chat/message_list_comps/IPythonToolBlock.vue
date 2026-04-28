@@ -27,7 +27,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { createHighlighter } from "shiki";
+import { createHighlighter, type HighlighterGeneric, type BundledLanguage, type BundledTheme } from "shiki";
 
 const props = defineProps({
   toolCall: {
@@ -54,7 +54,7 @@ const props = defineProps({
 
 const { tm } = useModuleI18n("features/chat");
 const isExpanded = ref(props.initialExpanded);
-const shikiHighlighter = ref(null);
+const shikiHighlighter = ref<HighlighterGeneric<BundledLanguage, BundledTheme> | null>(null);
 const shikiReady = ref(false);
 
 const code = computed(() => {

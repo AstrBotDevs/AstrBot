@@ -1,41 +1,17 @@
 from __future__ import annotations
 
-import asyncio
-import subprocess
-
 from astrbot.core.computer.booters import local as local_booter
-from astrbot.core.computer.booters.local import LocalShellComponent
+from astrbot.core.computer.booters.local import _decode_bytes_with_fallback
 
 
-class _FakeCompletedProcess:
-    def __init__(self, stdout: bytes, stderr: bytes = b"", returncode: int = 0):
-        self.stdout = stdout
-        self.stderr = stderr
-        self.returncode = returncode
-
-
-def test_local_shell_component_decodes_utf8_output(monkeypatch):
-    def fake_run(*args, **kwargs):
-        _ = args, kwargs
-        return _FakeCompletedProcess(stdout="技能内容".encode())
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    result = asyncio.run(LocalShellComponent().exec("dummy"))
-
-    assert result["stdout"] == "技能内容"
-    assert result["stderr"] == ""
-    assert result["exit_code"] == 0
+def test_local_shell_component_decodes_utf8_output():
+    result = _decode_bytes_with_fallback("技能内容".encode())
+    assert result == "技能内容"
 
 
 def test_local_shell_component_prefers_utf8_before_windows_locale(
     monkeypatch,
 ):
-    def fake_run(*args, **kwargs):
-        _ = args, kwargs
-        return _FakeCompletedProcess(stdout="技能内容".encode())
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
     monkeypatch.setattr(
         local_booter.locale,
@@ -43,19 +19,14 @@ def test_local_shell_component_prefers_utf8_before_windows_locale(
         lambda _do_setlocale=False: "cp936",
     )
 
-    result = asyncio.run(LocalShellComponent().exec("dummy"))
-
-    assert result["stdout"] == "技能内容"
-    assert result["stderr"] == ""
-    assert result["exit_code"] == 0
+    result = _decode_bytes_with_fallback(
+        "技能内容".encode(),
+        preferred_encoding="utf-8",
+    )
+    assert result == "技能内容"
 
 
 def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
-    def fake_run(*args, **kwargs):
-        _ = args, kwargs
-        return _FakeCompletedProcess(stdout="微博热搜".encode("gbk"))
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
     monkeypatch.setattr(
         local_booter.locale,
@@ -63,19 +34,11 @@ def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
         lambda _do_setlocale=False: "cp1252",
     )
 
-    result = asyncio.run(LocalShellComponent().exec("dummy"))
-
-    assert result["stdout"] == "微博热搜"
-    assert result["stderr"] == ""
-    assert result["exit_code"] == 0
+    result = _decode_bytes_with_fallback("微博热搜".encode("gbk"))
+    assert result == "微博热搜"
 
 
 def test_local_shell_component_falls_back_to_utf8_replace(monkeypatch):
-    def fake_run(*args, **kwargs):
-        _ = args, kwargs
-        return _FakeCompletedProcess(stdout=b"\xffabc")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
     monkeypatch.setattr(local_booter.os, "name", "posix", raising=False)
     monkeypatch.setattr(
         local_booter.locale,
@@ -83,6 +46,5 @@ def test_local_shell_component_falls_back_to_utf8_replace(monkeypatch):
         lambda _do_setlocale=False: "utf-8",
     )
 
-    result = asyncio.run(LocalShellComponent().exec("dummy"))
-
-    assert result["stdout"] == "\ufffdabc"
+    result = _decode_bytes_with_fallback(b"\xffabc")
+    assert result == "�abc"

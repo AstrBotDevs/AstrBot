@@ -302,7 +302,7 @@ const resetDialog = ref(false);
 const deleteDialog = ref(false);
 const applyAndCloseDialog = ref(false);
 
-const previewFrame = ref(null);
+const previewFrame = ref<HTMLIFrameElement | null>(null);
 
 // --- 编辑器配置 ---
 const editorTheme = computed(() => "vs-light");
@@ -351,7 +351,8 @@ const previewContent = computed(() => {
     );
     return content;
   } catch (error) {
-    return `<div style="color: red; padding: 20px;">模板渲染错误: ${error.message}</div>`;
+    const message = error instanceof Error ? error.message : String(error);
+    return `<div style="color: red; padding: 20px;">模板渲染错误: ${message}</div>`;
   }
 });
 
@@ -533,7 +534,7 @@ const refreshPreview = () => {
   syncPreviewVersion();
   nextTick(() => {
     if (previewFrame.value) {
-      previewFrame.value.contentWindow.location.reload();
+      previewFrame.value.contentWindow?.location.reload();
     }
     setTimeout(() => (previewLoading.value = false), 500);
   });

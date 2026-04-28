@@ -141,49 +141,6 @@
                   @delete-provider="deleteProvider"
                   @add-model-provider="addModelProvider"
                 />
-                <ProviderModelsPanel
-                  v-model:model-search="modelSearch"
-                  :entries="filteredMergedModelEntries"
-                  :available-count="availableModels.length"
-                  :loading-models="loadingModels"
-                  :is-source-modified="isSourceModified"
-                  :supports-image-input="supportsImageInput"
-                  :supports-audio-input="supportsAudioInput"
-                  :supports-tool-call="supportsToolCall"
-                  :supports-reasoning="supportsReasoning"
-                  :format-context-limit="formatContextLimit"
-                  :testing-providers="testingProviders"
-                  :tm="tm"
-                  @fetch-models="fetchAvailableModels"
-                  @open-manual-model="openManualModelDialog"
-                  @open-provider-edit="openProviderEdit"
-                  @toggle-provider-enable="toggleProviderEnable"
-                  @test-provider="testProvider"
-                  @delete-provider="deleteProvider"
-                  @add-model-provider="addModelProvider"
-                />
-                =======
-                <ProviderModelsPanel
-                  :entries="filteredMergedModelEntries"
-                  :available-count="availableModels.length"
-                  v-model:model-search="modelSearch"
-                  :loading-models="loadingModels"
-                  :is-source-modified="isSourceModified"
-                  :supports-image-input="supportsImageInput"
-                  :supports-audio-input="supportsAudioInput"
-                  :supports-tool-call="supportsToolCall"
-                  :supports-reasoning="supportsReasoning"
-                  :format-context-limit="formatContextLimit"
-                  :testing-providers="testingProviders"
-                  :tm="tm"
-                  @fetch-models="fetchAvailableModels"
-                  @open-manual-model="openManualModelDialog"
-                  @open-provider-edit="openProviderEdit"
-                  @toggle-provider-enable="toggleProviderEnable"
-                  @test-provider="testProvider"
-                  @delete-provider="deleteProvider"
-                  @add-model-provider="addModelProvider"
-                />
               </div>
             </div>
             <div
@@ -281,7 +238,6 @@ import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import ProviderModelsPanel from "@/components/provider/ProviderModelsPanel.vue";
 import ProviderSourcesPanel from "@/components/provider/ProviderSourcesPanel.vue";
 import { useProviderSources } from "@/composables/useProviderSources";
-import { getProviderIcon } from "@/utils/providerUtils";
 import axios from "@/utils/request";
 
 const props = defineProps({
@@ -356,11 +312,19 @@ const {
   showMessage,
 });
 
+interface ProviderData {
+  id: string;
+  enable?: boolean;
+  model?: string;
+  provider_source_id?: string;
+  [key: string]: unknown;
+}
+
 const showManualModelDialog = ref(false);
 const showProviderEditDialog = ref(false);
-const providerEditData = ref(null);
+const providerEditData = ref<ProviderData | null>(null);
 const providerEditOriginalId = ref("");
-const savingProviders = ref([]);
+const savingProviders = ref<string[]>([]);
 
 function closeDialog() {
   dialog.value = false;
@@ -393,8 +357,8 @@ async function confirmManualModel() {
   showManualModelDialog.value = false;
 }
 
-function openProviderEdit(provider) {
-  providerEditData.value = JSON.parse(JSON.stringify(provider));
+function openProviderEdit(provider: ProviderData) {
+  providerEditData.value = JSON.parse(JSON.stringify(provider)) as ProviderData;
   providerEditOriginalId.value = provider.id;
   showProviderEditDialog.value = true;
 }
@@ -430,7 +394,7 @@ async function saveEditedProvider() {
   }
 }
 
-async function toggleProviderEnable(provider, value) {
+async function toggleProviderEnable(provider: ProviderData, value: boolean) {
   provider.enable = value;
 
   try {

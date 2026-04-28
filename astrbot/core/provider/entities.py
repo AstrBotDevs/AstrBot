@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import aiofiles
+import anyio
 from anthropic.types import Message as AnthropicMessage
 from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
@@ -110,7 +111,7 @@ class ProviderRequest:
     OpenAI 格式上下文列表｡
     参考 https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages
     """
-    system_prompt: str = ""
+    system_prompt: str | None = None
     """系统提示词"""
     conversation: Conversation | None = None
     """关联的对话对象"""
@@ -235,7 +236,7 @@ class ProviderRequest:
                     parsed_url = urlparse(audio_url)
                     suffix = Path(parsed_url.path).suffix
                     temp_dir = Path(get_astrbot_temp_path())
-                    temp_dir.mkdir(parents=True, exist_ok=True)
+                    await anyio.Path(temp_dir).mkdir(parents=True, exist_ok=True)
                     temp_audio_path = (
                         temp_dir / f"provider_request_audio_{uuid.uuid4().hex}{suffix}"
                     )
@@ -307,8 +308,8 @@ class ProviderRequest:
         if audio_path.startswith("base64://"):
             return audio_path.replace("base64://", f"data:{mime_type};base64,", 1)
 
-        with open(audio_path, "rb") as f:
-            audio_bs64 = base64.b64encode(f.read()).decode("utf-8")
+        async with aiofiles.open(audio_path, "rb") as f:
+            audio_bs64 = base64.b64encode(await f.read()).decode("utf-8")
             return f"data:{mime_type};base64," + audio_bs64
 
 

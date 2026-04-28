@@ -1405,3 +1405,6 @@ async def build_main_agent(
         provider=provider,
         reset_coro=reset_coro if not apply_reset else None,
     )
+
+
+apply_sandbox_tools = _apply_sandbox_tools

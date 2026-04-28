@@ -1,5 +1,6 @@
 from xinference_client.client.restful.async_restful_client import AsyncClient as Client
 from xinference_client.client.restful.async_restful_client import (
+    AsyncRESTfulModelHandle,
     AsyncRESTfulRerankModelHandle,
 )
 
@@ -63,7 +64,9 @@ class XinferenceRerankProvider(RerankProvider):
                     )
                     return
             if self.model_uid:
-                self.model = await client.get_model(self.model_uid)
+                model_handle = await client.get_model(self.model_uid)
+                if isinstance(model_handle, AsyncRESTfulRerankModelHandle):
+                    self.model = model_handle
         except Exception as e:
             logger.error(f"Failed to initialize Xinference model: {e}")
             logger.debug(

@@ -20,7 +20,7 @@
               v-if="ref.favicon"
               :src="ref.favicon"
               class="ref-item-favicon"
-              @error="(e) => (e.target.style.display = 'none')"
+              @error="handleImgError"
             />
             <div v-else class="ref-item-initial">
               {{ getRefInitial(ref.title) }}
@@ -69,22 +69,27 @@ export default {
       get() {
         return this.modelValue;
       },
-      set(value) {
+      set(value: boolean) {
         this.$emit("update:modelValue", value);
       },
     },
   },
   methods: {
-    close() {
+    handleImgError(e: Event): void {
+      const el = e.target as HTMLElement;
+      if (el) el.style.display = "none";
+    },
+
+    close(): void {
       this.isOpen = false;
     },
 
-    getRefInitial(title) {
+    getRefInitial(title: string): string {
       if (!title) return "?";
       return title.charAt(0).toUpperCase();
     },
 
-    formatUrl(url) {
+    formatUrl(url: string): string {
       if (!url) return "";
       try {
         const urlObj = new URL(url);
@@ -94,7 +99,7 @@ export default {
       }
     },
 
-    openLink(url) {
+    openLink(url: string): void {
       if (url) {
         window.open(url, "_blank");
       }

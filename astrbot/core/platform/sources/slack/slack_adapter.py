@@ -67,7 +67,7 @@ class SlackAdapter(Platform):
         self.web_client = AsyncWebClient(token=self.bot_token, logger=logger)
         self.socket_client = None
         self.webhook_client = None
-        self.bot_self_id = None
+        self.bot_self_id = ""
 
     async def send_by_session(
         self,

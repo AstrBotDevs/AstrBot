@@ -38,7 +38,7 @@ def test_platform_abstract_methods():
     """Platform (ABC) has abstract methods (catches missing implementations)."""
     from astrbot.core.platform.platform import Platform
 
-    assert len(Platform.__abstractmethods__) > 0  # type: ignore[attr-defined]
+    assert len(Platform.__dict__.get('__abstractmethods__', frozenset())) > 0
 
 
 def test_live_chat_route():

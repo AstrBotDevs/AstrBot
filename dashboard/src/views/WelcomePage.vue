@@ -290,6 +290,31 @@ import { MarkdownRender } from "markstream-vue";
 import "markstream-vue/index.css";
 import "highlight.js/styles/github.css";
 
+interface ProviderPayloadItem {
+  [key: string]: unknown;
+  provider_type?: string;
+  provider_source_id?: string;
+  type?: string;
+  enable?: boolean;
+  id?: string;
+}
+
+interface ProviderSourceItem {
+  id: string;
+  provider_type: string;
+  [key: string]: unknown;
+}
+
+interface ApiError {
+  response?: {
+    status?: number;
+    data?: {
+      message?: string;
+    };
+  };
+  message?: string;
+}
+
 type StepState = "pending" | "completed" | "skipped";
 
 const { tm } = useModuleI18n("features/welcome");
@@ -446,10 +471,11 @@ async function checkAndSaveBackend() {
     if ((platformConfigData.value.platform || []).length > 0) {
       platformStepState.value = "completed";
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     setApiBaseUrl(originalBase);
     backendStepState.value = "pending";
-    if (error?.response?.status === 401) {
+    const apiErr = error as ApiError;
+    if (apiErr?.response?.status === 401) {
       showError("无访问权限！请点击右上角退出登录！");
     } else {
       showError(`Failed to connect to backend: ${error}`);
@@ -459,13 +485,15 @@ async function checkAndSaveBackend() {
   }
 }
 
-function getChatProvidersFromTemplatePayload(payload: any) {
-  const providers = payload?.providers || [];
-  const sources = payload?.provider_sources || [];
-  const sourceMap = new Map();
-  sources.forEach((s: any) => sourceMap.set(s.id, s.provider_type));
+function getChatProvidersFromTemplatePayload(payload: Record<string, unknown>) {
+  const providers: ProviderPayloadItem[] = (payload?.providers as ProviderPayloadItem[] | undefined) || [];
+  const sources: ProviderSourceItem[] = (payload?.provider_sources as ProviderSourceItem[] | undefined) || [];
+  const sourceMap = new Map<string, string>();
+  sources.forEach((s: ProviderSourceItem) => {
+    sourceMap.set(s.id, s.provider_type);
+  });
 
-  return providers.filter((provider: any) => {
+  return providers.filter((provider: ProviderPayloadItem) => {
     if (provider.provider_type) {
       return provider.provider_type === "chat_completion";
     }
@@ -485,7 +513,7 @@ async function fetchChatProviders() {
   return getChatProvidersFromTemplatePayload(response.data.data);
 }
 
-function pickDefaultProviderId(providers: any[]) {
+function pickDefaultProviderId(providers: ProviderPayloadItem[]) {
   if (!providers.length) return "";
   const enabledProvider = providers.find(
     (provider) => provider.enable !== false,
@@ -580,10 +608,11 @@ async function openPlatformDialog() {
       platformConfigData.value.platform || []
     ).length;
     showAddPlatformDialog.value = true;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
     showError(
-      err?.response?.data?.message ||
-        err?.message ||
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
         tm("onboard.platformLoadFailed"),
     );
   } finally {
@@ -596,10 +625,11 @@ async function openProviderDialog() {
     const providers = await fetchChatProviders();
     providerCountBeforeOpen.value = providers.length;
     showProviderDialog.value = true;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
     showError(
-      err?.response?.data?.message ||
-        err?.message ||
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
         tm("onboard.providerLoadFailed"),
     );
   }
@@ -613,10 +643,11 @@ watch(showAddPlatformDialog, async (visible, wasVisible) => {
     if (newCount > platformCountBeforeOpen.value) {
       platformStepState.value = "completed";
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
     showError(
-      err?.response?.data?.message ||
-        err?.message ||
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
         tm("onboard.platformLoadFailed"),
     );
   }
@@ -630,10 +661,11 @@ watch(showProviderDialog, async (visible, wasVisible) => {
       providerStepState.value = "completed";
       await syncDefaultConfigProviderIfNeeded();
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
     showError(
-      err?.response?.data?.message ||
-        err?.message ||
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
         tm("onboard.providerUpdateFailed"),
     );
   }

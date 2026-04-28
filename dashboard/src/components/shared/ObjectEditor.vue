@@ -295,9 +295,42 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, type PropType } from "vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
+
+interface SliderConfig {
+  min: number;
+  max: number;
+  step: number;
+}
+
+interface TemplateField {
+  type?: string;
+  name?: string;
+  description?: string;
+  hint?: string;
+  default?: unknown;
+  slider?: SliderConfig;
+  [key: string]: unknown;
+}
+
+interface ItemMeta {
+  template_schema?: Record<string, TemplateField>;
+  _special?: string;
+  [key: string]: unknown;
+}
+
+interface KeyValuePair {
+  _id: number;
+  key: string;
+  value: unknown;
+  type: string;
+  slider?: SliderConfig;
+  template?: TemplateField;
+  jsonError: string;
+  _originalKey?: string;
+}
 
 const { t } = useI18n();
 const { tm, getRaw } = useModuleI18n("features/config-metadata");
@@ -305,11 +338,11 @@ const { warning: toastWarning } = useToast();
 
 const props = defineProps({
   modelValue: {
-    type: Object,
+    type: Object as PropType<Record<string, unknown>>,
     required: true,
   },
   itemMeta: {
-    type: Object,
+    type: Object as PropType<ItemMeta | null>,
     default: null,
   },
   buttonText: {
@@ -336,15 +369,18 @@ const resolveDialogTitle = computed(
 );
 
 const dialog = ref(false);
-const localKeyValuePairs = ref([]);
-const originalKeyValuePairs = ref([]);
+const localKeyValuePairs = ref<KeyValuePair[]>([]);
+const originalKeyValuePairs = ref<KeyValuePair[]>([]);
 const newKey = ref("");
 const newValueType = ref("string");
 const nextPairId = ref(0);
 
 // Template schema support
 const templateSchema = computed(() => {
-  return props.itemMeta?.template_schema || {};
+  return (props.itemMeta?.template_schema || {}) as Record<
+    string,
+    TemplateField
+  >;
 });
 
 const hasTemplateSchema = computed(() => {
@@ -366,7 +402,7 @@ const nonTemplatePairs = computed(() => {
 // 监听 modelValue 变化，主要用于初始化
 watch(
   () => props.modelValue,
-  (newValue) => {
+  (_newValue) => {
     // This watch is primarily for initialization or external changes
     // The dialog-based editing handles internal updates
   },
@@ -381,7 +417,15 @@ function createPair({
   template,
   jsonError = "",
   _originalKey,
-}) {
+}: {
+  key: string;
+  value: unknown;
+  type: string;
+  slider?: SliderConfig;
+  template?: TemplateField;
+  jsonError?: string;
+  _originalKey?: string;
+}): KeyValuePair {
   return {
     _id: nextPairId.value++,
     key,
@@ -445,7 +489,7 @@ function addKeyValuePair() {
       return;
     }
 
-    let defaultValue;
+    let defaultValue: unknown;
     switch (newValueType.value) {
       case "number":
         defaultValue = 0;
@@ -472,23 +516,23 @@ function addKeyValuePair() {
   }
 }
 
-function validateJSON(pair) {
+function validateJSON(pair: KeyValuePair) {
   try {
-    JSON.parse(pair.value);
+    JSON.parse(String(pair.value));
     pair.jsonError = "";
-  } catch (e) {
+  } catch (_e: unknown) {
     pair.jsonError = t("core.common.objectEditor.invalidJson");
   }
 }
 
-function removeKeyValuePairByKey(key) {
+function removeKeyValuePairByKey(key: string) {
   const index = localKeyValuePairs.value.findIndex((pair) => pair.key === key);
   if (index >= 0) {
     localKeyValuePairs.value.splice(index, 1);
   }
 }
 
-function onKeyBlur(pair) {
+function onKeyBlur(pair: KeyValuePair) {
   const originalKey = pair._originalKey;
   const newKey = pair.key;
   if (originalKey === undefined || originalKey === newKey) return;
@@ -517,11 +561,11 @@ function onKeyBlur(pair) {
   }
 }
 
-function isTemplateKeyAdded(templateKey) {
+function isTemplateKeyAdded(templateKey: string): boolean {
   return localKeyValuePairs.value.some((pair) => pair.key === templateKey);
 }
 
-function getTemplateValue(templateKey) {
+function getTemplateValue(templateKey: string): unknown {
   const pair = localKeyValuePairs.value.find(
     (pair) => pair.key === templateKey,
   );
@@ -534,7 +578,7 @@ function getTemplateValue(templateKey) {
     : getDefaultValueForType(template?.type || "string");
 }
 
-function updateTemplateValue(templateKey, newValue) {
+function updateTemplateValue(templateKey: string, newValue: unknown) {
   const existingIndex = localKeyValuePairs.value.findIndex(
     (pair) => pair.key === templateKey,
   );
@@ -558,7 +602,7 @@ function updateTemplateValue(templateKey, newValue) {
   }
 }
 
-function removeTemplateKey(templateKey) {
+function removeTemplateKey(templateKey: string) {
   const index = localKeyValuePairs.value.findIndex(
     (pair) => pair.key === templateKey,
   );
@@ -567,7 +611,7 @@ function removeTemplateKey(templateKey) {
   }
 }
 
-function getDefaultValueForType(type) {
+function getDefaultValueForType(type: string): unknown {
   switch (type) {
     case "int":
     case "float":
@@ -585,31 +629,26 @@ function getDefaultValueForType(type) {
 }
 
 function confirmDialog() {
-  const updatedValue = {};
+  const updatedValue: Record<string, unknown> = {};
   for (const pair of localKeyValuePairs.value) {
     if (pair.type === "json" && pair.jsonError) return;
-    let convertedValue = pair.value;
+    let convertedValue: unknown = pair.value;
     // 根据声明的类型进行转换
     switch (pair.type) {
       case "int":
-        convertedValue = parseInt(pair.value) || 0;
+        convertedValue = parseInt(String(pair.value)) || 0;
         break;
       case "float":
       case "number":
         // 尝试转换为数字，如果失败则保持原值（或设为默认值0）
         convertedValue = Number(pair.value);
-        // 可选：检查是否为有效数字，无效则设为0或报错
-        // if (isNaN(convertedValue)) convertedValue = 0;
         break;
       case "bool":
       case "boolean":
-        // 布尔值通常由 v-switch 正确处理，但为保险起见可以显式转换
-        // 注意：在 JavaScript 中，只有严格的 false, 0, '', null, undefined, NaN 会被转换为 false
-        // 这里直接赋值 pair.value 应该是安全的，因为 v-model 绑定的就是布尔值
-        // convertedValue = Boolean(pair.value)
+        // 布尔值通常由 v-switch 正确处理，可直接使用
         break;
       case "json":
-        convertedValue = JSON.parse(pair.value);
+        convertedValue = JSON.parse(String(pair.value));
         break;
       case "string":
       default:
@@ -631,12 +670,15 @@ function cancelDialog() {
   dialog.value = false;
 }
 
-function translateIfKey(value) {
+function translateIfKey(value: unknown): unknown {
   if (!value || typeof value !== "string") return value;
   return getRaw(value) ? tm(value) : value;
 }
 
-function getTemplateTitle(template, templateKey) {
+function getTemplateTitle(
+  template: TemplateField | undefined,
+  templateKey: string,
+): unknown {
   return translateIfKey(template?.name || template?.description || templateKey);
 }
 </script>

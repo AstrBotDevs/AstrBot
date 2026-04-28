@@ -14,8 +14,8 @@
           <template #label="{ expanded }">
             <v-icon
               v-if="
-                toolCall.name.includes('web_search') ||
-                toolCall.name.includes('tavily')
+                toolCall.name?.includes('web_search') ||
+                toolCall.name?.includes('tavily')
               "
               size="x-small"
             >
@@ -28,11 +28,11 @@
               mdi-console-line
             </v-icon>
             <v-icon v-else size="x-small"> mdi-wrench </v-icon>
-            {{ tm("actions.toolCallUsed", { name: toolCall.name }) }}
+            {{ tm("actions.toolCallUsed", { name: toolCall.name ?? "" }) }}
             <span style="opacity: 0.6">{{
               toolCall.finished_ts
-                ? formatDuration(toolCall.finished_ts - toolCall.ts)
-                : getElapsedTime(toolCall.ts)
+                ? formatDuration((toolCall.finished_ts ?? 0) - (toolCall.ts ?? 0))
+                : getElapsedTime(toolCall.ts ?? 0)
             }}</span>
             <v-icon
               size="x-small"
@@ -81,25 +81,6 @@
         :typewriter="false"
         :is-dark="isDark"
         :monaco-options="{ theme: isDark ? 'vs-dark' : 'vs-light' }"
-      />
-    </div>
-
-    <!-- Text (Markdown) -->
-    <div
-      v-else-if="
-        renderPart.type === 'part' &&
-        renderPart.part?.type === 'plain' &&
-        renderPart.part?.text?.trim()
-      "
-      :key="`${renderPart.key}-${isDark ? 'dark' : 'light'}`"
-      class="markdown-content"
-    >
-      <MarkdownRender
-        custom-id="message-list"
-        :custom-html-tags="['ref']"
-        :content="renderPart.part?.text"
-        :typewriter="false"
-        :is-dark="isDark"
       />
     </div>
 
@@ -199,7 +180,7 @@
           <v-icon
             v-if="
               downloadingFiles?.has(
-                renderPart.part?.embedded_file?.attachment_id,
+                renderPart.part?.embedded_file?.attachment_id ?? "",
               )
             "
             size="small"
@@ -216,14 +197,16 @@
 </template>
 
 <script setup lang="ts">
+import type { PropType } from "vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { MarkdownRender } from "markstream-vue";
 import IPythonToolBlock from "./IPythonToolBlock.vue";
 import ToolCallItem from "./ToolCallItem.vue";
+import type { MessagePart } from "@/composables/useMessages";
 
 const props = defineProps({
   parts: {
-    type: Array,
+    type: Array as PropType<MessagePart[]>,
     required: true,
   },
   isDark: {
@@ -235,8 +218,8 @@ const props = defineProps({
     default: 0,
   },
   downloadingFiles: {
-    type: Object,
-    default: () => new Set(),
+    type: Object as PropType<Set<string>>,
+    default: () => new Set<string>(),
   },
 });
 
@@ -244,17 +227,17 @@ const emit = defineEmits(["open-image-preview", "download-file"]);
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 
-const emitOpenImage = (url) => {
+const emitOpenImage = (url: string): void => {
   emit("open-image-preview", url);
 };
 
-const emitDownloadFile = (file) => {
+const emitDownloadFile = (file: unknown): void => {
   emit("download-file", file);
 };
 
-const isMarkdownCodeFence = (text) => /^(```|~~~)/.test(text.trim());
+const isMarkdownCodeFence = (text: string): boolean => /^(```|~~~)/.test(text.trim());
 
-const looksLikeStandaloneHtml = (text) => {
+const looksLikeStandaloneHtml = (text: string): boolean => {
   const normalized = text.trim();
   if (!normalized) return false;
   if (!/(<!doctype\s+html|<html\b|<head\b|<body\b)/i.test(normalized))
@@ -264,13 +247,13 @@ const looksLikeStandaloneHtml = (text) => {
   );
 };
 
-const normalizeMarkdownContent = (text) => {
+const normalizeMarkdownContent = (text: string): string => {
   if (typeof text !== "string") return text;
   if (isMarkdownCodeFence(text) || !looksLikeStandaloneHtml(text)) return text;
   return `\`\`\`\`html\n${text}\n\`\`\`\``;
 };
 
-const formatDuration = (seconds) => {
+const formatDuration = (seconds: number): string => {
   if (seconds < 1) {
     return `${Math.round(seconds * 1000)}ms`;
   }
@@ -282,12 +265,12 @@ const formatDuration = (seconds) => {
   return `${minutes}m ${secs}s`;
 };
 
-const getElapsedTime = (startTs) => {
+const getElapsedTime = (startTs: number): string => {
   const elapsed = props.currentTime - startTs;
   return formatDuration(elapsed);
 };
 
-const formatToolResult = (result) => {
+const formatToolResult = (result: unknown): string => {
   if (!result) return "";
   if (typeof result === "string") {
     try {
@@ -300,7 +283,7 @@ const formatToolResult = (result) => {
   return JSON.stringify(result, null, 2);
 };
 
-const formatToolArgs = (args) => {
+const formatToolArgs = (args: unknown): string => {
   if (!args) return "";
   if (typeof args === "string") {
     try {
@@ -313,20 +296,22 @@ const formatToolArgs = (args) => {
   return JSON.stringify(args, null, 2);
 };
 
-const isIPythonTool = (toolCall) => {
+const isIPythonTool = (toolCall: { name?: string }): boolean => {
   return (
     toolCall.name === "astrbot_execute_ipython" ||
     toolCall.name === "astrbot_execute_python"
   );
 };
 
-const getRenderParts = (messageParts) => {
+interface PendingToolCall { name?: string; finished_ts?: number; ts?: number; id?: string; args?: unknown; result?: unknown; [key: string]: unknown }
+
+const getRenderParts = (messageParts: MessagePart[]): Array<{ type: string; toolCalls?: PendingToolCall[]; toolCall?: PendingToolCall; part?: MessagePart; key?: string }> => {
   if (!Array.isArray(messageParts)) return [];
-  const rendered = [];
-  let pendingToolCalls = [];
+  const rendered: Array<{ type: string; toolCalls?: PendingToolCall[]; toolCall?: PendingToolCall; part?: MessagePart; key?: string }> = [];
+  let pendingToolCalls: PendingToolCall[] = [];
   let groupIndex = 0;
 
-  const flushPending = (endIndex) => {
+  const flushPending = (endIndex: number): void => {
     if (!pendingToolCalls.length) return;
     rendered.push({
       type: "tool_group",

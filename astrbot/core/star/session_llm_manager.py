@@ -14,8 +14,8 @@ class SessionServiceConfig(TypedDict, total=False):
 
 def _normalize_session_service_config(value: object) -> SessionServiceConfig:
     if not isinstance(value, dict):
-        return {}
-    config: SessionServiceConfig = {}
+        return SessionServiceConfig()
+    config: SessionServiceConfig = SessionServiceConfig()
     val_dict: dict[str, object] = value
     llm_enabled = val_dict.get("llm_enabled")
     if isinstance(llm_enabled, bool):

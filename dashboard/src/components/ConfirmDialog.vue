@@ -27,9 +27,9 @@ const { t } = useI18n();
 const isOpen = ref(false);
 const title = ref("");
 const message = ref("");
-let resolvePromise = null; // ✅ 确保 Promise 句柄可用
+let resolvePromise: ((value: boolean) => void) | null = null; // 确保 Promise 句柄可用
 
-const open = (options) => {
+const open = (options: { title?: string; message?: string }) => {
   title.value = options.title || t("core.common.dialog.confirmTitle");
   message.value = options.message || t("core.common.dialog.confirmMessage");
   isOpen.value = true;

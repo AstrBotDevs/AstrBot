@@ -1,7 +1,18 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 
+/**
+ * @typedef {Object} ToastItem
+ * @property {string} message
+ * @property {string} color
+ * @property {number} timeout
+ * @property {boolean} closable
+ * @property {boolean} multiLine
+ * @property {string} location
+ */
+
 export const useToastStore = defineStore("toast", () => {
+  /** @type {import('vue').Ref<ToastItem[]>} */
   const queue = ref([]);
   const current = computed(() => queue.value[0]);
 

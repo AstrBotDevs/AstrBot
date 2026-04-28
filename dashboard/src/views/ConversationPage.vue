@@ -552,9 +552,10 @@
   </div>
 </template>
 
-<script>
-import axios from "@/utils/request";
+<script lang="ts">
+import axios, { AxiosError } from "@/utils/request";
 import { debounce } from "lodash";
+import { defineComponent } from "vue";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -565,7 +566,33 @@ import {
   useConfirmDialog,
 } from "@/utils/confirmDialog";
 
-export default {
+interface ConversationItem {
+  user_id: string;
+  cid: string;
+  title: string;
+  created_at?: number;
+  updated_at?: number;
+  sessionInfo?: { platform: string; messageType: string; sessionId: string };
+}
+
+interface MessageContentPart {
+  type: "plain" | "image";
+  text?: string;
+  embedded_url?: string;
+}
+
+interface HistoryMessage {
+  role: string;
+  content: string | unknown[] | Record<string, unknown> | null;
+}
+
+interface VFormRef {
+  validate: () => Promise<{ valid: boolean }>;
+  reset?: () => void;
+  resetValidation?: () => void;
+}
+
+export default defineComponent({
   name: "ConversationPage",
   components: {
     VueMonacoEditor,
@@ -573,15 +600,14 @@ export default {
   },
 
   setup() {
-    const { t, locale } = useI18n();
+    const { locale } = useI18n();
     const { tm } = useModuleI18n("features/conversation");
     const customizerStore = useCustomizerStore();
     const confirmDialog = useConfirmDialog();
 
     return {
-      t,
-      tm,
       locale,
+      tm,
       customizerStore,
       confirmDialog,
     };
@@ -590,15 +616,14 @@ export default {
   data() {
     return {
       // 表格数据
-      conversations: [],
+      conversations: [] as ConversationItem[],
       search: "",
-      headers: [],
-      selectedItems: [], // 批量选择的项目
+      selectedItems: [] as ConversationItem[], // 批量选择的项目
 
       // 筛选条件
-      platformFilter: [],
-      messageTypeFilter: [],
-      lastAppliedFilters: null, // 记录上次应用的筛选条件
+      platformFilter: [] as (string | { title: string; value: string })[],
+      messageTypeFilter: [] as string[],
+      lastAppliedFilters: null as Record<string, unknown> | null,
 
       // 分页数据
       pagination: {
@@ -616,8 +641,8 @@ export default {
       dialogBatchDelete: false, // 批量删除对话框
 
       // 选中的对话
-      selectedConversation: null,
-      conversationHistory: [],
+      selectedConversation: null as ConversationItem | null,
+      conversationHistory: [] as HistoryMessage[],
 
       // 编辑表单
       editedItem: {
@@ -643,6 +668,7 @@ export default {
       umoDisplayMode: "parsed",
 
       commonStore: useCommonStore(),
+      debouncedApplyFilters: undefined as (() => void) | undefined,
     };
   },
 
@@ -660,7 +686,7 @@ export default {
   },
 
   created() {
-    this.debouncedApplyFilters = debounce(() => {
+    (this as { debouncedApplyFilters?: (() => void) | undefined }).debouncedApplyFilters = debounce(() => {
       // 重置到第一页
       this.pagination.page = 1;
       this.fetchConversations();
@@ -781,7 +807,7 @@ export default {
 
   methods: {
     // Monaco编辑器挂载后的回调
-    onMonacoMounted(editor) {
+    onMonacoMounted(editor: unknown) {
       this.monacoEditor = editor;
       // 添加JSON格式校验
       editor.onDidChangeModelContent(() => {
@@ -796,7 +822,7 @@ export default {
     },
 
     // 处理表格选项变更（页面大小等）
-    handleTableOptions(options) {
+    handleTableOptions(options: { itemsPerPage?: number }) {
       // 处理页面大小变更
       if (options.itemsPerPage !== this.pagination.page_size) {
         this.pagination.page_size = options.itemsPerPage;
@@ -806,7 +832,7 @@ export default {
     },
 
     // 从会话ID解析平台和消息类型信息
-    parseSessionId(userId) {
+    parseSessionId(userId: string | null | undefined) {
       if (!userId)
         return { platform: "default", messageType: "default", sessionId: "" };
 
@@ -824,8 +850,17 @@ export default {
       return { platform: "default", messageType: "default", sessionId: userId };
     },
 
+    // Extract error message from unknown
+    getErrorMessage(error: unknown, fallback: string): string {
+      const err = error as {
+        response?: { data?: { message?: string } };
+        message?: string;
+      };
+      return err.response?.data?.message || err.message || fallback;
+    },
+
     // 获取消息类型的显示文本
-    getMessageTypeDisplay(messageType) {
+    getMessageTypeDisplay(messageType: string) {
       const typeMap = {
         GroupMessage: this.tm("messageTypes.group"),
         FriendMessage: this.tm("messageTypes.friend"),
@@ -835,7 +870,7 @@ export default {
       return typeMap[messageType] || typeMap.default;
     },
 
-    formatUmoSource(item) {
+    formatUmoSource(item: ConversationItem) {
       if (!item?.sessionInfo) {
         return item?.user_id || this.tm("status.unknown");
       }
@@ -852,7 +887,7 @@ export default {
       return `${platform}:${messageType}:${sessionId}`;
     },
 
-    async copyUmoSource(item) {
+    async copyUmoSource(item: ConversationItem) {
       try {
         await navigator.clipboard.writeText(this.formatUmoSource(item));
         this.showSuccessMessage(this.tm("messages.copySuccess"));
@@ -937,18 +972,12 @@ export default {
               response.data.message || this.tm("messages.fetchError"),
             );
           }
-        } catch (error) {
+        } catch (error: unknown) {
           if (axios.isCancel(error)) return;
 
           console.error("获取对话列表出错:", error);
-          if (error.response) {
-            console.error("错误响应数据:", error.response.data);
-            console.error("错误状态码:", error.response.status);
-          }
           this.showErrorMessage(
-            error.response?.data?.message ||
-              error.message ||
-              this.tm("messages.fetchError"),
+            this.getErrorMessage(error, this.tm("messages.fetchError")),
           );
         } finally {
           this.loading = false;
@@ -957,7 +986,7 @@ export default {
     })(),
 
     // 查看对话详情
-    async viewConversation(item) {
+    async viewConversation(item: ConversationItem) {
       this.selectedConversation = item;
       this.loading = true;
       this.isEditingHistory = false;
@@ -991,12 +1020,10 @@ export default {
             response.data.message || this.tm("messages.historyError"),
           );
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("获取对话详情出错:", error);
         this.showErrorMessage(
-          error.response?.data?.message ||
-            error.message ||
-            this.tm("messages.historyError"),
+          this.getErrorMessage(error, this.tm("messages.historyError")),
         );
       } finally {
         this.loading = false;
@@ -1034,12 +1061,10 @@ export default {
             response.data.message || this.tm("messages.historySaveError"),
           );
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("更新对话历史出错:", error);
         this.showErrorMessage(
-          error.response?.data?.message ||
-            error.message ||
-            this.tm("messages.historySaveError"),
+          this.getErrorMessage(error, this.tm("messages.historySaveError")),
         );
       } finally {
         this.savingHistory = false;
@@ -1063,7 +1088,7 @@ export default {
     },
 
     // 编辑对话
-    editConversation(item) {
+    editConversation(item: ConversationItem) {
       this.selectedConversation = item;
       this.editedItem = Object.assign({}, item);
       this.dialogEdit = true;
@@ -1071,7 +1096,7 @@ export default {
 
     // 保存编辑后的对话
     async saveConversation() {
-      if (!this.$refs.form.validate()) return;
+      if (!(this.$refs.form as unknown as VFormRef).validate()) return;
 
       this.loading = true;
       try {
@@ -1103,11 +1128,9 @@ export default {
             response.data.message || this.tm("messages.saveError"),
           );
         }
-      } catch (error) {
+      } catch (error: unknown) {
         this.showErrorMessage(
-          error.response?.data?.message ||
-            error.message ||
-            this.tm("messages.saveError"),
+          this.getErrorMessage(error, this.tm("messages.saveError")),
         );
       } finally {
         this.loading = false;
@@ -1115,25 +1138,27 @@ export default {
     },
 
     // 确认删除对话
-    confirmDeleteConversation(item) {
+    confirmDeleteConversation(item: ConversationItem) {
       this.selectedConversation = item;
       this.dialogDelete = true;
     },
 
     // 删除对话
     async deleteConversation() {
+      const target = this.selectedConversation;
+      if (!target) return;
       this.loading = true;
       try {
         const response = await axios.post("/api/conversation/delete", {
-          user_id: this.selectedConversation.user_id,
-          cid: this.selectedConversation.cid,
+          user_id: target.user_id,
+          cid: target.cid,
         });
 
         if (response.data.status === "ok") {
           const index = this.conversations.findIndex(
             (item) =>
-              item.user_id === this.selectedConversation.user_id &&
-              item.cid === this.selectedConversation.cid,
+              item.user_id === target.user_id &&
+              item.cid === target.cid,
           );
 
           if (index !== -1) {
@@ -1147,19 +1172,17 @@ export default {
             response.data.message || this.tm("messages.deleteError"),
           );
         }
-      } catch (error) {
+      } catch (error: unknown) {
         this.showErrorMessage(
-          error.response?.data?.message ||
-            error.message ||
-            this.tm("messages.deleteError"),
+          this.getErrorMessage(error, this.tm("messages.deleteError")),
         );
       } finally {
         this.loading = false;
         this.selectedItems = this.selectedItems.filter(
           (item) =>
             !(
-              item.user_id === this.selectedConversation.user_id &&
-              item.cid === this.selectedConversation.cid
+              item.user_id === target.user_id &&
+              item.cid === target.cid
             ),
         );
         this.selectedConversation = null;
@@ -1182,7 +1205,7 @@ export default {
     },
 
     // 从选择中移除项目
-    removeFromSelection(item) {
+    removeFromSelection(item: ConversationItem) {
       const index = this.selectedItems.findIndex(
         (selected) =>
           selected.user_id === item.user_id && selected.cid === item.cid,
@@ -1239,12 +1262,10 @@ export default {
             response.data.message || this.tm("messages.batchDeleteError"),
           );
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("批量删除对话出错:", error);
         this.showErrorMessage(
-          error.response?.data?.message ||
-            error.message ||
-            this.tm("messages.batchDeleteError"),
+          this.getErrorMessage(error, this.tm("messages.batchDeleteError")),
         );
       } finally {
         this.loading = false;
@@ -1297,12 +1318,10 @@ export default {
         window.URL.revokeObjectURL(url);
 
         this.showSuccessMessage(this.tm("messages.exportSuccess"));
-      } catch (error) {
+      } catch (error: unknown) {
         console.error(this.tm("messages.exportError"), error);
         this.showErrorMessage(
-          error.response?.data?.message ||
-            error.message ||
-            this.tm("messages.exportError"),
+          this.getErrorMessage(error, this.tm("messages.exportError")),
         );
       } finally {
         this.loading = false;
@@ -1310,7 +1329,7 @@ export default {
     },
 
     // 格式化时间戳
-    formatTimestamp(timestamp) {
+    formatTimestamp(timestamp: number | null | undefined) {
       if (!timestamp) return this.tm("status.unknown");
 
       const date = new Date(timestamp * 1000);
@@ -1327,22 +1346,22 @@ export default {
     },
 
     // 显示成功消息
-    showSuccessMessage(message) {
+    showSuccessMessage(message: string) {
       this.message = message;
       this.messageType = "success";
       this.showMessage = true;
     },
 
     // 显示错误消息
-    showErrorMessage(message) {
+    showErrorMessage(message: string) {
       this.message = message;
       this.messageType = "error";
       this.showMessage = true;
     },
 
     // 将消息内容转换为 MessagePart[] 格式
-    convertContentToMessageParts(content) {
-      const parts = [];
+    convertContentToMessageParts(content: unknown): MessageContentPart[] {
+      const parts: MessageContentPart[] = [];
 
       if (typeof content === "string") {
         // 纯文本内容
@@ -1395,14 +1414,14 @@ export default {
     },
 
     // Manually handle wheel scrolling inside the dialog preview container.
-    onContainerWheel(event) {
-      const el = this.$refs.messagesContainer;
+    onContainerWheel(event: WheelEvent) {
+      const el = this.$refs.messagesContainer as HTMLElement | undefined;
       if (!el) return;
       el.scrollTop += event.deltaY;
     },
 
     // 从内容中提取文本（保留用于其他用途）
-    extractTextFromContent(content) {
+    extractTextFromContent(content: unknown) {
       if (typeof content === "string") {
         return content;
       } else if (Array.isArray(content)) {
@@ -1419,7 +1438,7 @@ export default {
     },
 
     // 从内容中提取图片URL（保留用于其他用途）
-    extractImagesFromContent(content) {
+    extractImagesFromContent(content: unknown) {
       if (Array.isArray(content)) {
         return content
           .filter((item) => item.type === "image_url")
@@ -1429,7 +1448,7 @@ export default {
       return [];
     },
   },
-};
+});
 </script>
 
 <style>

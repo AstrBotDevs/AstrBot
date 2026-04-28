@@ -334,6 +334,32 @@ import { useRouter } from "vue-router";
 import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
 
+interface KnowledgeBaseItem {
+  kb_id: string;
+  kb_name: string;
+  description?: string;
+  emoji?: string;
+  init_error?: string;
+  doc_count?: number;
+  chunk_count?: number;
+  embedding_provider_id?: string;
+  rerank_provider_id?: string;
+}
+
+interface ProviderInfo {
+  id: string;
+  provider_type: string;
+  embedding_model?: string;
+  rerank_model?: string;
+  embedding_dimensions?: number;
+}
+
+interface VForm {
+  validate: () => Promise<{ valid: boolean }>;
+  reset: () => void;
+  resetValidation: () => void;
+}
+
 const { tm: t } = useModuleI18n("features/knowledge-base/index");
 const router = useRouter();
 
@@ -341,12 +367,11 @@ const router = useRouter();
 const loading = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
-const kbList = ref<any[]>([]);
-const embeddingProviders = ref<any[]>([]);
-const rerankProviders = ref<any[]>([]);
+const kbList = ref<KnowledgeBaseItem[]>([]);
+const embeddingProviders = ref<ProviderInfo[]>([]);
+const rerankProviders = ref<ProviderInfo[]>([]);
 const originalEmbeddingProvider = ref<string | null>(null);
 const showEmbeddingWarning = ref(false);
-const embeddingChangeDialog = ref(false);
 const pendingEmbeddingProvider = ref<string | null>(null);
 
 // 对话框
@@ -362,10 +387,16 @@ const snackbar = ref({
 });
 
 // 表单
-const formRef = ref();
-const editingKB = ref<any>(null);
-const deleteTarget = ref<any>(null);
-const formData = ref({
+const formRef = ref<VForm>();
+const editingKB = ref<KnowledgeBaseItem | null>(null);
+const deleteTarget = ref<KnowledgeBaseItem | null>(null);
+const formData = ref<{
+  kb_name: string;
+  description: string;
+  emoji: string;
+  embedding_provider_id: string | null;
+  rerank_provider_id: string | null;
+}>({
   kb_name: "",
   description: "",
   emoji: "📚",
@@ -461,7 +492,7 @@ const emojiCategories = [
 const loadKnowledgeBases = async (refreshStats = false) => {
   loading.value = true;
   try {
-    const params: any = {};
+    const params: Record<string, string> = {};
     if (refreshStats) {
       params.refresh_stats = "true";
     }
@@ -472,7 +503,7 @@ const loadKnowledgeBases = async (refreshStats = false) => {
     } else {
       showSnackbar(response.data.message || t("messages.loadError"), "error");
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Failed to load knowledge bases:", error);
     showSnackbar(t("messages.loadError"), "error");
   } finally {
@@ -488,10 +519,10 @@ const loadProviders = async () => {
     });
     if (response.data.status === "ok") {
       embeddingProviders.value = response.data.data.filter(
-        (p: any) => p.provider_type === "embedding",
+        (p: ProviderInfo) => p.provider_type === "embedding",
       );
       rerankProviders.value = response.data.data.filter(
-        (p: any) => p.provider_type === "rerank",
+        (p: ProviderInfo) => p.provider_type === "rerank",
       );
     }
   } catch (error) {
@@ -505,21 +536,21 @@ const navigateToDetail = (kbId: string) => {
 };
 
 // 编辑知识库
-const editKB = (kb: any) => {
+const editKB = (kb: KnowledgeBaseItem) => {
   editingKB.value = kb;
   originalEmbeddingProvider.value = kb.embedding_provider_id;
   formData.value = {
     kb_name: kb.kb_name,
     description: kb.description || "",
     emoji: kb.emoji || "📚",
-    embedding_provider_id: kb.embedding_provider_id,
-    rerank_provider_id: kb.rerank_provider_id,
+    embedding_provider_id: kb.embedding_provider_id ?? null,
+    rerank_provider_id: kb.rerank_provider_id ?? null,
   };
   showCreateDialog.value = true;
 };
 
 // 确认删除
-const confirmDelete = (kb: any) => {
+const confirmDelete = (kb: KnowledgeBaseItem) => {
   deleteTarget.value = kb;
   showDeleteDialog.value = true;
 };
@@ -554,7 +585,7 @@ const deleteKB = async () => {
         "error",
       );
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Failed to delete knowledge base:", error);
     showSnackbar(t("messages.deleteFailed"), "error");
   } finally {
@@ -564,7 +595,7 @@ const deleteKB = async () => {
 
 // 提交表单
 const submitForm = async () => {
-  const { valid } = await formRef.value.validate();
+  const { valid } = await formRef.value?.validate() ?? { valid: false };
   if (!valid) return;
 
   saving.value = true;
@@ -604,7 +635,7 @@ const submitForm = async () => {
         "error",
       );
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Failed to save knowledge base:", error);
     showSnackbar(
       editingKB.value ? t("messages.updateFailed") : t("messages.createFailed"),
@@ -629,7 +660,7 @@ const closeCreateDialog = () => {
     embedding_provider_id: null,
     rerank_provider_id: null,
   };
-  formRef.value?.reset();
+  formRef.value?.reset?.();
 };
 
 // 选择 emoji
@@ -639,7 +670,7 @@ const selectEmoji = (emoji: string) => {
 };
 
 // 显示通知
-const showSnackbar = (text: string, color: string = "success") => {
+const showSnackbar = (text: string, color: "success" | "error" = "success") => {
   snackbar.value.text = text;
   snackbar.value.color = color;
   snackbar.value.show = true;

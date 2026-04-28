@@ -332,6 +332,11 @@ class BlockingSubagentContext:
     def get_config(self, **_kwargs):
         return {"provider_settings": {}}
 
+    def get_llm_tool_manager(self):
+        from unittest.mock import MagicMock
+
+        return MagicMock()
+
     async def tool_loop_agent(self, **_kwargs):
         self.started.set()
         try:
@@ -1252,7 +1257,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
         run_context=run_context,
         tool_executor=cast(Any, MockToolExecutor()),
         agent_hooks=MockHooks(),
-        tool_schema_mode="lazy_load",
+        tool_schema_mode="skills_like",
     )
 
     async for _ in runner.step():

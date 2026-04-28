@@ -5,16 +5,21 @@ import subprocess
 import tempfile
 import wave
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 import anyio
+import pysilk  # requires silk-python (core dependency)
 
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
+if TYPE_CHECKING:
+    from typing import Any
+
+    import pilk  # optional; stubs live under types/pilk.pyi
+
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
-    import pysilk
-
     async with await anyio.open_file(silk_path, "rb") as f:
         input_data = await f.read()
         if input_data.startswith(b"\x02"):
@@ -120,7 +125,7 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     try:
         import pilk
     except ImportError as e:
-        raise Exception("未安装 pilk: pip install pilk") from e
+        raise Exception("未安装 pilk: pip install pilk") from e  # noqa
 
     temp_dir = get_astrbot_temp_path()
     await anyio.Path(temp_dir).mkdir(parents=True, exist_ok=True)

@@ -16,8 +16,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import { useI18n } from "@/i18n/composables";
+import type { Locale } from "@/i18n/types";
 
 const { locale } = useI18n();
 
@@ -26,7 +27,7 @@ interface Quote {
   author: string;
 }
 
-const quotes: Record<string, Quote[]> = {
+const quotes: Record<Locale, Quote[]> = {
   "en-US": [
     {
       text: "The best way to predict the future is to create it.",

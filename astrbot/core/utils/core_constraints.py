@@ -146,7 +146,14 @@ class CoreConstraintsProvider:
         without blocking the event loop. Internally it offloads blocking file
         creation/removal to a thread via asyncio.to_thread.
         """
-        constraints = _get_core_constraints(self._core_dist_name)
+        constraints = tuple(
+            dict.fromkeys(
+                (
+                    *_get_core_constraints(self._core_dist_name),
+                    *get_desktop_core_lock_constraints(),
+                )
+            )
+        )
         if not constraints:
             yield None
             return

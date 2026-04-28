@@ -564,12 +564,43 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import axios from "@/utils/request";
+import axios, { isAxiosError } from "@/utils/request";
 import { resolveApiUrl } from "@/utils/request";
 import { useI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 import WaitingForRestart from "./WaitingForRestart.vue";
+
+interface WfrExposed {
+  check: (initialStartTime?: number | null) => void | Promise<void>;
+  stop?: () => void;
+}
+interface BackupExportResult {
+  filename: string;
+}
+interface BackupCheckResult {
+  valid: boolean;
+  error?: string;
+  can_import?: boolean;
+  backup_version?: string;
+  current_version?: string;
+  backup_time?: string;
+  version_status?: "major_diff" | "minor_diff" | "match";
+  warnings?: string[];
+  backup_summary?: {
+    tables?: string[];
+    has_knowledge_bases?: boolean;
+    has_config?: boolean;
+    directories?: string[];
+  };
+}
+interface BackupListItem {
+  filename: string;
+  type: string;
+  size: number;
+  created_at: number;
+  astrbot_version: string;
+}
 
 const { t } = useI18n();
 
@@ -577,23 +608,23 @@ const confirmDialog = useConfirmDialog();
 
 const isOpen = ref(false);
 const activeTab = ref("export");
-const wfr = ref(null);
+const wfr = ref<WfrExposed | null>(null);
 
 // 导出状态
 const exportStatus = ref("idle"); // idle, processing, completed, failed
-const exportTaskId = ref(null);
+const exportTaskId = ref<string | null>(null);
 const exportProgress = ref({ current: 0, total: 100, message: "" });
-const exportResult = ref(null);
+const exportResult = ref<BackupExportResult | null>(null);
 const exportError = ref("");
 
 // 导入状态
 const importStatus = ref("idle"); // idle, uploading, confirm, processing, completed, failed
-const importFile = ref(null);
-const importTaskId = ref(null);
+const importFile = ref<File | null>(null);
+const importTaskId = ref<string | null>(null);
 const importProgress = ref({ current: 0, total: 100, message: "" });
 const importError = ref("");
 const uploadedFilename = ref(""); // 已上传的文件名
-const checkResult = ref(null); // 预检查结果
+const checkResult = ref<BackupCheckResult | null>(null); // 预检查结果
 
 // 分片上传状态
 const CONCURRENT_UPLOADS = 5; // 并发上传数
@@ -608,7 +639,7 @@ const uploadProgress = ref({
 
 // 备份列表
 const loadingList = ref(false);
-const backupList = ref([]);
+const backupList = ref<BackupListItem[]>([]);
 
 // 重命名对话框状态
 const renameDialogOpen = ref(false);
@@ -683,7 +714,7 @@ const loadBackupList = async () => {
     if (response.data.status === "ok") {
       backupList.value = response.data.data.items || [];
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Failed to load backup list:", error);
   } finally {
     loadingList.value = false;
@@ -703,9 +734,9 @@ const startExport = async () => {
     } else {
       throw new Error(response.data.message);
     }
-  } catch (error) {
+  } catch (error: unknown) {
     exportStatus.value = "failed";
-    exportError.value = error.message || "Export failed";
+    exportError.value = error instanceof Error ? error.message : "Export failed";
   }
 };
 
@@ -739,9 +770,9 @@ const pollExportProgress = async () => {
         setTimeout(pollExportProgress, 1000);
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     exportStatus.value = "failed";
-    exportError.value = error.message || "Failed to get export progress";
+    exportError.value = error instanceof Error ? error.message : "Failed to get export progress";
   }
 };
 
@@ -762,14 +793,14 @@ const resetExport = () => {
  * 因此分片到达顺序不影响最终结果。
  */
 const uploadChunksInParallel = async (
-  file,
-  totalChunks,
-  currentUploadId,
-  currentChunkSize,
+  file: File,
+  totalChunks: number,
+  currentUploadId: string,
+  currentChunkSize: number,
 ) => {
   // 跟踪已完成的字节数（使用原子操作避免并发问题）
   let completedBytes = 0;
-  const chunkSizes = [];
+  const chunkSizes: number[] = [];
 
   // 预计算每个分片的大小（使用后端返回的 chunk_size）
   for (let i = 0; i < totalChunks; i++) {
@@ -779,7 +810,7 @@ const uploadChunksInParallel = async (
   }
 
   // 上传单个分片的函数
-  const uploadSingleChunk = async (chunkIndex) => {
+  const uploadSingleChunk = async (chunkIndex: number) => {
     const start = chunkIndex * currentChunkSize;
     const end = Math.min(start + currentChunkSize, file.size);
     const chunk = file.slice(start, end);
@@ -917,21 +948,26 @@ const uploadAndCheck = async () => {
 
     // 显示确认对话框
     importStatus.value = "confirm";
-  } catch (error) {
+  } catch (error: unknown) {
     // 上传失败时尝试清理已上传的分片
     if (uploadId.value) {
       try {
         await axios.post("/api/backup/upload/abort", {
           upload_id: uploadId.value,
         });
-      } catch (abortError) {
+      } catch (abortError: unknown) {
         console.error("Failed to abort upload:", abortError);
       }
     }
 
     importStatus.value = "failed";
-    importError.value =
-      error.response?.data?.message || error.message || "Upload failed";
+    if (isAxiosError(error)) {
+      importError.value = error.response?.data?.message || "Upload failed";
+    } else if (error instanceof Error) {
+      importError.value = error.message;
+    } else {
+      importError.value = "Upload failed";
+    }
   }
 };
 
@@ -954,10 +990,15 @@ const confirmImport = async () => {
     } else {
       throw new Error(response.data.message);
     }
-  } catch (error) {
+  } catch (error: unknown) {
     importStatus.value = "failed";
-    importError.value =
-      error.response?.data?.message || error.message || "Import failed";
+    if (isAxiosError(error)) {
+      importError.value = error.response?.data?.message || "Import failed";
+    } else if (error instanceof Error) {
+      importError.value = error.message;
+    } else {
+      importError.value = "Import failed";
+    }
   }
 };
 
@@ -989,9 +1030,9 @@ const pollImportProgress = async () => {
         setTimeout(pollImportProgress, 1000);
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     importStatus.value = "failed";
-    importError.value = error.message || "Failed to get import progress";
+    importError.value = error instanceof Error ? error.message : "Failed to get import progress";
   }
 };
 
@@ -1003,7 +1044,7 @@ const resetImport = async () => {
       await axios.post("/api/backup/upload/abort", {
         upload_id: uploadId.value,
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to abort upload:", error);
     }
   }
@@ -1021,7 +1062,7 @@ const resetImport = async () => {
 };
 
 // 下载备份（使用浏览器原生下载，可显示下载进度）
-const downloadBackup = (filename) => {
+const downloadBackup = (filename: string) => {
   // 获取 token 用于鉴权（因为浏览器原生下载无法携带 Authorization header）
   const token = localStorage.getItem("token");
   if (!token) {
@@ -1045,7 +1086,7 @@ const downloadBackup = (filename) => {
 };
 
 // 从列表中恢复备份
-const restoreFromList = async (filename) => {
+const restoreFromList = async (filename: string) => {
   // 切换到导入标签页并设置文件名
   uploadedFilename.value = filename;
 
@@ -1072,13 +1113,19 @@ const restoreFromList = async (filename) => {
     // 切换到导入标签页并显示确认
     activeTab.value = "import";
     importStatus.value = "confirm";
-  } catch (error) {
-    alert(error.response?.data?.message || error.message || "Check failed");
+  } catch (error: unknown) {
+    let msg = "Check failed";
+    if (isAxiosError(error)) {
+      msg = error.response?.data?.message || "Check failed";
+    } else if (error instanceof Error) {
+      msg = error.message;
+    }
+    alert(msg);
   }
 };
 
 // 删除备份
-const deleteBackup = async (filename) => {
+const deleteBackup = async (filename: string) => {
   if (
     !(await askForConfirmation(
       t("features.settings.backup.list.confirmDelete"),
@@ -1094,13 +1141,13 @@ const deleteBackup = async (filename) => {
     } else {
       alert(response.data.message || "Delete failed");
     }
-  } catch (error) {
-    alert(error.message || "Delete failed");
+  } catch (error: unknown) {
+    alert(error instanceof Error ? error.message : "Delete failed");
   }
 };
 
 // 重命名相关函数
-const openRenameDialog = (filename) => {
+const openRenameDialog = (filename: string) => {
   renameOldFilename.value = filename;
   // 移除 .zip 后缀，只显示文件名部分
   renameNewName.value = filename.replace(/\.zip$/i, "");
@@ -1116,7 +1163,7 @@ const closeRenameDialog = () => {
 };
 
 // 文件名验证规则
-const renameValidationRule = (value) => {
+const renameValidationRule = (value: string) => {
   if (!value) return t("features.settings.backup.list.renameRequired");
   // 检查是否包含非法字符
   if (/[\\/:*?"<>|]/.test(value)) {
@@ -1156,18 +1203,21 @@ const confirmRename = async () => {
         response.data.message ||
         t("features.settings.backup.list.renameFailed");
     }
-  } catch (error) {
-    renameError.value =
-      error.response?.data?.message ||
-      error.message ||
-      t("features.settings.backup.list.renameFailed");
+  } catch (error: unknown) {
+    if (isAxiosError(error)) {
+      renameError.value = error.response?.data?.message || t("features.settings.backup.list.renameFailed");
+    } else if (error instanceof Error) {
+      renameError.value = error.message;
+    } else {
+      renameError.value = t("features.settings.backup.list.renameFailed");
+    }
   } finally {
     renameLoading.value = false;
   }
 };
 
 // 格式化文件大小
-const formatFileSize = (bytes) => {
+const formatFileSize = (bytes: number) => {
   if (bytes === 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
@@ -1176,12 +1226,12 @@ const formatFileSize = (bytes) => {
 };
 
 // 格式化日期（从时间戳）
-const formatDate = (timestamp) => {
+const formatDate = (timestamp: number) => {
   return new Date(timestamp * 1000).toLocaleString();
 };
 
 // 格式化 ISO 日期字符串
-const formatISODate = (isoString) => {
+const formatISODate = (isoString: string) => {
   if (!isoString) return "";
   try {
     return new Date(isoString).toLocaleString();
@@ -1194,7 +1244,7 @@ const formatISODate = (isoString) => {
 const restartAstrBot = async () => {
   try {
     await restartAstrBotRuntime(wfr.value);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(error);
   }
 };

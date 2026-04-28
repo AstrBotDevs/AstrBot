@@ -589,7 +589,7 @@ const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
-const selectedRefs = ref<Record<string, unknown> | null>(null);
+const selectedRefs = ref<Record<string, unknown> | undefined>(undefined);
 const threadSelection = reactive<{
   visible: boolean;
   left: number;
@@ -1152,7 +1152,7 @@ function openThreadPanel(thread: ChatThread) {
 
 function openRefsSidebar(refs: unknown) {
   selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : undefined;
   refsSidebarOpen.value = true;
 }
 

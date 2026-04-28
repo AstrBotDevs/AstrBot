@@ -38,11 +38,9 @@ async def test_delete_thread_raises_api_error_with_thread_context():
         _FakeDeleteResponse(status=500, body="thread cleanup failed"),
     )
 
-    try:
-        with pytest.raises(DeerFlowAPIError) as exc_info:
-            await client.delete_thread("thread-123")
-    finally:
-        client._closed = True
+    with pytest.raises(DeerFlowAPIError) as exc_info:
+        await client.delete_thread("thread-123")
+    client._closed = True
 
     assert exc_info.value.status == 500
     assert exc_info.value.thread_id == "thread-123"

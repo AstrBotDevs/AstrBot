@@ -100,10 +100,12 @@ class TestCoreDocs:
         assert agents_md.stat().st_size > 0, "AGENTS.md is empty"
 
     def test_claude_md_exists(self):
-        """CLAUDE.md should exist for AI coding guidelines."""
-        claude_md = PROJECT_ROOT / "CLAUDE.md"
-        assert claude_md.exists(), "CLAUDE.md not found"
-        assert claude_md.stat().st_size > 0, "CLAUDE.md is empty"
+        """AGENTS.md should exist and contain AI coding guidelines (merged from CLAUDE.md)."""
+        agents_md = PROJECT_ROOT / "AGENTS.md"
+        assert agents_md.exists(), "AGENTS.md not found (CLAUDE.md content was merged into AGENTS.md)"
+        assert agents_md.stat().st_size > 0, "AGENTS.md is empty"
+        content = agents_md.read_text(encoding="utf-8")
+        assert "AstrBot" in content, "AGENTS.md should contain project guidelines"
 
     def test_startup_guide_exists(self):
         """Startup guide should exist in both languages."""
@@ -118,7 +120,7 @@ class TestCoreDocs:
         core_docs = [
             DOCS_ROOT / "zh" / "startup.md",
             DOCS_ROOT / "en" / "startup.md",
-            PROJECT_ROOT / "CLAUDE.md",
+            PROJECT_ROOT / "AGENTS.md",
         ]
         for doc in core_docs:
             if doc.exists():

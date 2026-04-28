@@ -9,16 +9,48 @@ import SkillsSection from "@/components/extension/SkillsSection.vue";
 import ComponentPanel from "@/components/extension/componentPanel/index.vue";
 import InstalledPluginsTab from "./extension/InstalledPluginsTab.vue";
 import MarketPluginsTab from "./extension/MarketPluginsTab.vue";
+import type { Ref } from "vue";
 import { useExtensionPage } from "./extension/useExtensionPage";
+
+interface PluginHandlerInfo {
+  name: string;
+  event_type: string;
+  desc: string;
+  type: string;
+  cmd: string;
+}
+
+interface PluginInfo {
+  name: string;
+  handlers?: PluginHandlerInfo[];
+  repo?: string;
+  version?: string;
+  desc?: string;
+  author?: string;
+  astrbot_version?: string;
+  support_platforms?: string[];
+  category?: string;
+  stars?: number;
+  updated_at?: string;
+  pinned?: boolean;
+  tags?: string[];
+  installed?: boolean;
+  has_update?: boolean;
+  installed_at?: string;
+  reserved?: boolean;
+  activated?: boolean;
+  online_version?: string;
+  trimmedName?: string;
+}
 
 const pageState = useExtensionPage();
 
+const upload_file = pageState.upload_file as unknown as Ref<File | null>;
+const selectedPlugin = pageState.selectedPlugin as unknown as Ref<PluginInfo>;
+const pluginMarketData = pageState.pluginMarketData as unknown as Ref<PluginInfo[]>;
+
 const {
-  commonStore,
-  t,
   tm,
-  router,
-  route,
   getSelectedGitHubProxy,
   conflictDialog,
   checkAndPromptConflicts,
@@ -38,10 +70,8 @@ const {
   snack_success,
   configDialog,
   extension_config,
-  pluginMarketData,
   loadingDialog,
   showPluginInfoDialog,
-  selectedPlugin,
   curr_namespace,
   updatingAll,
   readmeDialog,
@@ -72,7 +102,6 @@ const {
   originalSourceUrl,
   extension_url,
   dialog,
-  upload_file,
   uploadTab,
   showPluginFullName,
   marketSearch,

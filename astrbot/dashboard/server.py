@@ -348,14 +348,14 @@ class AstrBotDashboard:
         star_context = self.core_lifecycle.star_context
         if star_context is None:
             return
-        if star_context.registered_web_apis is None:
-            star_context.registered_web_apis = []
+        if star_context._registered_web_apis is None:
+            star_context._registered_web_apis = []
         for (
             route,
             handler,
             methods,
             _,
-        ) in star_context.registered_web_apis:
+        ) in star_context._registered_web_apis:
             for method in methods:
                 self._plugin_route_map[(route, method)] = handler
 

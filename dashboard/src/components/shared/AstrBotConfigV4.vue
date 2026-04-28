@@ -7,6 +7,30 @@ import TemplateListEditor from "./TemplateListEditor.vue";
 import PersonaQuickPreview from "./PersonaQuickPreview.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 
+interface ConfigMetaSection {
+  description?: string;
+  hint?: string;
+  obvious_hint?: boolean;
+  type?: string;
+  condition?: Record<string, unknown>;
+  items?: Record<string, ConfigMetaItem>;
+}
+
+interface ConfigMetaItem {
+  description?: string;
+  hint?: string;
+  obvious_hint?: boolean;
+  type?: string;
+  invisible?: boolean;
+  condition?: Record<string, unknown>;
+  _special?: string;
+  editor_mode?: boolean;
+  editor_theme?: string;
+  editor_language?: string;
+  templates?: Record<string, unknown>;
+  labels?: string | string[];
+}
+
 const props = defineProps({
   metadata: {
     type: Object,
@@ -35,19 +59,25 @@ const hintMarkdown = new MarkdownIt({
 });
 
 // 翻译器函数 - 如果是国际化键则翻译，否则原样返回
-const translateIfKey = (value) => {
-  if (!value || typeof value !== "string") return value;
+const translateIfKey = (
+  value: string | undefined | null,
+): string => {
+  if (!value || typeof value !== "string") return value ?? "";
   return tm(value);
 };
 
-const renderHint = (value) => {
+const renderHint = (
+  value: string | undefined | null,
+): string => {
   const text = translateIfKey(value);
   if (!text) return "";
   return hintMarkdown.renderInline(text);
 };
 
 // 处理labels翻译 - labels可以是数组或国际化键
-const getTranslatedLabels = (itemMeta) => {
+const getTranslatedLabels = (
+  itemMeta: ConfigMetaItem | null | undefined,
+): string[] | null => {
   if (!itemMeta?.labels) return null;
 
   // 如果labels是字符串（国际化键）
@@ -71,14 +101,14 @@ const dialog = ref(false);
 const currentEditingKey = ref("");
 const currentEditingLanguage = ref("json");
 const currentEditingTheme = ref("vs-light");
-let currentEditingKeyIterable = null;
+let currentEditingKeyIterable: Record<string, unknown> | null = null;
 
-function getValueBySelector(obj, selector) {
+function getValueBySelector(obj: object, selector: string) {
   const keys = selector.split(".");
-  let current = obj;
+  let current: unknown = obj;
   for (const key of keys) {
     if (current && typeof current === "object" && key in current) {
-      current = current[key];
+      current = (current as Record<string, unknown>)[key];
     } else {
       return undefined;
     }
@@ -86,36 +116,40 @@ function getValueBySelector(obj, selector) {
   return current;
 }
 
-function setValueBySelector(obj, selector, value) {
+function setValueBySelector(obj: object, selector: string, value: unknown) {
   const keys = selector.split(".");
-  let current = obj;
+  let current: unknown = obj;
 
   // 创建嵌套对象路径
   for (let i = 0; i < keys.length - 1; i++) {
     const key = keys[i];
-    if (!current[key] || typeof current[key] !== "object") {
-      current[key] = {};
+    if (current && typeof current === "object" && key in current) {
+      if (!(current as Record<string, unknown>)[key] || typeof (current as Record<string, unknown>)[key] !== "object") {
+        (current as Record<string, unknown>)[key] = {};
+      }
+      current = (current as Record<string, unknown>)[key];
     }
-    current = current[key];
   }
 
   // 设置最终值
-  current[keys[keys.length - 1]] = value;
+  if (current && typeof current === "object") {
+    (current as Record<string, unknown>)[keys[keys.length - 1]] = value;
+  }
 }
 
 // 创建一个计算属性来处理 JSON selector 的获取和设置
-function createSelectorModel(selector) {
+function createSelectorModel(selector: string) {
   return computed({
     get() {
       return getValueBySelector(props.iterable, selector);
     },
-    set(value) {
+    set(value: unknown) {
       setValueBySelector(props.iterable, selector, value);
     },
   });
 }
 
-function openEditorDialog(key, value, theme, language) {
+function openEditorDialog(key: string, value: Record<string, unknown>, theme?: string, language?: string) {
   currentEditingKey.value = key;
   currentEditingLanguage.value = language || "json";
   currentEditingTheme.value = theme || "vs-light";
@@ -127,7 +161,7 @@ function saveEditedContent() {
   dialog.value = false;
 }
 
-function shouldShowItem(itemMeta, itemKey) {
+function shouldShowItem(itemMeta: object | null | undefined, itemKey: string): boolean {
   if (itemMeta?.condition) {
     for (const [conditionKey, expectedValue] of Object.entries(
       itemMeta.condition,
@@ -158,7 +192,7 @@ function shouldShowItem(itemMeta, itemKey) {
 }
 
 // 检查最外层的 object 是否应该显示
-function shouldShowSection() {
+function shouldShowSection(): boolean {
   const sectionMeta = props.metadata[props.metadataKey];
   if (!sectionMeta?.condition) {
     return true;
@@ -179,13 +213,13 @@ function shouldShowSection() {
   return hasVisibleItems;
 }
 
-function hasVisibleItemsAfter(items, currentIndex) {
+function hasVisibleItemsAfter(items: Record<string, unknown>, currentIndex: number): boolean {
   const itemEntries = Object.entries(items);
 
   // 检查当前索引之后是否还有可见的配置项
   for (let i = currentIndex + 1; i < itemEntries.length; i++) {
     const [itemKey, itemMeta] = itemEntries[i];
-    if (shouldShowItem(itemMeta, itemKey)) {
+    if (shouldShowItem(itemMeta as ConfigMetaItem | null, itemKey)) {
       return true;
     }
   }
@@ -193,7 +227,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
   return false;
 }
 
-function parseSpecialValue(value) {
+function parseSpecialValue(value: unknown): { name: string; subtype: string } {
   if (!value || typeof value !== "string") {
     return { name: "", subtype: "" };
   }
@@ -204,11 +238,11 @@ function parseSpecialValue(value) {
   };
 }
 
-function getSpecialName(value) {
+function getSpecialName(value: unknown): string {
   return parseSpecialValue(value).name;
 }
 
-function getSpecialSubtype(value) {
+function getSpecialSubtype(value: unknown): string {
   return parseSpecialValue(value).subtype;
 }
 </script>
@@ -379,6 +413,7 @@ function getSpecialSubtype(value) {
       </v-toolbar>
       <v-card-text class="pa-0">
         <VueMonacoEditor
+          v-if="currentEditingKeyIterable"
           v-model:value="currentEditingKeyIterable[currentEditingKey]"
           :theme="currentEditingTheme"
           :language="currentEditingLanguage"

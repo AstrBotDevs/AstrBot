@@ -997,6 +997,7 @@ class PipInstaller:
         package_name: str | None = None,
         requirements_path: str | None = None,
         mirror: str | None = None,
+        allow_target_upgrade: bool = False,
     ) -> None:
         args, requested_requirements = self._build_pip_args(
             package_name,
@@ -1021,6 +1022,8 @@ class PipInstaller:
                     "only-if-needed",
                 ],
             )
+        elif allow_target_upgrade:
+            args.append("--upgrade")
 
         async with (
             self._core_constraints.async_constraints_file() as constraints_file_path

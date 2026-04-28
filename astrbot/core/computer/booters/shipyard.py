@@ -107,7 +107,7 @@ class ShipyardShellWrapper:
 
 class ShipyardFileSystemWrapper:
     def __init__(
-        self, _shipyard_fs: ShipyardFileSystemComponent, _shipyard_shell: ShellComponent
+        self, _shipyard_fs: FileSystemComponent, _shipyard_shell: ShellComponent
     ):
         self._fs = _shipyard_fs
         self._shell = _shipyard_shell
@@ -188,7 +188,7 @@ class ShipyardBooter(ComputerBooter):
             PythonTool,
         )
 
-        return (  # type: ignore[return-value]
+        return (
             ExecuteShellTool(),
             PythonTool(),
             FileUploadTool(),
@@ -226,15 +226,15 @@ class ShipyardBooter(ComputerBooter):
             session_id,
         )
         self._ship = ship
-        self._shell = ShipyardShellWrapper(self._ship.shell)
-        self._fs = ShipyardFileSystemWrapper(self._ship.fs, self._shell)
+        self._shell = ShipyardShellWrapper(self._ship.shell)  # type: ignore[arg-type]
+        self._fs = ShipyardFileSystemWrapper(self._ship.fs, self._shell)  # type: ignore[arg-type]
 
     async def shutdown(self) -> None:
         logger.info("[Computer] booter_shutdown booter=shipyard status=done")
 
     @property
     def fs(self) -> FileSystemComponent:
-        return self._ship.fs
+        return self._ship.fs  # type: ignore[return-value]
 
     @property
     def python(self) -> PythonComponent:
@@ -242,7 +242,7 @@ class ShipyardBooter(ComputerBooter):
 
     @property
     def shell(self) -> ShellComponent:
-        return self._shell
+        return self._shell  # type: ignore[return-value]
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to sandbox"""

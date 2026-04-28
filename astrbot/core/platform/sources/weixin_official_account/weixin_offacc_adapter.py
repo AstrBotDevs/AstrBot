@@ -334,7 +334,8 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 return result
             except TimeoutError:
                 logger.info(f"callback 处理消息超时: message_id={msg.id}")
-                return create_reply("处理消息超时,请稍后再试｡", msg)
+                reply = create_reply("处理消息超时,请稍后再试｡", msg)
+                return reply if isinstance(reply, str) else str(reply)
             except Exception as e:
                 logger.error(f"转换消息时出现异常: {e}")
             finally:

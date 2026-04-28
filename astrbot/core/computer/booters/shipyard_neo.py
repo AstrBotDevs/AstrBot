@@ -33,7 +33,9 @@ except ImportError:
 
 def _maybe_model_dump(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
-        return value
+        out: dict[str, Any] = {}
+        out.update(value)
+        return out
     if hasattr(value, "model_dump"):
         dumped = value.model_dump()
         if isinstance(dumped, dict):

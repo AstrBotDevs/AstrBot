@@ -766,6 +766,53 @@ import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { normalizeTextInput } from "@/utils/inputValue";
 
+interface ProviderConfig {
+  id: string;
+  provider_type: string;
+  activated?: boolean;
+  llm_model?: string;
+  embedding_model?: string;
+  embedding_dimensions?: string | number;
+  rerank_model?: string;
+  version?: string;
+}
+
+interface KBCollection {
+  collection_name: string;
+  emoji?: string;
+  count?: number;
+  _embedding_provider_config?: {
+    embedding_model: string;
+  };
+  rerank_provider_id?: string;
+}
+
+interface NewKBData {
+  name: string;
+  emoji: string;
+  description: string;
+  embedding_provider_id: string | null;
+  rerank_provider_id: string | null;
+}
+
+interface ImportTaskData {
+  status: string;
+  task_id?: string;
+  result?: ImportTaskResult;
+  message?: string;
+}
+
+interface ImportTaskResult {
+  overall_summary?: string;
+  topics?: ImportTaskTopic[];
+  noise_points?: Array<string | { text: string }>;
+}
+
+interface ImportTaskTopic {
+  topic_id?: string;
+  topic_summary?: string;
+}
+
 export default {
   name: "KnowledgeBase",
   components: {
@@ -788,7 +835,7 @@ export default {
         description: "",
         embedding_provider_id: null,
         rerank_provider_id: null,
-      },
+      } as NewKBData,
       snackbar: {
         show: false,
         text: "",
@@ -922,16 +969,16 @@ export default {
       currentKB: {
         collection_name: "",
         emoji: "",
-      },
+      } as KBCollection,
       activeTab: "import",
       dataSource: "file",
       dataSourceOptions: [
         { title: "从文件", value: "file", icon: "mdi-file-upload" },
         { title: "从URL", value: "url", icon: "mdi-web" },
       ],
-      selectedFile: null,
-      chunkSize: null,
-      overlap: null,
+      selectedFile: null as File | null,
+      chunkSize: null as number | null,
+      overlap: null as number | null,
       uploading: false,
       searchQuery: "",
       searchResults: [],
@@ -958,7 +1005,7 @@ export default {
         chunk_overlap: 50,
       },
       importing: false,
-      pollingInterval: null,
+      pollingInterval: null as number | null,
       // 插件更新相关
       checkingUpdate: false,
       updatingPlugin: false,
@@ -1014,7 +1061,7 @@ export default {
     }
   },
   methods: {
-    onSearchQueryInput(value) {
+    onSearchQueryInput(value: string) {
       this.searchQuery = normalizeTextInput(value);
     },
     getSelectedGitHubProxy() {
@@ -1023,13 +1070,13 @@ export default {
         ? localStorage.getItem("selectedGitHubProxy") || ""
         : "";
     },
-    llmModelProps(providerConfig) {
+    llmModelProps(providerConfig: ProviderConfig) {
       return {
         title: providerConfig.llm_model || providerConfig.id,
         subtitle: `Provider ID: ${providerConfig.id}`,
       };
     },
-    embeddingModelProps(providerConfig) {
+    embeddingModelProps(providerConfig: ProviderConfig) {
       return {
         title: providerConfig.embedding_model,
         subtitle: this.tm("createDialog.providerInfo", {
@@ -1038,7 +1085,7 @@ export default {
         }),
       };
     },
-    rerankModelProps(providerConfig) {
+    rerankModelProps(providerConfig: ProviderConfig) {
       return {
         title: providerConfig.rerank_model,
         subtitle: this.tm("createDialog.rerankProviderInfo", {
@@ -1206,7 +1253,7 @@ export default {
         });
     },
 
-    createCollection(name, emoji, description) {
+    createCollection(name: string, emoji: string, description: string) {
       // 如果 this.newKB.embedding_provider_id 是 Object
       if (
         this.newKB.embedding_provider_id &&
@@ -1272,11 +1319,12 @@ export default {
         name: "",
         emoji: "🙂",
         description: "",
-        embedding_provider: "",
+        embedding_provider_id: null,
+        rerank_provider_id: null,
       };
     },
 
-    openKnowledgeBase(kb) {
+    openKnowledgeBase(kb: KBCollection) {
       // 不再跳转路由，而是打开对话框
       this.currentKB = kb;
       this.showContentDialog = true;
@@ -1306,22 +1354,23 @@ export default {
       this.$refs.fileInput.click();
     },
 
-    onFileSelected(event) {
-      const files = event.target.files;
-      if (files.length > 0) {
+    onFileSelected(event: Event) {
+      const target = event.target as HTMLInputElement;
+      const files = target.files;
+      if (files && files.length > 0) {
         this.selectedFile = files[0];
       }
     },
 
-    onFileDrop(event) {
-      const files = event.dataTransfer.files;
-      if (files.length > 0) {
+    onFileDrop(event: DragEvent) {
+      const files = event.dataTransfer?.files;
+      if (files && files.length > 0) {
         this.selectedFile = files[0];
       }
     },
 
-    getFileIcon(filename) {
-      const extension = filename.split(".").pop().toLowerCase();
+    getFileIcon(filename: string) {
+      const extension = filename.split(".").pop()?.toLowerCase() || "";
 
       switch (extension) {
         case "pdf":
@@ -1356,11 +1405,11 @@ export default {
 
       // 添加可选的分片长度和重叠长度参数
       if (this.chunkSize && this.chunkSize > 0) {
-        formData.append("chunk_size", this.chunkSize);
+        formData.append("chunk_size", String(this.chunkSize));
       }
 
       if (this.overlap && this.overlap >= 0) {
-        formData.append("chunk_overlap", this.overlap);
+        formData.append("chunk_overlap", String(this.overlap));
       }
 
       axios
@@ -1445,18 +1494,18 @@ export default {
         });
     },
 
-    showSnackbar(text, color = "success") {
+    showSnackbar(text: string, color = "success") {
       this.snackbar.text = text;
       this.snackbar.color = color;
       this.snackbar.show = true;
     },
 
-    selectEmoji(emoji) {
+    selectEmoji(emoji: string) {
       this.newKB.emoji = emoji;
       this.showEmojiPicker = false;
     },
 
-    confirmDelete(kb) {
+    confirmDelete(kb: KBCollection) {
       this.deleteTarget = kb;
       this.showDeleteDialog = true;
     },
@@ -1536,7 +1585,7 @@ export default {
         });
     },
 
-    openUrl(url) {
+    openUrl(url: string) {
       window.open(url, "_blank");
     },
 
@@ -1577,17 +1626,20 @@ export default {
 
         const taskId = addTaskResponse.data.task_id;
         this.pollTaskStatus(taskId);
-      } catch (error) {
-        const errorMessage =
-          error.response?.data?.message ||
-          error.message ||
-          "An unknown error occurred.";
+      } catch (error: unknown) {
+        let errorMessage = "An unknown error occurred.";
+        if (axios.isAxiosError(error)) {
+          errorMessage =
+            error.response?.data?.message || error.message || errorMessage;
+        } else if (error instanceof Error) {
+          errorMessage = error.message;
+        }
         this.showSnackbar(`Error: ${errorMessage}`, "error");
         this.importing = false;
       }
     },
 
-    pollTaskStatus(taskId) {
+    pollTaskStatus(taskId: string) {
       this.pollingInterval = setInterval(async () => {
         try {
           const statusResponse = await axios.post(`/api/plug/url_2_kb/status`, {
@@ -1612,21 +1664,24 @@ export default {
             );
             this.importing = false;
           }
-        } catch (error) {
+        } catch (error: unknown) {
           clearInterval(this.pollingInterval);
           this.pollingInterval = null;
-          const errorMessage =
-            error.response?.data?.message ||
-            error.message ||
-            "An unknown error occurred during polling.";
+          let errorMessage = "An unknown error occurred during polling.";
+          if (axios.isAxiosError(error)) {
+            errorMessage =
+              error.response?.data?.message || error.message || errorMessage;
+          } else if (error instanceof Error) {
+            errorMessage = error.message;
+          }
           this.showSnackbar(`Polling Error: ${errorMessage}`, "error");
           this.importing = false;
         }
       }, 3000);
     },
 
-    async handleImportResult(data) {
-      const chunks = [];
+    async handleImportResult(data: ImportTaskData) {
+      const chunks: Array<{ content: string; filename: string }> = [];
       const result = data.result;
 
       // 1. Handle overall summary
@@ -1675,7 +1730,7 @@ export default {
         try {
           await this.uploadChunkAsFile(chunk.content, chunk.filename);
           successCount++;
-        } catch (error) {
+        } catch {
           failCount++;
         }
       }
@@ -1698,7 +1753,7 @@ export default {
       this.getKBCollections();
     },
 
-    async uploadChunkAsFile(content, filename) {
+    async uploadChunkAsFile(content: string, filename: string) {
       const blob = new Blob([content], { type: "text/plain" });
       const file = new File([blob], filename, { type: "text/plain" });
 
@@ -1707,13 +1762,13 @@ export default {
       formData.append("collection_name", this.currentKB.collection_name);
 
       if (this.importOptions.chunk_size && this.importOptions.chunk_size > 0) {
-        formData.append("chunk_size", this.importOptions.chunk_size);
+        formData.append("chunk_size", String(this.importOptions.chunk_size));
       }
       if (
         this.importOptions.chunk_overlap &&
         this.importOptions.chunk_overlap >= 0
       ) {
-        formData.append("chunk_overlap", this.importOptions.chunk_overlap);
+        formData.append("chunk_overlap", String(this.importOptions.chunk_overlap));
       }
 
       const response = await axios.post(

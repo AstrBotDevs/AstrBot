@@ -539,6 +539,10 @@ async def test_import_reserved_plugin_skips_preloading_user_site_dependencies(
         "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
         lambda *, requirements_path: events.append(("prefer", requirements_path)),
     )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: None,
+    )
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
         del globals, locals, level
@@ -552,7 +556,6 @@ async def test_import_reserved_plugin_skips_preloading_user_site_dependencies(
         module_str="main",
         root_dir_name="web_searcher",
         requirements_path=str(requirements_path),
-        reserved=True,
     )
 
     assert imported_module is sentinel_module

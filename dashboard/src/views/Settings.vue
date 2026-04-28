@@ -379,6 +379,19 @@ import {
   ApiKeyListResponse,
 } from "@/types/api";
 
+interface WfrHandle {
+  check: (initialStartTime?: number | null) => void | Promise<void>;
+  stop?: () => void;
+}
+
+interface MigrationDialogHandle {
+  open: () => Promise<{ success: boolean; message: string }>;
+}
+
+interface BackupDialogHandle {
+  open: () => void;
+}
+
 const { tm } = useModuleI18n("features/settings");
 const toastStore = useToastStore();
 const theme = useTheme();
@@ -500,9 +513,7 @@ const applyThemePreset = (presetName: string) => {
 };
 
 const resolveThemes = () => {
-  if (theme?.themes?.value) return theme.themes.value;
-  if (theme?.global?.themes?.value) return theme.global.themes.value;
-  return null;
+  return theme?.global?.themes?.value ?? null;
 };
 
 const applyThemeColors = (primary: string, secondary: string) => {
@@ -542,9 +553,9 @@ const resetThemeColors = () => {
   applyThemeColors(primaryColor.value, secondaryColor.value);
 };
 
-const wfr = ref(null);
-const migrationDialog = ref(null);
-const backupDialog = ref(null);
+const wfr = ref<WfrHandle | null>(null);
+const migrationDialog = ref<MigrationDialogHandle | null>(null);
+const backupDialog = ref<BackupDialogHandle | null>(null);
 const apiKeys = ref<ApiKey[]>([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref("");
@@ -566,7 +577,10 @@ const availableScopes = [
   { value: "im", label: "im" },
 ];
 
-const showToast = (message: string, color = "success") => {
+const showToast = (
+  message: string,
+  color: "success" | "error" | "warning" = "success",
+) => {
   toastStore.add({
     message,
     color,
@@ -591,8 +605,9 @@ const loadApiKeys = async () => {
     apiKeys.value = res.data.data;
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
+      const data = e.response?.data as { message?: string } | undefined;
       showToast(
-        e?.response?.data?.message || tm("apiKey.messages.loadFailed"),
+        data?.message || tm("apiKey.messages.loadFailed"),
         "error",
       );
     } else {
@@ -695,8 +710,9 @@ const createApiKey = async () => {
     await loadApiKeys();
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
+      const data = e.response?.data as { message?: string } | undefined;
       showToast(
-        e?.response?.data?.message || tm("apiKey.messages.createFailed"),
+        data?.message || tm("apiKey.messages.createFailed"),
         "error",
       );
     } else {
@@ -724,8 +740,9 @@ const revokeApiKey = async (keyId: string) => {
     await loadApiKeys();
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
+      const data = e.response?.data as { message?: string } | undefined;
       showToast(
-        e?.response?.data?.message || tm("apiKey.messages.revokeFailed"),
+        data?.message || tm("apiKey.messages.revokeFailed"),
         "error",
       );
     } else {
@@ -751,8 +768,9 @@ const deleteApiKey = async (keyId: string) => {
     await loadApiKeys();
   } catch (e: unknown) {
     if (e instanceof AxiosError) {
+      const data = e.response?.data as { message?: string } | undefined;
       showToast(
-        e?.response?.data?.message || tm("apiKey.messages.deleteFailed"),
+        data?.message || tm("apiKey.messages.deleteFailed"),
         "error",
       );
     } else {
@@ -767,8 +785,9 @@ const restartAstrBot = async () => {
     await restartAstrBotRuntime(wfr.value);
   } catch (error: unknown) {
     if (error instanceof AxiosError) {
+      const data = error.response?.data as { message?: string } | undefined;
       showToast(
-        error?.response?.data?.message || tm("apiKey.messages.restartFailed"),
+        data?.message || tm("apiKey.messages.restartFailed"),
         "error",
       );
     } else {

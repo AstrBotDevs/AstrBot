@@ -5,7 +5,7 @@ import re
 import uuid
 from contextlib import asynccontextmanager
 from copy import deepcopy
-from typing import cast
+from typing import Any, cast
 
 from quart import Response as QuartResponse
 from quart import g, make_response, request, send_file
@@ -191,7 +191,7 @@ class BotMessageAccumulator:
         tool_call_id = str(tool_result.get("id") or "")
         if not tool_call_id:
             return
-        tool_call = self.pending_tool_calls.pop(tool_call_id, None) or {
+        tool_call: dict[str, Any] = self.pending_tool_calls.pop(tool_call_id, None) or {
             "id": tool_call_id
         }
         tool_call["result"] = tool_result.get("result")
@@ -258,17 +258,23 @@ class ChatRoute(Route):
 
         try:
             file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
-            real_file_path = os.path.realpath(file_path)
-            real_imgs_dir = os.path.realpath(self.attachments_dir)
+            real_file_path = await asyncio.to_thread(os.path.realpath, file_path)
+            real_imgs_dir = await asyncio.to_thread(
+                os.path.realpath, self.attachments_dir
+            )
 
-            if not os.path.exists(real_file_path):
+            if not await asyncio.to_thread(os.path.exists, real_file_path):
                 # try legacy
                 file_path = os.path.join(
                     self.legacy_img_dir, os.path.basename(filename)
                 )
-                if os.path.exists(file_path):
-                    real_file_path = os.path.realpath(file_path)
-                    real_imgs_dir = os.path.realpath(self.legacy_img_dir)
+                if await asyncio.to_thread(os.path.exists, file_path):
+                    real_file_path = await asyncio.to_thread(
+                        os.path.realpath, file_path
+                    )
+                    real_imgs_dir = await asyncio.to_thread(
+                        os.path.realpath, self.legacy_img_dir
+                    )
 
             if not real_file_path.startswith(real_imgs_dir):
                 return Response().error("Invalid file path").__dict__
@@ -295,7 +301,7 @@ class ChatRoute(Route):
                 return Response().error("Attachment not found").__dict__
 
             file_path = attachment.path
-            real_file_path = os.path.realpath(file_path)
+            real_file_path = await asyncio.to_thread(os.path.realpath, file_path)
 
             return await send_file(real_file_path, mimetype=attachment.mime_type)
 
@@ -677,12 +683,15 @@ class ChatRoute(Route):
         platform_history_id: str = "webchat",
     ):
         """保存 bot 消息到历史记录，返回保存的记录"""
-        bot_message_parts = []
+        bot_message_parts: list[dict[str, str]] = []
         bot_message_parts.extend(media_parts)
         if text:
             bot_message_parts.append({"type": "plain", "text": text})
 
-        new_his = {"type": "bot", "message": bot_message_parts}
+        new_his: dict[str, str | list[dict[str, str]] | dict[str, str] | None] = {
+            "type": "bot",
+            "message": bot_message_parts,
+        }
         if reasoning:
             new_his["reasoning"] = reasoning
         if agent_stats:
@@ -1149,10 +1158,10 @@ class ChatRoute(Route):
         try:
             attachments = await self.db.get_attachments(attachment_ids)
             for attachment in attachments:
-                if not os.path.exists(attachment.path):
+                if not await asyncio.to_thread(os.path.exists, attachment.path):
                     continue
                 try:
-                    os.remove(attachment.path)
+                    await asyncio.to_thread(os.remove, attachment.path)
                 except OSError as e:
                     logger.warning(
                         f"Failed to delete attachment file {attachment.path}: {e}"
@@ -1255,7 +1264,7 @@ class ChatRoute(Route):
             creator=username,
         )
 
-        response_data = {
+        response_data: dict[str, Any] = {
             "history": history_res,
             "threads": [self._serialize_thread(thread) for thread in threads],
             "is_running": self.running_convs.get(session_id, False),

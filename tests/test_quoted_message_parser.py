@@ -188,7 +188,8 @@ async def test_extract_quoted_message_text_forward_placeholder_variants_trigger_
     )
 
     text = await extract_quoted_message_text(event)
-    assert "Bob: [Image]world" in text  # type: ignore[operator]
+    assert text is not None
+    assert "Bob: [Image]world" in text
 
 
 @pytest.mark.asyncio

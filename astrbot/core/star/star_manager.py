@@ -134,7 +134,10 @@ async def _install_requirements_with_precheck(
             requirements_path,
             fallback_reason,
         )
-        await pip_installer.install(requirements_path=requirements_path)
+        await pip_installer.install(
+            requirements_path=requirements_path,
+            allow_target_upgrade=bool(install_plan.version_mismatch_names),
+        )
         return
     logger.info(
         f"检测到插件 {plugin_label} 缺失依赖,正在按 requirements.txt 安装: {requirements_path} -> {sorted(install_plan.missing_names)}",
@@ -142,7 +145,10 @@ async def _install_requirements_with_precheck(
     async with _temporary_filtered_requirements_file(
         install_lines=install_plan.install_lines,
     ) as filtered_requirements_path:
-        await pip_installer.install(requirements_path=filtered_requirements_path)
+        await pip_installer.install(
+            requirements_path=filtered_requirements_path,
+            allow_target_upgrade=bool(install_plan.version_mismatch_names),
+        )
 
 
 class PluginManager:
@@ -194,7 +200,9 @@ class PluginManager:
             logger.error(f"插件热重载监视任务异常: {e!s}")
             logger.error(traceback.format_exc())
 
-    async def _handle_file_changes(self, changes) -> None:
+    async def _handle_file_changes(
+        self, changes: set[tuple[Any, str]]
+    ) -> None:
         """处理文件变化"""
         logger.info(f"检测到文件变化: {changes}")
         plugins_to_check = []
@@ -229,9 +237,9 @@ class PluginManager:
                     break
 
     @staticmethod
-    def _get_classes(arg: ModuleType):
+    def _get_classes(arg: ModuleType) -> list[str]:
         """获取指定模块(可以理解为一个 python 文件)下所有的类"""
-        classes = []
+        classes: list[str] = []
         clsmembers = inspect.getmembers(arg, inspect.isclass)
         for name, _ in clsmembers:
             if name.lower().endswith("plugin") or name.lower() == "main":
@@ -240,8 +248,8 @@ class PluginManager:
         return classes
 
     @staticmethod
-    def _get_modules(path):
-        modules = []
+    def _get_modules(path: str) -> list[dict[str, Any]]:
+        modules: list[dict[str, Any]] = []
         dirs = os.listdir(path)
         for d in dirs:
             if os.path.isdir(os.path.join(path, d)):
@@ -264,7 +272,7 @@ class PluginManager:
                     )
         return modules
 
-    def _get_plugin_modules(self) -> list[dict]:
+    def _get_plugin_modules(self) -> list[dict[str, Any]]:
         plugins = []
         if os.path.exists(self.plugin_store_path):
             plugins.extend(self._get_modules(self.plugin_store_path))
@@ -285,12 +293,13 @@ class PluginManager:
         plugin_dir = self.plugin_store_path
         if not await anyio.Path(plugin_dir).exists():
             return False
-        to_update = []
+        to_update: list[str] = []
         if target_plugin:
             to_update.append(target_plugin)
         else:
             for p in self.context.get_all_stars():
-                to_update.append(p.root_dir_name)
+                if p.root_dir_name is not None:
+                    to_update.append(p.root_dir_name)
         for p in to_update:
             plugin_path = os.path.join(plugin_dir, p)
             await self._ensure_plugin_requirements(plugin_path, p)
@@ -323,6 +332,31 @@ class PluginManager:
             logger.exception(str(dependency_error))
             raise dependency_error from e
 
+    async def _plan_import_dependency_recovery(
+        self,
+        requirements_path: str,
+    ) -> str:
+        """Plan the dependency recovery strategy for plugin import.
+
+        Returns:
+            "prefer_before_import": All deps satisfied, prefer before first import.
+            "reinstall_on_failure": Version-mismatched deps, reinstall on import failure.
+            "recover_on_failure": Precheck unavailable or missing deps, recover on failure.
+        """
+        if not await anyio.Path(requirements_path).exists():
+            return "recover_on_failure"
+        try:
+            install_plan = plan_missing_requirements_install(requirements_path)
+        except Exception:
+            return "recover_on_failure"
+        if install_plan is None:
+            return "recover_on_failure"
+        if not install_plan.missing_names:
+            return "prefer_before_import"
+        if install_plan.version_mismatch_names:
+            return "reinstall_on_failure"
+        return "recover_on_failure"
+
     async def _import_plugin_with_dependency_recovery(
         self,
         path: str,
@@ -330,31 +364,50 @@ class PluginManager:
         root_dir_name: str,
         requirements_path: str,
     ) -> ModuleType:
+        recovery_strategy = await self._plan_import_dependency_recovery(
+            requirements_path,
+        )
+
+        if recovery_strategy == "prefer_before_import":
+            try:
+                pip_installer.prefer_installed_dependencies(
+                    requirements_path=requirements_path,
+                )
+            except Exception:
+                pass
+
         try:
             return __import__(path, fromlist=[module_str])
-        except (ModuleNotFoundError, ImportError) as import_exc:
+        except ModuleNotFoundError as import_exc:
             if await anyio.Path(requirements_path).exists():
-                try:
+                if recovery_strategy == "reinstall_on_failure":
+                    logger.info(
+                        "插件 %s 版本不匹配,跳过从已安装依赖恢复,直接重新安装: %s",
+                        root_dir_name,
+                        import_exc,
+                    )
+                else:
                     logger.info(
                         f"插件 {root_dir_name} 导入失败,尝试从已安装依赖恢复: {import_exc!s}",
                     )
                     pip_installer.prefer_installed_dependencies(
                         requirements_path=requirements_path,
                     )
-                    module = __import__(path, fromlist=[module_str])
-                    logger.info(
-                        f"插件 {root_dir_name} 已从 site-packages 恢复依赖,跳过重新安装｡",
-                    )
-                    return module
-                except Exception as recover_exc:
-                    logger.info(
-                        f"插件 {root_dir_name} 已安装依赖恢复失败,将重新安装依赖: {recover_exc!s}",
-                    )
+                    try:
+                        module = __import__(path, fromlist=[module_str])
+                        logger.info(
+                            f"插件 {root_dir_name} 已从 site-packages 恢复依赖,跳过重新安装｡",
+                        )
+                        return module
+                    except ModuleNotFoundError:
+                        pass
             await self._check_plugin_dept_update(target_plugin=root_dir_name)
             return __import__(path, fromlist=[module_str])
 
     @staticmethod
-    def _load_plugin_metadata(plugin_path: str, plugin_obj=None) -> StarMetadata | None:
+    def _load_plugin_metadata(
+        plugin_path: str, plugin_obj: Any = None
+    ) -> StarMetadata | None:
         """先寻找 metadata.yaml 文件,如果不存在,则使用插件对象的 info() 函数获取元数据｡
 
         Notes: 旧版本 AstrBot 插件可能使用的是 info() 函数来获取元数据｡
@@ -400,6 +453,8 @@ class PluginManager:
                 if isinstance(metadata.get("astrbot_version"), str)
                 else None,
             )
+        elif not isinstance(metadata, StarMetadata):
+            metadata = None
         return metadata
 
     @staticmethod
@@ -550,7 +605,7 @@ class PluginManager:
         reserved: bool,
         error: BaseException | str,
         error_trace: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         record: dict = {
             "name": root_dir_name,
             "error": str(error),
@@ -599,7 +654,9 @@ class PluginManager:
                 lines.append(f"加载插件目录 {dir_name} 时出现问题,原因:{error}｡")
         self.failed_plugin_info = "\n".join(lines) + "\n"
 
-    async def reload_failed_plugin(self, dir_name):
+    async def reload_failed_plugin(
+        self, dir_name: str
+    ) -> tuple[bool, str | None]:
         """重新加载未注册(加载失败)的插件
         Args:
             dir_name (str): 要重载的特定插件名称｡
@@ -621,7 +678,9 @@ class PluginManager:
                 return (success, None)
             return (False, error)
 
-    async def reload(self, specified_plugin_name=None):
+    async def reload(
+        self, specified_plugin_name: str | None = None
+    ) -> tuple[bool, str | None]:
         """重新加载插件
 
         Args:
@@ -689,10 +748,10 @@ class PluginManager:
 
     async def load(
         self,
-        specified_module_path=None,
-        specified_dir_name=None,
+        specified_module_path: str | None = None,
+        specified_dir_name: str | None = None,
         ignore_version_check: bool = False,
-    ):
+    ) -> tuple[bool, str | None]:
         """载入插件｡
         当 specified_module_path 或者 specified_dir_name 不为 None 时,只载入指定的插件｡
 
@@ -1133,7 +1192,7 @@ class PluginManager:
         repo_url: str,
         proxy: str = "",
         ignore_version_check: bool = False,
-    ):
+    ) -> dict[str, Any] | None:
         """从仓库 URL 安装插件
 
         从指定的仓库 URL 下载并安装插件,然后加载该插件到系统中
@@ -1376,7 +1435,9 @@ class PluginManager:
             is_reserved=plugin.reserved,
         )
 
-    async def update_plugin(self, plugin_name: str, proxy="") -> None:
+    async def update_plugin(
+        self, plugin_name: str, proxy: str = ""
+    ) -> None:
         """升级一个插件"""
         plugin = self.context.get_registered_star(plugin_name)
         if not plugin:
@@ -1432,7 +1493,8 @@ class PluginManager:
             return
         if star_metadata.star_cls is None:
             return
-        if "__del__" in star_metadata.star_cls_type.__dict__:
+        star_cls_type = type(star_metadata.star_cls)
+        if "__del__" in star_cls_type.__dict__:
             loop = asyncio.get_running_loop()
             future = loop.run_in_executor(None, star_metadata.star_cls.__del__)
 
@@ -1447,7 +1509,7 @@ class PluginManager:
                     )
 
             future.add_done_callback(_log_del_exception)
-        elif "terminate" in star_metadata.star_cls_type.__dict__:
+        elif "terminate" in star_cls_type.__dict__:
             await star_metadata.star_cls.terminate()
         handlers = star_handlers_registry.get_handlers_by_event_type(
             EventType.OnPluginUnloadedEvent,
@@ -1510,7 +1572,7 @@ class PluginManager:
         self,
         zip_file_path: str,
         ignore_version_check: bool = False,
-    ):
+    ) -> dict[str, Any] | None:
         dir_name = os.path.splitext(os.path.basename(zip_file_path))[0]
         desti_dir = tempfile.mkdtemp(
             dir=self.plugin_store_path,

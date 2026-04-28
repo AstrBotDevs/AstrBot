@@ -162,7 +162,7 @@
                 <v-radio-group
                   v-model="aBConfigRadioVal"
                   class="mt-2"
-                  hide-details="true"
+                  hide-details
                 >
                   <v-radio value="0">
                     <template #label>
@@ -529,7 +529,7 @@
       <div class="config-drawer-content">
         <ConfigPage
           v-if="showConfigDrawer"
-          :initial-config-id="configDrawerTargetId"
+          :initial-config-id="configDrawerTargetId ?? undefined"
         />
       </div>
     </v-card>
@@ -548,6 +548,24 @@ import {
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
 import ConfigPage from "@/views/ConfigPage.vue";
+
+interface RouteEntry {
+  umop: string | null;
+  originalUmop: string | null;
+  messageType: string;
+  sessionId: string;
+  configId: string;
+}
+
+interface ConfigInfo {
+  id: string;
+  name: string;
+}
+
+interface ToastPayload {
+  message: string;
+  type: "success" | "error";
+}
 
 export default {
   name: "AddNewPlatform",
@@ -575,45 +593,44 @@ export default {
       default: null,
     },
   },
-  emits: ["update:show", "show-toast", "refresh-config"],
   setup() {
     const { tm } = useModuleI18n("features/platform");
     return { tm };
   },
   data() {
     return {
-      selectedPlatformType: null,
-      selectedPlatformConfig: null,
+      selectedPlatformType: null as string | null,
+      selectedPlatformConfig: null as Record<string, unknown> | null,
 
       aBConfigRadioVal: "0",
-      selectedAbConfId: "default",
-      configInfoList: [],
+      selectedAbConfId: null as string | null,
+      configInfoList: [] as ConfigInfo[],
 
       // 选中的配置文件预览数据
-      selectedConfigData: null,
-      selectedConfigMetadata: null,
+      selectedConfigData: null as Record<string, unknown> | null,
+      selectedConfigMetadata: null as Record<string, unknown> | null,
       configPreviewLoading: false,
 
       // 新配置文件相关数据
-      newConfigData: null,
-      newConfigMetadata: null,
+      newConfigData: null as Record<string, unknown> | null,
+      newConfigMetadata: null as Record<string, unknown> | null,
       newConfigLoading: false,
 
       // 平台配置文件表格（已弃用，改用 platformRoutes）
-      platformConfigs: [],
+      platformConfigs: [] as Array<Record<string, unknown>>,
 
       // 平台路由表
-      platformRoutes: [],
+      platformRoutes: [] as RouteEntry[],
       isEditingRoutes: false, // 编辑模式开关
 
       // ID冲突确认对话框
       showIdConflictDialog: false,
       conflictId: "",
-      idConflictResolve: null,
+      idConflictResolve: null as ((value: boolean) => void) | null,
 
       // OneBot Empty Token Warning #2639
       showOneBotEmptyTokenWarnDialog: false,
-      oneBotEmptyTokenWarningResolve: null,
+      oneBotEmptyTokenWarningResolve: null as ((value: boolean) => void) | null,
 
       loading: false,
 
@@ -621,48 +638,41 @@ export default {
 
       // 配置抽屉
       showConfigDrawer: false,
-      configDrawerTargetId: null,
+      configDrawerTargetId: null as string | null,
 
       // 保存更新前的平台 ID，防止用户修改 ID 后丢失原始定位
-      originalUpdatingPlatformId: null,
+      originalUpdatingPlatformId: null as string | null,
     };
   },
   computed: {
     showDialog: {
-      get() {
+      get(): boolean {
         return this.show;
       },
-      set(value) {
+      set(value: boolean) {
         this.$emit("update:show", value);
       },
     },
-    platformTemplates() {
-      return (
-        this.metadata["platform_group"]?.metadata?.platform?.config_template ||
-        {}
-      );
+    platformTemplates(): Record<string, unknown> {
+      const pg = this.metadata["platform_group"] as Record<string, unknown> | undefined;
+      const meta = pg?.metadata as Record<string, unknown> | undefined;
+      const plat = meta?.platform as Record<string, unknown> | undefined;
+      return (plat?.config_template as Record<string, unknown>) || {};
     },
-    canSave() {
-      // 基本条件：必须选择平台类型
+    canSave(): boolean {
       if (!this.selectedPlatformType) {
         return false;
       }
-
-      if (!this.isPlatformIdValid(this.selectedPlatformConfig?.id)) {
+      const cfg = this.selectedPlatformConfig as Record<string, unknown> | null;
+      if (!this.isPlatformIdValid(cfg?.id as string | undefined)) {
         return false;
       }
-
-      // 如果是使用现有配置文件模式
       if (this.aBConfigRadioVal === "0") {
         return !!this.selectedAbConfId;
       }
-
-      // 如果是创建新配置文件模式
       if (this.aBConfigRadioVal === "1") {
-        // 需要配置文件名称，且新配置数据已加载
         return !!(this.selectedAbConfId && this.newConfigData);
       }
-
       return false;
     },
     configTableHeaders() {
@@ -697,7 +707,7 @@ export default {
           title: this.tm("createDialog.routeTableHeaders.actions"),
           key: "actions",
           sortable: false,
-          align: "center",
+          align: "center" as const,
           width: "20%",
         },
       ];
@@ -717,17 +727,17 @@ export default {
     },
   },
   watch: {
-    selectedPlatformType(newType) {
-      if (newType && this.platformTemplates[newType]) {
+    selectedPlatformType(newType: string | null) {
+      const templates = this.platformTemplates as Record<string, unknown>;
+      if (newType && templates[newType]) {
         this.selectedPlatformConfig = JSON.parse(
-          JSON.stringify(this.platformTemplates[newType]),
-        );
+          JSON.stringify(templates[newType]),
+        ) as Record<string, unknown>;
       } else {
         this.selectedPlatformConfig = null;
       }
     },
-    selectedAbConfId(newConfigId) {
-      // 当选择配置文件改变时，获取配置文件数据用于预览
+    selectedAbConfId(newConfigId: string | null) {
       if (!this.updatingMode && this.aBConfigRadioVal === "0" && newConfigId) {
         this.getConfigForPreview(newConfigId);
       } else {
@@ -735,15 +745,13 @@ export default {
         this.selectedConfigMetadata = null;
       }
     },
-    aBConfigRadioVal(newVal) {
-      // 当切换到创建新配置文件时，获取默认配置模板
+    aBConfigRadioVal(newVal: string) {
       if (newVal === "1") {
         this.selectedConfigData = null;
         this.selectedConfigMetadata = null;
         this.selectedAbConfId = null;
         this.getDefaultConfigTemplate();
       } else if (newVal === "0") {
-        // 如果切换回使用现有配置文件但没有选择配置文件，重置为默认
         this.newConfigData = null;
         this.newConfigMetadata = null;
         if (!this.selectedAbConfId) {
@@ -751,29 +759,28 @@ export default {
         }
       }
     },
-    showIdConflictDialog(newValue) {
+    showIdConflictDialog(newValue: boolean) {
       if (!newValue && this.idConflictResolve) {
         this.idConflictResolve(false);
         this.idConflictResolve = null;
       }
     },
-    showOneBotEmptyTokenWarnDialog(newValue) {
+    showOneBotEmptyTokenWarnDialog(newValue: boolean) {
       if (!newValue && this.oneBotEmptyTokenWarningResolve) {
         this.oneBotEmptyTokenWarningResolve(true);
         this.oneBotEmptyTokenWarningResolve = null;
       }
     },
-    // 监听更新模式变化，获取相关配置文件
     updatingPlatformConfig: {
-      handler(newConfig) {
+      handler(newConfig: Record<string, unknown> | null) {
         if (this.updatingMode && newConfig && newConfig.id) {
-          this.originalUpdatingPlatformId = newConfig.id;
-          this.getPlatformConfigs(newConfig.id);
+          this.originalUpdatingPlatformId = newConfig.id as string;
+          this.getPlatformConfigs(newConfig.id as string);
         }
       },
       immediate: true,
     },
-    showConfigSection(newValue) {
+    showConfigSection(newValue: boolean) {
       if (newValue && !this.updatingMode && this.aBConfigRadioVal === "0") {
         this.getConfigForPreview(this.selectedAbConfId);
       }
@@ -783,12 +790,10 @@ export default {
         });
       }
     },
-    // 监听编辑模式变化，自动展开配置文件部分
     updatingMode: {
-      handler(newValue) {
+      handler(newValue: boolean) {
         if (newValue) {
           this.showConfigSection = true;
-          // 编辑模式下默认不开启路由编辑模式，用户需要手动点击
           this.isEditingRoutes = false;
         }
       },
@@ -796,76 +801,73 @@ export default {
     },
   },
   methods: {
-    getPlatformTemplateByName(platformName) {
+    getPlatformTemplateByName(platformName: string | null | undefined): Record<string, unknown> | null {
       if (!platformName) {
         return null;
       }
-      return this.platformTemplates?.[platformName] || null;
+      const templates = this.platformTemplates as Record<string, unknown>;
+      return (templates?.[platformName] as Record<string, unknown>) || null;
     },
-    getPlatformOptionLabel(item) {
+    getPlatformOptionLabel(item: unknown): string {
       if (typeof item === "string") {
         return item;
       }
-      if (typeof item?.raw === "string") {
-        return item.raw;
+      const rec = item as Record<string, unknown>;
+      if (typeof rec?.raw === "string") {
+        return rec.raw as string;
       }
-      if (typeof item?.value === "string") {
-        return item.value;
+      if (typeof rec?.value === "string") {
+        return rec.value as string;
       }
-      if (typeof item?.title === "string") {
-        return item.title;
+      if (typeof rec?.title === "string") {
+        return rec.title as string;
       }
       return "";
     },
-    getPlatformIcon(platformNameOrType) {
-      const template = this.getPlatformTemplateByName(platformNameOrType);
+    getPlatformIcon(platformNameOrType: string): string {
+      const template = this.getPlatformTemplateByName(platformNameOrType) as Record<string, unknown> | null;
       if (template && template.logo_token) {
-        return resolveApiUrl(`/api/file/${template.logo_token}`);
+        return resolveApiUrl(`/api/file/${String(template.logo_token)}`);
       }
-      return getPlatformBuiltInIcon(template?.type || platformNameOrType);
+      return (template ? getPlatformBuiltInIcon(String(template.type)) : getPlatformBuiltInIcon(platformNameOrType)) ?? "";
     },
-    getPlatformOptionIcon(item) {
+    getPlatformOptionIcon(item: unknown): string {
       return this.getPlatformIcon(this.getPlatformOptionLabel(item));
     },
     getPlatformDescription,
-    resetForm() {
+    resetForm(): void {
       this.selectedPlatformType = null;
       this.selectedPlatformConfig = null;
 
       this.aBConfigRadioVal = "0";
       this.selectedAbConfId = "default";
 
-      // 重置配置预览数据
       this.selectedConfigData = null;
       this.selectedConfigMetadata = null;
       this.configPreviewLoading = false;
 
-      // 重置新配置文件数据
       this.newConfigData = null;
       this.newConfigMetadata = null;
       this.newConfigLoading = false;
 
       this.showConfigSection = false;
-      this.isEditingRoutes = false; // 重置编辑模式
+      this.isEditingRoutes = false;
 
       this.showConfigDrawer = false;
       this.configDrawerTargetId = null;
 
       this.originalUpdatingPlatformId = null;
     },
-    closeDialog() {
+    closeDialog(): void {
       this.resetForm();
-
       this.showDialog = false;
     },
-    async getConfigInfoList() {
-      await axios.get("/api/config/abconfs").then((res) => {
-        this.configInfoList = res.data.data.info_list;
-      });
+    async getConfigInfoList(): Promise<void> {
+      const res = await axios.get("/api/config/abconfs");
+      this.configInfoList = res.data.data.info_list;
     },
 
-    // 获取配置文件数据用于预览
-    async getConfigForPreview(configId) {
+    async getConfigForPreview(configId: string | null): Promise<void> {
       if (!configId) {
         this.selectedConfigData = null;
         this.selectedConfigMetadata = null;
@@ -877,11 +879,10 @@ export default {
         const response = await axios.get("/api/config/abconf", {
           params: { id: configId },
         });
-
         this.selectedConfigData = response.data.data.config;
         this.selectedConfigMetadata = response.data.data.metadata;
-      } catch (error) {
-        console.error("获取配置文件预览数据失败:", error);
+      } catch (_err) {
+        console.error("获取配置文件预览数据失败:", _err);
         this.selectedConfigData = null;
         this.selectedConfigMetadata = null;
       } finally {
@@ -889,31 +890,31 @@ export default {
       }
     },
 
-    // 获取默认配置模板用于创建新配置文件
-    async getDefaultConfigTemplate() {
+    async getDefaultConfigTemplate(): Promise<void> {
       this.newConfigLoading = true;
       try {
         const response = await axios.get("/api/config/default");
         this.newConfigData = response.data.data.config;
         this.newConfigMetadata = response.data.data.metadata;
-      } catch (error) {
-        console.error("获取默认配置模板失败:", error);
+      } catch (_err) {
+        console.error("获取默认配置模板失败:", _err);
         this.newConfigData = null;
         this.newConfigMetadata = null;
       } finally {
         this.newConfigLoading = false;
       }
     },
-    openTutorial() {
-      const tutorialUrl = getTutorialLink(this.selectedPlatformConfig.type);
+    openTutorial(): void {
+      const config = this.selectedPlatformConfig as Record<string, unknown> | null;
+      const tutorialUrl = getTutorialLink(config?.type as string);
       window.open(tutorialUrl, "_blank");
     },
-    openConfigDrawer(configId) {
+    openConfigDrawer(configId: string | null | undefined): void {
       const targetId = configId || "default";
 
       if (
         configId &&
-        this.configInfoList.findIndex((c) => c.id === configId) === -1
+        this.configInfoList.findIndex((c: ConfigInfo) => c.id === configId) === -1
       ) {
         this.showError(this.tm("messages.configNotFoundOpenConfig"));
       }
@@ -921,14 +922,15 @@ export default {
       this.configDrawerTargetId = targetId;
       this.showConfigDrawer = true;
     },
-    closeConfigDrawer() {
+    closeConfigDrawer(): void {
       this.showConfigDrawer = false;
     },
-    newPlatform() {
+    newPlatform(): void {
       this.loading = true;
       if (this.updatingMode) {
-        if (this.updatingPlatformConfig.type === "aiocqhttp") {
-          const token = this.updatingPlatformConfig.ws_reverse_token;
+        const config = this.updatingPlatformConfig as Record<string, unknown> | null;
+        if (config?.type === "aiocqhttp") {
+          const token = config?.ws_reverse_token as string | undefined;
           if (!token || token.trim() === "") {
             this.showOneBotEmptyTokenWarning().then((continueWithWarning) => {
               if (continueWithWarning) {
@@ -945,9 +947,9 @@ export default {
         this.savePlatform();
       }
     },
-    async updatePlatform() {
-      const id =
-        this.originalUpdatingPlatformId || this.updatingPlatformConfig.id;
+    async updatePlatform(): Promise<void> {
+      const config = this.updatingPlatformConfig as Record<string, unknown> | null;
+      const id = this.originalUpdatingPlatformId || (config?.id as string);
       if (!id) {
         this.loading = false;
         this.showError(this.tm("messages.updateMissingPlatformId"));
@@ -961,10 +963,9 @@ export default {
       }
 
       try {
-        // 更新平台配置
         const resp = await axios.post("/api/config/platform/update", {
           id: id,
-          config: this.updatingPlatformConfig,
+          config: config,
         });
 
         if (resp.data.status === "error") {
@@ -973,7 +974,6 @@ export default {
           );
         }
 
-        // 同时更新路由表
         await this.saveRoutesInternal();
 
         this.loading = false;
@@ -981,35 +981,34 @@ export default {
         this.resetForm();
         this.$emit("refresh-config");
         this.showSuccess(this.tm("messages.updateSuccess"));
-      } catch (err) {
+      } catch (_err) {
         this.loading = false;
-        this.showError(err.response?.data?.message || err.message);
+        this.showError(this.getErrorMessage(_err));
       }
     },
-    async savePlatform() {
-      if (!this.isPlatformIdValid(this.selectedPlatformConfig?.id)) {
+    async savePlatform(): Promise<void> {
+      const config = this.selectedPlatformConfig as Record<string, unknown> | null;
+
+      if (!this.isPlatformIdValid(config?.id as string | undefined)) {
         this.loading = false;
         this.showError(this.tm("dialog.invalidPlatformId"));
         return;
       }
 
-      // 检查 ID 是否已存在
-      const existingPlatform = this.config_data.platform?.find(
-        (p) => p.id === this.selectedPlatformConfig.id,
+      const platformList = (this.config_data as Record<string, unknown>)?.platform as Array<Record<string, unknown>> | undefined;
+      const existingPlatform = platformList?.find(
+        (p: Record<string, unknown>) => p.id === config?.id,
       );
-      if (existingPlatform || this.selectedPlatformConfig.id === "webchat") {
-        const confirmed = await this.confirmIdConflict(
-          this.selectedPlatformConfig.id,
-        );
+      if (existingPlatform || config?.id === "webchat") {
+        const confirmed = await this.confirmIdConflict(config?.id as string);
         if (!confirmed) {
           this.loading = false;
-          return; // 如果用户取消，则中止保存
+          return;
         }
       }
 
-      // 检查 aiocqhttp 适配器的安全设置
-      if (this.selectedPlatformConfig.type === "aiocqhttp") {
-        const token = this.selectedPlatformConfig.ws_reverse_token;
+      if (config?.type === "aiocqhttp") {
+        const token = config?.ws_reverse_token as string | undefined;
         if (!token || token.trim() === "") {
           const continueWithWarning = await this.showOneBotEmptyTokenWarning();
           if (!continueWithWarning) {
@@ -1019,13 +1018,11 @@ export default {
       }
 
       try {
-        // 先保存平台配置
         const res = await axios.post(
           "/api/config/platform/new",
-          this.selectedPlatformConfig,
+          config,
         );
 
-        // 平台保存成功后，处理配置文件
         await this.handleConfigFile();
 
         this.loading = false;
@@ -1035,41 +1032,37 @@ export default {
         this.showSuccess(
           res.data.message || this.tm("messages.addSuccessWithConfig"),
         );
-      } catch (err) {
+      } catch (_err) {
         this.loading = false;
-        this.showError(err.response?.data?.message || err.message);
+        this.showError(this.getErrorMessage(_err));
       }
     },
 
-    async handleConfigFile() {
+    async handleConfigFile(): Promise<void> {
       if (!this.selectedAbConfId) {
         return;
       }
 
-      const platformId = this.selectedPlatformConfig.id;
-      // 生成默认的UMOP：平台ID:*:*（表示该平台的所有消息类型和会话）
+      const config = this.selectedPlatformConfig as Record<string, unknown> | null;
+      const platformId = config?.id as string;
       const newUmop = `${platformId}:*:*`;
 
-      let configId = null;
+      let configId: string | null = null;
 
-      // 第一步：创建或获取配置文件ID
       if (this.aBConfigRadioVal === "0") {
-        // 使用现有配置文件
         configId = this.selectedAbConfId;
       } else if (this.aBConfigRadioVal === "1") {
-        // 创建新配置文件
-        configId = await this.createNewConfigFile(this.selectedAbConfId);
+        configId = await this.createNewConfigFile(this.selectedAbConfId!);
       }
 
       if (!configId) {
         throw new Error(this.tm("messages.configIdMissing"));
       }
 
-      // 第二步：统一更新路由表
       await this.updateRoutingTable(newUmop, configId);
     },
 
-    async updateRoutingTable(umop, configId) {
+    async updateRoutingTable(umop: string, configId: string): Promise<void> {
       try {
         await axios.post("/api/config/umo_abconf_route/update", {
           umo: umop,
@@ -1077,65 +1070,61 @@ export default {
         });
 
         console.info(`成功更新路由表: ${umop} -> ${configId}`);
-      } catch (err) {
-        console.error("更新路由表失败:", err);
-        const errorMessage = err.response?.data?.message || err.message;
+      } catch (_err) {
+        console.error("更新路由表失败:", _err);
         throw new Error(
-          this.tm("messages.routingUpdateFailed", { message: errorMessage }),
+          this.tm("messages.routingUpdateFailed", { message: this.getErrorMessage(_err) }),
         );
       }
     },
 
-    async createNewConfigFile(configName) {
+    async createNewConfigFile(configName: string): Promise<string> {
       try {
-        // 准备配置数据，如果是创建模式且有新配置数据，使用用户填写的配置
         const configData =
           this.aBConfigRadioVal === "1" && this.newConfigData
             ? this.newConfigData
             : undefined;
 
-        // 创建新的配置文件（不传入umop）
         const createRes = await axios.post("/api/config/abconf/new", {
           name: configName,
-          config: configData, // 传入用户配置的数据
+          config: configData,
         });
 
-        const newConfigId = createRes.data.data.conf_id;
+        const newConfigId: string = createRes.data.data.conf_id;
         console.info(`成功创建新配置文件 ${configName}，ID: ${newConfigId}`);
 
         return newConfigId;
-      } catch (err) {
-        console.error("创建新配置文件失败:", err);
-        const errorMessage = err.response?.data?.message || err.message;
+      } catch (_err) {
+        console.error("创建新配置文件失败:", _err);
         throw new Error(
-          this.tm("messages.createConfigFailed", { message: errorMessage }),
+          this.tm("messages.createConfigFailed", { message: this.getErrorMessage(_err) }),
         );
       }
     },
 
-    confirmIdConflict(id) {
+    confirmIdConflict(id: string): Promise<boolean> {
       this.conflictId = id;
       this.showIdConflictDialog = true;
-      return new Promise((resolve) => {
+      return new Promise<boolean>((resolve) => {
         this.idConflictResolve = resolve;
       });
     },
 
-    handleIdConflictConfirm(confirmed) {
+    handleIdConflictConfirm(confirmed: boolean): void {
       if (this.idConflictResolve) {
         this.idConflictResolve(confirmed);
       }
       this.showIdConflictDialog = false;
     },
 
-    showOneBotEmptyTokenWarning() {
+    showOneBotEmptyTokenWarning(): Promise<boolean> {
       this.showOneBotEmptyTokenWarnDialog = true;
-      return new Promise((resolve) => {
+      return new Promise<boolean>((resolve) => {
         this.oneBotEmptyTokenWarningResolve = resolve;
       });
     },
 
-    handleOneBotEmptyTokenWarningDismiss(continueWithWarning) {
+    handleOneBotEmptyTokenWarningDismiss(continueWithWarning: boolean): void {
       this.showOneBotEmptyTokenWarnDialog = false;
       if (this.oneBotEmptyTokenWarningResolve) {
         this.oneBotEmptyTokenWarningResolve(continueWithWarning);
@@ -1147,42 +1136,39 @@ export default {
       }
     },
 
-    showSuccess(message) {
-      this.$emit("show-toast", { message: message, type: "success" });
+    showSuccess(message: string): void {
+      this.$emit("show-toast", { message, type: "success" } as ToastPayload);
     },
 
-    showError(message) {
-      this.$emit("show-toast", { message: message, type: "error" });
+    showError(message: string): void {
+      this.$emit("show-toast", { message, type: "error" } as ToastPayload);
     },
 
-    isPlatformIdValid(id) {
+    isPlatformIdValid(id: string | null | undefined): boolean {
       if (!id) {
         return false;
       }
       return !/[!:]/.test(id);
     },
 
-    // 获取该平台适配器使用的所有配置文件（新版本：直接操作路由表）
-    async getPlatformConfigs(platformId) {
+    async getPlatformConfigs(platformId: string): Promise<void> {
       if (!platformId) {
         this.platformRoutes = [];
         return;
       }
 
       try {
-        // 获取路由表 (UMOP -> conf_id)
         const routesRes = await axios.get("/api/config/umo_abconf_routes");
-        const routingTable = routesRes.data.data.routing;
+        const routingTable = routesRes.data.data.routing as Record<string, string>;
 
-        // 过滤出属于该平台的路由，并保持顺序
-        const routes = [];
+        const routes: RouteEntry[] = [];
         for (const [umop, confId] of Object.entries(routingTable)) {
           if (this.isUmopMatchPlatform(umop, platformId)) {
             const parts = umop.split(":");
             if (parts.length === 3) {
               routes.push({
                 umop: umop,
-                originalUmop: umop, // 保存原始 UMOP 用于更新时查找
+                originalUmop: umop,
                 messageType:
                   parts[1] === "" || parts[1] === "*" ? "*" : parts[1],
                 sessionId: parts[2] === "" || parts[2] === "*" ? "*" : parts[2],
@@ -1194,7 +1180,6 @@ export default {
 
         this.platformRoutes = routes;
 
-        // 如果没有路由，添加一个默认的空路由供用户编辑
         if (this.platformRoutes.length === 0) {
           this.platformRoutes.push({
             umop: null,
@@ -1204,14 +1189,13 @@ export default {
             configId: "default",
           });
         }
-      } catch (err) {
-        console.error("获取平台路由配置失败:", err);
+      } catch (_err) {
+        console.error("获取平台路由配置失败:", _err);
         this.platformRoutes = [];
       }
     },
 
-    // 添加新路由
-    addNewRoute() {
+    addNewRoute(): void {
       this.platformRoutes.push({
         umop: null,
         originalUmop: null,
@@ -1221,50 +1205,41 @@ export default {
       });
     },
 
-    // 删除路由
-    deleteRoute(index) {
+    deleteRoute(index: number): void {
       this.platformRoutes.splice(index, 1);
     },
 
-    // 上移路由
-    moveRouteUp(index) {
+    moveRouteUp(index: number): void {
       if (index > 0) {
         const temp = this.platformRoutes[index];
         this.platformRoutes[index] = this.platformRoutes[index - 1];
         this.platformRoutes[index - 1] = temp;
-        // 强制更新视图
         this.platformRoutes = [...this.platformRoutes];
       }
     },
 
-    // 下移路由
-    moveRouteDown(index) {
+    moveRouteDown(index: number): void {
       if (index < this.platformRoutes.length - 1) {
         const temp = this.platformRoutes[index];
         this.platformRoutes[index] = this.platformRoutes[index + 1];
         this.platformRoutes[index + 1] = temp;
-        // 强制更新视图
         this.platformRoutes = [...this.platformRoutes];
       }
     },
 
-    // 内部保存路由表方法（不显示成功提示）
-    async saveRoutesInternal() {
-      const originalPlatformId =
-        this.originalUpdatingPlatformId || this.updatingPlatformConfig?.id;
-      const newPlatformId =
-        this.updatingPlatformConfig?.id || originalPlatformId;
+    async saveRoutesInternal(): Promise<void> {
+      const config = this.updatingPlatformConfig as Record<string, unknown> | null;
+      const originalPlatformId = this.originalUpdatingPlatformId || (config?.id as string);
+      const newPlatformId = (config?.id as string) || originalPlatformId;
 
       if (!originalPlatformId && !newPlatformId) {
         throw new Error(this.tm("messages.platformIdMissing"));
       }
 
       try {
-        // 获取完整的路由表
         const routesRes = await axios.get("/api/config/umo_abconf_routes");
-        const fullRoutingTable = routesRes.data.data.routing;
+        const fullRoutingTable = routesRes.data.data.routing as Record<string, string>;
 
-        // 删除该平台的所有旧路由
         for (const umop in fullRoutingTable) {
           if (
             (originalPlatformId &&
@@ -1275,7 +1250,6 @@ export default {
           }
         }
 
-        // 添加新路由（按顺序）
         for (const route of this.platformRoutes) {
           const messageType =
             route.messageType === "*" ? "*" : route.messageType;
@@ -1288,34 +1262,30 @@ export default {
           }
         }
 
-        // 使用 update_all 更新整个路由表
         await axios.post("/api/config/umo_abconf_route/update_all", {
           routing: fullRoutingTable,
         });
-      } catch (err) {
-        console.error("保存路由表失败:", err);
-        const errorMessage = err.response?.data?.message || err.message;
+      } catch (_err) {
+        console.error("保存路由表失败:", _err);
         throw new Error(
-          this.tm("messages.routingSaveFailed", { message: errorMessage }),
+          this.tm("messages.routingSaveFailed", { message: this.getErrorMessage(_err) }),
         );
       }
     },
 
-    // 切换编辑模式
-    toggleEditMode() {
+    toggleEditMode(): void {
       this.isEditingRoutes = !this.isEditingRoutes;
     },
-    toggleConfigSection() {
+    toggleConfigSection(): void {
       this.showConfigSection = !this.showConfigSection;
     },
 
-    // 根据配置文件ID获取名称
-    getConfigName(configId) {
-      const config = this.configInfoList.find((c) => c.id === configId);
+    getConfigName(configId: string): string {
+      const config = this.configInfoList.find((c: ConfigInfo) => c.id === configId);
       return config ? config.name : configId;
     },
 
-    isUmopMatchPlatform(umop, platformId) {
+    isUmopMatchPlatform(umop: string, platformId: string): boolean {
       if (!umop) return false;
       const parts = umop.split(":");
       if (parts.length !== 3) return false;
@@ -1323,9 +1293,8 @@ export default {
       return platform === platformId || platform === "" || platform === "*";
     },
 
-    // 获取消息类型标签
-    getMessageTypeLabel(messageType) {
-      const typeMap = {
+    getMessageTypeLabel(messageType: string): string {
+      const typeMap: Record<string, string> = {
         "*": this.tm("createDialog.messageTypeLabels.all"),
         "": this.tm("createDialog.messageTypeLabels.all"),
         GroupMessage: this.tm("createDialog.messageTypeLabels.group"),
@@ -1334,34 +1303,33 @@ export default {
       return typeMap[messageType] || messageType;
     },
 
-    toggleShowConfigSection() {
+    toggleShowConfigSection(): void {
       this.showConfigSection = false;
       this.showConfigSection = true;
     },
 
-    prepareData() {
+    prepareData(): void {
       this.getConfigInfoList();
       this.getConfigForPreview(this.selectedAbConfId);
-      if (
-        this.updatingMode &&
-        this.updatingPlatformConfig &&
-        this.updatingPlatformConfig.id
-      ) {
-        this.getPlatformConfigs(this.updatingPlatformConfig.id);
+      const config = this.updatingPlatformConfig as Record<string, unknown> | null;
+      if (this.updatingMode && config && config.id) {
+        this.getPlatformConfigs(config.id as string);
       }
     },
-    scrollDialogToBottom() {
-      const containerRef = this.$refs.dialogScrollContainer;
-      const el = containerRef?.$el || containerRef;
-      if (!el) {
-        return;
-      }
-      const scrollOptions = { top: el.scrollHeight, behavior: "smooth" };
+    scrollDialogToBottom(): void {
+      const ref = this.$refs.dialogScrollContainer;
+      if (!ref) return;
+      const el = ((ref as { $el?: HTMLElement }).$el || ref) as HTMLElement;
+      const scrollOptions: ScrollToOptions = { top: el.scrollHeight, behavior: "smooth" };
       if (typeof el.scrollTo === "function") {
         el.scrollTo(scrollOptions);
       } else {
         el.scrollTop = el.scrollHeight;
       }
+    },
+    getErrorMessage(err: unknown): string {
+      const ae = err as { response?: { data?: { message?: string } }; message?: string };
+      return ae.response?.data?.message || ae.message || String(err);
     },
   },
 };

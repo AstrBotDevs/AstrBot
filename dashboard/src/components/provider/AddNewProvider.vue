@@ -99,10 +99,30 @@
 </template>
 
 <script lang="ts">
+import type { PropType } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { getProviderIcon, getProviderDescription } from "@/utils/providerUtils";
 
-const AVAILABLE_PROVIDER_TABS = ['agent_runner', 'speech_to_text', 'text_to_speech', 'embedding', 'rerank'];
+const AVAILABLE_PROVIDER_TABS = [
+  "agent_runner",
+  "speech_to_text",
+  "text_to_speech",
+  "embedding",
+  "rerank",
+];
+
+interface ProviderTemplate {
+  provider: string;
+  provider_type: string;
+  type: string;
+  [key: string]: unknown;
+}
+
+type ProviderMetadata = {
+  provider?: {
+    config_template?: Record<string, ProviderTemplate>;
+  };
+};
 
 export default {
   name: "AddNewProvider",
@@ -112,12 +132,12 @@ export default {
       default: false,
     },
     metadata: {
-      type: Object,
+      type: Object as PropType<ProviderMetadata>,
       default: () => ({}),
     },
     currentProviderType: {
       type: String,
-      default: 'agent_runner'
+      default: "agent_runner",
     }
   },
   emits: ["update:show", "select-template"],
@@ -156,7 +176,7 @@ export default {
     syncActiveProviderTab() {
       this.activeProviderTab = AVAILABLE_PROVIDER_TABS.includes(this.currentProviderType)
         ? this.currentProviderType
-        : 'agent_runner';
+        : "agent_runner";
     },
 
     closeDialog() {
@@ -164,9 +184,9 @@ export default {
     },
 
     // 按提供商类型获取模板列表
-    getTemplatesByType(type) {
-      const templates = this.metadata.provider.config_template || {};
-      const filtered = {};
+    getTemplatesByType(type: string): Record<string, ProviderTemplate> {
+      const templates: Record<string, ProviderTemplate> = this.metadata.provider?.config_template || {};
+      const filtered: Record<string, ProviderTemplate> = {};
 
       for (const [name, template] of Object.entries(templates)) {
         if (template.provider_type === type) {
@@ -181,12 +201,12 @@ export default {
     getProviderIcon,
 
     // 获取提供商简介
-    getProviderDescription(template, name) {
+    getProviderDescription(template: ProviderTemplate, name: string) {
       return getProviderDescription(template, name, this.tm);
     },
 
     // 选择提供商模板
-    selectProviderTemplate(name) {
+    selectProviderTemplate(name: string) {
       this.$emit("select-template", name);
       this.closeDialog();
     },

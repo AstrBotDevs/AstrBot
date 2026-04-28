@@ -10,17 +10,13 @@ import aiohttp
 import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
 
+MultiModalConversation: Any = None
 try:
     from dashscope.aigc.multimodal_conversation import (
         MultiModalConversation,
     )
-
-    _MultiModalConversationType: type = MultiModalConversation
-except (
-    ImportError
-):  # pragma: no cover - older dashscope versions without Qwen TTS support
-    MultiModalConversation: Any = None
-    _MultiModalConversationType: Any = None
+except ImportError:  # pragma: no cover - older dashscope versions without Qwen TTS support
+    pass
 
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
@@ -69,24 +65,23 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             await f.write(audio_bytes)
         return path
 
-    def _call_qwen_tts(self, model: str, text: str):
+    def _call_qwen_tts(self, model: str, text: str) -> Any:
         if MultiModalConversation is None:
             raise RuntimeError(
                 "dashscope SDK missing MultiModalConversation. Please upgrade the dashscope package to use Qwen TTS models.",
             )
 
-        kwargs = {
-            "model": model,
-            "messages": None,
-            "api_key": self.chosen_api_key,
-            "voice": self.voice or "Cherry",
-            "text": text,
-        }
         if not self.voice:
             logging.warning(
                 "No voice specified for Qwen TTS model, using default 'Cherry'.",
             )
-        return MultiModalConversation.call(**kwargs)
+        return MultiModalConversation.call(
+            model=model,
+            messages=None,
+            api_key=self.chosen_api_key,
+            voice=self.voice or "Cherry",
+            text=text,
+        )
 
     async def _synthesize_with_qwen_tts(
         self,
@@ -103,7 +98,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         ext = ".wav"
         return audio_bytes, ext
 
-    async def _extract_audio_from_response(self, response) -> bytes | None:
+    async def _extract_audio_from_response(self, response: Any) -> bytes | None:
         output = getattr(response, "output", None)
         audio_obj = getattr(output, "audio", None) if output is not None else None
         if not audio_obj:

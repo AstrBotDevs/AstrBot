@@ -71,6 +71,9 @@ async def generate_tsne_visualization(
             for i in range(index.ntotal):
                 index.reconstruct(i, vectors[i])
         vec_db = kb_helper.vec_db
+        if vec_db is None:
+            logger.warning("向量数据库对象为空")
+            return None
         embedding_provider = vec_db.embedding_provider
         query_embedding = await embedding_provider.get_embedding(query)
         query_vector = np.array([query_embedding], dtype=np.float32)

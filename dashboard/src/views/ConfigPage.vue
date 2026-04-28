@@ -340,6 +340,25 @@ import {
 import UnsavedChangesConfirmDialog from "@/components/config/UnsavedChangesConfirmDialog.vue";
 import { normalizeTextInput } from "@/utils/inputValue";
 import { defineReactorMonacoTheme } from "@/utils/monacoTheme";
+import type { RouteLocationNormalized } from "vue-router";
+
+interface ConfigInfoItem {
+  id: string;
+  name: string;
+}
+
+type WfrRef = {
+  check: (initialStartTime?: number | null) => void | Promise<void>;
+  stop?: () => void;
+};
+
+interface UnsavedChangesOptions {
+  title?: string;
+  message?: string;
+  confirmHint?: string;
+  cancelHint?: string;
+  closeHint?: string;
+}
 
 export default {
   name: "ConfigPage",
@@ -352,9 +371,12 @@ export default {
   },
 
   // 检查未保存的更改
-  async beforeRouteLeave(to, from) {
+  async beforeRouteLeave(
+    _to: RouteLocationNormalized,
+    _from: RouteLocationNormalized,
+  ) {
     if (this.hasUnsavedChanges) {
-      const confirmed = await this.$refs.unsavedChangesDialog?.open({
+      const confirmed = await (this.$refs.unsavedChangesDialog as undefined | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> })?.open({
         title: this.tm("unsavedChangesWarning.dialogTitle"),
         message: this.tm("unsavedChangesWarning.leavePage"),
         confirmHint: `${this.tm("unsavedChangesWarning.options.saveAndSwitch")}:${this.tm("unsavedChangesWarning.options.confirm")}`,
@@ -429,17 +451,17 @@ export default {
       isSystemConfig: false,
 
       // 多配置文件管理
-      selectedConfigID: null, // 用于存储当前选中的配置项信息
-      currentConfigId: null, // 跟踪当前正在编辑的配置id
-      configInfoList: [],
+      selectedConfigID: null as string | null, // 用于存储当前选中的配置项信息
+      currentConfigId: null as string | null, // 跟踪当前正在编辑的配置id
+      configInfoList: [] as ConfigInfoItem[],
       configFormData: {
         name: "",
-      },
-      editingConfigId: null,
+      } as { name: string },
+      editingConfigId: null as string | null,
 
       // 测试聊天
       testChatDrawer: false,
-      testConfigId: null,
+      testConfigId: null as string | null,
 
       // 未保存的更改状态
       // 存储原始配置
@@ -469,7 +491,7 @@ export default {
     configInfoNameList() {
       return this.configInfoList.map((info) => info.name);
     },
-    selectedConfigInfo() {
+    selectedConfigInfo(): Partial<ConfigInfoItem> {
       return (
         this.configInfoList.find((info) => info.id === this.selectedConfigID) ||
         {}
@@ -480,7 +502,6 @@ export default {
       items.push({
         id: "_%manage%_",
         name: this.tm("configManagement.manageConfigs"),
-        umop: [],
       });
       return items;
     },
@@ -549,10 +570,10 @@ export default {
       }
     },
 
-    onConfigSearchInput(value) {
+    onConfigSearchInput(value: string) {
       this.configSearchKeyword = normalizeTextInput(value);
     },
-    extractConfigTypeFromHash(hash) {
+    extractConfigTypeFromHash(hash: string): string | null {
       const rawHash = String(hash || "");
       const lastHashIndex = rawHash.lastIndexOf("#");
       if (lastHashIndex === -1) {
@@ -563,7 +584,7 @@ export default {
         ? cleanHash
         : null;
     },
-    async syncConfigTypeFromHash(hash) {
+    async syncConfigTypeFromHash(hash: string): Promise<boolean> {
       const configType = this.extractConfigTypeFromHash(hash);
       if (!configType || configType === this.configType) {
         return false;
@@ -573,7 +594,7 @@ export default {
       await this.onConfigTypeToggle();
       return true;
     },
-    getConfigInfoList(abconf_id) {
+    getConfigInfoList(abconf_id?: string) {
       // 获取配置列表
       axios
         .get("/api/config/abconfs")
@@ -606,14 +627,14 @@ export default {
           this.save_message_success = "error";
         });
     },
-    getConfig(abconf_id, reloadFromFile = false) {
+    getConfig(abconf_id?: string, reloadFromFile = false) {
       this.fetched = false;
-      const params = {};
+      const params: Record<string, string> = {};
 
       if (this.isSystemConfig) {
         params.system_config = "1";
       } else {
-        params.id = abconf_id || this.selectedConfigID;
+        params.id = abconf_id || this.selectedConfigID || "";
       }
       if (reloadFromFile) {
         params.reload_from_file = "1";
@@ -655,7 +676,7 @@ export default {
       if (this.refreshingConfig) return;
 
       if (this.hasUnsavedChanges) {
-        const shouldDiscard = await this.$refs.unsavedChangesDialog?.open({
+        const shouldDiscard = await (this.$refs.unsavedChangesDialog as undefined | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> })?.open({
           title: this.tm("unsavedChangesWarning.dialogTitle"),
           message: this.tm("unsavedChangesWarning.reloadConfig"),
           confirmHint: `${this.tm("actions.refresh")}:${this.tm("unsavedChangesWarning.options.confirm")}`,
@@ -670,7 +691,7 @@ export default {
       this.refreshingConfig = true;
       try {
         await this.getConfig(
-          this.isSystemConfig ? undefined : this.selectedConfigID,
+          this.isSystemConfig ? undefined : (this.selectedConfigID ?? undefined),
           true,
         );
         this.save_message = this.tm("messages.refreshSuccess");
@@ -687,7 +708,7 @@ export default {
     updateConfig() {
       if (!this.fetched) return;
 
-      const postData = {
+      const postData: Record<string, unknown> = {
         config: JSON.parse(JSON.stringify(this.config_data)),
       };
 
@@ -710,7 +731,7 @@ export default {
             this.onConfigSaved();
 
             if (this.isSystemConfig) {
-              restartAstrBotRuntime(this.$refs.wfr).catch(() => undefined);
+              restartAstrBotRuntime(this.$refs.wfr as WfrRef | null | undefined).catch(() => undefined);
             }
             return { success: true };
           } else {
@@ -774,7 +795,7 @@ export default {
           this.save_message_success = "error";
         });
     },
-    async onConfigSelect(value) {
+    async onConfigSelect(value: string) {
       if (value === "_%manage%_") {
         this.configManageDialog = true;
         // 重置选择到之前的值
@@ -790,7 +811,7 @@ export default {
             ? "default"
             : this.currentConfigId || this.selectedConfigID || "default";
           const message = this.tm("unsavedChangesWarning.switchConfig");
-          const saveAndSwitch = await this.$refs.unsavedChangesDialog?.open({
+          const saveAndSwitch = await (this.$refs.unsavedChangesDialog as undefined | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> })?.open({
             title: this.tm("unsavedChangesWarning.dialogTitle"),
             message: message,
             confirmHint: `${this.tm("unsavedChangesWarning.options.saveAndSwitch")}:${this.tm("unsavedChangesWarning.options.confirm")}`,
@@ -833,7 +854,7 @@ export default {
       };
       this.editingConfigId = null;
     },
-    startEditConfig(config) {
+    startEditConfig(config: ConfigInfoItem) {
       this.showConfigForm = true;
       this.isEditingConfig = true;
       this.editingConfigId = config.id;
@@ -864,7 +885,7 @@ export default {
         this.createNewConfig();
       }
     },
-    async confirmDeleteConfig(config) {
+    async confirmDeleteConfig(config: ConfigInfoItem) {
       const message = this.tm("configManagement.confirmDelete").replace(
         "{name}",
         config.name,
@@ -873,7 +894,7 @@ export default {
         this.deleteConfig(config.id);
       }
     },
-    deleteConfig(configId) {
+    deleteConfig(configId: string) {
       axios
         .post("/api/config/abconf/delete", {
           id: configId,
@@ -910,7 +931,7 @@ export default {
             this.save_message = res.data.message;
             this.save_message_snack = true;
             this.save_message_success = "success";
-            this.getConfigInfoList(this.editingConfigId);
+            this.getConfigInfoList(this.editingConfigId ?? undefined);
             this.cancelConfigForm();
           } else {
             this.save_message = res.data.message;
@@ -929,7 +950,7 @@ export default {
       // 检查是否有未保存的更改
       if (this.hasUnsavedChanges) {
         const message = this.tm("unsavedChangesWarning.leavePage");
-        const saveAndSwitch = await this.$refs.unsavedChangesDialog?.open({
+        const saveAndSwitch = await (this.$refs.unsavedChangesDialog as undefined | { open: (opts: UnsavedChangesOptions) => Promise<boolean | "close"> })?.open({
           title: this.tm("unsavedChangesWarning.dialogTitle"),
           message: message,
           confirmHint: `${this.tm("unsavedChangesWarning.options.saveAndSwitch")}:${this.tm("unsavedChangesWarning.options.confirm")}`,
@@ -988,7 +1009,7 @@ export default {
       this.testChatDrawer = false;
       this.testConfigId = null;
     },
-    getConfigSnapshot(config) {
+    getConfigSnapshot(config: Record<string, unknown>) {
       return JSON.stringify(config ?? {});
     },
   },

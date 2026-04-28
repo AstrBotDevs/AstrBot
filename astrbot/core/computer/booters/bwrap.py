@@ -283,6 +283,52 @@ class HostBackedFileSystemComponent(FileSystemComponent):
         except Exception as e:
             return {"success": False, "error": str(e), "items": []}
 
+    async def search_files(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        after_context: int | None = None,
+        before_context: int | None = None,
+    ) -> dict[str, Any]:
+        p = path or self.workspace_dir
+        try:
+            import subprocess
+
+            cmd = ["grep", "-r", pattern, p]
+            result = await asyncio.to_thread(
+                subprocess.run, cmd, capture_output=True, text=True
+            )
+            return {
+                "success": True,
+                "matches": result.stdout.splitlines() if result.stdout else [],
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e), "matches": []}
+
+    async def edit_file(
+        self,
+        path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+        encoding: str = "utf-8",
+    ) -> dict[str, Any]:
+        p = self._safe_path(path)
+        try:
+            content = await asyncio.to_thread(_read_file_sync, p, encoding)
+            if replace_all:
+                new_content = content.replace(old_string, new_string)
+            else:
+                parts = content.split(old_string, 1)
+                if len(parts) == 1:
+                    return {"success": False, "error": "Pattern not found"}
+                new_content = new_string.join(parts)
+            await asyncio.to_thread(_write_file_sync, p, new_content, "w", encoding)
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
 
 class BwrapBooter(ComputerBooter):
     def __init__(

@@ -47,7 +47,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         super().__init__(provider_config, provider_settings)
         self.set_model(provider_config["stt_model"])
         self.model: SenseVoiceModel | None = None
-        self.is_emotion = provider_config.get("is_emotion", False)
+        self.is_emotion: bool = bool(provider_config.get("is_emotion", False))
 
     async def initialize(self) -> None:
         logger.info("下载或者加载 SenseVoice 模型中,这可能需要一些时间 ...")
@@ -66,7 +66,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         await temp_dir.mkdir(parents=True, exist_ok=True)
         return str(temp_dir / timestamp)
 
-    async def _is_silk_file(self, file_path) -> bool:
+    async def _is_silk_file(self, file_path: str) -> bool:
         silk_header = b"SILK"
         async with await anyio.open_file(file_path, "rb") as f:
             file_header = await f.read(8)

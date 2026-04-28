@@ -115,7 +115,7 @@ const props = defineProps({
 
 const isExpanded = ref(props.initialExpanded);
 const currentTime = ref(Date.now() / 1000);
-let timer = null;
+let timer: ReturnType<typeof setInterval> | null = null;
 
 const elapsedTime = computed(() => {
   if (props.toolCall.finished_ts) return "";
@@ -133,7 +133,7 @@ const formattedResult = computed(() => {
   }
 });
 
-const formatDuration = (seconds) => {
+const formatDuration = (seconds: number): string => {
   if (seconds < 1) {
     return `${Math.round(seconds * 1000)}ms`;
   } else if (seconds < 60) {

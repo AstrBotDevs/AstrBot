@@ -99,8 +99,8 @@ export default {
       selectedGitHubProxy: "",
       radioValue: "0", // 0: 不使用, 1: 使用
       loadingTestingConnection: false,
-      testingProxies: {},
-      proxyStatus: {},
+      testingProxies: {} as Record<number, boolean>,
+      proxyStatus: {} as Record<number, { available: boolean; latency: number }>,
       initializing: true,
     };
   },
@@ -167,7 +167,7 @@ export default {
     this.initializing = false;
   },
   methods: {
-    getProxyByControl(control) {
+    getProxyByControl(control: string) {
       const normalizedControl = String(control);
       if (normalizedControl === "-1") {
         return "";
@@ -178,7 +178,7 @@ export default {
       }
       return this.githubProxies[index] || "";
     },
-    async testSingleProxy(idx) {
+    async testSingleProxy(idx: number) {
       this.testingProxies[idx] = true;
 
       const proxy = this.githubProxies[idx];

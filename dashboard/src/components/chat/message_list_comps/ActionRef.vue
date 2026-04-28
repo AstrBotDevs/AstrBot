@@ -9,13 +9,13 @@
         v-for="(ref, refIdx) in refs.used.slice(0, 3)"
         :key="refIdx"
         class="ref-avatar"
-        :style="{ zIndex: 3 - refIdx }"
+        :style="{ zIndex: 3 - (refIdx as number) }"
       >
         <img
           v-if="ref.favicon"
           :src="ref.favicon"
           class="ref-favicon"
-          @error="(e) => (e.target.style.display = 'none')"
+          @error="handleImgError"
         />
         <span v-else class="ref-initial">{{ getRefInitial(ref.title) }}</span>
       </div>
@@ -46,14 +46,19 @@ export default {
     return { tm };
   },
   methods: {
+    handleImgError(e: Event): void {
+      const el = e.target as HTMLElement;
+      if (el) el.style.display = "none";
+    },
+
     // Get first character of ref title for fallback display
-    getRefInitial(title) {
+    getRefInitial(title: string): string {
       if (!title) return "?";
       return title.charAt(0).toUpperCase();
     },
 
     // Handle click to open refs sidebar
-    handleClick() {
+    handleClick(): void {
       this.$emit("open-refs", this.refs);
     },
   },

@@ -77,7 +77,7 @@ import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
 interface Session {
   session_id: string;
-  display_name?: string;
+  display_name?: string | null;
   updated_at: string;
 }
 

@@ -15,152 +15,43 @@ const props = defineProps({
 });
 
 const {
-  commonStore,
-  t,
   tm,
-  router,
-  route,
-  getSelectedGitHubProxy,
-  conflictDialog,
-  checkAndPromptConflicts,
-  handleConflictConfirm,
-  fileInput,
-  activeTab,
-  validTabs,
-  isValidTab,
-  getLocationHash,
-  extractTabFromHash,
-  syncTabFromHash,
   extension_data,
-  getInitialShowReserved,
   showReserved,
-  snack_message,
-  snack_show,
-  snack_success,
-  configDialog,
-  extension_config,
   pluginMarketData,
-  loadingDialog,
-  showPluginInfoDialog,
-  selectedPlugin,
-  curr_namespace,
   updatingAll,
-  readmeDialog,
-  forceUpdateDialog,
-  updateAllConfirmDialog,
-  changelogDialog,
-  getInitialListViewMode,
   isListView,
   pluginSearch,
   installedStatusFilter,
   installedSortBy,
   installedSortOrder,
   loading_,
-  currentPage,
-  dangerConfirmDialog,
-  selectedDangerPlugin,
-  selectedMarketInstallPlugin,
-  installCompat,
-  versionCompatibilityDialog,
-  showUninstallDialog,
-  uninstallTarget,
-  showSourceDialog,
-  showSourceManagerDialog,
-  sourceName,
-  sourceUrl,
-  customSources,
-  selectedSource,
-  showRemoveSourceDialog,
-  sourceToRemove,
-  editingSource,
-  originalSourceUrl,
-  extension_url,
-  dialog,
-  upload_file,
-  uploadTab,
-  showPluginFullName,
-  marketSearch,
-  debouncedMarketSearch,
-  refreshingMarket,
-  sortBy,
-  sortOrder,
-  randomPluginNames,
-  normalizeStr,
-  toPinyinText,
-  toInitials,
-  plugin_handler_info_headers,
-  installedSortItems,
-  installedSortUsesOrder,
-  pluginHeaders,
-  filteredExtensions,
   filteredPlugins,
-  filteredMarketPlugins,
-  sortedPlugins,
-  RANDOM_PLUGINS_COUNT,
-  randomPlugins,
-  shufflePlugins,
-  refreshRandomPlugins,
-  displayItemsPerPage,
-  totalPages,
-  paginatedPlugins,
-  updatableExtensions,
-  toggleShowReserved,
-  toast,
-  resetLoadingDialog,
-  onLoadingDialogResult,
   failedPluginItems,
-  getExtensions,
   reloadFailedPlugin,
-  checkUpdate,
-  uninstallExtension,
   requestUninstallFailedPlugin,
-  handleUninstallConfirm,
-  updateExtension,
-  showUpdateAllConfirm,
-  confirmUpdateAll,
-  cancelUpdateAll,
-  confirmForceUpdate,
-  updateAllExtensions,
+  pluginHeaders,
   pluginOn,
   pluginOff,
-  openExtensionConfig,
-  updateConfig,
-  showPluginInfo,
   reloadPlugin,
+  openExtensionConfig,
   viewReadme,
+  showPluginInfo,
+  uninstallExtension,
+  updateExtension,
   viewChangelog,
-  handleInstallPlugin,
-  confirmDangerInstall,
-  cancelDangerInstall,
-  loadCustomSources,
-  saveCustomSources,
-  addCustomSource,
-  openSourceManagerDialog,
-  selectPluginSource,
-  sourceSelectItems,
-  editCustomSource,
-  removeCustomSource,
-  confirmRemoveSource,
-  saveCustomSource,
-  trimExtensionName,
-  checkAlreadyInstalled,
-  showVersionCompatibilityWarning,
-  continueInstallIgnoringVersionWarning,
-  cancelInstallOnVersionWarning,
-  newExtension,
-  normalizePlatformList,
-  getPlatformDisplayList,
-  resolveSelectedInstallPlugin,
-  selectedInstallPlugin,
-  checkInstallCompatibility,
-  refreshPluginMarket,
-  handleLocaleChange,
-  searchDebounceTimer,
+  dialog,
+  sortedPlugins,
+  installedSortItems,
+  installedSortUsesOrder,
+  updatableExtensions,
+  toggleShowReserved,
+  showUpdateAllConfirm,
 } = props.state;
 
 // 置顶插件（保存在 localStorage）
 const PINNED_KEY = "astrbot.pinnedExtensions";
-const pinnedNames = ref([]);
+const pinnedNames = ref<string[]>([]);
 
 const loadPinned = () => {
   try {
@@ -183,11 +74,11 @@ loadPinned();
 
 watch(pinnedNames, () => savePinned(), { deep: true });
 
-const isPinned = (name) => {
+const isPinned = (name: string) => {
   return pinnedNames.value.includes(name);
 };
 
-const togglePin = (extension) => {
+const togglePin = (extension: { name: string }) => {
   const name = extension?.name;
   if (!name) return;
   const idx = pinnedNames.value.indexOf(name);
@@ -195,23 +86,24 @@ const togglePin = (extension) => {
   else pinnedNames.value.splice(idx, 1);
 };
 
-const handlePinnedImgError = (e) => {
-  e.target.src = defaultPluginIcon;
+const handlePinnedImgError = (e: Event) => {
+  const img = e.target as HTMLImageElement;
+  img.src = defaultPluginIcon;
 };
 
 // --- 拖拽功能实现 ---
 const draggedIndex = ref(-1);
 let lastSwapTime = 0;
 
-const onDragStart = (index) => {
+const onDragStart = (index: number) => {
   draggedIndex.value = index;
 };
 
-const onDragOver = (e) => {
+const onDragOver = (e: DragEvent) => {
   e.preventDefault(); // 必须调用，否则不会触发 drop
 };
 
-const onDragEnter = (e, index) => {
+const onDragEnter = (e: DragEvent, index: number) => {
   e.preventDefault();
 
   const now = Date.now();
@@ -230,11 +122,11 @@ const onDragEnter = (e, index) => {
   lastSwapTime = now;
 };
 
-const onDrop = () => {
+const onDrop = (e: DragEvent) => {
   draggedIndex.value = -1;
 };
 
-const onDragEnd = () => {
+const onDragEnd = (e: DragEvent) => {
   draggedIndex.value = -1;
 };
 // ----------------

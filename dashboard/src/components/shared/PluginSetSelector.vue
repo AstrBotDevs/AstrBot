@@ -145,11 +145,18 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue"]);
 const { tm } = useModuleI18n("core.shared");
 
+interface PluginEntry {
+  name: string;
+  desc?: string;
+  activated: boolean;
+  reserved: boolean;
+}
+
 const dialog = ref(false);
-const pluginList = ref([]);
+const pluginList = ref<PluginEntry[]>([]);
 const loading = ref(false);
 const selectionMode = ref("custom"); // 'all', 'none', 'custom'
-const selectedPlugins = ref([]);
+const selectedPlugins = ref<string[]>([]);
 
 // 判断是否为"所有插件"模式
 const isAllPlugins = computed(() => {
@@ -160,18 +167,11 @@ const isAllPlugins = computed(() => {
   );
 });
 
-// 移除插件
-function removePlugin(pluginName) {
-  if (props.modelValue && props.modelValue.length > 0) {
-    const newValue = props.modelValue.filter((name) => name !== pluginName);
-    emit("update:modelValue", newValue);
-  }
-}
 
 // 监听 modelValue 变化，同步内部状态
 watch(
   () => props.modelValue,
-  (newValue) => {
+  (newValue: unknown[]) => {
     if (!newValue || newValue.length === 0) {
       selectionMode.value = "none";
       selectedPlugins.value = [];
@@ -180,7 +180,7 @@ watch(
       selectedPlugins.value = [];
     } else {
       selectionMode.value = "custom";
-      selectedPlugins.value = [...newValue];
+      selectedPlugins.value = [...newValue] as string[];
     }
   },
   { immediate: true },
@@ -243,7 +243,7 @@ function cancelSelection() {
     selectedPlugins.value = [];
   } else {
     selectionMode.value = "custom";
-    selectedPlugins.value = [...currentValue];
+    selectedPlugins.value = [...currentValue] as string[];
   }
 
   dialog.value = false;

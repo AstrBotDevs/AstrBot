@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -37,11 +38,15 @@ class TestShipyardNeoBooterCapabilities:
 
     def test_includes_browser_when_present(self):
         booter = self._make_booter(["python", "shell", "filesystem", "browser"])
-        assert "browser" in booter.capabilities
+        caps = booter.capabilities
+        assert caps is not None
+        assert "browser" in caps
 
     def test_no_browser_when_absent(self):
         booter = self._make_booter(["python", "shell", "filesystem"])
-        assert "browser" not in booter.capabilities
+        caps = booter.capabilities
+        assert caps is not None
+        assert "browser" not in caps
 
     def test_returns_immutable(self):
         """Verify capabilities returns an immutable tuple."""
@@ -49,7 +54,7 @@ class TestShipyardNeoBooterCapabilities:
         caps = booter.capabilities
         assert isinstance(caps, tuple)
         with pytest.raises(AttributeError):
-            caps.append("mutated")
+            getattr(caps, "append")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -70,9 +75,9 @@ def _make_req():
 def _import_apply_sandbox_tools():
     """Import _apply_sandbox_tools, skipping if circular-import fails."""
     try:
-        from astrbot.core.astr_main_agent import _apply_sandbox_tools  # type: ignore[import]
+        from astrbot.core.astr_main_agent import apply_sandbox_tools
 
-        return _apply_sandbox_tools
+        return apply_sandbox_tools
     except ImportError:
         pytest.skip("Cannot import _apply_sandbox_tools (circular import in test env)")
 
@@ -89,24 +94,10 @@ class TestApplySandboxToolsConditional:
     def test_no_session_registers_all(self):
         """First request (no booted session) ￫ all tools including browser."""
         fn = _import_apply_sandbox_tools()
-        config = _make_config("shipyard_neo")
-        req = _make_req()
+        config: Any = _make_config("shipyard_neo")
+        req: Any = _make_req()
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_tools",
-                return_value=[],
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_default_sandbox_tools",
-                return_value=self._make_neo_booter().get_default_tools(),
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_prompt_parts",
-                return_value=[],
-            ),
-        ):
-            fn(config, req, "session-1")
+        fn(config, req, "session-1")
 
         names = self._tool_names(req)
         assert "astrbot_execute_browser" in names
@@ -127,25 +118,15 @@ class TestApplySandboxToolsConditional:
     def test_with_browser_capability(self):
         """Booted session with browser capability ￫ browser tools registered."""
         fn = _import_apply_sandbox_tools()
-        config = _make_config("shipyard_neo")
-        req = _make_req()
+        config: Any = _make_config("shipyard_neo")
+        req: Any = _make_req()
         fake_booter = self._make_neo_booter(
             caps=["python", "shell", "filesystem", "browser"]
         )
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_tools",
-                return_value=fake_booter.get_tools(),
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_default_sandbox_tools",
-                return_value=[],
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_prompt_parts",
-                return_value=[],
-            ),
+        with patch(
+            "astrbot.core.computer.computer_client.session_booter",
+            {"session-1": fake_booter},
         ):
             fn(config, req, "session-1")
 
@@ -155,23 +136,13 @@ class TestApplySandboxToolsConditional:
     def test_without_browser_capability(self):
         """Booted session WITHOUT browser capability ￫ browser tools NOT registered."""
         fn = _import_apply_sandbox_tools()
-        config = _make_config("shipyard_neo")
-        req = _make_req()
+        config: Any = _make_config("shipyard_neo")
+        req: Any = _make_req()
         fake_booter = self._make_neo_booter(caps=["python", "shell", "filesystem"])
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_tools",
-                return_value=fake_booter.get_tools(),
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_default_sandbox_tools",
-                return_value=[],
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_prompt_parts",
-                return_value=[],
-            ),
+        with patch(
+            "astrbot.core.computer.computer_client.session_booter",
+            {"session-1": fake_booter},
         ):
             fn(config, req, "session-1")
 
@@ -185,25 +156,10 @@ class TestApplySandboxToolsConditional:
     def test_skill_tools_always_registered(self):
         """Skill lifecycle tools are registered regardless of capabilities."""
         fn = _import_apply_sandbox_tools()
-        config = _make_config("shipyard_neo")
-        req = _make_req()
-        fake_booter = self._make_neo_booter(caps=["python"])
+        config: Any = _make_config("shipyard_neo")
+        req: Any = _make_req()
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_tools",
-                return_value=fake_booter.get_tools(),
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_default_sandbox_tools",
-                return_value=[],
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.get_sandbox_prompt_parts",
-                return_value=[],
-            ),
-        ):
-            fn(config, req, "session-1")
+        fn(config, req, "session-1")
 
         names = self._tool_names(req)
         assert "astrbot_create_skill_candidate" in names

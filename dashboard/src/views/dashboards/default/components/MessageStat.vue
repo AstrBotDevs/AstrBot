@@ -95,6 +95,11 @@ import axios from "@/utils/request";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
 
+interface TimeRangeOption {
+  label: string;
+  value: number;
+}
+
 export default {
   name: "MessageStat",
   props: ["stat"],
@@ -108,8 +113,8 @@ export default {
       dailyAverage: "0",
       growthRate: 0,
       loading: false,
-      selectedTimeRange: null,
-      timeRanges: [],
+      selectedTimeRange: null as TimeRangeOption | null,
+      timeRanges: [] as TimeRangeOption[],
 
       chartOptions: {
         chart: {
@@ -171,7 +176,7 @@ export default {
             text: "",
           },
           labels: {
-            formatter: function (value) {
+            formatter: function (value: number) {
               return new Date(value).toLocaleString("zh-CN", {
                 month: "short",
                 day: "numeric",
@@ -188,7 +193,7 @@ export default {
           title: {
             text: "",
           },
-          min: function (min) {
+          min: function (min: number) {
             return min < 10 ? 0 : Math.floor(min * 0.8);
           },
         },
@@ -211,11 +216,11 @@ export default {
       chartSeries: [
         {
           name: "",
-          data: [],
+          data: [] as number[][],
         },
       ],
 
-      messageTimeSeries: [],
+      messageTimeSeries: [] as [number, number][],
     };
   },
 
@@ -248,7 +253,7 @@ export default {
   },
 
   methods: {
-    formatNumber(num) {
+    formatNumber(num: number): string {
       return new Intl.NumberFormat("zh-CN").format(num);
     },
 
@@ -256,8 +261,9 @@ export default {
       this.loading = true;
 
       try {
+        const offsetSec = this.selectedTimeRange?.value ?? 86400;
         const response = await axios.get(
-          `/api/stat/get?offset_sec=${this.selectedTimeRange.value}`,
+          `/api/stat/get?offset_sec=${offsetSec}`,
         );
         const data = response.data.data;
 
@@ -288,7 +294,7 @@ export default {
 
       // 计算日平均
       if (this.messageTimeSeries.length > 0) {
-        const daysSpan = this.selectedTimeRange.value / 86400; // 将秒转换为天数
+        const daysSpan = (this.selectedTimeRange?.value ?? 86400) / 86400; // 将秒转换为天数
         this.dailyAverage = this.formatNumber(Math.round(total / daysSpan));
       }
 

@@ -9,7 +9,7 @@
     :color="toastStore.current.color"
     :timeout="toastStore.current.timeout"
     :multi-line="toastStore.current.multiLine"
-    :location="toastStore.current.location"
+    :location="snackbarLocation"
     close-on-back
   >
     {{ toastStore.current.message }}
@@ -22,15 +22,28 @@
 <script setup lang="ts">
 import { RouterView } from "vue-router";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useTheme } from "vuetify";
 import { useToastStore } from "@/stores/toast";
 import { useCustomizerStore } from "@/stores/customizer";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
 
+type SnackAnchor =
+  | "top"
+  | "bottom"
+  | "start"
+  | "end"
+  | "center"
+  | "center center"
+  | "top center"
+  | "top start"
+  | "top end"
+  | "bottom center"
+  | "bottom start"
+  | "bottom end";
+
 const toastStore = useToastStore();
 const customizer = useCustomizerStore();
-const globalWaitingRef = ref(null);
-let disposeTrayRestartListener = null;
+const globalWaitingRef = ref<InstanceType<typeof WaitingForRestart> | null>(null);
+let disposeTrayRestartListener: (() => void) | null = null;
 
 const snackbarShow = computed({
   get: () => !!toastStore.current,
@@ -38,6 +51,8 @@ const snackbarShow = computed({
     if (!val) toastStore.shift();
   },
 });
+
+const snackbarLocation = computed<SnackAnchor | undefined>(() => toastStore.current?.location as SnackAnchor | undefined);
 
 // 统一监听 uiTheme 变化并同步到 Vuetify
 watch(

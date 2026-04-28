@@ -43,15 +43,15 @@ const props = defineProps({
 const emit = defineEmits(["update:show"]);
 const { t, locale } = useI18n();
 
-const content = ref(null);
-const error = ref(null);
+const content = ref<string | null>(null);
+const error = ref<string | null>(null);
 const loading = ref(false);
 const isEmpty = ref(false);
-const copyFeedbackTimer = ref(null);
+const copyFeedbackTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const lastRequestId = ref(0);
-const scrollContainer = ref(null);
+const scrollContainer = ref<HTMLElement | null>(null);
 
-function slugifyHeading(text, slugCounts) {
+function slugifyHeading(text: string | null, slugCounts: Map<string, number>) {
   const base = (text || "")
     .trim()
     .toLowerCase()
@@ -262,8 +262,8 @@ async function fetchContent() {
     } else {
       error.value = res.data.message;
     }
-  } catch (err) {
-    if (requestId === lastRequestId.value) error.value = err.message;
+  } catch (err: unknown) {
+    if (requestId === lastRequestId.value) error.value = err instanceof Error ? err.message : String(err);
   } finally {
     if (requestId === lastRequestId.value) loading.value = false;
   }
@@ -279,24 +279,26 @@ watch(
   { immediate: true },
 );
 
-function handleContainerClick(event) {
-  const btn = event.target.closest(".copy-code-btn");
+function handleContainerClick(event: MouseEvent) {
+  const clickTarget = event.target;
+  if (!(clickTarget instanceof Element)) return;
+  const btn = clickTarget.closest(".copy-code-btn");
   if (btn) {
     const code = btn.closest(".code-block-wrapper")?.querySelector("code");
     if (code) {
       if (navigator.clipboard?.writeText) {
         navigator.clipboard
-          .writeText(code.textContent)
+          .writeText(code.textContent ?? "")
           .then(() => showCopyFeedback(btn, true))
-          .catch(() => tryFallbackCopy(code.textContent, btn));
+          .catch(() => tryFallbackCopy(code.textContent ?? "", btn));
       } else {
-        tryFallbackCopy(code.textContent, btn);
+        tryFallbackCopy(code.textContent ?? "", btn);
       }
     }
     return;
   }
 
-  const anchor = event.target.closest('a[href^="#"]');
+  const anchor = clickTarget.closest('a[href^="#"]');
   if (!anchor) return;
 
   const rawHref = anchor.getAttribute("href");
@@ -312,7 +314,7 @@ function handleContainerClick(event) {
   target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function tryFallbackCopy(text, btn) {
+function tryFallbackCopy(text: string, btn: Element) {
   try {
     const textArea = document.createElement("textarea");
     textArea.value = text;
@@ -331,12 +333,12 @@ function tryFallbackCopy(text, btn) {
     } else {
       showCopyFeedback(btn, false);
     }
-  } catch (err) {
+  } catch (_err: unknown) {
     showCopyFeedback(btn, false);
   }
 }
 
-function showCopyFeedback(btn, success) {
+function showCopyFeedback(btn: Element, success: boolean) {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
   btn.setAttribute("title", t(`core.common.${success ? "copied" : "error"}`));
   btn.innerHTML = success ? ICONS.SUCCESS : ICONS.ERROR;
@@ -358,7 +360,7 @@ const _show = computed({
 });
 
 // 安全打开外部链接
-function openExternalLink(url) {
+function openExternalLink(url: string | null) {
   if (!url) return;
   window.open(url, "_blank", "noopener,noreferrer");
 }
@@ -414,6 +416,7 @@ const showActionArea = computed(() => {
           </p>
         </div>
 
+        <!-- eslint-disable-next-line vue/no-v-html -->
         <div
           v-else-if="renderedHtml"
           class="markdown-body"

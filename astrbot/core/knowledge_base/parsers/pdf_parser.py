@@ -52,8 +52,11 @@ class PDFParser(BaseParser):
                     continue
 
                 resources = page["/Resources"]
+                if not resources:
+                    continue
+
                 xobject_ref = resources.get("/XObject")
-                if not resources or not xobject_ref:
+                if not xobject_ref:
                     continue
 
                 xobjects = xobject_ref.get_object()

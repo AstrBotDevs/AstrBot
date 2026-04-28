@@ -414,10 +414,10 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import axios from "@/utils/request";
+import axios, { AxiosError } from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import ItemCard from "@/components/shared/ItemCard.vue";
@@ -434,13 +434,38 @@ const props = defineProps({
   },
 });
 
+interface ProviderStatusItem {
+  id: string;
+  name?: string;
+  status: string;
+  error?: string | null;
+}
+
+interface ProviderConfigLike {
+  id: string;
+  type?: string;
+  enable?: boolean;
+  provider?: string;
+  provider_type?: string;
+  [key: string]: unknown;
+}
+
 const { tm } = useModuleI18n("features/provider");
 const router = useRouter();
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof AxiosError) {
+    const data = err.response?.data as { message?: string } | undefined;
+    return data?.message || err.message || fallback;
+  }
+  if (err instanceof Error) return err.message;
+  return fallback;
+}
 
 const snackbar = ref({
   show: false,
   message: "",
-  color: "success",
+  color: "success" as "success" | "error",
 });
 
 function showMessage(message, color = "success") {
@@ -500,16 +525,16 @@ const newSelectedProviderConfig = ref({});
 const newProviderOriginalId = ref("");
 const updatingMode = ref(false);
 const loading = ref(false);
-const providerStatuses = ref([]);
+const providerStatuses = ref<ProviderStatusItem[]>([]);
 const showAgentRunnerDialog = ref(false);
 const showProviderEditDialog = ref(false);
-const providerEditData = ref(null);
+const providerEditData = ref<ProviderConfigLike | null>(null);
 const providerEditOriginalId = ref("");
 const showManualModelDialog = ref(false);
 
-const savingProviders = ref([]);
+const savingProviders = ref<string[]>([]);
 
-function openProviderEdit(provider) {
+function openProviderEdit(provider: ProviderConfigLike) {
   providerEditData.value = JSON.parse(JSON.stringify(provider));
   providerEditOriginalId.value = provider.id;
   showProviderEditDialog.value = true;
@@ -544,7 +569,7 @@ async function confirmManualModel() {
 
 watch(
   () => props.defaultTab,
-  (val) => {
+  (val: string) => {
     updateDefaultTab(val);
   },
 );
@@ -554,7 +579,7 @@ function getEmptyText() {
   return tm("providers.empty.typed", { type: selectedProviderType.value });
 }
 
-function selectProviderTemplate(name) {
+function selectProviderTemplate(name: string) {
   newSelectedProviderName.value = name;
   newProviderOriginalId.value = "";
   showProviderCfg.value = true;
@@ -564,7 +589,7 @@ function selectProviderTemplate(name) {
   );
 }
 
-function configExistingProvider(provider) {
+function configExistingProvider(provider: ProviderConfigLike) {
   newSelectedProviderName.value = provider.id;
   newProviderOriginalId.value = provider.id;
   newSelectedProviderConfig.value = {};
@@ -579,10 +604,14 @@ function configExistingProvider(provider) {
     }
   }
 
-  const mergeConfigWithOrder = (target, source, reference) => {
+  const mergeConfigWithOrder = (
+    target: Record<string, unknown>,
+    source: Record<string, unknown> | undefined,
+    reference: Record<string, unknown>,
+  ) => {
     if (source && typeof source === "object" && !Array.isArray(source)) {
       for (const key in source) {
-        if (source.hasOwnProperty(key)) {
+        if (Object.prototype.hasOwnProperty.call(source, key)) {
           if (typeof source[key] === "object" && source[key] !== null) {
             target[key] = Array.isArray(source[key])
               ? [...source[key]]
@@ -657,8 +686,15 @@ async function newProvider() {
       showMessage(res.data.message || "添加成功!");
     }
     showProviderCfg.value = false;
-  } catch (err) {
-    showMessage(err.response?.data?.message || err.message, "error");
+  } catch (err: unknown) {
+    if (err instanceof AxiosError) {
+      const data = err.response?.data as { message?: string } | undefined;
+      showMessage(data?.message || err.message, "error");
+    } else if (err instanceof Error) {
+      showMessage(err.message, "error");
+    } else {
+      showMessage(String(err), "error");
+    }
   } finally {
     loading.value = false;
     await loadConfig();
@@ -682,13 +718,8 @@ async function saveEditedProvider() {
     showMessage(res.data.message || tm("providerSources.saveSuccess"));
     showProviderEditDialog.value = false;
     await loadConfig();
-  } catch (err) {
-    showMessage(
-      err.response?.data?.message ||
-        err.message ||
-        tm("providerSources.saveError"),
-      "error",
-    );
+  } catch (err: unknown) {
+    showMessage(getErrorMessage(err, tm("providerSources.saveError")), "error");
   } finally {
     savingProviders.value = savingProviders.value.filter(
       (id) => id !== providerEditData.value?.id,
@@ -696,7 +727,7 @@ async function saveEditedProvider() {
   }
 }
 
-async function copyProvider(providerToCopy) {
+async function copyProvider(providerToCopy: ProviderConfigLike) {
   const newProviderConfig = JSON.parse(JSON.stringify(providerToCopy));
 
   const generateUniqueId = (baseId) => {
@@ -717,14 +748,17 @@ async function copyProvider(providerToCopy) {
     const res = await axios.post("/api/config/provider/new", newProviderConfig);
     showMessage(res.data.message || `成功复制并创建了 ${newProviderConfig.id}`);
     await loadConfig();
-  } catch (err) {
-    showMessage(err.response?.data?.message || err.message, "error");
+  } catch (err: unknown) {
+    showMessage(getErrorMessage(err, `复制失败`), "error");
   } finally {
     loading.value = false;
   }
 }
 
-async function toggleProviderEnable(provider, value) {
+async function toggleProviderEnable(
+  provider: ProviderConfigLike,
+  value: boolean,
+) {
   provider.enable = value;
 
   try {
@@ -737,27 +771,22 @@ async function toggleProviderEnable(provider, value) {
       throw new Error(res.data.message);
     }
     showMessage(res.data.message || tm("messages.success.statusUpdate"));
-  } catch (error) {
-    showMessage(
-      error.response?.data?.message ||
-        error.message ||
-        tm("providerSources.saveError"),
-      "error",
-    );
+  } catch (error: unknown) {
+    showMessage(getErrorMessage(error, tm("providerSources.saveError")), "error");
   } finally {
     await loadConfig();
   }
 }
 
-function isProviderTesting(providerId) {
+function isProviderTesting(providerId: string) {
   return testingProviders.value.includes(providerId);
 }
 
-function getProviderStatus(providerId) {
+function getProviderStatus(providerId: string): ProviderStatusItem | undefined {
   return providerStatuses.value.find((s) => s.id === providerId);
 }
 
-async function testSingleProvider(provider) {
+async function testSingleProvider(provider: ProviderConfigLike) {
   if (isProviderTesting(provider.id)) return;
 
   testingProviders.value.push(provider.id);
@@ -809,9 +838,8 @@ async function testSingleProvider(provider) {
         res.data?.message || `Failed to check status for ${provider.id}`,
       );
     }
-  } catch (err) {
-    const errorMessage =
-      err.response?.data?.message || err.message || "Unknown error";
+  } catch (err: unknown) {
+    const errorMessage = getErrorMessage(err, "Unknown error");
     const index = providerStatuses.value.findIndex((s) => s.id === provider.id);
     const failedStatus = {
       id: provider.id,
@@ -830,7 +858,7 @@ async function testSingleProvider(provider) {
   }
 }
 
-function getStatusColor(status) {
+function getStatusColor(status: string) {
   switch (status) {
     case "available":
       return "success";
@@ -843,7 +871,7 @@ function getStatusColor(status) {
   }
 }
 
-function getStatusText(status) {
+function getStatusText(status: string) {
   const messages = {
     available: tm("availability.available"),
     unavailable: tm("availability.unavailable"),

@@ -14,7 +14,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool import FunctionTool, ToolSchema, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
@@ -32,20 +32,6 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
-from astrbot.core.tools.computer_tools import (
-    CuaKeyboardTypeTool,
-    CuaMouseClickTool,
-    CuaScreenshotTool,
-    ExecuteShellTool,
-    FileDownloadTool,
-    FileEditTool,
-    FileReadTool,
-    FileUploadTool,
-    FileWriteTool,
-    GrepTool,
-    LocalPythonTool,
-    PythonTool,
-)
 from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
@@ -230,57 +216,46 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     def _get_runtime_computer_tools(
         cls,
         runtime: str,
-        tool_mgr,
+        tool_mgr: Any = None,
         booter: str | None = None,
-    ) -> dict[str, FunctionTool]:
-        booter = "" if booter is None else str(booter).lower()
-        if runtime == "sandbox":
-            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
-            python_tool = tool_mgr.get_builtin_tool(PythonTool)
-            upload_tool = tool_mgr.get_builtin_tool(FileUploadTool)
-            download_tool = tool_mgr.get_builtin_tool(FileDownloadTool)
-            read_tool = tool_mgr.get_builtin_tool(FileReadTool)
-            write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
-            edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
-            grep_tool = tool_mgr.get_builtin_tool(GrepTool)
-            tools = {
-                shell_tool.name: shell_tool,
-                python_tool.name: python_tool,
-                upload_tool.name: upload_tool,
-                download_tool.name: download_tool,
-                read_tool.name: read_tool,
-                write_tool.name: write_tool,
-                edit_tool.name: edit_tool,
-                grep_tool.name: grep_tool,
-            }
-            if booter == "cua":
-                screenshot_tool = tool_mgr.get_builtin_tool(CuaScreenshotTool)
-                mouse_click_tool = tool_mgr.get_builtin_tool(CuaMouseClickTool)
-                keyboard_type_tool = tool_mgr.get_builtin_tool(CuaKeyboardTypeTool)
-                tools.update(
-                    {
-                        screenshot_tool.name: screenshot_tool,
-                        mouse_click_tool.name: mouse_click_tool,
-                        keyboard_type_tool.name: keyboard_type_tool,
-                    }
-                )
-            return tools
-        if runtime == "local":
-            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
-            python_tool = tool_mgr.get_builtin_tool(LocalPythonTool)
-            read_tool = tool_mgr.get_builtin_tool(FileReadTool)
-            write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
-            edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
-            grep_tool = tool_mgr.get_builtin_tool(GrepTool)
-            return {
-                shell_tool.name: shell_tool,
-                python_tool.name: python_tool,
-                read_tool.name: read_tool,
-                write_tool.name: write_tool,
-                edit_tool.name: edit_tool,
-                grep_tool.name: grep_tool,
-            }
-        return {}
+        session_id: str = "",
+        sandbox_cfg: dict | None = None,
+    ) -> dict[str, ToolSchema]:
+        """Get computer runtime tools via ComputerToolProvider.
+
+        Delegates tool discovery to ComputerToolProvider for decoupled
+        sandbox / local tool injection.  The *tool_mgr* parameter is kept
+        for backward compatibility but is no longer used.
+
+        Args:
+            runtime: ``'sandbox'``, ``'local'``, or ``'none'``.
+            tool_mgr: Kept for backward compatibility (unused).
+            booter: Short-form booter type (e.g. ``'shipyard_neo'``).
+            session_id: Session identifier.
+            sandbox_cfg: Full sandbox configuration dict (preferred over
+                *booter* when both are provided).
+
+        Returns:
+            Dict mapping tool name to FunctionTool instance.
+        """
+        from astrbot.core.computer.computer_tool_provider import (
+            ComputerToolProvider,
+        )
+        from astrbot.core.tool_provider import ToolProviderContext
+
+        cfg: dict = {}
+        if sandbox_cfg is not None:
+            cfg = sandbox_cfg
+        elif booter:
+            cfg["booter"] = booter
+
+        ctx = ToolProviderContext(
+            computer_use_runtime=runtime,
+            sandbox_cfg=cfg,
+            session_id=session_id,
+        )
+        tools = ComputerToolProvider().get_tools(ctx)
+        return {t.name: t for t in tools}
 
     @classmethod
     def _build_handoff_toolset(
@@ -558,6 +533,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             .get("stream", False),
         )
         req = ProviderRequest()
+        req.system_prompt = ""
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
         req.conversation = conv
         context = json.loads(conv.history)

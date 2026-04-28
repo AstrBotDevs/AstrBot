@@ -280,6 +280,8 @@
 </template>
 
 <script setup lang="ts">
+import { ref, type PropType } from "vue";
+
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import ListConfigItem from "./ListConfigItem.vue";
 import FileConfigItem from "./FileConfigItem.vue";
@@ -291,13 +293,36 @@ import PluginSetSelector from "./PluginSetSelector.vue";
 import T2ITemplateEditor from "./T2ITemplateEditor.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 
+interface SliderConfig {
+  min: number;
+  max: number;
+  step: number;
+}
+
+interface ItemMeta {
+  template_schema?: Record<string, unknown>;
+  _special?: string;
+  type?: string;
+  options?: unknown[];
+  render_type?: string;
+  readonly?: boolean;
+  editor_mode?: boolean;
+  editor_theme?: string;
+  editor_language?: string;
+  slider?: SliderConfig;
+  labels?: string | string[];
+  name?: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
 const props = defineProps({
   modelValue: {
     type: [String, Number, Boolean, Array, Object],
     default: null,
   },
   itemMeta: {
-    type: Object,
+    type: Object as PropType<ItemMeta | null>,
     default: null,
   },
   pluginName: {
@@ -326,21 +351,23 @@ const emit = defineEmits([
 const { t } = useI18n();
 const { getRaw } = useModuleI18n("features/config-metadata");
 
-function emitUpdate(val) {
+const numericTemp = ref<number | null>(null);
+
+function emitUpdate(val: unknown) {
   emit("update:modelValue", val);
 }
 
-function toNumber(val) {
-  const n = parseFloat(val);
+function toNumber(val: unknown): number {
+  const n = parseFloat(String(val));
   return isNaN(n) ? 0 : n;
 }
 
-function getLabel(itemMeta, index, option) {
+function getLabel(itemMeta: ItemMeta, index: number, option: unknown): string {
   const labels = getTranslatedLabels(itemMeta);
-  return labels ? labels[index] : option;
+  return labels ? String(labels[index] ?? option) : String(option);
 }
 
-function getTranslatedLabels(itemMeta) {
+function getTranslatedLabels(itemMeta: ItemMeta): string[] | null {
   if (!itemMeta?.labels) return null;
   if (typeof itemMeta.labels === "string") {
     const translatedLabels = getRaw(itemMeta.labels);
@@ -354,7 +381,7 @@ function getTranslatedLabels(itemMeta) {
   return null;
 }
 
-function getSelectItems(itemMeta) {
+function getSelectItems(itemMeta: ItemMeta): unknown[] {
   const labels = getTranslatedLabels(itemMeta);
   if (labels && itemMeta.options) {
     return itemMeta.options.map((value, index) => ({
@@ -365,7 +392,9 @@ function getSelectItems(itemMeta) {
   return itemMeta.options || [];
 }
 
-function parseSpecialValue(value) {
+function parseSpecialValue(
+  value: string | undefined,
+): { name: string; subtype: string } {
   if (!value || typeof value !== "string") {
     return { name: "", subtype: "" };
   }
@@ -376,11 +405,11 @@ function parseSpecialValue(value) {
   };
 }
 
-function getSpecialName(value) {
+function getSpecialName(value: string | undefined): string {
   return parseSpecialValue(value).name;
 }
 
-function getSpecialSubtype(value) {
+function getSpecialSubtype(value: string | undefined): string {
   return parseSpecialValue(value).subtype;
 }
 </script>

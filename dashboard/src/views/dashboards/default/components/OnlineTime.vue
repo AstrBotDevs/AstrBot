@@ -72,17 +72,33 @@
 </template>
 
 <script lang="ts">
+import { defineComponent } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
-export default {
+interface StatMemory {
+  process: number;
+  system: number;
+}
+
+interface Stat {
+  running?: string;
+  memory?: StatMemory;
+}
+
+export default defineComponent({
   name: "OnlineTime",
-  props: ["stat"],
+  props: {
+    stat: {
+      type: Object as () => Stat,
+      required: true,
+    },
+  },
   setup() {
     const { tm } = useModuleI18n("features/dashboard");
     return { tm };
   },
   computed: {
-    memoryPercentage() {
+    memoryPercentage(): number {
       if (
         !this.stat.memory ||
         !this.stat.memory.process ||
@@ -94,7 +110,7 @@ export default {
       );
     },
   },
-};
+});
 </script>
 
 <style scoped>

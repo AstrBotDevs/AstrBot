@@ -12,6 +12,7 @@ from PIL import Image
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.computer import file_read_utils
+from astrbot.core.computer.booters import local as local_booter_module
 from astrbot.core.computer.booters.local import LocalBooter
 from astrbot.core.tools.computer_tools import fs as fs_tools
 from astrbot.core.tools.computer_tools import util as computer_util
@@ -56,6 +57,11 @@ def _setup_local_fs_tools(
 
     monkeypatch.setattr(
         computer_util,
+        "get_astrbot_workspaces_path",
+        lambda: str(workspaces_root),
+    )
+    monkeypatch.setattr(
+        local_booter_module,
         "get_astrbot_workspaces_path",
         lambda: str(workspaces_root),
     )
@@ -206,6 +212,7 @@ async def test_file_read_tool_rejects_large_full_text_read_before_local_stream_r
         path="large.txt",
     )
 
+    assert isinstance(result, str)
     assert "text file exceeds 262144 bytes" in result
     assert "Use `offset` and `limit`" in result
 
@@ -373,6 +380,7 @@ async def test_file_read_tool_stores_long_converted_document_in_workspace(
     converted_files = list(converted_root.glob("manual.pdf_*/text.txt"))
     assert len(converted_files) == 1
     assert converted_files[0].read_text(encoding="utf-8") == long_text
+    assert isinstance(result, str)
     assert str(converted_files[0]) in result
     assert "Read or grep that file with a narrow window." in result
 
@@ -396,6 +404,7 @@ async def test_grep_tool_applies_result_limit(
         result_limit=2,
     )
 
+    assert isinstance(result, str)
     assert "match-1" in result
     assert "match-2" in result
     assert "match-3" not in result

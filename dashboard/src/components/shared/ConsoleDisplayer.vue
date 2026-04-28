@@ -1,9 +1,3 @@
-<script setup>
-import { useCommonStore } from "@/stores/common";
-import axios, { resolveApiUrl } from "@/utils/request";
-import { EventSourcePolyfill } from "event-source-polyfill";
-</script>
-
 <template>
   <div class="console-displayer-wrapper" id="console-wrapper">
     <div class="filter-controls mb-2" v-if="showLevelBtns">
@@ -46,7 +40,30 @@ import { EventSourcePolyfill } from "event-source-polyfill";
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { useCommonStore } from "@/stores/common";
+import axios, { resolveApiUrl } from "@/utils/request";
+import { EventSourcePolyfill } from "event-source-polyfill";
+
+declare module "event-source-polyfill" {
+  export class EventSourcePolyfill {
+    constructor(
+      url: string,
+      options?: Record<string, unknown>,
+    );
+    onopen: (() => void) | null;
+    onmessage: ((event: MessageEvent) => void) | null;
+    onerror: ((event: { status?: number }) => void) | null;
+    close(): void;
+  }
+}
+
+interface LogObject {
+  time: number;
+  data: string;
+  level: string;
+}
+
 export default {
   name: "ConsoleDisplayer",
   data() {
@@ -62,23 +79,23 @@ export default {
         "\u001b[0m": "color: inherit; font-weight: normal;",
         "\u001b[32m": "color: #00FF00;",
         default: "color: #FFFFFF;",
-      },
+      } as Record<string, string>,
       logLevels: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-      selectedLevels: [0, 1, 2, 3, 4],
+      selectedLevels: [0, 1, 2, 3, 4] as number[],
       levelColors: {
         DEBUG: "grey",
         INFO: "blue-lighten-3",
         WARNING: "amber",
         ERROR: "red",
         CRITICAL: "purple",
-      },
-      localLogCache: [],
-      eventSource: null,
-      retryTimer: null,
+      } as Record<string, string>,
+      localLogCache: [] as LogObject[],
+      eventSource: null as EventSourcePolyfill | null,
+      retryTimer: null as number | null,
       retryAttempts: 0,
       maxRetryAttempts: 10,
       baseRetryDelay: 1000,
-      lastEventId: null,
+      lastEventId: null as string | null,
     };
   },
   computed: {
@@ -207,7 +224,7 @@ export default {
       };
     },
 
-    processNewLogs(newLogs) {
+    processNewLogs(newLogs: LogObject[]) {
       if (!newLogs || newLogs.length === 0) return;
 
       let hasUpdate = false;
@@ -251,11 +268,11 @@ export default {
       }
     },
 
-    getLevelColor(level) {
+    getLevelColor(level: string) {
       return this.levelColors[level] || "grey";
     },
 
-    isLevelSelected(level) {
+    isLevelSelected(level: string) {
       for (let i = 0; i < this.selectedLevels.length; ++i) {
         const level_ = this.logLevels[this.selectedLevels[i]];
         if (level_ === level) {
@@ -287,7 +304,7 @@ export default {
     toggleFullscreen() {
       const container = document.getElementById("console-wrapper");
       if (!document.fullscreenElement) {
-        container.requestFullscreen().catch((err) => {
+        container.requestFullscreen().catch((err: Error) => {
           console.error(
             `Error attempting to enable full-screen mode: ${err.message}`,
           );
@@ -301,7 +318,7 @@ export default {
       this.isFullscreen = !!document.fullscreenElement;
     },
 
-    printLog(log) {
+    printLog(log: string) {
       const ele = document.getElementById("term");
       if (!ele) {
         return;

@@ -9,7 +9,7 @@
     target="_blank"
     clickable
   >
-    <v-icon start size="x-small" color> mdi-link-variant </v-icon>
+    <v-icon start size="x-small" color="default"> mdi-link-variant </v-icon>
     <span>{{ domain }}</span>
   </v-chip>
   <span v-else class="ref-fallback" :style="fallbackStyle">{{ "site" }}</span>
@@ -29,7 +29,8 @@ console.info("RefNode node:", props.node);
 
 // 从父组件注入的暗黑模式状态和搜索结果
 const isDark = inject("isDark", false);
-const webSearchResults = inject("webSearchResults", () => ({}));
+type WebSearchResultValue = Record<string, { url?: string }>;
+const webSearchResults = inject<WebSearchResultValue | (() => WebSearchResultValue)>("webSearchResults", () => ({}));
 
 // 从 node.content 中提取 ref index (格式: uuid.idx)
 const refIndex = computed(() => props.node?.content?.trim() || "");

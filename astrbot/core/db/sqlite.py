@@ -2102,16 +2102,16 @@ class SQLiteDatabase(BaseDatabase):
     ) -> tuple[list[PlatformMessageHistory], int | None]:
         async with self.get_db() as session:
             session: AsyncSession
-            query = (  # type: ignore
+            query = (
                 select(PlatformMessageHistory)
                 .where(
-                    PlatformMessageHistory.platform_id == platform_id,
-                    PlatformMessageHistory.user_id == user_id,
+                    col(PlatformMessageHistory.platform_id) == platform_id,
+                    col(PlatformMessageHistory.user_id) == user_id,
                 )
                 .order_by(desc(PlatformMessageHistory.created_at))
             )
             if cursor_id is not None:
-                query = query.where(PlatformMessageHistory.id < cursor_id)  # type: ignore
+                query = query.where(col(PlatformMessageHistory.id) < cursor_id)
             result = await session.execute(query.limit(limit))
             records = list(result.scalars().all())
             total = None
@@ -2119,9 +2119,9 @@ class SQLiteDatabase(BaseDatabase):
                 count_result = await session.execute(
                     select(func.count())
                     .select_from(PlatformMessageHistory)
-                    .where(  # type: ignore
-                        PlatformMessageHistory.platform_id == platform_id,
-                        PlatformMessageHistory.user_id == user_id,
+                    .where(
+                        col(PlatformMessageHistory.platform_id) == platform_id,
+                        col(PlatformMessageHistory.user_id) == user_id,
                     )
                 )
                 total = count_result.scalar()
@@ -2137,13 +2137,13 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
-                    delete(PlatformMessageHistory).where(  # type: ignore
-                        PlatformMessageHistory.platform_id == platform_id,
-                        PlatformMessageHistory.user_id == user_id,
-                        PlatformMessageHistory.created_at < before,
+                    delete(PlatformMessageHistory).where(
+                        col(PlatformMessageHistory.platform_id) == platform_id,
+                        col(PlatformMessageHistory.user_id) == user_id,
+                        col(PlatformMessageHistory.created_at) < before,
                     )
                 )
-            return result.rowcount  # type: ignore
+            return result.rowcount
 
     async def delete_platform_message_after(
         self,
@@ -2155,13 +2155,13 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
-                    delete(PlatformMessageHistory).where(  # type: ignore
-                        PlatformMessageHistory.platform_id == platform_id,
-                        PlatformMessageHistory.user_id == user_id,
-                        PlatformMessageHistory.created_at > after,
+                    delete(PlatformMessageHistory).where(
+                        col(PlatformMessageHistory.platform_id) == platform_id,
+                        col(PlatformMessageHistory.user_id) == user_id,
+                        col(PlatformMessageHistory.created_at) > after,
                     )
                 )
-            return result.rowcount  # type: ignore
+            return result.rowcount
 
     async def delete_all_platform_message_history(
         self,
@@ -2172,12 +2172,12 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 result = await session.execute(
-                    delete(PlatformMessageHistory).where(  # type: ignore
-                        PlatformMessageHistory.platform_id == platform_id,
-                        PlatformMessageHistory.user_id == user_id,
+                    delete(PlatformMessageHistory).where(
+                        col(PlatformMessageHistory.platform_id) == platform_id,
+                        col(PlatformMessageHistory.user_id) == user_id,
                     )
                 )
-            return result.rowcount  # type: ignore
+            return result.rowcount
 
     async def find_platform_message_history_by_idempotency_key(
         self,
@@ -2188,10 +2188,10 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             result = await session.execute(
-                select(PlatformMessageHistory).where(  # type: ignore
-                    PlatformMessageHistory.platform_id == platform_id,
-                    PlatformMessageHistory.user_id == user_id,
-                    PlatformMessageHistory.idempotency_key == idempotency_key,  # type: ignore
+                select(PlatformMessageHistory).where(
+                    col(PlatformMessageHistory.platform_id) == platform_id,
+                    col(PlatformMessageHistory.user_id) == user_id,
+                    col(PlatformMessageHistory.idempotency_key) == idempotency_key,
                 )
             )
             return result.scalar_one_or_none()

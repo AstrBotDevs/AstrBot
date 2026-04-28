@@ -9,14 +9,14 @@ import { useApiStore } from "@/stores/api";
 import { useRouter } from "vue-router";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useTheme } from "vuetify";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { useToast } from "@/utils/toast";
+import { getApiBaseUrlValidationError, normalizeConfiguredApiBaseUrl } from "@/utils/request";
 
 const vuetifyTheme = useTheme();
 const isDark = computed(
   () => vuetifyTheme.global.name.value === "BlueBusinessDarkTheme",
 );
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { useToast } from "@/utils/toast";
-import { getApiBaseUrlValidationError, normalizeConfiguredApiBaseUrl } from "@/utils/request";
 
 const cardVisible = ref(false);
 const router = useRouter();

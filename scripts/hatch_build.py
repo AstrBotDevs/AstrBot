@@ -18,6 +18,7 @@ import shutil
 import subprocess
 from logging import getLogger
 from pathlib import Path
+from typing import Any
 
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
@@ -27,7 +28,7 @@ logger = getLogger(__name__)
 class CustomBuildHook(BuildHookInterface):
     PLUGIN_NAME = "custom"
 
-    def initialize(self, version: str, build_data: dict) -> None:
+    def initialize(self, version: str, build_data: dict[str, Any]) -> None:
         root = Path(self.root)
         dashboard_src = root / "dashboard"
         dist_src = dashboard_src / "dist"

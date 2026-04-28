@@ -38,7 +38,7 @@ def test_platform_base_import():
     """Platform ABC is importable and has abstract methods."""
     from astrbot.core.platform.platform import Platform
 
-    assert len(Platform.__abstractmethods__) > 0  # type: ignore[attr-defined]
+    assert len(getattr(Platform, '__abstractmethods__', ())) > 0
 
 
 def test_compile_all():
@@ -90,7 +90,7 @@ def test_sqlite_implements_all_abstract():
 
     missing = [
         m
-        for m in BaseDatabase.__abstractmethods__  # type: ignore[attr-defined]
+        for m in getattr(BaseDatabase, '__abstractmethods__', ())
         if not hasattr(SQLiteDatabase, m)
         or getattr(SQLiteDatabase, m) is getattr(BaseDatabase, m, None)
     ]

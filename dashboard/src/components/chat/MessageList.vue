@@ -145,7 +145,7 @@
                     }}</span>
                     <v-icon
                       v-if="
-                        downloadingFiles.has(part.embedded_file.attachment_id)
+                        downloadingFiles.has(part.embedded_file.attachment_id ?? "")
                       "
                       size="small"
                       class="download-icon"
@@ -357,6 +357,8 @@
 </template>
 
 <script lang="ts">
+import { defineComponent } from "vue";
+import type { PropType } from "vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import {
   enableKatex,
@@ -367,6 +369,11 @@ import {
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
+import type {
+  ChatRecord,
+  MessagePart,
+  ToolCall,
+} from "@/composables/useMessages";
 import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
 import ReasoningBlock from "./message_list_comps/ReasoningBlock.vue";
@@ -382,7 +389,7 @@ setCustomComponents("message-list", {
   code_block: MarkdownCodeBlockNode,
 });
 
-export default {
+export default defineComponent({
   name: "MessageList",
   components: {
     ReasoningBlock,
@@ -397,7 +404,7 @@ export default {
   },
   props: {
     messages: {
-      type: Array,
+      type: Array as PropType<ChatRecord[]>,
       required: true,
     },
     isDark: {
@@ -431,15 +438,15 @@ export default {
       copyFailedMessages: new Set(),
       isUserNearBottom: true,
       scrollThreshold: 1,
-      scrollTimer: null,
+      scrollTimer: null as number | null,
       expandedReasoning: new Set(), // Track which reasoning blocks are expanded
-      downloadingFiles: new Set(), // Track which files are being downloaded
-      elapsedTimeTimer: null, // Timer for updating elapsed time
+      downloadingFiles: new Set<string>(), // Track which files are being downloaded
+      elapsedTimeTimer: null as number | null, // Timer for updating elapsed time
       currentTime: Date.now() / 1000, // Current time for elapsed time calculation
       // 选中文本相关状态
       selectedText: {
         content: "",
-        messageIndex: null,
+        messageIndex: null as number | null,
         position: { top: 0, left: 0 },
       },
       // 图片预览
@@ -471,31 +478,33 @@ export default {
   },
   methods: {
     // 从消息中提取 web_search_tavily 的搜索结果
-    extractWebSearchResults() {
-      const results = {};
+    extractWebSearchResults(): void {
+      const results: Record<
+        string,
+        { url: string; title: string; snippet: string }
+      > = {};
 
-      this.messages.forEach((msg) => {
+      this.messages.forEach((msg: ChatRecord) => {
         if (msg.content.type !== "bot" || !Array.isArray(msg.content.message)) {
           return;
         }
 
-        msg.content.message.forEach((part) => {
+        msg.content.message.forEach((part: MessagePart) => {
           if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) {
             return;
           }
 
-          part.tool_calls.forEach((toolCall) => {
-            // 检查是否是 web_search_tavily 工具调用
+          part.tool_calls.forEach((toolCall: ToolCall) => {
             if (toolCall.name !== "web_search_tavily" || !toolCall.result) {
               return;
             }
 
             try {
-              // 解析工具调用结果
-              const resultData =
+              const resultData = (
                 typeof toolCall.result === "string"
                   ? JSON.parse(toolCall.result)
-                  : toolCall.result;
+                  : toolCall.result
+              ) as { results?: Array<{ index: string; url: string; title: string; snippet: string }> };
 
               if (resultData.results && Array.isArray(resultData.results)) {
                 resultData.results.forEach((item) => {
@@ -519,24 +528,23 @@ export default {
     },
 
     // 处理文本选择
-    handleTextSelection() {
+    handleTextSelection(): void {
       const selection = window.getSelection();
+      if (!selection) return;
       const selectedText = selection.toString();
 
       if (!selectedText.trim()) {
-        // 清除选中状态
         this.selectedText.content = "";
         this.selectedText.messageIndex = null;
         return;
       }
 
-      // 获取被选中的元素，找到对应的message-item
+      if (selection.rangeCount === 0) return;
       const range = selection.getRangeAt(0);
       const startContainer = range.startContainer;
-      let messageItem = null;
-      let node = startContainer.parentElement;
+      let messageItem: HTMLElement | null = null;
+      let node: HTMLElement | null = startContainer.parentElement;
 
-      // 遍历DOM树向上查找message-item
       while (node && !node.classList.contains("message-item")) {
         node = node.parentElement;
       }
@@ -549,9 +557,8 @@ export default {
         return;
       }
 
-      // 获取message-item在messages数组中的索引
       const messageItems =
-        this.$refs.messageContainer?.querySelectorAll(".message-item");
+        (this.$refs.messageContainer as HTMLElement | null)?.querySelectorAll(".message-item");
       let messageIndex = -1;
       if (messageItems) {
         for (let i = 0; i < messageItems.length; i++) {
@@ -568,7 +575,6 @@ export default {
         return;
       }
 
-      // 获取选中文本的位置（相对于viewport）
       const rect = selection.getRangeAt(0).getBoundingClientRect();
 
       this.selectedText.content = selectedText;
@@ -580,27 +586,26 @@ export default {
     },
 
     // 处理引用选中的文本
-    handleQuoteSelected() {
+    handleQuoteSelected(): void {
       if (this.selectedText.messageIndex === null) return;
 
-      const msg = this.messages[this.selectedText.messageIndex];
+      const msg: ChatRecord | undefined =
+        this.messages[this.selectedText.messageIndex];
       if (!msg || !msg.id) return;
 
-      // 触发replyWithText事件，传递选中的文本内容
       this.$emit("replyWithText", {
         messageId: msg.id,
         selectedText: this.selectedText.content,
         messageIndex: this.selectedText.messageIndex,
       });
 
-      // 清除选中状态
       this.selectedText.content = "";
       this.selectedText.messageIndex = null;
-      window.getSelection().removeAllRanges();
+      window.getSelection()?.removeAllRanges();
     },
 
     // 检查 message 中是否有音频
-    hasAudio(messageParts) {
+    hasAudio(messageParts: MessagePart[]): boolean {
       if (!Array.isArray(messageParts)) return false;
       return messageParts.some(
         (part) => part.type === "record" && part.embedded_url,
@@ -608,16 +613,16 @@ export default {
     },
 
     // 获取被引用消息的内容
-    getReplyContent(messageId) {
-      const replyMsg = this.messages.find((m) => m.id === messageId);
+    getReplyContent(messageId: string | number | undefined): string {
+      const replyMsg = this.messages.find((m: ChatRecord) => m.id === messageId);
       if (!replyMsg) {
         return this.tm("reply.notFound");
       }
       let content = "";
       if (Array.isArray(replyMsg.content.message)) {
         const textParts = replyMsg.content.message
-          .filter((part) => part.type === "plain" && part.text)
-          .map((part) => part.text);
+          .filter((part: MessagePart) => part.type === "plain" && !!part.text)
+          .map((part: MessagePart) => part.text || "");
         content = textParts.join("");
       }
       // 截断过长内容
@@ -628,46 +633,52 @@ export default {
     },
 
     // 滚动到指定消息
-    scrollToMessage(messageId) {
-      const msgIndex = this.messages.findIndex((m) => m.id === messageId);
+    scrollToMessage(messageId: string | number | undefined): void {
+      const msgIndex = this.messages.findIndex(
+        (m: ChatRecord) => m.id === messageId,
+      );
       if (msgIndex === -1) return;
 
-      const container = this.$refs.messageContainer;
+      const container = this.$refs.messageContainer as HTMLElement | null;
       const messageItems = container?.querySelectorAll(".message-item");
       if (messageItems && messageItems[msgIndex]) {
         messageItems[msgIndex].scrollIntoView({
           behavior: "smooth",
           block: "center",
         });
-        // 高亮一下
-        messageItems[msgIndex].classList.add("highlight-message");
+        (messageItems[msgIndex] as HTMLElement).classList.add(
+          "highlight-message",
+        );
         setTimeout(() => {
-          messageItems[msgIndex].classList.remove("highlight-message");
+          (messageItems[msgIndex] as HTMLElement).classList.remove(
+            "highlight-message",
+          );
         }, 2000);
       }
     },
 
     // Toggle reasoning expansion state
-    toggleReasoning(messageIndex) {
+    toggleReasoning(messageIndex: number): void {
       if (this.expandedReasoning.has(messageIndex)) {
         this.expandedReasoning.delete(messageIndex);
       } else {
         this.expandedReasoning.add(messageIndex);
       }
-      // Force reactivity
       this.expandedReasoning = new Set(this.expandedReasoning);
     },
 
     // Check if reasoning is expanded
-    isReasoningExpanded(messageIndex) {
+    isReasoningExpanded(messageIndex: number): boolean {
       return this.expandedReasoning.has(messageIndex);
     },
 
     // 下载文件
-    async downloadFile(file) {
+    async downloadFile(file: {
+      attachment_id?: string;
+      filename?: string;
+    }): Promise<void> {
       if (!file.attachment_id) return;
 
-      // 标记为下载中
       this.downloadingFiles.add(file.attachment_id);
       this.downloadingFiles = new Set(this.downloadingFiles);
 
@@ -696,8 +707,8 @@ export default {
     },
 
     // 复制代码到剪贴板
-    tryExecCommandCopy(text) {
-      let textArea = null;
+    tryExecCommandCopy(text: string): boolean {
+      let textArea: HTMLTextAreaElement | null = null;
       try {
         textArea = document.createElement("textarea");
         textArea.value = text;
@@ -717,9 +728,9 @@ export default {
       }
     },
 
-    async copyTextToClipboard(text) {
-      // 优先使用同步复制，尽量保留用户手势上下文；
-      // 在非安全来源（例如通过局域网 IP + vite --host）时成功率更高。
+    async copyTextToClipboard(
+      text: string,
+    ): Promise<{ ok: boolean; method: string; error?: unknown }> {
       if (this.tryExecCommandCopy(text)) {
         return { ok: true, method: "execCommand" };
       }
@@ -736,7 +747,10 @@ export default {
       return { ok: false, method: "unavailable" };
     },
 
-    async copyWithFeedback(text, messageIndex = null) {
+    async copyWithFeedback(
+      text: string,
+      messageIndex: number | null = null,
+    ): Promise<{ ok: boolean; method: string; error?: unknown }> {
       const result = await this.copyTextToClipboard(text);
       const ok = !!result?.ok;
 
@@ -754,7 +768,7 @@ export default {
       return result;
     },
 
-    buildCopyTextFromParts(messageParts) {
+    buildCopyTextFromParts(messageParts: MessagePart[] | string): string {
       if (typeof messageParts === "string") {
         return messageParts.trim();
       }
@@ -764,18 +778,18 @@ export default {
 
       const textContents = messageParts
         .filter(
-          (part) =>
-            part &&
+          (part: unknown): part is MessagePart =>
+            part != null &&
             typeof part === "object" &&
-            part.type === "plain" &&
-            part.text,
+            (part as MessagePart).type === "plain" &&
+            !!(part as MessagePart).text,
         )
-        .map((part) => part.text);
+        .map((part: MessagePart) => part.text || "");
 
       let textToCopy = textContents.join("\n");
 
       const imageCount = messageParts.filter(
-        (part) => part?.type === "image" && part.embedded_url,
+        (part: MessagePart) => part?.type === "image" && part.embedded_url,
       ).length;
       if (imageCount > 0) {
         if (textToCopy) textToCopy += "\n\n";
@@ -783,7 +797,7 @@ export default {
       }
 
       const hasAudio = messageParts.some(
-        (part) => part?.type === "record" && part.embedded_url,
+        (part: MessagePart) => part?.type === "record" && part.embedded_url,
       );
       if (hasAudio) {
         if (textToCopy) textToCopy += "\n\n";
@@ -793,21 +807,26 @@ export default {
       return String(textToCopy || "").trim();
     },
 
-    async copyCodeToClipboard(code) {
+    async copyCodeToClipboard(
+      code: string,
+    ): Promise<{ ok: boolean; method: string }> {
       const text = String(code ?? "");
       if (!text) return { ok: false, method: "empty" };
       return await this.copyWithFeedback(text, null);
     },
 
     // 复制bot消息到剪贴板
-    async copyBotMessage(messageParts, messageIndex) {
+    async copyBotMessage(
+      messageParts: MessagePart[],
+      messageIndex: number,
+    ): Promise<void> {
       let textToCopy = this.buildCopyTextFromParts(messageParts);
       if (!textToCopy) textToCopy = "[媒体内容]";
       await this.copyWithFeedback(textToCopy, messageIndex);
     },
 
     // 显示复制成功提示
-    showCopySuccess(messageIndex) {
+    showCopySuccess(messageIndex: number): void {
       if (this.copyFailedMessages.has(messageIndex)) {
         this.copyFailedMessages.delete(messageIndex);
         this.copyFailedMessages = new Set(this.copyFailedMessages);
@@ -815,7 +834,6 @@ export default {
       this.copiedMessages.add(messageIndex);
       this.copiedMessages = new Set(this.copiedMessages);
 
-      // 2秒后移除成功状态
       setTimeout(() => {
         this.copiedMessages.delete(messageIndex);
         this.copiedMessages = new Set(this.copiedMessages);
@@ -823,7 +841,7 @@ export default {
     },
 
     // 显示复制失败提示
-    showCopyFailure(messageIndex) {
+    showCopyFailure(messageIndex: number): void {
       if (this.copiedMessages.has(messageIndex)) {
         this.copiedMessages.delete(messageIndex);
         this.copiedMessages = new Set(this.copiedMessages);
@@ -838,7 +856,7 @@ export default {
     },
 
     // 获取复制按钮图标
-    getCopyIcon(messageIndex) {
+    getCopyIcon(messageIndex: number): string {
       if (this.copiedMessages.has(messageIndex)) return "mdi-check";
       if (this.copyFailedMessages.has(messageIndex))
         return "mdi-alert-circle-outline";
@@ -846,17 +864,17 @@ export default {
     },
 
     // 检查是否为复制成功状态
-    isCopySuccess(messageIndex) {
+    isCopySuccess(messageIndex: number): boolean {
       return this.copiedMessages.has(messageIndex);
     },
 
     // 检查是否为复制失败状态
-    isCopyFailure(messageIndex) {
+    isCopyFailure(messageIndex: number): boolean {
       return this.copyFailedMessages.has(messageIndex);
     },
 
     // 获取复制按钮提示文本
-    getCopyTitle(messageIndex) {
+    getCopyTitle(messageIndex: number): string {
       if (this.isCopySuccess(messageIndex)) return this.t("core.common.copied");
       if (this.isCopyFailure(messageIndex))
         return this.t("core.common.copyFailed");
@@ -879,12 +897,13 @@ export default {
     },
 
     // 初始化代码块复制按钮
-    initCodeCopyButtons() {
+    initCodeCopyButtons(): void {
       this.$nextTick(() => {
         if (this.isUnmounted) return;
-        const codeBlocks =
-          this.$refs.messageContainer?.querySelectorAll("pre code") || [];
-        codeBlocks.forEach((codeBlock, index) => {
+        const container =
+          this.$refs.messageContainer as HTMLElement | null;
+        const codeBlocks = container?.querySelectorAll("pre code") || [];
+        codeBlocks.forEach((codeBlock) => {
           const pre = codeBlock.parentElement;
           if (pre && !pre.querySelector(".copy-code-btn")) {
             const button = document.createElement("button");
@@ -919,12 +938,13 @@ export default {
       });
     },
 
-    initImageClickEvents() {
+    initImageClickEvents(): void {
       this.$nextTick(() => {
         if (this.isUnmounted) return;
-        // 查找所有动态生成的图片（在markdown-content中）
-        const images = document.querySelectorAll(".markdown-content img");
-        images.forEach((img) => {
+        const images = document.querySelectorAll<HTMLImageElement>(
+          ".markdown-content img",
+        );
+        images.forEach((img: HTMLImageElement) => {
           if (!img.hasAttribute("data-click-enabled")) {
             img.style.cursor = "pointer";
             img.setAttribute("data-click-enabled", "true");
@@ -934,60 +954,57 @@ export default {
       });
     },
 
-    scrollToBottom() {
+    scrollToBottom(): void {
       this.$nextTick(() => {
         if (this.isUnmounted) return;
-        const container = this.$refs.messageContainer;
+        const container = this.$refs.messageContainer as HTMLElement | null;
         if (container) {
           container.scrollTop = container.scrollHeight;
-          this.isUserNearBottom = true; // 程序滚动到底部后标记用户在底部
+          this.isUserNearBottom = true;
         }
       });
     },
 
     // 添加滚动事件监听器
-    addScrollListener() {
-      const container = this.$refs.messageContainer;
+    addScrollListener(): void {
+      const container = this.$refs.messageContainer as HTMLElement | null;
       if (container) {
         container.addEventListener("scroll", this.throttledHandleScroll);
       }
     },
 
     // 节流处理滚动事件
-    throttledHandleScroll() {
+    throttledHandleScroll(): void {
       if (this.scrollTimer) return;
 
       this.scrollTimer = setTimeout(() => {
         this.handleScroll();
         this.scrollTimer = null;
-      }, 50); // 50ms 节流
+      }, 50);
     },
 
     // 处理滚动事件
-    handleScroll() {
-      const container = this.$refs.messageContainer;
+    handleScroll(): void {
+      const container = this.$refs.messageContainer as HTMLElement | null;
       if (container) {
         const { scrollTop, scrollHeight, clientHeight } = container;
         const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
 
-        // 判断用户是否在底部附近
         this.isUserNearBottom = distanceFromBottom <= this.scrollThreshold;
       }
     },
 
     // 组件销毁时移除监听器
-    beforeUnmount() {
+    beforeUnmount(): void {
       this.isUnmounted = true;
-      const container = this.$refs.messageContainer;
+      const container = this.$refs.messageContainer as HTMLElement | null;
       if (container) {
         container.removeEventListener("scroll", this.throttledHandleScroll);
       }
-      // 清理定时器
       if (this.scrollTimer) {
         clearTimeout(this.scrollTimer);
         this.scrollTimer = null;
       }
-      // 清理 elapsed time 计时器
       if (this.elapsedTimeTimer) {
         clearInterval(this.elapsedTimeTimer);
         this.elapsedTimeTimer = null;
@@ -995,13 +1012,12 @@ export default {
     },
 
     // 格式化消息时间，支持别名显示
-    formatMessageTime(dateStr) {
+    formatMessageTime(dateStr: string): string {
       if (!dateStr) return "";
 
       const date = new Date(dateStr);
       const now = new Date();
 
-      // 获取本地时间的日期部分
       const dateDay = new Date(
         date.getFullYear(),
         date.getMonth(),
@@ -1015,18 +1031,15 @@ export default {
       const yesterdayDay = new Date(todayDay);
       yesterdayDay.setDate(yesterdayDay.getDate() - 1);
 
-      // 格式化时间 HH:MM
       const hours = date.getHours().toString().padStart(2, "0");
       const minutes = date.getMinutes().toString().padStart(2, "0");
       const timeStr = `${hours}:${minutes}`;
 
-      // 判断是今天、昨天还是更早
       if (dateDay.getTime() === todayDay.getTime()) {
         return `${this.tm("time.today")} ${timeStr}`;
       } else if (dateDay.getTime() === yesterdayDay.getTime()) {
         return `${this.tm("time.yesterday")} ${timeStr}`;
       } else {
-        // 更早的日期显示完整格式
         const month = (date.getMonth() + 1).toString().padStart(2, "0");
         const day = date.getDate().toString().padStart(2, "0");
         return `${month}-${day} ${timeStr}`;
@@ -1034,8 +1047,7 @@ export default {
     },
 
     // Start timer for updating elapsed time
-    startElapsedTimeTimer() {
-      // Update every 12ms for sub-second precision, then every second after 1s
+    startElapsedTimeTimer(): void {
       let fastUpdateCount = 0;
       const fastUpdateInterval = 12;
       const slowUpdateInterval = 1000;
@@ -1043,27 +1055,26 @@ export default {
       const updateTime = () => {
         this.currentTime = Date.now() / 1000;
 
-        // Check if there are any running tool calls
         const hasRunningToolCalls = this.messages.some(
-          (msg) =>
+          (msg: ChatRecord) =>
             Array.isArray(msg.content.message) &&
             msg.content.message.some(
-              (part) =>
+              (part: MessagePart) =>
                 part.type === "tool_call" &&
-                part.tool_calls?.some((tc) => !tc.finished_ts),
+                part.tool_calls?.some((tc: ToolCall) => !tc.finished_ts),
             ),
         );
 
         if (hasRunningToolCalls) {
-          // Check if any running tool call is under 1 second
           const hasSubSecondToolCall = this.messages.some(
-            (msg) =>
+            (msg: ChatRecord) =>
               Array.isArray(msg.content.message) &&
               msg.content.message.some(
-                (part) =>
+                (part: MessagePart) =>
                   part.type === "tool_call" &&
                   part.tool_calls?.some(
-                    (tc) => !tc.finished_ts && this.currentTime - tc.ts < 1,
+                    (tc: ToolCall) =>
+                      !tc.finished_ts && this.currentTime - (tc.ts ?? 0) < 1,
                   ),
               ),
           );
@@ -1075,7 +1086,6 @@ export default {
             this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
           }
         } else {
-          // No running tool calls, check again after 1 second
           this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
         }
       };
@@ -1084,13 +1094,13 @@ export default {
     },
 
     // Get elapsed time string for a tool call
-    getElapsedTime(startTs) {
+    getElapsedTime(startTs: number): string {
       const elapsed = this.currentTime - startTs;
       return this.formatDuration(elapsed);
     },
 
     // Format duration in seconds to human readable string
-    formatDuration(seconds) {
+    formatDuration(seconds: number): string {
       if (seconds < 1) {
         return `${Math.round(seconds * 1000)}ms`;
       } else if (seconds < 60) {
@@ -1103,32 +1113,36 @@ export default {
     },
 
     // Get input tokens (input_other + input_cached)
-    getInputTokens(tokenUsage) {
+    getInputTokens(
+      tokenUsage: { input_other?: number; input_cached?: number } | null | undefined,
+    ): number {
       if (!tokenUsage) return 0;
       return (tokenUsage.input_other || 0) + (tokenUsage.input_cached || 0);
     },
 
     // Format agent duration
-    formatAgentDuration(agentStats) {
+    formatAgentDuration(
+      agentStats: { start_time: number; end_time: number } | null | undefined,
+    ): string {
       if (!agentStats) return "";
       const duration = agentStats.end_time - agentStats.start_time;
       return this.formatDuration(duration);
     },
 
     // Format time to first token
-    formatTTFT(ttft) {
+    formatTTFT(ttft: number | null | undefined): string {
       if (!ttft || ttft <= 0) return "";
       return this.formatDuration(ttft);
     },
 
     // 打开图片预览
-    openImagePreview(url) {
+    openImagePreview(url: string): void {
       this.imagePreview.url = url;
       this.imagePreview.show = true;
     },
 
     // 关闭图片预览
-    closeImagePreview() {
+    closeImagePreview(): void {
       this.imagePreview.show = false;
       setTimeout(() => {
         this.imagePreview.url = "";
@@ -1136,7 +1150,7 @@ export default {
     },
 
     // Open refs sidebar
-    openRefsSidebar(refs) {
+    openRefsSidebar(refs: unknown): void {
       this.$emit("openRefs", refs);
     },
   },

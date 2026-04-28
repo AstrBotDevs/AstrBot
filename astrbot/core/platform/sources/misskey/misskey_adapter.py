@@ -13,7 +13,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
     register_platform_adapter,
 )
-from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.astr_message_event import MessageSesion as MessageSession
 
 from .misskey_api import MisskeyAPI
 

@@ -140,12 +140,12 @@ const toast = useToast();
 
 const dialog = ref(false);
 const isDragging = ref(false);
-const fileInput = ref(null);
+const fileInput = ref<HTMLInputElement | null>(null);
 const uploading = ref(false);
 const loadingFiles = ref(false);
 const MAX_FILE_BYTES = 500 * 1024 * 1024;
 const MAX_FILE_MB = 500;
-const directoryFiles = ref([]);
+const directoryFiles = ref<string[]>([]);
 
 const fileList = computed({
   get: () => (Array.isArray(props.modelValue) ? props.modelValue : []),
@@ -196,7 +196,7 @@ const fileCountText = computed(() => {
   return tm("fileUpload.fileCount", { count: fileList.value.length });
 });
 
-const getStatusText = (status) => {
+const getStatusText = (status: string): string => {
   if (status === "missing") {
     return tm("fileUpload.statusMissing");
   }
@@ -206,7 +206,7 @@ const getStatusText = (status) => {
   return "";
 };
 
-const getStatusColor = (status) => {
+const getStatusColor = (status: string): string => {
   if (status === "missing") {
     return "error";
   }
@@ -216,7 +216,7 @@ const getStatusColor = (status) => {
   return "primary";
 };
 
-const openFilePicker = () => {
+const openFilePicker = (): void => {
   fileInput.value?.click();
 };
 
@@ -246,7 +246,7 @@ const loadDirectoryFiles = async () => {
   }
 };
 
-const handleFileSelect = (event) => {
+const handleFileSelect = (event: Event): void => {
   const target = event.target;
   if (target?.files && target.files.length > 0) {
     uploadFiles(Array.from(target.files));
@@ -256,14 +256,14 @@ const handleFileSelect = (event) => {
   }
 };
 
-const handleDrop = (event) => {
+const handleDrop = (event: DragEvent): void => {
   isDragging.value = false;
   if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
     uploadFiles(Array.from(event.dataTransfer.files));
   }
 };
 
-const uploadFiles = async (files) => {
+const uploadFiles = async (files: File[]): Promise<void> => {
   if (!props.pluginName || !props.configKey) {
     toast.warning("Missing plugin config info");
     return;
@@ -334,14 +334,14 @@ const uploadFiles = async (files) => {
   }
 };
 
-const addToConfig = (filePath) => {
+const addToConfig = (filePath: string): void => {
   if (!fileList.value.includes(filePath)) {
     fileList.value = [...fileList.value, filePath];
     toast.success(tm("fileUpload.addToConfig"));
   }
 };
 
-const deleteFile = (filePath) => {
+const deleteFile = (filePath: string): void => {
   fileList.value = fileList.value.filter((item) => item !== filePath);
   directoryFiles.value = directoryFiles.value.filter(
     (item) => item !== filePath,
@@ -364,7 +364,7 @@ const deleteFile = (filePath) => {
   toast.success(tm("fileUpload.deleteSuccess"));
 };
 
-const deletePhysicalFile = (filePath) => {
+const deletePhysicalFile = (filePath: string): void => {
   directoryFiles.value = directoryFiles.value.filter(
     (item) => item !== filePath,
   );
@@ -386,7 +386,7 @@ const deletePhysicalFile = (filePath) => {
   toast.success(tm("fileUpload.deleteSuccess"));
 };
 
-const getDisplayName = (path) => {
+const getDisplayName = (path: string): string => {
   if (!path) return "";
   const parts = String(path).split("/");
   return parts[parts.length - 1] || path;

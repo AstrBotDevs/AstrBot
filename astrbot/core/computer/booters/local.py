@@ -20,6 +20,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_root,
     get_astrbot_temp_path,
+    get_astrbot_workspaces_path,
 )
 
 from .base import ComputerBooter
@@ -52,6 +53,7 @@ def _ensure_safe_path(path: str) -> str:
         os.path.abspath(get_astrbot_root()),
         os.path.abspath(get_astrbot_data_path()),
         os.path.abspath(get_astrbot_temp_path()),
+        os.path.abspath(get_astrbot_workspaces_path()),
     ]
     if not any(abs_path.startswith(root) for root in allowed_roots):
         raise PermissionError("Path is outside the allowed computer roots.")
@@ -237,7 +239,7 @@ class LocalFileSystemComponent(FileSystemComponent):
                 )
                 return {
                     "success": True,
-                    "output": result.stdout,
+                    "content": result.stdout,
                     "error": result.stderr if result.returncode != 0 else "",
                 }
             except subprocess.TimeoutExpired:

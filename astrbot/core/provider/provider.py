@@ -4,6 +4,9 @@ import os
 from collections.abc import AsyncGenerator
 from typing import Literal, TypeAlias, Union
 
+import aiofiles
+import anyio
+
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
