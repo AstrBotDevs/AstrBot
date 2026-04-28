@@ -633,8 +633,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       showMessage(error.response?.data?.message || error.message || tm('providerSources.saveError'), 'error')
       return false
     } finally {
-      savingProviderToggles.value = savingProviderToggles.value.filter((id) => id !== provider.id)
       await loadConfig()
+      savingProviderToggles.value = savingProviderToggles.value.filter((id) => id !== provider.id)
     }
   }
 
@@ -657,7 +657,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function loadConfig() {
-    loadProviderTemplate()
+    await loadProviderTemplate()
   }
 
   async function loadProviderTemplate() {
