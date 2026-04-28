@@ -125,6 +125,10 @@
                     "description": "API-ключ Brave Search",
                     "hint": "Можно добавить несколько ключей для ротации."
                 },
+                "websearch_firecrawl_key": {
+                    "description": "API-ключ Firecrawl",
+                    "hint": "Можно добавить несколько ключей для ротации."
+                },
                 "websearch_baidu_app_builder_key": {
                     "description": "API-ключ Baidu Qianfan APP Builder",
                     "hint": "Ссылка: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -189,6 +193,30 @@
                     "shipyard_neo_ttl": {
                         "description": "TTL песочницы Shipyard Neo",
                         "hint": "Время жизни песочницы в секундах."
+                    },
+                    "cua_image": {
+                        "description": "Образ CUA",
+                        "hint": "Образ или тип ОС песочницы CUA. По умолчанию linux. Поддерживаемые значения зависят от установленного CUA SDK."
+                    },
+                    "cua_os_type": {
+                        "description": "Тип ОС CUA",
+                        "hint": "Тип операционной системы песочницы CUA. По умолчанию linux."
+                    },
+                    "cua_ttl": {
+                        "description": "TTL песочницы CUA",
+                        "hint": "Время жизни песочницы CUA в секундах. Фактическое поведение зависит от установленного CUA SDK."
+                    },
+                    "cua_telemetry_enabled": {
+                        "description": "Телеметрия CUA",
+                        "hint": "Разрешить CUA SDK отправлять телеметрию. По умолчанию выключено."
+                    },
+                    "cua_local": {
+                        "description": "Локальная песочница CUA",
+                        "hint": "Предпочитать локальную песочницу CUA. Включено по умолчанию, чтобы не требовать CUA_API_KEY для облачных песочниц. Отключите для использования облачных песочниц CUA."
+                    },
+                    "cua_api_key": {
+                        "description": "CUA API Key",
+                        "hint": "API key для облачной песочницы CUA. Требуется только если локальная песочница отключена. Также можно передать через переменную окружения CUA_API_KEY."
                     },
                     "shipyard_endpoint": {
                         "description": "Эндпоинт Shipyard API",

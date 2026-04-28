@@ -125,6 +125,10 @@
           "description": "Brave Search API Key",
           "hint": "Multiple keys can be added for rotation."
         },
+        "websearch_firecrawl_key": {
+          "description": "Firecrawl API Key",
+          "hint": "Multiple keys can be added for rotation."
+        },
         "websearch_baidu_app_builder_key": {
           "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
           "hint": "Reference: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -189,6 +193,30 @@
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox TTL",
             "hint": "Sandbox time-to-live in seconds."
+          },
+          "cua_image": {
+            "description": "CUA Image",
+            "hint": "CUA sandbox image or OS type. Defaults to linux. Supported values depend on the installed CUA SDK."
+          },
+          "cua_os_type": {
+            "description": "CUA OS Type",
+            "hint": "CUA sandbox operating system type. Defaults to linux."
+          },
+          "cua_ttl": {
+            "description": "CUA Sandbox TTL",
+            "hint": "CUA sandbox time-to-live in seconds. Actual behavior depends on the installed CUA SDK."
+          },
+          "cua_telemetry_enabled": {
+            "description": "CUA Telemetry",
+            "hint": "Allow the CUA SDK to send telemetry data. Disabled by default."
+          },
+          "cua_local": {
+            "description": "CUA Local Sandbox",
+            "hint": "Prefer a local CUA sandbox. Enabled by default to avoid requiring CUA_API_KEY for cloud sandboxes. Disable this to use CUA cloud sandboxes."
+          },
+          "cua_api_key": {
+            "description": "CUA API Key",
+            "hint": "CUA cloud sandbox API key. Required only when local sandbox is disabled. You can also provide it via the CUA_API_KEY environment variable."
           },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",

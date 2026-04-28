@@ -127,6 +127,10 @@
           "description": "Brave Search API Key",
           "hint": "可添加多个 Key 进行轮询。"
         },
+        "websearch_firecrawl_key": {
+          "description": "Firecrawl API Key",
+          "hint": "可添加多个 Key 进行轮询。"
+        },
         "websearch_baidu_app_builder_key": {
           "description": "百度千帆智能云 APP Builder API Key",
           "hint": "参考:[https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -191,6 +195,30 @@
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox 存活时间(秒)",
             "hint": "Shipyard Neo 沙箱的生存时间（秒）。"
+          },
+          "cua_image": {
+            "description": "CUA 镜像",
+            "hint": "CUA 沙箱镜像/系统类型，默认 linux。可填写 linux、macos、windows、android，具体取决于 CUA SDK 支持。"
+          },
+          "cua_os_type": {
+            "description": "CUA 操作系统类型",
+            "hint": "CUA 沙箱操作系统类型，默认 linux。"
+          },
+          "cua_ttl": {
+            "description": "CUA Sandbox 存活时间(秒)",
+            "hint": "CUA 沙箱生存时间（秒）。当前作为会话配置保存，具体生效取决于 CUA SDK。"
+          },
+          "cua_telemetry_enabled": {
+            "description": "CUA 遥测",
+            "hint": "是否允许 CUA SDK 发送遥测数据。默认关闭。"
+          },
+          "cua_local": {
+            "description": "CUA 本地沙箱",
+            "hint": "是否优先使用 CUA 本地沙箱。默认开启，避免云端沙箱要求 CUA_API_KEY。关闭后可使用 CUA 云端沙箱。"
+          },
+          "cua_api_key": {
+            "description": "CUA API Key",
+            "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。"
           },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
