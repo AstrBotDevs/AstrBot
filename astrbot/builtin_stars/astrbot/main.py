@@ -6,6 +6,7 @@ from astrbot.api.message_components import Image, Plain
 from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
 
+from .constants import LTM_ACTIVE_REPLY_IN_PROGRESS_KEY, LTM_ACTIVE_REPLY_KEY
 from .long_term_memory import LongTermMemory
 
 
@@ -75,11 +76,15 @@ class Main(star.Star):
                         logger.error("未找到对话，无法主动回复")
                         return
 
-                    yield event.request_llm(
+                    req = event.request_llm(
                         prompt=prompt,
                         session_id=event.session_id,
-                        conversation=conv,
+                        conversation=None,  # 主动回复不应写回会话历史，避免 chatroom 内容污染 conv.history
                     )
+                    event.set_extra(
+                        LTM_ACTIVE_REPLY_KEY, id(req)
+                    )  # 存 req 的 id，避免影响其他插件触发的 LLM 请求
+                    yield req
                 except BaseException as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
@@ -90,6 +95,11 @@ class Main(star.Star):
     ) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
         if self.ltm and self.ltm_enabled(event):
+            # If this request matches the active reply req id, mark it as in-progress
+            # so on_llm_response can correctly identify the active reply response
+            active_reply_req_id = event.get_extra(LTM_ACTIVE_REPLY_KEY, None)
+            if active_reply_req_id is not None and id(req) == active_reply_req_id:
+                event.set_extra(LTM_ACTIVE_REPLY_IN_PROGRESS_KEY, True)
             try:
                 await self.ltm.on_req_llm(event, req)
             except BaseException as e:
@@ -101,6 +111,17 @@ class Main(star.Star):
     ) -> None:
         """在 LLM 响应后记录对话"""
         if self.ltm and self.ltm_enabled(event):
+            # Skip recording if this response is from an active reply request
+            if event.get_extra(LTM_ACTIVE_REPLY_IN_PROGRESS_KEY, False):
+                event.set_extra(
+                    LTM_ACTIVE_REPLY_IN_PROGRESS_KEY, False
+                )  # Clear immediately so subsequent responses are not affected
+                return
+            # Only record if group_icl_enable is on, to keep session_chats consistent
+            # (handle_message is also guarded by group_icl_enable)
+            cfg = self.context.get_config(umo=event.unified_msg_origin)
+            if not cfg["provider_ltm_settings"]["group_icl_enable"]:
+                return
             try:
                 await self.ltm.after_req_llm(event, resp)
             except Exception as e:
@@ -116,3 +137,6 @@ class Main(star.Star):
                     await self.ltm.remove_session(event)
             except Exception as e:
                 logger.error(f"ltm: {e}")
+        # 清除主动回复标记，避免 event 被复用时意外影响后续流程
+        event.set_extra(LTM_ACTIVE_REPLY_KEY, None)
+        event.set_extra(LTM_ACTIVE_REPLY_IN_PROGRESS_KEY, False)
