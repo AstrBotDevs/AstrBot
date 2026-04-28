@@ -6,13 +6,6 @@ import axios from "@/utils/request";
 import DOMPurify from "dompurify";
 import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
-import { copyToClipboard } from "@/utils/clipboard";
-import {
-  escapeHtml,
-  ensureShikiLanguages,
-  normalizeShikiLanguage,
-  renderShikiCode,
-} from "@/utils/shiki";
 
 // 1. 在 setup 作用域创建 MarkdownIt 实例
 const md = new MarkdownIt({
@@ -286,17 +279,19 @@ watch(
   { immediate: true },
 );
 
-watch([content, locale, isDark], () => {
-  updateRenderedHtml();
-}, { immediate: true });
-
-async function handleContainerClick(event) {
+function handleContainerClick(event) {
   const btn = event.target.closest(".copy-code-btn");
   if (btn) {
     const code = btn.closest(".code-block-wrapper")?.querySelector("code");
     if (code) {
-      const success = await copyToClipboard(code.textContent || "");
-      showCopyFeedback(btn, success);
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard
+          .writeText(code.textContent)
+          .then(() => showCopyFeedback(btn, true))
+          .catch(() => tryFallbackCopy(code.textContent, btn));
+      } else {
+        tryFallbackCopy(code.textContent, btn);
+      }
     }
     return;
   }
@@ -315,6 +310,30 @@ async function handleContainerClick(event) {
 
   event.preventDefault();
   target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function tryFallbackCopy(text, btn) {
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    Object.assign(textArea.style, {
+      position: "absolute",
+      opacity: "0",
+      zIndex: "-1",
+    });
+    const parent = btn.parentNode;
+    if (parent) {
+      parent.appendChild(textArea);
+      textArea.select();
+      const success = document.execCommand("copy");
+      parent.removeChild(textArea);
+      showCopyFeedback(btn, success);
+    } else {
+      showCopyFeedback(btn, false);
+    }
+  } catch (err) {
+    showCopyFeedback(btn, false);
+  }
 }
 
 function showCopyFeedback(btn, success) {

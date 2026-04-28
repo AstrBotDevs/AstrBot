@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 261 icons */
+/* Auto-generated MDI subset – 274 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -144,6 +144,10 @@
   content: "\F00F3";
 }
 
+.mdi-calendar-range::before {
+  content: "\F0679";
+}
+
 .mdi-chat::before {
   content: "\F0B79";
 }
@@ -178,6 +182,10 @@
 
 .mdi-checkbox-marked::before {
   content: "\F0132";
+}
+
+.mdi-checkbox-multiple-marked-outline::before {
+  content: "\F0139";
 }
 
 .mdi-chevron-double-left::before {
@@ -320,16 +328,16 @@
   content: "\F164B";
 }
 
+.mdi-database-import::before {
+  content: "\F095D";
+}
+
 .mdi-database-off::before {
   content: "\F1640";
 }
 
 .mdi-database-refresh-outline::before {
   content: "\F1634";
-}
-
-.mdi-database-search-outline::before {
-  content: "\F1636";
 }
 
 .mdi-delete::before {
@@ -358,6 +366,10 @@
 
 .mdi-download::before {
   content: "\F01DA";
+}
+
+.mdi-earth::before {
+  content: "\F01E7";
 }
 
 .mdi-emoticon::before {
@@ -452,6 +464,10 @@
   content: "\F0A4D";
 }
 
+.mdi-file-upload-outline::before {
+  content: "\F0A4E";
+}
+
 .mdi-file-video-outline::before {
   content: "\F0E2C";
 }
@@ -466,6 +482,14 @@
 
 .mdi-filter-variant::before {
   content: "\F0236";
+}
+
+.mdi-flash::before {
+  content: "\F0241";
+}
+
+.mdi-flash-off::before {
+  content: "\F0243";
 }
 
 .mdi-folder::before {
@@ -556,10 +580,6 @@
   content: "\F0EFE";
 }
 
-.mdi-image-outline::before {
-  content: "\F0976";
-}
-
 .mdi-import::before {
   content: "\F02FA";
 }
@@ -584,8 +604,16 @@
   content: "\F0309";
 }
 
+.mdi-keyboard-outline::before {
+  content: "\F097B";
+}
+
 .mdi-label::before {
   content: "\F0315";
+}
+
+.mdi-lan-connect::before {
+  content: "\F0318";
 }
 
 .mdi-language-css3::before {
@@ -680,12 +708,20 @@
   content: "\F035F";
 }
 
+.mdi-message-off-outline::before {
+  content: "\F164E";
+}
+
 .mdi-message-outline::before {
   content: "\F0365";
 }
 
 .mdi-message-text::before {
   content: "\F0369";
+}
+
+.mdi-message-text-outline::before {
+  content: "\F036A";
 }
 
 .mdi-microphone::before {
@@ -702,6 +738,10 @@
 
 .mdi-minus-box::before {
   content: "\F0375";
+}
+
+.mdi-moon-waning-crescent::before {
+  content: "\F0F65";
 }
 
 .mdi-music-note-outline::before {
@@ -740,16 +780,16 @@
   content: "\F03D6";
 }
 
-.mdi-package-variant-closed::before {
-  content: "\F03D7";
-}
-
 .mdi-page-first::before {
   content: "\F0600";
 }
 
 .mdi-page-last::before {
   content: "\F0601";
+}
+
+.mdi-palette::before {
+  content: "\F03D8";
 }
 
 .mdi-paperclip::before {
@@ -868,6 +908,10 @@
   content: "\F167A";
 }
 
+.mdi-send::before {
+  content: "\F048A";
+}
+
 .mdi-server::before {
   content: "\F048B";
 }
@@ -882,6 +926,10 @@
 
 .mdi-shape-outline::before {
   content: "\F0832";
+}
+
+.mdi-share-variant::before {
+  content: "\F0497";
 }
 
 .mdi-shield-check::before {
@@ -950,6 +998,10 @@
 
 .mdi-subdirectory-arrow-right::before {
   content: "\F060D";
+}
+
+.mdi-sync::before {
+  content: "\F04E6";
 }
 
 .mdi-text::before {

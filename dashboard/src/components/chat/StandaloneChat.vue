@@ -1,135 +1,21 @@
 <template>
-  <div class="standalone-chat">
-    <section ref="messagesContainer" class="standalone-messages">
-      <div v-if="initializing" class="standalone-state">
-        <v-progress-circular indeterminate size="28" width="3" />
-      </div>
-
-      <div v-else-if="!activeMessages.length" class="standalone-state">
-        <div class="welcome-title">{{ tm("welcome.title") }}</div>
-      </div>
-
-      <div v-else class="message-list">
-        <div
-          v-for="(msg, msgIndex) in activeMessages"
-          :key="msg.id || `${msgIndex}-${msg.created_at || ''}`"
-          class="message-row"
-          :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
-        >
-          <div class="message-stack">
-            <div
-              class="message-bubble"
-              :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
-            >
-              <div v-if="messageContent(msg).isLoading" class="loading-message">
-                {{ tm("message.loading") }}
-              </div>
-
-              <template v-else>
-                <template
-                  v-for="(block, blockIndex) in renderBlocks(msg)"
-                  :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
-                >
-                  <ReasoningBlock
-                    v-if="block.kind === 'thinking'"
-                    :parts="block.parts"
-                    :is-dark="isDark"
-                    :initial-expanded="false"
-                    :is-streaming="isMessageStreaming(msg, msgIndex)"
-                    :has-non-reasoning-content="
-                      hasFollowingContentBlock(msg, blockIndex)
-                    "
-                  />
-
-                  <template v-else>
-                    <template
-                      v-for="(part, partIndex) in block.parts"
-                      :key="`${msgIndex}-${blockIndex}-${partIndex}-${part.type}`"
-                    >
-                      <div
-                        v-if="part.type === 'plain' && isUserMessage(msg)"
-                        class="plain-content"
-                      >
-                        {{ part.text || "" }}
-                      </div>
-
-                      <MarkdownMessagePart
-                        v-else-if="part.type === 'plain'"
-                        :content="part.text || ''"
-                        :refs="messageRefs(msg)"
-                        :is-dark="isDark"
-                        :custom-html-tags="customMarkdownTags"
-                      />
-
-                      <button
-                        v-else-if="part.type === 'image'"
-                        class="image-part"
-                        type="button"
-                        @click="openImage(partUrl(part))"
-                      >
-                        <img :src="partUrl(part)" :alt="part.filename || 'image'" />
-                      </button>
-
-                      <audio
-                        v-else-if="part.type === 'record'"
-                        class="audio-part"
-                        controls
-                        :src="partUrl(part)"
-                      />
-
-                      <video
-                        v-else-if="part.type === 'video'"
-                        class="video-part"
-                        controls
-                        :src="partUrl(part)"
-                      />
-
-                      <div v-else-if="part.type === 'file'" class="file-part">
-                        <v-icon size="20">mdi-file-document-outline</v-icon>
-                        <span>{{ part.filename || "file" }}</span>
-                      </div>
-
-                      <div
-                        v-else-if="part.type === 'tool_call'"
-                        class="tool-call-block"
-                      >
-                        <template
-                          v-for="tool in part.tool_calls || []"
-                          :key="tool.id || tool.name"
-                        >
-                          <ToolCallItem
-                            v-if="isIPythonToolCall(tool)"
-                            :is-dark="isDark"
-                          >
-                            <template #label>
-                              <v-icon size="16">mdi-code-json</v-icon>
-                              <span>{{ tool.name || "python" }}</span>
-                              <span class="tool-call-inline-status">
-                                {{ toolCallStatusText(tool) }}
-                              </span>
-                            </template>
-                            <template #details>
-                              <IPythonToolBlock
-                                :tool-call="normalizeToolCall(tool)"
-                                :is-dark="isDark"
-                                :show-header="false"
-                                :force-expanded="true"
-                              />
-                            </template>
-                          </ToolCallItem>
-                          <ToolCallCard
-                            v-else
-                            :tool-call="normalizeToolCall(tool)"
-                            :is-dark="isDark"
-                          />
-                        </template>
-                      </div>
-
-                      <pre v-else class="unknown-part">{{ formatJson(part) }}</pre>
-                    </template>
-                  </template>
-                </template>
-              </template>
+  <v-card class="standalone-chat-card" elevation="0" rounded="0">
+    <v-card-text class="standalone-chat-container">
+      <div class="chat-layout">
+        <!-- 聊天内容区域 -->
+        <div class="chat-content-panel">
+          <MessageList
+            v-if="messages && messages.length > 0"
+            ref="messageList"
+            :messages="messages"
+            :is-dark="isDark"
+            :is-streaming="isStreaming || isConvRunning"
+            @openImagePreview="openImagePreview"
+          />
+          <div v-else class="welcome-container fade-in">
+            <div class="welcome-title">
+              <span>Hello, I'm</span>
+              <span class="bot-name">AstrBot ⭐</span>
             </div>
             <p class="text-caption text-medium-emphasis mt-2">
               测试配置: {{ configId || "default" }}
@@ -183,37 +69,8 @@
 </template>
 
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  reactive,
-  ref,
-} from "vue";
-import axios from "axios";
-import { setCustomComponents } from "markstream-vue";
-import "markstream-vue/index.css";
-import ChatInput from "@/components/chat/ChatInput.vue";
-import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
-import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
-import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
-import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
-import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
-import { useMediaHandling } from "@/composables/useMediaHandling";
-import {
-  displayParts as displayMessageParts,
-  messageBlocks as buildMessageBlocks,
-  type MessageDisplayBlock,
-  useMessages,
-  type ChatRecord,
-  type MessagePart,
-  type TransportMode,
-} from "@/composables/useMessages";
-import type { Session } from "@/composables/useSessions";
-import { useModuleI18n } from "@/i18n/composables";
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
+import axios from "@/utils/request";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import MessageList from "@/components/chat/MessageList.vue";
@@ -299,23 +156,10 @@ const {
 } = useMediaHandling();
 
 const {
-  sending,
-  activeMessages,
-  isSessionRunning,
-  isMessageStreaming,
-  isUserMessage,
-  messageContent,
-  createLocalExchange,
-  sendMessageStream,
-  stopSession,
-} = useMessages({
-  currentSessionId: currSessionId,
-  onStreamUpdate: () => {
-    if (shouldStickToBottom.value) {
-      scrollToBottom();
-    }
-  },
-});
+  isRecording,
+  startRecording: startRec,
+  stopRecording: stopRec,
+} = useRecording();
 
 const {
   messages,
@@ -426,187 +270,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   cleanupMediaCache();
 });
-
-async function ensureSession() {
-  if (currSessionId.value) return currSessionId.value;
-  initializing.value = true;
-  try {
-    const response = await axios.get("/api/chat/new_session");
-    const session = response.data?.data as Session;
-    currSessionId.value = session.session_id;
-    currentSession.value = session;
-    await bindConfigToSession(session.session_id);
-    return session.session_id;
-  } finally {
-    initializing.value = false;
-  }
-}
-
-async function bindConfigToSession(sessionId: string) {
-  const confId = props.configId || "default";
-  const umo = buildWebchatUmoDetails(sessionId, false).umo;
-  await axios.post("/api/config/umo_abconf_route/update", {
-    umo,
-    conf_id: confId,
-  });
-}
-
-async function sendCurrentMessage() {
-  if (!draft.value.trim() && !stagedFiles.value.length) return;
-  const sessionId = await ensureSession();
-  const text = draft.value.trim();
-  const parts = buildOutgoingParts(text);
-  const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-  const selection = inputRef.value?.getCurrentSelection();
-  const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
-
-  draft.value = "";
-  clearStaged({ revokeUrls: false });
-  scrollToBottom();
-
-  sendMessageStream({
-    sessionId,
-    messageId,
-    parts,
-    transport: transportMode.value,
-    enableStreaming: enableStreaming.value,
-    selectedProvider: selection?.providerId || "",
-    selectedModel: selection?.modelName || "",
-    botRecord,
-  });
-}
-
-function buildOutgoingParts(text: string): MessagePart[] {
-  const parts: MessagePart[] = [];
-  if (text) {
-    parts.push({ type: "plain", text });
-  }
-  stagedFiles.value.forEach((file) => {
-    parts.push({
-      type: file.type,
-      attachment_id: file.attachment_id,
-      filename: file.filename,
-      embedded_url: file.url,
-    });
-  });
-  return parts;
-}
-
-function hasNonReasoningContent(message: ChatRecord) {
-  return renderBlocks(message).some((block) => block.kind === "content");
-}
-
-function bubbleParts(message: ChatRecord) {
-  return displayMessageParts(messageContent(message));
-}
-
-function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
-  if (isUserMessage(message)) {
-    const parts = bubbleParts(message);
-    return parts.length ? [{ kind: "content", parts }] : [];
-  }
-  return buildMessageBlocks(messageContent(message));
-}
-
-function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
-  return renderBlocks(message)
-    .slice(blockIndex + 1)
-    .some((block) => block.kind === "content");
-}
-
-async function stopCurrentSession() {
-  if (!currSessionId.value) return;
-  await stopSession(currSessionId.value);
-}
-
-async function handleFilesSelected(files: FileList) {
-  const selectedFiles = Array.from(files || []);
-  for (const file of selectedFiles) {
-    if (file.type.startsWith("image/")) {
-      await processAndUploadImage(file);
-    } else {
-      await processAndUploadFile(file);
-    }
-  }
-}
-
-function scrollToBottom() {
-  nextTick(() => {
-    const container = messagesContainer.value;
-    if (!container) return;
-    container.scrollTop = container.scrollHeight;
-    shouldStickToBottom.value = true;
-  });
-}
-
-function messageRefs(message: ChatRecord) {
-  const refs = messageContent(message).refs;
-  if (refs && typeof refs === "object" && Array.isArray(refs.used)) {
-    return refs as { used?: Array<Record<string, unknown>> };
-  }
-  return null;
-}
-
-function partUrl(part: MessagePart) {
-  if (part.embedded_url) return part.embedded_url;
-  if (part.embedded_file?.url) return part.embedded_file.url;
-  if (part.attachment_id)
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
-  if (part.filename)
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
-  return "";
-}
-
-function normalizeToolCall(tool: Record<string, unknown>) {
-  const normalized = { ...tool };
-  normalized.args = parseJsonSafe(normalized.args || normalized.arguments);
-  normalized.result = parseJsonSafe(normalized.result);
-  if (!normalized.ts) normalized.ts = Date.now() / 1000;
-  if (normalized.result && typeof normalized.result === "object") {
-    normalized.result = JSON.stringify(normalized.result, null, 2);
-  }
-  return normalized;
-}
-
-function isIPythonToolCall(tool: Record<string, unknown>) {
-  const name = String(tool.name || "").toLowerCase();
-  return name.includes("python") || name.includes("ipython");
-}
-
-function toolCallStatusText(tool: Record<string, unknown>) {
-  if (tool.finished_ts) return tm("toolStatus.done");
-  return tm("toolStatus.running");
-}
-
-function formatJson(value: unknown) {
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value ?? "");
-  }
-}
-
-function parseJsonSafe(value: unknown) {
-  if (typeof value !== "string") return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
-
-function openImage(url: string) {
-  imagePreview.url = url;
-  imagePreview.visible = true;
-}
-
-function closeImage() {
-  imagePreview.visible = false;
-  imagePreview.url = "";
-}
 </script>
 
 <style scoped>

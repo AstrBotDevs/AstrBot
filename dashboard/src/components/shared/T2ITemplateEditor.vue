@@ -332,83 +332,26 @@ const syncPreviewVersion = async () => {
 };
 
 const previewData = computed(() => ({
-  text: tm('t2iTemplateEditor.previewText') || '这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。',
-  version: previewVersion.value
-}))
-
-const injectShikiRuntime = (content) => {
-  if (content.includes('astrbot-t2i-shiki-runtime')) {
-    return content
-  }
-
-  const runtimeScript = getShikiRuntimeScript()
-  const headClose = content.search(/<\/head\s*>/i)
-  if (headClose >= 0) {
-    return `${content.slice(0, headClose)}  ${runtimeScript}\n${content.slice(headClose)}`
-  }
-
-  return `${runtimeScript}\n${content}`
-}
-
-const getShikiRuntimeScript = () => '<script id="astrbot-t2i-shiki-runtime" src="/t2i/shiki_runtime.iife.js"></scr' + 'ipt>'
-
-const hasMarkdownSource = (content) => /<[^>]+\bid=["']markdown-source["']/i.test(content)
-
-const insertMarkdownSource = (content) => {
-  const sourceElement = '  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>\n'
-  const markedScript = content.search(/^[ \t]*<script\s+src=["']https:\/\/cdn\.jsdelivr\.net\/npm\/marked\/marked\.min\.js["']><\/script>[ \t]*\r?\n?/im)
-  if (markedScript >= 0) {
-    return `${content.slice(0, markedScript)}${sourceElement}${content.slice(markedScript)}`
-  }
-
-  const bodyClose = content.search(/<\/body\s*>/i)
-  if (bodyClose >= 0) {
-    return `${content.slice(0, bodyClose)}${sourceElement}${content.slice(bodyClose)}`
-  }
-
-  return `${sourceElement}${content}`
-}
-
-const normalizeMarkdownSource = (content) => {
-  let normalized = content.replace(
-    /<script\s+id=["']markdown-source["']\s+type=["']text\/plain["']>\s*\{\{\s*text\s*\|\s*safe\s*\}\}\s*<\/script>/gi,
-    '<textarea id="markdown-source" hidden>{{ text | safe }}</textarea>'
-  )
-
-  normalized = normalized.replace(
-    /decodeBase64Utf8\("\{\{\s*text_base64\s*\}\}"\)/g,
-    'document.getElementById("markdown-source").value'
-  )
-  normalized = normalized.replace(
-    /document\.getElementById\(["']markdown-source["']\)\.textContent/g,
-    'document.getElementById("markdown-source").value'
-  )
-
-  if (/\{\{\s*text_base64\s*\}\}/.test(normalized) && !hasMarkdownSource(normalized)) {
-    normalized = insertMarkdownSource(normalized)
-  }
-
-  return normalized
-}
+  text:
+    tm("t2iTemplateEditor.previewText") ||
+    "这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。",
+  version: previewVersion.value,
+}));
 
 const previewContent = computed(() => {
   try {
-    let content = normalizeMarkdownSource(templateContent.value)
-    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, () => previewData.value.text)
-    content = content.replace(/\{\{\s*version\s*\}\}/g, () => previewData.value.version)
-    let usedLegacyShikiPlaceholder = false
-    content = content.replace(/<script\b[^>]*>\s*\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}\s*<\/script>/gi, () => {
-      usedLegacyShikiPlaceholder = true
-      return getShikiRuntimeScript()
-    })
-    content = content.replace(/\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}/g, () => {
-      usedLegacyShikiPlaceholder = true
-      return getShikiRuntimeScript()
-    })
-    return usedLegacyShikiPlaceholder ? content : injectShikiRuntime(content)
+    let content = templateContent.value;
+    content = content.replace(
+      /\{\{\s*text\s*\|\s*safe\s*\}\}/g,
+      previewData.value.text,
+    );
+    content = content.replace(
+      /\{\{\s*version\s*\}\}/g,
+      previewData.value.version,
+    );
+    return content;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    return `<div style="color: red; padding: 20px;">模板渲染错误: ${errorMessage}</div>`
+    return `<div style="color: red; padding: 20px;">模板渲染错误: ${error.message}</div>`;
   }
 });
 

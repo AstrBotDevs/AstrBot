@@ -67,7 +67,7 @@
     "callCount": "共 {count} 次调用",
     "avgTtft": "平均首字延迟（TTFT）",
     "avgDuration": "平均响应时间",
-    "avgTpm": "平均每分钟输出（TPM）",
+    "avgTpm": "平均每分钟词元数（TPM）",
     "successRate": "调用成功率"
   },
   "modelRanking": {

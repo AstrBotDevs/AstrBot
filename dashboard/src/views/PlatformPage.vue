@@ -371,9 +371,8 @@ import {
 import { getPlatformIcon } from "@/utils/platformUtils";
 import {
   askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog
-} from '@/utils/confirmDialog';
-import { copyToClipboard } from '@/utils/clipboard';
+  useConfirmDialog,
+} from "@/utils/confirmDialog";
 
 export default {
   name: "PlatformPage",
@@ -810,11 +809,11 @@ export default {
 
     async copyWebhookUrl(webhookUuid) {
       const url = this.getWebhookUrl(webhookUuid);
-      const ok = await copyToClipboard(url);
-      if (ok) {
-        this.showSuccess(this.tm('webhookCopied'));
-      } else {
-        this.showError(this.tm('webhookCopyFailed'));
+      try {
+        await navigator.clipboard.writeText(url);
+        this.showSuccess(this.tm("webhookCopied"));
+      } catch (err) {
+        this.showError(this.tm("webhookCopyFailed"));
       }
     },
   },

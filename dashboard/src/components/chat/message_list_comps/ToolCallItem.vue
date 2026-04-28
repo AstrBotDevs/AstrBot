@@ -41,16 +41,17 @@ const toggleExpanded = () => {
 
 <style scoped>
 .tool-call-line {
-    font: inherit;
-    line-height: inherit;
-    color: var(--v-theme-secondaryText);
-    opacity: 0.85;
-    cursor: pointer;
-    user-select: none;
-    transition: color 0.2s ease, opacity 0.2s ease;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+  font-size: 14px;
+  color: var(--v-theme-secondaryText);
+  opacity: 0.85;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    color 0.2s ease,
+    opacity 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .tool-call-line:hover {
@@ -59,13 +60,11 @@ const toggleExpanded = () => {
 }
 
 .tool-call-inline-details {
-    margin-top: 6px;
-    padding: 8px 10px;
-    border-left: 2px solid var(--v-theme-border);
-    border-radius: 6px;
-    background-color: rgba(0, 0, 0, 0.02);
-    font-size: inherit;
-    line-height: inherit;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--v-theme-border);
+  border-radius: 6px;
+  background-color: rgba(0, 0, 0, 0.02);
 }
 
 .tool-call-inline-details.is-dark {

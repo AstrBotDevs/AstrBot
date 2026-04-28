@@ -1,21 +1,7 @@
-import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
-import axios from "axios";
-
-export type TransportMode = "sse" | "websocket";
-
-export interface MessagePart {
-  type: string;
-  text?: string;
-  think?: string;
-  message_id?: string | number;
-  selected_text?: string;
-  embedded_url?: string;
-  embedded_file?: { url?: string; filename?: string; attachment_id?: string };
-  attachment_id?: string;
-  filename?: string;
-  tool_calls?: ToolCall[];
-  [key: string]: unknown;
-}
+import { ref, reactive, type Ref } from "vue";
+import axios from "@/utils/request";
+import { resolveWebSocketUrl, resolveApiUrl } from "@/utils/request";
+import { useToast } from "@/utils/toast";
 
 // 工具调用信息
 export interface ToolCall {
@@ -34,14 +20,53 @@ export interface TokenUsage {
   output: number;
 }
 
-export interface MessageDisplayBlock {
-  kind: "thinking" | "content";
-  parts: MessagePart[];
+// Agent 统计信息
+export interface AgentStats {
+  token_usage: TokenUsage;
+  start_time: number;
+  end_time: number;
+  time_to_first_token: number;
 }
 
-export interface ChatRecord {
-  id?: string | number;
-  content: ChatContent;
+// 文件信息结构
+export interface FileInfo {
+  url?: string; // blob URL (可选，点击时才加载)
+  filename: string;
+  attachment_id?: string; // 用于按需下载
+}
+
+// 消息部分的类型定义
+export interface MessagePart {
+  type: "plain" | "image" | "record" | "file" | "video" | "reply" | "tool_call";
+  text?: string; // for plain
+  attachment_id?: string; // for image, record, file, video
+  filename?: string; // for file (filename from backend)
+  message_id?: number; // for reply (PlatformSessionHistoryMessage.id)
+  tool_calls?: ToolCall[]; // for tool_call
+  // embedded fields - 加载后填充
+  embedded_url?: string; // blob URL for image, record
+  embedded_file?: FileInfo; // for file (保留 attachment_id 用于按需下载)
+  selected_text?: string; // for reply - 被引用消息的内容
+}
+
+// 引用信息 (用于发送消息时)
+export interface ReplyInfo {
+  messageId: number;
+  selectedText?: string; // 选中的文本内容（可选）
+}
+
+// 简化的消息内容结构
+export interface MessageContent {
+  type: string; // 'user' | 'bot'
+  message: MessagePart[]; // 消息部分列表 (保持顺序)
+  reasoning?: string; // reasoning content (for bot)
+  isLoading?: boolean; // loading state
+  agentStats?: AgentStats; // agent 统计信息 (for bot)
+}
+
+export interface Message {
+  id?: number;
+  content: MessageContent;
   created_at?: string;
 }
 
@@ -661,16 +686,27 @@ export function useMessages(
       const parts: MessagePart[] = [];
       const text = message;
 
-    const botRecord: ChatRecord = {
-      id: `local-bot-${messageId}`,
-      created_at: new Date().toISOString(),
-      content: {
-        type: "bot",
-        message: [],
-        reasoning: "",
-        isLoading: true,
-      },
-    };
+      // 处理旧格式的特殊标记
+      if (text.startsWith("[IMAGE]")) {
+        const img = text.replace("[IMAGE]", "");
+        const imageUrl = await getMediaFile(img);
+        parts.push({
+          type: "image",
+          embedded_url: imageUrl,
+        });
+      } else if (text.startsWith("[RECORD]")) {
+        const audio = text.replace("[RECORD]", "");
+        const audioUrl = await getMediaFile(audio);
+        parts.push({
+          type: "record",
+          embedded_url: audioUrl,
+        });
+      } else if (text) {
+        parts.push({
+          type: "plain",
+          text: text,
+        });
+      }
 
       content.message = parts;
       return;
@@ -716,61 +752,6 @@ export function useMessages(
 
   async function getSessionMessages(sessionId: string) {
     if (!sessionId) return;
-    const parts = messageParts(sourceRecord).map(stripUploadOnlyFields);
-    const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    messagesBySession[sessionId] = messagesBySession[sessionId] || [];
-
-    const botRecord: ChatRecord = {
-      id: `local-edited-bot-${messageId}`,
-      created_at: new Date().toISOString(),
-      content: {
-        type: "bot",
-        message: [],
-        reasoning: "",
-        isLoading: true,
-      },
-    };
-    messagesBySession[sessionId].push(botRecord);
-
-    startSseStream(
-      sessionId,
-      messageId,
-      parts,
-      botRecord,
-      undefined,
-      enableStreaming,
-      selectedProvider,
-      selectedModel,
-      true,
-      sourceRecord.llm_checkpoint_id || null,
-    );
-  }
-
-  async function regenerateMessage(
-    sessionId: string,
-    botRecord: ChatRecord,
-    selectedProvider = "",
-    selectedModel = "",
-  ) {
-    if (!sessionId || botRecord.id == null) return;
-    const targetMessageId = botRecord.id;
-
-    botRecord.id = `local-regenerate-${Date.now()}`;
-    botRecord.created_at = new Date().toISOString();
-    botRecord.content = {
-      type: "bot",
-      message: [],
-      reasoning: "",
-      isLoading: true,
-    };
-
-    const abort = new AbortController();
-    activeConnections[sessionId] = {
-      sessionId,
-      messageId: String(botRecord.id),
-      transport: "sse",
-      abort,
-    };
 
     try {
       if (transportMode.value === "websocket") {
@@ -841,65 +822,22 @@ export function useMessages(
       });
     }
 
-  async function stopSession(sessionId: string) {
-    if (!sessionId) return;
-    await axios.post("/api/chat/stop", { session_id: sessionId });
-  }
-
-  function cleanupConnections() {
-    Object.values(activeConnections).forEach((connection) => {
-      connection.abort?.abort();
-      connection.ws?.close();
-    });
-  }
-
-  function normalizeHistoryRecord(record: any): ChatRecord {
-    const content = record.content || {};
-    const normalizedMessage = normalizeMessageParts(
-      content.message || [],
-      content.reasoning || "",
-    );
-    const normalizedContent: ChatContent = {
-      type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
-      message: normalizedMessage,
-      reasoning: extractReasoningText(normalizedMessage, content.reasoning || ""),
-      agentStats: content.agentStats || content.agent_stats,
-      refs: content.refs,
-    };
-
-    return {
-      ...record,
-      content: normalizedContent,
-    };
-  }
-
-  function attachThreads(records: ChatRecord[], threads: ChatThread[]) {
-    const threadsByMessage = new Map<string, ChatThread[]>();
-    for (const thread of threads) {
-      const key = String(thread.parent_message_id);
-      const list = threadsByMessage.get(key) || [];
-      list.push(thread);
-      threadsByMessage.set(key, list);
-    }
-    for (const record of records) {
-      const key = record.id == null ? "" : String(record.id);
-      record.threads = threadsByMessage.get(key) || [];
+    for (const f of stagedFiles) {
+      const partType =
+        f.type === "image" ? "image" : f.type === "record" ? "record" : "file";
+      parts.push({
+        type: partType,
+        attachment_id: f.attachment_id,
+      });
     }
 
     return parts;
   }
 
-  function startSseStream(
-    sessionId: string,
-    messageId: string,
-    parts: MessagePart[],
-    botRecord: ChatRecord,
-    userRecord: ChatRecord | undefined,
-    enableStreaming: boolean,
-    selectedProvider: string,
-    selectedModel: string,
-    skipUserHistory = false,
-    llmCheckpointId: string | null = null,
+  async function sendMessageViaSSE(
+    messageToSend: string | MessagePart[],
+    selectedProviderId: string,
+    selectedModelName: string,
   ) {
     const controller = new AbortController();
     currentRequestController.value = controller;
@@ -1114,94 +1052,12 @@ export function useMessages(
       );
       const hasAttachmentOrReply = stagedFiles.length > 0 || !!replyTo;
 
-  function processStreamPayload(
-    botRecord: ChatRecord,
-    payload: any,
-    userRecord?: ChatRecord,
-  ) {
-    const normalized =
-      payload?.ct === "chat"
-        ? { ...payload, type: payload.type || payload.t }
-        : payload;
-    const msgType = normalized?.type || normalized?.t;
-    const chainType = normalized?.chain_type;
-    const data = normalized?.data ?? "";
-
-    if (msgType === "session_id" || msgType === "session_bound") return;
-    if (msgType === "user_message_saved") {
-      if (userRecord) {
-        userRecord.id = data?.id || userRecord.id;
-        userRecord.created_at = data?.created_at || userRecord.created_at;
-        userRecord.llm_checkpoint_id =
-          data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
-      }
-      return;
-    }
-    if (msgType === "message_saved") {
-      markMessageStarted(botRecord);
-      botRecord.id = data?.id || botRecord.id;
-      botRecord.created_at = data?.created_at || botRecord.created_at;
-      botRecord.llm_checkpoint_id =
-        data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
-      if (data?.refs) {
-        messageContent(botRecord).refs = data.refs;
-      }
-      return;
-    }
-    if (msgType === "agent_stats" || chainType === "agent_stats") {
-      markMessageStarted(botRecord);
-      messageContent(botRecord).agentStats = data;
-      return;
-    }
-    if (msgType === "error") {
-      markMessageStarted(botRecord);
-      appendPlain(botRecord, `\n\n${String(data)}`);
-      return;
-    }
-    if (msgType === "complete" || msgType === "break") {
-      markMessageStarted(botRecord);
-      const finalText = payloadText(data);
-      if (finalText && !hasPlainText(botRecord)) {
-        appendPlain(botRecord, finalText, false);
-      }
-      return;
-    }
-    if (msgType === "end") {
-      markMessageStarted(botRecord);
-      return;
-    }
-
-    if (msgType === "plain") {
-      markMessageStarted(botRecord);
-      if (chainType === "reasoning") {
-        appendReasoningPart(botRecord, payloadText(data));
-        return;
-      }
-      if (chainType === "tool_call") {
-        upsertToolCall(botRecord, parseJsonSafe(data));
-        return;
-      }
-      if (chainType === "tool_call_result") {
-        finishToolCall(botRecord, parseJsonSafe(data));
-        return;
-      }
-      appendPlain(botRecord, payloadText(data), normalized.streaming !== false);
-      return;
-    }
-
-    if (["image", "record", "file", "video"].includes(msgType)) {
-      markMessageStarted(botRecord);
-      const filename = String(data)
-        .replace("[IMAGE]", "")
-        .replace("[RECORD]", "")
-        .replace("[FILE]", "")
-        .replace("[VIDEO]", "")
-        .split("|", 1)[0];
-      const mediaPart: MessagePart = { type: msgType, filename };
-      if (msgType !== "file") {
-        resolvePartMedia(mediaPart).then(() => {
-          messageContent(botRecord).message.push(mediaPart);
-        });
+      if (transportMode.value === "websocket") {
+        await sendMessageViaWebSocket(
+          backendMessageParts,
+          selectedProviderId,
+          selectedModelName,
+        );
       } else {
         const messageToSend: string | MessagePart[] = hasAttachmentOrReply
           ? backendMessageParts
@@ -1236,292 +1092,9 @@ export function useMessages(
     }
   }
 
-  return {
-    loadingMessages,
-    sending,
-    messagesBySession,
-    loadedSessions,
-    sessionProjects,
-    activeMessages,
-    isSessionRunning,
-    isUserMessage,
-    isMessageStreaming,
-    messageContent,
-    messageParts,
-    loadSessionMessages,
-    createLocalExchange,
-    sendMessageStream,
-    editMessage,
-    continueEditedMessage,
-    regenerateMessage,
-    stopSession,
-    cleanupConnections,
-  };
-}
-
-function cloneContentWithEditedText(
-  record: ChatRecord,
-  editedText: string,
-): ChatContent {
-  const content = record.content || { type: "bot", message: [] };
-  const message = Array.isArray(content.message)
-    ? content.message.map((part) => ({ ...part }))
-    : [];
-  let replaced = false;
-  for (const part of message) {
-    if (part.type === "plain") {
-      part.text = editedText;
-      replaced = true;
-      break;
-    }
-  }
-  if (!replaced && editedText) {
-    message.push({ type: "plain", text: editedText });
-  }
-  return {
-    ...content,
-    message,
-  };
-}
-
-function stripUploadOnlyFields(part: MessagePart): MessagePart {
-  const copied = { ...part };
-  delete copied.path;
-  return copied;
-}
-
-function normalizeSessionProject(value: unknown): ChatSessionProject | null {
-  if (!value || typeof value !== "object") return null;
-  const project = value as Record<string, unknown>;
-  if (
-    typeof project.project_id !== "string" ||
-    typeof project.title !== "string"
-  ) {
-    return null;
-  }
-
-  return {
-    project_id: project.project_id,
-    title: project.title,
-    emoji: typeof project.emoji === "string" ? project.emoji : undefined,
-  };
-}
-
-export function normalizeMessageParts(
-  parts: unknown,
-  legacyReasoning = "",
-): MessagePart[] {
-  const normalizedParts = normalizePartsInternal(parts);
-  if (legacyReasoning && !normalizedParts.some((part) => part.type === "think")) {
-    normalizedParts.unshift({ type: "think", think: legacyReasoning });
-  }
-  return normalizedParts;
-}
-
-export function extractReasoningText(
-  parts: MessagePart[] | unknown,
-  legacyReasoning = "",
-) {
-  const normalizedParts = Array.isArray(parts)
-    ? parts
-    : normalizeMessageParts(parts, legacyReasoning);
-  const text = normalizedParts
-    .filter((part) => part.type === "think")
-    .map((part) => String(part.think || ""))
-    .join("");
-  return text || legacyReasoning;
-}
-
-export function thinkingParts(content: ChatContent): MessagePart[] {
-  const firstThinkingBlock = messageBlocks(content).find(
-    (block) => block.kind === "thinking",
-  );
-  if (firstThinkingBlock) return firstThinkingBlock.parts;
-
-  const fallbackReasoning = String(content.reasoning || "");
-  return fallbackReasoning ? [{ type: "think", think: fallbackReasoning }] : [];
-}
-
-export function displayParts(content: ChatContent): MessagePart[] {
-  return messageBlocks(content)
-    .filter((block) => block.kind === "content")
-    .flatMap((block) => block.parts);
-}
-
-export function messageBlocks(content: ChatContent): MessageDisplayBlock[] {
-  const parts = Array.isArray(content.message)
-    ? content.message
-    : normalizeMessageParts(content.message, content.reasoning || "");
-
-  const blocks: MessageDisplayBlock[] = [];
-  let currentKind: MessageDisplayBlock["kind"] | null = null;
-  let currentParts: MessagePart[] = [];
-
-  for (const part of parts) {
-    if (isEmptyPlainPart(part)) continue;
-
-    const nextKind: MessageDisplayBlock["kind"] = isThinkingPart(part)
-      ? "thinking"
-      : "content";
-
-    if (currentKind !== nextKind) {
-      if (currentKind && currentParts.length) {
-        blocks.push({ kind: currentKind, parts: currentParts });
-      }
-      currentKind = nextKind;
-      currentParts = [{ ...part }];
-      continue;
-    }
-
-    currentParts.push({ ...part });
-  }
-
-  if (currentKind && currentParts.length) {
-    blocks.push({ kind: currentKind, parts: currentParts });
-  }
-
-  if (!blocks.length && content.reasoning) {
-    return [
-      {
-        kind: "thinking",
-        parts: [{ type: "think", think: String(content.reasoning) }],
-      },
-    ];
-  }
-
-  return blocks;
-}
-
-function partToPayload(part: MessagePart) {
-  if (part.type === "plain") return { type: "plain", text: part.text || "" };
-  if (part.type === "reply") {
-    return {
-      type: "reply",
-      message_id: part.message_id,
-      selected_text: part.selected_text || "",
-    };
-  }
-  return {
-    type: part.type,
-    attachment_id: part.attachment_id,
-    filename: part.filename,
-  };
-}
-
-async function readSseStream(
-  body: ReadableStream<Uint8Array>,
-  onPayload: (payload: any) => void,
-) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const events = buffer.split("\n\n");
-    buffer = events.pop() || "";
-
-    for (const event of events) {
-      const data = event
-        .split("\n")
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trimStart())
-        .join("\n");
-      if (!data) continue;
-      try {
-        onPayload(JSON.parse(data));
-      } catch (error) {
-        console.error("Failed to parse SSE payload:", error, data);
-      }
-    }
-  }
-}
-
-function normalizePartsInternal(parts: unknown): MessagePart[] {
-  if (typeof parts === "string") {
-    return parts ? [{ type: "plain", text: parts }] : [];
-  }
-  if (!Array.isArray(parts)) return [];
-  return parts.map((part: any) => {
-    if (!part || typeof part !== "object") {
-      return { type: "plain", text: String(part ?? "") };
-    }
-    if (part.type === "reasoning") {
-      return {
-        ...part,
-        type: "think",
-        think: String(part.think ?? part.text ?? ""),
-      };
-    }
-    return { ...part };
-  });
-}
-
-function isEmptyPlainPart(part: MessagePart) {
-  return part.type === "plain" && !String(part.text || "");
-}
-
-function isThinkingPart(part: MessagePart) {
-  return part.type === "think" || part.type === "tool_call";
-}
-
-function firstNonEmptyPartIndex(parts: MessagePart[]) {
-  return parts.findIndex((part) => !isEmptyPlainPart(part));
-}
-
-export function appendPlain(record: ChatRecord, text: string, append = true) {
-  markMessageStarted(record);
-  const content = record.content;
-  let last = content.message[content.message.length - 1];
-  if (!last || last.type !== "plain") {
-    last = { type: "plain", text: "" };
-    content.message.push(last);
-  }
-  last.text = append ? `${last.text || ""}${text}` : text;
-}
-
-export function appendReasoningPart(record: ChatRecord, text: string) {
-  markMessageStarted(record);
-  if (!text) return;
-  const content = record.content;
-  const last = content.message[content.message.length - 1];
-  if (last?.type === "think") {
-    last.think = `${String(last.think || "")}${text}`;
-  } else {
-    content.message.push({ type: "think", think: text });
-  }
-  content.reasoning = extractReasoningText(content.message);
-}
-
-export function upsertToolCall(record: ChatRecord, toolCall: any) {
-  markMessageStarted(record);
-  if (!toolCall || typeof toolCall !== "object") return;
-  const targetId = toolCall.id;
-  if (targetId != null) {
-    for (const part of record.content.message) {
-      if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
-      const matched = part.tool_calls.find((item) => item.id === targetId);
-      if (matched) {
-        Object.assign(matched, toolCall);
-        return;
-      }
-    }
-  }
-  record.content.message.push({ type: "tool_call", tool_calls: [{ ...toolCall }] });
-}
-
-export function finishToolCall(record: ChatRecord, result: any) {
-  markMessageStarted(record);
-  if (!result || typeof result !== "object") return;
-  const targetId = result.id;
-  for (const part of record.content.message) {
-    if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
-    const tool = part.tool_calls.find((item) => item.id === targetId);
-    if (tool) {
-      tool.result = result.result;
-      tool.finished_ts = result.ts || Date.now() / 1000;
+  async function stopMessage() {
+    const sessionId = currentRunningSessionId.value || currSessionId.value;
+    if (!sessionId) {
       return;
     }
 
@@ -1564,44 +1137,24 @@ export function finishToolCall(record: ChatRecord, result: any) {
 
     isStreaming.value = false;
   }
-  record.content.message.push({
-    type: "tool_call",
-    tool_calls: [
-      {
-        id: targetId,
-        result: result.result,
-        finished_ts: result.ts || Date.now() / 1000,
-      },
-    ],
-  });
-}
 
-export function markMessageStarted(record: ChatRecord) {
-  record.content.isLoading = false;
-}
-
-export function hasPlainText(record: ChatRecord) {
-  return record.content.message.some(
-    (part) =>
-      part.type === "plain" && typeof part.text === "string" && part.text,
-  );
-}
-
-export function payloadText(value: unknown) {
-  if (typeof value === "string") return value;
-  if (value == null) return "";
-  if (typeof value === "object") {
-    const payload = value as Record<string, unknown>;
-    if (typeof payload.text === "string") return payload.text;
-    if (typeof payload.content === "string") return payload.content;
-    if (typeof payload.message === "string") return payload.message;
+  function cleanupTransport() {
+    closeChatWebSocket();
   }
 
-export function parseJsonSafe(value: unknown) {
-  if (typeof value !== "string") return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
+  return {
+    messages,
+    isStreaming,
+    isConvRunning,
+    enableStreaming,
+    transportMode,
+    currentSessionProject,
+    getSessionMessages,
+    sendMessage,
+    stopMessage,
+    toggleStreaming,
+    setTransportMode,
+    cleanupTransport,
+    getAttachment,
+  };
 }

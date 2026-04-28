@@ -87,8 +87,16 @@ const isInternal = (tool: ToolItem) => tool.source === "internal";
       </template>
 
       <template #item.description="{ item }">
-        <div class="text-body-2 text-medium-emphasis" style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.description">
-          {{ item.description || '-' }}
+        <div
+          class="text-body-2 text-medium-emphasis"
+          style="
+            max-width: 320px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          "
+        >
+          {{ item.description || "-" }}
         </div>
       </template>
 
@@ -104,8 +112,16 @@ const isInternal = (tool: ToolItem) => tool.source === "internal";
       </template>
 
       <template #item.origin_name="{ item }">
-        <div class="text-body-2 text-medium-emphasis" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.origin_name">
-          {{ item.origin_name || '-' }}
+        <div
+          class="text-body-2 text-medium-emphasis"
+          style="
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          "
+        >
+          {{ item.origin_name || "-" }}
         </div>
       </template>
 

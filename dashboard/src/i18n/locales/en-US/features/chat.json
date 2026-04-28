@@ -51,7 +51,7 @@
     "fullscreen": "Fullscreen Mode",
     "exitFullscreen": "Exit Fullscreen",
     "reply": "Reply",
-    "providerConfig": "Model Configuration",
+    "providerConfig": "AI Configuration",
     "toolsUsed": "Tool Used",
     "toolCallUsed": "Used {name} tool",
     "pythonCodeAnalysis": "Python Code Analysis Used"
@@ -113,9 +113,7 @@
     "title": "Config"
   },
   "reasoning": {
-    "thinking": "Thinking Process",
-    "think": "Thinking",
-    "toolUsed": "Using Tool"
+    "thinking": "Thinking Process"
   },
   "reply": {
     "replyTo": "Reply to",
@@ -137,9 +135,9 @@
   },
   "stats": {
     "tokens": "Tokens",
-    "inputTokens": "Input (other)",
+    "inputTokens": "Input Tokens",
     "outputTokens": "Output Tokens",
-    "cachedTokens": "Input (cached)",
+    "cachedTokens": "Cached Tokens",
     "duration": "Duration",
     "ttft": "Time to First Token"
   },

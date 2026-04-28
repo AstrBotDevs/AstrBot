@@ -350,21 +350,34 @@
   <BackupDialog ref="backupDialog" />
 </template>
 
-<script setup>
-import { computed, onMounted, ref, watch } from 'vue';
-import axios from 'axios';
-import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
-import ProxySelector from '@/components/shared/ProxySelector.vue';
-import MigrationDialog from '@/components/shared/MigrationDialog.vue';
-import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
-import BackupDialog from '@/components/shared/BackupDialog.vue';
-import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
-import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
-import { copyToClipboard } from '@/utils/clipboard';
-import { useModuleI18n } from '@/i18n/composables';
-import { useTheme } from 'vuetify';
-import { PurpleTheme } from '@/theme/LightTheme';
-import { useToastStore } from '@/stores/toast';
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from "vue";
+import axios, { AxiosError } from "@/utils/request";
+import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
+import ProxySelector from "@/components/shared/ProxySelector.vue";
+import MigrationDialog from "@/components/shared/MigrationDialog.vue";
+import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
+import BackupDialog from "@/components/shared/BackupDialog.vue";
+import StorageCleanupPanel from "@/components/shared/StorageCleanupPanel.vue";
+import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
+import { useModuleI18n } from "@/i18n/composables";
+import { useTheme } from "vuetify";
+import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
+import {
+  LIGHT_THEME_NAME,
+  DARK_THEME_NAME,
+  ThemeMode,
+} from "@/theme/constants";
+import { useToastStore } from "@/stores/toast";
+import { useCustomizerStore } from "@/stores/customizer";
+import {
+  ApiKey,
+  ApiKeyActionResponse,
+  ApiKeyCreatePayload,
+  ApiKeyCreateResponse,
+  ApiKeyExpiresDays,
+  ApiKeyListResponse,
+} from "@/types/api";
 
 const { tm } = useModuleI18n("features/settings");
 const toastStore = useToastStore();
@@ -589,14 +602,61 @@ const loadApiKeys = async () => {
   }
 };
 
-const copyCreatedApiKey = async () => {
-    if (!createdApiKeyPlaintext.value) return;
-    const ok = await copyToClipboard(createdApiKeyPlaintext.value);
-    if (ok) {
-        showToast(tm('apiKey.messages.copySuccess'), 'success');
-    } else {
-        showToast(tm('apiKey.messages.copyFailed'), 'error');
+const tryExecCommandCopy = (text: string): boolean => {
+  let textArea: HTMLTextAreaElement | null = null;
+  try {
+    if (typeof document === "undefined" || !document.body) return false;
+    textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.setAttribute("readonly", "");
+    textArea.style.position = "fixed";
+    textArea.style.opacity = "0";
+    textArea.style.pointerEvents = "none";
+    textArea.style.left = "-9999px";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, text.length);
+    // Fallback to deprecated execCommand for older browsers
+    return document.execCommand("copy");
+  } catch (_) {
+    return false;
+  } finally {
+    try {
+      if (textArea?.parentNode) {
+        textArea.parentNode.removeChild(textArea);
+      }
+    } catch (_) {
+      // ignore cleanup errors
     }
+  }
+};
+
+const copyTextToClipboard = async (text: string): Promise<boolean> => {
+  if (!text) return false;
+
+  // 由于execCommand被弃用，改用推荐的Clipboard API，但仍保留execCommand作为兼容性回退
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      // Clipboard API failed, try fallback method
+    }
+  }
+
+  // 回退到execCommand方法，兼容不支持Clipboard API的环境
+  return tryExecCommandCopy(text);
+};
+
+const copyCreatedApiKey = async () => {
+  if (!createdApiKeyPlaintext.value) return;
+  const ok = await copyTextToClipboard(createdApiKeyPlaintext.value);
+  if (ok) {
+    showToast(tm("apiKey.messages.copySuccess"), "success");
+  } else {
+    showToast(tm("apiKey.messages.copyFailed"), "error");
+  }
 };
 
 const createApiKey = async () => {

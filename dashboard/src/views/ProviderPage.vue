@@ -1,6 +1,7 @@
 <template>
   <div class="provider-page">
     <v-container fluid class="pa-0">
+      <!-- 页面标题 -->
       <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-4">
         <div>
           <h1 class="text-h1 font-weight-bold mb-2">
@@ -16,17 +17,22 @@
             color="primary"
             prepend-icon="mdi-plus"
             variant="tonal"
+            @click="showAddProviderDialog = true"
             rounded="xl"
             size="x-large"
-            @click="showAddProviderDialog = true"
           >
-            {{ tm('providers.addProvider') }}
+            {{ tm("providers.addProvider") }}
           </v-btn>
         </div>
       </v-row>
 
       <div>
-        <v-tabs v-model="selectedProviderType" bg-color="transparent" class="mb-4">
+        <!-- Provider Type 标签页 -->
+        <v-tabs
+          v-model="selectedProviderType"
+          bg-color="transparent"
+          class="mb-4"
+        >
           <v-tab
             v-for="type in providerTypes"
             :key="type.value"
@@ -38,113 +44,132 @@
           </v-tab>
         </v-tabs>
 
-        <div v-if="selectedProviderType === 'chat_completion'" class="provider-workbench">
-          <div class="provider-workbench__sidebar">
-            <ProviderSourcesPanel
-              :displayed-provider-sources="displayedProviderSources"
-              :selected-provider-source="selectedProviderSource"
-              :available-source-types="availableSourceTypes"
-              :tm="tm"
-              :resolve-source-icon="resolveSourceIcon"
-              :get-source-display-name="getSourceDisplayName"
-              @add-provider-source="addProviderSource"
-              @select-provider-source="selectProviderSource"
-              @delete-provider-source="deleteProviderSource"
-            />
-          </div>
+        <!-- Chat Completion: 左侧列表 + 右侧上下卡片布局 -->
+        <div
+          v-if="selectedProviderType === 'chat_completion'"
+          class="provider-workbench"
+        >
+          <v-row class="provider-workbench__shell">
+            <v-col cols="12" md="4" lg="3" class="provider-workbench__sources">
+              <ProviderSourcesPanel
+                :displayed-provider-sources="displayedProviderSources"
+                :selected-provider-source="selectedProviderSource"
+                :available-source-types="availableSourceTypes"
+                :tm="tm"
+                :resolve-source-icon="resolveSourceIcon"
+                :get-source-display-name="getSourceDisplayName"
+                @add-provider-source="addProviderSource"
+                @select-provider-source="selectProviderSource"
+                @delete-provider-source="deleteProviderSource"
+              />
+            </v-col>
 
-          <div class="provider-workbench__divider"></div>
+            <v-col cols="12" md="8" lg="9" class="provider-workbench__settings">
+              <v-card
+                class="provider-config-card provider-settings-panel h-100"
+                elevation="0"
+              >
+                <div
+                  v-if="selectedProviderSource"
+                  class="provider-config-header"
+                >
+                  <div class="provider-config-headline">
+                    <div class="provider-config-kicker">
+                      {{ tm("providers.settings") }}
+                    </div>
+                    <div class="provider-config-title">
+                      {{ selectedProviderSource.id }}
+                    </div>
+                    <div class="provider-config-subtitle">
+                      {{ selectedProviderSource.api_base || "N/A" }}
+                    </div>
+                  </div>
 
-          <div class="provider-workbench__main">
-            <div v-if="selectedProviderSource" class="provider-config-shell">
-              <div class="provider-config-header">
-                <div class="provider-config-headline">
-                  <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
-                  <div class="provider-config-subtitle">
-                    {{ selectedProviderSource.api_base || 'N/A' }}
+                  <div class="provider-config-actions">
+                    <v-btn
+                      color="primary"
+                      prepend-icon="mdi-content-save-outline"
+                      :loading="savingSource"
+                      :disabled="!isSourceModified"
+                      @click="saveProviderSource"
+                      variant="tonal"
+                    >
+                      {{ tm("providerSources.save") }}
+                    </v-btn>
                   </div>
                 </div>
 
-                <div class="provider-config-actions">
-                  <v-btn
-                    color="primary"
-                    prepend-icon="mdi-content-save-outline"
-                    :loading="savingSource"
-                    :disabled="!isSourceModified"
-                    variant="tonal"
-                    rounded="xl"
-                    @click="saveProviderSource"
-                  >
-                    {{ tm('providerSources.save') }}
-                  </v-btn>
-                </div>
-              </div>
+                <v-card-text class="provider-config-body">
+                  <template v-if="selectedProviderSource">
+                    <section class="provider-section">
+                      <div class="provider-section-head">
+                        <div class="provider-section-title">
+                          {{ tm("providers.settings") }}
+                        </div>
+                      </div>
+                      <AstrBotConfig
+                        v-if="basicSourceConfig"
+                        :iterable="basicSourceConfig"
+                        :metadata="providerSourceSchema"
+                        metadataKey="provider"
+                        :is-editing="true"
+                      />
+                    </section>
 
-              <v-divider></v-divider>
+                    <section
+                      v-if="advancedSourceConfig"
+                      class="provider-section"
+                    >
+                      <div class="provider-section-head">
+                        <div class="provider-section-title">
+                          {{ tm("providerSources.advancedConfig") }}
+                        </div>
+                      </div>
+                      <AstrBotConfig
+                        :iterable="advancedSourceConfig"
+                        :metadata="providerSourceSchema"
+                        metadataKey="provider"
+                        :is-editing="true"
+                      />
+                    </section>
 
-              <div class="provider-config-body">
-                <section class="provider-section">
-                  <div class="provider-section-head">
-                    <div class="provider-section-title">{{ tm('providers.settings') }}</div>
+                    <section class="provider-section provider-section--models">
+                      <ProviderModelsPanel
+                        :entries="filteredMergedModelEntries"
+                        :available-count="availableModels.length"
+                        v-model:model-search="modelSearch"
+                        :loading-models="loadingModels"
+                        :is-source-modified="isSourceModified"
+                        :supports-image-input="supportsImageInput"
+                        :supports-audio-input="supportsAudioInput"
+                        :supports-tool-call="supportsToolCall"
+                        :supports-reasoning="supportsReasoning"
+                        :format-context-limit="formatContextLimit"
+                        :testing-providers="testingProviders"
+                        :tm="tm"
+                        @fetch-models="fetchAvailableModels"
+                        @open-manual-model="openManualModelDialog"
+                        @open-provider-edit="openProviderEdit"
+                        @toggle-provider-enable="toggleProviderEnable"
+                        @test-provider="testProvider"
+                        @delete-provider="deleteProvider"
+                        @add-model-provider="addModelProvider"
+                      />
+                    </section>
+                  </template>
+                  <div v-else class="provider-empty-state">
+                    <v-icon size="48" color="grey-lighten-1"
+                      >mdi-cursor-default-click</v-icon
+                    >
+                    <p class="mt-2">{{ tm("providerSources.selectHint") }}</p>
                   </div>
-                  <AstrBotConfig
-                    v-if="basicSourceConfig"
-                    :iterable="basicSourceConfig"
-                    :metadata="providerSourceSchema"
-                    metadataKey="provider"
-                    :is-editing="true"
-                  />
-                </section>
-
-                <v-divider v-if="advancedSourceConfig"></v-divider>
-
-                <section v-if="advancedSourceConfig" class="provider-section">
-                  <div class="provider-section-head">
-                    <div class="provider-section-title">{{ tm('providerSources.advancedConfig') }}</div>
-                  </div>
-                  <AstrBotConfig
-                    :iterable="advancedSourceConfig"
-                    :metadata="providerSourceSchema"
-                    metadataKey="provider"
-                    :is-editing="true"
-                  />
-                </section>
-
-                <v-divider></v-divider>
-
-                <section class="provider-section provider-section--models">
-                  <ProviderModelsPanel
-                    :entries="filteredMergedModelEntries"
-                    :available-count="availableModels.length"
-                    v-model:model-search="modelSearch"
-                    :loading-models="loadingModels"
-                    :is-source-modified="isSourceModified"
-                    :supports-image-input="supportsImageInput"
-                    :supports-audio-input="supportsAudioInput"
-                    :supports-tool-call="supportsToolCall"
-                    :supports-reasoning="supportsReasoning"
-                    :format-context-limit="formatContextLimit"
-                    :testing-providers="testingProviders"
-                    :tm="tm"
-                    @fetch-models="fetchAvailableModels"
-                    @open-manual-model="openManualModelDialog"
-                    @open-provider-edit="openProviderEdit"
-                    @toggle-provider-enable="toggleProviderEnable"
-                    @test-provider="testProvider"
-                    @delete-provider="deleteProvider"
-                    @add-model-provider="addModelProvider"
-                  />
-                </section>
-              </div>
-            </div>
-
-            <div v-else class="provider-empty-state">
-              <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
-              <p class="mt-2">{{ tm('providerSources.selectHint') }}</p>
-            </div>
-          </div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
         </div>
 
+        <!-- 其他类型: 卡片布局 -->
         <template v-else>
           <v-row v-if="filteredProviders.length === 0">
             <v-col cols="12" class="text-center pa-8">
@@ -153,30 +178,51 @@
             </v-col>
           </v-row>
           <v-row v-else>
-            <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
+            <v-col
+              v-for="(provider, index) in filteredProviders"
+              :key="index"
+              cols="12"
+              md="6"
+              lg="4"
+              xl="3"
+            >
               <item-card
                 :item="provider"
                 title-field="id"
                 enabled-field="enable"
                 :loading="isProviderTesting(provider.id)"
+                @toggle-enabled="
+                  toggleProviderEnable(provider, !provider.enable)
+                "
                 :bglogo="getProviderIcon(provider.provider)"
-                :show-copy-button="true"
-                @toggle-enabled="toggleProviderEnable(provider, !provider.enable)"
                 @delete="deleteProvider"
                 @edit="configExistingProvider"
                 @copy="copyProvider"
+                :show-copy-button="true"
               >
                 <template #item-details="{ item }">
-                  <v-tooltip v-if="getProviderStatus(item.id)" location="top" max-width="300">
-                    <template #activator="{ props }">
-                      <v-chip v-bind="props" :color="getStatusColor(getProviderStatus(item.id).status)" size="small">
+                  <!-- 测试状态 chip -->
+                  <v-tooltip
+                    v-if="getProviderStatus(item.id)"
+                    location="top"
+                    max-width="300"
+                  >
+                    <template v-slot:activator="{ props }">
+                      <v-chip
+                        v-bind="props"
+                        :color="
+                          getStatusColor(getProviderStatus(item.id).status)
+                        "
+                        size="small"
+                      >
                         <v-icon start size="small">
                           {{
-                            getProviderStatus(item.id).status === 'available'
-                              ? 'mdi-check-circle'
-                              : getProviderStatus(item.id).status === 'unavailable'
-                                ? 'mdi-alert-circle'
-                                : 'mdi-clock-outline'
+                            getProviderStatus(item.id).status === "available"
+                              ? "mdi-check-circle"
+                              : getProviderStatus(item.id).status ===
+                                  "unavailable"
+                                ? "mdi-alert-circle"
+                                : "mdi-clock-outline"
                           }}
                         </v-icon>
                         {{ getStatusText(getProviderStatus(item.id).status) }}
@@ -192,10 +238,9 @@
                     }}</span>
                   </v-tooltip>
                 </template>
-
                 <template #actions="{ item }">
                   <v-btn
-                    style="z-index: 100000;"
+                    style="z-index: 100000"
                     variant="tonal"
                     color="info"
                     rounded="xl"
@@ -203,7 +248,7 @@
                     :loading="isProviderTesting(item.id)"
                     @click="testSingleProvider(item)"
                   >
-                    {{ tm('availability.test') }}
+                    {{ tm("availability.test") }}
                   </v-btn>
                 </template>
               </item-card>
@@ -213,13 +258,14 @@
       </div>
     </v-container>
 
+    <!-- 添加提供商对话框 -->
     <AddNewProvider
       v-model:show="showAddProviderDialog"
       :metadata="configSchema"
-      :current-provider-type="selectedProviderType"
       @select-template="selectProviderTemplate"
     />
 
+    <!-- 手动添加模型对话框 -->
     <v-dialog v-model="showManualModelDialog" max-width="400">
       <v-card :title="tm('models.manualDialogTitle')">
         <v-card-text class="py-4">
@@ -250,9 +296,16 @@
       </v-card>
     </v-dialog>
 
+    <!-- 配置对话框 -->
     <v-dialog v-model="showProviderCfg" width="900" persistent>
       <v-card
-        :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')"
+        :title="
+          updatingMode
+            ? tm('dialogs.config.editTitle')
+            : tm('dialogs.config.addTitle') +
+              ` ${newSelectedProviderName} ` +
+              tm('dialogs.config.provider')
+        "
       >
         <v-card-text class="py-4">
           <AstrBotConfig
@@ -267,20 +320,29 @@
 
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn variant="text" :disabled="loading" @click="showProviderCfg = false">
-            {{ tm('dialogs.config.cancel') }}
+          <v-btn
+            variant="text"
+            @click="showProviderCfg = false"
+            :disabled="loading"
+          >
+            {{ tm("dialogs.config.cancel") }}
           </v-btn>
-          <v-btn color="primary" :loading="loading" @click="newProvider">
-            {{ tm('dialogs.config.save') }}
+          <v-btn color="primary" @click="newProvider" :loading="loading">
+            {{ tm("dialogs.config.save") }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
+    <!-- 已配置模型编辑对话框 -->
     <v-dialog v-model="showProviderEditDialog" width="800">
       <v-card :title="providerEditData?.id || tm('dialogs.config.editTitle')">
         <v-card-text class="py-4">
-          <small style="color: gray;">不建议修改 ID，可能会导致指向该模型的相关配置（如默认模型、插件相关配置等）失效。旧版本 AstrBot 的 “提供商 ID” 是下方的 “ID”。</small>
+          <small style="color: gray"
+            >不建议修改
+            ID，可能会导致指向该模型的相关配置（如默认模型、插件相关配置等）失效。旧版本
+            AstrBot 的 “提供商 ID” 是下方的 “ID”。</small
+          >
           <AstrBotConfig
             v-if="providerEditData"
             :iterable="providerEditData"
@@ -293,26 +355,33 @@
           <v-spacer></v-spacer>
           <v-btn
             variant="text"
-            :disabled="savingProviders.includes(providerEditData?.id)"
             @click="showProviderEditDialog = false"
+            :disabled="savingProviders.includes(providerEditData?.id)"
           >
-            {{ tm('dialogs.config.cancel') }}
+            {{ tm("dialogs.config.cancel") }}
           </v-btn>
           <v-btn
             color="primary"
-            :loading="savingProviders.includes(providerEditData?.id)"
             @click="saveEditedProvider"
+            :loading="savingProviders.includes(providerEditData?.id)"
           >
-            {{ tm('dialogs.config.save') }}
+            {{ tm("dialogs.config.save") }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top">
+    <!-- 消息提示 -->
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      :timeout="3000"
+      location="top"
+    >
       {{ snackbar.message }}
     </v-snackbar>
 
+    <!-- Agent Runner 测试提示对话框 -->
     <v-dialog v-model="showAgentRunnerDialog" max-width="520" persistent>
       <v-card>
         <v-card-title class="text-h3 d-flex align-center">
@@ -416,27 +485,29 @@ const {
   deleteProvider,
   modelAlreadyConfigured,
   testProvider,
-  loadConfig
+  loadConfig,
 } = useProviderSources({
   defaultTab: props.defaultTab,
   tm,
   showMessage,
 });
 
-const showAddProviderDialog = ref(false)
-const showProviderCfg = ref(false)
-const newSelectedProviderName = ref('')
-const newSelectedProviderConfig = ref({})
-const newProviderOriginalId = ref('')
-const updatingMode = ref(false)
-const loading = ref(false)
-const providerStatuses = ref([])
-const showAgentRunnerDialog = ref(false)
-const showProviderEditDialog = ref(false)
-const providerEditData = ref(null)
-const providerEditOriginalId = ref('')
-const showManualModelDialog = ref(false)
-const savingProviders = ref([])
+// 非 chat 类型的状态
+const showAddProviderDialog = ref(false);
+const showProviderCfg = ref(false);
+const newSelectedProviderName = ref("");
+const newSelectedProviderConfig = ref({});
+const newProviderOriginalId = ref("");
+const updatingMode = ref(false);
+const loading = ref(false);
+const providerStatuses = ref([]);
+const showAgentRunnerDialog = ref(false);
+const showProviderEditDialog = ref(false);
+const providerEditData = ref(null);
+const providerEditOriginalId = ref("");
+const showManualModelDialog = ref(false);
+
+const savingProviders = ref([]);
 
 function openProviderEdit(provider) {
   providerEditData.value = JSON.parse(JSON.stringify(provider));
@@ -478,6 +549,7 @@ watch(
   },
 );
 
+// ===== 非 chat 类型的方法 =====
 function getEmptyText() {
   return tm("providers.empty.typed", { type: selectedProviderType.value });
 }
@@ -497,9 +569,10 @@ function configExistingProvider(provider) {
   newProviderOriginalId.value = provider.id;
   newSelectedProviderConfig.value = {};
 
-  let templates = configSchema.value.provider.config_template || {}
-  let defaultConfig = {}
-  for (let key in templates) {
+  // 比对默认配置模版，看看是否有更新
+  const templates = configSchema.value.provider.config_template || {};
+  let defaultConfig = {};
+  for (const key in templates) {
     if (templates[key]?.type === provider.type) {
       defaultConfig = templates[key];
       break;
@@ -562,23 +635,26 @@ async function newProvider() {
     if (wasUpdating) {
       const res = await axios.post("/api/config/provider/update", {
         id: newProviderOriginalId.value || newSelectedProviderName.value,
-        config: newSelectedProviderConfig.value
-      })
-      if (res.data.status === 'error') {
-        showMessage(res.data.message || '更新失败!', 'error')
-        return
+        config: newSelectedProviderConfig.value,
+      });
+      if (res.data.status === "error") {
+        showMessage(res.data.message || "更新失败!", "error");
+        return;
       }
-      showMessage(res.data.message || '更新成功!')
+      showMessage(res.data.message || "更新成功!");
       if (wasUpdating) {
         updatingMode.value = false;
       }
     } else {
-      const res = await axios.post('/api/config/provider/new', newSelectedProviderConfig.value)
-      if (res.data.status === 'error') {
-        showMessage(res.data.message || '添加失败!', 'error')
-        return
+      const res = await axios.post(
+        "/api/config/provider/new",
+        newSelectedProviderConfig.value,
+      );
+      if (res.data.status === "error") {
+        showMessage(res.data.message || "添加失败!", "error");
+        return;
       }
-      showMessage(res.data.message || '添加成功!')
+      showMessage(res.data.message || "添加成功!");
     }
     showProviderCfg.value = false;
   } catch (err) {
@@ -785,38 +861,41 @@ function goToConfigPage() {
 <style scoped>
 .provider-page {
   --provider-surface: rgb(var(--v-theme-surface));
-  --provider-border: rgba(var(--v-theme-on-surface), 0.08);
+  --provider-text: rgb(var(--v-theme-on-surface));
+  --provider-muted: rgba(var(--v-theme-on-surface), 0.68);
+  --provider-subtle: rgba(var(--v-theme-on-surface), 0.56);
+  --provider-border: rgba(var(--v-theme-on-surface), 0.1);
+  --provider-border-strong: rgba(var(--v-theme-on-surface), 0.14);
+  --provider-soft: rgba(var(--v-theme-primary), 0.08);
   padding: 20px;
   padding-top: 8px;
   padding-bottom: 40px;
 }
 
 .provider-workbench {
-  border: 1px solid var(--provider-border);
-  border-radius: 24px;
-  background: var(--provider-surface);
-  display: grid;
-  grid-template-columns: minmax(280px, 320px) 1px minmax(0, 1fr);
-  min-height: 760px;
-  overflow: hidden;
+  display: flex;
+  justify-content: center;
 }
 
-.provider-workbench__sidebar,
-.provider-workbench__main {
+.provider-workbench__shell {
+  width: 100%;
+  max-width: 1500px;
+}
+
+.provider-workbench__sources,
+.provider-workbench__settings {
   min-width: 0;
 }
 
-.provider-workbench__divider {
-  background: var(--provider-border);
+.provider-config-card {
+  min-height: 280px;
+  border: 1px solid var(--provider-border);
+  border-radius: 16px;
+  background: var(--provider-surface);
+  overflow: hidden;
 }
 
-.provider-workbench__main {
-  display: flex;
-}
-
-.provider-config-shell {
-  flex: 1;
-  min-height: 0;
+.provider-settings-panel {
   display: flex;
   flex-direction: column;
 }
@@ -825,46 +904,63 @@ function goToConfigPage() {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
-  padding: 18px 22px 14px;
+  gap: 12px;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--provider-border);
 }
 
 .provider-config-headline {
   min-width: 0;
 }
 
+.provider-config-kicker {
+  color: var(--provider-subtle);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .provider-config-title {
-  font-size: 21px;
+  margin-top: 8px;
+  font-size: 22px;
   line-height: 1.1;
-  font-weight: 680;
+  font-weight: 650;
   letter-spacing: -0.03em;
   overflow-wrap: anywhere;
+  color: var(--provider-text);
 }
 
 .provider-config-subtitle {
-  margin-top: 6px;
-  color: rgba(var(--v-theme-on-surface), 0.62);
+  margin-top: 8px;
+  color: var(--provider-muted);
   font-size: 13px;
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
 
 .provider-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .provider-config-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px 20px;
 }
 
 .provider-section {
-  padding: 18px 22px;
+  border: 1px solid var(--provider-border);
+  border-radius: 14px;
+  background: rgba(var(--v-theme-primary), 0.02);
+  padding: 16px;
 }
 
 .provider-section--models {
-  padding-top: 16px;
+  padding: 18px;
 }
 
 .provider-section-head {
@@ -875,92 +971,30 @@ function goToConfigPage() {
   font-size: 16px;
   font-weight: 650;
   line-height: 1.4;
+  color: var(--provider-text);
 }
 
 .provider-empty-state {
-  flex: 1;
   min-height: 420px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: rgba(var(--v-theme-on-surface), 0.56);
+  color: var(--provider-muted);
 }
 
 @media (max-width: 960px) {
-  .provider-page {
-    padding: 12px;
-    padding-bottom: 32px;
-  }
-
-  .provider-workbench {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1px auto;
+  .provider-config-card {
     min-height: auto;
-  }
-
-  .provider-workbench__divider {
-    height: 1px;
   }
 
   .provider-config-header {
     flex-direction: column;
-    align-items: stretch;
-    padding: 16px;
-  }
-
-  .provider-config-actions :deep(.v-btn) {
-    width: 100%;
-  }
-
-  .provider-section {
-    padding: 16px;
-  }
-}
-
-@media (max-width: 600px) {
-  .provider-page {
-    padding: 8px;
-    padding-bottom: 24px;
-  }
-
-  .provider-page :deep(.v-container) > .v-row:first-child {
-    margin: 0;
-    padding: 8px 4px 16px !important;
-  }
-
-  .provider-page :deep(.v-container) > .v-row:first-child > div {
-    width: 100%;
-  }
-
-  .provider-page :deep(.v-container) > .v-row:first-child .v-btn {
-    width: 100%;
-  }
-
-  .provider-page :deep(.v-tabs) {
-    overflow-x: auto;
-  }
-
-  .provider-workbench {
-    border-radius: 16px;
-    overflow: visible;
-  }
-
-  .provider-workbench__main {
-    overflow: visible;
+    align-items: flex-start;
   }
 
   .provider-config-body {
-    overflow-y: visible;
-  }
-
-  .provider-config-title {
-    font-size: 18px;
-  }
-
-  .provider-empty-state {
-    min-height: 260px;
-    padding: 24px;
+    padding: 18px;
   }
 }
 </style>
