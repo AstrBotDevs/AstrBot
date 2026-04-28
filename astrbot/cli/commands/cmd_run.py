@@ -64,29 +64,6 @@ if not (sys.version_info.major == 3 and sys.version_info.minor in (12, 13)):
 _PARAM_EXPAND_RE = re.compile(r"\$\{([^}:]+?)(:-([^}]*))?\}")
 
 
-def _expand_parameter(
-    match: re.Match,
-    env: dict[str, str],
-    local: dict[str, str],
-) -> str:
-    """Helper to expand a single ${VAR:-default} or ${VAR} occurrence.
-
-    Precedence:
-      1. local dict (parsed from the same file, earlier entries)
-      2. environment variables
-      3. default provided in the expansion (if any)
-      4. empty string
-    """
-    var = match.group(1)
-    default = match.group(3) if match.group(3) is not None else ""
-    if var in local and local[var] != "":
-        return local[var]
-    val = env.get(var, "")
-    if val != "":
-        return val
-    return default
-
-
 async def run_astrbot(astrbot_root: Path) -> None:
     """Run AstrBot"""
     from astrbot.core import LogBroker, LogManager, db_helper, logger
