@@ -581,6 +581,13 @@ function getChatProvidersFromTemplatePayload(payload: Record<string, unknown>) {
   });
 }
 
+async function fetchDefaultConfig() {
+  const res = await axios.get("/api/config/abconf", {
+    params: { id: "default" },
+  });
+  return res.data?.data?.config || {};
+}
+
 async function fetchChatProviders() {
   const response = await axios.get("/api/config/provider/template");
   if (response.data.status !== "ok") {
@@ -669,10 +676,73 @@ onMounted(async () => {
       } catch (e) {
         console.error(e);
       }
+
+      try {
+        const defaultConfig = await fetchDefaultConfig();
+        syncComputerAccessRuntime(defaultConfig);
+      } catch (e) {
+        console.error(e);
+      }
     } catch (e) {
       // Backend configured but not reachable
       backendStepState.value = "pending";
     }
+  }
+});
+
+function normalizeComputerAccessRuntime(runtime: unknown): ComputerAccessRuntime {
+  if (runtime === "local") return "local";
+  return "none";
+}
+
+function syncComputerAccessRuntime(configData: any) {
+  const currentRuntime = configData?.provider_settings?.computer_use_runtime;
+  const normalizedRuntime = normalizeComputerAccessRuntime(currentRuntime);
+  computerAccessRuntime.value = normalizedRuntime;
+  savedComputerAccessRuntime.value = normalizedRuntime;
+  if (normalizedRuntime !== "none") {
+    computerAccessStepState.value = "completed";
+  }
+}
+
+const computerAccessOptions = computed(() => [
+  { title: tm("onboard.step3Allow"), value: "local" },
+  { title: tm("onboard.step3Deny"), value: "none" },
+]);
+
+async function saveComputerAccessRuntime() {
+  savingComputerAccess.value = true;
+  try {
+    const configData = await fetchDefaultConfig();
+    if (!configData.provider_settings) {
+      configData.provider_settings = {};
+    }
+    configData.provider_settings.computer_use_runtime =
+      computerAccessRuntime.value;
+    const updateRes = await axios.post("/api/config/astrbot/update", {
+      conf_id: "default",
+      config: configData,
+    });
+    if (updateRes.data.status !== "ok") {
+      throw new Error(updateRes.data.message || "保存失败");
+    }
+    savedComputerAccessRuntime.value = computerAccessRuntime.value;
+    computerAccessStepState.value = "completed";
+  } catch (err: unknown) {
+    computerAccessRuntime.value = savedComputerAccessRuntime.value;
+  } finally {
+    savingComputerAccess.value = false;
+  }
+}
+
+watch(computerAccessRuntime, async (value, oldValue) => {
+  if (value === oldValue) return;
+  if (value === savedComputerAccessRuntime.value) return;
+  if (savingComputerAccess.value) return;
+  try {
+    await saveComputerAccessRuntime();
+  } catch {
+    computerAccessRuntime.value = savedComputerAccessRuntime.value;
   }
 });
 
@@ -751,6 +821,16 @@ watch(showProviderDialog, async (visible, wasVisible) => {
 <style scoped>
 .welcome-page {
   height: 100%;
+}
+
+.computer-access-select {
+  max-width: 240px;
+  min-width: 220px;
+}
+
+.computer-access-help-list {
+  margin: 0;
+  padding-left: 1.25rem;
 }
 
 .welcome-card {
