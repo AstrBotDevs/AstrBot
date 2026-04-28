@@ -6,7 +6,7 @@ LastEditTime: 2025-02-25 14:06:30
 import asyncio
 import re
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, cast
 
 import anyio
 from funasr_onnx import SenseVoiceSmall
@@ -55,7 +55,10 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         # 将模型加载放到线程池中执行
         self.model = await asyncio.get_running_loop().run_in_executor(
             None,
-            lambda: SenseVoiceSmall(self.model_name, quantize=True, batch_size=16),
+            lambda: cast(
+                SenseVoiceModel,
+                SenseVoiceSmall(self.model_name, quantize=True, batch_size=16),
+            ),
         )
 
         logger.info("SenseVoice 模型加载完成｡")

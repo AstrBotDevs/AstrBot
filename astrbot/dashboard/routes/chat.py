@@ -105,7 +105,7 @@ class BotMessageAccumulator:
     def __init__(self) -> None:
         self.parts: list[dict] = []
         self.pending_text = ""
-        self.pending_tool_calls: dict[str, dict] = {}
+        self.pending_tool_calls: dict[str, Any] = {}
 
     def has_content(self) -> bool:
         return bool(self.parts or self.pending_text or self.pending_tool_calls)

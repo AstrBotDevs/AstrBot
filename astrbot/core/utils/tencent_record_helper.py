@@ -14,9 +14,7 @@ from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 if TYPE_CHECKING:
-    from typing import Any
-
-    import pilk  # optional; stubs live under types/pilk.pyi
+    pass  # pilk/p Moffmpeg are runtime optional deps
 
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
