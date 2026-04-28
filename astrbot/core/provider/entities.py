@@ -20,6 +20,7 @@ from astrbot.core.agent.message import (
     ContentPart,
     ToolCall,
     ToolCallMessageSegment,
+    is_checkpoint_message,
 )
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
@@ -150,6 +151,8 @@ class ProviderRequest:
         result_parts = []
 
         for ctx in self.contexts:
+            if is_checkpoint_message(ctx):
+                continue
             role = ctx.get("role", "unknown")
             content = ctx.get("content", "")
 
@@ -350,7 +353,7 @@ class LLMResponse:
     """Tool call IDs."""
     tools_call_extra_content: dict[str, dict[str, Any]] = field(default_factory=dict)
     """Tool call extra content. tool_call_id -> extra_content dict"""
-    reasoning_content: str = ""
+    reasoning_content: str | None = None
     """The reasoning content extracted from the LLM, if any."""
     reasoning_signature: str | None = None
     """The signature of the reasoning content, if any."""
@@ -401,8 +404,6 @@ class LLMResponse:
             raw_completion (ChatCompletion, optional): 原始响应, OpenAI 格式. Defaults to None.
 
         """
-        if reasoning_content is None:
-            reasoning_content = ""
         if tools_call_args is None:
             tools_call_args = []
         if tools_call_name is None:

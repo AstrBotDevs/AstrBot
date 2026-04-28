@@ -484,6 +484,15 @@ async def get_booter(
                 profile=profile,
                 ttl=ttl,
             )
+        elif booter_type == "cua":
+            from .booters.cua import CuaBooter, build_cua_booter_kwargs
+
+            cua_kwargs = build_cua_booter_kwargs(sandbox_cfg)
+            logger.info(
+                f"[Computer] CUA config: image={cua_kwargs['image']}, "
+                f"os_type={cua_kwargs['os_type']}, ttl={cua_kwargs['ttl']}"
+            )
+            client = CuaBooter(**cua_kwargs)
         elif booter_type == "boxlite":
             from .booters.boxlite import BoxliteBooter
 
@@ -499,6 +508,14 @@ async def get_booter(
             await _sync_skills_to_sandbox(client)
         except Exception as e:
             logger.error(f"Error booting sandbox for session {session_id}: {e}")
+            try:
+                await client.shutdown()
+            except Exception as shutdown_error:
+                logger.warning(
+                    "Failed to shutdown sandbox after boot error for session %s: %s",
+                    session_id,
+                    shutdown_error,
+                )
             raise e
 
         session_booter[session_id] = client

@@ -13,12 +13,13 @@ from astrbot.api.platform import (
     PlatformMetadata,
     register_platform_adapter,
 )
-from astrbot.core.message.components import File, Record, Video
+from astrbot.core.message.components import BaseMessageComponent, File, Record, Video
 from astrbot.core.platform.astr_message_event import MessageSesion
 
 from .kook_client import KookClient
 from .kook_config import KookConfig
 from .kook_event import KookEvent
+from .kook_roles_record import KookRolesRecord
 from .kook_types import (
     ContainerModule,
     FileModule,
@@ -27,14 +28,18 @@ from .kook_types import (
     KmarkdownElement,
     KookCardMessageContainer,
     KookChannelType,
+    KookMarkdownMentionRolePart,
+    KookMentionTagName,
     KookMessageEventData,
     KookMessageType,
     KookModuleType,
+    KookRoleExtraType,
     PlainTextElement,
     SectionModule,
 )
 
-KOOK_AT_SELECTOR_REGEX = re.compile(r"\(met\)([^()]+)\(met\)")
+KOOK_AT_SELECTOR_REGEX = re.compile(r"\((met|rol)\)([^()]+)\(\1\)")
+AT_MENTION_PREFIX_REGEX = re.compile(r"^@[^\s]+(\s*-\s*[^\s]+)?\s*")
 
 
 @register_platform_adapter(
@@ -53,6 +58,7 @@ class KookPlatformAdapter(Platform):
         self._reconnect_task = None
         self.running = False
         self._main_task = None
+        self._roles_cache = KookRolesRecord("", self.client.http_client)
 
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
@@ -84,7 +90,7 @@ class KookPlatformAdapter(Platform):
         event_type = event.type
         if event_type in (KookMessageType.KMARKDOWN, KookMessageType.CARD):
             if self._should_ignore_event_by_bot_nickname(event.author_id):
-                logger.debug("[KOOK] 收到来自机器人自身的消息, 忽略此消息")
+                logger.debug("[KOOK] 判断此消息为来自机器人自身的消息, 忽略此消息")
                 return
             try:
                 abm = await self.convert_message(event)
@@ -92,8 +98,18 @@ class KookPlatformAdapter(Platform):
             except Exception as e:
                 logger.error(f"[KOOK] 消息处理异常: {e}")
         elif event_type == KookMessageType.SYSTEM:
-            logger.debug(f'[KOOK] 消息为系统通知, 通知类型为: "{event.extra.type}"')
-            logger.debug(f"[KOOK] 原始消息数据: {event.to_json()}")
+            match event.extra.type:
+                case KookRoleExtraType():
+                    # 此时 target_id 就是频道id(guild_id)
+                    guild_id = event.target_id
+                    logger.info(
+                        f'[KOOK] 收到频道"{guild_id}"的角色更新通知, 类型为"{event.extra.type.value}", 刷新角色id缓存'
+                    )
+                    self._roles_cache.clear_guild_roles_cache(int(guild_id))
+                case _:
+                    logger.debug(
+                        f'[KOOK] 判断此消息为"{event.extra.type}"类型的系统通知, 因未实现此消息的处理流程而忽略此消息, 原始消息数据: {event.to_json()}'
+                    )
 
     async def run(self):
         """主运行循环"""
@@ -124,6 +140,8 @@ class KookPlatformAdapter(Platform):
                 logger.info("[KOOK] 尝试连接KOOK服务器...")
 
                 # 尝试连接
+                await self.client.get_bot_info()
+                self._roles_cache.set_bot_id(self.client.bot_id)
                 success = await self.client.connect()
 
                 if success:
@@ -191,47 +209,86 @@ class KookPlatformAdapter(Platform):
 
         logger.info("[KOOK] 资源清理完成")
 
-    def _parse_kmarkdown_text_message(
-        self, data: KookMessageEventData, self_id: str
-    ) -> tuple[list, str]:
-        kmarkdown = data.extra.kmarkdown
-        content = data.content or ""
-        if kmarkdown is None:
-            logger.error(
-                f'[KOOK] 无法转换"{KookMessageType.KMARKDOWN.name}"消息, 消息中找不到kmarkdown字段'
-            )
-            logger.error(f"[KOOK] 原始消息内容: {data.to_json()}")
-            return [], ""
+    async def _convert_text_message_to_component(
+        self,
+        content: str,
+        raw_content: str,
+        mention_role_part: list[KookMarkdownMentionRolePart] | None = None,
+        guild_id: str | None = None,
+        mention_name_map: dict[str, str] | None = None,
+    ) -> tuple[list[BaseMessageComponent], str]:
+        # kook平台有一个角色(role)的概念,他表示拥有某一类权限的许多用户
+        # 且角色本身也有一个自己的id,与正常用户id不同
+        # 而在频道中是可以`@`角色的,而想要知道bot是否属于某个角色
+        # 需要通过 `/user/view` 接口获取当前bot账号的某个频道下所属角色的id
+        # 为了解决 https://github.com/AstrBotDevs/AstrBot/issues/7539
+        # 在确定机器人需要响应某个`(rol)xxx(rol)`时,需要将角色id替换装当前的bot id
+        # 包装成`At`机器人自己,而`At`的name就保留角色名称
+        # 如果没有查询到角色id或者bot不属于某类角色, 则不处理此`(rol)xxx(rol)`
+        # 暂时想不到能在不修改原有消息内容的情况下处理这个角色mention的方案
 
-        raw_content = kmarkdown.raw_content or content
-        if not isinstance(content, str):
-            content = str(content)
-        if not isinstance(raw_content, str):
-            raw_content = str(raw_content)
-
-        # TODO 后面的pydantic类型替换,以后再来探索吧 :(
-        mention_name_map: dict[str, str] = {}
-        mention_part = kmarkdown.mention_part
-        if isinstance(mention_part, list):
-            for item in mention_part:
-                if not isinstance(item, dict):
-                    continue
-                mention_id = item.get("id")
-                if mention_id is None:
-                    continue
-                mention_name_map[str(mention_id)] = str(item.get("username", ""))
-
-        components = []
+        message_str = raw_content
+        bot_id = self.client.bot_id
+        bot_nickname = self.client.bot_nickname
+        bot_username = self.client.bot_username
+        components: list[BaseMessageComponent] = []
+        if mention_name_map is None:
+            mention_name_map = {}
         cursor = 0
+
+        role_mention_counter = -1
+
         for match in KOOK_AT_SELECTOR_REGEX.finditer(content):
             if match.start() > cursor:
-                plain_text = content[cursor : match.start()]
+                plain_text = content[cursor : match.start()].strip(" ")
                 if plain_text:
                     components.append(Plain(text=plain_text))
 
-            mention_target = match.group(1).strip()
-            if mention_target == "all":
+            tag_name = match.group(1)
+            mention_target = match.group(2).strip()
+            if tag_name == KookMentionTagName.MENTION and mention_target == "all":
                 components.append(AtAll())
+            elif tag_name == KookMentionTagName.ROLE:
+                role_mention_counter += 1
+                role_id = 0
+                role_mention_name = mention_target
+                if mention_role_part is not None:
+                    if len(mention_role_part) > role_mention_counter:
+                        role_mention_name = mention_role_part[role_mention_counter].name
+                        role_id = mention_role_part[role_mention_counter].role_id
+                        if (
+                            bot_nickname == role_mention_name
+                            or bot_username == role_mention_name
+                        ):
+                            components.append(
+                                At(
+                                    qq=bot_id,
+                                    name=role_mention_name,  # 保留角色名称
+                                )
+                            )
+                            continue
+                if not mention_target.isdigit() and role_id == 0:
+                    continue
+
+                role_id = role_id or int(mention_target)
+                if not guild_id:
+                    continue
+
+                if not guild_id.isdigit():
+                    continue
+
+                if not await self._roles_cache.has_role_in_channel(
+                    role_id, int(guild_id)
+                ):
+                    continue
+
+                components.append(
+                    At(
+                        qq=bot_id,
+                        name=role_mention_name,  # 保留角色名称
+                    )
+                )
+
             elif mention_target:
                 components.append(
                     At(
@@ -242,11 +299,11 @@ class KookPlatformAdapter(Platform):
             cursor = match.end()
 
         if cursor < len(content):
-            tail_text = content[cursor:]
+            tail_text = content[cursor:].strip(" ")
             if tail_text:
                 components.append(Plain(text=tail_text))
 
-        message_str = raw_content
+        message_str = raw_content.strip()
         if components:
             for comp in components:
                 if isinstance(comp, Plain):
@@ -254,9 +311,8 @@ class KookPlatformAdapter(Platform):
                         continue
                     break
                 if isinstance(comp, At):
-                    if str(comp.qq) == str(self_id):
-                        message_str = re.sub(
-                            r"^@[^\s]+(\s*-\s*[^\s]+)?\s*",
+                    if str(comp.qq) == str(self.client.bot_id):
+                        message_str = AT_MENTION_PREFIX_REGEX.sub(
                             "",
                             message_str,
                             count=1,
@@ -270,10 +326,44 @@ class KookPlatformAdapter(Platform):
 
         return components, message_str
 
-    def _parse_card_message(self, data: KookMessageEventData) -> tuple[list, str]:
+    async def _parse_kmarkdown_message(
+        self, data: KookMessageEventData
+    ) -> tuple[list[BaseMessageComponent], str]:
+        kmarkdown = data.extra.kmarkdown
+        guild_id = data.extra.guild_id
+        mention_role_part = None
+        if kmarkdown:
+            mention_role_part = kmarkdown.mention_role_part
+        # 无法处理可能会收到的道具消息content,只能保留原样
+        content = str(data.content) or ""
+        if kmarkdown is None:
+            logger.error(
+                f'[KOOK] 无法转换"{KookMessageType.KMARKDOWN.name}"消息, 消息中找不到kmarkdown字段'
+            )
+            logger.error(f"[KOOK] 原始消息内容: {data.to_json()}")
+            return [], ""
+
+        raw_content = kmarkdown.raw_content or content
+
+        mention_name_map: dict[str, str] = {}
+        mention_part = kmarkdown.mention_part
+        for item in mention_part:
+            mention_id = item.id
+            if mention_id is None:
+                continue
+            mention_name_map[str(mention_id)] = str(item.username)
+
+        return await self._convert_text_message_to_component(
+            content, raw_content, mention_role_part, guild_id, mention_name_map
+        )
+
+    async def _parse_card_message(
+        self, data: KookMessageEventData
+    ) -> tuple[list[BaseMessageComponent], str]:
         content = data.content
         if not isinstance(content, str):
             content = str(content)
+        guild_id = data.extra.guild_id
 
         card_list = KookCardMessageContainer.from_dict(json.loads(content))
 
@@ -304,18 +394,13 @@ class KookPlatformAdapter(Platform):
                         logger.debug(f"[KOOK] 跳过或未处理模块: {module.type}")
 
         text = "".join(text_parts)
-        message = []
+        message: list[BaseMessageComponent] = []
 
         if text:
-            for search in KOOK_AT_SELECTOR_REGEX.finditer(text):
-                search_text = search.group(1).strip()
-                if search_text == "all":
-                    message.append(AtAll())
-                    continue
-                message.append(At(qq=search_text))
-                text = text.replace(f"(met){search_text}(met)", "")
-
-            message.append(Plain(text=text))
+            component_parts, text = await self._convert_text_message_to_component(
+                text, text, guild_id=guild_id
+            )
+            message.extend(component_parts)
 
         for img_url in images:
             message.append(Image(file=img_url))
@@ -387,12 +472,10 @@ class KookPlatformAdapter(Platform):
         abm.message_id = data.msg_id or "unknown"
 
         if data.type == KookMessageType.KMARKDOWN:
-            message, message_str = self._parse_kmarkdown_text_message(data, abm.self_id)
-            abm.message = message
-            abm.message_str = message_str
+            abm.message, abm.message_str = await self._parse_kmarkdown_message(data)
         elif data.type == KookMessageType.CARD:
             try:
-                abm.message, abm.message_str = self._parse_card_message(data)
+                abm.message, abm.message_str = await self._parse_card_message(data)
             except Exception as exp:
                 logger.error(f"[KOOK] 卡片消息解析失败: {exp}")
                 logger.error(f"[KOOK] 原始消息内容: {data.to_json()}")

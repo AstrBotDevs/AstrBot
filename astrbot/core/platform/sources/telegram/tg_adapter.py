@@ -6,6 +6,7 @@ import uuid
 from contextlib import suppress
 from typing import cast
 
+from apscheduler.events import EVENT_JOB_ERROR
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
@@ -80,6 +81,15 @@ class TelegramPlatformAdapter(Platform):
         self.last_command_hash = None
 
         self.scheduler = AsyncIOScheduler()
+        self.scheduler.add_listener(
+            lambda ev: logger.error(
+                "Scheduled job %s raised: %s",
+                ev.job_id,
+                ev.exception,
+                exc_info=ev.exception,
+            ),
+            EVENT_JOB_ERROR,
+        )
         self._terminating = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._polling_recovery_requested = asyncio.Event()
@@ -695,31 +705,36 @@ class TelegramPlatformAdapter(Platform):
             f"Processing media group {media_group_id}, total {len(updates_and_contexts)} items"
         )
 
-        # Use the first update to create the base message (with reply, caption, etc.)
-        first_update, first_context = updates_and_contexts[0]
-        abm = await self.convert_message(first_update, first_context)
+        try:
+            # Use the first update to create the base message (with reply, caption, etc.)
+            first_update, first_context = updates_and_contexts[0]
+            abm = await self.convert_message(first_update, first_context)
 
-        if not abm:
-            logger.warning(
-                f"Failed to convert the first message of media group {media_group_id}"
+            if not abm:
+                logger.warning(
+                    f"Failed to convert the first message of media group {media_group_id}"
+                )
+                return
+
+            # Add additional media from remaining updates by reusing convert_message
+            for update, context in updates_and_contexts[1:]:
+                # Convert the message but skip reply chains (get_reply=False)
+                extra = await self.convert_message(update, context, get_reply=False)
+                if not extra:
+                    continue
+
+                # Merge only the message components (keep base session/meta from first)
+                abm.message.extend(extra.message)
+                logger.debug(
+                    f"Added {len(extra.message)} components to media group {media_group_id}"
+                )
+
+            # Process the merged message
+            await self.handle_msg(abm)
+        except Exception:
+            logger.error(
+                f"Failed to process media group {media_group_id}", exc_info=True
             )
-            return
-
-        # Add additional media from remaining updates by reusing convert_message
-        for update, context in updates_and_contexts[1:]:
-            # Convert the message but skip reply chains (get_reply=False)
-            extra = await self.convert_message(update, context, get_reply=False)
-            if not extra:
-                continue
-
-            # Merge only the message components (keep base session/meta from first)
-            abm.message.extend(extra.message)
-            logger.debug(
-                f"Added {len(extra.message)} components to media group {media_group_id}"
-            )
-
-        # Process the merged message
-        await self.handle_msg(abm)
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = TelegramPlatformEvent(
