@@ -177,7 +177,13 @@ def import_data_command(backup_file: str, yes: bool):
             decrypted_path = backup_path.with_suffix("")
             click.echo(f"Processing GPG file {backup_path}...")
             try:
-                cmd = ["gpg", "--output", str(decrypted_path), "--decrypt", str(backup_path)]
+                cmd = [
+                    "gpg",
+                    "--output",
+                    str(decrypted_path),
+                    "--decrypt",
+                    str(backup_path),
+                ]
                 process = await asyncio.create_subprocess_exec(*cmd)
                 await process.wait()
                 if process.returncode != 0:
