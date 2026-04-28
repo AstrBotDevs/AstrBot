@@ -14,9 +14,14 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolSchema, ToolSet
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.astr_main_agent_resources import (
+    BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
+    BACKGROUND_TASK_WOKE_USER_PROMPT,
+    CONVERSATION_HISTORY_INJECT_PREFIX,
+)
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -288,7 +293,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
-        sandbox_cfg = provider_settings.get("sandbox", {})
+        tool_mgr = ctx.get_llm_tool_manager()
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
             tool_mgr,

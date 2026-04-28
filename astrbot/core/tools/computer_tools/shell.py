@@ -122,13 +122,20 @@ class ExecuteShellTool(FunctionTool):
                     local_runtime=local_runtime,
                 )
 
-            result = await sb.shell.exec(
-                command,
-                cwd=cwd,
-                background=effective_background,
-                env=env,
-                timeout=timeout or 300,
-            )
+            exec_kwargs: dict[str, Any] = {
+                "command": command,
+                "background": effective_background,
+                "env": env,
+                "timeout": timeout or 300,
+            }
+            # Don't pass cwd for local runtime — the persistent shell
+            # session maintains its own working directory across calls.
+            if is_local_runtime(context):
+                exec_kwargs["session_id"] = context.context.event.unified_msg_origin
+            else:
+                exec_kwargs["cwd"] = cwd
+
+            result = await sb.shell.exec(**exec_kwargs)
             if stdout_file:
                 result["stdout"] = (
                     f"Command is running in the background. stdout/stderr is being "
