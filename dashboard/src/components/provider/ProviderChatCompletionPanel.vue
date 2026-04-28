@@ -89,6 +89,7 @@
                 :supports-tool-call="supportsToolCall"
                 :supports-reasoning="supportsReasoning"
                 :format-context-limit="formatContextLimit"
+                :saving-providers="savingProviderToggles"
                 :testing-providers="testingProviders"
                 :tm="tm"
                 @fetch-models="fetchAvailableModels"
@@ -209,6 +210,7 @@ const {
   availableModels,
   loadingModels,
   savingSource,
+  savingProviderToggles,
   testingProviders,
   isSourceModified,
   configSchema,
