@@ -3,8 +3,14 @@ name: AstrBot Dashboard CI
 on:
   push:
     branches: [ "master" ]
+    paths:
+      - '.github/workflows/dashboard_ci.yml'
+      - 'dashboard/**'
   pull_request:
     branches: [ "master" ]
+    paths:
+      - '.github/workflows/dashboard_ci.yml'
+      - 'dashboard/**'
 
 jobs:
   build:
@@ -35,9 +41,10 @@ jobs:
       - name: Inject Commit SHA
         id: get_sha
         run: |
-          echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          commit_sha="$(git rev-parse HEAD)"
+          echo "COMMIT_SHA=$commit_sha" >> "$GITHUB_ENV"
           mkdir -p dashboard/dist/assets
-          echo $COMMIT_SHA > dashboard/dist/assets/version
+          echo "$commit_sha" > dashboard/dist/assets/version
           cd dashboard
           zip -r dist.zip dist
 

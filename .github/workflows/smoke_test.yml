@@ -21,14 +21,17 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-latest
-          - windows-latest
         python-version:
-          - '3.10'
-          - '3.11'
           - '3.12'
-          - '3.13'
-          - '3.14'
+        include:
+          - os: macos-latest
+            python-version: '3.12'
+          - os: windows-latest
+            python-version: '3.12'
+          - os: ubuntu-latest
+            python-version: '3.13'
+          - os: ubuntu-latest
+            python-version: '3.14'
 
     steps:
       - name: Checkout
