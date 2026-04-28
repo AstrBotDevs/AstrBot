@@ -7,12 +7,33 @@ export interface StagedFileInfo {
   original_name: string;
   url: string; // blob URL for preview
   type: string; // image, record, file, video
+  signature?: string;
 }
 
 export function useMediaHandling() {
   const stagedAudioUrl = ref<string>("");
   const stagedFiles = ref<StagedFileInfo[]>([]);
   const mediaCache = ref<Record<string, string>>({});
+  const pendingFileSignatures = new Set<string>();
+
+  async function getFileSignature(file: File): Promise<string> {
+    if (crypto?.subtle) {
+      const buffer = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", buffer);
+      const hash = Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+      return `sha256:${hash}`;
+    }
+    return `meta:${file.name}:${file.size}:${file.type}:${file.lastModified}`;
+  }
+
+  function isDuplicateFile(signature: string) {
+    return (
+      pendingFileSignatures.has(signature) ||
+      stagedFiles.value.some((file) => file.signature === signature)
+    );
+  }
 
   async function getMediaFile(filename: string): Promise<string> {
     if (mediaCache.value[filename]) {
@@ -34,7 +55,11 @@ export function useMediaHandling() {
     }
   }
 
-  async function processAndUploadImage(file: File) {
+  async function uploadStagedFile(file: File) {
+    const signature = await getFileSignature(file);
+    if (isDuplicateFile(signature)) return;
+
+    pendingFileSignatures.add(signature);
     const formData = new FormData();
     formData.append("file", file);
 
@@ -52,34 +77,21 @@ export function useMediaHandling() {
         original_name: file.name,
         url: URL.createObjectURL(file),
         type,
-      });
-    } catch (err) {
-      console.error("Error uploading image:", err);
-    }
-  }
-
-  async function processAndUploadFile(file: File) {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const response = await axios.post("/api/chat/post_file", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      const { attachment_id, filename, type } = response.data.data;
-      stagedFiles.value.push({
-        attachment_id,
-        filename,
-        original_name: file.name,
-        url: URL.createObjectURL(file),
-        type,
+        signature,
       });
     } catch (err) {
       console.error("Error uploading file:", err);
+    } finally {
+      pendingFileSignatures.delete(signature);
     }
+  }
+
+  async function processAndUploadImage(file: File) {
+    await uploadStagedFile(file);
+  }
+
+  async function processAndUploadFile(file: File) {
+    await uploadStagedFile(file);
   }
 
   async function handlePaste(event: ClipboardEvent) {
@@ -136,14 +148,17 @@ export function useMediaHandling() {
     }
   }
 
-  function clearStaged() {
+  function clearStaged(options: { revokeUrls?: boolean } = {}) {
+    const { revokeUrls = true } = options;
     stagedAudioUrl.value = "";
-    // 清理文件的 blob URLs
-    stagedFiles.value.forEach((file) => {
-      if (file.url.startsWith("blob:")) {
-        URL.revokeObjectURL(file.url);
-      }
-    });
+    if (revokeUrls) {
+      // 清理文件的 blob URLs
+      stagedFiles.value.forEach((file) => {
+        if (file.url.startsWith("blob:")) {
+          URL.revokeObjectURL(file.url);
+        }
+      });
+    }
     stagedFiles.value = [];
   }
 

@@ -36,6 +36,10 @@ withDefaults(
   backdrop-filter: blur(10px);
 }
 
+.styled-menu-card-borderless {
+  border: 0 !important;
+}
+
 .styled-menu-list {
   background: transparent !important;
 }
@@ -63,6 +67,10 @@ withDefaults(
 .v-theme--PurpleThemeDark .styled-menu-card {
   background: rgba(var(--v-theme-surface), 0.98) !important;
   border: 1px solid rgba(var(--v-theme-primary), 0.2) !important;
+}
+
+.v-theme--PurpleThemeDark .styled-menu-card-borderless {
+  border: 0 !important;
 }
 
 /* 深色模式下的列表项悬停效果 */
