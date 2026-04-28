@@ -1,3 +1,7 @@
+"""Configuration CLI for AstrBot."""
+
+from __future__ import annotations
+
 import hashlib
 import json
 import zoneinfo
@@ -5,66 +9,60 @@ from collections.abc import Callable
 from typing import Any
 
 import click
+from filelock import FileLock, Timeout
 
-from ..utils import check_astrbot_root, get_astrbot_root
+from astrbot.cli.i18n import t
+from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.utils.astrbot_path import astrbot_paths
+
+
+# --- Validators ---
 
 
 def _validate_log_level(value: str) -> str:
-    """Validate log level"""
-    value = value.upper()
-    if value not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
-        raise click.ClickException(
-            "Log level must be one of DEBUG/INFO/WARNING/ERROR/CRITICAL",
-        )
-    return value
+    value_up = value.upper()
+    allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    if value_up not in allowed:
+        raise click.ClickException(t("config_log_level_invalid"))
+    return value_up
 
 
 def _validate_dashboard_port(value: str) -> int:
-    """Validate Dashboard port"""
     try:
         port = int(value)
-        if port < 1 or port > 65535:
-            raise click.ClickException("Port must be in range 1-65535")
-        return port
     except ValueError:
-        raise click.ClickException("Port must be a number")
+        raise click.ClickException(t("config_port_must_be_number")) from None
+    if port < 1 or port > 65535:
+        raise click.ClickException(t("config_port_range_invalid"))
+    return port
 
 
 def _validate_dashboard_username(value: str) -> str:
-    """Validate Dashboard username"""
-    if not value:
-        raise click.ClickException("Username cannot be empty")
-    return value
+    if not value or not value.strip():
+        raise click.ClickException(t("config_username_empty"))
+    return value.strip()
 
 
 def _validate_dashboard_password(value: str) -> str:
-    """Validate Dashboard password"""
     if not value:
-        raise click.ClickException("Password cannot be empty")
+        raise click.ClickException(t("config_password_empty"))
     return hashlib.md5(value.encode()).hexdigest()
 
 
 def _validate_timezone(value: str) -> str:
-    """Validate timezone"""
     try:
         zoneinfo.ZoneInfo(value)
-    except Exception:
-        raise click.ClickException(
-            f"Invalid timezone: {value}. Please use a valid IANA timezone name"
-        )
+    except Exception as e:
+        raise click.ClickException(t("config_timezone_invalid", value=value)) from e
     return value
 
 
 def _validate_callback_api_base(value: str) -> str:
-    """Validate callback API base URL"""
-    if not value.startswith("http://") and not value.startswith("https://"):
-        raise click.ClickException(
-            "Callback API base must start with http:// or https://"
-        )
+    if not (value.startswith("http://") or value.startswith("https://")):
+        raise click.ClickException(t("config_callback_invalid"))
     return value
 
 
-# Configuration items settable via CLI, mapping config keys to validator functions
 CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
     "timezone": _validate_timezone,
     "log_level": _validate_log_level,
@@ -75,18 +73,18 @@ CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
 }
 
 
+# --- Config file helpers ---
+
+
 def _load_config() -> dict[str, Any]:
-    """Load or initialize config file"""
-    root = get_astrbot_root()
-    if not check_astrbot_root(root):
+    root = astrbot_paths.root
+    if not astrbot_paths.is_root:
         raise click.ClickException(
             f"{root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
         )
 
-    config_path = root / "data" / "cmd_config.json"
+    config_path = astrbot_paths.data / "cmd_config.json"
     if not config_path.exists():
-        from astrbot.core.config.default import DEFAULT_CONFIG
-
         config_path.write_text(
             json.dumps(DEFAULT_CONFIG, ensure_ascii=False, indent=2),
             encoding="utf-8-sig",
@@ -95,13 +93,11 @@ def _load_config() -> dict[str, Any]:
     try:
         return json.loads(config_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as e:
-        raise click.ClickException(f"Failed to parse config file: {e!s}")
+        raise click.ClickException(f"Failed to parse config file: {e!s}") from e
 
 
 def _save_config(config: dict[str, Any]) -> None:
-    """Save config file"""
-    config_path = get_astrbot_root() / "data" / "cmd_config.json"
-
+    config_path = astrbot_paths.data / "cmd_config.json"
     config_path.write_text(
         json.dumps(config, ensure_ascii=False, indent=2),
         encoding="utf-8-sig",
@@ -109,44 +105,41 @@ def _save_config(config: dict[str, Any]) -> None:
 
 
 def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
-    """Set a value in a nested dictionary"""
     parts = path.split(".")
+    cur = obj
     for part in parts[:-1]:
-        if part not in obj:
-            obj[part] = {}
-        elif not isinstance(obj[part], dict):
+        if part not in cur:
+            cur[part] = {}
+        elif not isinstance(cur[part], dict):
             raise click.ClickException(
                 f"Config path conflict: {'.'.join(parts[: parts.index(part) + 1])} is not a dict",
             )
-        obj = obj[part]
-    obj[parts[-1]] = value
+        cur = cur[part]
+    cur[parts[-1]] = value
 
 
 def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
-    """Get a value from a nested dictionary"""
     parts = path.split(".")
+    cur = obj
     for part in parts:
-        obj = obj[part]
-    return obj
+        cur = cur[part]
+    return cur
+
+
+# --- CLI commands ---
 
 
 @click.group(name="conf")
 def conf() -> None:
-    """Configuration management commands
+    """Configuration management commands.
 
     Supported config keys:
-
-    - timezone: Timezone setting (e.g. Asia/Shanghai)
-
-    - log_level: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
-
-    - dashboard.port: Dashboard port
-
-    - dashboard.username: Dashboard username
-
-    - dashboard.password: Dashboard password
-
-    - callback_api_base: Callback API base URL
+    - timezone
+    - log_level
+    - dashboard.port
+    - dashboard.username
+    - dashboard.password
+    - callback_api_base
     """
 
 
@@ -159,25 +152,25 @@ def set_config(key: str, value: str) -> None:
         raise click.ClickException(f"Unsupported config key: {key}")
 
     config = _load_config()
-
     try:
-        old_value = _get_nested_item(config, key)
+        try:
+            old_value = _get_nested_item(config, key)
+        except Exception:
+            old_value = "<not set>"
+
         validated_value = CONFIG_VALIDATORS[key](value)
         _set_nested_item(config, key, validated_value)
         _save_config(config)
 
         click.echo(f"Config updated: {key}")
-        if key == "dashboard.password":
-            click.echo("  Old value: ********")
-            click.echo("  New value: ********")
-        else:
-            click.echo(f"  Old value: {old_value}")
-            click.echo(f"  New value: {validated_value}")
-
-    except KeyError:
-        raise click.ClickException(f"Unknown config key: {key}")
+        click.echo(f"  Old value: {old_value}")
+        click.echo(f"  New value: {validated_value}")
+    except KeyError as e:
+        raise click.ClickException(f"Unknown config key: {key}") from e
+    except click.ClickException:
+        raise
     except Exception as e:
-        raise click.UsageError(f"Failed to set config: {e!s}")
+        raise click.UsageError(f"Failed to set config: {e!s}") from e
 
 
 @conf.command(name="get")
@@ -185,29 +178,84 @@ def set_config(key: str, value: str) -> None:
 def get_config(key: str | None = None) -> None:
     """Get the value of a config item. If no key is provided, show all configurable items"""
     config = _load_config()
-
     if key:
         if key not in CONFIG_VALIDATORS:
             raise click.ClickException(f"Unsupported config key: {key}")
-
         try:
             value = _get_nested_item(config, key)
             if key == "dashboard.password":
                 value = "********"
             click.echo(f"{key}: {value}")
-        except KeyError:
-            raise click.ClickException(f"Unknown config key: {key}")
+        except KeyError as e:
+            raise click.ClickException(f"Unknown config key: {key}") from e
         except Exception as e:
-            raise click.UsageError(f"Failed to get config: {e!s}")
+            raise click.UsageError(f"Failed to get config: {e!s}") from e
     else:
         click.echo("Current config:")
-        for key in CONFIG_VALIDATORS:
+        for k in CONFIG_VALIDATORS:
             try:
-                value = (
+                v = (
                     "********"
-                    if key == "dashboard.password"
-                    else _get_nested_item(config, key)
+                    if k == "dashboard.password"
+                    else _get_nested_item(config, k)
                 )
-                click.echo(f"  {key}: {value}")
+                click.echo(f"  {k}: {v}")
             except (KeyError, TypeError):
                 pass
+
+
+def _check_astrbot_not_running() -> None:
+    """Refuse to proceed if astrbot is currently running (lock file held)."""
+    lock_file = astrbot_paths.root / "astrbot.lock"
+    if not lock_file.exists():
+        return
+    lock = FileLock(lock_file, timeout=1)
+    try:
+        lock.acquire()
+    except Timeout:
+        raise click.ClickException(
+            "AstrBot is currently running. "
+            "Please stop it first before changing the password via CLI.",
+        ) from None
+    else:
+        lock.release()
+
+
+@conf.command(name="admin")
+@click.option("-u", "--username", type=str, help="Update admin username as well")
+@click.option(
+    "-p",
+    "--password",
+    type=str,
+    help="Set admin password directly without interactive prompt",
+)
+def set_dashboard_password(username: str | None, password: str | None) -> None:
+    """Interactively set dashboard password (with confirmation) or set directly with -p."""
+    _check_astrbot_not_running()
+    config = _load_config()
+
+    if password is not None:
+        password_hash = _validate_dashboard_password(password)
+    else:
+        click.echo()
+        click.echo("Set dashboard password (leave empty to skip):")
+        password = click.prompt(
+            "Password", hide_input=True, confirmation_prompt=True, default=""
+        )
+        if not password:
+            click.echo("Password not changed.")
+            return
+        password_hash = _validate_dashboard_password(password)
+
+    _set_nested_item(config, "dashboard.password", password_hash)
+    if username is not None:
+        _set_nested_item(
+            config,
+            "dashboard.username",
+            _validate_dashboard_username(username),
+        )
+    _save_config(config)
+
+    if username is not None:
+        click.echo(f"Dashboard username updated: {username.strip()}")
+    click.echo("Dashboard password updated.")
