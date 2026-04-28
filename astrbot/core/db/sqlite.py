@@ -2092,6 +2092,110 @@ class SQLiteDatabase(BaseDatabase):
             )
             return result.scalar_one_or_none()
 
+    async def list_sdk_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+        cursor_id: int | None = None,
+        limit: int = 50,
+        include_total: bool = False,
+    ) -> tuple[list[PlatformMessageHistory], int | None]:
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = (
+                select(PlatformMessageHistory)
+                .where(
+                    PlatformMessageHistory.platform_id == platform_id,
+                    PlatformMessageHistory.user_id == user_id,
+                )
+                .order_by(desc(PlatformMessageHistory.created_at))
+            )
+            if cursor_id is not None:
+                query = query.where(PlatformMessageHistory.id < cursor_id)
+            result = await session.execute(query.limit(limit))
+            records = list(result.scalars().all())
+            total = None
+            if include_total:
+                count_result = await session.execute(
+                    select(func.count())
+                    .select_from(PlatformMessageHistory)
+                    .where(
+                        PlatformMessageHistory.platform_id == platform_id,
+                        PlatformMessageHistory.user_id == user_id,
+                    )
+                )
+                total = count_result.scalar()
+            return records, total
+
+    async def delete_platform_message_before(
+        self,
+        platform_id: str,
+        user_id: str,
+        before: datetime,
+    ) -> int:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        PlatformMessageHistory.platform_id == platform_id,
+                        PlatformMessageHistory.user_id == user_id,
+                        PlatformMessageHistory.created_at < before,
+                    )
+                )
+            return result.rowcount
+
+    async def delete_platform_message_after(
+        self,
+        platform_id: str,
+        user_id: str,
+        after: datetime,
+    ) -> int:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        PlatformMessageHistory.platform_id == platform_id,
+                        PlatformMessageHistory.user_id == user_id,
+                        PlatformMessageHistory.created_at > after,
+                    )
+                )
+            return result.rowcount
+
+    async def delete_all_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+    ) -> int:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    delete(PlatformMessageHistory).where(
+                        PlatformMessageHistory.platform_id == platform_id,
+                        PlatformMessageHistory.user_id == user_id,
+                    )
+                )
+            return result.rowcount
+
+    async def find_platform_message_history_by_idempotency_key(
+        self,
+        platform_id: str,
+        user_id: str,
+        idempotency_key: str,
+    ) -> PlatformMessageHistory | None:
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(PlatformMessageHistory).where(
+                    PlatformMessageHistory.platform_id == platform_id,
+                    PlatformMessageHistory.user_id == user_id,
+                    PlatformMessageHistory.idempotency_key == idempotency_key,
+                )
+            )
+            return result.scalar_one_or_none()
+
     async def list_cron_jobs(self, job_type: str | None = None) -> list[CronJob]:
         async with self.get_db() as session:
             session: AsyncSession
