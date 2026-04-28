@@ -1918,7 +1918,7 @@ CONFIG_METADATA_2 = {
                     "xai_native_search": {
                         "description": "启用原生搜索功能",
                         "type": "bool",
-                        "hint": "启用后，将通过 xAI Chat Completions 原生 Live Search 进行联网检索（按需计费）。仅对 xAI Chat Completions 提供商生效。",
+                        "hint": "启用后，将通过 xAI Chat Completions 原生 Live Search 进行联网检索。仅对 xAI Chat Completions 提供商生效。",
                         "condition": {"type": "xai_chat_completion"},
                     },
                     "xai_web_search_config": {
@@ -1930,7 +1930,7 @@ CONFIG_METADATA_2 = {
                             "enabled": {
                                 "description": "启用 Web Search",
                                 "type": "bool",
-                                "hint": "启用后，将向 xAI Responses API 注册 web_search 工具（按需计费）。",
+                                "hint": "启用后，将向 xAI Responses API 注册 web_search 工具。",
                             },
                             "allowed_domains": {
                                 "description": "允许搜索的域名",
@@ -1947,7 +1947,7 @@ CONFIG_METADATA_2 = {
                             "enable_image_understanding": {
                                 "description": "启用图片理解",
                                 "type": "bool",
-                                "hint": "传允许模型在搜索过程中分析图片。",
+                                "hint": "允许模型在搜索过程中分析图片。",
                             },
                         },
                     },
@@ -1960,7 +1960,7 @@ CONFIG_METADATA_2 = {
                             "enabled": {
                                 "description": "启用 X Search",
                                 "type": "bool",
-                                "hint": "启用后，将向 xAI Responses API 注册 x_search 工具（按需计费）。",
+                                "hint": "启用后，将向 xAI Responses API 注册 x_search 工具。",
                             },
                             "allowed_x_handles": {
                                 "description": "允许搜索的 X 账号",
