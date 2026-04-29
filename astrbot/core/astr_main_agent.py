@@ -510,7 +510,9 @@ async def _ensure_persona_and_skills(
         ).strip()
 
         if router_prompt:
-            dynamic_cfg = orch_cfg.get("dynamic_agents", {})  # 未启用dynamic时才注入router_prompt，否则由subagent_manager注入
+            dynamic_cfg = orch_cfg.get(
+                "dynamic_agents", {}
+            )  # 未启用dynamic时才注入router_prompt，否则由subagent_manager注入
             if not dynamic_cfg.get("enabled", False):
                 req.system_prompt += f"\n{router_prompt}\n"
 
