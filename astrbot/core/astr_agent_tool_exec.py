@@ -411,7 +411,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 )
             except asyncio.TimeoutError:
                 # 若超时，保存已产生的部分历史
-                cls._save_subagent_history(agent_name, runner_messages, umo)
+                cls._save_subagent_history(umo, runner_messages, agent_name)
                 error_msg = f"SubAgent '{agent_name}' execution timeout after {execution_timeout:.1f} seconds."
                 logger.warning(f"[SubAgent:Timeout] {error_msg}")
 
