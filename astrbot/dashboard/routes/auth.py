@@ -65,8 +65,8 @@ class AuthRoute(Route):
         )
 
     async def login(self):
-        username = self.config["dashboard"]["username"]
-        password = self.config["dashboard"]["password"]
+        stored_username = self.config["dashboard"]["username"]
+        stored_password = self.config["dashboard"]["password"]
         post_data = await request.json
 
         req_username = (
@@ -81,22 +81,45 @@ class AuthRoute(Route):
         req_password_proof = (
             post_data.get("password_proof") if isinstance(post_data, dict) else None
         )
-        if not isinstance(req_username, str):
+        if not isinstance(req_username, str) or not isinstance(req_password, str):
             return Response().error("Invalid request payload").__dict__
+
+        # First login: if password is not configured (empty/default), trust the user's input
+        if is_default_dashboard_password(stored_password) and not DEMO_MODE:
+            # First-time setup: save user's input as admin credentials
+            new_password_hash = hash_dashboard_password(req_password)
+            self.config["dashboard"]["username"] = req_username
+            self.config["dashboard"]["password"] = new_password_hash
+            self.config.save_config()
+            logger.warning(
+                f"Dashboard admin configured via first login: username={req_username}",
+            )
+            return (
+                Response()
+                .ok(
+                    {
+                        "token": self.generate_jwt(req_username),
+                        "username": req_username,
+                        "change_pwd_hint": False,
+                        "legacy_pwd_hint": False,
+                    },
+                )
+                .__dict__
+            )
 
         login_verified = False
         if isinstance(req_password, str):
-            login_verified = req_username == username and verify_dashboard_password(
-                password,
+            login_verified = req_username == stored_username and verify_dashboard_password(
+                stored_password,
                 req_password,
             )
         elif isinstance(req_challenge_id, str) and isinstance(req_password_proof, str):
             challenge_nonce = self._consume_login_challenge(req_challenge_id)
             login_verified = (
-                req_username == username
+                req_username == stored_username
                 and isinstance(challenge_nonce, str)
                 and verify_dashboard_login_proof(
-                    password,
+                    stored_password,
                     challenge_nonce,
                     req_password_proof,
                 )
@@ -106,12 +129,8 @@ class AuthRoute(Route):
 
         if login_verified:
             change_pwd_hint = False
-            legacy_pwd_hint = is_legacy_dashboard_password(password)
-            if (
-                username == "astrbot"
-                and is_default_dashboard_password(password)
-                and not DEMO_MODE
-            ):
+            legacy_pwd_hint = is_legacy_dashboard_password(stored_password)
+            if is_default_dashboard_password(stored_password) and not DEMO_MODE:
                 change_pwd_hint = True
                 logger.warning(
                     "The dashboard is using the default password, please change it immediately to ensure security.",
@@ -122,8 +141,8 @@ class AuthRoute(Route):
                 Response()
                 .ok(
                     {
-                        "token": self.generate_jwt(username),
-                        "username": username,
+                        "token": self.generate_jwt(stored_username),
+                        "username": stored_username,
                         "change_pwd_hint": change_pwd_hint,
                         "legacy_pwd_hint": legacy_pwd_hint,
                     },
