@@ -456,6 +456,23 @@ async def _ensure_persona_and_skills(
 
         assigned_tools: set[str] = set()
         agents = orch_cfg.get("agents", [])
+
+        # 1. 提取白名单（归一化 subagents 名称）
+        sub_agents_cfg = (persona or {}).get("subagents")
+        normalized_subagents = (
+            {str(name).strip() for name in sub_agents_cfg if str(name).strip()}
+            if sub_agents_cfg is not None
+            else None
+        )
+
+        # 2. 过滤 agents（使用归一化后的名称）
+        if normalized_subagents is not None:
+            agents = [
+                agent
+                for agent in agents
+                if isinstance(agent, dict)
+                and str(agent.get("name", "")).strip() in normalized_subagents
+            ]
         if isinstance(agents, list):
             for a in agents:
                 if not isinstance(a, dict):
@@ -491,8 +508,20 @@ async def _ensure_persona_and_skills(
             req.func_tool = ToolSet()
 
         # add subagent handoff tools
-        for tool in so.handoffs:
-            req.func_tool.add_tool(tool)
+        # 如果 normalized_subagents 为 None 则默认放行所有 handoffs,空集合禁用所有handoffs
+        if normalized_subagents is None:
+            # 不配置 subagents 时，默认放行所有 handoffs
+            for tool in so.handoffs:
+                req.func_tool.add_tool(tool)
+        else:
+            # 只允许指向归一化白名单中的 subagents 的 handoff
+            for tool in so.handoffs:
+                agent = getattr(tool, "agent", None)
+                agent_name = getattr(agent, "name", None) if agent else None
+                if agent_name is not None:
+                    name_norm = str(agent_name).strip()
+                    if name_norm and name_norm in normalized_subagents:
+                        req.func_tool.add_tool(tool)
 
         # check duplicates
         if remove_dup:
