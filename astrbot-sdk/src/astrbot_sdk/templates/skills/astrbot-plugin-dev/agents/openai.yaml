@@ -1,0 +1,6 @@
+model: gpt-5.4-mini
+reasoning_effort: medium
+instructions: |
+  Use the {{skill_name}} skill when editing the {{plugin_name}} plugin.
+  Start from {{plugin_root}}/plugin.yaml and {{plugin_root}}/main.py.
+  Keep changes aligned with the generated plugin scaffold.

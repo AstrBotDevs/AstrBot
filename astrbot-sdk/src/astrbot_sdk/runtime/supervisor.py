@@ -1,0 +1,1090 @@
+"""Supervisor 端运行时：SupervisorRuntime 管理多个 Worker 进程，WorkerSession 封装与单个 Worker 的通信。
+
+架构层次：
+    AstrBot Core (Python)
+        |
+        v
+    SupervisorRuntime (管理多插件)
+        |
+        +-- WorkerSession (插件 A) -- StdioTransport -- PluginWorkerRuntime (子进程)
+        |
+        +-- WorkerSession (插件 B, 插件 C) -- StdioTransport -- GroupWorkerRuntime (子进程)
+        |
+        +-- WorkerSession (插件 D) -- StdioTransport -- PluginWorkerRuntime (子进程)
+
+核心类：
+    SupervisorRuntime: 监管者运行时
+        - 发现并加载所有插件
+        - 为单个插件或兼容插件组启动 Worker 进程
+        - 聚合所有 handler 并向 Core 注册
+        - 路由 Core 的调用请求到对应 Worker
+        - 处理 Worker 进程崩溃和重连
+        - handler ID 冲突检测和警告
+
+    WorkerSession: Worker 会话
+        - 管理单个插件 Worker 进程
+        - 通过 Peer 与 Worker 通信
+        - 提供 invoke_handler 和 cancel 方法
+        - 处理连接关闭回调
+        - 自动清理已注册的 handlers
+
+信号处理：
+    - SIGTERM: 设置 stop_event，触发优雅关闭
+    - SIGINT: 设置 stop_event，触发优雅关闭
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import signal
+import sys
+from collections.abc import Callable
+from pathlib import Path
+from typing import IO, Any, cast
+
+from .._internal.plugin_ids import (
+    capability_belongs_to_plugin,
+    plugin_capability_prefix,
+)
+from .._internal.sdk_logger import logger
+from ..errors import AstrBotError
+from ..protocol.codec import JsonProtocolCodec, MsgpackProtocolCodec, ProtocolCodec
+from ..protocol.descriptors import CapabilityDescriptor
+from ..protocol.messages import EventMessage, InitializeOutput, PeerInfo
+from .capability_router import CapabilityRouter, StreamExecution
+from .environment_groups import EnvironmentGroup
+from .loader import (
+    PluginDiscoveryIssue,
+    PluginEnvironmentManager,
+    PluginSpec,
+    discover_plugins,
+    load_plugin_config,
+)
+from .peer import Peer
+from .transport import (
+    StdioTransport,
+    WebSocketClientTransport,
+    build_websocket_client_ssl_context,
+)
+from .workers_manifest import RemoteWorkerSpec, load_remote_workers_manifest
+
+__all__ = [
+    "SupervisorRuntime",
+    "WorkerSession",
+    "_install_signal_handlers",
+    "_prepare_stdio_transport",
+    "_sdk_source_dir",
+    "_wait_for_shutdown",
+]
+
+# Worker 进程初始化握手超时：60 秒内必须完成 initialize 协议交换，
+# 否则视为进程卡死或挂载过慢，直接报错让上层感知
+WORKER_INITIALIZE_TIMEOUT_SECONDS = 60.0
+
+
+def _install_signal_handlers(stop_event: asyncio.Event) -> None:
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, stop_event.set)
+        except NotImplementedError:
+            logger.debug("Signal handlers are not supported for {}", sig)
+
+
+def _prepare_stdio_transport(
+    stdin: IO[str] | None,
+    stdout: IO[str] | None,
+) -> tuple[IO[str], IO[str], IO[str] | None]:
+    if stdin is not None and stdout is not None:
+        return stdin, stdout, None
+    transport_stdin = stdin or sys.stdin
+    transport_stdout = stdout or sys.stdout
+    original_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    return transport_stdin, transport_stdout, original_stdout
+
+
+def _sdk_source_dir(repo_root: Path) -> Path:
+    candidate = repo_root.resolve() / "src"
+    if (candidate / "astrbot_sdk").exists():
+        return candidate
+    return Path(__file__).resolve().parents[2]
+
+
+async def _wait_for_shutdown(peer: Peer, stop_event: asyncio.Event) -> None:
+    stop_waiter = asyncio.create_task(stop_event.wait())
+    transport_waiter = asyncio.create_task(peer.wait_closed())
+    done, pending = await asyncio.wait(
+        {stop_waiter, transport_waiter},
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for task in pending:
+        task.cancel()
+    for task in done:
+        if not task.cancelled():
+            task.result()
+
+
+def _plugin_name_from_handler_id(handler_id: str) -> str:
+    if ":" in handler_id:
+        return handler_id.split(":", 1)[0]
+    return handler_id
+
+
+def _metadata_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _metadata_string_dict(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: item
+        for key, item in value.items()
+        if isinstance(key, str) and isinstance(item, str)
+    }
+
+
+def _metadata_dict_list(
+    value: Any,
+    *,
+    require_name: bool = False,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    records = [dict(item) for item in value if isinstance(item, dict)]
+    if not require_name:
+        return records
+    return [record for record in records if str(record.get("name", "")).strip()]
+
+
+def _group_records_by_plugin(
+    records: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for item in records:
+        plugin_name = str(item.get("plugin_id", "")).strip()
+        if not plugin_name:
+            continue
+        grouped.setdefault(plugin_name, []).append(dict(item))
+    return grouped
+
+
+def _plugin_ids_from_worker_registry(entries: list[dict[str, Any]]) -> set[str]:
+    plugin_ids = {
+        str(item.get("name", "")).strip() for item in entries if isinstance(item, dict)
+    }
+    plugin_ids.discard("")
+    return plugin_ids
+
+
+def _wire_codec_cli_name(codec: ProtocolCodec) -> str:
+    if isinstance(codec, MsgpackProtocolCodec):
+        return "msgpack"
+    if isinstance(codec, JsonProtocolCodec):
+        return "json"
+    raise ValueError(
+        f"unsupported wire codec for local worker subprocess: {type(codec).__name__}"
+    )
+
+
+class WorkerSession:
+    def __init__(
+        self,
+        *,
+        plugin: PluginSpec | None = None,
+        group: EnvironmentGroup | None = None,
+        remote_worker: RemoteWorkerSpec | None = None,
+        repo_root: Path,
+        env_manager: PluginEnvironmentManager,
+        capability_router: CapabilityRouter,
+        on_closed: Callable[[], None] | None = None,
+        wire_codec: ProtocolCodec | None = None,
+    ) -> None:
+        target_count = sum(item is not None for item in (plugin, group, remote_worker))
+        if target_count != 1:
+            raise ValueError(
+                "WorkerSession requires exactly one of plugin, group, or remote_worker"
+            )
+        group_ref = group
+        self.remote_worker = remote_worker
+        self.is_remote = remote_worker is not None
+        if group_ref is not None:
+            primary_plugin = group_ref.plugins[0]
+        elif plugin is not None:
+            primary_plugin = plugin
+        else:
+            primary_plugin = None
+        self.group = group
+        self.plugins = (
+            list(group_ref.plugins)
+            if group_ref is not None
+            else ([primary_plugin] if primary_plugin is not None else [])
+        )
+        self.plugin = primary_plugin
+        self.worker_id = (
+            remote_worker.id
+            if remote_worker is not None
+            else (
+                group_ref.id
+                if group_ref is not None
+                else cast(PluginSpec, primary_plugin).name
+            )
+        )
+        self.repo_root = repo_root.resolve()
+        self.env_manager = env_manager
+        self.capability_router = capability_router
+        self.on_closed = on_closed
+        self.wire_codec = wire_codec or MsgpackProtocolCodec()
+        self.peer: Peer | None = None
+        self.handlers = []
+        self.provided_capabilities: list[CapabilityDescriptor] = []
+        self.loaded_plugins: list[str] = []
+        self.skipped_plugins: dict[str, str] = {}
+        self.issues: list[PluginDiscoveryIssue] = []
+        self.capability_sources: dict[str, str] = {}
+        self.llm_tools: list[dict[str, Any]] = []
+        self.agents: list[dict[str, Any]] = []
+        self.worker_registry: list[dict[str, Any]] = []
+        self._connection_watch_task: asyncio.Task[None] | None = None
+
+    async def start(self) -> None:
+        transport = self._build_transport()
+        self.peer = Peer(
+            transport=transport,
+            peer_info=PeerInfo(name="astrbot-core", role="core", version="s5r"),
+            wire_codec=self.wire_codec,
+        )
+        self.peer.set_initialize_handler(self._handle_initialize)
+        self.peer.set_invoke_handler(self._handle_capability_invoke)
+        try:
+            await self.peer.start()
+            await self._wait_until_initialized()
+            self._sync_remote_state()
+            self._validate_initialized_state()
+
+        except Exception:
+            await self.stop()
+            raise
+
+    def _build_transport(self):
+        if self.remote_worker is not None:
+            ssl_context = build_websocket_client_ssl_context(
+                ca_file=self.remote_worker.tls.ca_file,
+                cert_file=self.remote_worker.tls.cert_file,
+                key_file=self.remote_worker.tls.key_file,
+            )
+            return WebSocketClientTransport(
+                url=self.remote_worker.url,
+                ssl_context=ssl_context,
+                server_hostname=self.remote_worker.tls.server_hostname,
+            )
+
+        python_path, command, cwd = self._worker_command()
+        repo_src_dir = str(_sdk_source_dir(self.repo_root))
+        env = os.environ.copy()
+        existing_pythonpath = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = (
+            f"{repo_src_dir}{os.pathsep}{existing_pythonpath}"
+            if existing_pythonpath
+            else repo_src_dir
+        )
+        env.setdefault("PYTHONIOENCODING", "utf-8")
+        env.setdefault("PYTHONUTF8", "1")
+        return StdioTransport(command=command, cwd=cwd, env=env)
+
+    async def _wait_until_initialized(self) -> None:
+        assert self.peer is not None
+        try:
+            await self.peer.wait_until_remote_initialized(
+                timeout=WORKER_INITIALIZE_TIMEOUT_SECONDS
+            )
+        except TimeoutError as exc:
+            raise RuntimeError(
+                f"worker {self.worker_id} 初始化超时 "
+                f"({WORKER_INITIALIZE_TIMEOUT_SECONDS:.0f}s)；"
+                "请检查 worker 日志中的 on_start / 装饰器初始化错误"
+            ) from exc
+        except AstrBotError as exc:
+            raise RuntimeError(f"worker {self.worker_id} 在初始化阶段退出") from exc
+
+    def _sync_remote_state(self) -> None:
+        assert self.peer is not None
+        self.handlers = list(self.peer.remote_handlers)
+        self.provided_capabilities = list(self.peer.remote_provided_capabilities)
+        metadata = dict(self.peer.remote_metadata)
+        self.loaded_plugins = _metadata_string_list(metadata.get("loaded_plugins")) or [
+            plugin.name for plugin in self.plugins
+        ]
+        self.skipped_plugins = _metadata_string_dict(metadata.get("skipped_plugins"))
+        self.capability_sources = _metadata_string_dict(
+            metadata.get("capability_sources")
+        )
+        self.issues = self._parse_remote_issues(metadata.get("issues"))
+        self.llm_tools = _metadata_dict_list(metadata.get("llm_tools"))
+        self.agents = _metadata_dict_list(metadata.get("agents"))
+        self.worker_registry = _metadata_dict_list(
+            metadata.get("worker_registry"),
+            require_name=True,
+        )
+
+    def _parse_remote_issues(self, value: Any) -> list[PluginDiscoveryIssue]:
+        default_issue_owner = (
+            self.plugin.name if self.plugin is not None else self.worker_id
+        )
+        issues: list[PluginDiscoveryIssue] = []
+        for item in _metadata_dict_list(value):
+            issues.append(
+                PluginDiscoveryIssue(
+                    severity=str(item.get("severity", "error")),  # type: ignore[arg-type]
+                    phase=str(item.get("phase", "load")),  # type: ignore[arg-type]
+                    plugin_id=str(item.get("plugin_id", default_issue_owner)),
+                    message=str(item.get("message", "")),
+                    details=str(item.get("details", "")),
+                    hint=str(item.get("hint", "")),
+                )
+            )
+        return issues
+
+    def _validate_initialized_state(self) -> None:
+        assert self.peer is not None
+        if self.remote_worker is not None and self.peer.remote_peer is not None:
+            if self.peer.remote_peer.name != self.worker_id:
+                raise RuntimeError(
+                    "remote worker identity mismatch: "
+                    f"expected {self.worker_id!r}, got {self.peer.remote_peer.name!r}"
+                )
+
+        plugin_ids = _plugin_ids_from_worker_registry(self.worker_registry)
+        if not plugin_ids and self.plugins:
+            plugin_ids = {plugin.name for plugin in self.plugins}
+        if self.remote_worker is not None and not plugin_ids:
+            raise RuntimeError(
+                f"remote worker {self.worker_id} did not provide worker_registry"
+            )
+
+        for plugin_name in self.loaded_plugins:
+            if plugin_ids and plugin_name not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} reported undeclared loaded plugin: "
+                    f"{plugin_name}"
+                )
+        for plugin_name in self.skipped_plugins:
+            if plugin_ids and plugin_name not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} reported undeclared skipped plugin: "
+                    f"{plugin_name}"
+                )
+        for capability_name, plugin_name in self.capability_sources.items():
+            if plugin_ids and plugin_name not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} returned capability source outside "
+                    f"worker_registry: {capability_name} -> {plugin_name}"
+                )
+        for handler in self.handlers:
+            owner_plugin = _plugin_name_from_handler_id(handler.id)
+            if plugin_ids and owner_plugin not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} returned handler outside worker_registry: "
+                    f"{handler.id}"
+                )
+        for item in self.llm_tools:
+            plugin_name = str(item.get("plugin_id", "")).strip()
+            if plugin_ids and plugin_name and plugin_name not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} returned llm tool outside worker_registry: "
+                    f"{plugin_name}"
+                )
+        for item in self.agents:
+            plugin_name = str(item.get("plugin_id", "")).strip()
+            if plugin_ids and plugin_name and plugin_name not in plugin_ids:
+                raise RuntimeError(
+                    f"worker {self.worker_id} returned agent outside worker_registry: "
+                    f"{plugin_name}"
+                )
+
+    def _worker_command(self) -> tuple[Path, list[str], str]:
+        wire_codec = _wire_codec_cli_name(self.wire_codec)
+        if self.group is not None:
+            prepare_group = getattr(self.env_manager, "prepare_group_environment", None)
+            if callable(prepare_group):
+                python_path = cast(Path, prepare_group(self.group))
+            else:
+                python_path = self.env_manager.prepare_environment(self.plugins[0])
+            return (
+                python_path,
+                [
+                    str(python_path),
+                    "-m",
+                    "astrbot_sdk",
+                    "worker",
+                    "--wire-codec",
+                    wire_codec,
+                    "--group-metadata",
+                    str(self.group.metadata_path),
+                ],
+                str(self.repo_root),
+            )
+
+        assert self.plugin is not None
+        plugin = self.plugin
+        python_path = self.env_manager.prepare_environment(plugin)
+        return (
+            python_path,
+            [
+                str(python_path),
+                "-m",
+                "astrbot_sdk",
+                "worker",
+                "--wire-codec",
+                wire_codec,
+                "--plugin-dir",
+                str(plugin.plugin_dir),
+            ],
+            str(plugin.plugin_dir),
+        )
+
+    def start_close_watch(self) -> None:
+        if (
+            self.on_closed is None
+            or self.peer is None
+            or self._connection_watch_task is not None
+        ):
+            return
+        self._connection_watch_task = asyncio.create_task(self._watch_connection())
+
+    async def _watch_connection(self) -> None:
+        """监听 Worker 连接关闭，触发清理回调"""
+        try:
+            if self.peer is not None:
+                await self.peer.wait_closed()
+            if self.on_closed is not None:
+                try:
+                    self.on_closed()
+                except Exception:
+                    logger.exception(
+                        "on_closed callback failed for worker {}", self.worker_id
+                    )
+        finally:
+            current_task = asyncio.current_task()
+            if self._connection_watch_task is current_task:
+                self._connection_watch_task = None
+
+    async def stop(self) -> None:
+        if self.peer is not None:
+            await self.peer.stop()
+
+    async def invoke_handler(
+        self,
+        handler_id: str,
+        event_payload: dict[str, Any],
+        *,
+        request_id: str,
+        args: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if self.peer is None:
+            raise RuntimeError("worker session is not running")
+        return await self.peer.invoke(
+            "handler.invoke",
+            {
+                "handler_id": handler_id,
+                "event": event_payload,
+                "args": dict(args or {}),
+            },
+            request_id=request_id,
+        )
+
+    async def invoke_capability(
+        self,
+        capability_name: str,
+        payload: dict[str, Any],
+        *,
+        request_id: str,
+    ) -> dict[str, Any]:
+        if self.peer is None:
+            raise RuntimeError("worker session is not running")
+        return await self.peer.invoke(
+            capability_name,
+            payload,
+            request_id=request_id,
+        )
+
+    async def invoke_capability_stream(
+        self,
+        capability_name: str,
+        payload: dict[str, Any],
+        *,
+        request_id: str,
+    ):
+        if self.peer is None:
+            raise RuntimeError("worker session is not running")
+        event_stream = await self.peer.invoke_stream(
+            capability_name,
+            payload,
+            request_id=request_id,
+            include_completed=True,
+        )
+        async for event in event_stream:
+            yield event
+
+    async def cancel(self, request_id: str) -> None:
+        if self.peer is None:
+            return
+        await self.peer.cancel(request_id)
+
+    async def _handle_initialize(self, _message) -> InitializeOutput:
+        if self.peer is None:
+            raise RuntimeError("worker session is not running")
+        return InitializeOutput(
+            peer=PeerInfo(name="astrbot-supervisor", role="core", version="s5r"),
+            capabilities=self.capability_router.all_descriptors(),
+            metadata={
+                "worker_id": self.worker_id,
+                "plugins": [plugin.name for plugin in self.plugins],
+                "wire_codec": self.peer.wire_codec_name,
+            },
+        )
+
+    async def _handle_capability_invoke(self, message, cancel_token):
+        return await self.capability_router.execute(
+            message.capability,
+            message.input,
+            stream=message.stream,
+            cancel_token=cancel_token,
+            request_id=message.id,
+        )
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "worker_id": self.worker_id,
+            "plugins": [plugin.name for plugin in self.plugins],
+            "loaded_plugins": list(self.loaded_plugins),
+            "skipped_plugins": dict(self.skipped_plugins),
+            "issues": [issue.to_payload() for issue in self.issues],
+        }
+
+
+class SupervisorRuntime:
+    def __init__(
+        self,
+        *,
+        transport,
+        plugins_dir: Path,
+        env_manager: PluginEnvironmentManager | None = None,
+        workers_manifest: Path | None = None,
+        wire_codec: ProtocolCodec | None = None,
+    ) -> None:
+        self.transport = transport
+        self.plugins_dir = plugins_dir.resolve()
+        self.repo_root = Path(__file__).resolve().parents[3]
+        self.env_manager = env_manager or PluginEnvironmentManager(self.repo_root)
+        self.workers_manifest = workers_manifest.resolve() if workers_manifest else None
+        self.wire_codec = wire_codec or MsgpackProtocolCodec()
+        self.capability_router = CapabilityRouter()
+        self.peer = Peer(
+            transport=self.transport,
+            peer_info=PeerInfo(name="astrbot-supervisor", role="plugin", version="s5r"),
+            wire_codec=self.wire_codec,
+        )
+        self.peer.set_invoke_handler(self._handle_upstream_invoke)
+        self.peer.set_cancel_handler(self._handle_upstream_cancel)
+        self.worker_sessions: dict[str, WorkerSession] = {}
+        self.handler_to_worker: dict[str, WorkerSession] = {}
+        self.capability_to_worker: dict[str, WorkerSession] = {}
+        self.plugin_to_worker_session: dict[str, WorkerSession] = {}
+        self._handler_sources: dict[str, str] = {}  # handler_id -> plugin_name
+        self._capability_sources: dict[str, str] = {}  # capability_name -> plugin_name
+        self.active_requests: dict[str, WorkerSession] = {}
+        self.loaded_plugins: list[str] = []
+        self.skipped_plugins: dict[str, str] = {}
+        self.issues: list[PluginDiscoveryIssue] = []
+        self._register_internal_capabilities()
+
+    def _publish_plugin_registry_snapshot(
+        self,
+        plugins: list[PluginSpec],
+        *,
+        enabled_plugins: set[str],
+    ) -> None:
+        for plugin in plugins:
+            manifest = plugin.manifest_data
+            self.capability_router.upsert_plugin(
+                metadata={
+                    "name": plugin.name,
+                    "display_name": str(manifest.get("display_name") or plugin.name),
+                    "description": str(
+                        manifest.get("desc") or manifest.get("description") or ""
+                    ),
+                    "repo": str(manifest.get("repo") or ""),
+                    "author": str(manifest.get("author") or ""),
+                    "version": str(manifest.get("version") or "0.0.0"),
+                    "enabled": plugin.name in enabled_plugins,
+                },
+                config=load_plugin_config(plugin),
+            )
+
+    def _publish_discovered_plugin_registry(self, plugins: list[PluginSpec]) -> None:
+        """发布已发现插件的静态元数据。
+
+        这一阶段发生在 worker 真正启动前。此时 supervisor 已经知道有哪些插件、
+        它们的 manifest/config 是什么，但尚未确认哪些插件实际完成加载，因此统一
+        以 `enabled=False` 暴露给 metadata 能力。
+        """
+        self._publish_plugin_registry_snapshot(plugins, enabled_plugins=set())
+
+    def _publish_loaded_plugin_registry(self, plugins: list[PluginSpec]) -> None:
+        """在 worker 启动完成后刷新插件启用状态。"""
+        self._publish_plugin_registry_snapshot(
+            plugins,
+            enabled_plugins=set(self.loaded_plugins),
+        )
+
+    def _publish_worker_registry(self, entries: list[dict[str, Any]]) -> None:
+        for item in entries:
+            plugin_name = str(item.get("name", "")).strip()
+            if not plugin_name:
+                continue
+            config = item.get("config")
+            metadata = dict(item)
+            metadata.pop("config", None)
+            self.capability_router.upsert_plugin(
+                metadata=metadata,
+                config=dict(config) if isinstance(config, dict) else {},
+            )
+
+    def _publish_session_runtime_metadata(self, session: WorkerSession) -> None:
+        self._publish_worker_registry(session.worker_registry)
+        for plugin_name, items in _group_records_by_plugin(session.llm_tools).items():
+            self.capability_router.set_plugin_llm_tools(plugin_name, items)
+        for plugin_name, items in _group_records_by_plugin(session.agents).items():
+            self.capability_router.set_plugin_agents(plugin_name, items)
+
+    @staticmethod
+    def _session_plugin_ids(session: WorkerSession) -> set[str]:
+        plugin_ids = _plugin_ids_from_worker_registry(session.worker_registry)
+        if plugin_ids:
+            return plugin_ids
+        return {plugin.name for plugin in session.plugins}
+
+    def _validate_remote_session_plugins(
+        self,
+        session: WorkerSession,
+        *,
+        local_plugin_ids: set[str],
+    ) -> None:
+        if not session.is_remote:
+            return
+        conflicts = self._session_plugin_ids(session) & (
+            local_plugin_ids | set(self.plugin_to_worker_session)
+        )
+        if not conflicts:
+            return
+        names = ", ".join(sorted(conflicts))
+        raise RuntimeError(
+            f"remote worker {session.worker_id} conflicts with existing plugins: {names}"
+        )
+
+    def _record_session_start_failure(
+        self,
+        session: WorkerSession,
+        exc: Exception,
+    ) -> None:
+        if session.plugins:
+            for plugin in session.plugins:
+                self.skipped_plugins[plugin.name] = str(exc)
+                self.issues.append(
+                    PluginDiscoveryIssue(
+                        severity="error",
+                        phase="load",
+                        plugin_id=plugin.name,
+                        message="插件 worker 启动失败",
+                        details=str(exc),
+                    )
+                )
+            return
+        self.issues.append(
+            PluginDiscoveryIssue(
+                severity="error",
+                phase="load",
+                plugin_id=session.worker_id,
+                message="远程 worker 连接失败",
+                details=str(exc),
+            )
+        )
+
+    def _register_started_session(self, session: WorkerSession) -> None:
+        self.worker_sessions[session.worker_id] = session
+        self.skipped_plugins.update(session.skipped_plugins)
+        self.issues.extend(session.issues)
+        self._publish_session_runtime_metadata(session)
+        for plugin_name in session.loaded_plugins:
+            self.plugin_to_worker_session[plugin_name] = session
+            if plugin_name not in self.loaded_plugins:
+                self.loaded_plugins.append(plugin_name)
+        for handler in session.handlers:
+            self._register_handler(
+                handler,
+                session,
+                _plugin_name_from_handler_id(handler.id),
+            )
+        for descriptor in session.provided_capabilities:
+            plugin_name = session.capability_sources.get(descriptor.name)
+            if plugin_name is None and len(session.loaded_plugins) == 1:
+                plugin_name = session.loaded_plugins[0]
+            if plugin_name is None:
+                plugin_name = session.worker_id
+            self._register_plugin_capability(descriptor, session, plugin_name)
+        session.start_close_watch()
+
+    def _register_internal_capabilities(self) -> None:
+        self.capability_router.register(
+            CapabilityDescriptor(
+                name="handler.invoke",
+                description="框架内部：转发到插件 handler",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "handler_id": {"type": "string"},
+                        "event": {"type": "object"},
+                    },
+                    "required": ["handler_id", "event"],
+                },
+                output_schema={
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+                cancelable=True,
+            ),
+            call_handler=self._route_handler_invoke,
+            exposed=False,
+        )
+
+    def _register_handler(
+        self, handler, session: WorkerSession, plugin_name: str
+    ) -> None:
+        """注册 handler，处理冲突时输出警告。
+
+        Args:
+            handler: Handler 描述符
+            session: Worker 会话
+            plugin_name: 插件名称
+        """
+        handler_id = handler.id
+        existing_plugin = self._handler_sources.get(handler_id)
+
+        if existing_plugin is not None:
+            logger.warning(
+                f"Handler ID 冲突：'{handler_id}' 已被插件 '{existing_plugin}' 注册，"
+                f"现在被插件 '{plugin_name}' 覆盖。"
+            )
+
+        self.handler_to_worker[handler_id] = session
+        self._handler_sources[handler_id] = plugin_name
+
+    def _register_plugin_capability(
+        self,
+        descriptor: CapabilityDescriptor,
+        session: WorkerSession,
+        plugin_name: str,
+    ) -> None:
+        """注册插件 capability。"""
+        capability_name = descriptor.name
+        if not capability_belongs_to_plugin(capability_name, plugin_name):
+            expected_prefix = plugin_capability_prefix(plugin_name)
+            raise ValueError(
+                "插件导出的 capability 必须使用 plugin_id 作为公开命名空间前缀："
+                f" plugin={plugin_name!r}, capability={capability_name!r}, "
+                f"expected_prefix={expected_prefix!r}"
+            )
+        # Worker 侧 loader 已经做过命名空间校验；这里若还能撞名，说明协议数据
+        # 与本地路由状态不一致，继续静默改名只会掩盖问题。
+        if self.capability_router.contains(capability_name):
+            existing_plugin = self._capability_sources.get(capability_name, "<unknown>")
+            raise RuntimeError(
+                "duplicate capability registration detected after worker load validation: "
+                f"{capability_name!r} already registered by {existing_plugin!r}, "
+                f"cannot register again for {plugin_name!r}"
+            )
+        self._do_register_capability(descriptor, session, capability_name, plugin_name)
+
+    def _do_register_capability(
+        self,
+        descriptor: CapabilityDescriptor,
+        session: WorkerSession,
+        capability_name: str,
+        plugin_name: str,
+    ) -> None:
+        """实际执行 capability 注册。"""
+        self.capability_router.register(
+            descriptor,
+            call_handler=self._make_plugin_capability_caller(session, capability_name),
+            stream_handler=(
+                self._make_plugin_capability_streamer(session, capability_name)
+                if descriptor.supports_stream
+                else None
+            ),
+        )
+        self.capability_to_worker[capability_name] = session
+        self._capability_sources[capability_name] = plugin_name
+
+    def _make_plugin_capability_caller(
+        self,
+        session: WorkerSession,
+        capability_name: str,
+    ):
+        async def call_handler(
+            request_id: str,
+            payload: dict[str, Any],
+            _cancel_token,
+        ) -> dict[str, Any]:
+            self.active_requests[request_id] = session
+            try:
+                return await session.invoke_capability(
+                    capability_name,
+                    payload,
+                    request_id=request_id,
+                )
+            finally:
+                self.active_requests.pop(request_id, None)
+
+        return call_handler
+
+    def _make_plugin_capability_streamer(
+        self,
+        session: WorkerSession,
+        capability_name: str,
+    ):
+        async def stream_handler(
+            request_id: str,
+            payload: dict[str, Any],
+            _cancel_token,
+        ):
+            completed_output: dict[str, Any] = {}
+
+            async def iterator():
+                self.active_requests[request_id] = session
+                try:
+                    async for event in session.invoke_capability_stream(
+                        capability_name,
+                        payload,
+                        request_id=request_id,
+                    ):
+                        if not isinstance(event, EventMessage):
+                            raise AstrBotError.protocol_error(
+                                "插件 worker 返回了非法的流式事件"
+                            )
+                        if event.phase == "delta":
+                            yield event.data or {}
+                            continue
+                        if event.phase == "completed":
+                            completed_output.clear()
+                            completed_output.update(event.output or {})
+                finally:
+                    self.active_requests.pop(request_id, None)
+
+            return StreamExecution(
+                iterator=iterator(),
+                finalize=lambda chunks: completed_output or {"items": chunks},
+            )
+
+        return stream_handler
+
+    async def start(self) -> None:
+        discovery = discover_plugins(self.plugins_dir)
+        self.skipped_plugins = dict(discovery.skipped_plugins)
+        self.issues = list(discovery.issues)
+        local_plugin_ids = {plugin.name for plugin in discovery.plugins}
+        plan_result = self.env_manager.plan(discovery.plugins)
+        remote_workers = (
+            load_remote_workers_manifest(self.workers_manifest)
+            if self.workers_manifest is not None
+            else []
+        )
+        self.skipped_plugins.update(plan_result.skipped_plugins)
+        self.issues.extend(
+            PluginDiscoveryIssue(
+                severity="error",
+                phase="load",
+                plugin_id=plugin_name,
+                message="插件环境规划失败",
+                details=str(reason),
+            )
+            for plugin_name, reason in plan_result.skipped_plugins.items()
+        )
+        # 先发布静态插件元数据，允许 supervisor 侧在 worker 启动阶段就读取配置/清单。
+        self._publish_discovered_plugin_registry(discovery.plugins)
+        try:
+            planned_sessions: list[WorkerSession] = []
+            if plan_result.groups:
+                for group in plan_result.groups:
+                    planned_sessions.append(
+                        WorkerSession(
+                            group=group,
+                            repo_root=self.repo_root,
+                            env_manager=self.env_manager,
+                            capability_router=self.capability_router,
+                            wire_codec=self.wire_codec,
+                            on_closed=lambda worker_id=group.id: (
+                                self._handle_worker_closed(worker_id)
+                            ),
+                        )
+                    )
+            else:
+                for plugin in plan_result.plugins:
+                    planned_sessions.append(
+                        WorkerSession(
+                            plugin=plugin,
+                            repo_root=self.repo_root,
+                            env_manager=self.env_manager,
+                            capability_router=self.capability_router,
+                            wire_codec=self.wire_codec,
+                            on_closed=lambda worker_id=plugin.name: (
+                                self._handle_worker_closed(worker_id)
+                            ),
+                        )
+                    )
+            for remote_worker in remote_workers:
+                planned_sessions.append(
+                    WorkerSession(
+                        remote_worker=remote_worker,
+                        repo_root=self.repo_root,
+                        env_manager=self.env_manager,
+                        capability_router=self.capability_router,
+                        wire_codec=self.wire_codec,
+                        on_closed=lambda worker_id=remote_worker.id: (
+                            self._handle_worker_closed(worker_id)
+                        ),
+                    )
+                )
+
+            for session in planned_sessions:
+                try:
+                    await session.start()
+                    self._validate_remote_session_plugins(
+                        session,
+                        local_plugin_ids=local_plugin_ids,
+                    )
+                except Exception as exc:
+                    self._record_session_start_failure(session, exc)
+                    await session.stop()
+                    continue
+                self._register_started_session(session)
+
+            # worker 启动后再用实际加载结果刷新 enabled 状态，形成显式两阶段发布。
+            self._publish_loaded_plugin_registry(discovery.plugins)
+
+            aggregated_handlers = list(self.handler_to_worker.keys())
+            logger.info(
+                "Loaded plugins: {}", ", ".join(sorted(self.loaded_plugins)) or "none"
+            )
+
+            await self.peer.start()
+            await self.peer.initialize(
+                [
+                    handler
+                    for session in self.worker_sessions.values()
+                    for handler in session.handlers
+                ],
+                provided_capabilities=self.capability_router.descriptors(),
+                metadata={
+                    "plugins": sorted(self.loaded_plugins),
+                    "skipped_plugins": self.skipped_plugins,
+                    "issues": [issue.to_payload() for issue in self.issues],
+                    "aggregated_handler_ids": aggregated_handlers,
+                    "workers": [
+                        session.describe() for session in self.worker_sessions.values()
+                    ],
+                    "worker_count": len(self.worker_sessions),
+                },
+            )
+        except Exception:
+            await self.stop()
+            raise
+
+    def _handle_worker_closed(self, worker_id: str) -> None:
+        """Worker 连接关闭时的清理回调"""
+        session = self.worker_sessions.pop(worker_id, None)
+        if session is None:
+            return
+        # 从 handler_to_worker 中移除该插件注册的 handlers（仅当来源仍为此插件时）
+        for handler in session.handlers:
+            source_plugin = self._handler_sources.get(handler.id)
+            if source_plugin == _plugin_name_from_handler_id(handler.id) or (
+                source_plugin == worker_id
+            ):
+                self.handler_to_worker.pop(handler.id, None)
+                self._handler_sources.pop(handler.id, None)
+        for descriptor in session.provided_capabilities:
+            source_plugin = self._capability_sources.get(descriptor.name)
+            capability_plugin = session.capability_sources.get(descriptor.name)
+            if source_plugin == capability_plugin or (
+                capability_plugin is None
+                and (
+                    source_plugin == worker_id
+                    or source_plugin in session.loaded_plugins
+                )
+            ):
+                self.capability_to_worker.pop(descriptor.name, None)
+                self._capability_sources.pop(descriptor.name, None)
+                self.capability_router.unregister(descriptor.name)
+        session_loaded_plugins = getattr(session, "loaded_plugins", None)
+        if not isinstance(session_loaded_plugins, list):
+            session_loaded_plugins = [worker_id]
+        for plugin_name in session_loaded_plugins:
+            if plugin_name in self.loaded_plugins:
+                self.loaded_plugins.remove(plugin_name)
+            self.plugin_to_worker_session.pop(plugin_name, None)
+            self.capability_router.set_plugin_enabled(plugin_name, False)
+            self.capability_router.remove_http_apis_for_plugin(plugin_name)
+        stale_requests = [
+            request_id
+            for request_id, active_session in self.active_requests.items()
+            if active_session is session
+        ]
+        for request_id in stale_requests:
+            self.active_requests.pop(request_id, None)
+        logger.warning("worker {} 连接已关闭，已清理相关 handlers", worker_id)
+
+    async def stop(self) -> None:
+        for session in list(self.worker_sessions.values()):
+            await session.stop()
+        await self.peer.stop()
+
+    async def _handle_upstream_invoke(self, message, cancel_token):
+        return await self.capability_router.execute(
+            message.capability,
+            message.input,
+            stream=message.stream,
+            cancel_token=cancel_token,
+            request_id=message.id,
+        )
+
+    async def _route_handler_invoke(
+        self,
+        request_id: str,
+        payload: dict[str, Any],
+        _cancel_token,
+    ) -> dict[str, Any]:
+        handler_id = str(payload.get("handler_id", ""))
+        session = self.handler_to_worker.get(handler_id)
+        if session is None:
+            raise AstrBotError.invalid_input(f"handler not found: {handler_id}")
+        self.active_requests[request_id] = session
+        try:
+            return await session.invoke_handler(
+                handler_id,
+                payload.get("event", {}),
+                request_id=request_id,
+                args=payload.get("args", {}),
+            )
+        finally:
+            self.active_requests.pop(request_id, None)
+
+    async def _handle_upstream_cancel(self, request_id: str) -> None:
+        session = self.active_requests.get(request_id)
+        if session is not None:
+            await session.cancel(request_id)
