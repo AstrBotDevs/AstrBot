@@ -487,12 +487,61 @@ class ProviderOpenAIOfficial(Provider):
         self.set_model(model)
 
         self.reasoning_key = "reasoning_content"
+        self._deepseek_reasoning_effort_cached: str | None = None
+        self._deepseek_reasoning_effort_cached_source: Any = None
+        self._deepseek_reasoning_effort_cache_ready = False
+
+    @staticmethod
+    def _config_flag_enabled(value: Any, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+            return default
+        return bool(value)
 
     def _ollama_disable_thinking_enabled(self) -> bool:
-        value = self.provider_config.get("ollama_disable_thinking", False)
+        return self._config_flag_enabled(
+            self.provider_config.get("ollama_disable_thinking", False)
+        )
+
+    def _deepseek_thinking_enabled(self) -> bool:
+        return self._config_flag_enabled(
+            self.provider_config.get("deepseek_thinking_enabled", True),
+            default=True,
+        )
+
+    def _deepseek_reasoning_effort(self) -> str:
+        value = self.provider_config.get("deepseek_reasoning_effort", "high")
+        if (
+            self._deepseek_reasoning_effort_cache_ready
+            and self._deepseek_reasoning_effort_cached_source == value
+            and self._deepseek_reasoning_effort_cached is not None
+        ):
+            return self._deepseek_reasoning_effort_cached
+
+        normalized_value = "high"
         if isinstance(value, str):
-            return value.strip().lower() in {"1", "true", "yes", "on"}
-        return bool(value)
+            normalized = value.strip().lower()
+            if normalized in {"high", "max"}:
+                normalized_value = normalized
+            elif value not in (None, ""):
+                logger.warning(
+                    f"Invalid DeepSeek reasoning effort: {value}, falling back to high"
+                )
+        elif value not in (None, ""):
+            logger.warning(
+                f"Invalid DeepSeek reasoning effort: {value}, falling back to high"
+            )
+
+        self._deepseek_reasoning_effort_cached = normalized_value
+        self._deepseek_reasoning_effort_cached_source = value
+        self._deepseek_reasoning_effort_cache_ready = True
+        return normalized_value
 
     def _apply_provider_specific_extra_body_overrides(
         self, extra_body: dict[str, Any]
@@ -507,6 +556,27 @@ class ProviderOpenAIOfficial(Provider):
         extra_body.pop("reasoning", None)
         extra_body.pop("think", None)
         extra_body["reasoning_effort"] = "none"
+
+    def _apply_provider_specific_request_overrides(
+        self,
+        payloads: dict,
+        extra_body: dict[str, Any],
+    ) -> None:
+        if self.provider_config.get("provider") == "deepseek":
+            thinking_enabled = self._deepseek_thinking_enabled()
+            extra_body.pop("reasoning", None)
+            extra_body.pop("think", None)
+            extra_body.pop("reasoning_effort", None)
+            extra_body["thinking"] = {
+                "type": "enabled" if thinking_enabled else "disabled"
+            }
+            if thinking_enabled:
+                # Provider config is the canonical DeepSeek reasoning setting.
+                payloads["reasoning_effort"] = self._deepseek_reasoning_effort()
+            else:
+                payloads.pop("reasoning_effort", None)
+
+        self._apply_provider_specific_extra_body_overrides(extra_body)
 
     async def get_models(self):
         try:
@@ -580,7 +650,7 @@ class ProviderOpenAIOfficial(Provider):
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
-        self._apply_provider_specific_extra_body_overrides(extra_body)
+        self._apply_provider_specific_request_overrides(payloads, extra_body)
 
         model = payloads.get("model", "").lower()
 
@@ -634,7 +704,7 @@ class ProviderOpenAIOfficial(Provider):
                 to_del.append(key)
         for key in to_del:
             del payloads[key]
-        self._apply_provider_specific_extra_body_overrides(extra_body)
+        self._apply_provider_specific_request_overrides(payloads, extra_body)
 
         self._sanitize_assistant_messages(payloads)
 

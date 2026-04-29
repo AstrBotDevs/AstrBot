@@ -1190,6 +1190,14 @@
         "description": "关闭思考模式",
         "hint": "关闭 Ollama 思考模式。"
       },
+      "deepseek_thinking_enabled": {
+        "description": "开启思考模式",
+        "hint": "控制思考开关。"
+      },
+      "deepseek_reasoning_effort": {
+        "description": "思考强度",
+        "hint": "仅开启思考模式生效，可选 high / max。"
+      },
       "custom_extra_body": {
         "description": "自定义请求体参数",
         "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
