@@ -741,6 +741,24 @@ class MisskeyPlatformAdapter(Platform):
         current = raw_data
         labelled_by_depth = self.reply_context_max_depth > 1
 
+        def append_summary_block(
+            target: dict[str, Any],
+            relation: str,
+            depth_index: int,
+        ) -> None:
+            """生成摘要并追加到 blocks。两处调用（主父帖 / 引用帖）共用此 helper
+            以避免「summarize + label + blocks.append」的重复逻辑。"""
+            summary = summarize_note_for_context(
+                target,
+                max_text_length=self.reply_context_max_text_length,
+            )
+            if not summary:
+                return
+            label = relation
+            if labelled_by_depth:
+                label = f"{label} - 第{depth_index + 1}层"
+            blocks.append(f"[{label}]\n{summary}")
+
         for depth in range(self.reply_context_max_depth):
             parent, relation = await self._resolve_parent_note(current)
             if not isinstance(parent, dict):
@@ -756,15 +774,7 @@ class MisskeyPlatformAdapter(Platform):
                 if parent_uid and parent_uid == self.bot_self_id:
                     return ""
 
-            summary = summarize_note_for_context(
-                parent,
-                max_text_length=self.reply_context_max_text_length,
-            )
-            if summary:
-                label = relation or "被回复的原帖"
-                if labelled_by_depth:
-                    label = f"{label} - 第{depth + 1}层"
-                blocks.append(f"[{label}]\n{summary}")
+            append_summary_block(parent, relation or "被回复的原帖", depth)
 
             # depth=0 且当前是 reply：如果还有 renote（reply-with-quote），也补上。
             # 走 _resolve_renote_target 而不是只检查 isinstance(current.get("renote"))，
@@ -775,15 +785,7 @@ class MisskeyPlatformAdapter(Platform):
                     renote_id = str(renote_parent.get("id") or "")
                     if renote_id and renote_id not in visited:
                         visited.add(renote_id)
-                        quote_summary = summarize_note_for_context(
-                            renote_parent,
-                            max_text_length=self.reply_context_max_text_length,
-                        )
-                        if quote_summary:
-                            quote_label = "被引用/转发的原帖"
-                            if labelled_by_depth:
-                                quote_label = f"{quote_label} - 第1层"
-                            blocks.append(f"[{quote_label}]\n{quote_summary}")
+                        append_summary_block(renote_parent, "被引用/转发的原帖", 0)
 
             current = parent
 
