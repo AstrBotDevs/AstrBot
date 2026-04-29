@@ -6,6 +6,7 @@ from typing import Literal
 import anthropic
 import httpx
 from anthropic import AsyncAnthropic
+from anthropic._base_client import httpx as _anthropic_httpx
 from anthropic.types import Message
 from anthropic.types.message_delta_usage import MessageDeltaUsage
 from anthropic.types.usage import Usage
@@ -113,6 +114,7 @@ class ProviderAnthropic(Provider):
             "Anthropic",
             provider_config.get("proxy", ""),
             headers=self.custom_headers,
+            httpx_module=_anthropic_httpx,
         )
 
     def _apply_thinking_config(self, payloads: dict) -> None:

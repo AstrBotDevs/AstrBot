@@ -187,6 +187,10 @@ class WecomPlatformAdapter(Platform):
 
         self.client.__setattr__("API_BASE_URL", self.api_base_url)
 
+        # 消息去重
+        self._seen_msg_ids: dict[str, float] = {}
+        self._DEDUP_TTL = 120  # 去重窗口，秒
+
         async def callback(msg: BaseMessage) -> None:
             if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
 
@@ -465,6 +469,20 @@ class WecomPlatformAdapter(Platform):
         await self.handle_msg(abm)
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
+        # 消息去重检查
+        msg_id = message.message_id
+        if msg_id:
+            now = time.monotonic()
+            expired = [
+                k for k, ts in self._seen_msg_ids.items() if now - ts > self._DEDUP_TTL
+            ]
+            for k in expired:
+                del self._seen_msg_ids[k]
+            if msg_id in self._seen_msg_ids:
+                logger.debug(f"[WeCom] Duplicate message {msg_id}, skipping.")
+                return
+            self._seen_msg_ids[msg_id] = now
+
         message_event = WecomPlatformEvent(
             message_str=message.message_str,
             message_obj=message,

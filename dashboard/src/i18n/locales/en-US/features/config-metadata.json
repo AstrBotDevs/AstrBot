@@ -1305,6 +1305,14 @@
         "description": "Embedding model",
         "hint": "Embedding model name."
       },
+      "embedding_send_dimensions": {
+        "description": "Send embedding dimensions",
+        "hint": "Whether to send the dimensions parameter in embedding requests. Some OpenAI-compatible services, such as NVIDIA, do not support it; disable this while keeping embedding_dimensions as the local vector index dimension."
+      },
+      "embedding_input_type": {
+        "description": "Embedding input type",
+        "hint": "Some embedding services require an input_type parameter. For NVIDIA retrieval embedding models, use query. Leave empty to omit it."
+      },
       "embedding_api_key": {
         "description": "API Key"
       },

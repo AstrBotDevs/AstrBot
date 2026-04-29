@@ -895,9 +895,13 @@ class ConfigRoute(Route):
             if inspect.iscoroutinefunction(init_fn):
                 await init_fn()
 
-            # 通过实际请求验证当前 embedding_dimensions 是否可用
-            vec = await inst.get_embedding("echo")
-            dim = len(vec)
+            # 通过实际请求检测模型原生维度
+            vec = await inst.client.embeddings.create(
+                input="echo",
+                model=inst.model,
+                **inst._embedding_kwargs(),
+            )
+            dim = len(vec.data[0].embedding)
 
             logger.info(
                 f"检测到 {provider_config.get('id', 'unknown')} 的嵌入向量维度为 {dim}",

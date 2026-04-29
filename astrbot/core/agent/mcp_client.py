@@ -109,6 +109,31 @@ except (ModuleNotFoundError, ImportError):
         "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
     )
 
+try:
+    import httpx as _httpx
+
+    def _create_no_verify_httpx_client(
+        headers: dict[str, str] | None = None,
+        timeout: _httpx.Timeout | None = None,
+        auth: _httpx.Auth | None = None,
+    ) -> _httpx.AsyncClient:
+        kwargs: dict[str, Any] = {
+            "follow_redirects": True,
+            "verify": False,
+        }
+        if timeout is None:
+            kwargs["timeout"] = _httpx.Timeout(30, read=300)
+        else:
+            kwargs["timeout"] = timeout
+        if headers is not None:
+            kwargs["headers"] = headers
+        if auth is not None:
+            kwargs["auth"] = auth
+        return _httpx.AsyncClient(**kwargs)
+
+except (ModuleNotFoundError, ImportError):
+    _create_no_verify_httpx_client = None
+
 
 def _prepare_config(config: dict) -> dict:
     """Prepare configuration, handle nested format"""
@@ -237,13 +262,57 @@ def validate_mcp_stdio_config(config: dict) -> None:
         raise ValueError("MCP stdio env keys and values must be strings.")
 
 
+def _get_certifi_ca_bundle() -> str | None:
+    """Try to locate the certifi CA bundle for SSL_CERT_FILE."""
+    try:
+        import certifi
+
+        return certifi.where()
+    except ImportError:
+        pass
+    # Fallback: look for certifi in common locations
+    for candidate in (
+        os.path.join(
+            os.path.dirname(sys.executable),
+            "Lib",
+            "site-packages",
+            "certifi",
+            "cacert.pem",
+        ),
+        os.path.join(
+            os.path.dirname(sys.executable),
+            "..",
+            "Lib",
+            "site-packages",
+            "certifi",
+            "cacert.pem",
+        ),
+    ):
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
 def _prepare_stdio_env(config: dict) -> dict:
-    """Preserve Windows executable resolution for stdio subprocesses."""
-    if sys.platform != "win32":
-        return config
+    """Prepare environment variables for stdio subprocesses.
+
+    On Windows:
+    - Merges system environment variables (case-insensitive handling).
+    - For uv/uvx commands, sets SSL_CERT_FILE from certifi to avoid
+      ``invalid peer certificate: UnknownIssuer`` errors caused by
+      uv's bundled TLS not trusting the system certificate store.
+    """
     prepared = config.copy()
     env = dict(prepared.get("env") or {})
     env = _merge_environment_variables(env)
+
+    if sys.platform == "win32":
+        command_name = _normalize_stdio_command_name(config.get("command", ""))
+        if command_name in ("uv", "uvx") and "SSL_CERT_FILE" not in env:
+            ca_bundle = _get_certifi_ca_bundle()
+            if ca_bundle:
+                env["SSL_CERT_FILE"] = ca_bundle
+
     prepared["env"] = env
     return prepared
 
@@ -326,6 +395,18 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"{e!s}"
 
 
+_NONSTANDARD_TYPE_MAP: dict[str, str] = {
+    "int": "integer",
+    "float": "number",
+    "double": "number",
+    "decimal": "number",
+    "bool": "boolean",
+    "str": "string",
+    "dict": "object",
+    "list": "array",
+}
+
+
 def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Normalize common non-standard MCP JSON Schema variants.
 
@@ -334,6 +415,9 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
     parent object to declare `required` as an array of property names instead.
     We lift those booleans to the parent object so the schema remains usable
     without disabling validation entirely.
+
+    Also normalizes non-standard type names (e.g. ``"int"`` → ``"integer"``,
+    ``"str"`` → ``"string"``) that some MCP servers emit.
     """
 
     def _normalize(node: Any) -> Any:
@@ -344,6 +428,16 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
             return node
 
         normalized = {key: _normalize(value) for key, value in node.items()}
+
+        # Normalize non-standard type names
+        type_val = normalized.get("type")
+        if isinstance(type_val, str) and type_val in _NONSTANDARD_TYPE_MAP:
+            normalized["type"] = _NONSTANDARD_TYPE_MAP[type_val]
+        elif isinstance(type_val, list):
+            normalized["type"] = [
+                _NONSTANDARD_TYPE_MAP.get(t, t) if isinstance(t, str) else t
+                for t in type_val
+            ]
 
         properties = normalized.get("properties")
         if isinstance(properties, dict):
@@ -439,14 +533,22 @@ class MCPClient:
             else:
                 raise Exception("MCP connection config missing transport or type field")
 
+            _http_client_kwargs: dict[str, Any] = {
+                "url": cfg["url"],
+                "headers": cfg.get("headers", {}),
+            }
+            if _create_no_verify_httpx_client is not None:
+                _http_client_kwargs["httpx_client_factory"] = (
+                    _create_no_verify_httpx_client
+                )
+
             if transport_type != "streamable_http":
                 # SSE transport method
-                self._streams_context = sse_client(
-                    url=cfg["url"],
-                    headers=cfg.get("headers", {}),
-                    timeout=cfg.get("timeout", 5),
-                    sse_read_timeout=cfg.get("sse_read_timeout", 60 * 5),
+                _http_client_kwargs["timeout"] = cfg.get("timeout", 5)
+                _http_client_kwargs["sse_read_timeout"] = cfg.get(
+                    "sse_read_timeout", 60 * 5
                 )
+                self._streams_context = sse_client(**_http_client_kwargs)
                 streams = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
@@ -461,17 +563,16 @@ class MCPClient:
                     ),
                 )
             else:
-                timeout = timedelta(seconds=cfg.get("timeout", 30))
-                sse_read_timeout = timedelta(
+                _http_client_kwargs["timeout"] = timedelta(
+                    seconds=cfg.get("timeout", 30)
+                )
+                _http_client_kwargs["sse_read_timeout"] = timedelta(
                     seconds=cfg.get("sse_read_timeout", 60 * 5),
                 )
-                self._streams_context = streamablehttp_client(
-                    url=cfg["url"],
-                    headers=cfg.get("headers", {}),
-                    timeout=timeout,
-                    sse_read_timeout=sse_read_timeout,
-                    terminate_on_close=cfg.get("terminate_on_close", True),
+                _http_client_kwargs["terminate_on_close"] = cfg.get(
+                    "terminate_on_close", True
                 )
+                self._streams_context = streamablehttp_client(**_http_client_kwargs)
                 read_s, write_s, _ = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
