@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import json
 import sys
 import time
 import traceback
@@ -279,7 +280,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
-        self._last_tool_name: str | None = None
+        self._last_tool_call_streak_key: tuple[str, str] | None = None
         self._same_tool_streak = 0
 
         # These two are used for tool schema mode handling
@@ -321,6 +322,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+
+    @staticmethod
+    def _tool_call_streak_key(
+        tool_name: str,
+        tool_args: dict[str, T.Any],
+    ) -> tuple[str, str]:
+        try:
+            args_fingerprint = json.dumps(
+                tool_args,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            )
+        except Exception:
+            args_fingerprint = repr(tool_args)
+        return tool_name, args_fingerprint
 
     def _read_tool_hint(self) -> str:
         if self.read_tool is not None:
@@ -657,11 +674,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return content
         return f"{content}{notice}"
 
-    def _track_tool_call_streak(self, tool_name: str) -> int:
-        if tool_name == self._last_tool_name:
+    def _track_tool_call_streak(
+        self, tool_name: str, tool_args: dict[str, T.Any]
+    ) -> int:
+        streak_key = self._tool_call_streak_key(tool_name, tool_args)
+        if streak_key == self._last_tool_call_streak_key:
             self._same_tool_streak += 1
         else:
-            self._last_tool_name = tool_name
+            self._last_tool_call_streak_key = streak_key
             self._same_tool_streak = 1
         return self._same_tool_streak
 
@@ -990,7 +1010,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_ids,
         ):
             tool_result_blocks_start = len(tool_call_result_blocks)
-            tool_call_streak = self._track_tool_call_streak(func_tool_name)
+            tool_call_streak = self._track_tool_call_streak(
+                func_tool_name, func_tool_args
+            )
             yield _HandleFunctionToolsResult.from_message_chain(
                 MessageChain(
                     type="tool_call",
