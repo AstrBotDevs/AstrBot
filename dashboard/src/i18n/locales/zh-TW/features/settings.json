@@ -1,0 +1,214 @@
+{
+  "network": {
+    "title": "網路",
+    "githubProxy": {
+      "title": "GitHub 加速位址",
+      "subtitle": "設定下載擴充套件或者更新 AstrBot 時所用的 GitHub 加速位址。這在中國大陸的網路環境有效。可以自訂，輸入結果即時生效。所有位址均不保證穩定性，如果在更新擴充套件/專案時出現報錯，請首先檢查加速位址是否能正常使用。",
+      "label": "選擇 GitHub 加速位址"
+    },
+    "proxySelector": {
+      "title": "GitHub 加速",
+      "noProxy": "不使用 GitHub 加速",
+      "useProxy": "使用 GitHub 加速",
+      "testConnection": "測試代理連線",
+      "available": "可用",
+      "unavailable": "不可用",
+      "custom": "自訂"
+    }
+  },
+  "theme": {
+    "title": "主題",
+    "subtitle": "自訂主題主色與輔助色。修改後立即生效，並保存在瀏覽器本機。",
+    "customize": {
+      "title": "主題顏色",
+      "primary": "主色",
+      "secondary": "輔助色",
+      "reset": "恢復預設"
+    }
+  },
+  "system": {
+    "title": "系統",
+    "restart": {
+      "title": "重新啟動",
+      "subtitle": "重新啟動 AstrBot",
+      "button": "重新啟動"
+    },
+    "migration": {
+      "title": "資料遷移到 v4.0.0 格式",
+      "subtitle": "如果您遇到資料相容性問題，可以手動啟動資料庫遷移助手",
+      "button": "啟動遷移助手"
+    },
+    "backup": {
+      "title": "資料備份與還原",
+      "subtitle": "匯出或匯入 AstrBot 的所有資料，方便遷移到新伺服器",
+      "button": "備份管理"
+    },
+    "cleanup": {
+      "title": "日誌與快取清理",
+      "subtitle": "查看目前日誌和快取佔用，並一鍵清理。",
+      "refresh": "重新整理佔用",
+      "cleanAll": "全部清理",
+      "panel": {
+        "title": "清理詳情",
+        "subtitle": "目前佔用 {size}"
+      },
+      "fileCount": "{count} 個檔案",
+      "confirm": "確定要清理 {target} 嗎？",
+      "targetNames": {
+        "cache": "快取",
+        "logs": "日誌",
+        "all": "日誌和快取"
+      },
+      "targets": {
+        "cache": {
+          "title": "快取",
+          "subtitle": "清理暫存檔案、擴充套件市場快取和技能快取。",
+          "button": "清理快取"
+        },
+        "logs": {
+          "title": "日誌",
+          "subtitle": "清理歷史日誌，並清空目前正在寫入的日誌檔案內容。",
+          "button": "清理日誌"
+        }
+      },
+      "messages": {
+        "statusFailed": "載入儲存佔用失敗",
+        "cleanupSuccess": "已清理 {count} 個檔案，釋放 {size}",
+        "cleanupFailed": "清理失敗"
+      }
+    }
+  },
+  "sidebar": {
+    "title": "側邊欄",
+    "customize": {
+      "title": "自訂側邊欄",
+      "subtitle": "拖曳以調整模組順序，或者將模組移入/移出「更多功能」分組。設定僅保存在瀏覽器本機。",
+      "reset": "恢復預設",
+      "mainItems": "主要模組",
+      "moreItems": "更多功能"
+    }
+  },
+  "backup": {
+    "dialog": {
+      "title": "備份管理"
+    },
+    "tabs": {
+      "export": "匯出備份",
+      "import": "匯入備份",
+      "list": "備份列表"
+    },
+    "export": {
+      "title": "建立備份",
+      "description": "將所有資料匯出為 ZIP 備份檔案，包括資料庫、知識庫、設定和附件。",
+      "includes": "備份包含：主資料庫、知識庫（中繼資料+向量索引+文件）、設定檔、附件檔案",
+      "button": "開始匯出",
+      "processing": "正在匯出...",
+      "wait": "請稍候，正在打包資料...",
+      "completed": "匯出完成！",
+      "download": "下載備份",
+      "another": "建立新備份",
+      "failed": "匯出失敗",
+      "retry": "重試"
+    },
+    "import": {
+      "title": "匯入備份",
+      "warning": "⚠️ 匯入將會清空並覆寫現有資料！請確保已備份目前資料。",
+      "selectFile": "選擇備份檔案 (.zip)",
+      "uploadAndCheck": "上傳並檢查",
+      "uploading": "正在上傳...",
+      "uploadWait": "請稍候，正在上傳備份檔案...",
+      "uploadInit": "正在初始化上傳...",
+      "uploadingChunks": "正在上傳分片...",
+      "uploadComplete": "上傳完成，正在合併檔案...",
+      "checking": "正在檢查備份檔案...",
+      "invalidBackup": "無效的備份檔案",
+      "backupContents": "備份內容",
+      "tables": "個資料表",
+      "knowledgeBases": "知識庫",
+      "configFiles": "設定檔",
+      "confirmImport": "確認匯入",
+      "button": "開始匯入",
+      "processing": "正在匯入...",
+      "wait": "請稍候，正在還原資料...",
+      "completed": "匯入完成！",
+      "restartRequired": "資料已成功匯入。建議立即重新啟動 AstrBot 以使所有變更生效。",
+      "restartNow": "立即重新啟動",
+      "failed": "匯入失敗",
+      "retry": "重試",
+      "version": {
+        "backupVersion": "備份版本",
+        "currentVersion": "目前版本",
+        "backupTime": "備份時間",
+        "matchTitle": "✅ 版本相符",
+        "matchMessage": "匯入將會清空並覆寫現有的所有資料，包括：\n• 主資料庫（對話紀錄、設定等）\n• 知識庫資料\n• 擴充套件及擴充套件資料\n• 設定檔\n\n此操作不可復原！是否確認繼續？",
+        "minorDiffTitle": "⚠️ 版本差異警告",
+        "minorDiffMessage": "小版本差異通常是相容的，但可能存在少量資料結構變化。\n匯入將會清空並覆寫現有的所有資料！\n\n是否確認繼續匯入？",
+        "majorDiffTitle": "⛔ 無法匯入",
+        "majorDiffMessage": "主版本號不同，跨主版本匯入可能導致資料損壞。\n請使用相同主版本的 AstrBot 進行匯入。"
+      }
+    },
+    "list": {
+      "empty": "暫無備份檔案",
+      "refresh": "重新整理列表",
+      "confirmDelete": "確定要刪除這個備份檔案嗎？此操作不可復原。",
+      "uploaded": "已上傳",
+      "restore": "還原此備份",
+      "rename": "重新命名",
+      "renameTitle": "重新命名備份檔案",
+      "newName": "新檔案名稱",
+      "renameHint": "檔案名稱只能包含字母、數字、底線、連字號和點",
+      "renameRequired": "請輸入檔案名稱",
+      "renameInvalidChars": "檔案名稱包含非法字元",
+      "renameFailed": "重新命名失敗",
+      "ftpHint": "對於較大的備份檔案，也可以透過 FTP/SFTP 等方式直接上傳到 data/backups 目錄"
+    }
+  },
+  "apiKey": {
+    "title": "API Key",
+    "manageTitle": "開發者存取密鑰",
+    "subtitle": "為外部開發者建立 API Key，用於呼叫開放 HTTP API。",
+    "name": "Key 名稱",
+    "expiresInDays": "有效期限",
+    "expiryOptions": {
+      "day1": "1 天",
+      "day7": "7 天",
+      "day30": "30 天",
+      "day90": "90 天",
+      "permanent": "永久"
+    },
+    "permanentWarning": "永久有效的 API Key 風險較高，請妥善保存並建議僅在必要場景使用。",
+    "scopes": "權限範圍",
+    "create": "建立 API Key",
+    "revoke": "撤銷",
+    "delete": "刪除",
+    "copy": "複製",
+    "docsLink": "查看文件",
+    "plaintextHint": "請立即保存該 Key，關閉後將無法再次查看明文。",
+    "empty": "暫無 API Key",
+    "status": {
+      "active": "有效",
+      "inactive": "無效"
+    },
+    "table": {
+      "name": "名稱",
+      "prefix": "前綴",
+      "scopes": "權限",
+      "status": "狀態",
+      "lastUsed": "最近使用",
+      "createdAt": "建立時間",
+      "actions": "操作"
+    },
+    "messages": {
+      "loadFailed": "載入 API Key 失敗",
+      "scopeRequired": "請至少選擇一個權限",
+      "createSuccess": "API Key 建立成功",
+      "createFailed": "建立 API Key 失敗",
+      "revokeSuccess": "API Key 已撤銷",
+      "revokeFailed": "撤銷 API Key 失敗",
+      "deleteSuccess": "API Key 已刪除",
+      "deleteFailed": "刪除 API Key 失敗",
+      "copySuccess": "已複製 API Key",
+      "copyFailed": "複製 API Key 失敗"
+    }
+  }
+}

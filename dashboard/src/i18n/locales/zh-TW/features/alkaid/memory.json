@@ -1,0 +1,97 @@
+{
+  "title": "長期記憶",
+  "subtitle": "AI 助手的長期記憶管理",
+  "memories": {
+    "title": "記憶列表",
+    "content": "記憶內容",
+    "importance": "重要程度",
+    "createTime": "建立時間",
+    "lastAccess": "最後存取",
+    "category": "分類"
+  },
+  "categories": {
+    "personal": "個人資訊",
+    "preferences": "偏好設定",
+    "conversations": "對話歷史",
+    "facts": "事實資訊",
+    "skills": "技能知識"
+  },
+  "importance": {
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  },
+  "actions": {
+    "view": "查看詳情",
+    "edit": "編輯",
+    "delete": "刪除",
+    "pin": "置頂",
+    "unpin": "取消置頂"
+  },
+  "filters": {
+    "all": "全部",
+    "category": "按分類",
+    "importance": "按重要程度",
+    "dateRange": "按時間範圍",
+    "title": "篩選",
+    "userIdLabel": "篩選使用者 ID",
+    "filterButton": "篩選",
+    "resetButton": "重設篩選",
+    "refreshButton": "重新整理圖形"
+  },
+  "search": {
+    "title": "搜尋記憶",
+    "userIdLabel": "使用者 ID",
+    "queryLabel": "輸入關鍵字",
+    "searchButton": "搜尋",
+    "resultsTitle": "搜尋結果",
+    "noResults": "未找到相關記憶內容",
+    "similarity": "相關度",
+    "noTextContent": "無文字內容"
+  },
+  "addMemory": {
+    "title": "新增記憶資料",
+    "textLabel": "輸入文字內容",
+    "userIdLabel": "使用者 ID",
+    "summarizeLabel": "需要摘要",
+    "addButton": "新增資料"
+  },
+  "nodeDetails": {
+    "title": "節點詳情",
+    "id": "ID",
+    "type": "類型",
+    "name": "名稱",
+    "userId": "使用者 ID",
+    "timestamp": "時間戳記"
+  },
+  "graphStats": {
+    "title": "圖形統計",
+    "nodeCount": "節點數",
+    "edgeCount": "邊數"
+  },
+  "factDialog": {
+    "title": "記憶事實",
+    "id": "ID",
+    "docId": "文件 ID",
+    "createdAt": "建立時間",
+    "updatedAt": "更新時間",
+    "metadata": "中繼資料",
+    "metadataKey": "鍵",
+    "metadataValue": "值",
+    "loading": "載入中...",
+    "close": "關閉",
+    "noValue": "無",
+    "unknown": "未知"
+  },
+  "messages": {
+    "searchQueryRequired": "請輸入搜尋關鍵字",
+    "searchSuccess": "找到 {count} 條相關記憶",
+    "searchNoResults": "未找到相關記憶內容",
+    "searchError": "搜尋失敗",
+    "addSuccess": "記憶資料新增成功！",
+    "addError": "新增記憶資料失敗",
+    "factDetailsError": "取得記憶詳情失敗",
+    "metadataParseError": "無法解析中繼資料",
+    "relationNoMemoryData": "該關係沒有關聯的記憶資料"
+  }
+} 

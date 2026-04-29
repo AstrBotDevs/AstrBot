@@ -1,0 +1,10 @@
+{
+  "title": "追蹤日誌 (Trace)",
+  "autoScroll": {
+    "enabled": "自動捲動：開",
+    "disabled": "自動捲動：關"
+  },
+  "hint": "目前僅記錄部分 AstrBot Main Agent 的模型呼叫路徑，後續會繼續完善。",
+  "recording": "記錄中",
+  "paused": "已暫停"
+}

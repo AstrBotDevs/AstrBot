@@ -1,0 +1,153 @@
+{
+  "title": "模型供應商",
+  "subtitle": "可以在「對話」中設定對話模型。此外，「Agent 執行器」包含 Dify、Coze、阿里雲百鍊 App 等第三方服務的整合。",
+  "providers": {
+    "title": "模型供應商",
+    "settings": "設定",
+    "addProvider": "新增模型供應商",
+    "providerType": "供應商類型",
+    "tabs": {
+      "all": "全部",
+      "chatCompletion": "對話",
+      "agentRunner": "Agent 執行器",
+      "speechToText": "語音轉文字",
+      "textToSpeech": "文字轉語音",
+      "embedding": "Embedding",
+      "rerank": "Rerank"
+    },
+    "empty": {
+      "all": "暫無模型供應商，點擊 新增模型供應商 加入",
+      "typed": "暫無 {type} 類型的模型供應商，點擊 新增模型供應商 加入"
+    },
+    "description": {
+      "openai": "亦支援所有相容於 OpenAI API 的模型供應商。",
+      "kimi_code": "Kimi 的 CodingPlan / Kimi Code 專屬存取介面，使用特殊的 Anthropic API 相容 Adapter。",
+      "vllm_rerank": "亦支援 Jina AI, Cohere, PPIO 等供應商。",
+      "default": ""
+    }
+  },
+  "availability": {
+    "title": "模型供應商可用性",
+    "subtitle": "透過測試模型對話可用性來判斷，可能會產生 API 費用",
+    "refresh": "更新狀態",
+    "noData": "點擊「更新狀態」按鈕以獲取模型供應商可用性",
+    "available": "可用",
+    "unavailable": "無法使用",
+    "pending": "正在檢查...",
+    "errorMessage": "錯誤訊息",
+    "test": "測試"
+  },
+  "logs": {
+    "title": "服務日誌",
+    "expand": "展開",
+    "collapse": "摺疊"
+  },
+  "dialogs": {
+    "addProvider": {
+      "title": "模型供應商",
+      "tabs": {
+        "basic": "對話",
+        "agentRunner": "Agent 執行器",
+        "speechToText": "語音轉文字",
+        "textToSpeech": "文字轉語音",
+        "embedding": "Embedding",
+        "rerank": "Rerank"
+      },
+      "noTemplates": "暫無此類型的供應商模板"
+    },
+    "config": {
+      "addTitle": "新增",
+      "editTitle": "編輯",
+      "provider": "模型供應商",
+      "cancel": "取消",
+      "save": "儲存"
+    },
+    "settings": {
+      "title": "模型供應商設定",
+      "sessionSeparation": {
+        "title": "啟用供應商工作階段隔離",
+        "description": "不同的工作階段可以獨立選擇 Text Generation、TTS、STT 等模型供應商。"
+      },
+      "close": "關閉"
+    }
+  },
+  "messages": {
+    "success": {
+      "update": "更新成功！",
+      "add": "新增成功！",
+      "delete": "刪除成功！",
+      "statusUpdate": "狀態更新成功！",
+      "sessionSeparation": "工作階段隔離設定已更新"
+    },
+    "error": {
+      "sessionSeparation": "獲取工作階段隔離設定失敗",
+      "fetchStatus": "獲取模型供應商狀態失敗",
+      "testError": "測試 {id} 失敗: {error}"
+    },
+    "confirm": {
+      "delete": "確定要刪除模型供應商 {id}？"
+    }
+  },
+  "providerTypes": {
+    "title": "供應商類型"
+  },
+  "providerSources": {
+    "title": "供應商來源",
+    "add": "新增",
+    "empty": "暫無供應商來源",
+    "selectHint": "請選擇一個供應商來源",
+    "selectCreated": "選擇已建立的供應商來源",
+    "save": "儲存設定",
+    "saveAndFetchModels": "儲存並獲取模型",
+    "fetchModels": "獲取模型列表",
+    "saveSuccess": "供應商來源儲存成功",
+    "saveError": "供應商來源儲存失敗",
+    "deleteConfirm": "確定要刪除供應商來源 {id}？這樣會連同所有關聯的模型設定一併刪除。",
+    "deleteSuccess": "供應商來源刪除成功",
+    "deleteError": "供應商來源刪除失敗",
+    "enabled": "已啟用",
+    "disabled": "已停用",
+    "advancedConfig": "進階設定...",
+    "fields": {
+      "name": "名稱",
+      "apiKey": "API Key",
+      "baseUrl": "Base URL"
+    },
+    "hints": {
+      "id": "供應商來源唯一 ID（非 Provider ID）",
+      "key": "API Key",
+      "apiBase": "自訂 API Endpoint URL",
+      "proxy": "HTTP/HTTPS Proxy 地址，格式例如 http://127.0.0.1:7890。僅對此供應商的 API 請求生效，不影響 Docker 內網通訊。"
+    },
+    "labels": {
+      "proxy": "Proxy 地址"
+    }
+  },
+  "models": {
+    "available": "可用模型",
+    "configured": "已設定模型",
+    "empty": "暫無已設定的模型，點擊上方的「獲取模型列表」新增",
+    "noModelsFound": "找不到可用模型",
+    "fetchError": "獲取模型列表失敗",
+    "addSuccess": "模型 {model} 新增成功",
+    "deleteConfirm": "確定要刪除模型 {id}？",
+    "deleteSuccess": "模型刪除成功",
+    "deleteError": "模型刪除失敗",
+    "testSuccess": "模型 {id} 測試通過",
+    "testSuccessWithLatency": "模型 {id} 測試通過，延遲 {latency} ms",
+    "testError": "模型測試失敗",
+    "searchPlaceholder": "搜尋模型或 ID",
+    "manualAddButton": "自訂模型",
+    "manualDialogTitle": "新增自訂模型",
+    "manualDialogModelLabel": "模型 ID（例如 gpt-4o-mini）",
+    "manualDialogPreviewLabel": "顯示 ID（自動生成）",
+    "manualDialogPreviewHint": "生成規則：來源 ID/模型 ID",
+    "manualModelRequired": "請輸入模型 ID",
+    "manualModelExists": "此模型已經存在",
+    "configure": "設定",
+    "tooltips": {
+      "providerId": "Provider ID",
+      "modelId": "模型 ID"
+    }
+  }
+}
