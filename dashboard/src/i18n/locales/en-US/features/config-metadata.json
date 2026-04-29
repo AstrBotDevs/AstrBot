@@ -1312,7 +1312,16 @@
         "description": "API Base URL"
       },
       "openai_embedding": {
-        "hint": "If testing fails, try adding /v1 at the end to be compatible with some OpenAI API versions."
+        "hint": "For OpenAI and compatible embedding services. AstrBot appends /v1 only when the API Base URL has no path; URLs with paths (e.g. /api/paas/v4, /api/v3) are preserved as-is."
+      },
+      "zhipu_embedding": {
+        "hint": "Zhipu preset defaults to https://open.bigmodel.cn/api/paas/v4 and embedding-3, preserving the /api/paas/v4 path."
+      },
+      "volcengine_embedding": {
+        "hint": "Volcengine preset defaults to https://ark.cn-beijing.volces.com/api/v3 and doubao-embedding-vision, preserving the /api/v3 path."
+      },
+      "ollama_embedding": {
+        "hint": "Ollama preset defaults to local http://127.0.0.1:11434, model embeddinggemma, and 768 dimensions. Run ollama pull embeddinggemma before use."
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."

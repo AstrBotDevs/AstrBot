@@ -1314,7 +1314,16 @@
         "description": "API Base URL"
       },
       "openai_embedding": {
-        "hint": "如果测试不通过，可以尝试添加 /v1 在末尾以兼容部分 OpenAI API 版本。"
+        "hint": "适用于 OpenAI 及兼容其 API 的嵌入服务。纯域名地址会自动补 /v1；带路径的地址（如 /api/paas/v4）保持原样。"
+      },
+      "zhipu_embedding": {
+        "hint": "智谱 Embedding 预设，默认使用 https://open.bigmodel.cn/api/paas/v4 和 embedding-3 模型。"
+      },
+      "volcengine_embedding": {
+        "hint": "火山引擎 Embedding 预设，默认使用 https://ark.cn-beijing.volces.com/api/v3 和 doubao-embedding-vision 模型。"
+      },
+      "ollama_embedding": {
+        "hint": "Ollama Embedding 预设，默认指向本地 http://127.0.0.1:11434，模型 embeddinggemma，维度 768。使用前请先运行 ollama pull embeddinggemma。"
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding 无需手动添加 /v1beta。"

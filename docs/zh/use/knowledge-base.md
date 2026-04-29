@@ -11,7 +11,9 @@
 
 打开服务提供商页面，点击新增服务提供商，选择 Embedding。
 
-目前 AstrBot 支持兼容 OpenAI API 和 Gemini API 的嵌入向量服务。
+目前 AstrBot 内置了 OpenAI Embedding、智谱 Embedding、火山引擎 Embedding、Ollama Embedding 和 Gemini Embedding 预设。
+
+如果需要接入其他兼容 OpenAI API 的嵌入服务，使用 OpenAI Embedding 预设即可。当 `embedding api base` 只填写域名时，AstrBot 会自动补上 `/v1`；如果填写的是带路径的地址（例如智谱的 `/api/paas/v4` 或火山引擎的 `/api/v3`），AstrBot 会保持原样。
 
 点击上面的提供商卡片进入配置页面，填写配置。
 
