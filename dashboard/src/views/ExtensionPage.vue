@@ -9,7 +9,9 @@ import SkillsSection from "@/components/extension/SkillsSection.vue";
 import ComponentPanel from "@/components/extension/componentPanel/index.vue";
 import InstalledPluginsTab from "./extension/InstalledPluginsTab.vue";
 import MarketPluginsTab from "./extension/MarketPluginsTab.vue";
+import PluginDetailPage from "./extension/PluginDetailPage.vue";
 import { useExtensionPage } from "./extension/useExtensionPage";
+import { computed } from "vue";
 
 const pageState = useExtensionPage();
 
@@ -150,10 +152,63 @@ const {
   handleLocaleChange,
   searchDebounceTimer,
 } = pageState;
+
+const selectedPluginId = computed(() => {
+  const pluginId = route.params.pluginId;
+  return Array.isArray(pluginId) ? pluginId[0] : pluginId || "";
+});
+
+const selectedInstalledPlugin = computed(() => {
+  if (!selectedPluginId.value) return null;
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  return data.find((plugin) => plugin.name === selectedPluginId.value) || null;
+});
+
+const selectedMarketPlugin = computed(() => {
+  const plugin = selectedInstalledPlugin.value;
+  if (!plugin) return null;
+  const market = Array.isArray(pluginMarketData.value) ? pluginMarketData.value : [];
+  const repo = plugin.repo?.toLowerCase();
+  return (
+    market.find((item) => repo && item.repo?.toLowerCase() === repo) ||
+    market.find((item) => item.name === plugin.name) ||
+    null
+  );
+});
 </script>
 
 <template>
-  <v-row class="extension-page">
+  <PluginDetailPage
+    v-if="selectedPluginId && selectedInstalledPlugin"
+    :plugin="selectedInstalledPlugin"
+    :market-plugin="selectedMarketPlugin"
+    :state="pageState"
+  />
+
+  <div v-else-if="selectedPluginId && loading_" class="pa-4">
+    <v-progress-linear indeterminate color="primary" />
+  </div>
+
+  <div v-else-if="selectedPluginId" class="pa-4">
+    <div class="d-flex align-center mb-6">
+      <v-btn
+        icon="mdi-arrow-left"
+        variant="text"
+        density="comfortable"
+        @click="router.push({ name: 'Extensions', hash: '#installed' })"
+      />
+      <h2 class="text-h3 mb-0 ml-2">
+        {{ tm("titles.installedAstrBotPlugins") }}
+        <v-icon icon="mdi-chevron-right" size="24" class="mx-1" />
+        {{ selectedPluginId }}
+      </h2>
+    </div>
+    <v-alert type="warning" variant="tonal">
+      {{ tm("detail.notFound") }}
+    </v-alert>
+  </div>
+
+  <v-row v-else class="extension-page">
     <v-col cols="12" md="12">
       <v-card variant="flat" style="background-color: transparent">
         <!-- 标签页 -->

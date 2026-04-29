@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 261 icons */
+/* Auto-generated MDI subset – 256 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -110,6 +110,10 @@
 
 .mdi-brain::before {
   content: "\F09D1";
+}
+
+.mdi-broadcast::before {
+  content: "\F1720";
 }
 
 .mdi-broom::before {
@@ -464,10 +468,6 @@
   content: "\F0234";
 }
 
-.mdi-filter-variant::before {
-  content: "\F0236";
-}
-
 .mdi-folder::before {
   content: "\F024B";
 }
@@ -550,6 +550,10 @@
 
 .mdi-home::before {
   content: "\F02DC";
+}
+
+.mdi-hook::before {
+  content: "\F06E2";
 }
 
 .mdi-identifier::before {
@@ -760,10 +764,6 @@
   content: "\F03E4";
 }
 
-.mdi-pause-circle-outline::before {
-  content: "\F03E6";
-}
-
 .mdi-pencil::before {
   content: "\F03EB";
 }
@@ -784,20 +784,8 @@
   content: "\F03F6";
 }
 
-.mdi-pin::before {
-  content: "\F0403";
-}
-
-.mdi-pin-outline::before {
-  content: "\F0931";
-}
-
 .mdi-play::before {
   content: "\F040A";
-}
-
-.mdi-play-circle-outline::before {
-  content: "\F040D";
 }
 
 .mdi-plus::before {
@@ -1022,14 +1010,6 @@
 
 .mdi-view-dashboard::before {
   content: "\F056E";
-}
-
-.mdi-view-grid::before {
-  content: "\F0570";
-}
-
-.mdi-view-list::before {
-  content: "\F0572";
 }
 
 .mdi-volume-high::before {

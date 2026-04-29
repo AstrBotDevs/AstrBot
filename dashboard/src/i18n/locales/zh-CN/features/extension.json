@@ -9,8 +9,7 @@
     "handlersOperation": "管理行为"
   },
   "titles": {
-    "installedAstrBotPlugins": "已安装的 AstrBot 插件",
-    "pinnedPlugins": "置顶插件"
+    "installedAstrBotPlugins": "已安装的 AstrBot 插件"
   },
   "failedPlugins": {
     "title": "加载失败插件（{count}）",
@@ -54,8 +53,6 @@
     "refresh": "刷新",
     "updateAll": "更新全部插件",
     "deleteSource": "删除源",
-    "pin": "置顶",
-    "unpin": "取消置顶",
     "reshuffle": "随机一发"
   },
   "status": {
@@ -94,7 +91,27 @@
   },
   "empty": {
     "noPlugins": "暂无插件",
-    "noPluginsDesc": "尝试安装插件或者显示系统插件"
+    "noPluginsDesc": "尝试安装插件或调整搜索条件"
+  },
+  "detail": {
+    "contents": "插件行为",
+    "noContents": "暂无行为",
+    "notFound": "未找到该插件",
+    "docsTitle": "文档",
+    "docsEmpty": "暂无文档",
+    "handlerGroups": {
+      "commands": "指令/指令组",
+      "hooks": "钩子",
+      "functionTools": "函数工具",
+      "eventListeners": "事件监听器"
+    },
+    "info": {
+      "title": "信息",
+      "author": "作者",
+      "category": "类别",
+      "authorWebsite": "作者网站",
+      "repository": "仓库"
+    }
   },
   "market": {
     "recommended": "🥳 推荐",
@@ -147,8 +164,7 @@
     "updated": "更新时间",
     "updateStatus": "更新状态",
     "ascending": "升序",
-    "descending": "降序",
-    "pinUpdatesOnTop": "有更新置顶"
+    "descending": "降序"
   },
   "tags": {
     "danger": "危险"
@@ -226,6 +242,7 @@
     "supportedFormats": "支持 .zip 格式的插件文件",
     "updateAllSuccess": "所有可更新的插件都已更新！",
     "updateAllFailed": "有 {failed}/{total} 个插件更新失败:",
+    "noUpdatesAvailable": "当前没有可更新的插件",
     "fillSourceNameAndUrl": "请填写完整的插件源名称和地址",
     "invalidUrl": "请输入有效的URL地址",
     "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址"

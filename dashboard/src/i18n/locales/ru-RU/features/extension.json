@@ -91,7 +91,27 @@
     },
     "empty": {
         "noPlugins": "Плагины не найдены",
-        "noPluginsDesc": "Попробуйте установить новые плагины или включите отображение системных."
+        "noPluginsDesc": "Попробуйте установить новые плагины или изменить поиск."
+    },
+    "detail": {
+        "contents": "Обработчики плагина",
+        "noContents": "Нет обработчиков",
+        "notFound": "Плагин не найден",
+        "docsTitle": "Документация",
+        "docsEmpty": "Документация отсутствует",
+        "handlerGroups": {
+            "commands": "Команды / группы команд",
+            "hooks": "Хуки",
+            "functionTools": "Функциональные инструменты",
+            "eventListeners": "Слушатели событий"
+        },
+        "info": {
+            "title": "Информация",
+            "author": "Автор",
+            "category": "Категория",
+            "authorWebsite": "Сайт автора",
+            "repository": "Репозиторий"
+        }
     },
     "market": {
         "recommended": "🥳 Рекомендуем",
@@ -143,8 +163,7 @@
         "updated": "Дате обновления",
         "updateStatus": "Статусу обновления",
         "ascending": "По возрастанию",
-        "descending": "По убыванию",
-        "pinUpdatesOnTop": "Обновления сверху"
+        "descending": "По убыванию"
     },
     "tags": {
         "danger": "Опасно"
@@ -222,6 +241,7 @@
         "supportedFormats": "Поддерживаются файлы плагинов в формате .zip",
         "updateAllSuccess": "Все плагины успешно обновлены",
         "updateAllFailed": "Ошибок при обновлении: {failed} из {total}:",
+        "noUpdatesAvailable": "Нет плагинов с доступными обновлениями",
         "fillSourceNameAndUrl": "Пожалуйста, введите имя и адрес источника",
         "invalidUrl": "Введите корректный URL",
         "enterJsonUrl": "Введите URL, возвращающий список плагинов в формате JSON"

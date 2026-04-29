@@ -14,16 +14,8 @@ import {
   getValidHashTab,
   replaceTabRoute,
 } from "@/utils/hashRouteTabs.mjs";
-import {
-  PIN_UPDATES_ON_TOP_STORAGE_KEY,
-  PLUGIN_LIST_VIEW_MODE_STORAGE_KEY,
-  SHOW_RESERVED_PLUGINS_STORAGE_KEY,
-  readBooleanPreference,
-  writeBooleanPreference,
-} from "./extensionPreferenceStorage.mjs";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useDisplay } from "vuetify";
 
 const useRandomPluginsDisplay = ({ activeTab, marketSearch, currentPage }) => {
   const showRandomPlugins = ref(true);
@@ -78,7 +70,6 @@ export const useExtensionPage = () => {
   const { tm } = useModuleI18n("features/extension");
   const router = useRouter();
   const route = useRoute();
-  const { width } = useDisplay();
   
   const getSelectedGitHubProxy = () => {
     if (typeof window === "undefined" || !window.localStorage) return "";
@@ -129,11 +120,6 @@ export const useExtensionPage = () => {
     message: "",
   });
   
-  // 从 localStorage 恢复显示系统插件的状态，默认为 false（隐藏）
-  const getInitialShowReserved = () => {
-    return readBooleanPreference(SHOW_RESERVED_PLUGINS_STORAGE_KEY, false);
-  };
-  const showReserved = ref(getInitialShowReserved());
   const snack_message = ref("");
   const snack_show = ref(false);
   const snack_success = ref("success");
@@ -178,23 +164,7 @@ export const useExtensionPage = () => {
     repoUrl: null,
   });
   
-  // 新增变量支持列表视图
-  // 从 localStorage 恢复显示模式，默认为 false（卡片视图）
-  const getInitialListViewMode = () => {
-    return readBooleanPreference(PLUGIN_LIST_VIEW_MODE_STORAGE_KEY, false);
-  };
-  const isListView = ref(getInitialListViewMode());
   const pluginSearch = ref("");
-  const installedStatusFilter = ref("all");
-  const installedSortBy = ref("default");
-  const installedSortOrder = ref("desc");
-  const getInitialPinUpdatesOnTop = () => {
-    return readBooleanPreference(PIN_UPDATES_ON_TOP_STORAGE_KEY, true);
-  };
-  const pinUpdatesOnTop = ref(getInitialPinUpdatesOnTop());
-  watch(pinUpdatesOnTop, (val) => {
-    writeBooleanPreference(PIN_UPDATES_ON_TOP_STORAGE_KEY, val);
-  });
   const loading_ = ref(false);
   
   // 分页相关
@@ -348,67 +318,9 @@ export const useExtensionPage = () => {
     return items;
   });
 
-  const installedSortItems = computed(() => [
-    { title: tm("sort.default"), value: "default" },
-    { title: tm("sort.installTime"), value: "install_time" },
-    { title: tm("sort.name"), value: "name" },
-    { title: tm("sort.author"), value: "author" },
-    { title: tm("sort.updateStatus"), value: "update_status" },
-  ]);
-
-  const installedSortUsesOrder = computed(
-    () => installedSortBy.value !== "default",
-  );
-  
-  // 插件表格的表头定义
-  const showAuthorColumn = computed(() => width.value >= 1280);
-  const pluginHeaders = computed(() => {
-    const headers = [
-      {
-        title: tm("table.headers.name"),
-        key: "name",
-        sortable: false,
-        width: showAuthorColumn.value ? "24%" : "26%",
-      },
-      {
-        title: tm("table.headers.description"),
-        key: "desc",
-        sortable: false,
-        width: showAuthorColumn.value ? "32%" : "36%",
-      },
-      {
-        title: tm("table.headers.version"),
-        key: "version",
-        sortable: false,
-        width: showAuthorColumn.value ? "12%" : "14%",
-      },
-    ];
-
-    if (showAuthorColumn.value) {
-      headers.push({
-        title: tm("table.headers.author"),
-        key: "author",
-        sortable: false,
-        width: "10%",
-      });
-    }
-
-    headers.push({
-      title: tm("table.headers.actions"),
-      key: "actions",
-      sortable: false,
-      width: showAuthorColumn.value ? "22%" : "24%",
-    });
-
-    return headers;
-  });
-  
   // 过滤要显示的插件
   const filteredExtensions = computed(() => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
-    if (!showReserved.value) {
-      return data.filter((ext) => !ext.reserved);
-    }
     return data;
   });
 
@@ -421,27 +333,15 @@ export const useExtensionPage = () => {
       },
     );
 
-  const compareInstalledPluginAuthors = (left, right) =>
-    normalizeStr(left?.author ?? "").localeCompare(
-      normalizeStr(right?.author ?? ""),
-      undefined,
-      { sensitivity: "base" },
-    );
-
-  const getInstalledAtTimestamp = (plugin) => {
-    const parsed = Date.parse(plugin?.installed_at ?? "");
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
   const compareInstalledFallback = (left, right) => {
+    const reservedDiff =
+      Number(!!left.plugin?.reserved) - Number(!!right.plugin?.reserved);
+    if (reservedDiff !== 0) {
+      return reservedDiff;
+    }
+
     const nameCompare = compareInstalledPluginNames(left.plugin, right.plugin);
     return nameCompare !== 0 ? nameCompare : left.index - right.index;
-  };
-
-  const compareInstalledUpdatePinning = (left, right) => {
-    const leftHasUpdate = left.plugin?.has_update ? 1 : 0;
-    const rightHasUpdate = right.plugin?.has_update ? 1 : 0;
-    return rightHasUpdate - leftHasUpdate;
   };
 
   const sortInstalledPlugins = (plugins) => {
@@ -449,98 +349,19 @@ export const useExtensionPage = () => {
       .map((plugin, index) => ({
         plugin,
         index,
-        installedAtTimestamp: getInstalledAtTimestamp(plugin),
       }))
-      .sort((left, right) => {
-        if (
-          pinUpdatesOnTop.value &&
-          installedSortBy.value !== "update_status"
-        ) {
-          // Pinning updates is a primary grouping; the selected sort order still
-          // applies within the "has update" and "no update" groups below.
-          const pinCompare = compareInstalledUpdatePinning(left, right);
-          if (pinCompare !== 0) {
-            return pinCompare;
-          }
-        }
-
-        if (installedSortBy.value === "install_time") {
-          const leftTimestamp = left.installedAtTimestamp;
-          const rightTimestamp = right.installedAtTimestamp;
-
-          if (leftTimestamp == null && rightTimestamp == null) {
-            return compareInstalledFallback(left, right);
-          }
-          if (leftTimestamp == null) {
-            return 1;
-          }
-          if (rightTimestamp == null) {
-            return -1;
-          }
-
-          const timeDiff =
-            installedSortOrder.value === "desc"
-              ? rightTimestamp - leftTimestamp
-              : leftTimestamp - rightTimestamp;
-          return timeDiff !== 0
-            ? timeDiff
-            : compareInstalledFallback(left, right);
-        }
-
-        if (installedSortBy.value === "name") {
-          const nameCompare = compareInstalledPluginNames(left.plugin, right.plugin);
-          if (nameCompare !== 0) {
-            return installedSortOrder.value === "desc"
-              ? -nameCompare
-              : nameCompare;
-          }
-          return compareInstalledFallback(left, right);
-        }
-
-        if (installedSortBy.value === "author") {
-          const authorCompare = compareInstalledPluginAuthors(
-            left.plugin,
-            right.plugin,
-          );
-          if (authorCompare !== 0) {
-            return installedSortOrder.value === "desc"
-              ? -authorCompare
-              : authorCompare;
-          }
-          return compareInstalledFallback(left, right);
-        }
-
-        if (installedSortBy.value === "update_status") {
-          const updateDiff =
-            installedSortOrder.value === "desc"
-              ? compareInstalledUpdatePinning(left, right)
-              : compareInstalledUpdatePinning(right, left);
-          return updateDiff !== 0
-            ? updateDiff
-            : compareInstalledFallback(left, right);
-        }
-
-        return compareInstalledFallback(left, right);
-      })
+      .sort(compareInstalledFallback)
       .map((item) => item.plugin);
   };
 
   // 通过搜索过滤插件
   const filteredPlugins = computed(() => {
-    const plugins = filteredExtensions.value.filter((plugin) => {
-      if (installedStatusFilter.value === "enabled") {
-        return !!plugin.activated;
-      }
-      if (installedStatusFilter.value === "disabled") {
-        return !plugin.activated;
-      }
-      return true;
-    });
-
     const query = buildSearchQuery(pluginSearch.value);
     const filtered = query
-      ? plugins.filter((plugin) => matchesPluginSearch(plugin, query))
-      : plugins;
+      ? filteredExtensions.value.filter((plugin) =>
+          matchesPluginSearch(plugin, query),
+        )
+      : filteredExtensions.value;
 
     return sortInstalledPlugins(filtered);
   });
@@ -658,12 +479,6 @@ export const useExtensionPage = () => {
   });
   
   // 方法
-  const toggleShowReserved = () => {
-    showReserved.value = !showReserved.value;
-    // 保存到 localStorage
-    writeBooleanPreference(SHOW_RESERVED_PLUGINS_STORAGE_KEY, showReserved.value);
-  };
-  
   const toast = (message, success) => {
     snack_message.value = message;
     snack_show.value = true;
@@ -922,7 +737,10 @@ export const useExtensionPage = () => {
   // 确认强制更新
   // 显示更新全部插件确认对话框
   const showUpdateAllConfirm = () => {
-    if (updatableExtensions.value.length === 0) return;
+    if (updatableExtensions.value.length === 0) {
+      toast(tm("messages.noUpdatesAvailable"), "info");
+      return;
+    }
     updateAllConfirmDialog.show = true;
   };
   
@@ -945,7 +763,11 @@ export const useExtensionPage = () => {
   };
   
   const updateAllExtensions = async () => {
-    if (updatingAll.value || updatableExtensions.value.length === 0) return;
+    if (updatingAll.value) return;
+    if (updatableExtensions.value.length === 0) {
+      toast(tm("messages.noUpdatesAvailable"), "info");
+      return;
+    }
     updatingAll.value = true;
     loadingDialog.title = tm("status.loading");
     loadingDialog.statusCode = 0;
@@ -1624,11 +1446,6 @@ export const useExtensionPage = () => {
     }, 300); // 300ms 防抖延迟
   });
   
-  // 监听显示模式变化并保存到 localStorage
-  watch(isListView, (newVal) => {
-    writeBooleanPreference(PLUGIN_LIST_VIEW_MODE_STORAGE_KEY, newVal);
-  });
-  
   watch(
     [() => dialog.value, () => extension_url.value, () => uploadTab.value],
     async ([dialogOpen, _, currentUploadTab]) => {
@@ -1693,8 +1510,6 @@ export const useExtensionPage = () => {
     extractTabFromHash,
     syncTabFromHash,
     extension_data,
-    getInitialShowReserved,
-    showReserved,
     snack_message,
     snack_show,
     snack_success,
@@ -1710,13 +1525,7 @@ export const useExtensionPage = () => {
     forceUpdateDialog,
     updateAllConfirmDialog,
     changelogDialog,
-    getInitialListViewMode,
-    isListView,
     pluginSearch,
-    installedStatusFilter,
-    installedSortBy,
-    installedSortOrder,
-    pinUpdatesOnTop,
     loading_,
     currentPage,
     marketCategoryFilter,
@@ -1755,9 +1564,6 @@ export const useExtensionPage = () => {
     toPinyinText,
     toInitials,
     plugin_handler_info_headers,
-    installedSortItems,
-    installedSortUsesOrder,
-    pluginHeaders,
     filteredExtensions,
     filteredPlugins,
     filteredMarketPlugins,
@@ -1772,7 +1578,6 @@ export const useExtensionPage = () => {
     totalPages,
     paginatedPlugins,
     updatableExtensions,
-    toggleShowReserved,
     toast,
     resetLoadingDialog,
     onLoadingDialogResult,
