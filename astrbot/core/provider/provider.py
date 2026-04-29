@@ -168,19 +168,49 @@ class Provider(AbstractProvider):
         raise NotImplementedError()
 
     async def pop_record(self, context: list) -> None:
-        """弹出 context 第一条非系统提示词对话记录"""
-        poped = 0
-        indexs_to_pop = []
-        for idx, record in enumerate(context):
-            if record["role"] == "system":
-                continue
-            indexs_to_pop.append(idx)
-            poped += 1
-            if poped == 2:
-                break
+        """弹出最早的非 system 记录，同时保持 tool_calls 与 tool 配对完整。"""
 
-        for idx in reversed(indexs_to_pop):
-            context.pop(idx)
+        def _has_tool_calls(message: dict) -> bool:
+            return bool(message.get("tool_calls"))
+
+        def _next_unit_bounds() -> tuple[int, int] | None:
+            for idx, record in enumerate(context):
+                if record.get("role") != "system":
+                    end_idx = idx
+                    role = record.get("role")
+                    if role == "assistant" and _has_tool_calls(record):
+                        # Keep assistant(tool_calls) and following tool messages atomic.
+                        while end_idx + 1 < len(context) and (
+                            context[end_idx + 1].get("role") == "tool"
+                        ):
+                            end_idx += 1
+                    elif role == "tool":
+                        # Remove leading orphan tool messages together.
+                        while end_idx + 1 < len(context) and (
+                            context[end_idx + 1].get("role") == "tool"
+                        ):
+                            end_idx += 1
+                    return idx, end_idx
+            return None
+
+        # Removal policy: try to remove around TARGET_RECORDS messages,
+        # but allow up to MAX_RECORDS to keep tool-call/message units atomic.
+        TARGET_RECORDS = 2
+        MAX_RECORDS = 3
+
+        removed = 0
+        while removed < TARGET_RECORDS:
+            next_unit = _next_unit_bounds()
+            if next_unit is None:
+                break
+            start_idx, end_idx = next_unit
+            next_unit_count = end_idx - start_idx + 1
+            # Keep behavior close to the old "pop around 2 records" strategy,
+            # while still preserving tool-call atomicity.
+            if removed > 0 and removed + next_unit_count > MAX_RECORDS:
+                break
+            del context[start_idx : end_idx + 1]
+            removed += next_unit_count
 
     def _ensure_message_to_dicts(
         self,
