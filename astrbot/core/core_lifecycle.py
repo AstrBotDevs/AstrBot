@@ -59,6 +59,7 @@ class AstrBotCoreLifecycle:
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
+        self._default_chat_provider_warning_emitted = False
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
@@ -96,6 +97,47 @@ class AstrBotCoreLifecycle:
             )
         except Exception as e:
             logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
+
+    def _warn_about_unset_default_chat_provider(self) -> None:
+        if self._default_chat_provider_warning_emitted:
+            return
+
+        pm = getattr(self, "provider_manager", None)
+        if not pm:
+            return
+
+        providers = pm.provider_insts
+        if len(providers) == 0:
+            return
+
+        provider_settings = getattr(pm, "provider_settings", None) or {}
+        default_id = provider_settings.get("default_provider_id")
+        fallback = pm.curr_provider_inst or providers[0]
+        fallback_id = fallback.provider_config.get("id") or "unknown"
+
+        if not default_id:
+            if len(providers) <= 1:
+                return
+            self._default_chat_provider_warning_emitted = True
+            logger.warning(
+                "Detected %d enabled chat providers but `provider_settings.default_provider_id` is empty. "
+                "AstrBot will use `%s` as the startup fallback chat provider. "
+                "Set a default chat model in the WebUI configuration page to avoid unexpected provider switching.",
+                len(providers),
+                fallback_id,
+            )
+            return
+
+        found = any((p.provider_config.get("id") == default_id) for p in providers)
+        if not found:
+            self._default_chat_provider_warning_emitted = True
+            logger.warning(
+                "Configured `default_provider_id` is `%s` but no enabled provider matches that ID. "
+                "AstrBot will use `%s` as the fallback chat provider. "
+                "Please check the WebUI configuration page.",
+                default_id,
+                fallback_id,
+            )
 
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
@@ -201,7 +243,9 @@ class AstrBotCoreLifecycle:
         await self.plugin_manager.reload()
 
         # 根据配置实例化各个 Provider
+        self._default_chat_provider_warning_emitted = False
         await self.provider_manager.initialize()
+        self._warn_about_unset_default_chat_provider()
 
         await self.kb_manager.initialize()
 
