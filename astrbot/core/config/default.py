@@ -3669,11 +3669,6 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "hint": "如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat，则需要 /chat 才会触发 LLM 请求",
                     },
-                    "provider_settings.prompt_prefix": {
-                        "description": "用户提示词",
-                        "type": "string",
-                        "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
-                    },
                     "provider_settings.image_compress_enabled": {
                         "description": "启用图片压缩",
                         "type": "bool",
@@ -3696,6 +3691,12 @@ CONFIG_METADATA_3 = {
                             "provider_settings.image_compress_enabled": True,
                         },
                         "slider": {"min": 1, "max": 100, "step": 1},
+                    },
+                    "provider_settings.prompt_prefix": {
+                        "description": "用户提示词",
+                        "type": "string",
+                        "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
+                        "collapsed": True,
                     },
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
