@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import shlex
 from typing import Any, cast
@@ -438,6 +439,9 @@ class ShipyardNeoBooter(ComputerBooter):
             ttl=self._ttl,
         )
 
+        # --- Readiness gate: wait until sandbox session is READY ---
+        await self._wait_until_ready(self._sandbox)
+
         self._shell = NeoShellComponent(self._sandbox)
         self._fs = NeoFileSystemComponent(self._sandbox, self._shell)
         self._python = NeoPythonComponent(self._sandbox)
@@ -454,6 +458,78 @@ class ShipyardNeoBooter(ComputerBooter):
             list(caps),
             bool(self._bay_manager),
         )
+
+    async def _wait_until_ready(self, sandbox: Sandbox) -> None:
+        """Poll sandbox status until READY, or raise on FAILED / timeout.
+
+        Covers both warm-pool hits (near-instant) and cold starts (up to 180s).
+        On FAILED, EXPIRED, or timeout the sandbox is deleted before raising
+        so no orphan resources leak on Bay.
+        """
+        READINESS_TIMEOUT = 180  # seconds
+        POLL_INTERVAL = 2  # seconds
+
+        sandbox_id = sandbox.id
+        deadline = asyncio.get_running_loop().time() + READINESS_TIMEOUT
+
+        while True:
+            await sandbox.refresh()
+            status = getattr(sandbox.status, "value", str(sandbox.status))
+
+            if status == "ready":
+                logger.info(
+                    "[Computer] Sandbox %s is ready (profile=%s)",
+                    sandbox_id,
+                    sandbox.profile,
+                )
+                return
+
+            if status in {"failed", "expired"}:
+                logger.error(
+                    "[Computer] Sandbox %s reached terminal state: %s",
+                    sandbox_id,
+                    status,
+                )
+                try:
+                    await sandbox.delete()
+                except Exception as del_err:
+                    logger.warning(
+                        "[Computer] Failed to delete failed sandbox %s: %s",
+                        sandbox_id,
+                        del_err,
+                    )
+                raise RuntimeError(
+                    f"Sandbox {sandbox_id} is in terminal state: {status}"
+                )
+
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                logger.error(
+                    "[Computer] Sandbox %s did not become ready within %ds "
+                    "(last status: %s)",
+                    sandbox_id,
+                    READINESS_TIMEOUT,
+                    status,
+                )
+                try:
+                    await sandbox.delete()
+                except Exception as del_err:
+                    logger.warning(
+                        "[Computer] Failed to delete timed-out sandbox %s: %s",
+                        sandbox_id,
+                        del_err,
+                    )
+                raise TimeoutError(
+                    f"Sandbox {sandbox_id} did not become ready within "
+                    f"{READINESS_TIMEOUT}s (last status: {status})"
+                )
+
+            logger.debug(
+                "[Computer] Sandbox %s status=%s, waiting...",
+                sandbox_id,
+                status,
+            )
+            await asyncio.sleep(POLL_INTERVAL)
 
     async def _resolve_profile(self, client: Any) -> str:
         """Pick the best profile for this session.
@@ -510,16 +586,41 @@ class ShipyardNeoBooter(ComputerBooter):
 
         return chosen
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, *, delete_sandbox: bool = False) -> None:
         if self._client is not None:
             sandbox_id = getattr(self._sandbox, "id", "unknown")
+
+            # Delete sandbox on Bay BEFORE closing the HTTP client.
+            # This is critical for cleanup — calling delete after
+            # __aexit__ would fail because the httpx session is already
+            # torn down.
+            if delete_sandbox and self._sandbox is not None:
+                try:
+                    logger.info(
+                        "[Computer] Deleting Shipyard Neo sandbox: id=%s", sandbox_id
+                    )
+                    await self._sandbox.delete()
+                    logger.info(
+                        "[Computer] Shipyard Neo sandbox deleted: id=%s", sandbox_id
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "[Computer] Failed to delete sandbox %s (may already be "
+                        "cleaned up by Bay GC): %s",
+                        sandbox_id,
+                        e,
+                    )
+
             logger.info(
-                "[Computer] Shutting down Shipyard Neo sandbox: id=%s", sandbox_id
+                "[Computer] Shutting down Shipyard Neo sandbox client: id=%s",
+                sandbox_id,
             )
             await self._client.__aexit__(None, None, None)
             self._client = None
             self._sandbox = None
-            logger.info("[Computer] Shipyard Neo sandbox shut down: id=%s", sandbox_id)
+            logger.info(
+                "[Computer] Shipyard Neo sandbox client shut down: id=%s", sandbox_id
+            )
 
         # NOTE: We intentionally do NOT stop the Bay container here.
         # It stays running for reuse by future sessions.  The user can
