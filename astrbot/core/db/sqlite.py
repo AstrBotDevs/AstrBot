@@ -62,6 +62,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_platform_message_history_checkpoint_column(conn)
+            await self._ensure_attachment_columns(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -757,7 +758,36 @@ class SQLiteDatabase(BaseDatabase):
                 )
         return thread_ids
 
-    async def insert_attachment(self, path, type, mime_type):
+    async def _ensure_attachment_columns(self, conn) -> None:
+        """Ensure attachments table has original_filename, creator, session_id."""
+        result = await conn.execute(text("PRAGMA table_info(attachments)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "original_filename" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE attachments ADD COLUMN original_filename VARCHAR(255)"
+                )
+            )
+        if "creator" not in columns:
+            await conn.execute(
+                text("ALTER TABLE attachments ADD COLUMN creator VARCHAR(255)")
+            )
+        if "session_id" not in columns:
+            await conn.execute(
+                text("ALTER TABLE attachments ADD COLUMN session_id VARCHAR(100)")
+            )
+
+    async def insert_attachment(
+        self,
+        path,
+        type,
+        mime_type,
+        *,
+        original_filename=None,
+        creator=None,
+        session_id=None,
+    ):
         """Insert a new attachment record."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -766,8 +796,13 @@ class SQLiteDatabase(BaseDatabase):
                     path=path,
                     type=type,
                     mime_type=mime_type,
+                    original_filename=original_filename,
+                    creator=creator,
+                    session_id=session_id,
                 )
                 session.add(new_attachment)
+                await session.flush()
+                await session.refresh(new_attachment)
                 return new_attachment
 
     async def get_attachment_by_id(self, attachment_id):

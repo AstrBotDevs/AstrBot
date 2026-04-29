@@ -23,6 +23,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
 
+from ..core.utils import api_package
 from .routes import *
 from .routes.api_key import ALL_OPEN_API_SCOPES
 from .routes.backup import BackupRoute
@@ -32,6 +33,7 @@ from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
+from .routes.widget import ChatWidget
 
 # Static assets shipped inside the wheel (built during `hatch build`).
 _BUNDLED_DIST = Path(__file__).parent / "dist"
@@ -139,6 +141,13 @@ class AstrBotDashboard:
         self.platform_route = PlatformRoute(self.context, core_lifecycle)
         self.backup_route = BackupRoute(self.context, db, core_lifecycle)
         self.live_chat_route = LiveChatRoute(self.context, db, core_lifecycle)
+        self.chat_widget = ChatWidget(
+            self.context,
+            db,
+            core_lifecycle,
+            self.chat_route,
+            self.open_api_route,
+        )
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -195,6 +204,59 @@ class AstrBotDashboard:
             g.username = f"api_key:{api_key.key_id}"
             await self.db.touch_api_key(api_key.key_id)
             return None
+
+        # 验证签名、解包参数
+        if request.path.startswith("/api/widget"):
+            try:
+                post_data = await api_package.request_input([
+                    "appid",
+                    "data",
+                    "noise",
+                    "expiry_date",
+                    "signature",
+                ])
+                # 读取apikey
+                appid = post_data.get("appid")
+                if not appid:
+                    r = jsonify(Response().error("appid is empty").__dict__)
+                    r.status_code = 403
+                    return r
+                api_key = await self.db.get_api_key_by_id(str(appid))
+                if not api_key:
+                    r = jsonify(Response().error("Invalid API key").__dict__)
+                    r.status_code = 401
+                    return r
+                # 验证
+                pkg_data = api_package.de_package(
+                    api_key.key_hash,
+                    post_data.get("data", ""),
+                    post_data.get("noise", ""),
+                    post_data.get("expiry_date", ""),
+                    post_data.get("signature", ""),
+                )
+                if "username" not in pkg_data:
+                    r = jsonify(Response().error("username is required").__dict__)
+                    r.status_code = 401
+                    return r
+                username = "widget." + pkg_data["username"] # 增加前缀，
+                pkg_data["username"] = username
+                # 设置全局参数
+                g.username = username
+                g.api_package = pkg_data
+                # 权限
+                if isinstance(api_key.scopes, list):
+                    scopes = api_key.scopes
+                else:
+                    scopes = list(ALL_OPEN_API_SCOPES)
+                if "*" not in scopes and "chat_widget" not in scopes:
+                    r = jsonify(Response().error("Insufficient API key scope").__dict__)
+                    r.status_code = 403
+                    return r
+                return None
+            except Exception as err:
+                r = jsonify(Response().error(str(err)).__dict__)
+                r.status_code = 403
+                return r
 
         allowed_endpoints = [
             "/api/auth/login",

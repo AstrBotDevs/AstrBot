@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import MainRoutes from './MainRoutes';
 import AuthRoutes from './AuthRoutes';
 import ChatBoxRoutes from './ChatBoxRoutes';
+import ChatWidgetRoutes from "@/router/ChatWidget";
 import { useAuthStore } from '@/stores/auth';
 import { useRouterLoadingStore } from '@/stores/routerLoading';
 
@@ -10,7 +11,8 @@ export const router = createRouter({
   routes: [
     MainRoutes,
     AuthRoutes,
-    ChatBoxRoutes
+    ChatBoxRoutes,
+    ChatWidgetRoutes,
   ]
 });
 

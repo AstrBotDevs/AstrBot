@@ -142,8 +142,10 @@ class OpenApiRoute(Route):
 
         return None
 
-    async def chat_send(self):
-        post_data = await request.get_json(silent=True) or {}
+    async def chat_send(self, post_data: dict | None = None):
+        if post_data is None:
+            post_data = await request.get_json(silent=True) or {}
+
         effective_username, username_err = self._resolve_open_username(
             post_data.get("username")
         )
@@ -605,6 +607,7 @@ class OpenApiRoute(Route):
             message_payload,
             get_attachment_by_id=self.db.get_attachment_by_id,
             strict=True,
+            attachments_dir=self.chat_route.attachments_dir,
         )
 
     async def send_message(self):

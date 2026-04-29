@@ -141,6 +141,7 @@ class WebChatAdapter(Platform):
             message_chain,
             insert_attachment=db_helper.insert_attachment,
             attachments_dir=self.attachments_dir,
+            conversation_id=conversation_id,
         )
         if not message_parts:
             return

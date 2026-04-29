@@ -156,6 +156,7 @@
                         <v-table density="compact">
                             <thead>
                                 <tr>
+                                    <th>{{ tm('apiKey.table.id') }}</th>
                                     <th>{{ tm('apiKey.table.name') }}</th>
                                     <th>{{ tm('apiKey.table.prefix') }}</th>
                                     <th>{{ tm('apiKey.table.scopes') }}</th>
@@ -167,6 +168,7 @@
                             </thead>
                             <tbody>
                                 <tr v-for="item in apiKeys" :key="item.key_id">
+                                    <td>{{ item.key_id }}</td>
                                     <td>{{ item.name }}</td>
                                     <td><code>{{ item.key_prefix }}</code></td>
                                     <td>{{ (item.scopes || []).join(', ') }}</td>
@@ -294,7 +296,7 @@ const apiKeys = ref([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref('');
 const newApiKeyExpiresInDays = ref(30);
-const newApiKeyScopes = ref(['chat', 'config', 'file', 'im']);
+const newApiKeyScopes = ref(['chat', 'config', 'file', 'im', 'chat_widget']);
 const createdApiKeyPlaintext = ref('');
 const apiKeyExpiryOptions = computed(() => [
     { title: tm('apiKey.expiryOptions.day1'), value: 1 },
@@ -308,7 +310,8 @@ const availableScopes = [
     { value: 'chat', label: 'chat' },
     { value: 'config', label: 'config' },
     { value: 'file', label: 'file' },
-    { value: 'im', label: 'im' }
+    { value: 'im', label: 'im' },
+    { value: 'chat_widget', label: 'chat_widget' },
 ];
 
 const showToast = (message, color = 'success') => {
