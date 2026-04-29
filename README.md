@@ -204,7 +204,58 @@ Connect AstrBot to your favorite chat platform.
 | Xiaomi MiMo TTS | Text-to-Speech Services |
 | Volcano Engine TTS | Text-to-Speech Services |
 
+
+## ❓ FAQ & Troubleshooting
+
+### General
+
+**Q: What messaging platforms does AstrBot support?**
+AstrBot supports QQ (via NapCat/Lagrange/etc.), WeChat Work, Feishu, DingTalk, WeChat Official Accounts, Telegram, Slack, VoceChat, Matrix, and more. See the [Supported Messaging Platforms](#supported-messaging-platforms) table for the full list.
+
+**Q: Which LLM providers are compatible?**
+AstrBot works with OpenAI, Anthropic, Google Gemini, Moonshot, Zhipu AI, DeepSeek, Ollama, LM Studio, and many others. Any service compatible with the OpenAI API format can be used. See [Supported Model Services](#supported-model-services) for the complete list.
+
+**Q: Can I use AstrBot with a self-hosted model?**
+Yes. Ollama and LM Studio are both supported for local, self-hosted inference. Configure the API endpoint and model name in your provider settings.
+
+**Q: How do I install community plugins?**
+AstrBot has a built-in plugin marketplace with 1000+ plugins. Navigate to the Plugin Manager in the WebUI to browse and install plugins with one click, or use the `/plugin` command in chat.
+
+### Troubleshooting
+
+**Q: Messages are not being received from my messaging platform.**
+Check the following:
+- Verify your platform adapter is correctly configured (API keys, webhooks, etc.)
+- Ensure the adapter process is running (check the WebUI dashboard)
+- Review the logs for connection errors: `Data/Logs/`
+- For QQ adapters, confirm the underlying framework (NapCat/Lagrange/etc.) is running and logged in
+
+**Q: The bot replies with errors about API keys or authentication.**
+- Confirm your LLM provider API key is correctly set in the provider configuration
+- Check that your API key has sufficient quota/credits
+- If using a proxy or gateway (like OneAPI), verify the base URL is correct
+- Test the API key independently with `curl` to isolate provider issues
+
+**Q: AstrBot fails to start or crashes on launch.**
+- Ensure Python 3.10+ is installed: `python --version`
+- Run `pip install -r requirements.txt` to install all dependencies
+- Check `Data/Logs/` for detailed error traces
+- If using Docker, verify your Docker and Docker Compose versions are up to date
+
+**Q: Plugin installation fails or plugins don't work.**
+- Check plugin compatibility with your AstrBot version
+- Review the plugin's own documentation for specific requirements
+- Look for error messages in `Data/Logs/`
+- Try reinstalling the plugin from the marketplace
+
+**Q: The WebUI is not accessible.**
+- Verify AstrBot is running and the WebUI port (default: 6185) is not blocked
+- Check firewall rules if accessing from a remote machine
+- Ensure no other process is using port 6185: `lsof -i :6185`
+
+
 ## ❤️ Sponsors
+PLACEHOLDER
 
 <p align="center">
   <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
