@@ -14,17 +14,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.0.3
+        with:
+          version: 10.28.2
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24.13.0'
+          cache: "pnpm"
+          cache-dependency-path: dashboard/pnpm-lock.yaml
 
-      - name: npm install, build
+      - name: Install and Build
+        working-directory: dashboard
         run: |
-          cd dashboard
-          npm install pnpm -g
-          pnpm install
-          pnpm i --save-dev @types/markdown-it
+          pnpm install --frozen-lockfile
           pnpm run build
 
       - name: Inject Commit SHA

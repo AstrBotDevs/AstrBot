@@ -284,7 +284,7 @@ def register_platform_adapter_type(
     return decorator
 
 
-def register_regex(regex: str, **kwargs):
+def register_regex(regex: str | re.Pattern, **kwargs):
     """注册一个 Regex"""
 
     def decorator(awaitable):
@@ -455,6 +455,64 @@ def register_on_llm_response(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(awaitable, EventType.OnLLMResponseEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_agent_begin(**kwargs):
+    """当 Agent 开始运行时的事件
+
+    Examples:
+    ```py
+    from astrbot.core.agent.run_context import ContextWrapper
+    from astrbot.core.astr_agent_context import AstrAgentContext
+
+    @on_agent_begin()
+    async def test(
+        self,
+        event: AstrMessageEvent,
+        run_context: ContextWrapper[AstrAgentContext],
+    ) -> None:
+        ...
+    ```
+
+    请务必接收两个参数：event, run_context
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnAgentBeginEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_agent_done(**kwargs):
+    """当 Agent 运行完成后的事件
+
+    Examples:
+    ```py
+    from astrbot.core.agent.run_context import ContextWrapper
+    from astrbot.core.astr_agent_context import AstrAgentContext
+    from astrbot.api.provider import LLMResponse
+
+    @on_agent_done()
+    async def test(
+        self,
+        event: AstrMessageEvent,
+        run_context: ContextWrapper[AstrAgentContext],
+        response: LLMResponse,
+    ) -> None:
+        ...
+    ```
+
+    请务必接收三个参数：event, run_context, response
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnAgentDoneEvent, **kwargs)
         return awaitable
 
     return decorator

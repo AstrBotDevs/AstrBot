@@ -1,6 +1,7 @@
 import abc
 import asyncio
 import hashlib
+import os
 import re
 import uuid
 from collections.abc import AsyncGenerator
@@ -88,6 +89,8 @@ class AstrMessageEvent(abc.ABC):
         """在此次事件中是否有过至少一次发送消息的操作"""
         self.call_llm = False
         """是否在此消息事件中禁止默认的 LLM 请求"""
+        self._temporary_local_files: list[str] = []
+        """Temporary local files created during this event and safe to delete when it finishes."""
 
         self.plugins_name: list[str] | None = None
         """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
@@ -228,6 +231,24 @@ class AstrMessageEvent(abc.ABC):
         logger.info(f"清除 {self.get_platform_name()} 的额外信息: {self._extras}")
         self._extras.clear()
 
+    def track_temporary_local_file(self, path: str) -> None:
+        if path and path not in self._temporary_local_files:
+            self._temporary_local_files.append(path)
+
+    def cleanup_temporary_local_files(self) -> None:
+        paths = list(self._temporary_local_files)
+        self._temporary_local_files.clear()
+        for path in paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError as e:
+                logger.warning(
+                    "Failed to remove temporary local file %s: %s",
+                    path,
+                    e,
+                )
+
     def is_private_chat(self) -> bool:
         """是否是私聊。"""
         return self.get_message_type() == MessageType.FRIEND_MESSAGE
@@ -268,6 +289,12 @@ class AstrMessageEvent(abc.ABC):
 
     async def send_typing(self) -> None:
         """发送输入中状态。
+
+        默认实现为空，由具体平台按需重写。
+        """
+
+    async def stop_typing(self) -> None:
+        """停止输入中状态。
 
         默认实现为空，由具体平台按需重写。
         """
@@ -387,6 +414,7 @@ class AstrMessageEvent(abc.ABC):
         tool_set: ToolSet | None = None,
         session_id: str = "",
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         contexts: list | None = None,
         system_prompt: str = "",
         conversation: Conversation | None = None,
@@ -405,6 +433,8 @@ class AstrMessageEvent(abc.ABC):
 
         image_urls: 可以是 base64:// 或者 http:// 开头的图片链接，也可以是本地图片路径。
 
+        audio_urls: 音频 URL 列表，也支持本地路径。
+
         contexts: 当指定 contexts 时，将会使用 contexts 作为上下文。如果同时传入了 conversation，将会忽略 conversation。
 
         func_tool_manager: [Deprecated] 函数工具管理器，用于调用函数工具。用 self.context.get_llm_tool_manager() 获取。已过时，请使用 tool_set 参数代替。
@@ -414,6 +444,8 @@ class AstrMessageEvent(abc.ABC):
         """
         if image_urls is None:
             image_urls = []
+        if audio_urls is None:
+            audio_urls = []
         if contexts is None:
             contexts = []
         if len(contexts) > 0 and conversation:
@@ -423,6 +455,7 @@ class AstrMessageEvent(abc.ABC):
             prompt=prompt,
             session_id=session_id,
             image_urls=image_urls,
+            audio_urls=audio_urls,
             # func_tool=func_tool_manager,
             func_tool=tool_set,
             contexts=contexts,

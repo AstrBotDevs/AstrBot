@@ -1,6 +1,6 @@
 <template>
 
-    <div style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px;">
+    <div style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 24px;">
 
         <v-list lines="two">
             <v-list-subheader>{{ tm('network.title') }}</v-list-subheader>
@@ -61,6 +61,10 @@
 
             <v-list-item :subtitle="tm('system.restart.subtitle')" :title="tm('system.restart.title')">
                 <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button') }}</v-btn>
+            </v-list-item>
+
+            <v-list-item class="py-2">
+                <StorageCleanupPanel />
             </v-list-item>
 
             <v-list-subheader>{{ tm('apiKey.title') }}</v-list-subheader>
@@ -230,7 +234,9 @@ import ProxySelector from '@/components/shared/ProxySelector.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
 import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
+import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
+import { copyToClipboard } from '@/utils/clipboard';
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
 import { PurpleTheme } from '@/theme/LightTheme';
@@ -333,50 +339,9 @@ const loadApiKeys = async () => {
     }
 };
 
-const tryExecCommandCopy = (text) => {
-    let textArea = null;
-    try {
-        if (typeof document === 'undefined' || !document.body) return false;
-        textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.setAttribute('readonly', '');
-        textArea.style.position = 'fixed';
-        textArea.style.opacity = '0';
-        textArea.style.pointerEvents = 'none';
-        textArea.style.left = '-9999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        textArea.setSelectionRange(0, text.length);
-        return document.execCommand('copy');
-    } catch (_) {
-        return false;
-    } finally {
-        try {
-            if (textArea?.parentNode) {
-                textArea.parentNode.removeChild(textArea);
-            }
-        } catch (_) {
-            // ignore cleanup errors
-        }
-    }
-};
-
-const copyTextToClipboard = async (text) => {
-    if (!text) return false;
-    if (tryExecCommandCopy(text)) return true;
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false;
-    try {
-        await navigator.clipboard.writeText(text);
-        return true;
-    } catch (_) {
-        return false;
-    }
-};
-
 const copyCreatedApiKey = async () => {
     if (!createdApiKeyPlaintext.value) return;
-    const ok = await copyTextToClipboard(createdApiKeyPlaintext.value);
+    const ok = await copyToClipboard(createdApiKeyPlaintext.value);
     if (ok) {
         showToast(tm('apiKey.messages.copySuccess'), 'success');
     } else {

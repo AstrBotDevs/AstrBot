@@ -5,15 +5,20 @@ import base64
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 
-from astrbot.core import logger
-from astrbot.core.agent.message import Message
+from astrbot.core import db_helper, logger
+from astrbot.core.agent.message import (
+    CheckpointData,
+    CheckpointMessageSegment,
+    Message,
+    dump_messages_with_checkpoints,
+)
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
 )
-from astrbot.core.message.components import File, Image
+from astrbot.core.message.components import File, Image, Record, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -66,6 +71,10 @@ class InternalAgentSubStage(Stage):
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
+        self.buffer_intermediate_messages: bool = settings.get(
+            "buffer_intermediate_messages",
+            False,
+        )
         self.show_reasoning = settings.get("display_reasoning_text", False)
         self.sanitize_context_by_modalities: bool = settings.get(
             "sanitize_context_by_modalities",
@@ -144,6 +153,7 @@ class InternalAgentSubStage(Stage):
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
+        typing_requested = False
         try:
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
@@ -152,7 +162,8 @@ class InternalAgentSubStage(Stage):
             has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
             has_media_content = any(
-                isinstance(comp, Image | File) for comp in event.message_obj.message
+                isinstance(comp, (Image, File, Record, Video))
+                for comp in event.message_obj.message
             )
 
             if (
@@ -178,7 +189,11 @@ class InternalAgentSubStage(Stage):
                     )
                     return
 
-            await event.send_typing()
+            try:
+                typing_requested = True
+                await event.send_typing()
+            except Exception:
+                logger.warning("send_typing failed", exc_info=True)
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
@@ -274,6 +289,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
+                                    buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
                         )
@@ -304,6 +320,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
+                                    buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
                         )
@@ -334,6 +351,7 @@ class InternalAgentSubStage(Stage):
                             self.show_tool_call_result,
                             stream_to_general,
                             show_reasoning=self.show_reasoning,
+                            buffer_intermediate_messages=self.buffer_intermediate_messages,
                         ):
                             yield
 
@@ -343,6 +361,15 @@ class InternalAgentSubStage(Stage):
                         "astr_agent_complete",
                         stats=agent_runner.stats.to_dict(),
                         resp=final_resp.completion_text if final_resp else None,
+                    )
+
+                    asyncio.create_task(
+                        _record_internal_agent_stats(
+                            event,
+                            req,
+                            agent_runner,
+                            final_resp,
+                        )
                     )
 
                     # 检查事件是否被停止，如果被停止则不保存历史记录
@@ -377,6 +404,11 @@ class InternalAgentSubStage(Stage):
             )
             await event.send(MessageChain().message(error_text))
         finally:
+            if typing_requested:
+                try:
+                    await event.stop_typing()
+                except Exception:
+                    logger.warning("stop_typing failed", exc_info=True)
             if follow_up_capture:
                 await finalize_follow_up_capture(
                     follow_up_capture,
@@ -417,7 +449,7 @@ class InternalAgentSubStage(Stage):
             logger.debug("LLM 响应为空，不保存记录。")
             return
 
-        message_to_save = []
+        messages_to_save: list[Message] = []
         skipped_initial_system = False
         for message in all_messages:
             if message.role == "system" and not skipped_initial_system:
@@ -425,7 +457,16 @@ class InternalAgentSubStage(Stage):
                 continue
             if message.role in ["assistant", "user"] and message._no_save:
                 continue
-            message_to_save.append(message.model_dump())
+            messages_to_save.append(message)
+
+        checkpoint_id = event.get_extra("llm_checkpoint_id")
+        message_to_save = dump_messages_with_checkpoints(messages_to_save)
+        if isinstance(checkpoint_id, str) and checkpoint_id:
+            message_to_save.append(
+                CheckpointMessageSegment(
+                    content=CheckpointData(id=checkpoint_id),
+                ).model_dump()
+            )
 
         # if user_aborted:
         #     message_to_save.append(
@@ -452,3 +493,46 @@ class InternalAgentSubStage(Stage):
 # these hosts are base64 encoded
 BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}
 decoded_blocked = [base64.b64decode(b).decode("utf-8") for b in BLOCKED]
+
+
+async def _record_internal_agent_stats(
+    event: AstrMessageEvent,
+    req: ProviderRequest | None,
+    agent_runner: AgentRunner | None,
+    final_resp: LLMResponse | None,
+) -> None:
+    """Persist internal agent stats without affecting the user response flow."""
+    if agent_runner is None:
+        return
+
+    provider = agent_runner.provider
+    stats = agent_runner.stats
+    if provider is None or stats is None:
+        return
+
+    try:
+        provider_config = getattr(provider, "provider_config", {}) or {}
+        conversation_id = (
+            req.conversation.cid
+            if req is not None and req.conversation is not None
+            else None
+        )
+
+        if agent_runner.was_aborted():
+            status = "aborted"
+        elif final_resp is not None and final_resp.role == "err":
+            status = "error"
+        else:
+            status = "completed"
+
+        await db_helper.insert_provider_stat(
+            umo=event.unified_msg_origin,
+            conversation_id=conversation_id,
+            provider_id=provider_config.get("id", "") or provider.meta().id,
+            provider_model=provider.get_model(),
+            status=status,
+            stats=stats.to_dict(),
+            agent_type="internal",
+        )
+    except Exception as e:
+        logger.warning("Persist provider stats failed: %s", e, exc_info=True)

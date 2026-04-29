@@ -33,6 +33,45 @@ const UTILITY_CLASSES = new Set([
     "mdi-18px", "mdi-24px", "mdi-36px", "mdi-48px",
 ]);
 
+// Icons used indirectly by Vuetify internals, so they won't appear in src/ static scans.
+export const REQUIRED_ICONS = new Set([
+    "mdi-radiobox-blank",
+    "mdi-radiobox-marked",
+    "mdi-menu-down",
+    "mdi-menu-right",
+    "mdi-check-circle",
+    "mdi-information",
+    "mdi-alert-circle",
+    "mdi-close-circle",
+    "mdi-chevron-down",
+    "mdi-chevron-up",
+    "mdi-chevron-left",
+    "mdi-chevron-right",
+    "mdi-check",
+    "mdi-close",
+    "mdi-checkbox-marked",
+    "mdi-checkbox-blank-outline",
+    "mdi-minus-box",
+    "mdi-circle",
+    "mdi-arrow-up",
+    "mdi-arrow-down",
+    "mdi-menu",
+    "mdi-pencil",
+    "mdi-star-outline",
+    "mdi-star",
+    "mdi-star-half-full",
+    "mdi-cached",
+    "mdi-page-first",
+    "mdi-page-last",
+    "mdi-unfold-more-horizontal",
+    "mdi-paperclip",
+    "mdi-plus",
+    "mdi-minus",
+    "mdi-calendar",
+    "mdi-eyedropper",
+    "mdi-cloud-upload",
+]);
+
 // Regex to match individual icon class definitions in MDI CSS
 export const ICON_CLASS_PATTERN = /\.(mdi-[a-z][a-z0-9-]*)::before\s*\{\s*content:\s*"\\([0-9A-Fa-f]+)"\s*;?\s*}/g;
 
@@ -53,7 +92,7 @@ export function* collectFiles(dir, exts) {
 /** Scan source files and return a Set of used mdi-* icon names. */
 export function scanUsedIcons(sourceFiles) {
     const iconPattern = /mdi-[a-z][a-z0-9-]*/g;
-    const usedIcons = new Set();
+    const usedIcons = new Set(REQUIRED_ICONS);
     for (const file of sourceFiles) {
         const content = readFileSync(file, "utf-8");
         for (const match of content.matchAll(iconPattern)) {

@@ -39,6 +39,9 @@
   "actions": {
     "copy": "复制",
     "regenerate": "重新生成",
+    "retry": "重试",
+    "retryWithModel": "使用其他模型",
+    "noAvailableModels": "暂无可用模型",
     "like": "点赞",
     "dislike": "踩",
     "share": "分享",
@@ -48,13 +51,26 @@
     "fullscreen": "全屏模式",
     "exitFullscreen": "退出全屏",
     "reply": "引用回复",
-    "providerConfig": "AI 配置",
+    "providerConfig": "模型配置",
     "toolsUsed": "已使用工具",
     "toolCallUsed": "已使用 {name} 工具",
     "pythonCodeAnalysis": "已使用 Python 代码分析"
   },
   "ipython": {
     "output": "输出"
+  },
+  "toolStatus": {
+    "done": "已完成",
+    "running": "运行中"
+  },
+  "thread": {
+    "title": "分支",
+    "askInThread": "在新分支中询问",
+    "count": "{count} 个分支",
+    "createFailed": "创建分支失败",
+    "delete": "删除分支",
+    "confirmDelete": "确定要删除这个分支吗？此操作无法撤销。",
+    "placeholder": "继续追问这段内容..."
   },
   "conversation": {
     "newConversation": "新的聊天",
@@ -97,7 +113,9 @@
     "title": "配置文件"
   },
   "reasoning": {
-    "thinking": "思考过程"
+    "thinking": "思考过程",
+    "think": "思考",
+    "toolUsed": "使用工具"
   },
   "reply": {
     "replyTo": "引用",
@@ -119,9 +137,9 @@
   },
   "stats": {
     "tokens": "Token",
-    "inputTokens": "输入 Token",
+    "inputTokens": "输入（其他）",
     "outputTokens": "输出 Token",
-    "cachedTokens": "缓存 Token",
+    "cachedTokens": "输入（缓存）",
     "duration": "耗时",
     "ttft": "首字时间"
   },
@@ -158,4 +176,4 @@
     "partialFailure": "{total} 个对话中有 {failed} 个删除失败",
     "requestFailed": "删除对话失败，请重试。"
   }
-} 
+}

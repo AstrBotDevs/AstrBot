@@ -1,11 +1,12 @@
 [project]
 name = "AstrBot"
-version = "4.20.1"
+version = "4.23.6"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
+license = { text = "AGPL-3.0-or-later" }
 requires-python = ">=3.12"
 
-keywords = ["Astrbot", "Astrbot Module", "Astrbot Plugin"]
+keywords = ["AstrBot", "Agent", "Chatbot", "IM"]
 
 dependencies = [
   "aiocqhttp>=1.4.4",
@@ -14,21 +15,19 @@ dependencies = [
   "aiosqlite>=0.21.0",
   "anthropic>=0.51.0",
   "apscheduler>=3.11.0",
-  "beautifulsoup4>=4.13.4",
   "certifi>=2025.4.26",
   "chardet~=5.1.0",
   "loguru>=0.7.2",
   "cryptography>=44.0.3",
   "dashscope>=1.23.2",
-  "defusedxml>=0.7.1",
   "deprecated>=1.2.18",
   "dingtalk-stream>=0.22.1",
   "docstring-parser>=0.16",
   "faiss-cpu>=1.12.0",
   "filelock>=3.18.0",
   "google-genai>=1.56.0",
+  "httpx[socks]>=0.28.1",
   "lark-oapi>=1.4.15",
-  "lxml-html-clean>=0.4.2",
   "mcp>=1.8.0",
   "openai>=1.78.0",
   "ormsgpack>=1.9.1",
@@ -39,10 +38,10 @@ dependencies = [
   "pydantic>=2.12.5",
   "pydub>=0.25.1",
   "pyjwt>=2.10.1",
+  "qrcode>=8.2",
   "python-telegram-bot>=22.6",
   "qq-botpy>=1.2.1",
   "quart>=0.20.0",
-  "readability-lxml>=0.8.4.1",
   "silk-python>=0.2.6",
   "slack-sdk>=3.35.0",
   "sqlalchemy[asyncio]>=2.0.41",
@@ -63,7 +62,9 @@ dependencies = [
   "shipyard-python-sdk>=0.2.4",
   "shipyard-neo-sdk>=0.2.0",
   "python-socks>=2.8.0",
+  "pysocks>=1.7.1",
   "packaging>=24.2",
+  "python-ripgrep==0.0.8",
 ]
 
 [dependency-groups]
@@ -77,6 +78,9 @@ dev = [
 
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
+
+[project.urls]
+Repository = "https://github.com/AstrBotDevs/AstrBot"
 
 [tool.ruff]
 exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]

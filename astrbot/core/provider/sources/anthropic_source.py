@@ -1,6 +1,7 @@
 import base64
 import json
 from collections.abc import AsyncGenerator
+from typing import Literal
 
 import anthropic
 import httpx
@@ -11,7 +12,8 @@ from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
+from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
@@ -29,6 +31,47 @@ from ..register import register_provider_adapter
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
+    @staticmethod
+    def _ensure_usable_response(
+        llm_response: LLMResponse,
+        *,
+        completion_id: str | None = None,
+        stop_reason: str | None = None,
+    ) -> None:
+        has_text_output = bool((llm_response.completion_text or "").strip())
+        has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
+        has_tool_output = bool(llm_response.tools_call_args)
+        if has_text_output or has_reasoning_output or has_tool_output:
+            return
+        raise EmptyModelOutputError(
+            "Anthropic completion has no usable output. "
+            f"completion_id={completion_id}, stop_reason={stop_reason}"
+        )
+
+    @staticmethod
+    def _normalize_custom_headers(provider_config: dict) -> dict[str, str] | None:
+        custom_headers = provider_config.get("custom_headers", {})
+        if not isinstance(custom_headers, dict) or not custom_headers:
+            return None
+        normalized_headers: dict[str, str] = {}
+        for key, value in custom_headers.items():
+            normalized_headers[str(key)] = str(value)
+        return normalized_headers or None
+
+    @classmethod
+    def _resolve_custom_headers(
+        cls,
+        provider_config: dict,
+        *,
+        required_headers: dict[str, str] | None = None,
+    ) -> dict[str, str] | None:
+        merged_headers = cls._normalize_custom_headers(provider_config) or {}
+        if required_headers:
+            for header_name, header_value in required_headers.items():
+                if not merged_headers.get(header_name, "").strip():
+                    merged_headers[header_name] = header_value
+        return merged_headers or None
+
     def __init__(
         self,
         provider_config,
@@ -46,6 +89,7 @@ class ProviderAnthropic(Provider):
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
         self.thinking_config = provider_config.get("anth_thinking_config", {})
+        self.custom_headers = self._resolve_custom_headers(provider_config)
 
         if use_api_key:
             self._init_api_key(provider_config)
@@ -63,10 +107,13 @@ class ProviderAnthropic(Provider):
             http_client=self._create_http_client(provider_config),
         )
 
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
-        """创建带代理的 HTTP 客户端"""
-        proxy = provider_config.get("proxy", "")
-        return create_proxy_client("Anthropic", proxy)
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
+        """创建带代理的 HTTP 客户端，使用系统 SSL 证书"""
+        return create_proxy_client(
+            "Anthropic",
+            provider_config.get("proxy", ""),
+            headers=self.custom_headers,
+        )
 
     def _apply_thinking_config(self, payloads: dict) -> None:
         thinking_type = self.thinking_config.get("type", "")
@@ -148,18 +195,37 @@ class ProviderAnthropic(Provider):
                     },
                 )
             elif message["role"] == "tool":
-                new_messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": message["tool_call_id"],
-                                "content": message["content"] or "<empty response>",
-                            },
-                        ],
-                    },
+                tool_result_block = {
+                    "type": "tool_result",
+                    "tool_use_id": message["tool_call_id"],
+                    "content": message["content"] or "<empty response>",
+                }
+                last_message = new_messages[-1] if new_messages else None
+                last_content = (
+                    last_message.get("content")
+                    if isinstance(last_message, dict)
+                    else None
                 )
+                can_append_to_previous_tool_results = (
+                    last_message is not None
+                    and last_message.get("role") == "user"
+                    and isinstance(last_content, list)
+                    and len(last_content) > 0
+                    and all(
+                        isinstance(block, dict) and block.get("type") == "tool_result"
+                        for block in last_content
+                    )
+                )
+
+                if can_append_to_previous_tool_results:
+                    last_content.append(tool_result_block)
+                else:
+                    new_messages.append(
+                        {
+                            "role": "user",
+                            "content": [tool_result_block],
+                        },
+                    )
             elif message["role"] == "user":
                 if isinstance(message.get("content"), list):
                     converted_content = []
@@ -194,6 +260,13 @@ class ProviderAnthropic(Provider):
                                 logger.warning(
                                     f"Unsupported image URL format for Anthropic: {url[:50]}..."
                                 )
+                        elif part.get("type") == "audio_url":
+                            converted_content.append(
+                                {
+                                    "type": "text",
+                                    "text": "[Audio Attachment]",
+                                }
+                            )
                         else:
                             converted_content.append(part)
                     new_messages.append(
@@ -229,11 +302,16 @@ class ProviderAnthropic(Provider):
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
+                payloads["tool_choice"] = {
+                    "type": "any"
+                    if payloads.get("tool_choice") == "required"
+                    else "auto"
+                }
 
         extra_body = self.provider_config.get("custom_extra_body", {})
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 1024
+            payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
 
         try:
@@ -254,7 +332,9 @@ class ProviderAnthropic(Provider):
         logger.debug(f"completion: {completion}")
 
         if len(completion.content) == 0:
-            raise Exception("API 返回的 completion 为空。")
+            raise EmptyModelOutputError(
+                f"Anthropic completion is empty. completion_id={completion.id}"
+            )
 
         llm_response = LLMResponse(role="assistant")
 
@@ -282,10 +362,9 @@ class ProviderAnthropic(Provider):
         if not llm_response.completion_text and not llm_response.tools_call_args:
             # Guard clause: raise early if no valid content at all
             if not llm_response.reasoning_content:
-                raise ValueError(
-                    f"Anthropic API returned unparsable completion: "
-                    f"no text, tool_use, or thinking content found. "
-                    f"Completion: {completion}"
+                raise EmptyModelOutputError(
+                    "Anthropic completion has no usable output. "
+                    f"completion_id={completion.id}, stop_reason={completion.stop_reason}"
                 )
 
             # We have reasoning content (ThinkingBlock) - this is valid
@@ -295,6 +374,11 @@ class ProviderAnthropic(Provider):
             )
             llm_response.completion_text = ""  # Ensure empty string, not None
 
+        self._ensure_usable_response(
+            llm_response,
+            completion_id=completion.id,
+            stop_reason=completion.stop_reason,
+        )
         return llm_response
 
     async def _query_stream(
@@ -305,6 +389,11 @@ class ProviderAnthropic(Provider):
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
+                payloads["tool_choice"] = {
+                    "type": "any"
+                    if payloads.get("tool_choice") == "required"
+                    else "auto"
+                }
 
         # 用于累积工具调用信息
         tool_use_buffer = {}
@@ -318,7 +407,7 @@ class ProviderAnthropic(Provider):
         reasoning_signature = ""
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 1024
+            payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
 
         async with self.client.messages.stream(
@@ -441,6 +530,11 @@ class ProviderAnthropic(Provider):
             final_response.tools_call_name = [call["name"] for call in final_tool_calls]
             final_response.tools_call_ids = [call["id"] for call in final_tool_calls]
 
+        self._ensure_usable_response(
+            final_response,
+            completion_id=id,
+            stop_reason=None,
+        )
         yield final_response
 
     async def text_chat(
@@ -448,12 +542,14 @@ class ProviderAnthropic(Provider):
         prompt=None,
         session_id=None,
         image_urls=None,
+        audio_urls=None,
         func_tool=None,
         contexts=None,
         system_prompt=None,
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -461,7 +557,10 @@ class ProviderAnthropic(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_user_content_parts
+                prompt or "",
+                image_urls,
+                audio_urls,
+                extra_user_content_parts,
             )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
@@ -487,6 +586,8 @@ class ProviderAnthropic(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": new_messages, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
@@ -505,12 +606,14 @@ class ProviderAnthropic(Provider):
         prompt=None,
         session_id=None,
         image_urls=None,
+        audio_urls=None,
         func_tool=None,
         contexts=None,
         system_prompt=None,
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ):
         if contexts is None:
@@ -518,7 +621,10 @@ class ProviderAnthropic(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_user_content_parts
+                prompt or "",
+                image_urls,
+                audio_urls,
+                extra_user_content_parts,
             )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
@@ -543,6 +649,8 @@ class ProviderAnthropic(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": new_messages, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
@@ -567,6 +675,7 @@ class ProviderAnthropic(Provider):
         self,
         text: str,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
     ):
         """组装上下文，支持文本和图片"""
@@ -605,7 +714,9 @@ class ProviderAnthropic(Provider):
             content.append({"type": "text", "text": text})
         elif image_urls:
             # 如果没有文本但有图片，添加占位文本
-            content.append({"type": "text", "text": "[图片]"})
+            content.append({"type": "text", "text": "[Image]"})
+        elif audio_urls:
+            content.append({"type": "text", "text": "[Audio]"})
         elif extra_user_content_parts:
             # 如果只有额外内容块，也需要添加占位文本
             content.append({"type": "text", "text": " "})
@@ -619,6 +730,8 @@ class ProviderAnthropic(Provider):
                     image_dict = await resolve_image_url(block.image_url.url)
                     if image_dict:
                         content.append(image_dict)
+                elif isinstance(block, AudioURLPart):
+                    content.append({"type": "text", "text": "[Audio]"})
                 else:
                     raise ValueError(f"不支持的额外内容块类型: {type(block)}")
 
@@ -628,12 +741,16 @@ class ProviderAnthropic(Provider):
                 image_dict = await resolve_image_url(image_url)
                 if image_dict:
                     content.append(image_dict)
+        if audio_urls:
+            for _audio_path in audio_urls:
+                content.append({"type": "text", "text": "[Audio]"})
 
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts
             and not image_urls
+            and not audio_urls
             and len(content) == 1
             and content[0]["type"] == "text"
         ):

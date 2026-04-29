@@ -214,7 +214,7 @@ def parse_description(text: str) -> str:
     if end_idx is None:
         return ""
 
-    frontmatter = "\n".join(lines[1:end_idx])
+    frontmatter = "\\n".join(lines[1:end_idx])
     try:
         import yaml
     except ImportError:
@@ -445,7 +445,22 @@ async def get_booter(
     if session_id in session_booter:
         booter = session_booter[session_id]
         if not await booter.available():
-            # rebuild
+            # Clean up old booter before rebuilding so sandbox resources
+            # on Bay (containers, volumes, networks) are not leaked.
+            # Only ShipyardNeoBooter supports delete_sandbox; other booters
+            # (local, boxlite, cua, etc.) are not backed by a remote sandbox
+            # manager and don't need it.
+            try:
+                if booter_type == "shipyard_neo":
+                    await booter.shutdown(delete_sandbox=True)
+                else:
+                    await booter.shutdown()
+            except Exception as shutdown_err:
+                logger.warning(
+                    "[Computer] Error shutting down stale booter for session %s: %s",
+                    session_id,
+                    shutdown_err,
+                )
             session_booter.pop(session_id, None)
     if session_id not in session_booter:
         uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
@@ -484,6 +499,15 @@ async def get_booter(
                 profile=profile,
                 ttl=ttl,
             )
+        elif booter_type == "cua":
+            from .booters.cua import CuaBooter, build_cua_booter_kwargs
+
+            cua_kwargs = build_cua_booter_kwargs(sandbox_cfg)
+            logger.info(
+                f"[Computer] CUA config: image={cua_kwargs['image']}, "
+                f"os_type={cua_kwargs['os_type']}, ttl={cua_kwargs['ttl']}"
+            )
+            client = CuaBooter(**cua_kwargs)
         elif booter_type == "boxlite":
             from .booters.boxlite import BoxliteBooter
 
@@ -499,6 +523,17 @@ async def get_booter(
             await _sync_skills_to_sandbox(client)
         except Exception as e:
             logger.error(f"Error booting sandbox for session {session_id}: {e}")
+            try:
+                if booter_type == "shipyard_neo":
+                    await client.shutdown(delete_sandbox=True)
+                else:
+                    await client.shutdown()
+            except Exception as shutdown_error:
+                logger.warning(
+                    "Failed to shutdown sandbox after boot error for session %s: %s",
+                    session_id,
+                    shutdown_error,
+                )
             raise e
 
         session_booter[session_id] = client

@@ -9,6 +9,7 @@ from . import HandlerFilter
 class PlatformAdapterType(enum.Flag):
     AIOCQHTTP = enum.auto()
     QQOFFICIAL = enum.auto()
+    QQOFFICIAL_WEBHOOK = enum.auto()
     TELEGRAM = enum.auto()
     WECOM = enum.auto()
     WECOM_AI_BOT = enum.auto()
@@ -22,28 +23,17 @@ class PlatformAdapterType(enum.Flag):
     SATORI = enum.auto()
     MISSKEY = enum.auto()
     LINE = enum.auto()
-    ALL = (
-        AIOCQHTTP
-        | QQOFFICIAL
-        | TELEGRAM
-        | WECOM
-        | WECOM_AI_BOT
-        | LARK
-        | DINGTALK
-        | DISCORD
-        | SLACK
-        | KOOK
-        | VOCECHAT
-        | WEIXIN_OFFICIAL_ACCOUNT
-        | SATORI
-        | MISSKEY
-        | LINE
-    )
+    MATRIX = enum.auto()
+    WEIXIN_OC = enum.auto()
+    MATTERMOST = enum.auto()
+    WEBCHAT = enum.auto()
+    ALL = enum.auto()
 
 
 ADAPTER_NAME_2_TYPE = {
     "aiocqhttp": PlatformAdapterType.AIOCQHTTP,
     "qq_official": PlatformAdapterType.QQOFFICIAL,
+    "qq_official_webhook": PlatformAdapterType.QQOFFICIAL_WEBHOOK,
     "telegram": PlatformAdapterType.TELEGRAM,
     "wecom": PlatformAdapterType.WECOM,
     "wecom_ai_bot": PlatformAdapterType.WECOM_AI_BOT,
@@ -57,6 +47,10 @@ ADAPTER_NAME_2_TYPE = {
     "satori": PlatformAdapterType.SATORI,
     "misskey": PlatformAdapterType.MISSKEY,
     "line": PlatformAdapterType.LINE,
+    "matrix": PlatformAdapterType.MATRIX,
+    "weixin_oc": PlatformAdapterType.WEIXIN_OC,
+    "mattermost": PlatformAdapterType.MATTERMOST,
+    "webchat": PlatformAdapterType.WEBCHAT,
 }
 
 
@@ -68,6 +62,12 @@ class PlatformAdapterTypeFilter(HandlerFilter):
             self.platform_type = platform_adapter_type_or_str
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        if (
+            self.platform_type is not None
+            and self.platform_type & PlatformAdapterType.ALL
+        ):
+            return True
+
         adapter_name = event.get_platform_name()
         if adapter_name in ADAPTER_NAME_2_TYPE and self.platform_type is not None:
             return bool(ADAPTER_NAME_2_TYPE[adapter_name] & self.platform_type)

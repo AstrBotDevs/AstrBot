@@ -3,8 +3,11 @@ import base64
 import json
 import logging
 import random
+import uuid
 from collections.abc import AsyncGenerator
-from typing import cast
+from pathlib import Path
+from typing import Literal, cast
+from urllib.parse import urlparse
 
 from google import genai
 from google.genai import types
@@ -13,11 +16,14 @@ from google.genai.errors import APIError
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
+from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
+from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
-from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.io import download_file, download_image_by_url
+from astrbot.core.utils.media_utils import ensure_wav
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
 
 from ..register import register_provider_adapter
@@ -131,6 +137,7 @@ class ProviderGoogleGenAI(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None = None,
+        tool_choice: Literal["auto", "required"] = "auto",
         system_instruction: str | None = None,
         modalities: list[str] | None = None,
         temperature: float = 0.7,
@@ -207,6 +214,19 @@ class ProviderGoogleGenAI(Provider):
                 types.Tool(function_declarations=func_desc["function_declarations"]),
             ]
 
+        tool_config = None
+        has_func_decl = tool_list and any(t.function_declarations for t in tool_list)
+        if has_func_decl:
+            tool_config = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode=(
+                        types.FunctionCallingConfigMode.ANY
+                        if tool_choice == "required"
+                        else types.FunctionCallingConfigMode.AUTO
+                    )
+                )
+            )
+
         # oper thinking config
         thinking_config = None
         if model_name in [
@@ -227,15 +247,10 @@ class ProviderGoogleGenAI(Provider):
                 thinking_config = types.ThinkingConfig(
                     thinking_budget=thinking_budget,
                 )
-        elif model_name in [
-            "gemini-3-pro",
-            "gemini-3-pro-preview",
-            "gemini-3-flash",
-            "gemini-3-flash-preview",
-            "gemini-3-flash-lite",
-            "gemini-3-flash-lite-preview",
-        ]:
-            # The thinkingLevel parameter, recommended for Gemini 3 models and onwards
+        elif any(model_name.startswith(p) for p in ("gemini-3-", "gemini-3.")):
+            # The thinkingLevel parameter, recommended for Gemini 3 models and onwards.
+            # Use prefix match so new variants (3.1, 3-flash-lite-preview, etc.) are
+            # covered without needing to keep an exhaustive list up to date.
             # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
             thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
                 "level", "HIGH"
@@ -272,6 +287,7 @@ class ProviderGoogleGenAI(Provider):
             seed=payloads.get("seed"),
             response_modalities=modalities,
             tools=cast(types.ToolListUnion | None, tool_list),
+            tool_config=tool_config,
             safety_settings=self.safety_settings if self.safety_settings else None,
             thinking_config=thinking_config,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
@@ -293,6 +309,12 @@ class ProviderGoogleGenAI(Provider):
             mime_type = url.split(":")[1].split(";")[0]
             image_bytes = base64.b64decode(url.split(",", 1)[1])
             return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+
+        def process_audio_url(audio_url_dict: dict) -> types.Part:
+            url = audio_url_dict["url"]
+            mime_type = url.split(":")[1].split(";")[0]
+            audio_bytes = base64.b64decode(url.split(",", 1)[1])
+            return types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
 
         def append_or_extend(
             contents: list[types.Content],
@@ -321,7 +343,11 @@ class ProviderGoogleGenAI(Provider):
                         (
                             types.Part.from_text(text=item["text"] or " ")
                             if item["type"] == "text"
-                            else process_image_url(item["image_url"])
+                            else (
+                                process_image_url(item["image_url"])
+                                if item["type"] == "image_url"
+                                else process_audio_url(item["audio_url"])
+                            )
                         )
                         for item in content
                     ]
@@ -399,8 +425,6 @@ class ProviderGoogleGenAI(Provider):
                         "content": message["content"],
                     },
                 )
-                if part.function_response:
-                    part.function_response.id = message["tool_call_id"]
 
                 parts = [part]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -430,15 +454,40 @@ class ProviderGoogleGenAI(Provider):
             output=usage_metadata.candidates_token_count or 0,
         )
 
+    @staticmethod
+    def _ensure_usable_response(
+        llm_response: LLMResponse,
+        *,
+        response_id: str | None = None,
+        finish_reason: str | None = None,
+    ) -> None:
+        has_text_output = bool((llm_response.completion_text or "").strip())
+        has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
+        has_tool_output = bool(llm_response.tools_call_args)
+        if has_text_output or has_reasoning_output or has_tool_output:
+            return
+        raise EmptyModelOutputError(
+            "Gemini completion has no usable output. "
+            f"response_id={response_id}, finish_reason={finish_reason}"
+        )
+
     def _process_content_parts(
         self,
         candidate: types.Candidate,
         llm_response: LLMResponse,
+        *,
+        validate_output: bool = True,
     ) -> MessageChain:
         """处理内容部分并构建消息链"""
         if not candidate.content:
             logger.warning(f"收到的 candidate.content 为空: {candidate}")
-            raise Exception("API 返回的 candidate.content 为空。")
+            if validate_output:
+                raise EmptyModelOutputError(
+                    "Gemini candidate content is empty. "
+                    f"finish_reason={candidate.finish_reason}"
+                )
+            llm_response.result_chain = MessageChain(chain=[])
+            return llm_response.result_chain
 
         finish_reason = candidate.finish_reason
         result_parts: list[types.Part] | None = candidate.content.parts
@@ -460,7 +509,13 @@ class ProviderGoogleGenAI(Provider):
 
         if not result_parts:
             logger.warning(f"收到的 candidate.content.parts 为空: {candidate}")
-            raise Exception("API 返回的 candidate.content.parts 为空。")
+            if validate_output:
+                raise EmptyModelOutputError(
+                    "Gemini candidate content parts are empty. "
+                    f"finish_reason={candidate.finish_reason}"
+                )
+            llm_response.result_chain = MessageChain(chain=[])
+            return llm_response.result_chain
 
         # 提取 reasoning content
         reasoning = self._extract_reasoning_content(candidate)
@@ -479,7 +534,11 @@ class ProviderGoogleGenAI(Provider):
         ):
             chain.append(Comp.Plain("这是图片"))
         for part in result_parts:
-            if part.text:
+            # Skip thinking parts — their text is already captured via
+            # _extract_reasoning_content above.  Including them here would
+            # leak the model's internal reasoning into the user-facing message,
+            # which also causes duplicate/triple replies on some platforms.
+            if part.text and not part.thought:
                 chain.append(Comp.Plain(part.text))
 
             if (
@@ -511,7 +570,15 @@ class ProviderGoogleGenAI(Provider):
             if ts := part.thought_signature:
                 # only keep the last thinking signature
                 llm_response.reasoning_signature = base64.b64encode(ts).decode("utf-8")
-        return MessageChain(chain=chain)
+        chain_result = MessageChain(chain=chain)
+        llm_response.result_chain = chain_result
+        if validate_output:
+            self._ensure_usable_response(
+                llm_response,
+                response_id=None,
+                finish_reason=str(finish_reason) if finish_reason is not None else None,
+            )
+        return chain_result
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         """非流式请求 Gemini API"""
@@ -535,6 +602,7 @@ class ProviderGoogleGenAI(Provider):
                 config = await self._prepare_query_config(
                     payloads,
                     tools,
+                    payloads.get("tool_choice", "auto"),
                     system_instruction,
                     modalities,
                     temperature,
@@ -616,6 +684,7 @@ class ProviderGoogleGenAI(Provider):
                 config = await self._prepare_query_config(
                     payloads,
                     tools,
+                    payloads.get("tool_choice", "auto"),
                     system_instruction,
                 )
                 result = await self.client.models.generate_content_stream(
@@ -662,6 +731,7 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.result_chain = self._process_content_parts(
                     chunk.candidates[0],
                     llm_response,
+                    validate_output=False,
                 )
                 llm_response.id = chunk.response_id
                 if chunk.usage_metadata:
@@ -692,6 +762,7 @@ class ProviderGoogleGenAI(Provider):
                     final_response.result_chain = self._process_content_parts(
                         chunk.candidates[0],
                         final_response,
+                        validate_output=False,
                     )
                     final_response.id = chunk.response_id
                     if chunk.usage_metadata:
@@ -711,9 +782,12 @@ class ProviderGoogleGenAI(Provider):
             final_response.result_chain = MessageChain(
                 chain=[Comp.Plain(accumulated_text)],
             )
-        elif not final_response.result_chain:
-            # If no text was accumulated and no final response was set, provide empty space
-            final_response.result_chain = MessageChain(chain=[Comp.Plain(" ")])
+
+        self._ensure_usable_response(
+            final_response,
+            response_id=getattr(final_response, "id", None),
+            finish_reason=None,
+        )
 
         yield final_response
 
@@ -722,12 +796,14 @@ class ProviderGoogleGenAI(Provider):
         prompt=None,
         session_id=None,
         image_urls=None,
+        audio_urls=None,
         func_tool=None,
         contexts=None,
         system_prompt=None,
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -735,7 +811,10 @@ class ProviderGoogleGenAI(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_user_content_parts
+                prompt or "",
+                image_urls,
+                audio_urls,
+                extra_user_content_parts,
             )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
@@ -758,6 +837,8 @@ class ProviderGoogleGenAI(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         retry = 10
         keys = self.api_keys.copy()
@@ -777,12 +858,14 @@ class ProviderGoogleGenAI(Provider):
         prompt=None,
         session_id=None,
         image_urls=None,
+        audio_urls=None,
         func_tool=None,
         contexts=None,
         system_prompt=None,
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
+        tool_choice: Literal["auto", "required"] = "auto",
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
@@ -790,7 +873,10 @@ class ProviderGoogleGenAI(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_user_content_parts
+                prompt or "",
+                image_urls,
+                audio_urls,
+                extra_user_content_parts,
             )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
@@ -813,6 +899,8 @@ class ProviderGoogleGenAI(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        if func_tool and not func_tool.empty():
+            payloads["tool_choice"] = tool_choice
 
         retry = 10
         keys = self.api_keys.copy()
@@ -854,6 +942,7 @@ class ProviderGoogleGenAI(Provider):
         self,
         text: str,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
     ):
         """组装上下文。"""
@@ -875,6 +964,43 @@ class ProviderGoogleGenAI(Provider):
                 "image_url": {"url": image_data},
             }
 
+        async def resolve_audio_part(audio_path: str) -> dict | None:
+            if audio_path.startswith("http"):
+                suffix = Path(urlparse(audio_path).path).suffix or ".wav"
+                temp_dir = Path(get_astrbot_temp_path())
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                resolved_path = str(
+                    temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
+                )
+                await download_file(audio_path, resolved_path)
+            elif audio_path.startswith("file:///"):
+                resolved_path = audio_path.replace("file:///", "")
+            else:
+                resolved_path = audio_path
+
+            suffix = Path(resolved_path).suffix.lower()
+            if suffix != ".mp3":
+                resolved_path = await ensure_wav(resolved_path)
+                suffix = ".wav"
+
+            try:
+                audio_bytes = Path(resolved_path).read_bytes()
+            except OSError as exc:
+                logger.warning(
+                    f"Failed to read audio file {resolved_path}, skipping. Error: {exc}"
+                )
+                return None
+
+            mime_type = {
+                ".wav": "audio/wav",
+                ".mp3": "audio/mp3",
+            }.get(suffix, "audio/wav")
+            audio_data = base64.b64encode(audio_bytes).decode("utf-8")
+            return {
+                "type": "audio_url",
+                "audio_url": {"url": f"data:{mime_type};base64,{audio_data}"},
+            }
+
         # 构建内容块列表
         content_blocks = []
 
@@ -883,7 +1009,9 @@ class ProviderGoogleGenAI(Provider):
             content_blocks.append({"type": "text", "text": text})
         elif image_urls:
             # 如果没有文本但有图片，添加占位文本
-            content_blocks.append({"type": "text", "text": "[图片]"})
+            content_blocks.append({"type": "text", "text": "[Image]"})
+        elif audio_urls:
+            content_blocks.append({"type": "text", "text": "[Audio]"})
         elif extra_user_content_parts:
             # 如果只有额外内容块，也需要添加占位文本
             content_blocks.append({"type": "text", "text": " "})
@@ -897,6 +1025,10 @@ class ProviderGoogleGenAI(Provider):
                     image_part = await resolve_image_part(part.image_url.url)
                     if image_part:
                         content_blocks.append(image_part)
+                elif isinstance(part, AudioURLPart):
+                    audio_part = await resolve_audio_part(part.audio_url.url)
+                    if audio_part:
+                        content_blocks.append(audio_part)
                 else:
                     raise ValueError(f"不支持的额外内容块类型: {type(part)}")
 
@@ -907,11 +1039,18 @@ class ProviderGoogleGenAI(Provider):
                 if image_part:
                     content_blocks.append(image_part)
 
+        if audio_urls:
+            for audio_path in audio_urls:
+                audio_part = await resolve_audio_part(audio_path)
+                if audio_part:
+                    content_blocks.append(audio_part)
+
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts
             and not image_urls
+            and not audio_urls
             and len(content_blocks) == 1
             and content_blocks[0]["type"] == "text"
         ):

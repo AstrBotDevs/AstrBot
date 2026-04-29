@@ -3,6 +3,7 @@ import copy
 import io
 import os
 import sys
+import uuid
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
@@ -108,6 +109,58 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
+async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config.get("dashboard", {}),
+    )
+    warning_messages = []
+    info_messages = []
+
+    async def fake_serve(app, config, shutdown_trigger):
+        return config
+
+    def capture(messages):
+        def append(message, *args):
+            messages.append(message % args if args else message)
+
+        return append
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["ssl"] = {
+            "enable": True,
+            "cert_file": "",
+            "key_file": "",
+        }
+        monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
+        monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.warning",
+            capture(warning_messages),
+        )
+        monkeypatch.setattr(
+            "astrbot.dashboard.server.logger.info",
+            capture(info_messages),
+        )
+
+        config = await server.run()
+
+        assert getattr(config, "certfile", None) is None
+        assert getattr(config, "keyfile", None) is None
+        assert any(
+            "cert_file or key_file is missing" in message
+            for message in warning_messages
+        )
+        assert any("Starting WebUI at http://" in message for message in info_messages)
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
+
+
+@pytest.mark.asyncio
 async def test_subagent_config_accepts_default_persona(
     app: Quart,
     authenticated_header: dict,
@@ -155,6 +208,8 @@ async def test_subagent_config_accepts_default_persona(
             headers=authenticated_header,
         )
 
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [[], "x"])
 async def test_batch_delete_sessions_rejects_non_object_payload(
     app: Quart, authenticated_header: dict, payload
@@ -424,6 +479,224 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
     assert data["status"] == "ok"
     # conflicts is a list
     assert isinstance(data["data"], list)
+
+
+@pytest.mark.asyncio
+async def test_t2i_set_active_template_syncs_all_configs(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    template_name = f"sync_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
+
+    try:
+        for name in ("sync-a", "sync-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
+
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }}</body></html>",
+            },
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        assert "default" in conf_ids
+        for conf_id in conf_ids:
+            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
+            assert conf.get("t2i_active_template") == template_name
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
+
+
+@pytest.mark.asyncio
+async def test_t2i_reset_default_template_syncs_all_configs(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    template_name = f"reset_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
+
+    try:
+        for name in ("reset-a", "reset-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
+
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }} reset</body></html>",
+            },
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+
+        response = await test_client.post(
+            "/api/t2i/templates/reset_default",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        conf_ids = set(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        assert "default" in conf_ids
+        for conf_id in conf_ids:
+            conf = core_lifecycle_td.astrbot_config_mgr.confs[conf_id]
+            assert conf.get("t2i_active_template") == "base"
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
+
+
+@pytest.mark.asyncio
+async def test_t2i_update_active_template_reloads_all_schedulers(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    template_name = f"update_tpl_{uuid.uuid4().hex[:8]}"
+    created_conf_ids: list[str] = []
+
+    try:
+        for name in ("update-a", "update-b"):
+            response = await test_client.post(
+                "/api/config/abconf/new",
+                json={"name": name},
+                headers=authenticated_header,
+            )
+            assert response.status_code == 200
+            data = await response.get_json()
+            assert data["status"] == "ok"
+            created_conf_ids.append(data["data"]["conf_id"])
+
+        response = await test_client.post(
+            "/api/t2i/templates/create",
+            json={
+                "name": template_name,
+                "content": "<html><body>{{ content }} v1</body></html>",
+            },
+            headers=authenticated_header,
+        )
+        assert response.status_code == 201
+
+        response = await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": template_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+
+        conf_ids = list(core_lifecycle_td.astrbot_config_mgr.confs.keys())
+        old_schedulers = {
+            conf_id: core_lifecycle_td.pipeline_scheduler_mapping[conf_id]
+            for conf_id in conf_ids
+        }
+
+        response = await test_client.put(
+            f"/api/t2i/templates/{template_name}",
+            json={"content": "<html><body>{{ content }} v2</body></html>"},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        for conf_id in conf_ids:
+            assert conf_id in core_lifecycle_td.pipeline_scheduler_mapping
+            assert (
+                core_lifecycle_td.pipeline_scheduler_mapping[conf_id]
+                is not old_schedulers[conf_id]
+            )
+    finally:
+        await test_client.post(
+            "/api/t2i/templates/set_active",
+            json={"name": "base"},
+            headers=authenticated_header,
+        )
+        await test_client.delete(
+            f"/api/t2i/templates/{template_name}",
+            headers=authenticated_header,
+        )
+        for conf_id in created_conf_ids:
+            await test_client.post(
+                "/api/config/abconf/delete",
+                json={"id": conf_id},
+                headers=authenticated_header,
+            )
 
 
 @pytest.mark.asyncio

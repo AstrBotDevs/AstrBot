@@ -97,7 +97,7 @@
     "livePreview": "Live Preview (may differ)",
     "refreshPreview": "Refresh Preview",
     "previewText": "This is a sample text used to preview the template output.\n\nIt can contain multiple lines and various formatting.",
-    "syntaxHint": "Supports jinja2 syntax. Available variables: text | safe (text to render), version (AstrBot version)",
+    "syntaxHint": "Supports jinja2 syntax. Available variables: text | safe (text to render), version (AstrBot version). If the preview test content does not load or looks wrong, click Reset Base to restore the default template.",
     "saveAndApply": "Save and Apply Current Template",
     "confirmReset": "Confirm Reset",
     "confirmResetMessage": "Are you sure you want to reset the 'base' template to default content? Any unsaved changes in the editor will be lost. This action cannot be undone.",

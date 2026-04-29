@@ -1,4 +1,5 @@
-![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
+![astrbot-github-banner-v2-light-0405_副本](https://github.com/user-attachments/assets/36fb04e4-cc75-4454-bd8b-049d11aa86f9)
+
 
 <div align="center">
 
@@ -32,7 +33,7 @@
 <a href="https://astrbot.app/">Documentation</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">Roadmap</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a> ｜
 <a href="mailto:community@astrbot.app">Email Support</a>
 </div>
 
@@ -76,27 +77,31 @@ AstrBot is an open-source all-in-one Agent chatbot platform that integrates with
 For users who want to quickly experience AstrBot, are familiar with command-line usage, and can install a `uv` environment on their own, we recommend the `uv` one-click deployment method ⚡️:
 
 ```bash
-uv tool install astrbot
+uv tool install astrbot --python 3.12
 astrbot init # Only execute this command for the first time to initialize the environment
 astrbot run
 ```
 
 > Requires [uv](https://docs.astral.sh/uv/) to be installed.
+> AstrBot requires Python 3.12 or later. The `--python 3.12` option ensures that `uv` creates the tool environment with Python 3.12.
 
 > [!NOTE]
-> For macOS user: due to macOS security checks, the first run of the `astrbot` command may take longer (about 10-20s).
+> For macOS users: due to macOS security checks, the first run of the `astrbot` command may take longer (about 10-20s).
 
 Update `astrbot`:
 
 ```bash
-uv tool upgrade astrbot
+uv tool upgrade astrbot --python 3.12
 ```
+
+> [!WARNING]
+> AstrBot deployed via `uv` **does not support upgrading through the WebUI**. To update, please run the command above from the command line.
 
 ### Docker Deployment
 
 For users familiar with containers and looking for a more stable, production-ready deployment method, we recommend deploying AstrBot with Docker / Docker Compose.
 
-Please refer to the official documentation: [Deploy AstrBot with Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
+Please refer to the official documentation: [Deploy AstrBot with Docker](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
 
 ### Deploy on RainYun
 
@@ -134,7 +139,7 @@ yay -S astrbot-git
 
 **More deployment methods**
 
-If you need panel-based management or deeper customization, see [BT-Panel Deployment](https://astrbot.app/deploy/astrbot/btpanel.html) for BT Panel app-store setup, [1Panel Deployment](https://astrbot.app/deploy/astrbot/1panel.html) for 1Panel app-market deployment, [CasaOS Deployment](https://astrbot.app/deploy/astrbot/casaos.html) for NAS/home-server visual deployment, and [Manual Deployment](https://astrbot.app/deploy/astrbot/cli.html) for fully custom source-based installation with `uv`.
+If you need panel-based management or deeper customization, see [BT-Panel Deployment](https://docs.astrbot.app/deploy/astrbot/btpanel.html) for BT Panel app-store setup, [1Panel Deployment](https://docs.astrbot.app/deploy/astrbot/1panel.html) for 1Panel app-market deployment, [CasaOS Deployment](https://docs.astrbot.app/deploy/astrbot/casaos.html) for NAS/home-server visual deployment, and [Manual Deployment](https://docs.astrbot.app/deploy/astrbot/cli.html) for fully custom source-based installation with `uv`.
 
 ## Supported Messaging Platforms
 
@@ -153,10 +158,12 @@ Connect AstrBot to your favorite chat platform.
 | Discord | Official |
 | LINE | Official |
 | Satori | Official |
+| KOOK | Official |
 | Misskey | Official |
+| Mattermost | Official |
 | WhatsApp (Coming Soon) | Official |
 | [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | Community |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | Community |
+| [Rocket.Chat](https://github.com/NET-Homeless/astrbot_plugin_rocket_chat_adapter) | Community |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | Community |
 
 ## Supported Model Services
@@ -184,6 +191,7 @@ Connect AstrBot to your favorite chat platform.
 | Coze | LLMOps Platforms |
 | OpenAI Whisper | Speech-to-Text Services |
 | SenseVoice | Speech-to-Text Services |
+| Xiaomi MiMo Omni | Speech-to-Text Services |
 | OpenAI TTS | Text-to-Speech Services |
 | Gemini TTS | Text-to-Speech Services |
 | GPT-Sovits-Inference | Text-to-Speech Services |
@@ -193,6 +201,7 @@ Connect AstrBot to your favorite chat platform.
 | Alibaba Cloud Bailian TTS | Text-to-Speech Services |
 | Azure TTS | Text-to-Speech Services |
 | Minimax TTS | Text-to-Speech Services |
+| Xiaomi MiMo TTS | Text-to-Speech Services |
 | Volcano Engine TTS | Text-to-Speech Services |
 
 ## ❤️ Sponsors
@@ -225,14 +234,17 @@ pre-commit install
 
 ### QQ Groups
 
-- Group 9: 1076659624 (New)
-- Group 10: 1078079676 (New)
-- Group 1: 322154837
-- Group 3: 630166526
-- Group 5: 822130018
-- Group 6: 753075035
-- Group 7: 743746109
-- Group 8: 1030353265
+- Group 12: 916228568 (New)
+- Group 9: 1076659624 (Full)
+- Group 10: 1078079676 (Full)
+- Group 11: 704659519 (Full)
+- Group 1: 322154837 (Full)
+- Group 3: 630166526 (Full)
+- Group 4: 1077826412 (Full)
+- Group 5: 822130018 (Full)
+- Group 6: 753075035 (Full)
+- Group 7: 743746109 (Full)
+- Group 8: 1030353265 (Full)
 
 - Developer Group(Chit-chat): 975206796
 - Developer Group(Formal): 1039761811

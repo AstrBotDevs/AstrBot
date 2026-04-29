@@ -382,6 +382,7 @@ const deleteChunk = async (chunk: any) => {
 const getFileIcon = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'mdi-file-pdf-box'
+  if (type.includes('epub')) return 'mdi-book-open-page-variant'
   if (type.includes('md')) return 'mdi-language-markdown'
   if (type.includes('txt')) return 'mdi-file-document-outline'
   return 'mdi-file'
@@ -390,6 +391,7 @@ const getFileIcon = (fileType: string) => {
 const getFileColor = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'error'
+  if (type.includes('epub')) return 'warning'
   if (type.includes('md')) return 'info'
   if (type.includes('txt')) return 'success'
   return 'grey'

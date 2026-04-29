@@ -87,6 +87,31 @@ def _build_tool_result_status_message(
     return status_msg
 
 
+def _should_buffer_llm_result(
+    buffer_intermediate_messages: bool,
+    stream_to_general: bool,
+    agent_runner: AgentRunner,
+) -> bool:
+    return (
+        buffer_intermediate_messages
+        and not stream_to_general
+        and not agent_runner.streaming
+    )
+
+
+def _merge_buffered_llm_chains(
+    buffered_llm_chains: list[MessageChain],
+) -> MessageChain | None:
+    if not buffered_llm_chains:
+        return None
+
+    merged_chain = MessageChain()
+    for chain in buffered_llm_chains:
+        merged_chain.chain.extend(chain.chain)
+    buffered_llm_chains.clear()
+    return merged_chain
+
+
 async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 30,
@@ -94,10 +119,17 @@ async def run_agent(
     show_tool_call_result: bool = False,
     stream_to_general: bool = False,
     show_reasoning: bool = False,
+    buffer_intermediate_messages: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
+    buffered_llm_chains: list[MessageChain] = []
+    can_buffer_llm_result = _should_buffer_llm_result(
+        buffer_intermediate_messages,
+        stream_to_general,
+        agent_runner,
+    )
     while step_idx < max_step + 1:
         step_idx += 1
 
@@ -126,6 +158,17 @@ async def run_agent(
                     agent_runner.request_stop()
 
                 if resp.type == "aborted":
+                    if can_buffer_llm_result:
+                        merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
+                        if merged_chain:
+                            astr_event.set_result(
+                                MessageEventResult(
+                                    chain=merged_chain.chain,
+                                    result_content_type=ResultContentType.LLM_RESULT,
+                                ),
+                            )
+                            yield merged_chain
+                            astr_event.clear_result()
                     if not stop_watcher.done():
                         stop_watcher.cancel()
                         try:
@@ -165,8 +208,13 @@ async def run_agent(
                     # 对于其他情况，暂时先不处理
                     continue
                 elif resp.type == "tool_call":
-                    if agent_runner.streaming:
-                        # 用来标记流式响应需要分节
+                    if agent_runner.streaming and show_tool_use:
+                        # 向下游平台发送 "break" 分段信号（空 MessageChain，不携带数据）。
+                        # 平台适配器收到后会关闭当前流式消息，并在后续文本到来时创建新消息。
+                        # 仅在 show_tool_use 为 True 时才发送：此时紧接着会通过
+                        # astr_event.send() 独立发送工具状态消息（如"🔨 调用工具: xxx"），
+                        # 需要分段才能保证消息顺序正确。
+                        # 若 show_tool_use 为 False，不会有独立消息插入，无需分段。
                         yield MessageChain(chain=[], type="break")
 
                     tool_info = _extract_chain_json_data(resp.data["chain"])
@@ -187,11 +235,21 @@ async def run_agent(
                         )
                         await astr_event.send(chain)
                     continue
+                elif resp.type == "llm_result":
+                    chain = resp.data["chain"]
+                    if chain.type == "reasoning":
+                        # For non-streaming mode, we handle reasoning in astrbot/core/astr_agent_hooks.py.
+                        # For streaming mode, we yield content immediately when received a reasoning chunk but not in here, see below.
+                        continue
 
                 if stream_to_general and resp.type == "streaming_delta":
                     continue
 
                 if stream_to_general or not agent_runner.streaming:
+                    if can_buffer_llm_result and resp.type == "llm_result":
+                        buffered_llm_chains.append(resp.data["chain"])
+                        continue
+
                     content_typ = (
                         ResultContentType.LLM_RESULT
                         if resp.type == "llm_result"
@@ -203,7 +261,7 @@ async def run_agent(
                             result_content_type=content_typ,
                         ),
                     )
-                    yield
+                    yield resp.data["chain"]
                     astr_event.clear_result()
                 elif resp.type == "streaming_delta":
                     chain = resp.data["chain"]
@@ -211,6 +269,19 @@ async def run_agent(
                         # display the reasoning content only when configured
                         continue
                     yield resp.data["chain"]  # MessageChain
+
+            if can_buffer_llm_result and agent_runner.done():
+                merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
+                if merged_chain:
+                    astr_event.set_result(
+                        MessageEventResult(
+                            chain=merged_chain.chain,
+                            result_content_type=ResultContentType.LLM_RESULT,
+                        ),
+                    )
+                    yield merged_chain
+                    astr_event.clear_result()
+
             if not stop_watcher.done():
                 stop_watcher.cancel()
                 try:
@@ -283,6 +354,7 @@ async def run_live_agent(
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,
+    buffer_intermediate_messages: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
     """Live Mode 的 Agent 运行器，支持流式 TTS
 
@@ -306,6 +378,7 @@ async def run_live_agent(
             show_tool_call_result=show_tool_call_result,
             stream_to_general=False,
             show_reasoning=show_reasoning,
+            buffer_intermediate_messages=buffer_intermediate_messages,
         ):
             yield chain
         return
@@ -338,6 +411,7 @@ async def run_live_agent(
             show_tool_use,
             show_tool_call_result,
             show_reasoning,
+            buffer_intermediate_messages,
         )
     )
 
@@ -425,6 +499,7 @@ async def _run_agent_feeder(
     show_tool_use: bool,
     show_tool_call_result: bool,
     show_reasoning: bool,
+    buffer_intermediate_messages: bool,
 ) -> None:
     """运行 Agent 并将文本输出分句放入队列"""
     buffer = ""
@@ -436,6 +511,7 @@ async def _run_agent_feeder(
             show_tool_call_result=show_tool_call_result,
             stream_to_general=False,
             show_reasoning=show_reasoning,
+            buffer_intermediate_messages=buffer_intermediate_messages,
         ):
             if chain is None:
                 continue

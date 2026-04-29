@@ -3,10 +3,43 @@
 import os
 from typing import Any, TypedDict
 
+from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.20.1"
+VERSION = "4.23.6"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+PERSONAL_WECHAT_CONFIG_METADATA = {
+    "weixin_oc_base_url": {
+        "description": "Base URL",
+        "type": "string",
+        "hint": "默认值: https://ilinkai.weixin.qq.com",
+    },
+    "weixin_oc_bot_type": {
+        "description": "扫码参数 bot_type",
+        "type": "string",
+        "hint": "默认值: 3",
+    },
+    "weixin_oc_qr_poll_interval": {
+        "description": "二维码状态轮询间隔（秒）",
+        "type": "int",
+        "hint": "每隔多少秒轮询一次二维码状态。",
+    },
+    "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates 长轮询超时时间（毫秒）",
+        "type": "int",
+        "hint": "会话消息拉取接口超时参数。",
+    },
+    "weixin_oc_api_timeout_ms": {
+        "description": "HTTP 请求超时（毫秒）",
+        "type": "int",
+        "hint": "通用 API 请求超时参数。",
+    },
+    "weixin_oc_token": {
+        "description": "登录后 token（可留空）",
+        "type": "string",
+        "hint": "扫码登录成功后会自动写入；高级场景可手动填写。",
+    },
+}
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
     "qq_official_webhook",
@@ -74,9 +107,10 @@ DEFAULT_CONFIG = {
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
-        "websearch_provider": "default",
+        "websearch_provider": "tavily",
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
+        "websearch_brave_key": [],
         "websearch_baidu_app_builder_key": "",
         "web_search_link": False,
         "display_reasoning_text": False,
@@ -101,6 +135,7 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
+        "buffer_intermediate_messages": False,
         "sanitize_context_by_modalities": False,
         "max_quoted_fallback_images": 20,
         "quoted_message_parser": {
@@ -117,7 +152,7 @@ DEFAULT_CONFIG = {
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
         "max_agent_step": 30,
-        "tool_call_timeout": 60,
+        "tool_call_timeout": 120,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
@@ -141,6 +176,17 @@ DEFAULT_CONFIG = {
             "shipyard_neo_access_token": "",
             "shipyard_neo_profile": "python-default",
             "shipyard_neo_ttl": 3600,
+            "cua_image": CUA_DEFAULT_CONFIG["image"],
+            "cua_os_type": CUA_DEFAULT_CONFIG["os_type"],
+            "cua_ttl": CUA_DEFAULT_CONFIG["ttl"],
+            "cua_telemetry_enabled": CUA_DEFAULT_CONFIG["telemetry_enabled"],
+            "cua_local": CUA_DEFAULT_CONFIG["local"],
+            "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
+        },
+        "image_compress_enabled": True,
+        "image_compress_options": {
+            "max_size": 1280,
+            "quality": 95,
         },
     },
     # SubAgent orchestrator mode:
@@ -364,6 +410,16 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6198,
                     },
+                    "个人微信": {
+                        "id": "weixin_personal",
+                        "type": "weixin_oc",
+                        "enable": False,
+                        "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
+                        "weixin_oc_bot_type": "3",
+                        "weixin_oc_qr_poll_interval": 1,
+                        "weixin_oc_long_poll_timeout_ms": 35_000,
+                        "weixin_oc_api_timeout_ms": 15_000,
+                    },
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
@@ -396,6 +452,7 @@ CONFIG_METADATA_2 = {
                         "telegram_command_register": True,
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
+                        "telegram_polling_restart_delay": 5.0,
                     },
                     "Discord": {
                         "id": "discord",
@@ -405,6 +462,7 @@ CONFIG_METADATA_2 = {
                         "discord_proxy": "",
                         "discord_command_register": True,
                         "discord_activity_name": "",
+                        "discord_allow_bot_messages": False,
                     },
                     "Misskey": {
                         "id": "misskey",
@@ -458,7 +516,7 @@ CONFIG_METADATA_2 = {
                         "satori_heartbeat_interval": 10,
                         "satori_reconnect_delay": 5,
                     },
-                    "kook": {
+                    "KOOK": {
                         "id": "kook",
                         "type": "kook",
                         "enable": False,
@@ -470,6 +528,14 @@ CONFIG_METADATA_2 = {
                         "kook_heartbeat_timeout": 6,
                         "kook_max_heartbeat_failures": 3,
                         "kook_max_consecutive_failures": 5,
+                    },
+                    "Mattermost": {
+                        "id": "mattermost",
+                        "type": "mattermost",
+                        "enable": False,
+                        "mattermost_url": "https://chat.example.com",
+                        "mattermost_bot_token": "",
+                        "mattermost_reconnect_delay": 5.0,
                     },
                     # "WebChat": {
                     #     "id": "webchat",
@@ -605,6 +671,21 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
                     },
+                    "mattermost_url": {
+                        "description": "Mattermost URL",
+                        "type": "string",
+                        "hint": "Mattermost 服务地址，例如 https://chat.example.com。",
+                    },
+                    "mattermost_bot_token": {
+                        "description": "Mattermost Bot Token",
+                        "type": "string",
+                        "hint": "在 Mattermost 中创建 Bot 账户后生成的访问令牌。",
+                    },
+                    "mattermost_reconnect_delay": {
+                        "description": "Mattermost 重连延迟",
+                        "type": "float",
+                        "hint": "WebSocket 断开后的重连等待时间，单位为秒。默认 5 秒。",
+                    },
                     "misskey_instance_url": {
                         "description": "Misskey 实例 URL",
                         "type": "string",
@@ -686,6 +767,11 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "Telegram 命令自动刷新间隔，单位为秒。",
                     },
+                    "telegram_polling_restart_delay": {
+                        "description": "Telegram 轮询重启延迟",
+                        "type": "float",
+                        "hint": "当轮询意外结束尝试自动重启时的延迟时间，理论上越短恢复越快，但过短（<0.1s）可能导致死循环针对 API 服务器的请求阻断。单位为秒。默认为 5s。",
+                    },
                     "id": {
                         "description": "机器人名称",
                         "type": "string",
@@ -704,7 +790,7 @@ CONFIG_METADATA_2 = {
                     "appid": {
                         "description": "appid",
                         "type": "string",
-                        "hint": "必填项。QQ 官方机器人平台的 appid。如何获取请参考文档。",
+                        "hint": "必填项。当前消息平台的 AppID。如何获取请参考对应平台接入文档。",
                     },
                     "secret": {
                         "description": "secret",
@@ -842,6 +928,11 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "可选的 Discord 活动名称。留空则不设置活动。",
                     },
+                    "discord_allow_bot_messages": {
+                        "description": "允许接收机器人消息",
+                        "type": "bool",
+                        "hint": "启用后，AstrBot 将接收来自其他 Discord 机器人的消息。适用于机器人间通信场景（如消息转发）。默认关闭。",
+                    },
                     "port": {
                         "description": "回调服务器端口",
                         "type": "int",
@@ -863,6 +954,7 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
                     },
+                    **PERSONAL_WECHAT_CONFIG_METADATA,
                     "webhook_uuid": {
                         "invisible": True,
                         "description": "Webhook UUID",
@@ -1068,7 +1160,7 @@ CONFIG_METADATA_2 = {
                 "type": "list",
                 # provider sources templates
                 "config_template": {
-                    "OpenAI": {
+                    "OpenAI Compatible": {
                         "id": "openai",
                         "provider": "openai",
                         "type": "openai_chat_completion",
@@ -1112,6 +1204,20 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.anthropic.com/v1",
                         "timeout": 120,
                         "proxy": "",
+                        "custom_headers": {},
+                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
+                    },
+                    "Kimi Coding Plan": {
+                        "id": "kimi-code",
+                        "provider": "kimi-code",
+                        "type": "kimi_code_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.kimi.com/coding",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Moonshot": {
@@ -1137,6 +1243,19 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
+                    },
+                    "MiniMax Token Plan": {
+                        "id": "minimax-token-plan",
+                        "provider": "minimax-token-plan",
+                        "type": "minimax_token_plan",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.minimaxi.com/anthropic",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "xAI": {
                         "id": "xai",
@@ -1172,6 +1291,18 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://open.bigmodel.cn/api/paas/v4/",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
+                    "LongCat": {
+                        "id": "longcat",
+                        "provider": "longcat",
+                        "type": "longcat_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.longcat.chat/openai",
+                        "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
                     },
@@ -1234,6 +1365,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "http://127.0.0.1:11434/v1",
                         "proxy": "",
                         "custom_headers": {},
+                        "ollama_disable_thinking": False,
                     },
                     "LM Studio": {
                         "id": "lm_studio",
@@ -1431,6 +1563,20 @@ CONFIG_METADATA_2 = {
                         "model": "whisper-1",
                         "proxy": "",
                     },
+                    "MiMo STT(API)": {
+                        "id": "mimo_stt",
+                        "provider": "mimo",
+                        "type": "mimo_stt_api",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.xiaomimimo.com/v1",
+                        "model": "mimo-v2-omni",
+                        "mimo-stt-system-prompt": "You are a speech transcription assistant. Transcribe the spoken content from the audio exactly and return only the transcription text.",
+                        "mimo-stt-user-prompt": "Please transcribe the content of the audio and return only the transcription text.",
+                        "timeout": "20",
+                        "proxy": "",
+                    },
                     "Whisper(Local)": {
                         "provider": "openai",
                         "type": "openai_whisper_selfhost",
@@ -1438,6 +1584,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "id": "whisper_selfhost",
                         "model": "tiny",
+                        "whisper_device": "cpu",
                     },
                     "SenseVoice(Local)": {
                         "type": "sensevoice_stt_selfhost",
@@ -1458,6 +1605,23 @@ CONFIG_METADATA_2 = {
                         "api_base": "",
                         "model": "tts-1",
                         "openai-tts-voice": "alloy",
+                        "timeout": "20",
+                        "proxy": "",
+                    },
+                    "MiMo TTS(API)": {
+                        "id": "mimo_tts",
+                        "type": "mimo_tts_api",
+                        "provider": "mimo",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.xiaomimimo.com/v1",
+                        "model": "mimo-v2-tts",
+                        "mimo-tts-voice": "mimo_default",
+                        "mimo-tts-format": "wav",
+                        "mimo-tts-style-prompt": "",
+                        "mimo-tts-dialect": "",
+                        "mimo-tts-seed-text": "Hello, MiMo, have you had lunch?",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -1523,10 +1687,14 @@ CONFIG_METADATA_2 = {
                         "type": "gsvi_tts_api",
                         "provider": "gpt_sovits_inference",
                         "provider_type": "text_to_speech",
-                        "api_base": "http://127.0.0.1:5000",
-                        "character": "",
-                        "emotion": "default",
                         "enable": False,
+                        "api_key": "",
+                        "api_base": "http://127.0.0.1:8000",
+                        "version": "v4",
+                        "character": "",
+                        "prompt_text_lang": "中文",
+                        "emotion": "默认",
+                        "text_lang": "中文",
                         "timeout": 20,
                     },
                     "FishAudio TTS(API)": {
@@ -1657,6 +1825,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "rerank_api_key": "",
                         "rerank_api_base": "http://127.0.0.1:8000",
+                        "rerank_api_suffix": "/v1/rerank",
                         "rerank_model": "BAAI/bge-reranker-base",
                         "timeout": 20,
                     },
@@ -1684,6 +1853,19 @@ CONFIG_METADATA_2 = {
                         "timeout": 30,
                         "return_documents": False,
                         "instruct": "",
+                    },
+                    "NVIDIA Rerank": {
+                        "id": "nvidia_rerank",
+                        "type": "nvidia_rerank",
+                        "provider": "nvidia",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "nvidia_rerank_api_key": "",
+                        "nvidia_rerank_api_base": "https://ai.api.nvidia.com/v1/retrieval",
+                        "nvidia_rerank_model": "nv-rerank-qa-mistral-4b:1",
+                        "nvidia_rerank_model_endpoint": "/reranking",
+                        "timeout": 20,
+                        "nvidia_rerank_truncate": "",
                     },
                     "Xinference STT": {
                         "id": "xinference_stt",
@@ -1722,7 +1904,12 @@ CONFIG_METADATA_2 = {
                     "rerank_api_base": {
                         "description": "重排序模型 API Base URL",
                         "type": "string",
-                        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。",
+                        "hint": "最终请求路径由 Base URL 和路径后缀拼接而成（默认为 /v1/rerank）。",
+                    },
+                    "rerank_api_suffix": {
+                        "description": "API URL 路径后缀",
+                        "type": "string",
+                        "hint": "追加到 base_url 后的路径，如 /v1/rerank。留空则不追加。",
                     },
                     "rerank_api_key": {
                         "description": "API Key",
@@ -1748,12 +1935,40 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "如果模型当前未在 Xinference 服务中运行，是否尝试自动启动它。在生产环境中建议关闭。",
                     },
+                    "nvidia_rerank_api_base": {
+                        "description": "API Base URL",
+                        "type": "string",
+                    },
+                    "nvidia_rerank_api_key": {
+                        "description": "API Key",
+                        "type": "string",
+                    },
+                    "nvidia_rerank_model": {
+                        "description": "重排序模型名称",
+                        "type": "string",
+                        "hint": "请参照NVIDIA Docs中模型名称填写。",
+                    },
+                    "nvidia_rerank_model_endpoint": {
+                        "description": "自定义模型端点",
+                        "type": "string",
+                        "hint": "自定义URL末尾端点，默认为 /reranking",
+                    },
+                    "nvidia_rerank_truncate": {
+                        "description": "文本截断策略",
+                        "type": "string",
+                        "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。",
+                        "options": [
+                            "",
+                            "NONE",
+                            "END",
+                        ],
+                    },
                     "modalities": {
                         "description": "模型能力",
                         "type": "list",
                         "items": {"type": "string"},
-                        "options": ["text", "image", "tool_use"],
-                        "labels": ["文本", "图像", "工具使用"],
+                        "options": ["text", "image", "audio", "tool_use"],
+                        "labels": ["文本", "图像", "音频", "工具使用"],
                         "render_type": "checkbox",
                         "hint": "模型支持的模态。如所填写的模型不支持图像，请取消勾选图像。",
                     },
@@ -1762,6 +1977,11 @@ CONFIG_METADATA_2 = {
                         "type": "dict",
                         "items": {},
                         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。",
+                    },
+                    "ollama_disable_thinking": {
+                        "description": "关闭思考模式",
+                        "type": "bool",
+                        "hint": "关闭 Ollama 思考模式。",
                     },
                     "custom_extra_body": {
                         "description": "自定义请求体参数",
@@ -2309,10 +2529,45 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
                     },
+                    "mimo-stt-system-prompt": {
+                        "description": "系统提示词",
+                        "type": "string",
+                        "hint": "用于指导 MiMo STT 转录行为的 system prompt。",
+                    },
+                    "mimo-stt-user-prompt": {
+                        "description": "用户提示词",
+                        "type": "string",
+                        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。",
+                    },
                     "openai-tts-voice": {
                         "description": "voice",
                         "type": "string",
                         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'",
+                    },
+                    "mimo-tts-voice": {
+                        "description": "音色",
+                        "type": "string",
+                        "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。",
+                    },
+                    "mimo-tts-format": {
+                        "description": "输出格式",
+                        "type": "string",
+                        "hint": "MiMo TTS 生成音频的格式。支持 'wav'、'mp3'、'pcm'。",
+                    },
+                    "mimo-tts-style-prompt": {
+                        "description": "风格提示词",
+                        "type": "string",
+                        "hint": "会以 <style>...</style> 标签形式添加到待合成文本开头，用于控制语速、情绪、角色或风格，例如 开心、变快、孙悟空、悄悄话。可留空。",
+                    },
+                    "mimo-tts-dialect": {
+                        "description": "方言",
+                        "type": "string",
+                        "hint": "会与风格提示词一起写入开头的 <style>...</style> 标签中，例如 东北话、四川话、河南话、粤语。可留空。",
+                    },
+                    "mimo-tts-seed-text": {
+                        "description": "种子文本",
+                        "type": "string",
+                        "hint": "作为可选的 user 消息发送，用于辅助调节语气和风格，不会拼接到待合成文本中。",
                     },
                     "fishaudio-tts-character": {
                         "description": "character",
@@ -2328,6 +2583,12 @@ CONFIG_METADATA_2 = {
                         "description": "本地部署 Whisper 模型须知",
                         "type": "string",
                         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
+                    },
+                    "whisper_device": {
+                        "description": "推理设备",
+                        "type": "string",
+                        "hint": "Whisper 推理设备。Apple Silicon 可选 mps；其他环境建议使用 cpu。若指定 mps 但当前环境不可用，将自动回退到 cpu。",
+                        "options": ["cpu", "mps"],
                     },
                     "id": {
                         "description": "ID",
@@ -2431,12 +2692,12 @@ CONFIG_METADATA_2 = {
                     "deerflow_assistant_id": {
                         "description": "Assistant ID",
                         "type": "string",
-                        "hint": "LangGraph assistant_id，默认为 lead_agent。",
+                        "hint": "DeerFlow 2.0 LangGraph assistant_id，默认为 lead_agent。",
                     },
                     "deerflow_model_name": {
                         "description": "模型名称覆盖",
                         "type": "string",
-                        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。",
+                        "hint": "可选。覆盖 DeerFlow 默认模型（对应运行时 configurable 的 model_name）。",
                     },
                     "deerflow_thinking_enabled": {
                         "description": "启用思考模式",
@@ -2445,17 +2706,17 @@ CONFIG_METADATA_2 = {
                     "deerflow_plan_mode": {
                         "description": "启用计划模式",
                         "type": "bool",
-                        "hint": "对应 DeerFlow 的 is_plan_mode。",
+                        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 is_plan_mode。",
                     },
                     "deerflow_subagent_enabled": {
                         "description": "启用子智能体",
                         "type": "bool",
-                        "hint": "对应 DeerFlow 的 subagent_enabled。",
+                        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 subagent_enabled。",
                     },
                     "deerflow_max_concurrent_subagents": {
                         "description": "子智能体最大并发数",
                         "type": "int",
-                        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。",
+                        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。",
                     },
                     "deerflow_recursion_limit": {
                         "description": "递归深度上限",
@@ -2522,6 +2783,9 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                     },
                     "show_tool_call_result": {
+                        "type": "bool",
+                    },
+                    "buffer_intermediate_messages": {
                         "type": "bool",
                     },
                     "unsupported_streaming_strategy": {
@@ -2940,7 +3204,13 @@ CONFIG_METADATA_3 = {
                     "provider_settings.websearch_provider": {
                         "description": "网页搜索提供商",
                         "type": "string",
-                        "options": ["default", "tavily", "baidu_ai_search", "bocha"],
+                        "options": [
+                            "tavily",
+                            "baidu_ai_search",
+                            "bocha",
+                            "brave",
+                            "firecrawl",
+                        ],
                         "condition": {
                             "provider_settings.web_search": True,
                         },
@@ -2962,6 +3232,26 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。",
                         "condition": {
                             "provider_settings.websearch_provider": "bocha",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_brave_key": {
+                        "description": "Brave Search API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "brave",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_firecrawl_key": {
+                        "description": "Firecrawl API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "firecrawl",
                             "provider_settings.web_search": True,
                         },
                     },
@@ -3006,8 +3296,8 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
                         "type": "string",
-                        "options": ["shipyard_neo", "shipyard"],
-                        "labels": ["Shipyard Neo", "Shipyard"],
+                        "options": ["shipyard_neo", "shipyard", "cua"],
+                        "labels": ["Shipyard Neo", "Shipyard", "CUA"],
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },
@@ -3046,6 +3336,64 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_image": {
+                        "description": "CUA Image",
+                        "type": "string",
+                        "hint": "CUA 沙箱镜像/系统类型，默认 linux。可填写 linux、macos、windows、android，具体取决于 CUA SDK 支持。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_os_type": {
+                        "description": "CUA OS Type",
+                        "type": "string",
+                        "options": ["linux", "macos", "windows", "android"],
+                        "labels": ["Linux", "macOS", "Windows", "Android"],
+                        "hint": "CUA 沙箱操作系统类型，默认 linux。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_ttl": {
+                        "description": "CUA Sandbox TTL",
+                        "type": "int",
+                        "hint": "CUA 沙箱生存时间（秒）。当前作为会话配置保存，具体生效取决于 CUA SDK。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_telemetry_enabled": {
+                        "description": "CUA Telemetry",
+                        "type": "bool",
+                        "hint": "是否允许 CUA SDK 发送遥测数据。默认关闭。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_local": {
+                        "description": "CUA Local Sandbox",
+                        "type": "bool",
+                        "hint": "是否优先使用 CUA 本地沙箱。默认开启，避免云端沙箱要求 CUA_API_KEY。关闭后可使用 CUA 云端沙箱。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                        },
+                    },
+                    "provider_settings.sandbox.cua_api_key": {
+                        "description": "CUA API Key",
+                        "type": "string",
+                        "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。",
+                        "obvious_hint": True,
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "cua",
+                            "provider_settings.sandbox.cua_local": False,
                         },
                     },
                     "provider_settings.sandbox.shipyard_endpoint": {
@@ -3275,6 +3623,15 @@ CONFIG_METADATA_3 = {
                             "provider_settings.show_tool_use_status": True,
                         },
                     },
+                    "provider_settings.buffer_intermediate_messages": {
+                        "description": "合并 Agent 中间消息",
+                        "type": "bool",
+                        "hint": "开启后，非流式模式下多步工具调用过程中产生的中间文本将缓冲，待 Agent 完成后合并为一条回复发送。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.streaming_response": False,
+                        },
+                    },
                     "provider_settings.sanitize_context_by_modalities": {
                         "description": "按模型能力清理历史上下文",
                         "type": "bool",
@@ -3317,14 +3674,39 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
                     },
+                    "provider_settings.image_compress_enabled": {
+                        "description": "启用图片压缩",
+                        "type": "bool",
+                        "hint": "启用后，发送给多模态模型前会先压缩本地大图片。",
+                    },
+                    "provider_settings.image_compress_options.max_size": {
+                        "description": "最大边长",
+                        "type": "int",
+                        "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 256, "max": 4096, "step": 64},
+                    },
+                    "provider_settings.image_compress_options.quality": {
+                        "description": "压缩质量",
+                        "type": "int",
+                        "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 1, "max": 100, "step": 1},
+                    },
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
+                        "collapsed": True,
                     },
                     "provider_settings.reachability_check": {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
+                        "collapsed": True,
                     },
                     "provider_settings.max_quoted_fallback_images": {
                         "description": "引用图片回退解析上限",
@@ -3333,6 +3715,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_component_chain_depth": {
                         "description": "引用解析组件链深度",
@@ -3341,6 +3724,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_forward_node_depth": {
                         "description": "引用解析转发节点深度",
@@ -3349,6 +3733,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_forward_fetch": {
                         "description": "引用解析转发拉取上限",
@@ -3357,6 +3742,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.warn_on_action_failure": {
                         "description": "引用解析 action 失败告警",
@@ -3365,6 +3751,7 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
+                        "collapsed": True,
                     },
                 },
                 "condition": {
@@ -3866,9 +4253,9 @@ CONFIG_METADATA_3_SYSTEM = {
                         "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab",
                     },
                     "http_proxy": {
-                        "description": "HTTP 代理",
+                        "description": "代理",
                         "type": "string",
-                        "hint": "启用后，会以添加环境变量的方式设置代理。格式为 `http://ip:port`",
+                        "hint": "启用后，会以添加环境变量的方式设置代理。支持 http://、https://、socks5:// 格式，例如：http://127.0.0.1:7890 或 socks5://127.0.0.1:7891",
                     },
                     "no_proxy": {
                         "description": "直连地址列表",

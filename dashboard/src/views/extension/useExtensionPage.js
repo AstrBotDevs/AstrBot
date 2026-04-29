@@ -14,6 +14,13 @@ import {
   getValidHashTab,
   replaceTabRoute,
 } from "@/utils/hashRouteTabs.mjs";
+import {
+  PIN_UPDATES_ON_TOP_STORAGE_KEY,
+  PLUGIN_LIST_VIEW_MODE_STORAGE_KEY,
+  SHOW_RESERVED_PLUGINS_STORAGE_KEY,
+  readBooleanPreference,
+  writeBooleanPreference,
+} from "./extensionPreferenceStorage.mjs";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
@@ -124,11 +131,7 @@ export const useExtensionPage = () => {
   
   // 从 localStorage 恢复显示系统插件的状态，默认为 false（隐藏）
   const getInitialShowReserved = () => {
-    if (typeof window !== "undefined" && window.localStorage) {
-      const saved = localStorage.getItem("showReservedPlugins");
-      return saved === "true";
-    }
-    return false;
+    return readBooleanPreference(SHOW_RESERVED_PLUGINS_STORAGE_KEY, false);
   };
   const showReserved = ref(getInitialShowReserved());
   const snack_message = ref("");
@@ -178,16 +181,20 @@ export const useExtensionPage = () => {
   // 新增变量支持列表视图
   // 从 localStorage 恢复显示模式，默认为 false（卡片视图）
   const getInitialListViewMode = () => {
-    if (typeof window !== "undefined" && window.localStorage) {
-      return localStorage.getItem("pluginListViewMode") === "true";
-    }
-    return false;
+    return readBooleanPreference(PLUGIN_LIST_VIEW_MODE_STORAGE_KEY, false);
   };
   const isListView = ref(getInitialListViewMode());
   const pluginSearch = ref("");
   const installedStatusFilter = ref("all");
   const installedSortBy = ref("default");
   const installedSortOrder = ref("desc");
+  const getInitialPinUpdatesOnTop = () => {
+    return readBooleanPreference(PIN_UPDATES_ON_TOP_STORAGE_KEY, true);
+  };
+  const pinUpdatesOnTop = ref(getInitialPinUpdatesOnTop());
+  watch(pinUpdatesOnTop, (val) => {
+    writeBooleanPreference(PIN_UPDATES_ON_TOP_STORAGE_KEY, val);
+  });
   const loading_ = ref(false);
   
   // 分页相关
@@ -237,6 +244,7 @@ export const useExtensionPage = () => {
   const sortBy = ref("default"); // default, stars, author, updated
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
+  const marketCategoryFilter = ref("all");
   const {
     showRandomPlugins,
     toggleRandomPluginsVisibility,
@@ -255,6 +263,90 @@ export const useExtensionPage = () => {
     { title: tm("table.headers.specificType"), key: "type" },
     { title: tm("table.headers.trigger"), key: "cmd" },
   ]);
+
+  const normalizeMarketCategory = (rawCategory) => {
+    const normalized = String(rawCategory || "").trim().toLowerCase();
+    if (!normalized) {
+      return "other";
+    }
+    return normalized.replace(/[\s-]+/g, "_");
+  };
+
+  const getMarketCategoryLabel = (key, rawCategory = "") => {
+    const fallbackMap = {
+      all: "All",
+      ai_tools: "AI Tools",
+      entertainment: "Entertainment",
+      productivity: "Productivity",
+      integrations: "Integrations",
+      utilities: "Utilities",
+      other: "Other",
+    };
+    const i18nKey = `market.categories.${key}`;
+    const translated = tm(i18nKey);
+    if (translated && !translated.includes("[MISSING:")) {
+      return translated;
+    }
+    if (fallbackMap[key]) {
+      return fallbackMap[key];
+    }
+    const normalizedRaw = String(rawCategory || "").trim();
+    if (normalizedRaw) {
+      return normalizedRaw;
+    }
+    return key
+      .split(/[_-]+/)
+      .filter(Boolean)
+      .map((part) => part[0].toUpperCase() + part.slice(1))
+      .join(" ");
+  };
+
+  const marketCategoryMeta = computed(() => {
+    const categories = new Map();
+
+    for (const plugin of pluginMarketData.value) {
+      const categoryKey = normalizeMarketCategory(plugin?.category);
+      const categoryData = categories.get(categoryKey);
+      if (categoryData) {
+        categoryData.count += 1;
+        continue;
+      }
+      categories.set(categoryKey, {
+        count: 1,
+        rawLabel: String(plugin?.category || "").trim(),
+      });
+    }
+
+    return categories;
+  });
+
+  const marketCategoryCounts = computed(() => {
+    const counts = { all: pluginMarketData.value.length };
+    for (const [categoryKey, categoryData] of marketCategoryMeta.value.entries()) {
+      counts[categoryKey] = categoryData.count;
+    }
+    return counts;
+  });
+
+  const marketCategoryItems = computed(() => {
+    const items = [
+      {
+        value: "all",
+        label: getMarketCategoryLabel("all"),
+        count: marketCategoryCounts.value.all || 0,
+      },
+    ];
+
+    for (const [categoryKey, categoryData] of marketCategoryMeta.value.entries()) {
+      items.push({
+        value: categoryKey,
+        label: getMarketCategoryLabel(categoryKey, categoryData.rawLabel),
+        count: categoryData.count,
+      });
+    }
+
+    return items;
+  });
 
   const installedSortItems = computed(() => [
     { title: tm("sort.default"), value: "default" },
@@ -341,6 +433,17 @@ export const useExtensionPage = () => {
     return Number.isFinite(parsed) ? parsed : null;
   };
 
+  const compareInstalledFallback = (left, right) => {
+    const nameCompare = compareInstalledPluginNames(left.plugin, right.plugin);
+    return nameCompare !== 0 ? nameCompare : left.index - right.index;
+  };
+
+  const compareInstalledUpdatePinning = (left, right) => {
+    const leftHasUpdate = left.plugin?.has_update ? 1 : 0;
+    const rightHasUpdate = right.plugin?.has_update ? 1 : 0;
+    return rightHasUpdate - leftHasUpdate;
+  };
+
   const sortInstalledPlugins = (plugins) => {
     return plugins
       .map((plugin, index) => ({
@@ -349,19 +452,24 @@ export const useExtensionPage = () => {
         installedAtTimestamp: getInstalledAtTimestamp(plugin),
       }))
       .sort((left, right) => {
-        const fallbackNameCompare = compareInstalledPluginNames(
-          left.plugin,
-          right.plugin,
-        );
-        const fallbackResult =
-          fallbackNameCompare !== 0 ? fallbackNameCompare : left.index - right.index;
+        if (
+          pinUpdatesOnTop.value &&
+          installedSortBy.value !== "update_status"
+        ) {
+          // Pinning updates is a primary grouping; the selected sort order still
+          // applies within the "has update" and "no update" groups below.
+          const pinCompare = compareInstalledUpdatePinning(left, right);
+          if (pinCompare !== 0) {
+            return pinCompare;
+          }
+        }
 
         if (installedSortBy.value === "install_time") {
           const leftTimestamp = left.installedAtTimestamp;
           const rightTimestamp = right.installedAtTimestamp;
 
           if (leftTimestamp == null && rightTimestamp == null) {
-            return fallbackResult;
+            return compareInstalledFallback(left, right);
           }
           if (leftTimestamp == null) {
             return 1;
@@ -374,7 +482,9 @@ export const useExtensionPage = () => {
             installedSortOrder.value === "desc"
               ? rightTimestamp - leftTimestamp
               : leftTimestamp - rightTimestamp;
-          return timeDiff !== 0 ? timeDiff : fallbackResult;
+          return timeDiff !== 0
+            ? timeDiff
+            : compareInstalledFallback(left, right);
         }
 
         if (installedSortBy.value === "name") {
@@ -384,7 +494,7 @@ export const useExtensionPage = () => {
               ? -nameCompare
               : nameCompare;
           }
-          return left.index - right.index;
+          return compareInstalledFallback(left, right);
         }
 
         if (installedSortBy.value === "author") {
@@ -397,20 +507,20 @@ export const useExtensionPage = () => {
               ? -authorCompare
               : authorCompare;
           }
-          return fallbackResult;
+          return compareInstalledFallback(left, right);
         }
 
         if (installedSortBy.value === "update_status") {
-          const leftHasUpdate = left.plugin?.has_update ? 1 : 0;
-          const rightHasUpdate = right.plugin?.has_update ? 1 : 0;
           const updateDiff =
             installedSortOrder.value === "desc"
-              ? rightHasUpdate - leftHasUpdate
-              : leftHasUpdate - rightHasUpdate;
-          return updateDiff !== 0 ? updateDiff : fallbackResult;
+              ? compareInstalledUpdatePinning(left, right)
+              : compareInstalledUpdatePinning(right, left);
+          return updateDiff !== 0
+            ? updateDiff
+            : compareInstalledFallback(left, right);
         }
 
-        return fallbackResult;
+        return compareInstalledFallback(left, right);
       })
       .map((item) => item.plugin);
   };
@@ -438,13 +548,24 @@ export const useExtensionPage = () => {
   // 过滤后的插件市场数据（带搜索）
   const filteredMarketPlugins = computed(() => {
     const query = buildSearchQuery(debouncedMarketSearch.value);
+    const targetCategory = normalizeMarketCategory(marketCategoryFilter.value);
+    const shouldFilterByCategory = marketCategoryFilter.value !== "all";
     if (!query) {
-      return pluginMarketData.value;
+      if (!shouldFilterByCategory) {
+        return pluginMarketData.value;
+      }
+      return pluginMarketData.value.filter(
+        (plugin) => normalizeMarketCategory(plugin?.category) === targetCategory,
+      );
     }
 
-    return pluginMarketData.value.filter((plugin) =>
-      matchesPluginSearch(plugin, query),
-    );
+    return pluginMarketData.value.filter((plugin) => {
+      const matchesSearch = matchesPluginSearch(plugin, query);
+      const matchesCategory = shouldFilterByCategory
+        ? normalizeMarketCategory(plugin?.category) === targetCategory
+        : true;
+      return matchesSearch && matchesCategory;
+    });
   });
   
   // 所有插件列表，推荐插件排在前面
@@ -540,9 +661,7 @@ export const useExtensionPage = () => {
   const toggleShowReserved = () => {
     showReserved.value = !showReserved.value;
     // 保存到 localStorage
-    if (typeof window !== "undefined" && window.localStorage) {
-      localStorage.setItem("showReservedPlugins", showReserved.value.toString());
-    }
+    writeBooleanPreference(SHOW_RESERVED_PLUGINS_STORAGE_KEY, showReserved.value);
   };
   
   const toast = (message, success) => {
@@ -570,8 +689,10 @@ export const useExtensionPage = () => {
     buildFailedPluginItems(failedPluginsDict.value),
   );
   
-  const getExtensions = async () => {
-    loading_.value = true;
+  const getExtensions = async ({ withLoading = true } = {}) => {
+    if (withLoading) {
+      loading_.value = true;
+    }
     try {
       const res = await axios.get("/api/plugin/get");   
       Object.assign(extension_data, res.data);
@@ -583,7 +704,9 @@ export const useExtensionPage = () => {
     } catch (err) {
       toast(err, "error");
     } finally {
-      loading_.value = false;
+      if (withLoading) {
+        loading_.value = false;
+      }
     }
   };
   
@@ -1188,7 +1311,7 @@ export const useExtensionPage = () => {
   const checkAlreadyInstalled = () => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
     const installedRepos = new Set(data.map((ext) => ext.repo?.toLowerCase()));
-    const installedNames = new Set(data.map((ext) => ext.name));
+    const installedNames = new Set(data.map((ext) => normalizeStr(ext.name).replace(/_/g, '-')));//统一格式，以防下面的匹配不生效
     const installedByRepo = new Map(
       data
         .filter((ext) => ext.repo)
@@ -1215,10 +1338,10 @@ export const useExtensionPage = () => {
           plugin.astrbot_version = matchedInstalled.astrbot_version;
         }
       }
-  
+      
       plugin.installed =
         installedRepos.has(plugin.repo?.toLowerCase()) ||
-        installedNames.has(plugin.name);
+        installedNames.has(normalizeStr(plugin.name).replace(/_/g, '-'));//统一格式，防止匹配失败
     }
   
     let installed = [];
@@ -1411,6 +1534,7 @@ export const useExtensionPage = () => {
   // 刷新插件市场数据
   const refreshPluginMarket = async () => {
     refreshingMarket.value = true;
+    loading_.value = true;
     try {
       // 强制刷新插件市场数据
       const data = await commonStore.getPluginCollections(
@@ -1429,6 +1553,7 @@ export const useExtensionPage = () => {
       toast(tm("messages.refreshFailed") + " " + err, "error");
     } finally {
       refreshingMarket.value = false;
+      loading_.value = false;
     }
   };
   
@@ -1437,21 +1562,22 @@ export const useExtensionPage = () => {
     if (!syncTabFromHash(getLocationHash())) {
       await replaceTabRoute(router, route, activeTab.value);
     }
-    await getExtensions();
-  
-    // 加载自定义插件源
-    loadCustomSources();
-  
-    // 检查是否有 open_config 参数
-    const plugin_name = Array.isArray(route.query.open_config)
-      ? route.query.open_config[0]
-      : route.query.open_config;
-    if (plugin_name) {
-      console.log(`Opening config for plugin: ${plugin_name}`);
-      openExtensionConfig(plugin_name);
-    }
-  
+    loading_.value = true;
     try {
+      await getExtensions({ withLoading: false });
+  
+      // 加载自定义插件源
+      loadCustomSources();
+  
+      // 检查是否有 open_config 参数
+      const plugin_name = Array.isArray(route.query.open_config)
+        ? route.query.open_config[0]
+        : route.query.open_config;
+      if (plugin_name) {
+        console.log(`Opening config for plugin: ${plugin_name}`);
+        openExtensionConfig(plugin_name);
+      }
+  
       const data = await commonStore.getPluginCollections(
         false,
         selectedSource.value,
@@ -1463,6 +1589,8 @@ export const useExtensionPage = () => {
       refreshRandomPlugins();
     } catch (err) {
       toast(tm("messages.getMarketDataFailed") + " " + err, "error");
+    } finally {
+      loading_.value = false;
     }
   });
   
@@ -1498,9 +1626,7 @@ export const useExtensionPage = () => {
   
   // 监听显示模式变化并保存到 localStorage
   watch(isListView, (newVal) => {
-    if (typeof window !== "undefined" && window.localStorage) {
-      localStorage.setItem("pluginListViewMode", String(newVal));
-    }
+    writeBooleanPreference(PLUGIN_LIST_VIEW_MODE_STORAGE_KEY, newVal);
   });
   
   watch(
@@ -1531,6 +1657,23 @@ export const useExtensionPage = () => {
     if (route.hash === `#${newTab}`) return;
     void replaceTabRoute(router, route, newTab);
   });
+
+  watch(marketCategoryFilter, () => {
+    if (activeTab.value === "market") {
+      currentPage.value = 1;
+    }
+  });
+
+  watch(
+    marketCategoryItems,
+    (newItems) => {
+      const validValues = new Set(newItems.map((item) => item.value));
+      if (!validValues.has(marketCategoryFilter.value)) {
+        marketCategoryFilter.value = "all";
+      }
+    },
+    { immediate: true },
+  );
 
   return {
     commonStore,
@@ -1573,8 +1716,12 @@ export const useExtensionPage = () => {
     installedStatusFilter,
     installedSortBy,
     installedSortOrder,
+    pinUpdatesOnTop,
     loading_,
     currentPage,
+    marketCategoryFilter,
+    marketCategoryItems,
+    marketCategoryCounts,
     dangerConfirmDialog,
     selectedDangerPlugin,
     selectedMarketInstallPlugin,

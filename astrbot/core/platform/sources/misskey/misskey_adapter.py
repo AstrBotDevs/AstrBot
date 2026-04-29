@@ -93,7 +93,7 @@ class MisskeyPlatformAdapter(Platform):
 
         self.api: MisskeyAPI | None = None
         self._running = False
-        self.client_self_id = ""
+        self.bot_self_id = ""
         self._bot_username = ""
         self._user_cache = {}
 
@@ -138,10 +138,10 @@ class MisskeyPlatformAdapter(Platform):
 
         try:
             user_info = await self.api.get_current_user()
-            self.client_self_id = str(user_info.get("id", ""))
+            self.bot_self_id = str(user_info.get("id", ""))
             self._bot_username = user_info.get("username", "")
             logger.info(
-                f"[Misskey] 已连接用户: {self._bot_username} (ID: {self.client_self_id})",
+                f"[Misskey] 已连接用户: {self._bot_username} (ID: {self.bot_self_id})",
             )
         except Exception as e:
             logger.error(f"[Misskey] 获取用户信息失败: {e}")
@@ -312,9 +312,9 @@ class MisskeyPlatformAdapter(Platform):
             )
             room_id = data.get("toRoomId")
             logger.debug(
-                f"[Misskey] 收到聊天事件: sender_id={sender_id}, room_id={room_id}, is_self={sender_id == self.client_self_id}",
+                f"[Misskey] 收到聊天事件: sender_id={sender_id}, room_id={room_id}, is_self={sender_id == self.bot_self_id}",
             )
-            if sender_id == self.client_self_id:
+            if sender_id == self.bot_self_id:
                 return
 
             if room_id:
@@ -354,13 +354,13 @@ class MisskeyPlatformAdapter(Platform):
         mentions = note.get("mentions", [])
         if self._bot_username and f"@{self._bot_username}" in text:
             return True
-        if self.client_self_id in [str(uid) for uid in mentions]:
+        if self.bot_self_id in [str(uid) for uid in mentions]:
             return True
 
         reply = note.get("reply")
         if reply and isinstance(reply, dict):
             reply_user_id = str(reply.get("user", {}).get("id", ""))
-            if reply_user_id == self.client_self_id:
+            if reply_user_id == self.bot_self_id:
                 return bool(self._bot_username and f"@{self._bot_username}" in text)
 
         return False
@@ -598,7 +598,7 @@ class MisskeyPlatformAdapter(Platform):
                     visibility, visible_user_ids = resolve_message_visibility(
                         user_id=user_id_for_cache,
                         user_cache=self._user_cache,
-                        self_id=self.client_self_id,
+                        self_id=self.bot_self_id,
                         default_visibility=self.default_visibility,
                     )
                     logger.debug(
@@ -637,14 +637,14 @@ class MisskeyPlatformAdapter(Platform):
         message = create_base_message(
             raw_data,
             sender_info,
-            self.client_self_id,
+            self.bot_self_id,
             is_chat=False,
         )
         cache_user_info(
             self._user_cache,
             sender_info,
             raw_data,
-            self.client_self_id,
+            self.bot_self_id,
             is_chat=False,
         )
 
@@ -656,7 +656,7 @@ class MisskeyPlatformAdapter(Platform):
                 message,
                 raw_text,
                 self._bot_username,
-                self.client_self_id,
+                self.bot_self_id,
             )
             message_parts.extend(text_parts)
 
@@ -685,14 +685,14 @@ class MisskeyPlatformAdapter(Platform):
         message = create_base_message(
             raw_data,
             sender_info,
-            self.client_self_id,
+            self.bot_self_id,
             is_chat=True,
         )
         cache_user_info(
             self._user_cache,
             sender_info,
             raw_data,
-            self.client_self_id,
+            self.bot_self_id,
             is_chat=True,
         )
 
@@ -713,7 +713,7 @@ class MisskeyPlatformAdapter(Platform):
         message = create_base_message(
             raw_data,
             sender_info,
-            self.client_self_id,
+            self.bot_self_id,
             is_chat=False,
             room_id=room_id,
         )
@@ -722,10 +722,10 @@ class MisskeyPlatformAdapter(Platform):
             self._user_cache,
             sender_info,
             raw_data,
-            self.client_self_id,
+            self.bot_self_id,
             is_chat=False,
         )
-        cache_room_info(self._user_cache, raw_data, self.client_self_id)
+        cache_room_info(self._user_cache, raw_data, self.bot_self_id)
 
         raw_text = raw_data.get("text", "")
         message_parts = []
@@ -736,7 +736,7 @@ class MisskeyPlatformAdapter(Platform):
                     message,
                     raw_text,
                     self._bot_username,
-                    self.client_self_id,
+                    self.bot_self_id,
                 )
                 message_parts.extend(text_parts)
             else:
