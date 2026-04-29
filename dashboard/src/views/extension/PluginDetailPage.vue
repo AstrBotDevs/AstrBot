@@ -219,6 +219,13 @@ const groupedHandlerSections = computed(() => {
 const getHandlerCommand = (handler) =>
   String(handler?.cmd || handler?.handler_name || tm("status.unknown")).trim();
 
+const getHandlerDisplayName = (handler, groupKey) => {
+  if (["functionTools", "eventListeners"].includes(groupKey)) {
+    return handler?.handler_name || handler?.cmd || tm("status.unknown");
+  }
+  return handler?.cmd || handler?.handler_name || tm("status.unknown");
+};
+
 const getHandlerTiming = (handler) =>
   String(handler?.event_type_h || handler?.event_type || "").trim();
 
@@ -512,7 +519,7 @@ onBeforeUnmount(() => {
                 >
                   <td class="detail-info-table__label detail-handler-table__name">
                     <div>
-                      {{ handler.cmd || handler.handler_name || tm("status.unknown") }}
+                      {{ getHandlerDisplayName(handler, group.key) }}
                     </div>
                   </td>
                   <td>
