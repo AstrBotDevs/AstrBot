@@ -66,13 +66,16 @@ export function useMediaHandling() {
         }
     }
 
-    async function uploadStagedFile(file: File) {
+    async function uploadStagedFile(file: File, sessionId?: string) {
         const signature = await getFileSignature(file);
         if (isDuplicateFile(signature)) return;
 
         pendingFileSignatures.add(signature);
         const formData = new FormData();
         formData.append('file', file);
+        if (sessionId) {
+            formData.append('session_id', sessionId);
+        }
         if (chatWidgetApi) {
             for (const k in chatWidgetApiPackage)
                 formData.append(k, chatWidgetApiPackage[k]);
@@ -89,11 +92,11 @@ export function useMediaHandling() {
                 }
             );
 
-            const { attachment_id, filename, type } = response.data.data;
+            const { attachment_id, filename, type, original_filename } = response.data.data;
             stagedFiles.value.push({
                 attachment_id,
-                filename,
-                original_name: file.name,
+                filename: original_filename || filename,
+                original_name: original_filename || file.name,
                 url: URL.createObjectURL(file),
                 type,
                 signature
@@ -105,15 +108,15 @@ export function useMediaHandling() {
         }
     }
 
-    async function processAndUploadImage(file: File) {
-        await uploadStagedFile(file);
+    async function processAndUploadImage(file: File, sessionId?: string) {
+        await uploadStagedFile(file, sessionId);
     }
 
-    async function processAndUploadFile(file: File) {
-        await uploadStagedFile(file);
+    async function processAndUploadFile(file: File, sessionId?: string) {
+        await uploadStagedFile(file, sessionId);
     }
 
-    async function handlePaste(event: ClipboardEvent) {
+    async function handlePaste(event: ClipboardEvent, sessionId?: string) {
         const items = event.clipboardData?.items;
         if (!items) return;
 
@@ -121,7 +124,7 @@ export function useMediaHandling() {
             if (items[i].type.indexOf('image') !== -1) {
                 const file = items[i].getAsFile();
                 if (file) {
-                    await processAndUploadImage(file);
+                    await processAndUploadImage(file, sessionId);
                 }
             }
         }

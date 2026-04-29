@@ -662,6 +662,7 @@ class LiveChatRoute(Route):
             message,
             get_attachment_by_id=self.db.get_attachment_by_id,
             strict=False,
+            attachments_dir=self.attachments_dir,
         )
 
     async def _handle_message(self, session: LiveChatSession, message: dict) -> None:

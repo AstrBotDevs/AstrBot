@@ -10,12 +10,12 @@ from .route import Response, Route, RouteContext
 
 class ChatWidget(Route):
     def __init__(
-            self,
-            context: RouteContext,
-            db: BaseDatabase,
-            core_lifecycle: AstrBotCoreLifecycle,
-            chat_route: ChatRoute,
-            open_api: OpenApiRoute,
+        self,
+        context: RouteContext,
+        db: BaseDatabase,
+        core_lifecycle: AstrBotCoreLifecycle,
+        chat_route: ChatRoute,
+        open_api: OpenApiRoute,
     ) -> None:
         super().__init__(context)
         self.db = db
@@ -26,7 +26,7 @@ class ChatWidget(Route):
             "/widget/send": ("POST", self.send),
             "/widget/history": ("GET", self.history),
             "/widget/file": ("GET", self.file_get),
-            "/widget/filename": ("GET", self.filename_get),
+            #"/widget/filename": ("GET", self.filename_get),
             "/widget/upload": ("POST", self.file_upload),
             "/widget/stop": ("POST", self.stop),
         }
@@ -55,7 +55,7 @@ class ChatWidget(Route):
     async def file_get(self):
         api_package = g.api_package
         if api_package.get("file_upload"):
-            return await self.chat_route.get_attachment()
+            return await self.chat_route.get_attachment(api_package.get("session_id"))
         else:
             return Response().error("attachment not enabled").__dict__
 

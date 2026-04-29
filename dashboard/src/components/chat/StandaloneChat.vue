@@ -157,7 +157,7 @@
         @remove-image="removeImage"
         @remove-audio="removeAudio"
         @remove-file="removeFile"
-        @paste-image="handlePaste"
+        @paste-image="(e: ClipboardEvent) => handlePaste(e, currSessionId)"
         @file-select="handleFilesSelected"
         :uploadFilesDisabled="!attachmentEnabled"
         :providerModelMenuDisabled="widgetModel"
@@ -415,9 +415,9 @@ async function handleFilesSelected(files: FileList) {
   const selectedFiles = Array.from(files || []);
   for (const file of selectedFiles) {
     if (file.type.startsWith("image/")) {
-      await processAndUploadImage(file);
+      await processAndUploadImage(file, currSessionId.value);
     } else {
-      await processAndUploadFile(file);
+      await processAndUploadFile(file, currSessionId.value);
     }
   }
 }

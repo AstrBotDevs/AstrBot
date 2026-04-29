@@ -607,6 +607,7 @@ class OpenApiRoute(Route):
             message_payload,
             get_attachment_by_id=self.db.get_attachment_by_id,
             strict=True,
+            attachments_dir=self.chat_route.attachments_dir,
         )
 
     async def send_message(self):

@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import json
 import os
 import re
@@ -286,13 +287,29 @@ class ChatRoute(Route):
 
         self.running_convs: dict[str, bool] = {}
 
+    def _resolve_attachment_path(self, path: str) -> Path:
+        """Resolve an attachment path to an absolute Path.
+
+        Handles both relative paths (stored in DB) and legacy absolute paths.
+        """
+        attachments_dir = Path(self.attachments_dir).resolve(strict=False)
+        file_path = Path(path)
+        if not file_path.is_absolute():
+            file_path = (attachments_dir / file_path).resolve(strict=False)
+        return file_path
+
     async def get_file(self):
         filename = request.args.get("filename")
         if not filename:
             return Response().error("Missing key: filename").__dict__
 
         try:
-            file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
+            attachments_dir = Path(self.attachments_dir).resolve(strict=False)
+            # Support sub-directory paths like 2026/01/06/xxx.jpg
+            file_path = (attachments_dir / filename).resolve(strict=False)
+            if not file_path.is_relative_to(attachments_dir):
+                return Response().error("Invalid file path").__dict__
+
             real_file_path = os.path.realpath(file_path)
             real_imgs_dir = os.path.realpath(self.attachments_dir)
 
@@ -318,7 +335,7 @@ class ChatRoute(Route):
         except (FileNotFoundError, OSError):
             return Response().error("File access error").__dict__
 
-    async def get_attachment(self):
+    async def get_attachment(self, session_id: str | None = None):
         """Get attachment file by attachment_id."""
         attachment_id = request.args.get("attachment_id")
         if not attachment_id:
@@ -329,7 +346,20 @@ class ChatRoute(Route):
             if not attachment:
                 return Response().error("Attachment not found").__dict__
 
-            file_path = attachment.path
+            # 权限检查
+            check_ok = False
+            if not attachment.creator and not attachment.session_id: # 没有绑定创建人和会话的附件，跳过检查
+                check_ok = True
+            if attachment.creator and g.username == attachment.creator:
+                check_ok = True
+            if attachment.session_id and session_id == attachment.session_id:
+                session = await self.db.get_platform_session_by_id(session_id)
+                if session.creator == g.username:
+                    check_ok = True
+            if not check_ok:
+                return Response().error("permission denied").__dict__
+
+            file_path = self._resolve_attachment_path(attachment.path)
             real_file_path = os.path.realpath(file_path)
 
             return await send_file(real_file_path, mimetype=attachment.mime_type)
@@ -344,10 +374,10 @@ class ChatRoute(Route):
             return Response().error("Missing key: file").__dict__
 
         file = post_data["file"]
-        filename = _sanitize_upload_filename(file.filename)
+        original_filename = _sanitize_upload_filename(file.filename)
         content_type = file.content_type or "application/octet-stream"
 
-        # 根据 content_type 判断文件类型并添加扩展名
+        # 根据 content_type 判断文件类型
         if content_type.startswith("image"):
             attach_type = "image"
         elif content_type.startswith("audio"):
@@ -357,31 +387,53 @@ class ChatRoute(Route):
         else:
             attach_type = "file"
 
+        # 生成随机文件名（保留后缀）并按日期目录存储
+        suffix = Path(original_filename).suffix
+        random_name = f"{uuid.uuid4().hex}{suffix}"
+        date_dir = datetime.datetime.now().strftime("%Y/%m/%d")
+
         attachments_dir = Path(self.attachments_dir).resolve(strict=False)
-        file_path = (attachments_dir / filename).resolve(strict=False)
+        target_dir = attachments_dir / date_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        file_path = (target_dir / random_name).resolve(strict=False)
         if not file_path.is_relative_to(attachments_dir):
             return Response().error("Invalid filename").__dict__
 
         await file.save(str(file_path))
 
+        # 存储相对路径
+        rel_path = str(Path(date_dir) / random_name)
+
+        # 获取上传者信息
+        username = g.get("username", "guest")
+        form_data = await request.form
+        session_id = (
+            form_data.get("session_id")
+            or request.args.get("session_id")
+            or None
+        )
+
         # 创建 attachment 记录
         attachment = await self.db.insert_attachment(
-            path=str(file_path),
+            path=rel_path,
             type=attach_type,
             mime_type=content_type,
+            original_filename=original_filename,
+            creator=username,
+            session_id=session_id,
         )
 
         if not attachment:
             return Response().error("Failed to create attachment").__dict__
-
-        filename = os.path.basename(attachment.path)
 
         return (
             Response()
             .ok(
                 data={
                     "attachment_id": attachment.attachment_id,
-                    "filename": filename,
+                    "filename": random_name,
+                    "original_filename": original_filename,
                     "type": attach_type,
                 }
             )
@@ -394,6 +446,7 @@ class ChatRoute(Route):
             message,
             get_attachment_by_id=self.db.get_attachment_by_id,
             strict=False,
+            attachments_dir=self.attachments_dir,
         )
 
     async def _create_attachment_from_file(

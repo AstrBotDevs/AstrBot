@@ -765,5 +765,7 @@ async def test_open_file_upload_requires_file_and_can_upload(
     upload_data = await upload_res.get_json()
     assert upload_data["status"] == "ok"
     assert isinstance(upload_data["data"]["attachment_id"], str)
-    assert upload_data["data"]["filename"] == "openapi_test.txt"
+    assert upload_data["data"]["original_filename"] == "openapi_test.txt"
+    assert upload_data["data"]["filename"] != "openapi_test.txt"
+    assert upload_data["data"]["type"] == "file"
     assert upload_data["data"]["type"] == "file"
