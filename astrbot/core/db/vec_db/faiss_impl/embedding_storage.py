@@ -8,6 +8,8 @@ import os
 
 import numpy as np
 
+from astrbot.core.exceptions import KnowledgeBaseUploadError
+
 
 class EmbeddingStorage:
     def __init__(self, dimension: int, path: str | None = None) -> None:
@@ -16,6 +18,20 @@ class EmbeddingStorage:
         self.index = None
         if path and os.path.exists(path):
             self.index = faiss.read_index(path)
+            actual_dimension = self.index.d
+            if actual_dimension != dimension:
+                raise KnowledgeBaseUploadError(
+                    stage="embedding",
+                    user_message=(
+                        "向量化失败：知识库索引维度与当前嵌入模型维度不一致"
+                        f"（索引维度 {actual_dimension}，当前模型配置维度 {dimension}）。"
+                        "请使用原嵌入模型，或删除并重建知识库索引。"
+                    ),
+                    details={
+                        "index_dimension": actual_dimension,
+                        "provider_dimension": dimension,
+                    },
+                )
         else:
             base_index = faiss.IndexFlatL2(dimension)
             self.index = faiss.IndexIDMap(base_index)
