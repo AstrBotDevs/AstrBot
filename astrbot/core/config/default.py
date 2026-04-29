@@ -2152,6 +2152,7 @@ CONFIG_METADATA_2 = {
                     "embedding_api_key": {
                         "description": "API Key",
                         "type": "string",
+                        "hint": "使用 vLLM 作为提供商时，请在 API Key 中填写 'vllm' 以启用兼容模式（自动禁用 dimensions 参数）",
                     },
                     "embedding_api_base": {
                         "description": "API Base URL",
@@ -2692,12 +2693,12 @@ CONFIG_METADATA_2 = {
                     "deerflow_assistant_id": {
                         "description": "Assistant ID",
                         "type": "string",
-                        "hint": "DeerFlow 2.0 LangGraph assistant_id，默认为 lead_agent。",
+                        "hint": "LangGraph assistant_id，默认为 lead_agent。",
                     },
                     "deerflow_model_name": {
                         "description": "模型名称覆盖",
                         "type": "string",
-                        "hint": "可选。覆盖 DeerFlow 默认模型（对应运行时 configurable 的 model_name）。",
+                        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。",
                     },
                     "deerflow_thinking_enabled": {
                         "description": "启用思考模式",
@@ -2706,17 +2707,17 @@ CONFIG_METADATA_2 = {
                     "deerflow_plan_mode": {
                         "description": "启用计划模式",
                         "type": "bool",
-                        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 is_plan_mode。",
+                        "hint": "对应 DeerFlow 的 is_plan_mode。",
                     },
                     "deerflow_subagent_enabled": {
                         "description": "启用子智能体",
                         "type": "bool",
-                        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 subagent_enabled。",
+                        "hint": "对应 DeerFlow 的 subagent_enabled。",
                     },
                     "deerflow_max_concurrent_subagents": {
                         "description": "子智能体最大并发数",
                         "type": "int",
-                        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。",
+                        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。",
                     },
                     "deerflow_recursion_limit": {
                         "description": "递归深度上限",
