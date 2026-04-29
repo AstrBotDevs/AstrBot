@@ -228,7 +228,7 @@ class TestProviderRequest:
         tcr = MagicMock(spec=ToolCallsResult)
         req.append_tool_calls_result(tcr)
         assert isinstance(req.tool_calls_result, list)
-        assert len(req.tool_calls_result) == 1
+        assert len(req.tool_calls_result or []) == 1
         assert req.tool_calls_result[0] is tcr
 
     def test_append_tool_calls_result_single_to_list(self):
@@ -237,7 +237,7 @@ class TestProviderRequest:
         tcr2 = MagicMock(spec=ToolCallsResult)
         req.append_tool_calls_result(tcr2)
         assert isinstance(req.tool_calls_result, list)
-        assert len(req.tool_calls_result) == 2
+        assert len(req.tool_calls_result or []) == 2
         assert req.tool_calls_result[0] is tcr1
         assert req.tool_calls_result[1] is tcr2
 
@@ -247,7 +247,7 @@ class TestProviderRequest:
         req = ProviderRequest(tool_calls_result=[tcr1])
         tcr3 = MagicMock(spec=ToolCallsResult)
         req.append_tool_calls_result(tcr3)
-        assert len(req.tool_calls_result) == 2
+        assert len(req.tool_calls_result or []) == 2
 
     def test_print_friendly_context_no_contexts(self):
         req = ProviderRequest(prompt="hello", image_urls=["a.png"], audio_urls=["b.wav"])

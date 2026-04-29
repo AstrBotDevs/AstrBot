@@ -5,7 +5,7 @@ Uses tmp_path for filesystem-level assertions.
 
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -215,33 +215,29 @@ class TestStorageCleanerEdgeCases:
         result = cleaner.cleanup("all")
         assert result["failed_files"] == 0
 
-    def test_cleanup_handles_stat_os_error(self, tmp_path: Path):
-        data = tmp_path / "data"
-        logs = data / "logs"
-        _make_file(logs / "astrbot.log", 100)
+    def test_summarize_files_catches_stat_os_error(self):
+        """_summarize_files should catch OSError from stat() and skip the file."""
+        bad = MagicMock()
+        bad.exists.return_value = True
+        bad.is_file.return_value = True
+        bad.stat.side_effect = OSError(13, "Permission denied")
 
-        cleaner = StorageCleaner(
-            {"log_file_enable": True, "log_file_path": "logs/astrbot.log"},
-            data_dir=data,
-            temp_dir=data / "temp",
+        good = MagicMock()
+        good.exists.return_value = True
+        good.is_file.return_value = True
+        good.stat.return_value = os.stat_result(
+            [0, 0, 0, 0, 0, 0, 200, 0, 0, 0]
         )
 
-        original_stat = (logs / "astrbot.log").stat
-
-        def _broken_stat():
-            raise OSError(13, "Permission denied")
-
-        (logs / "astrbot.log").stat = _broken_stat  # type: ignore[method-assign]
-
-        result = cleaner.cleanup("logs")
-        assert result["failed_files"] == 1
-
-        (logs / "astrbot.log").stat = original_stat
+        size, count = StorageCleaner._summarize_files([bad, good])
+        assert size == 200
+        assert count == 1
 
     def test_cleanup_handles_unlink_os_error(self, tmp_path: Path):
+        """_cleanup_target catches OSError from unlink() via mocked file."""
         data = tmp_path / "data"
         logs = data / "logs"
-        _make_file(logs / "astrbot.log", 100)
+        _make_file(logs / "astrbot.log", 50)
 
         cleaner = StorageCleaner(
             {"log_file_enable": False},
@@ -249,14 +245,17 @@ class TestStorageCleanerEdgeCases:
             temp_dir=data / "temp",
         )
 
-        original_unlink = (logs / "astrbot.log").unlink
+        bad_file = MagicMock()
+        bad_file.exists.return_value = True
+        bad_file.is_file.return_value = True
+        bad_file.stat.return_value = os.stat_result(
+            [0, 0, 0, 0, 0, 0, 100, 0, 0, 0]
+        )
+        bad_file.unlink.side_effect = OSError(13, "Permission denied")
+        bad_file.__eq__ = lambda self, other: False  # never in active_log_files
 
-        def _broken_unlink():
-            raise OSError(13, "Permission denied")
+        with patch.object(cleaner, "_collect_log_files", return_value={bad_file}):
+            result = cleaner.cleanup("logs")
 
-        (logs / "astrbot.log").unlink = _broken_unlink  # type: ignore[method-assign]
-
-        result = cleaner.cleanup("logs")
-        assert result["failed_files"] == 1
-
-        (logs / "astrbot.log").unlink = original_unlink
+        assert result["results"]["logs"]["failed_files"] == 1
+        assert result["results"]["logs"]["deleted_files"] == 0

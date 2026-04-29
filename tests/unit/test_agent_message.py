@@ -74,8 +74,9 @@ class TestMessageConstruction:
 
     def test_invalid_role_raises(self):
         """An invalid role is rejected."""
+        invalid_role: str = "invalid_role"
         with pytest.raises(ValidationError):
-            Message(role="invalid_role", content="hi")
+            Message(role=invalid_role, content="hi")
 
 
 class TestCheckpointMessage:
@@ -190,6 +191,7 @@ class TestMessageSegments:
         cp = CheckpointData(id="cp_1")
         msg = CheckpointMessageSegment(content=cp)
         assert msg.role == "_checkpoint"
+        assert msg.content is not None
         assert msg.content.id == "cp_1"
 
 

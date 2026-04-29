@@ -124,18 +124,17 @@ class TestCleanupOnce:
             temp_dir=temp_dir,
         )
 
-        def _broken_unlink():
-            raise OSError(13, "Permission denied")
-
-        (temp_dir / "bad.bin").unlink = _broken_unlink  # type: ignore[method-assign]
-
-        # Should log warning but not crash
-        with patch("astrbot.core.utils.temp_dir_cleaner.logger.warning") as mock_warn:
-            cleaner.cleanup_once()
-            mock_warn.assert_called()
-            assert any(
-                "Permission denied" in str(c) for c in mock_warn.call_args_list
-            )
+        # Patch unlink at the class level (instance-level setattr is not
+        # supported on Python 3.12+ pathlib which uses __slots__).
+        with patch.object(Path, "unlink", side_effect=OSError(13, "Permission denied")):
+            with patch(
+                "astrbot.core.utils.temp_dir_cleaner.logger.warning"
+            ) as mock_warn:
+                cleaner.cleanup_once()
+                mock_warn.assert_called()
+                assert any(
+                    "Permission denied" in str(c) for c in mock_warn.call_args_list
+                )
 
     def test_invalid_config_falls_back_to_default(self, tmp_path: Path):
         temp_dir = tmp_path / "temp"
