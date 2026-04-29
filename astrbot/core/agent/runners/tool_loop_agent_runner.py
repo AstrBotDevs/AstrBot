@@ -183,10 +183,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats.end_time = time.time()
 
         parts = []
-        if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+        if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
-                    think=llm_resp.reasoning_content,
+                    think=llm_resp.reasoning_content or "",
                     encrypted=llm_resp.reasoning_signature,
                 )
             )
@@ -876,10 +876,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             # 将结果添加到上下文中
             parts = []
-            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+            if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
                 parts.append(
                     ThinkPart(
-                        think=llm_resp.reasoning_content,
+                        think=llm_resp.reasoning_content or "",
                         encrypted=llm_resp.reasoning_signature,
                     )
                 )
@@ -1293,7 +1293,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     model=self.req.model,
                     session_id=self.req.session_id,
                     extra_user_content_parts=self.req.extra_user_content_parts,
-                    tool_choice="required",
+                    # tool_choice="required",
                     abort_signal=self._abort_signal,
                 )
                 if requery_resp:
@@ -1319,7 +1319,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         model=self.req.model,
                         session_id=self.req.session_id,
                         extra_user_content_parts=self.req.extra_user_content_parts,
-                        tool_choice="required",
+                        # tool_choice="required",
                         abort_signal=self._abort_signal,
                     )
                     if repair_resp:
@@ -1361,10 +1361,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats.end_time = time.time()
 
         parts = []
-        if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+        if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
-                    think=llm_resp.reasoning_content,
+                    think=llm_resp.reasoning_content or "",
                     encrypted=llm_resp.reasoning_signature,
                 )
             )

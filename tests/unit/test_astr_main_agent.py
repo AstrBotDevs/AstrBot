@@ -398,6 +398,37 @@ class TestBuiltinToolInjection:
         assert req.func_tool is not None
         assert req.func_tool.get_tool("web_search_baidu") is builtin_tool
 
+    @pytest.mark.asyncio
+    async def test_apply_web_search_tools_adds_firecrawl_search_and_extract_tools(
+        self, mock_event, mock_context
+    ):
+        """Test Firecrawl web search injects search and extract tools."""
+        module = ama
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {
+                "web_search": True,
+                "websearch_provider": "firecrawl",
+            }
+        }
+        search_tool = MagicMock(spec=FunctionTool)
+        search_tool.name = "web_search_firecrawl"
+        extract_tool = MagicMock(spec=FunctionTool)
+        extract_tool.name = "firecrawl_extract_web_page"
+        tool_mgr = MagicMock()
+        tool_mgr.get_builtin_tool.side_effect = [search_tool, extract_tool]
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        await module._apply_web_search_tools(mock_event, req, mock_context)
+
+        assert tool_mgr.get_builtin_tool.call_args_list == [
+            ((module.FirecrawlWebSearchTool,),),
+            ((module.FirecrawlExtractWebPageTool,),),
+        ]
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("web_search_firecrawl") is search_tool
+        assert req.func_tool.get_tool("firecrawl_extract_web_page") is extract_tool
+
     def test_proactive_cron_job_tools_uses_builtin_tool_manager(self, mock_context):
         """Test cron tool injection through the builtin tool manager."""
         module = ama
@@ -1529,6 +1560,36 @@ class TestApplySandboxTools:
         module._apply_sandbox_tools(config, req, "session-123")
 
         assert "sandboxed environment" in req.system_prompt
+
+    def test_apply_sandbox_tools_with_cua_adds_gui_guidance(self, mock_context):
+        """Test that CUA sandbox guidance nudges reliable GUI workflows."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={"booter": "cua"},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert req.func_tool is not None
+        tool_names = req.func_tool.names()
+        assert "astrbot_cua_screenshot" in tool_names
+        assert "astrbot_cua_mouse_click" in tool_names
+        assert "astrbot_cua_keyboard_type" in tool_names
+        assert "astrbot_cua_key_press" not in tool_names
+
+        assert "Firefox" in req.system_prompt
+        assert "background=true" in req.system_prompt
+        assert 'firefox "https://example.com"' in req.system_prompt
+        assert "astrbot_cua_screenshot" in req.system_prompt
+        assert "astrbot_cua_key_press" not in req.system_prompt
+        assert "return_image_to_llm" in req.system_prompt
+        assert "astrbot_execute_shell" in req.system_prompt
+        assert "\\n" in req.system_prompt
+        assert "send_to_user=true" in req.system_prompt
+        assert "focused and empty or safe to append" in req.system_prompt
 
     def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
         """Test sandbox tools with shipyard booter configuration."""

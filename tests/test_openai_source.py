@@ -1621,33 +1621,106 @@ async def test_query_does_not_filter_user_or_system_messages(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_query_adds_deepseek_reasoning_content_for_tool_continuation():
-    provider = _make_provider({"model": "deepseek/deepseek-v4-flash"})
+async def test_query_stream_filters_empty_assistant_message(monkeypatch):
+    """Regression for #7721: streaming path must also filter empty assistant messages.
+
+    Previously only ``_query`` sanitized the payload; ``_query_stream`` forwarded
+    the raw history and strict providers (e.g. DeepSeek Reasoner) returned 400 on
+    the next turn after a tool call whose assistant entry had reasoning only.
+    """
+    provider = _make_provider()
     try:
-        payloads = {
-            "model": "deepseek/deepseek-v4-flash",
-            "messages": [
-                {"role": "user", "content": "hello"},
+        captured_kwargs = {}
+
+        async def fake_stream():
+            yield ChatCompletionChunk.model_validate(
                 {
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": [
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "deepseek-reasoner",
+                    "choices": [
                         {
-                            "id": "call-123",
-                            "type": "function",
-                            "function": {"name": "test", "arguments": "{}"},
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
                         }
                     ],
-                },
-                {"role": "tool", "tool_call_id": "call-123", "content": "result"},
+                }
+            )
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads = {
+            "model": "deepseek-reasoner",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": ""},  # should be filtered
+                {"role": "user", "content": "world"},
             ],
         }
 
-        provider._finally_convert_payload(payloads)
-        provider._clean_chat_payload_messages(payloads)
+        async for _ in provider._query_stream(payloads=payloads, tools=None):
+            pass
 
-        messages = payloads["messages"]
-        assert messages[1]["content"] is None
-        assert messages[1]["reasoning_content"] == ""
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 2
+        assert messages[0] == {"role": "user", "content": "hello"}
+        assert messages[1] == {"role": "user", "content": "world"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
+    """Empty-list content (``content == []``) must also be filtered, not just ``""`` / ``None``."""
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            )
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": []},  # should be filtered
+                {"role": "user", "content": "again"},
+            ],
+        }
+
+        await provider._query(payloads=payloads, tools=None)
+
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 2
+        assert messages[0] == {"role": "user", "content": "hi"}
+        assert messages[1] == {"role": "user", "content": "again"}
     finally:
         await provider.terminate()

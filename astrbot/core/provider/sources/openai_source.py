@@ -14,7 +14,6 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
-from openai._base_client import httpx as _openai_httpx
 from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
@@ -440,13 +439,9 @@ class ProviderOpenAIOfficial(Provider):
         )
 
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
-        """创建带代理的 HTTP 客户端
-
-        使用 openai 库内部引用的 httpx 模块来创建客户端实例，
-        避免打包后 httpx 被重复收集导致 isinstance 校验失败。
-        """
+        """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
-        return create_proxy_client("OpenAI", proxy, httpx_module=_openai_httpx)
+        return create_proxy_client("OpenAI", proxy)
 
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
@@ -524,30 +519,41 @@ class ProviderOpenAIOfficial(Provider):
         except NotFoundError as e:
             raise Exception(f"获取模型列表失败：{e}")
 
-    def _clean_chat_payload_messages(self, payloads: dict) -> None:
-        if "messages" not in payloads or not isinstance(payloads["messages"], list):
+    @staticmethod
+    def _sanitize_assistant_messages(payloads: dict) -> None:
+        """在请求发送前过滤/规范化空的 assistant 消息。
+
+        严格 API（Moonshot、DeepSeek Reasoner 等）会在 assistant 消息同时缺少
+        ``content`` 和 ``tool_calls`` 时返回 400。把 ``""`` / ``None`` / ``[]``
+        都视作空内容：无 tool_calls 时整条过滤掉；有 tool_calls 时将 content
+        设为 ``None`` 以符合 OpenAI 规范。就地修改 ``payloads["messages"]``。
+        """
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
             return
 
-        cleaned_messages = []
-        for idx, msg in enumerate(payloads["messages"]):
-            if not isinstance(msg, dict):
-                cleaned_messages.append(msg)
+        def _is_empty(content: Any) -> bool:
+            return content is None or content == "" or content == []
+
+        cleaned: list[Any] = []
+        for idx, msg in enumerate(messages):
+            if not isinstance(msg, dict) or msg.get("role") != "assistant":
+                cleaned.append(msg)
                 continue
 
-            if msg.get("role") == "assistant":
-                content = msg.get("content")
-                tool_calls = msg.get("tool_calls")
+            content = msg.get("content")
+            tool_calls = msg.get("tool_calls")
 
-                if not tool_calls and (content == "" or content is None):
-                    logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
-                    continue
+            if _is_empty(content) and not tool_calls:
+                logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
+                continue
 
-                if content == "" and tool_calls:
-                    msg["content"] = None
+            if _is_empty(content) and tool_calls:
+                msg["content"] = None
 
-            cleaned_messages.append(msg)
+            cleaned.append(msg)
 
-        payloads["messages"] = cleaned_messages
+        payloads["messages"] = cleaned
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
@@ -578,7 +584,7 @@ class ProviderOpenAIOfficial(Provider):
 
         model = payloads.get("model", "").lower()
 
-        self._clean_chat_payload_messages(payloads)
+        self._sanitize_assistant_messages(payloads)
 
         completion = await self.client.chat.completions.create(
             **payloads,
@@ -629,7 +635,8 @@ class ProviderOpenAIOfficial(Provider):
         for key in to_del:
             del payloads[key]
         self._apply_provider_specific_extra_body_overrides(extra_body)
-        self._clean_chat_payload_messages(payloads)
+
+        self._sanitize_assistant_messages(payloads)
 
         stream = await self.client.chat.completions.create(
             **payloads,
@@ -639,7 +646,6 @@ class ProviderOpenAIOfficial(Provider):
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
-        reasoning_content_chunks: list[str] = []
 
         state = ChatCompletionStreamState()
 
@@ -665,10 +671,9 @@ class ProviderOpenAIOfficial(Provider):
             reasoning = self._extract_reasoning_content(chunk)
             _y = False
             llm_response.id = chunk.id
-            llm_response.reasoning_content = ""
+            llm_response.reasoning_content = None
             llm_response.completion_text = ""
-            if reasoning:
-                reasoning_content_chunks.append(reasoning)
+            if reasoning is not None:
                 llm_response.reasoning_content = reasoning
                 _y = True
             if delta and delta.content:
@@ -690,41 +695,34 @@ class ProviderOpenAIOfficial(Provider):
 
         final_completion = state.get_final_completion()
         llm_response = await self._parse_openai_completion(final_completion, tools)
-        if not llm_response.reasoning_content and reasoning_content_chunks:
-            llm_response.reasoning_content = "".join(reasoning_content_chunks)
 
         yield llm_response
-
-    def _get_openai_extra_attr(self, obj: Any, key: str) -> Any:
-        value = getattr(obj, key, None)
-        if value is not None:
-            return value
-        model_extra = getattr(obj, "model_extra", None)
-        if isinstance(model_extra, dict):
-            return model_extra.get(key)
-        return None
 
     def _extract_reasoning_content(
         self,
         completion: ChatCompletion | ChatCompletionChunk,
-    ) -> str:
+    ) -> str | None:
         """Extract reasoning content from OpenAI ChatCompletion if available."""
-        reasoning_text = ""
+
+        def _get_reasoning_attr(obj: Any) -> str | None:
+            fields_set = getattr(obj, "model_fields_set", None)
+            if isinstance(fields_set, set) and self.reasoning_key in fields_set:
+                attr = getattr(obj, self.reasoning_key, "")
+                return "" if attr is None else str(attr)
+            attr = getattr(obj, self.reasoning_key, None)
+            return None if attr is None else str(attr)
+
         if not completion.choices:
-            return reasoning_text
+            return None
         if isinstance(completion, ChatCompletion):
             choice = completion.choices[0]
-            reasoning_attr = self._get_openai_extra_attr(
-                choice.message, self.reasoning_key
-            )
-            if reasoning_attr:
-                reasoning_text = str(reasoning_attr)
+            reasoning_attr = _get_reasoning_attr(choice.message)
         elif isinstance(completion, ChatCompletionChunk):
             delta = completion.choices[0].delta
-            reasoning_attr = self._get_openai_extra_attr(delta, self.reasoning_key)
-            if reasoning_attr:
-                reasoning_text = str(reasoning_attr)
-        return reasoning_text
+            reasoning_attr = _get_reasoning_attr(delta)
+        else:
+            return None
+        return reasoning_attr
 
     def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
         ptd = getattr(usage, "prompt_tokens_details", None)
@@ -867,7 +865,8 @@ class ProviderOpenAIOfficial(Provider):
 
         # parse the reasoning content if any
         # the priority is higher than the <think> tag extraction
-        if reasoning_content := self._extract_reasoning_content(completion):
+        reasoning_content = self._extract_reasoning_content(completion)
+        if reasoning_content is not None:
             llm_response.reasoning_content = reasoning_content
 
         # parse tool calls if any
@@ -915,7 +914,7 @@ class ProviderOpenAIOfficial(Provider):
                 "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
             )
         has_text_output = bool((llm_response.completion_text or "").strip())
-        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
         if (
             not has_text_output
             and not has_reasoning_output
@@ -987,51 +986,42 @@ class ProviderOpenAIOfficial(Provider):
 
         return payloads, context_query
 
-    def _is_deepseek_model(self, model: str | None = None) -> bool:
-        model = (model or self.get_model() or "").lower()
-        api_base = str(self.provider_config.get("api_base", "")).lower()
-        return "deepseek" in model or "deepseek" in api_base
-
-    def _ensure_deepseek_tool_reasoning_content(self, payloads: dict) -> None:
-        if not self._is_deepseek_model(payloads.get("model")):
-            return
-
-        messages = payloads.get("messages")
-        if not isinstance(messages, list):
-            return
-
-        for idx, message in enumerate(messages):
-            if not isinstance(message, dict):
-                continue
-            if message.get("role") != "assistant" or not message.get("tool_calls"):
-                continue
-            if self.reasoning_key in message:
-                continue
-            next_message = messages[idx + 1] if idx + 1 < len(messages) else None
-            if isinstance(next_message, dict) and next_message.get("role") == "tool":
-                message[self.reasoning_key] = ""
-
     def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
         model = payloads.get("model", "").lower()
         is_gemini = "gemini" in model
-
+        deepseek_reasoning_models = {"deepseek-v4-pro", "deepseek-v4-flash"}
+        is_deepseek_v4_reasoning = (
+            model in deepseek_reasoning_models
+            or "api.deepseek.com" in self.client.base_url.host
+        )
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
             ):
                 reasoning_content = ""
+                reasoning_content_present = False
                 new_content = []  # not including think part
                 for part in message["content"]:
                     if part.get("type") == "think":
+                        reasoning_content_present = True
                         reasoning_content += str(part.get("think"))
                     else:
                         new_content.append(part)
                 # Some providers (Grok, etc.) reject empty content lists.
                 # When all parts were think blocks, fall back to None.
                 message["content"] = new_content or None
-                if reasoning_content:
+                if reasoning_content_present:
                     message["reasoning_content"] = reasoning_content
+
+            if (
+                message.get("role") == "assistant"
+                and is_deepseek_v4_reasoning
+                and "reasoning_content" not in message
+            ):
+                # DeepSeek v4 reasoning models require the field on assistant
+                # history messages, even when the reasoning content is empty.
+                message["reasoning_content"] = ""
 
             # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
             # 纯文本会触发 400 Invalid argument，需要包一层 JSON。
@@ -1044,8 +1034,6 @@ class ProviderOpenAIOfficial(Provider):
                         message["content"] = json.dumps(
                             {"result": content}, ensure_ascii=False
                         )
-
-        self._ensure_deepseek_tool_reasoning_content(payloads)
 
     async def _handle_api_error(
         self,
