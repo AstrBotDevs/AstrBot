@@ -87,7 +87,7 @@
       ></v-checkbox>
     </div>
 
-    <v-select
+    <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
       :model-value="modelValue"
       @update:model-value="emitUpdate"
@@ -101,7 +101,8 @@
       hide-details
       chips
       multiple
-    ></v-select>
+      clear-on-select
+    ></v-autocomplete>
 
     <v-select
       v-else-if="itemMeta?.options"
