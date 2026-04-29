@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import MagicMock, AsyncMock
-from pydantic import ValidationError
+from jsonschema.exceptions import ValidationError
 
 from astrbot.core.agent.tool import (
     FunctionTool,
