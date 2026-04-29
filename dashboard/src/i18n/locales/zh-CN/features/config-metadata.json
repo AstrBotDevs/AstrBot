@@ -1125,7 +1125,51 @@
       },
       "xai_native_search": {
         "description": "启用原生搜索功能",
-        "hint": "启用后，将通过 xAI 的 Chat Completions 原生 Live Search 进行联网检索（按需计费）。仅对 xAI 提供商生效。"
+        "hint": "启用后，将通过 xAI Chat Completions 原生 Live Search 进行联网检索（按需计费）。仅对 xAI Chat Completions 提供商生效。"
+      },
+      "xai_web_search_config": {
+        "description": "xAI Web Search 工具",
+        "hint": "xAI Responses 的网页搜索工具配置。",
+        "enabled": {
+          "description": "启用 Web Search",
+          "hint": "启用后，将向 xAI Responses API 注册 web_search 工具。"
+        },
+        "allowed_domains": {
+          "description": "允许搜索的域名",
+          "hint": "仅搜索这些域名；不可与 excluded_domains 同时设置。"
+        },
+        "excluded_domains": {
+          "description": "排除搜索的域名",
+          "hint": "排除这些域名；不可与 allowed_domains 同时设置。"
+        },
+        "enable_image_understanding": {
+          "description": "启用图片理解",
+          "hint": "允许模型在搜索过程中分析图片。"
+        }
+      },
+      "xai_x_search_config": {
+        "description": "xAI X Search 工具",
+        "hint": "xAI Responses 的 X/Twitter 搜索工具配置。",
+        "enabled": {
+          "description": "启用 X Search",
+          "hint": "启用后，将向 xAI Responses API 注册 x_search 工具。"
+        },
+        "allowed_x_handles": {
+          "description": "允许搜索的 X 账号",
+          "hint": "仅搜索这些 X 账号，不需要填写 @。"
+        },
+        "excluded_x_handles": {
+          "description": "排除搜索的 X 账号",
+          "hint": "排除这些 X 账号，不需要填写 @。"
+        },
+        "enable_image_understanding": {
+          "description": "启用图片理解",
+          "hint": "允许模型在搜索过程中分析X帖子中的图片。"
+        },
+        "enable_video_understanding": {
+          "description": "启用视频理解",
+          "hint": "允许模型在搜索过程中分析X帖子中的视频。"
+        }
       },
       "rerank_api_base": {
         "description": "重排序模型 API Base URL",

@@ -1123,7 +1123,51 @@
       },
       "xai_native_search": {
         "description": "Enable native search",
-        "hint": "When enabled, uses xAI Chat Completions native Live Search for web queries (billed on demand). Only applies to xAI providers."
+        "hint": "When enabled, uses xAI Chat Completions native Live Search for web queries (billed on demand). Only applies to xAI Chat Completions providers."
+      },
+      "xai_web_search_config": {
+        "description": "xAI Web Search Tool",
+        "hint": "Web search tool settings for xAI Responses.",
+        "enabled": {
+          "description": "Enable Web Search",
+          "hint": "Registers the web_search tool with xAI Responses API when enabled (billed on demand)."
+        },
+        "allowed_domains": {
+          "description": "Allowed search domains",
+          "hint": "Only search these domains; cannot be used with excluded_domains."
+        },
+        "excluded_domains": {
+          "description": "Excluded search domains",
+          "hint": "Exclude these domains; cannot be used with allowed_domains."
+        },
+        "enable_image_understanding": {
+          "description": "Enable image understanding",
+          "hint": "Allow the model to analyze images during search."
+        }
+      },
+      "xai_x_search_config": {
+        "description": "xAI X Search Tool",
+        "hint": "X/Twitter search tool settings for xAI Responses.",
+        "enabled": {
+          "description": "Enable X Search",
+          "hint": "Registers the x_search tool with xAI Responses API when enabled (billed on demand)."
+        },
+        "allowed_x_handles": {
+          "description": "Allowed X handles",
+          "hint": "Only search these X handles. Do not include @."
+        },
+        "excluded_x_handles": {
+          "description": "Excluded X handles",
+          "hint": "Exclude these X handles. Do not include @."
+        },
+        "enable_image_understanding": {
+          "description": "Enable image understanding",
+          "hint": "Allow the model to analyze images in X posts during search."
+        },
+        "enable_video_understanding": {
+          "description": "Enable video understanding",
+          "hint": "Allow the model to analyze videos in X posts during search."
+        }
       },
       "rerank_api_base": {
         "description": "Rerank Model API Base URL",
