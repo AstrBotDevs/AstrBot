@@ -1,6 +1,6 @@
 """固定大小分块器
 
-按照固定的字符数将文本分块,支持重叠区域。
+按照固定的字符数将文本分块,支持重叠区域｡
 """
 
 from .base import BaseChunker
@@ -9,7 +9,7 @@ from .base import BaseChunker
 class FixedSizeChunker(BaseChunker):
     """固定大小分块器
 
-    按照固定的字符数分块,并支持块之间的重叠。
+    按照固定的字符数分块,并支持块之间的重叠｡
     """
 
     def __init__(self, chunk_size: int = 512, chunk_overlap: int = 50) -> None:

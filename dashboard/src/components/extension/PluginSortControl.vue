@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 const props = defineProps({
   modelValue: {
     type: String,
@@ -54,7 +54,7 @@ const toggleOrder = () => {
       @update:model-value="updateSortBy"
     >
       <template #prepend-inner>
-        <v-icon size="small">mdi-sort</v-icon>
+        <v-icon size="small"> mdi-sort </v-icon>
       </template>
     </v-select>
 
@@ -65,9 +65,9 @@ const toggleOrder = () => {
       density="compact"
       @click="toggleOrder"
     >
-      <v-icon>{{
-        order === "desc" ? "mdi-arrow-down-thin" : "mdi-arrow-up-thin"
-      }}</v-icon>
+      <v-icon>
+        {{ order === "desc" ? "mdi-arrow-down-thin" : "mdi-arrow-up-thin" }}
+      </v-icon>
       <v-tooltip activator="parent" location="top">
         {{ order === "desc" ? descendingLabel : ascendingLabel }}
       </v-tooltip>
@@ -89,10 +89,10 @@ const toggleOrder = () => {
   max-width: 220px;
 }
 
-.plugin-sort-control__select :deep(.v-field__input),
-.plugin-sort-control__select :deep(.v-field-label),
-.plugin-sort-control__select :deep(.v-select__selection-text),
-.plugin-sort-control__select :deep(.v-field__prepend-inner) {
+.plugin-sort-control__select ::v-deep(.v-field__input),
+.plugin-sort-control__select ::v-deep(.v-field-label),
+.plugin-sort-control__select ::v-deep(.v-select__selection-text),
+.plugin-sort-control__select ::v-deep(.v-field__prepend-inner) {
   font-size: 0.875rem;
 }
 </style>

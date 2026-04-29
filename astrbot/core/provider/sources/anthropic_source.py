@@ -1,12 +1,24 @@
 import base64
 import json
 from collections.abc import AsyncGenerator
-from typing import Literal
+from typing import Any, Literal
 
-import anthropic
+import aiofiles
 import httpx
 from anthropic import AsyncAnthropic
-from anthropic.types import Message
+from anthropic.types import (
+    InputJSONDelta,
+    Message,
+    RawContentBlockDeltaEvent,
+    RawContentBlockStartEvent,
+    RawContentBlockStopEvent,
+    RawMessageDeltaEvent,
+    RawMessageStartEvent,
+    SignatureDelta,
+    TextDelta,
+    ThinkingDelta,
+    ToolUseBlock,
+)
 from anthropic.types.message_delta_usage import MessageDeltaUsage
 from anthropic.types.usage import Usage
 
@@ -16,14 +28,13 @@ from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, 
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
     is_connection_error,
     log_connection_failure,
 )
-
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -45,7 +56,7 @@ class ProviderAnthropic(Provider):
             return
         raise EmptyModelOutputError(
             "Anthropic completion has no usable output. "
-            f"completion_id={completion_id}, stop_reason={stop_reason}"
+            f"completion_id={completion_id}, stop_reason={stop_reason}",
         )
 
     @staticmethod
@@ -135,10 +146,10 @@ class ProviderAnthropic(Provider):
         """准备 Anthropic API 的请求 payload
 
         Args:
-            messages: OpenAI 格式的消息列表，包含用户输入和系统提示等信息
+            messages: OpenAI 格式的消息列表,包含用户输入和系统提示等信息
         Returns:
             system_prompt: 系统提示内容
-            new_messages: 处理后的消息列表，去除系统提示
+            new_messages: 处理后的消息列表,去除系统提示
 
         """
         system_prompt = ""
@@ -173,7 +184,7 @@ class ProviderAnthropic(Provider):
 
                 if "tool_calls" in message and isinstance(message["tool_calls"], list):
                     for tool_call in message["tool_calls"]:
-                        blocks.append(  # noqa: PERF401
+                        blocks.append(
                             {
                                 "type": "tool_use",
                                 "name": tool_call["function"]["name"],
@@ -218,7 +229,7 @@ class ProviderAnthropic(Provider):
                 )
 
                 if can_append_to_previous_tool_results:
-                    last_content.append(tool_result_block)
+                    last_content.append(tool_result_block)  # type: ignore[union-attr]
                 else:
                     new_messages.append(
                         {
@@ -240,7 +251,7 @@ class ProviderAnthropic(Provider):
                                     # Detect actual image format from binary data
                                     image_bytes = base64.b64decode(base64_data)
                                     media_type = self._detect_image_mime_type(
-                                        image_bytes
+                                        image_bytes,
                                     )
                                     converted_content.append(
                                         {
@@ -250,22 +261,22 @@ class ProviderAnthropic(Provider):
                                                 "media_type": media_type,
                                                 "data": base64_data,
                                             },
-                                        }
+                                        },
                                     )
                                 except ValueError:
                                     logger.warning(
-                                        f"Failed to parse image data URI: {url[:50]}..."
+                                        f"Failed to parse image data URI: {url[:50]}...",
                                     )
                             else:
                                 logger.warning(
-                                    f"Unsupported image URL format for Anthropic: {url[:50]}..."
+                                    f"Unsupported image URL format for Anthropic: {url[:50]}...",
                                 )
                         elif part.get("type") == "audio_url":
                             converted_content.append(
                                 {
                                     "type": "text",
                                     "text": "[Audio Attachment]",
-                                }
+                                },
                             )
                         else:
                             converted_content.append(part)
@@ -273,7 +284,7 @@ class ProviderAnthropic(Provider):
                         {
                             "role": "user",
                             "content": converted_content,
-                        }
+                        },
                     )
                 else:
                     new_messages.append(message)
@@ -305,7 +316,7 @@ class ProviderAnthropic(Provider):
                 payloads["tool_choice"] = {
                     "type": "any"
                     if payloads.get("tool_choice") == "required"
-                    else "auto"
+                    else "auto",
                 }
 
         extra_body = self.provider_config.get("custom_extra_body", {})
@@ -316,7 +327,9 @@ class ProviderAnthropic(Provider):
 
         try:
             completion = await self.client.messages.create(
-                **payloads, stream=False, extra_body=extra_body
+                **payloads,
+                stream=False,
+                extra_body=extra_body,
             )
         except httpx.RequestError as e:
             proxy = self.provider_config.get("proxy", "")
@@ -333,7 +346,7 @@ class ProviderAnthropic(Provider):
 
         if len(completion.content) == 0:
             raise EmptyModelOutputError(
-                f"Anthropic completion is empty. completion_id={completion.id}"
+                f"Anthropic completion is empty. completion_id={completion.id}",
             )
 
         llm_response = LLMResponse(role="assistant")
@@ -364,13 +377,13 @@ class ProviderAnthropic(Provider):
             if not llm_response.reasoning_content:
                 raise EmptyModelOutputError(
                     "Anthropic completion has no usable output. "
-                    f"completion_id={completion.id}, stop_reason={completion.stop_reason}"
+                    f"completion_id={completion.id}, stop_reason={completion.stop_reason}",
                 )
 
             # We have reasoning content (ThinkingBlock) - this is valid
             stop_reason = getattr(completion, "stop_reason", "unknown")
             logger.debug(
-                f"Completion contains only ThinkingBlock (stop_reason={stop_reason})"
+                f"Completion contains only ThinkingBlock (stop_reason={stop_reason})",
             )
             llm_response.completion_text = ""  # Ensure empty string, not None
 
@@ -392,14 +405,14 @@ class ProviderAnthropic(Provider):
                 payloads["tool_choice"] = {
                     "type": "any"
                     if payloads.get("tool_choice") == "required"
-                    else "auto"
+                    else "auto",
                 }
 
         # 用于累积工具调用信息
-        tool_use_buffer = {}
+        tool_use_buffer: dict[int, dict[str, Any]] = {}
         # 用于累积最终结果
         final_text = ""
-        final_tool_calls = []
+        final_tool_calls: list[dict[str, Any]] = []
         id = None
         usage = TokenUsage()
         extra_body = self.provider_config.get("custom_extra_body", {})
@@ -411,17 +424,16 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
 
         async with self.client.messages.stream(
-            **payloads, extra_body=extra_body
+            **payloads,
+            extra_body=extra_body,
         ) as stream:
-            assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
-                if event.type == "message_start":
-                    # the usage contains input token usage
+                if isinstance(event, RawMessageStartEvent):
                     id = event.message.id
                     usage = self._extract_usage(event.message.usage)
-                if event.type == "content_block_start":
-                    if event.content_block.type == "text":
-                        # 文本块开始
+                elif isinstance(event, RawContentBlockStartEvent):
+                    content_block = event.content_block
+                    if content_block.type == "text":
                         yield LLMResponse(
                             role="assistant",
                             completion_text="",
@@ -429,28 +441,25 @@ class ProviderAnthropic(Provider):
                             usage=usage,
                             id=id,
                         )
-                    elif event.content_block.type == "tool_use":
-                        # 工具使用块开始，初始化缓冲区
+                    elif isinstance(content_block, ToolUseBlock):
                         tool_use_buffer[event.index] = {
-                            "id": event.content_block.id,
-                            "name": event.content_block.name,
+                            "id": content_block.id,
+                            "name": content_block.name,
                             "input": {},
                         }
-
-                elif event.type == "content_block_delta":
-                    if event.delta.type == "text_delta":
-                        # 文本增量
-                        final_text += event.delta.text
+                elif isinstance(event, RawContentBlockDeltaEvent):
+                    delta = event.delta
+                    if isinstance(delta, TextDelta):
+                        final_text += delta.text
                         yield LLMResponse(
                             role="assistant",
-                            completion_text=event.delta.text,
+                            completion_text=delta.text,
                             is_chunk=True,
                             usage=usage,
                             id=id,
                         )
-                    elif event.delta.type == "thinking_delta":
-                        # 思考增量
-                        reasoning = event.delta.thinking
+                    elif isinstance(delta, ThinkingDelta):
+                        reasoning = delta.thinking
                         if reasoning:
                             yield LLMResponse(
                                 role="assistant",
@@ -461,28 +470,28 @@ class ProviderAnthropic(Provider):
                                 reasoning_signature=reasoning_signature or None,
                             )
                             reasoning_content += reasoning
-                    elif event.delta.type == "signature_delta":
-                        reasoning_signature = event.delta.signature
-                    elif event.delta.type == "input_json_delta":
-                        # 工具调用参数增量
+                    elif isinstance(delta, SignatureDelta):
+                        reasoning_signature = delta.signature
+                    elif isinstance(delta, InputJSONDelta):
                         if event.index in tool_use_buffer:
-                            # 累积 JSON 输入
                             if "input_json" not in tool_use_buffer[event.index]:
                                 tool_use_buffer[event.index]["input_json"] = ""
-                            tool_use_buffer[event.index]["input_json"] += (
-                                event.delta.partial_json
+                            partial_json = delta.partial_json
+                            partial_json_chunk = (
+                                partial_json
+                                if isinstance(partial_json, str)
+                                else "".join(partial_json)
                             )
-
-                elif event.type == "content_block_stop":
-                    # 内容块结束
+                            tool_use_buffer[event.index]["input_json"] += (
+                                partial_json_chunk
+                            )
+                elif isinstance(event, RawContentBlockStopEvent):
                     if event.index in tool_use_buffer:
-                        # 解析完整的工具调用
                         tool_info = tool_use_buffer[event.index]
                         try:
                             if "input_json" in tool_info:
                                 tool_info["input"] = json.loads(tool_info["input_json"])
 
-                            # 添加到最终结果
                             final_tool_calls.append(
                                 {
                                     "id": tool_info["id"],
@@ -502,13 +511,10 @@ class ProviderAnthropic(Provider):
                                 id=id,
                             )
                         except json.JSONDecodeError:
-                            # JSON 解析失败，跳过这个工具调用
                             logger.warning(f"工具调用参数 JSON 解析失败: {tool_info}")
 
-                        # 清理缓冲区
                         del tool_use_buffer[event.index]
-
-                elif event.type == "message_delta":
+                elif isinstance(event, RawMessageDeltaEvent):
                     if event.usage:
                         self._update_usage(usage, event.usage)
 
@@ -678,7 +684,7 @@ class ProviderAnthropic(Provider):
         audio_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
     ):
-        """组装上下文，支持文本和图片"""
+        """组装上下文,支持文本和图片"""
 
         async def resolve_image_url(image_url: str) -> dict | None:
             if image_url.startswith("http"):
@@ -691,7 +697,7 @@ class ProviderAnthropic(Provider):
                 image_data, mime_type = await self.encode_image_bs64(image_url)
 
             if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                logger.warning(f"图片 {image_url} 得到的结果为空,将忽略｡")
                 return None
 
             return {
@@ -709,7 +715,7 @@ class ProviderAnthropic(Provider):
 
         content = []
 
-        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        # 1. 用户原始发言(OpenAI 建议:用户发言在前)
         if text:
             content.append({"type": "text", "text": text})
         elif image_urls:
@@ -718,10 +724,10 @@ class ProviderAnthropic(Provider):
         elif audio_urls:
             content.append({"type": "text", "text": "[Audio]"})
         elif extra_user_content_parts:
-            # 如果只有额外内容块，也需要添加占位文本
+            # 如果只有额外内容块,也需要添加占位文本
             content.append({"type": "text", "text": " "})
 
-        # 2. 额外的内容块（系统提醒、指令等）
+        # 2. 额外的内容块(系统提醒､指令等)
         if extra_user_content_parts:
             for block in extra_user_content_parts:
                 if isinstance(block, TextPart):
@@ -745,7 +751,7 @@ class ProviderAnthropic(Provider):
             for _audio_path in audio_urls:
                 content.append({"type": "text", "text": "[Audio]"})
 
-        # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
+        # 如果只有主文本且没有额外内容块和图片,返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts
@@ -760,7 +766,7 @@ class ProviderAnthropic(Provider):
         return {"role": "user", "content": content}
 
     async def encode_image_bs64(self, image_url: str) -> tuple[str, str]:
-        """将图片转换为 base64，同时检测实际 MIME 类型"""
+        """将图片转换为 base64,同时检测实际 MIME 类型"""
         if image_url.startswith("base64://"):
             raw_base64 = image_url.replace("base64://", "")
             try:
@@ -769,8 +775,8 @@ class ProviderAnthropic(Provider):
             except Exception:
                 mime_type = "image/jpeg"
             return f"data:{mime_type};base64,{raw_base64}", mime_type
-        with open(image_url, "rb") as f:
-            image_bytes = f.read()
+        async with aiofiles.open(image_url, "rb") as f:
+            image_bytes = await f.read()
             mime_type = self._detect_image_mime_type(image_bytes)
             image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
             return f"data:{mime_type};base64,{image_bs64}", mime_type
@@ -780,12 +786,13 @@ class ProviderAnthropic(Provider):
         return self.chosen_api_key
 
     async def get_models(self) -> list[str]:
-        models_str = []
-        models = await self.client.models.list()
-        models = sorted(models.data, key=lambda x: x.id)
-        for model in models:
-            models_str.append(model.id)
-        return models_str
+        model_ids: list[str] = []
+        models_page = await self.client.models.list()
+        for model_info in models_page.data:
+            model_id = getattr(model_info, "id", None)
+            if isinstance(model_id, str):
+                model_ids.append(model_id)
+        return sorted(model_ids)
 
     def set_key(self, key: str) -> None:
         self.chosen_api_key = key

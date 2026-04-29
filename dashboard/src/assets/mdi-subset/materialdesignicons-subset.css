@@ -1,10 +1,11 @@
-/* Auto-generated MDI subset – 261 icons */
+/* Auto-generated MDI subset – 268 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
   font-family: "Material Design Icons";
-  src: url("./materialdesignicons-webfont-subset.woff2") format("woff2"),
-       url("./materialdesignicons-webfont-subset.woff") format("woff");
+  src:
+    url("./materialdesignicons-webfont-subset.woff2") format("woff2"),
+    url("./materialdesignicons-webfont-subset.woff") format("woff");
   font-weight: normal;
   font-style: normal;
 }
@@ -144,6 +145,10 @@
   content: "\F00F3";
 }
 
+.mdi-calendar-range::before {
+  content: "\F0679";
+}
+
 .mdi-chat::before {
   content: "\F0B79";
 }
@@ -180,6 +185,10 @@
   content: "\F0132";
 }
 
+.mdi-checkbox-multiple-marked-outline::before {
+  content: "\F0139";
+}
+
 .mdi-chevron-double-left::before {
   content: "\F013D";
 }
@@ -212,6 +221,10 @@
   content: "\F0765";
 }
 
+.mdi-circle-outline::before {
+  content: "\F0766";
+}
+
 .mdi-circle-small::before {
   content: "\F09DF";
 }
@@ -234,10 +247,6 @@
 
 .mdi-cloud-upload::before {
   content: "\F0167";
-}
-
-.mdi-code-braces::before {
-  content: "\F0169";
 }
 
 .mdi-code-json::before {
@@ -320,16 +329,16 @@
   content: "\F164B";
 }
 
+.mdi-database-import::before {
+  content: "\F095D";
+}
+
 .mdi-database-off::before {
   content: "\F1640";
 }
 
 .mdi-database-refresh-outline::before {
   content: "\F1634";
-}
-
-.mdi-database-search-outline::before {
-  content: "\F1636";
 }
 
 .mdi-delete::before {
@@ -358,6 +367,10 @@
 
 .mdi-download::before {
   content: "\F01DA";
+}
+
+.mdi-earth::before {
+  content: "\F01E7";
 }
 
 .mdi-emoticon::before {
@@ -428,10 +441,6 @@
   content: "\F021C";
 }
 
-.mdi-file-music-outline::before {
-  content: "\F0E2A";
-}
-
 .mdi-file-outline::before {
   content: "\F0224";
 }
@@ -450,10 +459,6 @@
 
 .mdi-file-upload::before {
   content: "\F0A4D";
-}
-
-.mdi-file-video-outline::before {
-  content: "\F0E2C";
 }
 
 .mdi-file-word-box::before {
@@ -556,10 +561,6 @@
   content: "\F0EFE";
 }
 
-.mdi-image-outline::before {
-  content: "\F0976";
-}
-
 .mdi-import::before {
   content: "\F02FA";
 }
@@ -584,8 +585,16 @@
   content: "\F0309";
 }
 
+.mdi-keyboard-outline::before {
+  content: "\F097B";
+}
+
 .mdi-label::before {
   content: "\F0315";
+}
+
+.mdi-lan-connect::before {
+  content: "\F0318";
 }
 
 .mdi-language-css3::before {
@@ -594,10 +603,6 @@
 
 .mdi-language-html5::before {
   content: "\F031D";
-}
-
-.mdi-language-java::before {
-  content: "\F0B37";
 }
 
 .mdi-language-javascript::before {
@@ -680,12 +685,20 @@
   content: "\F035F";
 }
 
+.mdi-message-off-outline::before {
+  content: "\F164E";
+}
+
 .mdi-message-outline::before {
   content: "\F0365";
 }
 
 .mdi-message-text::before {
   content: "\F0369";
+}
+
+.mdi-message-text-outline::before {
+  content: "\F036A";
 }
 
 .mdi-microphone::before {
@@ -702,6 +715,10 @@
 
 .mdi-minus-box::before {
   content: "\F0375";
+}
+
+.mdi-moon-waning-crescent::before {
+  content: "\F0F65";
 }
 
 .mdi-music-note-outline::before {
@@ -732,6 +749,10 @@
   content: "\F0B3C";
 }
 
+.mdi-numeric-4::before {
+  content: "\F0B3D";
+}
+
 .mdi-open-in-new::before {
   content: "\F03CC";
 }
@@ -740,16 +761,16 @@
   content: "\F03D6";
 }
 
-.mdi-package-variant-closed::before {
-  content: "\F03D7";
-}
-
 .mdi-page-first::before {
   content: "\F0600";
 }
 
 .mdi-page-last::before {
   content: "\F0601";
+}
+
+.mdi-palette::before {
+  content: "\F03D8";
 }
 
 .mdi-paperclip::before {
@@ -884,6 +905,10 @@
   content: "\F0832";
 }
 
+.mdi-share-variant::before {
+  content: "\F0497";
+}
+
 .mdi-shield-check::before {
   content: "\F0565";
 }
@@ -950,6 +975,10 @@
 
 .mdi-subdirectory-arrow-right::before {
   content: "\F060D";
+}
+
+.mdi-sync::before {
+  content: "\F04E6";
 }
 
 .mdi-text::before {
@@ -1072,19 +1101,23 @@
   visibility: hidden;
 }
 
-.mdi-18px.mdi-set, .mdi-18px.mdi:before {
+.mdi-18px.mdi-set,
+.mdi-18px.mdi:before {
   font-size: 18px;
 }
 
-.mdi-24px.mdi-set, .mdi-24px.mdi:before {
+.mdi-24px.mdi-set,
+.mdi-24px.mdi:before {
   font-size: 24px;
 }
 
-.mdi-36px.mdi-set, .mdi-36px.mdi:before {
+.mdi-36px.mdi-set,
+.mdi-36px.mdi:before {
   font-size: 36px;
 }
 
-.mdi-48px.mdi-set, .mdi-48px.mdi:before {
+.mdi-48px.mdi-set,
+.mdi-48px.mdi:before {
   font-size: 48px;
 }
 
@@ -1103,9 +1136,9 @@
 .mdi-light.mdi-inactive:before {
   color: rgba(255, 255, 255, 0.3);
 }
-
+/*
 .mdi-rotate-45 {
-  /*
+
         // Not included in production
         &.mdi-flip-h:before {
             -webkit-transform: scaleX(-1) rotate(45deg);
@@ -1120,17 +1153,17 @@
             filter: FlipV;
             -ms-filter: "FlipV";
         }
-        */
-}
 
+}
+*/
 .mdi-rotate-45:before {
   -webkit-transform: rotate(45deg);
   -ms-transform: rotate(45deg);
   transform: rotate(45deg);
 }
-
+/*
 .mdi-rotate-90 {
-  /*
+
         // Not included in production
         &.mdi-flip-h:before {
             -webkit-transform: scaleX(-1) rotate(90deg);
@@ -1145,17 +1178,17 @@
             filter: FlipV;
             -ms-filter: "FlipV";
         }
-        */
-}
 
+}
+*/
 .mdi-rotate-90:before {
   -webkit-transform: rotate(90deg);
   -ms-transform: rotate(90deg);
   transform: rotate(90deg);
 }
-
+/*
 .mdi-rotate-135 {
-  /*
+
         // Not included in production
         &.mdi-flip-h:before {
             -webkit-transform: scaleX(-1) rotate(135deg);
@@ -1170,17 +1203,18 @@
             filter: FlipV;
             -ms-filter: "FlipV";
         }
-        */
-}
 
+}
+*/
 .mdi-rotate-135:before {
   -webkit-transform: rotate(135deg);
   -ms-transform: rotate(135deg);
   transform: rotate(135deg);
 }
 
+/*
 .mdi-rotate-180 {
-  /*
+
         // Not included in production
         &.mdi-flip-h:before {
             -webkit-transform: scaleX(-1) rotate(180deg);
@@ -1195,17 +1229,17 @@
             filter: FlipV;
             -ms-filter: "FlipV";
         }
-        */
-}
 
+}
+*/
 .mdi-rotate-180:before {
   -webkit-transform: rotate(180deg);
   -ms-transform: rotate(180deg);
   transform: rotate(180deg);
 }
-
+/*
 .mdi-rotate-225 {
-  /*
+
         // Not included in production
         &.mdi-flip-h:before {
             -webkit-transform: scaleX(-1) rotate(225deg);
@@ -1220,17 +1254,17 @@
             filter: FlipV;
             -ms-filter: "FlipV";
         }
-        */
-}
 
+}
+*/
 .mdi-rotate-225:before {
   -webkit-transform: rotate(225deg);
   -ms-transform: rotate(225deg);
   transform: rotate(225deg);
 }
-
+/*
 .mdi-rotate-270 {
-  /*
+
         // Not included in production
         &.mdi-flip-h:before {
             -webkit-transform: scaleX(-1) rotate(270deg);
@@ -1245,17 +1279,17 @@
             filter: FlipV;
             -ms-filter: "FlipV";
         }
-        */
-}
 
+}
+*/
 .mdi-rotate-270:before {
   -webkit-transform: rotate(270deg);
   -ms-transform: rotate(270deg);
   transform: rotate(270deg);
 }
-
+/*
 .mdi-rotate-315 {
-  /*
+
         // Not included in production
         &.mdi-flip-h:before {
             -webkit-transform: scaleX(-1) rotate(315deg);
@@ -1270,9 +1304,9 @@
             filter: FlipV;
             -ms-filter: "FlipV";
         }
-        */
-}
 
+}
+*/
 .mdi-rotate-315:before {
   -webkit-transform: rotate(315deg);
   -ms-transform: rotate(315deg);

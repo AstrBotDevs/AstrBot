@@ -1,6 +1,10 @@
 import asyncio
 import os
 import uuid
+from typing import Any
+
+import aiofiles
+import anyio
 
 from astrbot.core import logger
 from astrbot.core.provider.entities import ProviderType
@@ -8,10 +12,11 @@ from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
+genie: Any = None
 try:
-    import genie_tts as genie  # type: ignore
+    import genie_tts as genie
 except ImportError:
-    genie = None
+    pass
 
 
 @register_provider_adapter(
@@ -72,7 +77,8 @@ class GenieTTSProvider(TTSProvider):
         try:
             await loop.run_in_executor(None, _generate, path)
 
-            if os.path.exists(path):
+            path_obj = anyio.Path(path)
+            if await path_obj.exists():
                 return path
 
             raise RuntimeError("Genie TTS did not save to file.")
@@ -109,16 +115,17 @@ class GenieTTSProvider(TTSProvider):
 
                 await loop.run_in_executor(None, _generate, path, text)
 
-                if os.path.exists(path):
-                    with open(path, "rb") as f:
-                        audio_data = f.read()
+                path_obj = anyio.Path(path)
+                if await path_obj.exists():
+                    async with aiofiles.open(path, "rb") as f:
+                        audio_data = await f.read()
 
                     # Put (text, bytes) into queue so frontend can display text
                     await audio_queue.put((text, audio_data))
 
                     # Clean up
                     try:
-                        os.remove(path)
+                        await path_obj.unlink()
                     except OSError:
                         pass
                 else:

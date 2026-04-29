@@ -4,18 +4,10 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from astrbot.core import astrbot_config, logger
-from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
-from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
-    DashscopeAgentRunner,
-)
 from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
     DEERFLOW_PROVIDER_TYPE,
 )
-from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
-    DeerFlowAgentRunner,
-)
-from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
@@ -32,6 +24,8 @@ from astrbot.core.persona_error_reply import (
 if TYPE_CHECKING:
     from astrbot.core.agent.runners.base import BaseAgentRunner
     from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
@@ -40,9 +34,6 @@ from astrbot.core.provider.entities import (
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.metrics import Metric
-
-from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
-from ....context import PipelineContext, call_event_hook
 
 AGENT_RUNNER_TYPE_KEY = {
     "dify": "dify_agent_runner_provider_id",
@@ -64,12 +55,11 @@ async def run_third_party_agent(
     stream_to_general: bool = False,
     custom_error_message: str | None = None,
 ) -> AsyncGenerator[tuple[MessageChain, bool], None]:
-    """
-    运行第三方 agent runner 并转换响应格式
-    类似于 run_agent 函数，但专门处理第三方 agent runner
+    """运行第三方 agent runner 并转换响应格式
+    类似于 run_agent 函数,但专门处理第三方 agent runner
     """
     try:
-        async for resp in runner.step_until_done(max_step=30):  # type: ignore[misc]
+        async for resp in runner.step_until_done(max_step=30):
             if resp.type == "streaming_delta":
                 if stream_to_general:
                     continue
@@ -86,7 +76,7 @@ async def run_third_party_agent(
             err_msg = (
                 f"Error occurred during AI execution.\n"
                 f"Error Type: {type(e).__name__} (3rd party)\n"
-                f"Error Message: {str(e)}"
+                f"Error Message: {e!s}"
             )
         yield MessageChain().message(err_msg), True
 
@@ -164,6 +154,9 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
 class ThirdPartyAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
+        self.provider_wake_prefix: str = ctx.astrbot_config["provider_settings"][
+            "wake_prefix"
+        ]
         self.conf = ctx.astrbot_config
         self.runner_type = self.conf["provider_settings"]["agent_runner_type"]
         self.prov_id = self.conf["provider_settings"].get(
@@ -187,7 +180,8 @@ class ThirdPartyAgentSubStage(Stage):
         )
 
     async def _resolve_persona_custom_error_message(
-        self, event: AstrMessageEvent
+        self,
+        event: AstrMessageEvent,
     ) -> str | None:
         try:
             conversation_persona_id = await resolve_event_conversation_persona_id(
@@ -237,11 +231,11 @@ class ThirdPartyAgentSubStage(Stage):
             .set_result_content_type(ResultContentType.STREAMING_RESULT)
             .set_async_stream(_stream_runner_chain()),
         )
-        yield
+        yield None
 
         if runner.done():
             final_chain, is_runner_error = aggregator.finalize(
-                runner.get_final_llm_resp()
+                runner.get_final_llm_resp(),
             )
             event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)
             event.set_result(
@@ -284,15 +278,16 @@ class ThirdPartyAgentSubStage(Stage):
             ),
         )
         # Second yield keeps scheduler progress consistent after final result update.
-        yield
+        yield None
 
     async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
+        self,
+        event: AstrMessageEvent,
     ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
-        if provider_wake_prefix and not event.message_str.startswith(
-            provider_wake_prefix
+        if self.provider_wake_prefix and not event.message_str.startswith(
+            self.provider_wake_prefix,
         ):
             return
 
@@ -301,18 +296,18 @@ class ThirdPartyAgentSubStage(Stage):
             {},
         )
         if not self.prov_id:
-            logger.error("没有填写 Agent Runner 提供商 ID，请前往配置页面配置。")
+            logger.error("没有填写 Agent Runner 提供商 ID,请前往配置页面配置｡")
             return
         if not self.prov_cfg:
             logger.error(
-                f"Agent Runner 提供商 {self.prov_id} 配置不存在，请前往配置页面修改配置。"
+                f"Agent Runner 提供商 {self.prov_id} 配置不存在,请前往配置页面修改配置｡",
             )
             return
 
         # make provider request
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
-        req.prompt = event.message_str[len(provider_wake_prefix) :]
+        req.prompt = event.message_str[len(self.provider_wake_prefix) :]
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
                 image_path = await comp.convert_to_base64()
@@ -330,14 +325,50 @@ class ThirdPartyAgentSubStage(Stage):
         # call event hook
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
             return
+        sdk_plugin_bridge = getattr(
+            self.ctx.plugin_manager.context,
+            "sdk_plugin_bridge",
+            None,
+        )
+        if sdk_plugin_bridge is not None:
+            try:
+                await sdk_plugin_bridge.dispatch_message_event(
+                    "llm_request",
+                    event,
+                    {
+                        "prompt": req.prompt,
+                        "provider_id": self.prov_id,
+                    },
+                    provider_request=req,
+                )
+            except Exception as exc:
+                logger.warning("SDK llm_request dispatch failed: %s", exc)
 
         if self.runner_type == "dify":
-            runner = DifyAgentRunner[AstrAgentContext]()
+            from astrbot.core.agent.runners.dify.dify_agent_runner import (
+                DifyAgentRunner,
+            )
+
+            runner: BaseAgentRunner[AstrAgentContext] = DifyAgentRunner[
+                AstrAgentContext
+            ]()
         elif self.runner_type == "coze":
+            from astrbot.core.agent.runners.coze.coze_agent_runner import (
+                CozeAgentRunner,
+            )
+
             runner = CozeAgentRunner[AstrAgentContext]()
         elif self.runner_type == "dashscope":
+            from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
+                DashscopeAgentRunner,
+            )
+
             runner = DashscopeAgentRunner[AstrAgentContext]()
         elif self.runner_type == DEERFLOW_PROVIDER_TYPE:
+            from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
+                DeerFlowAgentRunner,
+            )
+
             runner = DeerFlowAgentRunner[AstrAgentContext]()
         else:
             raise ValueError(
@@ -377,12 +408,24 @@ class ThirdPartyAgentSubStage(Stage):
                 stream_watchdog_task.cancel()
 
         try:
+            from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+
+            provider = self.ctx.plugin_manager.context.get_using_provider(
+                umo=event.unified_msg_origin,
+            )
+            if provider is None:
+                raise ValueError(
+                    "No active provider is available for third-party runner",
+                )
+
             await runner.reset(
+                provider=provider,
                 request=req,
                 run_context=AgentContextWrapper(
                     context=astr_agent_ctx,
                     tool_call_timeout=120,
                 ),
+                tool_executor=FunctionToolExecutor(),
                 agent_hooks=MAIN_AGENT_HOOKS,
                 provider_config=self.prov_cfg,
                 streaming=streaming_response,
@@ -401,7 +444,7 @@ class ThirdPartyAgentSubStage(Stage):
                     close_runner_once=close_runner_once,
                     mark_stream_consumed=mark_stream_consumed,
                 ):
-                    yield
+                    yield None
             else:
                 async for _ in self._handle_non_streaming_response(
                     runner=runner,
@@ -409,7 +452,7 @@ class ThirdPartyAgentSubStage(Stage):
                     stream_to_general=stream_to_general,
                     custom_error_message=custom_error_message,
                 ):
-                    yield
+                    yield None
         finally:
             if (
                 stream_watchdog_task
@@ -420,7 +463,7 @@ class ThirdPartyAgentSubStage(Stage):
             if not streaming_used:
                 await close_runner_once()
 
-        asyncio.create_task(
+        asyncio.create_task(  # noqa: RUF006
             Metric.upload(
                 llm_tick=1,
                 model_name=self.runner_type,

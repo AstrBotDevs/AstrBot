@@ -76,7 +76,7 @@ def test_promote_stable_sync_failure_auto_rolls_back(monkeypatch):
     tool = PromoteSkillCandidateTool()
     result = asyncio.run(
         tool.call(
-            run_ctx,
+            run_ctx,  # type: ignore[arg-type]
             candidate_id="cand-1",
             stage="stable",
             sync_to_local=True,

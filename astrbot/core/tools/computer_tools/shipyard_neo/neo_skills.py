@@ -12,11 +12,6 @@ from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
 
-_SHIPYARD_NEO_TOOL_CONFIG = {
-    "provider_settings.computer_use_runtime": "sandbox",
-    "provider_settings.sandbox.booter": "shipyard_neo",
-}
-
 
 def _to_jsonable(model_like: Any) -> Any:
     if isinstance(model_like, dict):
@@ -44,7 +39,7 @@ async def _get_neo_context(
     if client is None or sandbox is None:
         raise RuntimeError(
             "Current sandbox booter does not support Neo skill lifecycle APIs. "
-            "Please switch to shipyard_neo."
+            "Please switch to shipyard_neo.",
         )
     return client, sandbox
 
@@ -66,10 +61,10 @@ class NeoSkillToolBase(FunctionTool):
             result = await neo_call(client, sandbox)
             return _to_json_text(result)
         except Exception as e:
-            return f"{self.error_prefix} {error_action}: {str(e)}"
+            return f"{self.error_prefix} {error_action}: {e!s}"
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class GetExecutionHistoryTool(NeoSkillToolBase):
     name: str = "astrbot_get_execution_history"
@@ -87,10 +82,10 @@ class GetExecutionHistoryTool(NeoSkillToolBase):
                 "has_description": {"type": "boolean", "default": False},
             },
             "required": [],
-        }
+        },
     )
 
-    async def call(
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         exec_type: str | None = None,
@@ -116,7 +111,7 @@ class GetExecutionHistoryTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class AnnotateExecutionTool(NeoSkillToolBase):
     name: str = "astrbot_annotate_execution"
@@ -131,10 +126,10 @@ class AnnotateExecutionTool(NeoSkillToolBase):
                 "notes": {"type": "string"},
             },
             "required": ["execution_id"],
-        }
+        },
     )
 
-    async def call(
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         execution_id: str,
@@ -154,7 +149,7 @@ class AnnotateExecutionTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class CreateSkillPayloadTool(NeoSkillToolBase):
     name: str = "astrbot_create_skill_payload"
@@ -183,10 +178,10 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
                 },
             },
             "required": ["payload"],
-        }
+        },
     )
 
-    async def call(
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         payload: dict[str, Any] | list[Any],
@@ -202,7 +197,7 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class GetSkillPayloadTool(NeoSkillToolBase):
     name: str = "astrbot_get_skill_payload"
@@ -214,10 +209,10 @@ class GetSkillPayloadTool(NeoSkillToolBase):
                 "payload_ref": {"type": "string"},
             },
             "required": ["payload_ref"],
-        }
+        },
     )
 
-    async def call(
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         payload_ref: str,
@@ -229,7 +224,7 @@ class GetSkillPayloadTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class CreateSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_create_skill_candidate"
@@ -260,10 +255,10 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
                 },
             },
             "required": ["skill_key", "source_execution_ids"],
-        }
+        },
     )
 
-    async def call(
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         skill_key: str,
@@ -283,7 +278,7 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class ListSkillCandidatesTool(NeoSkillToolBase):
     name: str = "astrbot_list_skill_candidates"
@@ -298,10 +293,10 @@ class ListSkillCandidatesTool(NeoSkillToolBase):
                 "offset": {"type": "integer", "default": 0},
             },
             "required": [],
-        }
+        },
     )
 
-    async def call(
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         status: str | None = None,
@@ -321,7 +316,7 @@ class ListSkillCandidatesTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class EvaluateSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_evaluate_skill_candidate"
@@ -337,10 +332,10 @@ class EvaluateSkillCandidateTool(NeoSkillToolBase):
                 "report": {"type": "string"},
             },
             "required": ["candidate_id", "passed"],
-        }
+        },
     )
 
-    async def call(
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         candidate_id: str,
@@ -362,7 +357,7 @@ class EvaluateSkillCandidateTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class PromoteSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_promote_skill_candidate"
@@ -390,10 +385,10 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
                 },
             },
             "required": ["candidate_id"],
-        }
+        },
     )
 
-    async def call(
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         candidate_id: str,
@@ -427,13 +422,13 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
                     "release": result.get("release"),
                     "sync": result.get("sync"),
                     "rollback": result.get("rollback"),
-                }
+                },
             )
         except Exception as e:
-            return f"Error promoting skill candidate: {str(e)}"
+            return f"Error promoting skill candidate: {e!s}"
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class ListSkillReleasesTool(NeoSkillToolBase):
     name: str = "astrbot_list_skill_releases"
@@ -449,10 +444,10 @@ class ListSkillReleasesTool(NeoSkillToolBase):
                 "offset": {"type": "integer", "default": 0},
             },
             "required": [],
-        }
+        },
     )
 
-    async def call(
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         skill_key: str | None = None,
@@ -474,7 +469,7 @@ class ListSkillReleasesTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class RollbackSkillReleaseTool(NeoSkillToolBase):
     name: str = "astrbot_rollback_skill_release"
@@ -486,10 +481,10 @@ class RollbackSkillReleaseTool(NeoSkillToolBase):
                 "release_id": {"type": "string"},
             },
             "required": ["release_id"],
-        }
+        },
     )
 
-    async def call(
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         release_id: str,
@@ -501,7 +496,7 @@ class RollbackSkillReleaseTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class SyncSkillReleaseTool(NeoSkillToolBase):
     name: str = "astrbot_sync_skill_release"
@@ -517,10 +512,10 @@ class SyncSkillReleaseTool(NeoSkillToolBase):
                 "require_stable": {"type": "boolean", "default": True},
             },
             "required": [],
-        }
+        },
     )
 
-    async def call(
+    async def call(  # type: ignore
         self,
         context: ContextWrapper[AstrAgentContext],
         release_id: str | None = None,

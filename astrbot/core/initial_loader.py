@@ -37,6 +37,9 @@ class InitialLoader:
 
         webui_dir = self.webui_dir
 
+        assert core_lifecycle.dashboard_shutdown_event is not None, (
+            "dashboard_shutdown_event was not initialized"
+        )
         self.dashboard_server = AstrBotDashboard(
             core_lifecycle,
             self.db,

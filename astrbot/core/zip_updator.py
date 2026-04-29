@@ -53,7 +53,10 @@ class RepoZipUpdator:
         return body[:max_len] + "...[truncated]"
 
     async def _download_file(
-        self, url: str, path: str, timeout: float = 1800.0
+        self,
+        url: str,
+        path: str,
+        timeout: float = 1800.0,
     ) -> None:
         target_path = Path(path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,8 +75,8 @@ class RepoZipUpdator:
             raise
 
     async def fetch_release_info(self, url: str, latest: bool = True) -> list:
-        """请求版本信息。
-        返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
+        """请求版本信息｡
+        返回一个列表,每个元素是一个字典,包含版本号､发布时间､更新内容､commit hash等信息｡
         """
         try:
             async with self._create_httpx_client() as client:
@@ -111,8 +114,8 @@ class RepoZipUpdator:
         return ret
 
     def github_api_release_parser(self, releases: list) -> list:
-        """解析 GitHub API 返回的 releases 信息。
-        返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
+        """解析 GitHub API 返回的 releases 信息｡
+        返回一个列表,每个元素是一个字典,包含版本号､发布时间､更新内容､commit hash等信息｡
         """
         ret = []
         for release in releases:
@@ -137,6 +140,16 @@ class RepoZipUpdator:
         """Semver 版本比较"""
         return VersionComparator.compare_version(v1, v2)
 
+    def _is_prerelease_version(self, version: str) -> bool:
+        """Check if a version string is a prerelease version."""
+        return bool(
+            re.search(
+                r"[\-_.]?(alpha|beta|rc|dev)[\-_.]?\d*$",
+                version,
+                re.IGNORECASE,
+            ),
+        )
+
     async def check_update(
         self,
         url: str,
@@ -145,13 +158,16 @@ class RepoZipUpdator:
     ) -> ReleaseInfo | None:
         update_data = await self.fetch_release_info(url)
 
+        # Check if current version is a prerelease
+        current_is_prerelease = self._is_prerelease_version(current_version)
+
         sel_release_data = None
         if consider_prerelease:
             tag_name = update_data[0]["tag_name"]
             sel_release_data = update_data[0]
         else:
             for data in update_data:
-                # 跳过带有 alpha、beta 等预发布标签的版本
+                # Skip prerelease versions when not considering them
                 if re.search(
                     r"[\-_.]?(alpha|beta|rc|dev)[\-_.]?\d*$",
                     data["tag_name"],
@@ -166,6 +182,13 @@ class RepoZipUpdator:
             logger.error("未找到合适的发布版本")
             return None
 
+        # If current version is a prerelease and we're comparing against stable,
+        # check if current version is already newer than the latest stable
+        if current_is_prerelease and not self._is_prerelease_version(tag_name):
+            if self.compare_version(current_version, tag_name) >= 0:
+                # Current prerelease version is >= latest stable, no update needed
+                return None
+
         if self.compare_version(current_version, tag_name) >= 0:
             return None
         return ReleaseInfo(
@@ -175,7 +198,10 @@ class RepoZipUpdator:
         )
 
     async def download_from_repo_url(
-        self, target_path: str, repo_url: str, proxy=""
+        self,
+        target_path: str,
+        repo_url: str,
+        proxy="",
     ) -> None:
         author, repo, branch = self.parse_github_url(repo_url)
 
@@ -192,11 +218,11 @@ class RepoZipUpdator:
                 releases = await self.fetch_release_info(url=release_url)
             except Exception as e:
                 logger.warning(
-                    f"获取 {author}/{repo} 的 GitHub Releases 失败: {e}，将尝试下载默认分支",
+                    f"获取 {author}/{repo} 的 GitHub Releases 失败: {e},将尝试下载默认分支",
                 )
                 releases = []
             if not releases:
-                # 如果没有最新版本，下载默认分支
+                # 如果没有最新版本,下载默认分支
                 logger.info(f"正在从默认分支下载 {author}/{repo}")
                 release_url = (
                     f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
@@ -208,15 +234,15 @@ class RepoZipUpdator:
             proxy = proxy.rstrip("/")
             release_url = f"{proxy}/{release_url}"
             logger.info(
-                f"检查到设置了镜像站，将使用镜像站下载 {author}/{repo} 仓库源码: {release_url}",
+                f"检查到设置了镜像站,将使用镜像站下载 {author}/{repo} 仓库源码: {release_url}",
             )
 
         await self._download_file(release_url, target_path + ".zip")
 
     def parse_github_url(self, url: str):
-        """使用正则表达式解析 GitHub 仓库 URL，支持 `.git` 后缀和 `tree/branch` 结构
+        """使用正则表达式解析 GitHub 仓库 URL,支持 `.git` 后缀和 `tree/branch` 结构
         Returns:
-            tuple[str, str, str]: 返回作者名、仓库名和分支名
+            tuple[str, str, str]: 返回作者名､仓库名和分支名
         Raises:
             ValueError: 如果 URL 格式不正确
         """
@@ -257,7 +283,7 @@ class RepoZipUpdator:
             os.remove(zip_path)
         except BaseException:
             logger.warning(
-                f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}",
+                f"删除更新文件失败,可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}",
             )
 
     def format_name(self, name: str) -> str:

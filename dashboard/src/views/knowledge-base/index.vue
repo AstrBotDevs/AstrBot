@@ -22,7 +22,9 @@
 /* 页面切换动画 */
 .kb-fade-enter-active,
 .kb-fade-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
 }
 
 .kb-fade-enter-from {

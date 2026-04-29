@@ -17,17 +17,18 @@ class UmopConfigRouter:
     async def _load_routing_table(self) -> None:
         """加载路由表"""
         # 从 SharedPreferences 中加载 umop_to_conf_id 映射
-        sp_data = await self.sp.get_async(
+        sp_data: dict[str, str] | None = await self.sp.get_async(
             key="umop_config_routing",
             default={},
             scope="global",
             scope_id="global",
         )
-        self.umop_to_conf_id = sp_data
+        if sp_data is not None:
+            self.umop_to_conf_id = sp_data
 
     @staticmethod
-    def _split_umo(umo: str) -> tuple[str, str, str] | None:
-        """将 UMO 拆分为 3 个部分，同时保留 session_id 中的 ':'"""
+    def _split_umo(umo: str | int | None) -> tuple[str, str, str] | None:
+        """将 UMO 拆分为 3 个部分,同时保留 session_id 中的 ':'"""
         if not isinstance(umo, str):
             return None
         parts = umo.split(":", 2)
@@ -43,7 +44,10 @@ class UmopConfigRouter:
         if p1_ls is None or p2_ls is None:
             return False  # 非法格式
 
-        return all(p == "" or fnmatch.fnmatchcase(t, p) for p, t in zip(p1_ls, p2_ls))
+        return all(
+            p == "" or fnmatch.fnmatchcase(t, p)
+            for p, t in zip(p1_ls, p2_ls, strict=True)
+        )
 
     def get_conf_id_for_umop(self, umo: str) -> str | None:
         """根据 UMO 获取对应的配置文件 ID
@@ -52,7 +56,7 @@ class UmopConfigRouter:
             umo (str): UMO 字符串
 
         Returns:
-            str | None: 配置文件 ID，如果没有找到则返回 None
+            str | None: 配置文件 ID,如果没有找到则返回 None
 
         """
         for pattern, conf_id in self.umop_to_conf_id.items():
@@ -64,8 +68,8 @@ class UmopConfigRouter:
         """更新路由表
 
         Args:
-            new_routing (dict[str, str]): 新的 UMOP 到配置文件 ID 的映射。umo 由三个部分组成 [platform_id]:[message_type]:[session_id]。
-                umop 可以是 "::" (代表所有), 可以是 "[platform_id]::" (代表指定平台下的所有类型消息和会话)。
+            new_routing (dict[str, str]): 新的 UMOP 到配置文件 ID 的映射｡umo 由三个部分组成 [platform_id]:[message_type]:[session_id]｡
+                umop 可以是 "::" (代表所有), 可以是 "[platform_id]::" (代表指定平台下的所有类型消息和会话)｡
 
         Raises:
             ValueError: 如果 new_routing 中的 key 格式不正确
@@ -107,8 +111,8 @@ class UmopConfigRouter:
 
         Raises:
             ValueError: 当 umo 格式不正确时抛出
-        """
 
+        """
         if self._split_umo(umo) is None:
             raise ValueError(
                 "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",

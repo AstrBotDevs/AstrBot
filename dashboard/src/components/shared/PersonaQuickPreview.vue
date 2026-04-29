@@ -1,27 +1,41 @@
 <template>
   <div class="persona-preview-card">
     <div class="preview-header">
-      <small>{{ tm('personaQuickPreview.title') }}</small>
+      <small>{{ tm("personaQuickPreview.title") }}</small>
     </div>
 
     <div v-if="loading" class="preview-loading">
-      <v-progress-circular indeterminate size="18" width="2" color="primary" class="mr-2" />
-      <small class="text-grey">{{ tm('personaQuickPreview.loading') }}</small>
+      <v-progress-circular
+        indeterminate
+        size="18"
+        width="2"
+        color="primary"
+        class="mr-2"
+      />
+      <small class="text-grey">{{ tm("personaQuickPreview.loading") }}</small>
     </div>
 
     <div v-else-if="!modelValue" class="preview-empty">
-      <small class="text-grey">{{ tm('personaQuickPreview.noPersonaSelected') }}</small>
+      <small class="text-grey">{{
+        tm("personaQuickPreview.noPersonaSelected")
+      }}</small>
     </div>
 
     <div v-else-if="!personaData" class="preview-empty">
-      <small class="text-grey">{{ tm('personaQuickPreview.personaNotFound') }}</small>
+      <small class="text-grey">{{
+        tm("personaQuickPreview.personaNotFound")
+      }}</small>
     </div>
 
     <div v-else class="preview-content">
-      <div class="section-title">{{ tm('personaQuickPreview.systemPromptLabel') }}</div>
-      <pre class="prompt-content">{{ personaData.system_prompt || '' }}</pre>
+      <div class="section-title">
+        {{ tm("personaQuickPreview.systemPromptLabel") }}
+      </div>
+      <pre class="prompt-content">{{ personaData.system_prompt || "" }}</pre>
 
-      <div class="section-title mt-3">{{ tm('personaQuickPreview.toolsLabel') }}</div>
+      <div class="section-title mt-3">
+        {{ tm("personaQuickPreview.toolsLabel") }}
+      </div>
       <div class="chip-wrap tools-wrap">
         <v-chip
           v-if="personaData.tools === null"
@@ -30,9 +44,18 @@
           variant="tonal"
           label
         >
-          {{ tm('personaQuickPreview.allToolsWithCount', { count: allToolsCount }) }}
+          {{
+            tm("personaQuickPreview.allToolsWithCount", {
+              count: allToolsCount,
+            })
+          }}
         </v-chip>
-        <div v-for="tool in resolvedTools" v-else :key="tool.name" class="tool-item">
+        <div
+          v-for="tool in resolvedTools"
+          v-else
+          :key="tool.name"
+          class="tool-item"
+        >
           <v-chip
             size="small"
             :color="tool.active === false ? 'warning' : 'primary'"
@@ -42,24 +65,38 @@
             {{ tool.name }}
           </v-chip>
           <v-tooltip v-if="tool.active === false" location="top">
-            <template v-slot:activator="{ props: tooltipProps }">
+            <template #activator="{ props: tooltipProps }">
               <small class="text-warning tool-inactive" v-bind="tooltipProps">
-                {{ tm('personaQuickPreview.toolInactive') }}
+                {{ tm("personaQuickPreview.toolInactive") }}
               </small>
             </template>
-            {{ tm('personaQuickPreview.toolInactiveTooltip') }}
+            {{ tm("personaQuickPreview.toolInactiveTooltip") }}
           </v-tooltip>
-          <small v-if="tool.origin || tool.origin_name" class="text-grey tool-meta">
-            <span v-if="tool.origin">{{ tm('personaQuickPreview.originLabel') }}: {{ tool.origin }}</span>
-            <span v-if="tool.origin_name"> | {{ tm('personaQuickPreview.originNameLabel') }}: {{ tool.origin_name }}</span>
+          <small
+            v-if="tool.origin || tool.origin_name"
+            class="text-grey tool-meta"
+          >
+            <span v-if="tool.origin"
+              >{{ tm("personaQuickPreview.originLabel") }}:
+              {{ tool.origin }}</span
+            >
+            <span v-if="tool.origin_name">
+              | {{ tm("personaQuickPreview.originNameLabel") }}:
+              {{ tool.origin_name }}</span
+            >
           </small>
         </div>
-        <small v-if="personaData.tools !== null && normalizedTools.length === 0" class="text-grey">
-          {{ tm('personaQuickPreview.noTools') }}
+        <small
+          v-if="personaData.tools !== null && normalizedTools.length === 0"
+          class="text-grey"
+        >
+          {{ tm("personaQuickPreview.noTools") }}
         </small>
       </div>
 
-      <div class="section-title mt-3">{{ tm('personaQuickPreview.skillsLabel') }}</div>
+      <div class="section-title mt-3">
+        {{ tm("personaQuickPreview.skillsLabel") }}
+      </div>
       <div class="chip-wrap">
         <v-chip
           v-if="personaData.skills === null"
@@ -68,7 +105,11 @@
           variant="tonal"
           label
         >
-          {{ tm('personaQuickPreview.allSkillsWithCount', { count: allSkillsCount }) }}
+          {{
+            tm("personaQuickPreview.allSkillsWithCount", {
+              count: allSkillsCount,
+            })
+          }}
         </v-chip>
         <v-chip
           v-for="skillName in normalizedSkills"
@@ -81,154 +122,164 @@
         >
           {{ skillName }}
         </v-chip>
-        <small v-if="personaData.skills !== null && normalizedSkills.length === 0" class="text-grey">
-          {{ tm('personaQuickPreview.noSkills') }}
+        <small
+          v-if="personaData.skills !== null && normalizedSkills.length === 0"
+          class="text-grey"
+        >
+          {{ tm("personaQuickPreview.noSkills") }}
         </small>
       </div>
     </div>
   </div>
 </template>
 
-<script setup>
-import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import axios from 'axios'
-import { useModuleI18n } from '@/i18n/composables'
+<script setup lang="ts">
+import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
+import axios from "@/utils/request";
+import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
   modelValue: {
     type: String,
-    default: ''
-  }
-})
+    default: "",
+  },
+});
 
-const { tm } = useModuleI18n('core.shared')
+const { tm } = useModuleI18n("core.shared");
 
-const loading = ref(false)
-const personaData = ref(null)
-const toolMetaMap = ref({})
-const availableSkills = ref([])
+const loading = ref(false);
+const personaData = ref(null);
+const toolMetaMap = ref({});
+const availableSkills = ref([]);
 
 const defaultPersonaData = {
-  persona_id: 'default',
-  system_prompt: 'You are a helpful and friendly assistant.',
+  persona_id: "default",
+  system_prompt: "You are a helpful and friendly assistant.",
   tools: null,
-  skills: null
-}
+  skills: null,
+};
 
-const normalizedTools = computed(() => (Array.isArray(personaData.value?.tools) ? personaData.value.tools : []))
-const normalizedSkills = computed(() => (Array.isArray(personaData.value?.skills) ? personaData.value.skills : []))
-const allToolsCount = computed(() =>
-  Object.values(toolMetaMap.value).filter((tool) => tool.origin !== 'builtin').length
-)
-const allSkillsCount = computed(() => availableSkills.value.length)
+const normalizedTools = computed(() =>
+  Array.isArray(personaData.value?.tools) ? personaData.value.tools : [],
+);
+const normalizedSkills = computed(() =>
+  Array.isArray(personaData.value?.skills) ? personaData.value.skills : [],
+);
+const allToolsCount = computed(() => Object.keys(toolMetaMap.value).length);
+const allSkillsCount = computed(() => availableSkills.value.length);
 const resolvedTools = computed(() =>
   normalizedTools.value.map((toolName) => {
-    const meta = toolMetaMap.value[toolName] || {}
+    const meta = toolMetaMap.value[toolName] || {};
     return {
       name: toolName,
-      origin: meta.origin || '',
-      origin_name: meta.origin_name || '',
-      active: meta.active
-    }
-  })
-)
+      origin: meta.origin || "",
+      origin_name: meta.origin_name || "",
+      active: meta.active,
+    };
+  }),
+);
 
 async function loadToolsMeta() {
   try {
-    const response = await axios.get('/api/tools/list')
-    if (response.data?.status === 'ok') {
-      const tools = response.data?.data || []
-      const nextMap = {}
+    const response = await axios.get("/api/tools/list");
+    if (response.data?.status === "ok") {
+      const tools = response.data?.data || [];
+      const nextMap = {};
       for (const tool of tools) {
         if (!tool?.name) {
-          continue
+          continue;
         }
         nextMap[tool.name] = {
-          origin: tool.origin || '',
-          origin_name: tool.origin_name || '',
-          active: tool.active
-        }
+          origin: tool.origin || "",
+          origin_name: tool.origin_name || "",
+          active: tool.active,
+        };
       }
-      toolMetaMap.value = nextMap
+      toolMetaMap.value = nextMap;
     }
   } catch (error) {
-    console.error('Failed to load tools metadata:', error)
-    toolMetaMap.value = {}
+    console.error("Failed to load tools metadata:", error);
+    toolMetaMap.value = {};
   }
 }
 
 async function loadSkillsMeta() {
   try {
-    const response = await axios.get('/api/skills')
-    if (response.data?.status === 'ok') {
-      const payload = response.data?.data || []
+    const response = await axios.get("/api/skills");
+    if (response.data?.status === "ok") {
+      const payload = response.data?.data || [];
       if (Array.isArray(payload)) {
-        availableSkills.value = payload.filter((skill) => skill.active !== false)
+        availableSkills.value = payload.filter(
+          (skill) => skill.active !== false,
+        );
       } else {
-        const skills = payload.skills || []
-        availableSkills.value = skills.filter((skill) => skill.active !== false)
+        const skills = payload.skills || [];
+        availableSkills.value = skills.filter(
+          (skill) => skill.active !== false,
+        );
       }
     } else {
-      availableSkills.value = []
+      availableSkills.value = [];
     }
   } catch (error) {
-    console.error('Failed to load skills metadata:', error)
-    availableSkills.value = []
+    console.error("Failed to load skills metadata:", error);
+    availableSkills.value = [];
   }
 }
 
 async function loadPersonaPreview(personaId) {
   if (!personaId) {
-    personaData.value = null
-    return
+    personaData.value = null;
+    return;
   }
 
-  if (personaId === 'default') {
-    personaData.value = defaultPersonaData
-    return
+  if (personaId === "default") {
+    personaData.value = defaultPersonaData;
+    return;
   }
 
-  loading.value = true
+  loading.value = true;
   try {
-    const response = await axios.get('/api/persona/list')
-    if (response.data?.status === 'ok') {
-      const personas = response.data?.data || []
-      personaData.value = personas.find((item) => item.persona_id === personaId) || null
+    const response = await axios.get("/api/persona/list");
+    if (response.data?.status === "ok") {
+      const personas = response.data?.data || [];
+      personaData.value =
+        personas.find((item) => item.persona_id === personaId) || null;
     } else {
-      personaData.value = null
+      personaData.value = null;
     }
   } catch (error) {
-    console.error('Failed to load persona preview:', error)
-    personaData.value = null
+    console.error("Failed to load persona preview:", error);
+    personaData.value = null;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function handlePersonaSaved() {
   if (props.modelValue) {
-    loadPersonaPreview(props.modelValue)
+    loadPersonaPreview(props.modelValue);
   }
 }
 
 watch(
   () => props.modelValue,
   (newValue) => {
-    loadPersonaPreview(newValue)
+    loadPersonaPreview(newValue);
   },
-  { immediate: true }
-)
+  { immediate: true },
+);
 
-loadToolsMeta()
-loadSkillsMeta()
+loadToolsMeta();
+loadSkillsMeta();
 
 onMounted(() => {
-  window.addEventListener('astrbot:persona-saved', handlePersonaSaved)
-})
+  window.addEventListener("astrbot:persona-saved", handlePersonaSaved);
+});
 
 onBeforeUnmount(() => {
-  window.removeEventListener('astrbot:persona-saved', handlePersonaSaved)
-})
+  window.removeEventListener("astrbot:persona-saved", handlePersonaSaved);
+});
 </script>
 
 <style scoped>

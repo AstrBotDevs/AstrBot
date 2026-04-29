@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
-import type { CommandItem } from '../types';
+import { computed, ref, watch } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import type { CommandItem } from "../types";
 
-const { tm } = useModuleI18n('features/command');
+const { tm } = useModuleI18n("features/command");
 
 // Props
 const props = defineProps<{
@@ -16,29 +16,31 @@ const props = defineProps<{
 
 // Emits
 const emit = defineEmits<{
-  (e: 'update:show', value: boolean): void;
-  (e: 'update:newName', value: string): void;
-  (e: 'update:aliases', value: string[]): void;
-  (e: 'confirm'): void;
+  (e: "update:show", value: boolean): void;
+  (e: "update:newName", value: string): void;
+  (e: "update:aliases", value: string[]): void;
+  (e: "confirm"): void;
 }>();
 
 const addAlias = () => {
-  emit('update:aliases', [...props.aliases, '']);
+  emit("update:aliases", [...props.aliases, ""]);
 };
 
 const removeAlias = (index: number) => {
   const newAliases = [...props.aliases];
   newAliases.splice(index, 1);
-  emit('update:aliases', newAliases);
+  emit("update:aliases", newAliases);
 };
 
 const updateAlias = (index: number, value: string) => {
   const newAliases = [...props.aliases];
   newAliases[index] = value;
-  emit('update:aliases', newAliases);
+  emit("update:aliases", newAliases);
 };
 
-const hasAliases = computed(() => (props.aliases || []).some(a => (a ?? '').toString().trim()));
+const hasAliases = computed(() =>
+  (props.aliases || []).some((a) => (a ?? "").toString().trim()),
+);
 const showAliasEditor = ref(false);
 const aliasEditorEverOpened = ref(false);
 
@@ -57,18 +59,24 @@ watch(showAliasEditor, (open) => {
 </script>
 
 <template>
-  <v-dialog :model-value="show" @update:model-value="emit('update:show', $event)" max-width="500">
+  <v-dialog
+    :model-value="show"
+    max-width="500"
+    @update:model-value="emit('update:show', $event)"
+  >
     <v-card>
-      <v-card-title class="text-h5">{{ tm('dialogs.rename.title') }}</v-card-title>
+      <v-card-title class="text-h5">
+        {{ tm("dialogs.rename.title") }}
+      </v-card-title>
       <v-card-text>
         <v-text-field
           :model-value="newName"
-          @update:model-value="emit('update:newName', $event)"
           :label="tm('dialogs.rename.newName')"
           variant="outlined"
           density="compact"
           autofocus
           class="mb-2"
+          @update:model-value="emit('update:newName', $event)"
         />
 
         <v-card variant="outlined" class="mt-2" elevation="0">
@@ -80,22 +88,40 @@ watch(showAliasEditor, (open) => {
             @keydown.enter.prevent="showAliasEditor = !showAliasEditor"
             @keydown.space.prevent="showAliasEditor = !showAliasEditor"
           >
-            <div class="text-subtitle-1">{{ tm('dialogs.rename.aliases') }}</div>
-            <v-icon size="20">{{ showAliasEditor ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+            <div class="text-subtitle-1">
+              {{ tm("dialogs.rename.aliases") }}
+            </div>
+            <v-icon size="20">
+              {{ showAliasEditor ? "mdi-chevron-up" : "mdi-chevron-down" }}
+            </v-icon>
           </div>
           <v-divider v-if="showAliasEditor" />
           <v-slide-y-transition>
-            <div v-if="aliasEditorEverOpened" v-show="showAliasEditor" class="px-4 py-3">
-              <div v-for="(alias, index) in aliases" :key="index" class="d-flex align-center mb-2">
+            <div
+              v-if="aliasEditorEverOpened"
+              v-show="showAliasEditor"
+              class="px-4 py-3"
+            >
+              <div
+                v-for="(alias, index) in aliases"
+                :key="index"
+                class="d-flex align-center mb-2"
+              >
                 <v-text-field
                   :model-value="alias"
-                  @update:model-value="updateAlias(index, $event)"
                   variant="outlined"
                   density="compact"
                   hide-details
                   class="flex-grow-1 mr-2"
+                  @update:model-value="updateAlias(index, $event)"
                 />
-                <v-btn icon="mdi-delete" variant="text" color="error" density="compact" @click="removeAlias(index)" />
+                <v-btn
+                  icon="mdi-delete"
+                  variant="text"
+                  color="error"
+                  density="compact"
+                  @click="removeAlias(index)"
+                />
               </div>
               <v-btn
                 prepend-icon="mdi-plus"
@@ -106,7 +132,7 @@ watch(showAliasEditor, (open) => {
                 class="mt-2"
                 @click="addAlias"
               >
-                {{ tm('dialogs.rename.addAlias') }}
+                {{ tm("dialogs.rename.addAlias") }}
               </v-btn>
             </div>
           </v-slide-y-transition>
@@ -115,7 +141,7 @@ watch(showAliasEditor, (open) => {
       <v-card-actions>
         <v-spacer />
         <v-btn color="grey" variant="text" @click="emit('update:show', false)">
-          {{ tm('dialogs.rename.cancel') }}
+          {{ tm("dialogs.rename.cancel") }}
         </v-btn>
         <v-btn
           color="primary"
@@ -123,7 +149,7 @@ watch(showAliasEditor, (open) => {
           :loading="loading"
           @click="emit('confirm')"
         >
-          {{ tm('dialogs.rename.confirm') }}
+          {{ tm("dialogs.rename.confirm") }}
         </v-btn>
       </v-card-actions>
     </v-card>

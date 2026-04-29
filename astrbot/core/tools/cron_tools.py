@@ -75,11 +75,13 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["action"],
-        }
+        },
     )
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
     ) -> ToolExecResult:
         cron_mgr = context.context.context.cron_manager
         if cron_mgr is None:
@@ -230,13 +232,87 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             lines = []
             for j in jobs:
                 lines.append(
-                    f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={j.next_run_time}"
+                    f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={j.next_run_time}",
                 )
             return "\n".join(lines)
 
         return "error: action must be one of create, edit, delete, or list."
 
 
+# Backwards-compatible aliases expected by cron_tool_provider
+CREATE_CRON_JOB_TOOL = FutureTaskTool()
+DELETE_CRON_JOB_TOOL = FutureTaskTool()
+LIST_CRON_JOBS_TOOL = FutureTaskTool()
+
+
+# Convenience tool classes matching historical test expectations.
+# These are thin wrappers around FutureTaskTool that expose the names and
+# parameter requirements expected by the unit tests and older callers.
+class CreateActiveCronTool(FutureTaskTool):
+    def __init__(self):
+        super().__init__()
+        # tool name expected by tests
+        self.name = "create_future_task"
+
+        # Ensure 'note' is required for the create tool parameters.
+        params = dict(self.parameters) if isinstance(self.parameters, dict) else {}
+        required = list(params.get("required", []))
+        if "note" not in required:
+            required.append("note")
+        params["required"] = required
+        self.parameters = params
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
+    ) -> ToolExecResult:
+        # Force action to 'create' when this convenience tool is used.
+        kwargs.setdefault("action", "create")
+        return await super().call(context, **kwargs)
+
+
+class DeleteCronJobTool(FutureTaskTool):
+    def __init__(self):
+        super().__init__()
+        self.name = "delete_future_task"
+
+        params = dict(self.parameters) if isinstance(self.parameters, dict) else {}
+        required = list(params.get("required", []))
+        if "job_id" not in required:
+            required.append("job_id")
+        params["required"] = required
+        self.parameters = params
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
+    ) -> ToolExecResult:
+        kwargs.setdefault("action", "delete")
+        return await super().call(context, **kwargs)
+
+
+class ListCronJobsTool(FutureTaskTool):
+    def __init__(self):
+        super().__init__()
+        self.name = "list_future_tasks"
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
+    ) -> ToolExecResult:
+        kwargs.setdefault("action", "list")
+        return await super().call(context, **kwargs)
+
+
 __all__ = [
+    "CREATE_CRON_JOB_TOOL",
+    "DELETE_CRON_JOB_TOOL",
+    "LIST_CRON_JOBS_TOOL",
+    "CreateActiveCronTool",
+    "DeleteCronJobTool",
     "FutureTaskTool",
+    "ListCronJobsTool",
 ]

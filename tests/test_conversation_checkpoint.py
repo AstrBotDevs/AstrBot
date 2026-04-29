@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import pytest
 
 from astrbot.core.agent.message import (
@@ -82,14 +84,14 @@ def test_dump_checkpoint_messages_drops_checkpoint_when_message_is_dropped():
 
 
 def test_provider_ensure_message_to_dicts_skips_checkpoints():
-    messages = [
+    messages: list[Message] = [
         Message(role="user", content="hello"),
         CheckpointMessageSegment(content=CheckpointData(id="cp-1")),
-        {"role": "assistant", "content": "world"},
-        {"role": "_checkpoint", "content": {"id": "cp-2"}},
+        Message(role="assistant", content="world"),
+        CheckpointMessageSegment(content=CheckpointData(id="cp-2")),
     ]
 
-    assert Provider._ensure_message_to_dicts(object(), messages) == [
+    assert Provider._ensure_message_to_dicts(MagicMock(spec=Provider), messages) == [
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "world"},
     ]

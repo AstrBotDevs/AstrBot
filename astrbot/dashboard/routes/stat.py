@@ -12,7 +12,7 @@ from pathlib import Path
 import aiohttp
 import psutil
 from quart import request
-from sqlmodel import select
+from sqlmodel import col, select
 
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.config import VERSION
@@ -21,6 +21,10 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.migration.helper import check_migration_needed_v4
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.auth_password import (
+    is_default_dashboard_password,
+    is_legacy_dashboard_password,
+)
 from astrbot.core.utils.io import get_dashboard_version
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 from astrbot.core.utils.version_comparator import VersionComparator
@@ -76,7 +80,7 @@ class StatRoute(Route):
         password = self.config["dashboard"]["password"]
         return (
             username == "astrbot"
-            and password == "77b90590a8945a7d36c963981a307dc9"
+            and is_default_dashboard_password(password)
             and not DEMO_MODE
         )
 
@@ -90,6 +94,9 @@ class StatRoute(Route):
                     "version": VERSION,
                     "dashboard_version": await get_dashboard_version(),
                     "change_pwd_hint": self.is_default_cred(),
+                    "legacy_pwd_hint": is_legacy_dashboard_password(
+                        self.config["dashboard"]["password"],
+                    ),
                     "need_migration": need_migration,
                 },
             )
@@ -211,10 +218,15 @@ class StatRoute(Route):
             local_tz = datetime.now().astimezone().tzinfo or timezone.utc
             now_local = datetime.now(local_tz)
             range_start_local = (now_local - timedelta(days=days)).replace(
-                minute=0, second=0, microsecond=0
+                minute=0,
+                second=0,
+                microsecond=0,
             )
             today_start_local = now_local.replace(
-                hour=0, minute=0, second=0, microsecond=0
+                hour=0,
+                minute=0,
+                second=0,
+                microsecond=0,
             )
             query_start_local = min(range_start_local, today_start_local)
             query_start_utc = query_start_local.astimezone(timezone.utc)
@@ -226,7 +238,7 @@ class StatRoute(Route):
                         ProviderStat.agent_type == "internal",
                         ProviderStat.created_at >= query_start_utc,
                     )
-                    .order_by(ProviderStat.created_at.asc())
+                    .order_by(col(ProviderStat.created_at).asc()),
                 )
                 records = result.scalars().all()
 
@@ -237,7 +249,7 @@ class StatRoute(Route):
                 bucket_cursor += timedelta(hours=1)
 
             trend_by_provider: dict[str, dict[int, int]] = defaultdict(
-                lambda: defaultdict(int)
+                lambda: defaultdict(int),
             )
             total_by_provider: dict[str, int] = defaultdict(int)
             total_by_umo: dict[str, int] = defaultdict(int)
@@ -268,7 +280,9 @@ class StatRoute(Route):
 
                 if created_at_local >= range_start_local:
                     bucket_local = created_at_local.replace(
-                        minute=0, second=0, microsecond=0
+                        minute=0,
+                        second=0,
+                        microsecond=0,
                     )
                     bucket_ts = int(bucket_local.timestamp() * 1000)
                     trend_by_provider[provider_id][bucket_ts] += token_total
@@ -389,7 +403,7 @@ class StatRoute(Route):
                         "today_total_calls": today_total_calls,
                         "today_by_model": today_by_model_data,
                         "today_by_provider": today_by_provider_data,
-                    }
+                    },
                 )
                 .__dict__
             )

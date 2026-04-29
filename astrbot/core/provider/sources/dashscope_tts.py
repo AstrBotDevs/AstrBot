@@ -3,23 +3,25 @@ import base64
 import logging
 import os
 import uuid
+from typing import Any
 
+import aiofiles
 import aiohttp
 import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
 
+MultiModalConversation: Any = None
 try:
-    from dashscope.aigc.multimodal_conversation import MultiModalConversation
-except (
-    ImportError
-):  # pragma: no cover - older dashscope versions without Qwen TTS support
-    MultiModalConversation = None
+    from dashscope.aigc.multimodal_conversation import (
+        MultiModalConversation,
+    )
+except ImportError:  # pragma: no cover - older dashscope versions without Qwen TTS support
+    pass
 
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -59,28 +61,27 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             )
 
         path = os.path.join(temp_dir, f"dashscope_tts_{uuid.uuid4()}{ext}")
-        with open(path, "wb") as f:
-            f.write(audio_bytes)
+        async with aiofiles.open(path, "wb") as f:
+            await f.write(audio_bytes)
         return path
 
-    def _call_qwen_tts(self, model: str, text: str):
+    def _call_qwen_tts(self, model: str, text: str) -> Any:
         if MultiModalConversation is None:
             raise RuntimeError(
                 "dashscope SDK missing MultiModalConversation. Please upgrade the dashscope package to use Qwen TTS models.",
             )
 
-        kwargs = {
-            "model": model,
-            "messages": None,
-            "api_key": self.chosen_api_key,
-            "voice": self.voice or "Cherry",
-            "text": text,
-        }
         if not self.voice:
             logging.warning(
                 "No voice specified for Qwen TTS model, using default 'Cherry'.",
             )
-        return MultiModalConversation.call(**kwargs)
+        return MultiModalConversation.call(
+            model=model,
+            messages=None,
+            api_key=self.chosen_api_key,
+            voice=self.voice or "Cherry",
+            text=text,
+        )
 
     async def _synthesize_with_qwen_tts(
         self,
@@ -97,7 +98,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         ext = ".wav"
         return audio_bytes, ext
 
-    async def _extract_audio_from_response(self, response) -> bytes | None:
+    async def _extract_audio_from_response(self, response: Any) -> bytes | None:
         output = getattr(response, "output", None)
         audio_obj = getattr(output, "audio", None) if output is not None else None
         if not audio_obj:

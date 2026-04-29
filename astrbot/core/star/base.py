@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from asyncio import Queue
+from typing import TYPE_CHECKING, Any, Protocol
 
 from astrbot.core import html_renderer
 from astrbot.core.utils.command_parser import CommandParserMixin
@@ -9,17 +10,34 @@ from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
 
 from .star import StarMetadata, star_map, star_registry
 
+if TYPE_CHECKING:
+    from astrbot.core.provider.func_tool_manager import FunctionToolManager
+    from astrbot.core.provider.manager import ProviderManager
+    from astrbot.core.provider.provider import Provider
+
 logger = logging.getLogger("astrbot")
 
 
 class Star(CommandParserMixin, PluginKVStoreMixin):
-    """所有插件（Star）的父类，所有插件都应该继承于这个类"""
+    """所有插件(Star)的父类,所有插件都应该继承于这个类"""
 
     author: str
     name: str
 
     class _ContextLike(Protocol):
         def get_config(self, umo: str | None = None) -> Any: ...
+
+        def get_using_provider(self, umo: str | None = None) -> Provider | None: ...
+
+        def get_llm_tool_manager(self) -> FunctionToolManager: ...
+
+        def get_event_queue(self) -> Queue[Any]: ...
+
+        @property
+        def conversation_manager(self) -> Any: ...
+
+        @property
+        def provider_manager(self) -> ProviderManager: ...
 
     def __init__(self, context: _ContextLike, config: dict | None = None) -> None:
         self.context = context
@@ -81,7 +99,7 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
         """当插件被激活时会调用这个方法"""
 
     async def terminate(self) -> None:
-        """当插件被禁用、重载插件时会调用这个方法"""
+        """当插件被禁用､重载插件时会调用这个方法"""
 
     def __del__(self) -> None:
-        """[Deprecated] 当插件被禁用、重载插件时会调用这个方法"""
+        """[Deprecated] 当插件被禁用､重载插件时会调用这个方法"""

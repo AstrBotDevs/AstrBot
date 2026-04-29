@@ -48,10 +48,14 @@ class KookEvent(AstrMessageEvent):
         self._file_message_counter = 0
 
     def _wrap_message(
-        self, index: int, message_component: BaseMessageComponent
+        self,
+        index: int,
+        message_component: BaseMessageComponent,
     ) -> Coroutine[Any, Any, OrderMessage]:
         async def wrap_upload(
-            index: int, message_type: KookMessageType, upload_coro
+            index: int,
+            message_type: KookMessageType,
+            upload_coro,
         ) -> OrderMessage:
             url = await upload_coro
             return OrderMessage(index=index, text=url, type=message_type)
@@ -93,7 +97,9 @@ class KookEvent(AstrMessageEvent):
                     f_data = await f_item.get_file()
                     url = await self.client.upload_asset(f_data)
                     return OrderMessage(
-                        index=index, text=url, type=KookMessageType.FILE
+                        index=index,
+                        text=url,
+                        type=KookMessageType.FILE,
                     )
 
                 self._file_message_counter += 1
@@ -115,10 +121,10 @@ class KookEvent(AstrMessageEvent):
                                             type=KookModuleType.AUDIO,
                                             title=title,
                                             src=url,
-                                        )
-                                    ]
-                                )
-                            ]
+                                        ),
+                                    ],
+                                ),
+                            ],
                         ).to_json(),
                         type=KookMessageType.CARD,
                     )
@@ -147,7 +153,7 @@ class KookEvent(AstrMessageEvent):
                 )
             case _:
                 raise NotImplementedError(
-                    f'kook适配器尚未实现对 "{message_component.type}" 消息类型的支持'
+                    f'kook适配器尚未实现对 "{message_component.type}" 消息类型的支持',
                 )
 
     async def send(self, message: MessageChain):
@@ -164,7 +170,7 @@ class KookEvent(AstrMessageEvent):
         for index, result in enumerate(tasks_result):
             if isinstance(result, BaseException):
                 logger.error(f"[Kook] {result}")
-                # 构造一个虚假的 OrderMessage，让用户知道这里本来有张图但坏了
+                # 构造一个虚假的 OrderMessage,让用户知道这里本来有张图但坏了
                 # 这样后面的 for 循环就能把它当成普通文本发出去
                 err_node = OrderMessage(
                     index=index,

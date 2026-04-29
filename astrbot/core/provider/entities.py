@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+import aiofiles
+import anyio
 from anthropic.types import Message as AnthropicMessage
 from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
@@ -101,22 +103,22 @@ class ProviderRequest:
     audio_urls: list[str] = field(default_factory=list)
     """音频 URL 列表，也支持本地路径"""
     extra_user_content_parts: list[ContentPart] = field(default_factory=list)
-    """额外的用户消息内容部分列表，用于在用户消息后添加额外的内容块（如系统提醒、指令等）。支持 dict 或 ContentPart 对象"""
+    """额外的用户消息内容部分列表,用于在用户消息后添加额外的内容块(如系统提醒､指令等)｡支持 dict 或 ContentPart 对象"""
     func_tool: ToolSet | None = None
     """可用的函数工具"""
     contexts: list[dict] = field(default_factory=list)
     """
-    OpenAI 格式上下文列表。
+    OpenAI 格式上下文列表｡
     参考 https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages
     """
-    system_prompt: str = ""
+    system_prompt: str | None = None
     """系统提示词"""
     conversation: Conversation | None = None
     """关联的对话对象"""
     tool_calls_result: list[ToolCallsResult] | ToolCallsResult | None = None
-    """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
+    """附加的上次请求后工具调用的结果｡参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
-    """模型名称，为 None 时使用提供商的默认模型"""
+    """模型名称,为 None 时使用提供商的默认模型"""
 
     def __repr__(self) -> str:
         return (
@@ -191,22 +193,23 @@ class ProviderRequest:
     async def assemble_context(self) -> dict:
         """将请求(prompt、image_urls 和 audio_urls)包装成统一消息格式。"""
         # 构建内容块列表
-        content_blocks = []
+        content_blocks: list[dict[str, object]] = []
 
-        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        # 1. 用户原始发言(OpenAI 建议:用户发言在前)
         if self.prompt and self.prompt.strip():
             content_blocks.append({"type": "text", "text": self.prompt})
         elif self.image_urls:
-            # 如果没有文本但有图片，添加占位文本
+            # 如果没有文本但有图片,添加占位文本
             content_blocks.append({"type": "text", "text": "[图片]"})
         elif self.audio_urls:
             # 如果没有文本但有音频，添加占位文本
             content_blocks.append({"type": "text", "text": "[音频]"})
 
-        # 2. 额外的内容块（系统提醒、指令等）
+        # 2. 额外的内容块(系统提醒､指令等)
         if self.extra_user_content_parts:
             for part in self.extra_user_content_parts:
-                content_blocks.append(part.model_dump())
+                part_payload = part.model_dump()
+                content_blocks.append(dict(part_payload))
 
         # 3. 图片内容
         if self.image_urls:
@@ -220,7 +223,7 @@ class ProviderRequest:
                 else:
                     image_data = await self._encode_image_bs64(image_url)
                 if not image_data:
-                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                    logger.warning(f"图片 {image_url} 得到的结果为空,将忽略｡")
                     continue
                 content_blocks.append(
                     {"type": "image_url", "image_url": {"url": image_data}},
@@ -233,7 +236,7 @@ class ProviderRequest:
                     parsed_url = urlparse(audio_url)
                     suffix = Path(parsed_url.path).suffix
                     temp_dir = Path(get_astrbot_temp_path())
-                    temp_dir.mkdir(parents=True, exist_ok=True)
+                    await anyio.Path(temp_dir).mkdir(parents=True, exist_ok=True)
                     temp_audio_path = (
                         temp_dir / f"provider_request_audio_{uuid.uuid4().hex}{suffix}"
                     )
@@ -273,12 +276,15 @@ class ProviderRequest:
         # 只有当只有一个来自 prompt 的文本块且没有额外内容块时，才降级为简单格式以保持向后兼容
         if (
             len(content_blocks) == 1
-            and content_blocks[0]["type"] == "text"
             and not self.extra_user_content_parts
             and not self.image_urls
             and not self.audio_urls
         ):
-            return {"role": "user", "content": content_blocks[0]["text"]}
+            first_block = content_blocks[0]
+            if first_block.get("type") == "text":
+                text_content = first_block.get("text")
+                if isinstance(text_content, str):
+                    return {"role": "user", "content": text_content}
 
         # 否则返回多模态格式
         return {"role": "user", "content": content_blocks}
@@ -287,8 +293,8 @@ class ProviderRequest:
         """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
+        async with aiofiles.open(image_url, "rb") as f:
+            image_bs64 = base64.b64encode(await f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
 
     async def _encode_audio_bs64(
@@ -302,8 +308,8 @@ class ProviderRequest:
         if audio_path.startswith("base64://"):
             return audio_path.replace("base64://", f"data:{mime_type};base64,", 1)
 
-        with open(audio_path, "rb") as f:
-            audio_bs64 = base64.b64encode(f.read()).decode("utf-8")
+        async with aiofiles.open(audio_path, "rb") as f:
+            audio_bs64 = base64.b64encode(await f.read()).decode("utf-8")
             return f"data:{mime_type};base64," + audio_bs64
 
 
@@ -397,7 +403,7 @@ class LLMResponse:
 
         Args:
             role (str): 角色, assistant, tool, err
-            completion_text (str, optional): 返回的结果文本，已经过时，推荐使用 result_chain. Defaults to "".
+            completion_text (str, optional): 返回的结果文本,已经过时,推荐使用 result_chain. Defaults to "".
             result_chain (MessageChain, optional): 返回的消息链. Defaults to None.
             tools_call_args (List[Dict[str, any]], optional): 工具调用参数. Defaults to None.
             tools_call_name (List[str], optional): 工具调用名称. Defaults to None.
@@ -480,7 +486,7 @@ class LLMResponse:
                     ),
                     # the extra_content will not serialize if it's None when calling ToolCall.model_dump()
                     extra_content=self.tools_call_extra_content.get(
-                        self.tools_call_ids[idx]
+                        self.tools_call_ids[idx],
                     ),
                 ),
             )

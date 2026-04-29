@@ -1,11 +1,8 @@
-from collections.abc import AsyncGenerator
-
 from astrbot.core import logger
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
-
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
 
 
 @register_stage
@@ -19,10 +16,10 @@ class SessionStatusCheckStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         # 检查会话是否整体启用
         if not await SessionServiceManager.is_session_enabled(event.unified_msg_origin):
-            logger.debug(f"会话 {event.unified_msg_origin} 已被关闭，已终止事件传播。")
+            logger.debug(f"会话 {event.unified_msg_origin} 已被关闭,已终止事件传播｡")
 
             # workaround for #2309
             conv_id = await self.conv_mgr.get_curr_conversation_id(

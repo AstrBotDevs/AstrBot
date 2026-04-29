@@ -3,6 +3,10 @@
 import os
 from typing import Any, TypedDict
 
+from astrbot.builtin_stars.web_searcher.provider_constants import (
+    DEFAULT_WEB_SEARCH_PROVIDER,
+    WEB_SEARCH_PROVIDER_OPTIONS,
+)
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -52,7 +56,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 ]
 
 # 默认配置
-DEFAULT_CONFIG = {
+DEFAULT_CONFIG: dict[str, Any] = {
     "config_version": 2,
     "platform_settings": {
         "unique_session": False,
@@ -107,10 +111,9 @@ DEFAULT_CONFIG = {
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
-        "websearch_provider": "tavily",
+        "websearch_provider": DEFAULT_WEB_SEARCH_PROVIDER,
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
-        "websearch_brave_key": [],
         "websearch_baidu_app_builder_key": "",
         "web_search_link": False,
         "display_reasoning_text": False,
@@ -244,7 +247,7 @@ DEFAULT_CONFIG = {
     "dashboard": {
         "enable": True,
         "username": "astrbot",
-        "password": "77b90590a8945a7d36c963981a307dc9",
+        "password": "",
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
@@ -322,7 +325,7 @@ WebUI 的配置文件在 `CONFIG_METADATA_3` 中。
 
 未来将会逐步淘汰此配置元数据。
 """
-CONFIG_METADATA_2 = {
+CONFIG_METADATA_2: Any = {
     "platform_group": {
         "metadata": {
             "platform": {
@@ -462,7 +465,6 @@ CONFIG_METADATA_2 = {
                         "discord_proxy": "",
                         "discord_command_register": True,
                         "discord_activity_name": "",
-                        "discord_allow_bot_messages": False,
                     },
                     "Misskey": {
                         "id": "misskey",
@@ -516,7 +518,7 @@ CONFIG_METADATA_2 = {
                         "satori_heartbeat_interval": 10,
                         "satori_reconnect_delay": 5,
                     },
-                    "KOOK": {
+                    "kook": {
                         "id": "kook",
                         "type": "kook",
                         "enable": False,
@@ -528,14 +530,6 @@ CONFIG_METADATA_2 = {
                         "kook_heartbeat_timeout": 6,
                         "kook_max_heartbeat_failures": 3,
                         "kook_max_consecutive_failures": 5,
-                    },
-                    "Mattermost": {
-                        "id": "mattermost",
-                        "type": "mattermost",
-                        "enable": False,
-                        "mattermost_url": "https://chat.example.com",
-                        "mattermost_bot_token": "",
-                        "mattermost_reconnect_delay": 5.0,
                     },
                     # "WebChat": {
                     #     "id": "webchat",
@@ -670,21 +664,6 @@ CONFIG_METADATA_2 = {
                         "description": "Bot Token",
                         "type": "string",
                         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
-                    },
-                    "mattermost_url": {
-                        "description": "Mattermost URL",
-                        "type": "string",
-                        "hint": "Mattermost 服务地址，例如 https://chat.example.com。",
-                    },
-                    "mattermost_bot_token": {
-                        "description": "Mattermost Bot Token",
-                        "type": "string",
-                        "hint": "在 Mattermost 中创建 Bot 账户后生成的访问令牌。",
-                    },
-                    "mattermost_reconnect_delay": {
-                        "description": "Mattermost 重连延迟",
-                        "type": "float",
-                        "hint": "WebSocket 断开后的重连等待时间，单位为秒。默认 5 秒。",
                     },
                     "misskey_instance_url": {
                         "description": "Misskey 实例 URL",
@@ -927,11 +906,6 @@ CONFIG_METADATA_2 = {
                         "description": "Discord 活动名称",
                         "type": "string",
                         "hint": "可选的 Discord 活动名称。留空则不设置活动。",
-                    },
-                    "discord_allow_bot_messages": {
-                        "description": "允许接收机器人消息",
-                        "type": "bool",
-                        "hint": "启用后，AstrBot 将接收来自其他 Discord 机器人的消息。适用于机器人间通信场景（如消息转发）。默认关闭。",
                     },
                     "port": {
                         "description": "回调服务器端口",
@@ -1375,6 +1349,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": ["lmstudio"],
                         "api_base": "http://127.0.0.1:1234/v1",
+                        "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
                     },
@@ -1584,7 +1559,6 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "id": "whisper_selfhost",
                         "model": "tiny",
-                        "whisper_device": "cpu",
                     },
                     "SenseVoice(Local)": {
                         "type": "sensevoice_stt_selfhost",
@@ -1687,14 +1661,10 @@ CONFIG_METADATA_2 = {
                         "type": "gsvi_tts_api",
                         "provider": "gpt_sovits_inference",
                         "provider_type": "text_to_speech",
-                        "enable": False,
-                        "api_key": "",
-                        "api_base": "http://127.0.0.1:8000",
-                        "version": "v4",
+                        "api_base": "http://127.0.0.1:5000",
                         "character": "",
-                        "prompt_text_lang": "中文",
-                        "emotion": "默认",
-                        "text_lang": "中文",
+                        "emotion": "default",
+                        "enable": False,
                         "timeout": 20,
                     },
                     "FishAudio TTS(API)": {
@@ -2584,12 +2554,6 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
                     },
-                    "whisper_device": {
-                        "description": "推理设备",
-                        "type": "string",
-                        "hint": "Whisper 推理设备。Apple Silicon 可选 mps；其他环境建议使用 cpu。若指定 mps 但当前环境不可用，将自动回退到 cpu。",
-                        "options": ["cpu", "mps"],
-                    },
                     "id": {
                         "description": "ID",
                         "type": "string",
@@ -2692,12 +2656,12 @@ CONFIG_METADATA_2 = {
                     "deerflow_assistant_id": {
                         "description": "Assistant ID",
                         "type": "string",
-                        "hint": "DeerFlow 2.0 LangGraph assistant_id，默认为 lead_agent。",
+                        "hint": "LangGraph assistant_id，默认为 lead_agent。",
                     },
                     "deerflow_model_name": {
                         "description": "模型名称覆盖",
                         "type": "string",
-                        "hint": "可选。覆盖 DeerFlow 默认模型（对应运行时 configurable 的 model_name）。",
+                        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。",
                     },
                     "deerflow_thinking_enabled": {
                         "description": "启用思考模式",
@@ -2706,17 +2670,17 @@ CONFIG_METADATA_2 = {
                     "deerflow_plan_mode": {
                         "description": "启用计划模式",
                         "type": "bool",
-                        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 is_plan_mode。",
+                        "hint": "对应 DeerFlow 的 is_plan_mode。",
                     },
                     "deerflow_subagent_enabled": {
                         "description": "启用子智能体",
                         "type": "bool",
-                        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 subagent_enabled。",
+                        "hint": "对应 DeerFlow 的 subagent_enabled。",
                     },
                     "deerflow_max_concurrent_subagents": {
                         "description": "子智能体最大并发数",
                         "type": "int",
-                        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。",
+                        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。",
                     },
                     "deerflow_recursion_limit": {
                         "description": "递归深度上限",
@@ -3700,13 +3664,11 @@ CONFIG_METADATA_3 = {
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
-                        "collapsed": True,
                     },
                     "provider_settings.reachability_check": {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
-                        "collapsed": True,
                     },
                     "provider_settings.max_quoted_fallback_images": {
                         "description": "引用图片回退解析上限",
@@ -3715,7 +3677,6 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
-                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_component_chain_depth": {
                         "description": "引用解析组件链深度",
@@ -3724,7 +3685,6 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
-                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_forward_node_depth": {
                         "description": "引用解析转发节点深度",
@@ -3733,7 +3693,6 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
-                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.max_forward_fetch": {
                         "description": "引用解析转发拉取上限",
@@ -3742,7 +3701,6 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
-                        "collapsed": True,
                     },
                     "provider_settings.quoted_message_parser.warn_on_action_failure": {
                         "description": "引用解析 action 失败告警",
@@ -3751,7 +3709,6 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
-                        "collapsed": True,
                     },
                 },
                 "condition": {

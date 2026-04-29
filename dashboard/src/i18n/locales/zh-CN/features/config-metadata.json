@@ -172,6 +172,14 @@
           "booter": {
             "description": "沙箱环境驱动器"
           },
+          "bwrap_rw_binds": {
+            "description": "Bubblewrap 读写挂载目录",
+            "hint": "额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写，整个宿主机系统默认是只读挂载于沙箱内的相同位置）。"
+          },
+          "bwrap_ro_binds": {
+            "description": "Bubblewrap 额外只读挂载目录",
+            "hint": "Bubblewrap 沙箱额外的只读挂载目录（回车添加，可添加多个。宿主机系统目录/usr, /etc, /opt默认只读挂载于沙箱内的相同位置）。"
+          },
           "shipyard_neo_endpoint": {
             "description": "Shipyard Neo API Endpoint",
             "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。"
@@ -348,9 +356,9 @@
         },
         "tool_schema_mode": {
           "description": "工具调用模式",
-          "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+          "hint": "lazy-tool-load 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
           "labels": [
-            "Skills-like（两阶段）",
+            "Lazy-tool-load（两阶段）",
             "Full（完整参数）"
           ]
         },
@@ -410,7 +418,7 @@
       },
       "appid": {
         "description": "appid",
-        "hint": "必填项。当前消息平台的 AppID。如何获取请参考对应平台接入文档。"
+        "hint": "必填项。QQ 官方机器人平台的 appid。如何获取请参考文档。"
       },
       "callback_server_host": {
         "description": "回调服务器主机",
@@ -1084,8 +1092,8 @@
       "dashboard": {
         "ssl": {
           "enable": {
-            "description": "启用 WebUI HTTPS",
-            "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。"
+            "description": "启用 AstrBot 面板 HTTPS",
+            "hint": "启用后，AstrBot 面板 将直接使用 HTTPS 提供服务。"
           },
           "cert_file": {
             "description": "SSL 证书文件路径",

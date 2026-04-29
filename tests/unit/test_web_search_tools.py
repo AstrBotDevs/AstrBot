@@ -1,5 +1,6 @@
 import json
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -52,6 +53,7 @@ async def test_firecrawl_search_maps_web_results(monkeypatch):
 
     result = await tool.call(context, query="AstrBot", limit=3, country="US")
 
+    assert isinstance(result, str)
     assert json.loads(result)["results"] == [
         {
             "title": "AstrBot",
@@ -174,6 +176,7 @@ async def test_firecrawl_search_payload_omits_tbs_and_uses_default_limit(monkeyp
         country="US",
     )
 
+    assert isinstance(result, str)
     assert json.loads(result)["results"][0]["url"] == "https://example.com"
     assert "tbs" not in tool.parameters["properties"]
 
@@ -371,7 +374,7 @@ class _FakeFirecrawlSession:
         return self.response
 
 
-def _context_with_provider_settings(provider_settings):
+def _context_with_provider_settings(provider_settings) -> Any:
     config = {"provider_settings": provider_settings}
     agent_context = SimpleNamespace(
         context=SimpleNamespace(get_config=lambda umo: config),

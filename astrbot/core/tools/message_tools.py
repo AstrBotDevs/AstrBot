@@ -2,7 +2,9 @@ import json
 import os
 import shlex
 import uuid
+from typing import TypedDict
 
+import anyio
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -17,6 +19,35 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+
+class MessageComponentPayload(TypedDict, total=False):
+    type: str
+    text: str
+    path: str
+    url: str
+    mention_user_id: str
+
+
+def _normalize_message_component(raw_msg: object) -> MessageComponentPayload | None:
+    if not isinstance(raw_msg, dict):
+        return None
+
+    normalized: MessageComponentPayload = {}
+    for key, value in raw_msg.items():
+        if not isinstance(key, str):
+            continue
+        if key == "type" and isinstance(value, str):
+            normalized["type"] = value
+        elif key == "text" and isinstance(value, str):
+            normalized["text"] = value
+        elif key == "path" and isinstance(value, str):
+            normalized["path"] = value
+        elif key == "url" and isinstance(value, str):
+            normalized["url"] = value
+        elif key == "mention_user_id" and isinstance(value, str):
+            normalized["mention_user_id"] = value
+    return normalized
 
 
 @builtin_tool
@@ -72,11 +103,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["messages"],
-        }
+        },
     )
 
     async def _resolve_path_from_sandbox(
-        self, context: ContextWrapper[AstrAgentContext], path: str
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        path: str,
     ) -> tuple[str, bool]:
         # if the path is relative, check if the file exists in user's local workspace
         if not os.path.isabs(path):
@@ -92,7 +125,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 except Exception:
                     pass
         # check if the file exists in local environment (only allow absolute paths to prevent traversal)
-        elif os.path.isfile(path):
+        elif await anyio.Path(path).is_file():
             return path, False
 
         try:
@@ -105,7 +138,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if "_&exists_" in json.dumps(result):
                 name = os.path.basename(path)
                 local_path = os.path.join(
-                    get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
+                    get_astrbot_temp_path(),
+                    f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
                 )
                 await sb.download_file(path, local_path)
                 logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
@@ -116,7 +150,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         return path, False
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
     ) -> ToolExecResult:
         # Security: only AstrBot admins can send messages to other sessions.
         # Non-admin users are always restricted to their own session.
@@ -134,25 +170,27 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         components: list[Comp.BaseMessageComponent] = []
         for idx, msg in enumerate(messages):
-            if not isinstance(msg, dict):
+            normalized_msg = _normalize_message_component(msg)
+            if normalized_msg is None:
                 return f"error: messages[{idx}] should be an object."
 
-            msg_type = str(msg.get("type", "")).lower()
+            msg_type = normalized_msg.get("type", "").lower()
             if not msg_type:
                 return f"error: messages[{idx}].type is required."
 
             try:
                 if msg_type == "plain":
-                    text = str(msg.get("text", "")).strip()
+                    text = normalized_msg.get("text", "").strip()
                     if not text:
                         return f"error: messages[{idx}].text is required for plain component."
                     components.append(Comp.Plain(text=text))
                 elif msg_type == "image":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = normalized_msg.get("path")
+                    url = normalized_msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context,
+                            path,
                         )
                         components.append(Comp.Image.fromFileSystem(path=local_path))
                     elif url:
@@ -160,11 +198,12 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for image component."
                 elif msg_type == "record":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = normalized_msg.get("path")
+                    url = normalized_msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context,
+                            path,
                         )
                         components.append(Comp.Record.fromFileSystem(path=local_path))
                     elif url:
@@ -172,11 +211,12 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for record component."
                 elif msg_type == "video":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = normalized_msg.get("path")
+                    url = normalized_msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context,
+                            path,
                         )
                         components.append(Comp.Video.fromFileSystem(path=local_path))
                     elif url:
@@ -184,17 +224,18 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for video component."
                 elif msg_type == "file":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = normalized_msg.get("path")
+                    url = normalized_msg.get("url")
                     name = (
-                        msg.get("text")
+                        normalized_msg.get("text")
                         or (os.path.basename(path) if path else "")
                         or (os.path.basename(url) if url else "")
                         or "file"
                     )
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context,
+                            path,
                         )
                         components.append(Comp.File(name=name, file=local_path))
                     elif url:
@@ -202,7 +243,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for file component."
                 elif msg_type == "mention_user":
-                    mention_user_id = msg.get("mention_user_id")
+                    mention_user_id = normalized_msg.get("mention_user_id")
                     if not mention_user_id:
                         return f"error: messages[{idx}].mention_user_id is required for mention_user component."
                     components.append(Comp.At(qq=mention_user_id))

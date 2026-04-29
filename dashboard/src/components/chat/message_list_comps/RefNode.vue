@@ -1,6 +1,6 @@
 <template>
   <v-chip
-    v-if="resultData"
+    v-if="domain"
     class="ref-chip"
     size="x-small"
     variant="flat"
@@ -9,32 +9,33 @@
     target="_blank"
     clickable
   >
-    <v-icon start size="x-small" color>mdi-link-variant</v-icon>
-    <span>{{ domain || resultData.title || refIndex }}</span>
+    <v-icon start size="x-small" color="default"> mdi-link-variant </v-icon>
+    <span>{{ domain }}</span>
   </v-chip>
+  <span v-else class="ref-fallback" :style="fallbackStyle">{{ "site" }}</span>
 </template>
 
-<script setup>
-import { computed, inject, unref, useSlots } from "vue";
+<script setup lang="ts">
+import { computed, inject } from "vue";
 
 const props = defineProps({
   node: {
     type: Object,
-    default: null,
+    required: true,
   },
 });
 
-const slots = useSlots();
-const injectedIsDark = inject("isDark", false);
-const webSearchResults = inject("webSearchResults", () => ({}));
+console.info("RefNode node:", props.node);
 
-const isDark = computed(() => Boolean(unref(injectedIsDark)));
-const refIndex = computed(() => {
-  const nodeContent = props.node?.content?.trim();
-  if (nodeContent) return nodeContent;
-  return slotText(slots.default?.()).trim();
-});
+// 从父组件注入的暗黑模式状态和搜索结果
+const isDark = inject("isDark", false);
+type WebSearchResultValue = Record<string, { url?: string }>;
+const webSearchResults = inject<WebSearchResultValue | (() => WebSearchResultValue)>("webSearchResults", () => ({}));
 
+// 从 node.content 中提取 ref index (格式: uuid.idx)
+const refIndex = computed(() => props.node?.content?.trim() || "");
+
+// 根据 refIndex 查找对应的 URL
 const resultData = computed(() => {
   if (!refIndex.value) return null;
   const results =
@@ -57,23 +58,19 @@ const domain = computed(() => {
 });
 
 const chipStyle = computed(() => ({
-  backgroundColor: isDark.value
+  backgroundColor: isDark
     ? "rgba(var(--v-theme-on-surface), 0.08)"
     : "rgba(var(--v-theme-on-surface), 0.04)",
-  color: isDark.value
+  color: isDark
     ? "rgba(var(--v-theme-on-surface), 0.62)"
     : "rgba(var(--v-theme-on-surface), 0.72)",
 }));
 
-function slotText(nodes = []) {
-  return nodes
-    .map((node) => {
-      if (typeof node.children === "string") return node.children;
-      if (Array.isArray(node.children)) return slotText(node.children);
-      return "";
-    })
-    .join("");
-}
+const fallbackStyle = computed(() => ({
+  color: isDark
+    ? "rgba(var(--v-theme-on-surface), 0.62)"
+    : "rgba(var(--v-theme-on-surface), 0.72)",
+}));
 </script>
 
 <style scoped>
@@ -87,5 +84,9 @@ function slotText(nodes = []) {
 
 .ref-chip:hover {
   opacity: 0.8;
+}
+
+.ref-fallback {
+  font-size: 0.9em;
 }
 </style>

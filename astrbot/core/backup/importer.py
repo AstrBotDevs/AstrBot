@@ -1,9 +1,9 @@
 """AstrBot 数据导入器
 
-负责从 ZIP 备份文件恢复所有数据。
-导入时进行版本校验：
-- 主版本（前两位）不同时直接拒绝导入
-- 小版本（第三位）不同时提示警告，用户可选择强制导入
+负责从 ZIP 备份文件恢复所有数据｡
+导入时进行版本校验:
+- 主版本(前两位)不同时直接拒绝导入
+- 小版本(第三位)不同时提示警告,用户可选择强制导入
 - 版本匹配时也需要用户确认
 """
 
@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import anyio
 from sqlalchemy import delete
 
 from astrbot.core import logger
@@ -39,13 +40,14 @@ if TYPE_CHECKING:
 
 
 def _get_major_version(version_str: str) -> str:
-    """提取版本的主版本部分（前两位）
+    """提取版本的主版本部分(前两位)
 
     Args:
-        version_str: 版本字符串，如 "4.9.1", "4.10.0-beta"
+        version_str: 版本字符串,如 "4.9.1", "4.10.0-beta"
 
     Returns:
-        主版本字符串，如 "4.9", "4.10"
+        主版本字符串,如 "4.9", "4.10"
+
     """
     if not version_str:
         return "0.0"
@@ -54,7 +56,7 @@ def _get_major_version(version_str: str) -> str:
     parts = [p for p in version.split(".") if p]  # 过滤空字符串
     if len(parts) >= 2:
         return f"{parts[0]}.{parts[1]}"
-    elif len(parts) == 1 and parts[0]:
+    if len(parts) == 1 and parts[0]:
         return f"{parts[0]}.0"
     return "0.0"
 
@@ -118,14 +120,14 @@ class _InvalidCountWarnLimiter:
         if self.limit > 0:
             if self._count < self.limit:
                 logger.warning(
-                    "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
+                    "platform_stats count 非法,已按 0 处理: value=%r, key=%s",
                     value,
                     key_for_log,
                 )
                 self._count += 1
                 if self._count == self.limit and not self._suppression_logged:
                     logger.warning(
-                        "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                        "platform_stats 非法 count 告警已达到上限 (%d),后续将抑制",
                         self.limit,
                     )
                     self._suppression_logged = True
@@ -134,7 +136,7 @@ class _InvalidCountWarnLimiter:
         if not self._suppression_logged:
             # limit <= 0: emit only one suppression warning.
             logger.warning(
-                "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                "platform_stats 非法 count 告警已达到上限 (%d),后续将抑制",
                 self.limit,
             )
             self._suppression_logged = True
@@ -144,15 +146,15 @@ class _InvalidCountWarnLimiter:
 class ImportPreCheckResult:
     """导入预检查结果
 
-    用于在实际导入前检查备份文件的版本兼容性，
-    并返回确认信息让用户决定是否继续导入。
+    用于在实际导入前检查备份文件的版本兼容性,
+    并返回确认信息让用户决定是否继续导入｡
     """
 
-    # 检查是否通过（文件有效且版本可导入）
+    # 检查是否通过(文件有效且版本可导入)
     valid: bool = False
-    # 是否可以导入（版本兼容）
+    # 是否可以导入(版本兼容)
     can_import: bool = False
-    # 版本状态: match（完全匹配）, minor_diff（小版本差异）, major_diff（主版本不同，拒绝）
+    # 版本状态: match(完全匹配), minor_diff(小版本差异), major_diff(主版本不同,拒绝)
     version_status: str = ""
     # 备份文件中的 AstrBot 版本
     backup_version: str = ""
@@ -160,11 +162,11 @@ class ImportPreCheckResult:
     current_version: str = VERSION
     # 备份创建时间
     backup_time: str = ""
-    # 确认消息（显示给用户）
+    # 确认消息(显示给用户)
     confirm_message: str = ""
     # 警告消息列表
     warnings: list[str] = field(default_factory=list)
-    # 错误消息（如果检查失败）
+    # 错误消息(如果检查失败)
     error: str = ""
     # 备份包含的内容摘要
     backup_summary: dict = field(default_factory=dict)
@@ -222,18 +224,18 @@ class DatabaseClearError(RuntimeError):
 class AstrBotImporter:
     """AstrBot 数据导入器
 
-    导入备份文件中的所有数据，包括：
+    导入备份文件中的所有数据,包括:
     - 主数据库所有表
     - 知识库元数据和文档
     - 配置文件
     - 附件文件
     - 知识库多媒体文件
-    - 插件目录（data/plugins）
-    - 插件数据目录（data/plugin_data）
-    - 配置目录（data/config）
-    - T2I 模板目录（data/t2i_templates）
-    - WebChat 数据目录（data/webchat）
-    - 临时文件目录（data/temp）
+    - 插件目录(data/plugins)
+    - 插件数据目录(data/plugin_data)
+    - 配置目录(data/config)
+    - T2I 模板目录(data/t2i_templates)
+    - WebChat 数据目录(data/webchat)
+    - 临时文件目录(data/temp)
     """
 
     def __init__(
@@ -251,14 +253,15 @@ class AstrBotImporter:
     def pre_check(self, zip_path: str) -> ImportPreCheckResult:
         """预检查备份文件
 
-        在实际导入前检查备份文件的有效性和版本兼容性。
-        返回检查结果供前端显示确认对话框。
+        在实际导入前检查备份文件的有效性和版本兼容性｡
+        返回检查结果供前端显示确认对话框｡
 
         Args:
             zip_path: ZIP 备份文件路径
 
         Returns:
             ImportPreCheckResult: 预检查结果
+
         """
         result = ImportPreCheckResult()
         result.current_version = VERSION
@@ -274,7 +277,7 @@ class AstrBotImporter:
                     manifest_data = zf.read("manifest.json")
                     manifest = json.loads(manifest_data)
                 except KeyError:
-                    result.error = "备份文件缺少 manifest.json，不是有效的 AstrBot 备份"
+                    result.error = "备份文件缺少 manifest.json,不是有效的 AstrBot 备份"
                     return result
                 except json.JSONDecodeError as e:
                     result.error = f"manifest.json 格式错误: {e}"
@@ -299,7 +302,7 @@ class AstrBotImporter:
                 result.can_import = version_check["can_import"]
 
                 # 版本信息由前端根据 version_status 和 i18n 生成显示
-                # 不再将版本消息添加到 warnings 列表中，避免中文硬编码
+                # 不再将版本消息添加到 warnings 列表中,避免中文硬编码
                 # warnings 列表保留用于其他非版本相关的警告
 
                 return result
@@ -314,12 +317,13 @@ class AstrBotImporter:
     def _check_version_compatibility(self, backup_version: str) -> dict:
         """检查版本兼容性
 
-        规则：
-        - 主版本（前两位，如 4.9）必须一致，否则拒绝
-        - 小版本（第三位，如 4.9.1 vs 4.9.2）不同时，警告但允许导入
+        规则:
+        - 主版本(前两位,如 4.9)必须一致,否则拒绝
+        - 小版本(第三位,如 4.9.1 vs 4.9.2)不同时,警告但允许导入
 
         Returns:
             dict: {status, can_import, message}
+
         """
         if not backup_version:
             return {
@@ -328,7 +332,7 @@ class AstrBotImporter:
                 "message": "备份文件缺少版本信息",
             }
 
-        # 提取主版本（前两位）进行比较
+        # 提取主版本(前两位)进行比较
         backup_major = _get_major_version(backup_version)
         current_major = _get_major_version(VERSION)
 
@@ -338,8 +342,8 @@ class AstrBotImporter:
                 "status": "major_diff",
                 "can_import": False,
                 "message": (
-                    f"主版本不兼容: 备份版本 {backup_version}, 当前版本 {VERSION}。"
-                    f"跨主版本导入可能导致数据损坏，请使用相同主版本的 AstrBot。"
+                    f"主版本不兼容: 备份版本 {backup_version}, 当前版本 {VERSION}｡"
+                    f"跨主版本导入可能导致数据损坏,请使用相同主版本的 AstrBot｡"
                 ),
             }
 
@@ -350,7 +354,7 @@ class AstrBotImporter:
                 "status": "minor_diff",
                 "can_import": True,
                 "message": (
-                    f"小版本差异: 备份版本 {backup_version}, 当前版本 {VERSION}。"
+                    f"小版本差异: 备份版本 {backup_version}, 当前版本 {VERSION}｡"
                 ),
             }
 
@@ -370,15 +374,16 @@ class AstrBotImporter:
 
         Args:
             zip_path: ZIP 备份文件路径
-            mode: 导入模式，目前仅支持 "replace"（清空后导入）
-            progress_callback: 进度回调函数，接收参数 (stage, current, total, message)
+            mode: 导入模式,目前仅支持 "replace"(清空后导入)
+            progress_callback: 进度回调函数,接收参数 (stage, current, total, message)
 
         Returns:
             ImportResult: 导入结果
+
         """
         result = ImportResult()
 
-        if not os.path.exists(zip_path):
+        if not await anyio.Path(zip_path).exists():
             result.add_error(f"备份文件不存在: {zip_path}")
             return result
 
@@ -460,12 +465,12 @@ class AstrBotImporter:
                     try:
                         config_content = zf.read("config/cmd_config.json")
                         # 备份现有配置
-                        if os.path.exists(self.config_path):
+                        if await anyio.Path(self.config_path).exists():
                             backup_path = f"{self.config_path}.bak"
                             shutil.copy2(self.config_path, backup_path)
 
-                        with open(self.config_path, "wb") as f:
-                            f.write(config_content)
+                        async with await anyio.open_file(self.config_path, "wb") as f:
+                            await f.write(config_content)
                         result.imported_files["config"] = 1
                     except Exception as e:
                         result.add_warning(f"导入配置文件失败: {e}")
@@ -478,7 +483,8 @@ class AstrBotImporter:
                     await progress_callback("attachments", 0, 100, "正在导入附件...")
 
                 attachment_count = await self._import_attachments(
-                    zf, main_data.get("attachments", [])
+                    zf,
+                    main_data.get("attachments", []),
                 )
                 result.imported_files["attachments"] = attachment_count
 
@@ -488,7 +494,10 @@ class AstrBotImporter:
                 # 6. 导入插件和其他目录
                 if progress_callback:
                     await progress_callback(
-                        "directories", 0, 100, "正在导入插件和数据目录..."
+                        "directories",
+                        0,
+                        100,
+                        "正在导入插件和数据目录...",
                     )
 
                 dir_stats = await self._import_directories(zf, manifest, result)
@@ -510,8 +519,8 @@ class AstrBotImporter:
     def _validate_version(self, manifest: dict) -> None:
         """验证版本兼容性 - 仅允许相同主版本导入
 
-        注意：此方法仅在 import_all 中调用，用于双重校验。
-        前端应先调用 pre_check 获取详细的版本信息并让用户确认。
+        注意:此方法仅在 import_all 中调用,用于双重校验｡
+        前端应先调用 pre_check 获取详细的版本信息并让用户确认｡
         """
         backup_version = manifest.get("astrbot_version")
         if not backup_version:
@@ -529,16 +538,15 @@ class AstrBotImporter:
 
     async def _clear_main_db(self) -> None:
         """清空主数据库所有表"""
-        async with self.main_db.get_db() as session:
-            async with session.begin():
-                for table_name, model_class in MAIN_DB_MODELS.items():
-                    try:
-                        await session.execute(delete(model_class))
-                        logger.debug(f"已清空表 {table_name}")
-                    except Exception as e:
-                        raise DatabaseClearError(
-                            f"清空表 {table_name} 失败: {e}"
-                        ) from e
+        async with self.main_db.get_db() as session, session.begin():
+            for table_name, model_class in MAIN_DB_MODELS.items():
+                try:
+                    await session.execute(delete(model_class))
+                    logger.debug(f"已清空表 {table_name}")
+                except Exception as e:
+                    raise DatabaseClearError(
+                        f"清空表 {table_name} 失败: {e}",
+                    ) from e
 
     async def _clear_kb_data(self) -> None:
         """清空知识库数据"""
@@ -546,14 +554,13 @@ class AstrBotImporter:
             return
 
         # 清空知识库元数据表
-        async with self.kb_manager.kb_db.get_db() as session:
-            async with session.begin():
-                for table_name, model_class in KB_METADATA_MODELS.items():
-                    try:
-                        await session.execute(delete(model_class))
-                        logger.debug(f"已清空知识库表 {table_name}")
-                    except Exception as e:
-                        logger.warning(f"清空知识库表 {table_name} 失败: {e}")
+        async with self.kb_manager.kb_db.get_db() as session, session.begin():
+            for table_name, model_class in KB_METADATA_MODELS.items():
+                try:
+                    await session.execute(delete(model_class))
+                    logger.debug(f"已清空知识库表 {table_name}")
+                except Exception as e:
+                    logger.warning(f"清空知识库表 {table_name} 失败: {e}")
 
         # 删除知识库文件目录
         for kb_id in list(self.kb_manager.kb_insts.keys()):
@@ -568,45 +575,47 @@ class AstrBotImporter:
         self.kb_manager.kb_insts.clear()
 
     async def _import_main_database(
-        self, data: dict[str, list[dict]]
+        self,
+        data: dict[str, list[dict]],
     ) -> dict[str, int]:
         """导入主数据库数据"""
         imported: dict[str, int] = {}
 
-        async with self.main_db.get_db() as session:
-            async with session.begin():
-                for table_name, rows in data.items():
-                    model_class = MAIN_DB_MODELS.get(table_name)
-                    if not model_class:
-                        logger.warning(f"未知的表: {table_name}")
-                        continue
-                    normalized_rows = self._preprocess_main_table_rows(table_name, rows)
+        async with self.main_db.get_db() as session, session.begin():
+            for table_name, rows in data.items():
+                model_class = MAIN_DB_MODELS.get(table_name)
+                if not model_class:
+                    logger.warning(f"未知的表: {table_name}")
+                    continue
+                normalized_rows = self._preprocess_main_table_rows(table_name, rows)
 
-                    count = 0
-                    for row in normalized_rows:
-                        try:
-                            # 转换 datetime 字符串为 datetime 对象
-                            row = self._convert_datetime_fields(row, model_class)
-                            obj = model_class(**row)
-                            session.add(obj)
-                            count += 1
-                        except Exception as e:
-                            logger.warning(f"导入记录到 {table_name} 失败: {e}")
+                count = 0
+                for row in normalized_rows:
+                    try:
+                        # 转换 datetime 字符串为 datetime 对象
+                        row = self._convert_datetime_fields(row, model_class)
+                        obj = model_class(**row)
+                        session.add(obj)
+                        count += 1
+                    except Exception as e:
+                        logger.warning(f"导入记录到 {table_name} 失败: {e}")
 
-                    imported[table_name] = count
-                    logger.debug(f"导入表 {table_name}: {count} 条记录")
+                imported[table_name] = count
+                logger.debug(f"导入表 {table_name}: {count} 条记录")
 
         return imported
 
     def _preprocess_main_table_rows(
-        self, table_name: str, rows: list[dict[str, Any]]
+        self,
+        table_name: str,
+        rows: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         if table_name == "platform_stats":
             normalized_rows = self._merge_platform_stats_rows(rows)
             duplicate_count = len(rows) - len(normalized_rows)
             if duplicate_count > 0:
                 logger.warning(
-                    "检测到 %s 重复键 %d 条，已在导入前聚合",
+                    "检测到 %s 重复键 %d 条,已在导入前聚合",
                     table_name,
                     duplicate_count,
                 )
@@ -614,7 +623,8 @@ class AstrBotImporter:
         return rows
 
     def _merge_platform_stats_rows(
-        self, rows: list[dict[str, Any]]
+        self,
+        rows: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """Merge duplicate platform_stats rows by normalized timestamp/platform key.
 
@@ -622,6 +632,7 @@ class AstrBotImporter:
         - Invalid/empty timestamps are kept as distinct rows to avoid accidental merging.
         - Non-string platform_id/platform_type are kept as distinct rows.
         - Invalid count warnings are rate-limited per function invocation.
+
         """
         merged: dict[tuple[str, str, str], dict[str, Any]] = {}
         result: list[dict[str, Any]] = []
@@ -721,24 +732,23 @@ class AstrBotImporter:
             return
 
         # 1. 导入知识库元数据
-        async with self.kb_manager.kb_db.get_db() as session:
-            async with session.begin():
-                for table_name, rows in kb_meta_data.items():
-                    model_class = KB_METADATA_MODELS.get(table_name)
-                    if not model_class:
-                        continue
+        async with self.kb_manager.kb_db.get_db() as session, session.begin():
+            for table_name, rows in kb_meta_data.items():
+                model_class = KB_METADATA_MODELS.get(table_name)
+                if not model_class:
+                    continue
 
-                    count = 0
-                    for row in rows:
-                        try:
-                            row = self._convert_datetime_fields(row, model_class)
-                            obj = model_class(**row)
-                            session.add(obj)
-                            count += 1
-                        except Exception as e:
-                            logger.warning(f"导入知识库记录到 {table_name} 失败: {e}")
+                count = 0
+                for row in rows:
+                    try:
+                        row = self._convert_datetime_fields(row, model_class)
+                        obj = model_class(**row)
+                        session.add(obj)
+                        count += 1
+                    except Exception as e:
+                        logger.warning(f"导入知识库记录到 {table_name} 失败: {e}")
 
-                    result.imported_tables[f"kb_{table_name}"] = count
+                result.imported_tables[f"kb_{table_name}"] = count
 
         # 2. 导入每个知识库的文档和文件
         for kb_data in kb_meta_data.get("knowledge_bases", []):
@@ -767,8 +777,10 @@ class AstrBotImporter:
             if faiss_path in zf.namelist():
                 try:
                     target_path = kb_dir / "index.faiss"
-                    with zf.open(faiss_path) as src, open(target_path, "wb") as dst:
-                        dst.write(src.read())
+                    with zf.open(faiss_path) as src:
+                        content = src.read()
+                    async with await anyio.open_file(target_path, "wb") as dst:
+                        await dst.write(content)
                 except Exception as e:
                     result.add_warning(f"导入知识库 {kb_id} 的 FAISS 索引失败: {e}")
 
@@ -874,13 +886,14 @@ class AstrBotImporter:
 
         Returns:
             dict: 每个目录导入的文件数量
+
         """
         dir_stats: dict[str, int] = {}
 
-        # 检查备份版本是否支持目录备份（需要版本 >= 1.1）
+        # 检查备份版本是否支持目录备份(需要版本 >= 1.1)
         backup_version = manifest.get("version", "1.0")
         if VersionComparator.compare_version(backup_version, "1.1") < 0:
-            logger.info("备份版本不支持目录备份，跳过目录导入")
+            logger.info("备份版本不支持目录备份,跳过目录导入")
             return dir_stats
 
         backed_up_dirs = manifest.get("directories", [])
@@ -907,16 +920,16 @@ class AstrBotImporter:
                 if not dir_files:
                     continue
 
-                # 备份现有目录（如果存在）
-                if target_dir.exists():
+                # 备份现有目录(如果存在)
+                if await anyio.Path(target_dir).exists():
                     backup_path = Path(f"{target_dir}.bak")
-                    if backup_path.exists():
+                    if await anyio.Path(backup_path).exists():
                         shutil.rmtree(backup_path)
                     shutil.move(str(target_dir), str(backup_path))
                     logger.debug(f"已备份现有目录 {target_dir} 到 {backup_path}")
 
                 # 创建目标目录
-                target_dir.mkdir(parents=True, exist_ok=True)
+                await anyio.Path(target_dir).mkdir(parents=True, exist_ok=True)
 
                 # 解压文件
                 for name in dir_files:
@@ -933,8 +946,10 @@ class AstrBotImporter:
                             continue
                         target_path.parent.mkdir(parents=True, exist_ok=True)
 
-                        with zf.open(name) as src, open(target_path, "wb") as dst:
-                            dst.write(src.read())
+                        with zf.open(name) as src:
+                            content = src.read()
+                        async with await anyio.open_file(target_path, "wb") as dst:
+                            await dst.write(content)
                         file_count += 1
                     except Exception as e:
                         result.add_warning(f"导入文件 {name} 失败: {e}")
@@ -954,9 +969,10 @@ class AstrBotImporter:
 
         # 获取模型的 datetime 字段
         from sqlalchemy import inspect as sa_inspect
+        from sqlalchemy.orm import Mapper
 
         try:
-            mapper = sa_inspect(model_class)
+            mapper: Mapper[Any] = sa_inspect(model_class)
             for column in mapper.columns:
                 if column.name in result and result[column.name] is not None:
                     # 检查是否是 datetime 类型的列

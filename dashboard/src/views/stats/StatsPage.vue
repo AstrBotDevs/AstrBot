@@ -3,9 +3,9 @@
     <v-container fluid class="stats-shell pa-4 pa-md-6">
       <div class="stats-header">
         <div>
-          <div class="eyebrow">{{ t('header.eyebrow') }}</div>
-          <h1 class="stats-title">{{ t('header.title') }}</h1>
-          <p class="stats-subtitle">{{ t('header.subtitle') }}</p>
+          <div class="eyebrow">{{ t("header.eyebrow") }}</div>
+          <h1 class="stats-title">{{ t("header.title") }}</h1>
+          <p class="stats-subtitle">{{ t("header.subtitle") }}</p>
         </div>
         <div class="header-meta">
           <div class="meta-pill">
@@ -15,12 +15,7 @@
         </div>
       </div>
 
-      <v-alert
-        v-if="errorMessage"
-        type="error"
-        variant="tonal"
-        class="mb-4"
-      >
+      <v-alert v-if="errorMessage" type="error" variant="tonal" class="mb-4">
         {{ errorMessage }}
       </v-alert>
 
@@ -46,8 +41,10 @@
 
         <div class="section-toolbar">
           <div>
-            <div class="section-title">{{ t('messageOverview.title') }}</div>
-            <div class="section-subtitle">{{ t('messageOverview.subtitle') }}</div>
+            <div class="section-title">{{ t("messageOverview.title") }}</div>
+            <div class="section-subtitle">
+              {{ t("messageOverview.subtitle") }}
+            </div>
           </div>
           <div class="range-switch">
             <button
@@ -67,13 +64,19 @@
           <section class="stat-card chart-card chart-card-wide">
             <div class="card-head">
               <div>
-                <div class="section-title">{{ t('messageTrend.title') }}</div>
-                <div class="section-subtitle">{{ t('messageTrend.subtitle', { range: rangeLabel }) }}</div>
+                <div class="section-title">{{ t("messageTrend.title") }}</div>
+                <div class="section-subtitle">
+                  {{ t("messageTrend.subtitle", { range: rangeLabel }) }}
+                </div>
               </div>
               <div class="card-head-actions">
                 <div class="section-metric">
-                  <span class="metric-label">{{ t('messageTrend.totalMessages') }}</span>
-                  <span class="metric-value">{{ formatNumber(baseStats?.message_count ?? 0) }}</span>
+                  <span class="metric-label">{{
+                    t("messageTrend.totalMessages")
+                  }}</span>
+                  <span class="metric-value">{{
+                    formatNumber(baseStats?.message_count ?? 0)
+                  }}</span>
                 </div>
               </div>
             </div>
@@ -88,8 +91,12 @@
           <section class="stat-card provider-list-card">
             <div class="card-head compact">
               <div>
-                <div class="section-title">{{ t('platformRanking.title') }}</div>
-                <div class="section-subtitle">{{ t('platformRanking.subtitle', { range: rangeLabel }) }}</div>
+                <div class="section-title">
+                  {{ t("platformRanking.title") }}
+                </div>
+                <div class="section-subtitle">
+                  {{ t("platformRanking.subtitle", { range: rangeLabel }) }}
+                </div>
               </div>
             </div>
             <div v-if="platformRanking.length" class="provider-list">
@@ -102,23 +109,27 @@
                 <strong>{{ formatNumber(platform.count) }}</strong>
               </div>
             </div>
-            <div v-else class="empty-state">{{ t('empty.platformStats') }}</div>
+            <div v-else class="empty-state">{{ t("empty.platformStats") }}</div>
           </section>
         </div>
 
         <div class="token-section-head">
           <div>
-            <div class="section-title">{{ t('modelCalls.title') }}</div>
-            <div class="section-subtitle">{{ t('modelCalls.subtitle') }}</div>
+            <div class="section-title">{{ t("modelCalls.title") }}</div>
+            <div class="section-subtitle">{{ t("modelCalls.subtitle") }}</div>
           </div>
         </div>
 
         <div class="token-grid">
-          <section class="stat-card chart-card chart-card-wide provider-trend-card">
+          <section
+            class="stat-card chart-card chart-card-wide provider-trend-card"
+          >
             <div class="card-head">
               <div>
-                <div class="section-title">{{ t('modelTrend.title') }}</div>
-                <div class="section-subtitle">{{ t('modelTrend.subtitle') }}</div>
+                <div class="section-title">{{ t("modelTrend.title") }}</div>
+                <div class="section-subtitle">
+                  {{ t("modelTrend.subtitle") }}
+                </div>
               </div>
             </div>
             <apexchart
@@ -131,24 +142,35 @@
 
           <section class="token-side-column">
             <section class="stat-card token-total-card">
-              <div class="card-label">{{ t('modelTotal.title', { range: rangeLabel }) }}</div>
-              <div class="token-total-value">{{ formatNumber(providerStats?.range_total_tokens ?? 0) }} <span style="font-size: 18px;">{{ t('units.tokens') }}</span></div>
-              <div class="card-note">{{ t('modelTotal.callCount', { count: formatNumber(providerStats?.range_total_calls ?? 0) }) }}</div>
+              <div class="card-label">
+                {{ t("modelTotal.title", { range: rangeLabel }) }}
+              </div>
+              <div class="token-total-value">
+                {{ formatNumber(providerStats?.range_total_tokens ?? 0) }}
+                <span style="font-size: 18px">{{ t("units.tokens") }}</span>
+              </div>
+              <div class="card-note">
+                {{
+                  t("modelTotal.callCount", {
+                    count: formatNumber(providerStats?.range_total_calls ?? 0),
+                  })
+                }}
+              </div>
               <div class="token-meta-list">
                 <div class="token-meta-item">
-                  <span>{{ t('modelTotal.avgTtft') }}</span>
+                  <span>{{ t("modelTotal.avgTtft") }}</span>
                   <strong>{{ rangeAvgTtftLabel }}</strong>
                 </div>
                 <div class="token-meta-item">
-                  <span>{{ t('modelTotal.avgDuration') }}</span>
+                  <span>{{ t("modelTotal.avgDuration") }}</span>
                   <strong>{{ rangeAvgDurationLabel }}</strong>
                 </div>
                 <div class="token-meta-item">
-                  <span>{{ t('modelTotal.avgTpm') }}</span>
+                  <span>{{ t("modelTotal.avgTpm") }}</span>
                   <strong>{{ rangeAvgTpmLabel }}</strong>
                 </div>
                 <div class="token-meta-item">
-                  <span>{{ t('modelTotal.successRate') }}</span>
+                  <span>{{ t("modelTotal.successRate") }}</span>
                   <strong>{{ rangeSuccessRateLabel }}</strong>
                 </div>
               </div>
@@ -157,8 +179,12 @@
             <section class="stat-card provider-list-card">
               <div class="card-head compact">
                 <div>
-                  <div class="section-title">{{ t('modelRanking.title', { range: rangeLabel }) }}</div>
-                  <div class="section-subtitle">{{ t('modelRanking.subtitle') }}</div>
+                  <div class="section-title">
+                    {{ t("modelRanking.title", { range: rangeLabel }) }}
+                  </div>
+                  <div class="section-subtitle">
+                    {{ t("modelRanking.subtitle") }}
+                  </div>
                 </div>
               </div>
               <div
@@ -174,7 +200,9 @@
                   <strong>{{ formatNumber(provider.tokens) }}</strong>
                 </div>
               </div>
-              <div v-else class="empty-state">{{ t('empty.modelCalls', { range: rangeLabel }) }}</div>
+              <div v-else class="empty-state">
+                {{ t("empty.modelCalls", { range: rangeLabel }) }}
+              </div>
             </section>
           </section>
         </div>
@@ -182,8 +210,12 @@
         <section class="stat-card provider-list-card">
           <div class="card-head compact">
             <div>
-              <div class="section-title">{{ t('sessionRanking.title', { range: rangeLabel }) }}</div>
-              <div class="section-subtitle">{{ t('sessionRanking.subtitle') }}</div>
+              <div class="section-title">
+                {{ t("sessionRanking.title", { range: rangeLabel }) }}
+              </div>
+              <div class="section-subtitle">
+                {{ t("sessionRanking.subtitle") }}
+              </div>
             </div>
           </div>
           <div v-if="rangeUmoRanking.length" class="provider-list">
@@ -196,7 +228,9 @@
               <strong>{{ formatNumber(item.tokens) }}</strong>
             </div>
           </div>
-          <div v-else class="empty-state">{{ t('empty.sessionCalls', { range: rangeLabel }) }}</div>
+          <div v-else class="empty-state">
+            {{ t("empty.sessionCalls", { range: rangeLabel }) }}
+          </div>
         </section>
       </template>
     </v-container>
@@ -204,90 +238,90 @@
 </template>
 
 <script setup lang="ts">
-import type { ApexOptions } from 'apexcharts'
-import axios from 'axios'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useTheme } from 'vuetify'
-import { useI18n, useModuleI18n } from '@/i18n/composables'
+import type { ApexOptions } from "apexcharts";
+import axios from "@/utils/request";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useTheme } from "vuetify";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 
-type TokenRange = 1 | 3 | 7
+type TokenRange = 1 | 3 | 7;
 type ChartSeries = Array<{
-  name: string
-  data: unknown[]
-}>
+  name: string;
+  data: unknown[];
+}>;
 
 interface RunningStats {
-  hours: number
-  minutes: number
-  seconds: number
+  hours: number;
+  minutes: number;
+  seconds: number;
 }
 
 interface BaseStatsResponse {
-  message_count: number
-  platform_count: number
+  message_count: number;
+  platform_count: number;
   platform: Array<{
-    name: string
-    count: number
-    timestamp: number
-  }>
-  message_time_series: Array<[number, number]>
+    name: string;
+    count: number;
+    timestamp: number;
+  }>;
+  message_time_series: Array<[number, number]>;
   memory: {
-    process: number
-    system: number
-  }
-  cpu_percent: number
-  running: RunningStats
-  thread_count: number
-  start_time: number
+    process: number;
+    system: number;
+  };
+  cpu_percent: number;
+  running: RunningStats;
+  thread_count: number;
+  start_time: number;
 }
 
 interface ProviderTrendItem {
-  name: string
-  data: Array<[number, number]>
-  total_tokens: number
+  name: string;
+  data: Array<[number, number]>;
+  total_tokens: number;
 }
 
 interface ProviderRankingItem {
-  provider_id: string
-  tokens: number
+  provider_id: string;
+  tokens: number;
 }
 
 interface UmoRankingItem {
-  umo: string
-  tokens: number
+  umo: string;
+  tokens: number;
 }
 
 interface ProviderTokenStatsResponse {
-  days: TokenRange
+  days: TokenRange;
   trend: {
-    series: ProviderTrendItem[]
-    total_series: Array<[number, number]>
-  }
-  range_total_tokens: number
-  range_total_calls: number
-  range_avg_ttft_ms: number
-  range_avg_duration_ms: number
-  range_avg_tpm: number
-  range_success_rate: number
-  range_by_provider: ProviderRankingItem[]
-  range_by_umo: UmoRankingItem[]
-  today_total_tokens: number
-  today_total_calls: number
-  today_by_provider: ProviderRankingItem[]
+    series: ProviderTrendItem[];
+    total_series: Array<[number, number]>;
+  };
+  range_total_tokens: number;
+  range_total_calls: number;
+  range_avg_ttft_ms: number;
+  range_avg_duration_ms: number;
+  range_avg_tpm: number;
+  range_success_rate: number;
+  range_by_provider: ProviderRankingItem[];
+  range_by_umo: UmoRankingItem[];
+  today_total_tokens: number;
+  today_total_calls: number;
+  today_by_provider: ProviderRankingItem[];
 }
 
-const { locale } = useI18n()
-const { tm: t } = useModuleI18n('features/stats')
-const theme = useTheme()
-const loading = ref(true)
-const errorMessage = ref('')
-const baseStats = ref<BaseStatsResponse | null>(null)
-const providerStats = ref<ProviderTokenStatsResponse | null>(null)
-const selectedRange = ref<TokenRange>(1)
-const lastUpdatedAt = ref<Date | null>(null)
-const isDark = computed(() => theme.global.current.value.dark)
+const { locale } = useI18n();
+const { tm: t } = useModuleI18n("features/stats");
+const theme = useTheme();
+const loading = ref(true);
+const errorMessage = ref("");
+const baseStats = ref<BaseStatsResponse | null>(null);
+const providerStats = ref<ProviderTokenStatsResponse | null>(null);
+const selectedRange = ref<TokenRange>(1);
+const lastUpdatedAt = ref<Date | null>(null);
+const isDark = computed(() => theme.global.current.value.dark);
 const themePalette = computed(() => {
-  const colors = theme.global.current.value.colors as Record<string, string>
+  const colors = theme.global.current.value.colors as Record<string, string>;
   return {
     primary: colors.primary,
     secondary: colors.secondary,
@@ -298,421 +332,480 @@ const themePalette = computed(() => {
     border: colors.border ?? colors.borderLight ?? colors.primary,
     mutedText: colors.secondaryText ?? colors.primaryText ?? colors.primary,
     lightPrimary: colors.lightprimary ?? colors.surface ?? colors.background,
-    lightSecondary: colors.lightsecondary ?? colors.surface ?? colors.background
-  }
-})
+    lightSecondary:
+      colors.lightsecondary ?? colors.surface ?? colors.background,
+  };
+});
 
-let refreshTimer: number | null = null
+let refreshTimer: number | null = null;
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat(locale.value).format(value)
+  return new Intl.NumberFormat(locale.value).format(value);
 }
 
 function formatCompactNumber(value: number): string {
-  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`
-  return formatNumber(value)
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`;
+  return formatNumber(value);
 }
 
 function formatMemory(memoryMb: number): string {
   if (memoryMb >= 1024) {
-    return `${(memoryMb / 1024).toFixed(1)} ${t('units.gb')}`
+    return `${(memoryMb / 1024).toFixed(1)} ${t("units.gb")}`;
   }
-  return `${formatNumber(memoryMb)} ${t('units.mb')}`
+  return `${formatNumber(memoryMb)} ${t("units.mb")}`;
 }
 
 function formatDurationMs(value: number): string {
-  if (!value || value <= 0) return '—'
-  if (value < 1000) return `${Math.round(value)} ${t('units.ms')}`
-  return `${(value / 1000).toFixed(2)} ${t('units.secondsShort')}`
+  if (!value || value <= 0) return "—";
+  if (value < 1000) return `${Math.round(value)} ${t("units.ms")}`;
+  return `${(value / 1000).toFixed(2)} ${t("units.secondsShort")}`;
 }
 
 function formatTpm(value: number): string {
-  if (!value || value <= 0) return '—'
-  return `${value.toFixed(0) } ${t('units.tpm')}`
+  if (!value || value <= 0) return "—";
+  return `${value.toFixed(0)} ${t("units.tpm")}`;
 }
 
 function hexToRgba(color: string | undefined, alpha: number): string {
-  if (!color) return `rgba(0, 0, 0, ${alpha})`
-  if (!color.startsWith('#')) return color
+  if (!color) return `rgba(0, 0, 0, ${alpha})`;
+  if (!color.startsWith("#")) return color;
 
-  let hex = color.slice(1)
+  let hex = color.slice(1);
   if (hex.length === 3) {
     hex = hex
-      .split('')
+      .split("")
       .map((char) => char + char)
-      .join('')
+      .join("");
   }
 
-  if (hex.length !== 6) return color
+  if (hex.length !== 6) return color;
 
-  const red = Number.parseInt(hex.slice(0, 2), 16)
-  const green = Number.parseInt(hex.slice(2, 4), 16)
-  const blue = Number.parseInt(hex.slice(4, 6), 16)
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
+  const red = Number.parseInt(hex.slice(0, 2), 16);
+  const green = Number.parseInt(hex.slice(2, 4), 16);
+  const blue = Number.parseInt(hex.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 function formatDateTime(timestampSec: number): string {
-  if (!timestampSec) return '—'
+  if (!timestampSec) return "—";
   return new Date(timestampSec * 1000).toLocaleString(locale.value, {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatRunningTime(running?: RunningStats | null): string {
-  if (!running) return '—'
+  if (!running) return "—";
   const parts = [
-    running.hours > 0 ? `${running.hours}${t('units.hoursShort')}` : '',
-    running.minutes > 0 || running.hours > 0 ? `${running.minutes}${t('units.minutesShort')}` : '',
-    `${running.seconds}${t('units.secondsShort')}`
-  ].filter(Boolean)
-  return parts.join(' ')
+    running.hours > 0 ? `${running.hours}${t("units.hoursShort")}` : "",
+    running.minutes > 0 || running.hours > 0
+      ? `${running.minutes}${t("units.minutesShort")}`
+      : "",
+    `${running.seconds}${t("units.secondsShort")}`,
+  ].filter(Boolean);
+  return parts.join(" ");
 }
 
-function aggregateOverflowSeries(series: ProviderTrendItem[]): ProviderTrendItem[] {
-  if (series.length <= 5) return series
-  const leading = series.slice(0, 4)
-  const overflow = series.slice(4)
+function aggregateOverflowSeries(
+  series: ProviderTrendItem[],
+): ProviderTrendItem[] {
+  if (series.length <= 5) return series;
+  const leading = series.slice(0, 4);
+  const overflow = series.slice(4);
   const mergedPoints = overflow[0].data.map(([timestamp], index) => {
-    const total = overflow.reduce((sum, item) => sum + (item.data[index]?.[1] ?? 0), 0)
-    return [timestamp, total] as [number, number]
-  })
+    const total = overflow.reduce(
+      (sum, item) => sum + (item.data[index]?.[1] ?? 0),
+      0,
+    );
+    return [timestamp, total] as [number, number];
+  });
   return [
     ...leading,
     {
-      name: t('chart.others'),
+      name: t("chart.others"),
       data: mergedPoints,
-      total_tokens: overflow.reduce((sum, item) => sum + item.total_tokens, 0)
-    }
-  ]
+      total_tokens: overflow.reduce((sum, item) => sum + item.total_tokens, 0),
+    },
+  ];
 }
 
 async function fetchBaseStats(): Promise<void> {
-  const response = await axios.get('/api/stat/get', {
+  const response = await axios.get("/api/stat/get", {
     params: {
-      offset_sec: selectedRange.value * 24 * 60 * 60
-    }
-  })
-  baseStats.value = response.data.data
+      offset_sec: selectedRange.value * 24 * 60 * 60,
+    },
+  });
+  baseStats.value = response.data.data;
 }
 
 async function fetchProviderStats(): Promise<void> {
-  const response = await axios.get('/api/stat/provider-tokens', {
+  const response = await axios.get("/api/stat/provider-tokens", {
     params: {
-      days: selectedRange.value
-    }
-  })
-  providerStats.value = response.data.data
+      days: selectedRange.value,
+    },
+  });
+  providerStats.value = response.data.data;
 }
 
 async function refreshStats(): Promise<void> {
   try {
-    errorMessage.value = ''
-    await Promise.all([fetchBaseStats(), fetchProviderStats()])
-    lastUpdatedAt.value = new Date()
+    errorMessage.value = "";
+    await Promise.all([fetchBaseStats(), fetchProviderStats()]);
+    lastUpdatedAt.value = new Date();
   } catch (error) {
-    console.error('Failed to load stats page data:', error)
-    errorMessage.value = t('errors.loadFailed')
+    console.error("Failed to load stats page data:", error);
+    errorMessage.value = t("errors.loadFailed");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 const rangeOptions = computed(() => [
-  { labelKey: 'ranges.oneDay', value: 1 as TokenRange },
-  { labelKey: 'ranges.threeDays', value: 3 as TokenRange },
-  { labelKey: 'ranges.oneWeek', value: 7 as TokenRange }
-])
+  { labelKey: "ranges.oneDay", value: 1 as TokenRange },
+  { labelKey: "ranges.threeDays", value: 3 as TokenRange },
+  { labelKey: "ranges.oneWeek", value: 7 as TokenRange },
+]);
 
 const lastUpdatedLabel = computed(() => {
-  if (!lastUpdatedAt.value) return t('header.notUpdated')
+  if (!lastUpdatedAt.value) return t("header.notUpdated");
   return lastUpdatedAt.value.toLocaleTimeString(locale.value, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-})
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+});
 
 const rangeLabel = computed(() => {
-  if (selectedRange.value === 3) return t('rangeLabels.threeDays')
-  if (selectedRange.value === 7) return t('rangeLabels.oneWeek')
-  return t('rangeLabels.oneDay')
-})
+  if (selectedRange.value === 3) return t("rangeLabels.threeDays");
+  if (selectedRange.value === 7) return t("rangeLabels.oneWeek");
+  return t("rangeLabels.oneDay");
+});
 
 const overviewCards = computed(() => [
   {
-    label: t('overviewCards.platformCount.label'),
+    label: t("overviewCards.platformCount.label"),
     value: formatNumber(baseStats.value?.platform_count ?? 0),
-    note: t('overviewCards.platformCount.note'),
-    icon: 'mdi-robot-outline'
+    note: t("overviewCards.platformCount.note"),
+    icon: "mdi-robot-outline",
   },
   {
-    label: t('overviewCards.messageCount.label'),
+    label: t("overviewCards.messageCount.label"),
     value: formatNumber(baseStats.value?.message_count ?? 0),
-    note: t('overviewCards.messageCount.note'),
-    icon: 'mdi-message-outline'
+    note: t("overviewCards.messageCount.note"),
+    icon: "mdi-message-outline",
   },
   {
-    label: t('overviewCards.todayModelCalls.label'),
+    label: t("overviewCards.todayModelCalls.label"),
     value: formatCompactNumber(providerStats.value?.today_total_tokens ?? 0),
-    note: t('overviewCards.todayModelCalls.note'),
-    icon: 'mdi-creation-outline'
+    note: t("overviewCards.todayModelCalls.note"),
+    icon: "mdi-creation-outline",
   },
   {
-    label: t('overviewCards.cpu.label'),
+    label: t("overviewCards.cpu.label"),
     value: `${baseStats.value?.cpu_percent ?? 0}%`,
-    note: t('overviewCards.cpu.note'),
-    icon: 'mdi-chip'
+    note: t("overviewCards.cpu.note"),
+    icon: "mdi-chip",
   },
   {
-    label: t('overviewCards.memory.label'),
+    label: t("overviewCards.memory.label"),
     value: formatMemory(baseStats.value?.memory?.process ?? 0),
-    note: t('overviewCards.memory.note', {
-      systemMemory: formatMemory(baseStats.value?.memory?.system ?? 0)
+    note: t("overviewCards.memory.note", {
+      systemMemory: formatMemory(baseStats.value?.memory?.system ?? 0),
     }),
-    icon: 'mdi-memory'
+    icon: "mdi-memory",
   },
   {
-    label: t('overviewCards.uptime.label'),
+    label: t("overviewCards.uptime.label"),
     value: formatRunningTime(baseStats.value?.running),
-    note: t('overviewCards.uptime.note', { startTime: startTimeLabel.value }),
-    icon: 'mdi-timer-outline'
-  }
-])
+    note: t("overviewCards.uptime.note", { startTime: startTimeLabel.value }),
+    icon: "mdi-timer-outline",
+  },
+]);
 
 const messageChartSeries = computed<ChartSeries>(() => [
   {
-    name: t('chart.messages'),
-    data: (baseStats.value?.message_time_series ?? []).map(([timestamp, value]) => [
-      timestamp * 1000,
-      value
-    ])
-  }
-])
+    name: t("chart.messages"),
+    data: (baseStats.value?.message_time_series ?? []).map(
+      ([timestamp, value]) => [timestamp * 1000, value],
+    ),
+  },
+]);
 
 const providerTrendSeries = computed<ChartSeries>(() =>
-  aggregateOverflowSeries(providerStats.value?.trend.series ?? []).map((item) => ({
-    name: item.name,
-    data: item.data
-  }))
-)
+  aggregateOverflowSeries(providerStats.value?.trend.series ?? []).map(
+    (item) => ({
+      name: item.name,
+      data: item.data,
+    }),
+  ),
+);
 
-const rangeProviderRanking = computed(() => providerStats.value?.range_by_provider ?? [])
+const rangeProviderRanking = computed(
+  () => providerStats.value?.range_by_provider ?? [],
+);
 
 const rangeUmoRanking = computed(() =>
-  (providerStats.value?.range_by_umo ?? []).slice(0, 10)
-)
+  (providerStats.value?.range_by_umo ?? []).slice(0, 10),
+);
 
 const rangeAvgTtftLabel = computed(() =>
-  formatDurationMs(providerStats.value?.range_avg_ttft_ms ?? 0)
-)
+  formatDurationMs(providerStats.value?.range_avg_ttft_ms ?? 0),
+);
 
 const rangeAvgDurationLabel = computed(() =>
-  formatDurationMs(providerStats.value?.range_avg_duration_ms ?? 0)
-)
+  formatDurationMs(providerStats.value?.range_avg_duration_ms ?? 0),
+);
 
 const rangeAvgTpmLabel = computed(() =>
-  formatTpm(providerStats.value?.range_avg_tpm ?? 0)
-)
+  formatTpm(providerStats.value?.range_avg_tpm ?? 0),
+);
 
 const rangeSuccessRateLabel = computed(() => {
   if (!(providerStats.value?.range_total_calls ?? 0)) {
-    return '—'
+    return "—";
   }
-  const rate = providerStats.value?.range_success_rate ?? 0
-  return `${(rate * 100).toFixed(1)}%`
-})
+  const rate = providerStats.value?.range_success_rate ?? 0;
+  return `${(rate * 100).toFixed(1)}%`;
+});
 
 const platformRanking = computed(() =>
   [...(baseStats.value?.platform ?? [])]
     .sort((left, right) => right.count - left.count)
-    .slice(0, 6)
-)
+    .slice(0, 6),
+);
 
 const startTimeLabel = computed(() =>
-  formatDateTime(baseStats.value?.start_time ?? 0)
-)
+  formatDateTime(baseStats.value?.start_time ?? 0),
+);
 
 const providerChartColors = computed(() =>
   isDark.value
     ? [
-        '#6F8FAF',
-        '#7E9A73',
-        '#A78468',
-        '#8A78A8',
-        '#6B9995',
-        '#B07A87',
-        '#8C8F62',
-        '#7C8798'
+        "#6F8FAF",
+        "#7E9A73",
+        "#A78468",
+        "#8A78A8",
+        "#6B9995",
+        "#B07A87",
+        "#8C8F62",
+        "#7C8798",
       ]
     : [
-        '#5F7E9B',
-        '#708865',
-        '#9A7557',
-        '#786696',
-        '#5D8985',
-        '#9C6674',
-        '#80844F',
-        '#69788D'
-      ]
-)
+        "#5F7E9B",
+        "#708865",
+        "#9A7557",
+        "#786696",
+        "#5D8985",
+        "#9C6674",
+        "#80844F",
+        "#69788D",
+      ],
+);
 
 const messageChartOptions = computed<ApexOptions>(() => ({
   chart: {
-    background: 'transparent',
+    background: "transparent",
     toolbar: { show: false },
     zoom: { enabled: false },
-    fontFamily: '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    fontFamily:
+      '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   },
   theme: {
-    mode: isDark.value ? 'dark' : 'light'
+    mode: isDark.value ? "dark" : "light",
   },
   colors: [themePalette.value.primary],
   stroke: {
-    curve: 'smooth',
-    width: 2.4
+    curve: "smooth",
+    width: 2.4,
   },
   fill: {
-    type: 'solid',
-    opacity: 0.12
+    type: "solid",
+    opacity: 0.12,
   },
   grid: {
-    borderColor: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
-    strokeDashArray: 0
+    borderColor: hexToRgba(
+      themePalette.value.border,
+      isDark.value ? 0.4 : 0.26,
+    ),
+    strokeDashArray: 0,
   },
   dataLabels: { enabled: false },
   xaxis: {
-    type: 'datetime',
+    type: "datetime",
     labels: {
       datetimeUTC: false,
-      style: { colors: themePalette.value.mutedText }
+      style: { colors: themePalette.value.mutedText },
     },
-    axisBorder: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) },
-    axisTicks: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) }
+    axisBorder: {
+      color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
+    },
+    axisTicks: {
+      color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
+    },
   },
   yaxis: {
     labels: {
       formatter: (value) => formatCompactNumber(Number(value)),
-      style: { colors: themePalette.value.mutedText }
-    }
+      style: { colors: themePalette.value.mutedText },
+    },
   },
   tooltip: {
-    theme: isDark.value ? 'dark' : 'light',
+    theme: isDark.value ? "dark" : "light",
     x: {
-      format: 'MM/dd HH:mm'
-    }
+      format: "MM/dd HH:mm",
+    },
   },
-  legend: { show: false }
-}))
+  legend: { show: false },
+}));
 
 const providerChartOptions = computed<ApexOptions>(() => ({
   chart: {
-    background: 'transparent',
+    background: "transparent",
     toolbar: { show: false },
     zoom: { enabled: false },
     stacked: true,
-    fontFamily: '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    fontFamily:
+      '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   },
   theme: {
-    mode: isDark.value ? 'dark' : 'light'
+    mode: isDark.value ? "dark" : "light",
   },
   plotOptions: {
     bar: {
       horizontal: false,
       borderRadius: 4,
-      columnWidth: '58%'
-    }
+      columnWidth: "58%",
+    },
   },
   colors: providerChartColors.value,
   dataLabels: { enabled: false },
   grid: {
-    borderColor: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26)
+    borderColor: hexToRgba(
+      themePalette.value.border,
+      isDark.value ? 0.4 : 0.26,
+    ),
   },
   xaxis: {
-    type: 'datetime',
+    type: "datetime",
     labels: {
       datetimeUTC: false,
-      style: { colors: themePalette.value.mutedText }
+      style: { colors: themePalette.value.mutedText },
     },
-    axisBorder: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) },
-    axisTicks: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) }
+    axisBorder: {
+      color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
+    },
+    axisTicks: {
+      color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
+    },
   },
   yaxis: {
     labels: {
       formatter: (value) => formatCompactNumber(Number(value)),
-      style: { colors: themePalette.value.mutedText }
-    }
+      style: { colors: themePalette.value.mutedText },
+    },
   },
   tooltip: {
-    theme: isDark.value ? 'dark' : 'light',
+    theme: isDark.value ? "dark" : "light",
     x: {
-      format: 'MM/dd HH:mm'
-    }
+      format: "MM/dd HH:mm",
+    },
   },
   legend: {
-    position: 'top',
-    horizontalAlign: 'left',
+    position: "top",
+    horizontalAlign: "left",
     labels: {
-      colors: themePalette.value.mutedText
-    }
-  }
-}))
+      colors: themePalette.value.mutedText,
+    },
+  },
+}));
 
 watch(selectedRange, async () => {
   try {
-    await Promise.all([fetchBaseStats(), fetchProviderStats()])
-    lastUpdatedAt.value = new Date()
+    await Promise.all([fetchBaseStats(), fetchProviderStats()]);
+    lastUpdatedAt.value = new Date();
   } catch (error) {
-    console.error('Failed to refresh stats range:', error)
-    errorMessage.value = t('errors.rangeFailed')
+    console.error("Failed to refresh stats range:", error);
+    errorMessage.value = t("errors.rangeFailed");
   }
-})
+});
 
 onMounted(async () => {
-  await refreshStats()
+  await refreshStats();
   refreshTimer = window.setInterval(() => {
-    void refreshStats()
-  }, 60_000)
-})
+    void refreshStats();
+  }, 60_000);
+});
 
 onBeforeUnmount(() => {
   if (refreshTimer !== null) {
-    window.clearInterval(refreshTimer)
+    window.clearInterval(refreshTimer);
   }
-})
+});
 </script>
 
 <style scoped>
 .stats-page {
-  --stats-bg: rgb(var(--v-theme-background));
-  --stats-surface: rgb(var(--v-theme-surface));
+  --stats-page-bg: transparent;
+  --stats-panel-bg: rgba(var(--v-theme-surface), 0.78);
+  --stats-card-bg: rgba(var(--v-theme-surface), 0.9);
+  --stats-surface: rgba(var(--v-theme-surface), 0.9);
   --stats-text: rgb(var(--v-theme-on-surface));
-  --stats-muted: rgba(var(--v-theme-on-surface), 0.68);
-  --stats-subtle: rgba(var(--v-theme-on-surface), 0.56);
-  --stats-border: rgba(var(--v-theme-on-surface), 0.1);
-  --stats-border-strong: rgba(var(--v-theme-on-surface), 0.14);
+  --stats-muted: rgba(var(--v-theme-on-surface), 0.7);
+  --stats-subtle: rgba(var(--v-theme-on-surface), 0.54);
+  --stats-border: rgba(var(--v-theme-borderLight), 0.22);
+  --stats-border-strong: rgba(var(--v-theme-borderLight), 0.4);
   --stats-soft: rgba(var(--v-theme-primary), 0.08);
   --stats-soft-strong: rgba(var(--v-theme-primary), 0.14);
+  --stats-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   min-height: 100%;
-  background: var(--stats-bg);
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  background: var(--stats-page-bg);
+  padding: 16px;
+}
+
+:global(.v-theme--bluebusinessdarktheme) .stats-page {
+  --stats-panel-bg: rgba(var(--v-theme-surface), 0.72);
+  --stats-card-bg: rgba(var(--v-theme-surface-variant), 0.74);
+  --stats-surface: rgba(var(--v-theme-surface-variant), 0.74);
+  --stats-border: rgba(var(--v-theme-borderLight), 0.46);
+  --stats-border-strong: rgba(var(--v-theme-borderLight), 0.66);
+  --stats-shadow: none;
 }
 
 .stats-page.is-dark {
-  --stats-border: rgba(var(--v-theme-on-surface), 0.14);
-  --stats-border-strong: rgba(var(--v-theme-on-surface), 0.18);
+  --stats-border: rgba(var(--v-theme-borderLight), 0.46);
+  --stats-border-strong: rgba(var(--v-theme-borderLight), 0.66);
   --stats-soft: rgba(var(--v-theme-primary), 0.12);
   --stats-soft-strong: rgba(var(--v-theme-primary), 0.2);
 }
 
 .stats-shell {
   max-width: 1560px;
+  width: 100%;
   margin: 0 auto;
   color: var(--stats-text);
-  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    "SF Pro Display",
+    "SF Pro Text",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  background: var(--stats-panel-bg);
+  border: 1px solid var(--stats-border);
+  border-radius: 12px;
+  backdrop-filter: blur(16px);
+  box-shadow: var(--stats-shadow);
 }
 
 .stats-header {
@@ -1023,7 +1116,9 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.18s ease, color 0.18s ease;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
 }
 
 .range-chip.active {

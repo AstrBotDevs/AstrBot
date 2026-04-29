@@ -2,7 +2,6 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncGenerator
-from typing import cast
 
 from quart import Response as QuartResponse
 from quart import make_response, request
@@ -14,11 +13,19 @@ from .route import Response, Route, RouteContext
 
 def _format_log_sse(log: dict, ts: float) -> str:
     """辅助函数：格式化 SSE 消息"""
-    payload = {
-        "type": "log",
-        **log,
-    }
+    payload = {"type": "log", **log}
     return f"id: {ts}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _coerce_log_timestamp(value: object) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
 
 
 class LogRoute(Route):
@@ -43,19 +50,19 @@ class LogRoute(Route):
         )
 
     async def _replay_cached_logs(
-        self, last_event_id: str
+        self,
+        last_event_id: str,
     ) -> AsyncGenerator[str, None]:
         """辅助生成器：重放缓存的日志"""
         try:
             last_ts = float(last_event_id)
             cached_logs = list(self.log_broker.log_cache)
-
             for log_item in cached_logs:
-                log_ts = float(log_item.get("time", 0))
-
+                log_ts = _coerce_log_timestamp(log_item.get("time"))
+                if log_ts is None:
+                    continue
                 if log_ts > last_ts:
                     yield _format_log_sse(log_item, log_ts)
-
         except ValueError:
             pass
         except Exception as e:
@@ -70,13 +77,13 @@ class LogRoute(Route):
                 if last_event_id:
                     async for event in self._replay_cached_logs(last_event_id):
                         yield event
-
                 queue = self.log_broker.register()
                 while True:
                     message = await queue.get()
-                    current_ts = message.get("time", time.time())
+                    current_ts = _coerce_log_timestamp(message.get("time"))
+                    if current_ts is None:
+                        current_ts = time.time()
                     yield _format_log_sse(message, current_ts)
-
             except asyncio.CancelledError:
                 pass
             except Exception as e:
@@ -85,60 +92,47 @@ class LogRoute(Route):
                 if queue:
                     self.log_broker.unregister(queue)
 
-        response = cast(
-            QuartResponse,
-            await make_response(
-                stream(),
-                {
-                    "Content-Type": "text/event-stream",
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "Transfer-Encoding": "chunked",
-                },
-            ),
+        response = await make_response(
+            stream(),
+            {
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Transfer-Encoding": "chunked",
+            },
         )
-        response.timeout = None  # type: ignore
+        response.timeout = None
         return response
 
     async def log_history(self):
         """获取日志历史"""
         try:
             logs = list(self.log_broker.log_cache)
-            return (
-                Response()
-                .ok(
-                    data={
-                        "logs": logs,
-                    },
-                )
-                .__dict__
-            )
+            return Response().ok(data={"logs": logs}).to_json()
         except Exception as e:
             logger.error(f"获取日志历史失败: {e}")
-            return Response().error(f"获取日志历史失败: {e}").__dict__
+            return Response().error(f"获取日志历史失败: {e}").to_json()
 
     async def get_trace_settings(self):
         """获取 Trace 设置"""
         try:
             trace_enable = self.config.get("trace_enable", True)
-            return Response().ok(data={"trace_enable": trace_enable}).__dict__
+            return Response().ok(data={"trace_enable": trace_enable}).to_json()
         except Exception as e:
             logger.error(f"获取 Trace 设置失败: {e}")
-            return Response().error(f"获取 Trace 设置失败: {e}").__dict__
+            return Response().error(f"获取 Trace 设置失败: {e}").to_json()
 
     async def update_trace_settings(self):
         """更新 Trace 设置"""
         try:
             data = await request.json
             if data is None:
-                return Response().error("请求数据为空").__dict__
-
+                return Response().error("请求数据为空").to_json()
             trace_enable = data.get("trace_enable")
             if trace_enable is not None:
                 self.config["trace_enable"] = bool(trace_enable)
                 self.config.save_config()
-
-            return Response().ok(message="Trace 设置已更新").__dict__
+            return Response().ok(message="Trace 设置已更新").to_json()
         except Exception as e:
             logger.error(f"更新 Trace 设置失败: {e}")
-            return Response().error(f"更新 Trace 设置失败: {e}").__dict__
+            return Response().error(f"更新 Trace 设置失败: {e}").to_json()

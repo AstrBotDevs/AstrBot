@@ -1,5 +1,10 @@
 import base64
 
+from astrbot.core.tools.prompts import (  # noqa: F401 — re-export for backward compatibility
+    BACKGROUND_TASK_WOKE_USER_PROMPT,
+    CONVERSATION_HISTORY_INJECT_PREFIX,
+)
+
 LLM_SAFETY_MODE_SYSTEM_PROMPT = """You are running in Safe Mode.
 
 Rules:

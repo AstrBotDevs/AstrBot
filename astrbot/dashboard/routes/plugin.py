@@ -7,8 +7,10 @@ import traceback
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import aiohttp
+import anyio
 import certifi
 from quart import request
 
@@ -29,10 +31,31 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_temp_path,
 )
 
-from .route import Response, Route, RouteContext
+from .route import Response, Route, RouteContext, guard_runtime_ready
 
 PLUGIN_UPDATE_CONCURRENCY = (
     3  # limit concurrent updates to avoid overwhelming plugin sources
+)
+
+PLUGIN_ROUTE_DEFINITIONS = (
+    ("/plugin/get", "GET", "get_plugins", True),
+    ("/plugin/check-compat", "POST", "check_plugin_compatibility", False),
+    ("/plugin/install", "POST", "install_plugin", True),
+    ("/plugin/install-upload", "POST", "install_plugin_upload", True),
+    ("/plugin/update", "POST", "update_plugin", True),
+    ("/plugin/update-all", "POST", "update_all_plugins", True),
+    ("/plugin/uninstall", "POST", "uninstall_plugin", True),
+    ("/plugin/uninstall-failed", "POST", "uninstall_failed_plugin", False),
+    ("/plugin/market_list", "GET", "get_online_plugins", False),
+    ("/plugin/off", "POST", "off_plugin", True),
+    ("/plugin/on", "POST", "on_plugin", True),
+    ("/plugin/reload-failed", "POST", "reload_failed_plugins", False),
+    ("/plugin/reload", "POST", "reload_plugins", True),
+    ("/plugin/readme", "GET", "get_plugin_readme", True),
+    ("/plugin/changelog", "GET", "get_plugin_changelog", True),
+    ("/plugin/source/get", "GET", "get_custom_source", False),
+    ("/plugin/source/save", "POST", "save_custom_source", False),
+    ("/plugin/source/get-failed-plugins", "GET", "get_failed_plugins", False),
 )
 
 
@@ -51,28 +74,18 @@ class PluginRoute(Route):
         plugin_manager: PluginManager,
     ) -> None:
         super().__init__(context)
-        self.routes = {
-            "/plugin/get": ("GET", self.get_plugins),
-            "/plugin/check-compat": ("POST", self.check_plugin_compatibility),
-            "/plugin/install": ("POST", self.install_plugin),
-            "/plugin/install-upload": ("POST", self.install_plugin_upload),
-            "/plugin/update": ("POST", self.update_plugin),
-            "/plugin/update-all": ("POST", self.update_all_plugins),
-            "/plugin/uninstall": ("POST", self.uninstall_plugin),
-            "/plugin/uninstall-failed": ("POST", self.uninstall_failed_plugin),
-            "/plugin/market_list": ("GET", self.get_online_plugins),
-            "/plugin/off": ("POST", self.off_plugin),
-            "/plugin/on": ("POST", self.on_plugin),
-            "/plugin/reload-failed": ("POST", self.reload_failed_plugins),
-            "/plugin/reload": ("POST", self.reload_plugins),
-            "/plugin/readme": ("GET", self.get_plugin_readme),
-            "/plugin/changelog": ("GET", self.get_plugin_changelog),
-            "/plugin/source/get": ("GET", self.get_custom_source),
-            "/plugin/source/save": ("POST", self.save_custom_source),
-            "/plugin/source/get-failed-plugins": ("GET", self.get_failed_plugins),
-        }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
+        self._guard_runtime_ready = lambda handler: guard_runtime_ready(
+            self.core_lifecycle,
+            handler,
+        )
+        self.routes = {}
+        for path, method, handler_name, requires_runtime in PLUGIN_ROUTE_DEFINITIONS:
+            handler = getattr(self, handler_name)
+            if requires_runtime:
+                handler = self._guard_runtime_ready(handler)
+            self.routes[path] = (method, handler)
         self.register_routes()
 
         self.translated_event_type = {
@@ -87,14 +100,14 @@ class PluginRoute(Route):
             EventType.OnPluginErrorEvent: "插件报错时",
         }
 
-        self._logo_cache = {}
+        self._logo_cache: dict[str, Any] = {}
 
     async def check_plugin_compatibility(self):
         try:
             data = await request.get_json()
             version_spec = data.get("astrbot_version", "")
             is_valid, message = self.plugin_manager._validate_astrbot_version_specifier(
-                version_spec
+                version_spec,
             )
             return (
                 Response()
@@ -103,46 +116,45 @@ class PluginRoute(Route):
                         "compatible": is_valid,
                         "message": message,
                         "astrbot_version": version_spec,
-                    }
+                    },
                 )
-                .__dict__
+                .to_json()
             )
         except Exception as e:
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def reload_failed_plugins(self):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
         try:
             data = await request.get_json()
-            dir_name = data.get("dir_name")  # 这里拿的是目录名，不是插件名
+            dir_name = data.get("dir_name")  # 这里拿的是目录名,不是插件名
 
             if not dir_name:
-                return Response().error("缺少插件目录名").__dict__
+                return Response().error("缺少插件目录名").to_json()
 
             # 调用 star_manager.py 中的函数
-            # 注意：传入的是目录名
+            # 注意:传入的是目录名
             success, err = await self.plugin_manager.reload_failed_plugin(dir_name)
 
             if success:
-                return Response().ok(None, f"插件 {dir_name} 重载成功。").__dict__
-            else:
-                return Response().error(f"重载失败: {err}").__dict__
+                return Response().ok(None, f"插件 {dir_name} 重载成功｡").to_json()
+            return Response().error(f"重载失败: {err}").to_json()
 
         except Exception as e:
             logger.error(f"/api/plugin/reload-failed: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def reload_plugins(self):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
 
         data = await request.get_json()
@@ -150,11 +162,11 @@ class PluginRoute(Route):
         try:
             success, message = await self.plugin_manager.reload(plugin_name)
             if not success:
-                return Response().error(message or "插件重载失败").__dict__
-            return Response().ok(None, "重载成功。").__dict__
+                return Response().error(message or "插件重载失败").to_json()
+            return Response().ok(None, "重载成功｡").to_json()
         except Exception as e:
             logger.error(f"/api/plugin/reload: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def get_online_plugins(self):
         custom = request.args.get("custom_registry")
@@ -163,15 +175,15 @@ class PluginRoute(Route):
         # 构建注册表源信息
         source = self._build_registry_source(custom)
 
-        # 如果不是强制刷新，先检查缓存是否有效
+        # 如果不是强制刷新,先检查缓存是否有效
         cached_data = None
         if not force_refresh:
-            # 先检查MD5是否匹配，如果匹配则使用缓存
+            # 先检查MD5是否匹配,如果匹配则使用缓存
             if await self._is_cache_valid(source):
-                cached_data = self._load_plugin_cache(source.cache_file)
+                cached_data = await self._load_plugin_cache(source.cache_file)
                 if cached_data:
-                    logger.debug("缓存MD5匹配，使用缓存的插件市场数据")
-                    return Response().ok(cached_data).__dict__
+                    logger.debug("缓存MD5匹配,使用缓存的插件市场数据")
+                    return Response().ok(cached_data).to_json()
 
         # 尝试获取远程数据
         remote_data = None
@@ -202,29 +214,29 @@ class PluginRoute(Route):
                             continue  # 继续尝试其他URL或使用缓存
 
                         logger.info(
-                            f"成功获取远程插件市场数据，包含 {len(remote_data)} 个插件"
+                            f"成功获取远程插件市场数据,包含 {len(remote_data)} 个插件",
                         )
                         # 获取最新的MD5并保存到缓存
                         current_md5 = await self._fetch_remote_md5(source.md5_url)
-                        self._save_plugin_cache(
+                        await self._save_plugin_cache(
                             source.cache_file,
                             remote_data,
                             current_md5,
                         )
-                        return Response().ok(remote_data).__dict__
-                    logger.error(f"请求 {url} 失败，状态码：{response.status}")
+                        return Response().ok(remote_data).to_json()
+                    logger.error(f"请求 {url} 失败,状态码:{response.status}")
             except Exception as e:
-                logger.error(f"请求 {url} 失败，错误：{e}")
+                logger.error(f"请求 {url} 失败,错误:{e}")
 
-        # 如果远程获取失败，尝试使用缓存数据
+        # 如果远程获取失败,尝试使用缓存数据
         if not cached_data:
-            cached_data = self._load_plugin_cache(source.cache_file)
+            cached_data = await self._load_plugin_cache(source.cache_file)
 
         if cached_data:
-            logger.warning("远程插件市场数据获取失败，使用缓存数据")
-            return Response().ok(cached_data, "使用缓存数据，可能不是最新版本").__dict__
+            logger.warning("远程插件市场数据获取失败,使用缓存数据")
+            return Response().ok(cached_data, "使用缓存数据,可能不是最新版本").to_json()
 
-        return Response().error("获取插件列表失败，且没有可用的缓存数据").__dict__
+        return Response().error("获取插件列表失败,且没有可用的缓存数据").to_json()
 
     def _build_registry_source(self, custom_url: str | None) -> RegistrySource:
         """构建注册表源信息"""
@@ -250,14 +262,14 @@ class PluginRoute(Route):
             ]
         return RegistrySource(urls=urls, cache_file=cache_file, md5_url=md5_url)
 
-    def _load_cached_md5(self, cache_file: str) -> str | None:
+    async def _load_cached_md5(self, cache_file: str) -> str | None:
         """从缓存文件中加载MD5"""
-        if not os.path.exists(cache_file):
+        if not await anyio.Path(cache_file).exists():
             return None
 
         try:
-            with open(cache_file, encoding="utf-8") as f:
-                cache_data = json.load(f)
+            async with await anyio.open_file(cache_file, encoding="utf-8") as f:
+                cache_data = json.loads(await f.read())
             return cache_data.get("md5")
         except Exception as e:
             logger.warning(f"加载缓存MD5失败: {e}")
@@ -287,17 +299,17 @@ class PluginRoute(Route):
         return None
 
     async def _is_cache_valid(self, source: RegistrySource) -> bool:
-        """检查缓存是否有效（基于MD5）"""
+        """检查缓存是否有效(基于MD5)"""
         try:
-            cached_md5 = self._load_cached_md5(source.cache_file)
+            cached_md5 = await self._load_cached_md5(source.cache_file)
             if not cached_md5:
                 logger.debug("缓存文件中没有MD5信息")
                 return False
 
             remote_md5 = await self._fetch_remote_md5(source.md5_url)
             if remote_md5 is None:
-                logger.warning("无法获取远程MD5，将使用缓存")
-                return True  # 如果无法获取远程MD5，认为缓存有效
+                logger.warning("无法获取远程MD5,将使用缓存")
+                return True  # 如果无法获取远程MD5,认为缓存有效
 
             is_valid = cached_md5 == remote_md5
             logger.debug(
@@ -309,12 +321,12 @@ class PluginRoute(Route):
             logger.warning(f"检查缓存有效性失败: {e}")
             return False
 
-    def _load_plugin_cache(self, cache_file: str):
+    async def _load_plugin_cache(self, cache_file: str):
         """加载本地缓存的插件市场数据"""
         try:
-            if os.path.exists(cache_file):
-                with open(cache_file, encoding="utf-8") as f:
-                    cache_data = json.load(f)
+            if await anyio.Path(cache_file).exists():
+                async with await anyio.open_file(cache_file, encoding="utf-8") as f:
+                    cache_data = json.loads(await f.read())
                     # 检查缓存是否有效
                     if "data" in cache_data and "timestamp" in cache_data:
                         logger.debug(
@@ -325,7 +337,12 @@ class PluginRoute(Route):
             logger.warning(f"加载插件市场缓存失败: {e}")
         return None
 
-    def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None) -> None:
+    async def _save_plugin_cache(
+        self,
+        cache_file: str,
+        data,
+        md5: str | None = None,
+    ) -> None:
         """保存插件市场数据到本地缓存"""
         try:
             # 确保目录存在
@@ -337,8 +354,10 @@ class PluginRoute(Route):
                 "md5": md5 or "",
             }
 
-            with open(cache_file, "w", encoding="utf-8") as f:
-                json.dump(cache_data, f, ensure_ascii=False, indent=2)
+            async with await anyio.open_file(cache_file, "w", encoding="utf-8") as f:
+                await f.write(
+                    json.dumps(cache_data, ensure_ascii=False, indent=2),
+                )
             logger.debug(f"插件市场数据已缓存到: {cache_file}, MD5: {md5}")
         except Exception as e:
             logger.warning(f"保存插件市场缓存失败: {e}")
@@ -348,7 +367,10 @@ class PluginRoute(Route):
             if token := self._logo_cache.get(logo_path):
                 if not await file_token_service.check_token_expired(token):
                     return self._logo_cache[logo_path]
-            token = await file_token_service.register_file(logo_path, timeout=300)
+            token = await file_token_service.register_file(
+                logo_path,
+                expire_seconds=300,
+            )
             self._logo_cache[logo_path] = token
             return token
         except Exception as e:
@@ -362,7 +384,7 @@ class PluginRoute(Route):
         base_dir = Path(
             self.plugin_manager.reserved_plugin_path
             if plugin.reserved
-            else self.plugin_manager.plugin_store_path
+            else self.plugin_manager.plugin_store_path,
         )
         plugin_dir = base_dir / plugin.root_dir_name
         if not plugin_dir.is_dir():
@@ -418,19 +440,19 @@ class PluginRoute(Route):
                     plugin.desc,
                     plugin.version,
                     plugin.display_name,
-                ]
+                ],
             ):
                 continue
             _plugin_resp.append(_t)
         return (
             Response()
             .ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info)
-            .__dict__
+            .to_json()
         )
 
     async def get_failed_plugins(self):
         """专门获取加载失败的插件列表(字典格式)"""
-        return Response().ok(self.plugin_manager.failed_plugin_dict).__dict__
+        return Response().ok(self.plugin_manager.failed_plugin_dict).to_json()
 
     async def get_plugin_handlers_info(self, handler_full_names: list[str]):
         """解析插件行为"""
@@ -458,7 +480,7 @@ class PluginRoute(Route):
                 has_admin = False
                 for filter in (
                     handler.event_filters
-                ):  # 正常handler就只有 1~2 个 filter，因此这里时间复杂度不会太高
+                ):  # 正常handler就只有 1~2 个 filter,因此这里时间复杂度不会太高
                     if isinstance(filter, CommandFilter):
                         info["type"] = "指令"
                         info["cmd"] = (
@@ -498,7 +520,7 @@ class PluginRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -517,8 +539,8 @@ class PluginRoute(Route):
                 ignore_version_check=ignore_version_check,
             )
             # self.core_lifecycle.restart()
-            logger.info(f"安装插件 {repo_url} 成功。")
-            return Response().ok(plugin_info, "安装成功。").__dict__
+            logger.info(f"安装插件 {repo_url} 成功｡")
+            return Response().ok(plugin_info, "安装成功｡").to_json()
         except PluginVersionIncompatibleError as e:
             return {
                 "status": "warning",
@@ -530,14 +552,14 @@ class PluginRoute(Route):
             }
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def install_plugin_upload(self):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
 
         try:
@@ -559,7 +581,7 @@ class PluginRoute(Route):
             )
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {file.filename} 成功")
-            return Response().ok(plugin_info, "安装成功。").__dict__
+            return Response().ok(plugin_info, "安装成功｡").to_json()
         except PluginVersionIncompatibleError as e:
             return {
                 "status": "warning",
@@ -571,14 +593,14 @@ class PluginRoute(Route):
             }
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def uninstall_plugin(self):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -593,17 +615,17 @@ class PluginRoute(Route):
                 delete_data=delete_data,
             )
             logger.info(f"卸载插件 {plugin_name} 成功")
-            return Response().ok(None, "卸载成功").__dict__
+            return Response().ok(None, "卸载成功").to_json()
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def uninstall_failed_plugin(self):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -611,7 +633,7 @@ class PluginRoute(Route):
         delete_config = post_data.get("delete_config", False)
         delete_data = post_data.get("delete_data", False)
         if not dir_name:
-            return Response().error("缺少失败插件目录名").__dict__
+            return Response().error("缺少失败插件目录名").to_json()
 
         try:
             logger.info(f"正在卸载失败插件 {dir_name}")
@@ -621,17 +643,17 @@ class PluginRoute(Route):
                 delete_data=delete_data,
             )
             logger.info(f"卸载失败插件 {dir_name} 成功")
-            return Response().ok(None, "卸载成功").__dict__
+            return Response().ok(None, "卸载成功").to_json()
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def update_plugin(self):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -642,18 +664,18 @@ class PluginRoute(Route):
             await self.plugin_manager.update_plugin(plugin_name, proxy)
             # self.core_lifecycle.restart()
             await self.plugin_manager.reload(plugin_name)
-            logger.info(f"更新插件 {plugin_name} 成功。")
-            return Response().ok(None, "更新成功。").__dict__
+            logger.info(f"更新插件 {plugin_name} 成功｡")
+            return Response().ok(None, "更新成功｡").to_json()
         except Exception as e:
             logger.error(f"/api/plugin/update: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def update_all_plugins(self):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
 
         post_data = await request.get_json()
@@ -661,7 +683,7 @@ class PluginRoute(Route):
         proxy: str = post_data.get("proxy", "")
 
         if not isinstance(plugin_names, list) or not plugin_names:
-            return Response().error("插件列表不能为空").__dict__
+            return Response().error("插件列表不能为空").to_json()
 
         results = []
         sem = asyncio.Semaphore(PLUGIN_UPDATE_CONCURRENCY)
@@ -687,55 +709,55 @@ class PluginRoute(Route):
                 raise result
             if isinstance(result, BaseException):
                 results.append(
-                    {"name": name, "status": "error", "message": str(result)}
+                    {"name": name, "status": "error", "message": str(result)},
                 )
             else:
                 results.append(result)
 
         failed = [r for r in results if r["status"] == "error"]
         message = (
-            "批量更新完成，全部成功。"
+            "批量更新完成,全部成功｡"
             if not failed
-            else f"批量更新完成，其中 {len(failed)}/{len(results)} 个插件失败。"
+            else f"批量更新完成,其中 {len(failed)}/{len(results)} 个插件失败｡"
         )
 
-        return Response().ok({"results": results}, message).__dict__
+        return Response().ok({"results": results}, message).to_json()
 
     async def off_plugin(self):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
 
         post_data = await request.get_json()
         plugin_name = post_data["name"]
         try:
             await self.plugin_manager.turn_off_plugin(plugin_name)
-            logger.info(f"停用插件 {plugin_name} 。")
-            return Response().ok(None, "停用成功。").__dict__
+            logger.info(f"停用插件 {plugin_name} ｡")
+            return Response().ok(None, "停用成功｡").to_json()
         except Exception as e:
             logger.error(f"/api/plugin/off: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def on_plugin(self):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .to_json()
             )
 
         post_data = await request.get_json()
         plugin_name = post_data["name"]
         try:
             await self.plugin_manager.turn_on_plugin(plugin_name)
-            logger.info(f"启用插件 {plugin_name} 。")
-            return Response().ok(None, "启用成功。").__dict__
+            logger.info(f"启用插件 {plugin_name} ｡")
+            return Response().ok(None, "启用成功｡").to_json()
         except Exception as e:
             logger.error(f"/api/plugin/on: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()
 
     async def get_plugin_readme(self):
         plugin_name = request.args.get("name")
@@ -743,7 +765,7 @@ class PluginRoute(Route):
 
         if not plugin_name:
             logger.warning("插件名称为空")
-            return Response().error("插件名称不能为空").__dict__
+            return Response().error("插件名称不能为空").to_json()
 
         plugin_obj = None
         for plugin in self.plugin_manager.context.get_all_stars():
@@ -753,11 +775,11 @@ class PluginRoute(Route):
 
         if not plugin_obj:
             logger.warning(f"插件 {plugin_name} 不存在")
-            return Response().error(f"插件 {plugin_name} 不存在").__dict__
+            return Response().error(f"插件 {plugin_name} 不存在").to_json()
 
         if not plugin_obj.root_dir_name:
             logger.warning(f"插件 {plugin_name} 目录不存在")
-            return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
+            return Response().error(f"插件 {plugin_name} 目录不存在").to_json()
 
         if plugin_obj.reserved:
             plugin_dir = os.path.join(
@@ -770,40 +792,40 @@ class PluginRoute(Route):
                 plugin_obj.root_dir_name,
             )
 
-        if not os.path.isdir(plugin_dir):
+        if not await anyio.Path(plugin_dir).is_dir():
             logger.warning(f"无法找到插件目录: {plugin_dir}")
-            return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
+            return Response().error(f"无法找到插件 {plugin_name} 的目录").to_json()
 
         readme_path = os.path.join(plugin_dir, "README.md")
 
-        if not os.path.isfile(readme_path):
+        if not await anyio.Path(readme_path).is_file():
             logger.warning(f"插件 {plugin_name} 没有README文件")
-            return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
+            return Response().error(f"插件 {plugin_name} 没有README文件").to_json()
 
         try:
-            with open(readme_path, encoding="utf-8") as f:
-                readme_content = f.read()
+            async with await anyio.open_file(readme_path, encoding="utf-8") as f:
+                readme_content = await f.read()
 
             return (
                 Response()
                 .ok({"content": readme_content}, "成功获取README内容")
-                .__dict__
+                .to_json()
             )
         except Exception as e:
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
-            return Response().error(f"读取README文件失败: {e!s}").__dict__
+            return Response().error(f"读取README文件失败: {e!s}").to_json()
 
     async def get_plugin_changelog(self):
         """获取插件更新日志
 
-        读取插件目录下的 CHANGELOG.md 文件内容。
+        读取插件目录下的 CHANGELOG.md 文件内容｡
         """
         plugin_name = request.args.get("name")
         logger.debug(f"正在获取插件 {plugin_name} 的更新日志")
 
         if not plugin_name:
             logger.warning("插件名称为空")
-            return Response().error("插件名称不能为空").__dict__
+            return Response().error("插件名称不能为空").to_json()
 
         # 查找插件
         plugin_obj = None
@@ -814,11 +836,11 @@ class PluginRoute(Route):
 
         if not plugin_obj:
             logger.warning(f"插件 {plugin_name} 不存在")
-            return Response().error(f"插件 {plugin_name} 不存在").__dict__
+            return Response().error(f"插件 {plugin_name} 不存在").to_json()
 
         if not plugin_obj.root_dir_name:
             logger.warning(f"插件 {plugin_name} 目录不存在")
-            return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
+            return Response().error(f"插件 {plugin_name} 目录不存在").to_json()
 
         if plugin_obj.reserved:
             plugin_dir = os.path.join(
@@ -831,35 +853,38 @@ class PluginRoute(Route):
                 plugin_obj.root_dir_name,
             )
 
-        if not os.path.isdir(plugin_dir):
+        if not await anyio.Path(plugin_dir).is_dir():
             logger.warning(f"无法找到插件目录: {plugin_dir}")
-            return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
+            return Response().error(f"无法找到插件 {plugin_name} 的目录").to_json()
 
         # 尝试多种可能的文件名
         changelog_names = ["CHANGELOG.md", "changelog.md", "CHANGELOG", "changelog"]
         for name in changelog_names:
             changelog_path = os.path.join(plugin_dir, name)
-            if os.path.isfile(changelog_path):
+            if await anyio.Path(changelog_path).is_file():
                 try:
-                    with open(changelog_path, encoding="utf-8") as f:
-                        changelog_content = f.read()
+                    async with await anyio.open_file(
+                        changelog_path,
+                        encoding="utf-8",
+                    ) as f:
+                        changelog_content = await f.read()
                     return (
                         Response()
                         .ok({"content": changelog_content}, "成功获取更新日志")
-                        .__dict__
+                        .to_json()
                     )
                 except Exception as e:
                     logger.error(f"/api/plugin/changelog: {traceback.format_exc()}")
-                    return Response().error(f"读取更新日志失败: {e!s}").__dict__
+                    return Response().error(f"读取更新日志失败: {e!s}").to_json()
 
-        # 没有找到 changelog 文件，返回 ok 但 content 为 null
+        # 没有找到 changelog 文件,返回 ok 但 content 为 null
         logger.warning(f"插件 {plugin_name} 没有更新日志文件")
-        return Response().ok({"content": None}, "该插件没有更新日志文件").__dict__
+        return Response().ok({"content": None}, "该插件没有更新日志文件").to_json()
 
     async def get_custom_source(self):
         """获取自定义插件源"""
         sources = await sp.global_get("custom_plugin_sources", [])
-        return Response().ok(sources).__dict__
+        return Response().ok(sources).to_json()
 
     async def save_custom_source(self):
         """保存自定义插件源"""
@@ -867,10 +892,10 @@ class PluginRoute(Route):
             data = await request.get_json()
             sources = data.get("sources", [])
             if not isinstance(sources, list):
-                return Response().error("sources fields must be a list").__dict__
+                return Response().error("sources fields must be a list").to_json()
 
             await sp.global_put("custom_plugin_sources", sources)
-            return Response().ok(None, "保存成功").__dict__
+            return Response().ok(None, "保存成功").to_json()
         except Exception as e:
             logger.error(f"/api/plugin/source/save: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).to_json()

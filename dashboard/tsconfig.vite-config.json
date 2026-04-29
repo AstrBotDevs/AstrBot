@@ -1,9 +1,11 @@
 {
-  "extends": "@vue/tsconfig/tsconfig.json",
-  "include": ["vite.config.*"],
   "compilerOptions": {
     "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowSyntheticDefaultImports": true,
     "allowJs": true,
-    "types": ["node"]
-  }
+    "types": ["node"],
+  },
+  "include": ["vite.config.*", "scripts/**/*"],
 }

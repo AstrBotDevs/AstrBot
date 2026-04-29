@@ -1,9 +1,10 @@
+import asyncio
 import contextlib
 import functools
 import importlib.metadata as importlib_metadata
 import logging
 import os
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 
 from packaging.requirements import Requirement
 
@@ -81,7 +82,13 @@ def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
                 continue
             name = canonicalize_distribution_name(req.name)
             if name in installed:
-                constraints.append(f"{name}=={installed[name]}")
+                # Use the original constraint from pyproject.toml instead of ==installed_version
+                # This allows plugins to require higher versions as long as they satisfy the core constraint
+                if req.specifier:
+                    constraints.append(f"{name}{req.specifier}")
+                else:
+                    # No version constraint in original, use >=installed to prevent downgrade
+                    constraints.append(f"{name}>={installed[name]}")
         except Exception:
             continue
 
@@ -111,7 +118,10 @@ class CoreConstraintsProvider:
             import tempfile
 
             with tempfile.NamedTemporaryFile(
-                mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8"
+                mode="w",
+                suffix="_constraints.txt",
+                delete=False,
+                encoding="utf-8",
             ) as f:
                 f.write("\n".join(constraints))
                 path = f.name
@@ -127,3 +137,56 @@ class CoreConstraintsProvider:
             if path and os.path.exists(path):
                 with contextlib.suppress(Exception):
                     os.remove(path)
+
+    @contextlib.asynccontextmanager
+    async def async_constraints_file(self) -> AsyncIterator[str | None]:
+        """Asynchronous variant of constraints_file for use with `async with`.
+
+        This is provided so async callers can obtain a temporary constraints file
+        without blocking the event loop. Internally it offloads blocking file
+        creation/removal to a thread via asyncio.to_thread.
+        """
+        constraints = tuple(
+            dict.fromkeys(
+                (
+                    *_get_core_constraints(self._core_dist_name),
+                    *get_desktop_core_lock_constraints(),
+                )
+            )
+        )
+        if not constraints:
+            yield None
+            return
+
+        path: str | None = None
+        try:
+            import tempfile
+
+            def _make_tmp() -> str:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    suffix="_constraints.txt",
+                    delete=False,
+                    encoding="utf-8",
+                ) as f:
+                    f.write("\n".join(constraints))
+                    return f.name
+
+            path = await asyncio.to_thread(_make_tmp)
+            logger.info("已启用核心依赖版本保护 (%d 个约束)", len(constraints))
+        except Exception as exc:
+            logger.warning("创建临时约束文件失败: %s", exc)
+            yield None
+            return
+
+        try:
+            yield path
+        finally:
+            if path:
+                try:
+                    exists = await asyncio.to_thread(os.path.exists, path)
+                    if exists:
+                        await asyncio.to_thread(os.remove, path)
+                except Exception:
+                    # Ensure we never raise while cleaning up
+                    pass

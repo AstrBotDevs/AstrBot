@@ -48,7 +48,10 @@ AT_MENTION_PREFIX_REGEX = re.compile(r"^@[^\s]+(\s*-\s*[^\s]+)?\s*")
 )
 class KookPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.kook_config = KookConfig.from_dict(platform_config)
@@ -61,7 +64,9 @@ class KookPlatformAdapter(Platform):
         self._roles_cache = KookRolesRecord("", self.client.http_client)
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         inner_message = AstrBotMessage()
         inner_message.session_id = session.session_id
@@ -77,7 +82,9 @@ class KookPlatformAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            name="kook", description="KOOK 适配器", id=self.kook_config.id
+            name="kook",
+            description="KOOK 适配器",
+            id=self.kook_config.id,
         )
 
     def _should_ignore_event_by_bot_nickname(self, author_id: str) -> bool:
@@ -85,7 +92,7 @@ class KookPlatformAdapter(Platform):
 
     async def _on_received(self, event: KookMessageEventData):
         logger.debug(
-            f'[KOOK] 收到来自"{event.channel_type.name}"渠道的消息, 消息类型为: {event.type.name}({event.type.value})'
+            f'[KOOK] 收到来自"{event.channel_type.name}"渠道的消息, 消息类型为: {event.type.name}({event.type.value})',
         )
         event_type = event.type
         if event_type in (KookMessageType.KMARKDOWN, KookMessageType.CARD):
@@ -103,12 +110,12 @@ class KookPlatformAdapter(Platform):
                     # 此时 target_id 就是频道id(guild_id)
                     guild_id = event.target_id
                     logger.info(
-                        f'[KOOK] 收到频道"{guild_id}"的角色更新通知, 类型为"{event.extra.type.value}", 刷新角色id缓存'
+                        f'[KOOK] 收到频道"{guild_id}"的角色更新通知, 类型为"{event.extra.type.value}", 刷新角色id缓存',
                     )
                     self._roles_cache.clear_guild_roles_cache(int(guild_id))
                 case _:
                     logger.debug(
-                        f'[KOOK] 判断此消息为"{event.extra.type}"类型的系统通知, 因未实现此消息的处理流程而忽略此消息, 原始消息数据: {event.to_json()}'
+                        f'[KOOK] 判断此消息为"{event.extra.type}"类型的系统通知, 因未实现此消息的处理流程而忽略此消息, 原始消息数据: {event.to_json()}',
                     )
 
     async def run(self):
@@ -130,7 +137,7 @@ class KookPlatformAdapter(Platform):
             await self._cleanup()
 
     async def _main_loop(self):
-        """主循环，处理连接和重连"""
+        """主循环,处理连接和重连"""
         consecutive_failures = 0
         max_consecutive_failures = self.kook_config.max_consecutive_failures
         max_retry_delay = self.kook_config.max_retry_delay
@@ -145,37 +152,39 @@ class KookPlatformAdapter(Platform):
                 success = await self.client.connect()
 
                 if success:
-                    logger.info("[KOOK] 连接成功，开始监听消息")
+                    logger.info("[KOOK] 连接成功,开始监听消息")
                     consecutive_failures = 0  # 重置失败计数
 
-                    # 等待连接结束（可能是正常关闭或异常）
+                    # 等待连接结束(可能是正常关闭或异常)
                     while self.client.running and self.running:
                         try:
-                            # 等待 client 内部触发 _stop_event，或者超时 1 秒后重试
+                            # 等待 client 内部触发 _stop_event,或者超时 1 秒后重试
                             # 使用 wait_for 配合 timeout 是为了防止极端情况下 self.running 变化没被察觉
                             await asyncio.wait_for(
-                                self.client.wait_until_closed(), timeout=1.0
+                                self.client.wait_until_closed(),
+                                timeout=1.0,
                             )
                         except asyncio.TimeoutError:
-                            # 正常超时，继续下一轮 while 检查
+                            # 正常超时,继续下一轮 while 检查
                             continue
 
                     if self.running:
-                        logger.warning("[KOOK] 连接断开，准备重连")
+                        logger.warning("[KOOK] 连接断开,准备重连")
 
                 else:
                     consecutive_failures += 1
                     logger.error(
-                        f"[KOOK] 连接失败，连续失败次数: {consecutive_failures}"
+                        f"[KOOK] 连接失败,连续失败次数: {consecutive_failures}",
                     )
 
                     if consecutive_failures >= max_consecutive_failures:
-                        logger.error("[KOOK] 连续失败次数过多，停止重连")
+                        logger.error("[KOOK] 连续失败次数过多,停止重连")
                         break
 
                     # 等待一段时间后重试
                     wait_time = min(
-                        2**consecutive_failures, max_retry_delay
+                        2**consecutive_failures,
+                        max_retry_delay,
                     )  # 指数退避
                     logger.info(f"[KOOK] 等待 {wait_time} 秒后重试...")
                     await asyncio.sleep(wait_time)
@@ -185,7 +194,7 @@ class KookPlatformAdapter(Platform):
                 logger.error(f"[KOOK] 主循环异常: {e}")
 
                 if consecutive_failures >= max_consecutive_failures:
-                    logger.error("[KOOK] 连续异常次数过多，停止重连")
+                    logger.error("[KOOK] 连续异常次数过多,停止重连")
                     break
 
                 await asyncio.sleep(5)
@@ -264,7 +273,7 @@ class KookPlatformAdapter(Platform):
                                 At(
                                     qq=bot_id,
                                     name=role_mention_name,  # 保留角色名称
-                                )
+                                ),
                             )
                             continue
                 if not mention_target.isdigit() and role_id == 0:
@@ -278,7 +287,8 @@ class KookPlatformAdapter(Platform):
                     continue
 
                 if not await self._roles_cache.has_role_in_channel(
-                    role_id, int(guild_id)
+                    role_id,
+                    int(guild_id),
                 ):
                     continue
 
@@ -286,7 +296,7 @@ class KookPlatformAdapter(Platform):
                     At(
                         qq=bot_id,
                         name=role_mention_name,  # 保留角色名称
-                    )
+                    ),
                 )
 
             elif mention_target:
@@ -294,7 +304,7 @@ class KookPlatformAdapter(Platform):
                     At(
                         qq=mention_target,
                         name=mention_name_map.get(mention_target, ""),
-                    )
+                    ),
                 )
             cursor = match.end()
 
@@ -327,7 +337,8 @@ class KookPlatformAdapter(Platform):
         return components, message_str
 
     async def _parse_kmarkdown_message(
-        self, data: KookMessageEventData
+        self,
+        data: KookMessageEventData,
     ) -> tuple[list[BaseMessageComponent], str]:
         kmarkdown = data.extra.kmarkdown
         guild_id = data.extra.guild_id
@@ -338,7 +349,7 @@ class KookPlatformAdapter(Platform):
         content = str(data.content) or ""
         if kmarkdown is None:
             logger.error(
-                f'[KOOK] 无法转换"{KookMessageType.KMARKDOWN.name}"消息, 消息中找不到kmarkdown字段'
+                f'[KOOK] 无法转换"{KookMessageType.KMARKDOWN.name}"消息, 消息中找不到kmarkdown字段',
             )
             logger.error(f"[KOOK] 原始消息内容: {data.to_json()}")
             return [], ""
@@ -354,11 +365,16 @@ class KookPlatformAdapter(Platform):
             mention_name_map[str(mention_id)] = str(item.username)
 
         return await self._convert_text_message_to_component(
-            content, raw_content, mention_role_part, guild_id, mention_name_map
+            content,
+            raw_content,
+            mention_role_part,
+            guild_id,
+            mention_name_map,
         )
 
     async def _parse_card_message(
-        self, data: KookMessageEventData
+        self,
+        data: KookMessageEventData,
     ) -> tuple[list[BaseMessageComponent], str]:
         content = data.content
         if not isinstance(content, str):
@@ -398,7 +414,9 @@ class KookPlatformAdapter(Platform):
 
         if text:
             component_parts, text = await self._convert_text_message_to_component(
-                text, text, guild_id=guild_id
+                text,
+                text,
+                guild_id=guild_id,
             )
             message.extend(component_parts)
 
@@ -426,7 +444,8 @@ class KookPlatformAdapter(Platform):
         return ""
 
     def _handle_image_group(
-        self, module: ContainerModule | ImageGroupModule
+        self,
+        module: ContainerModule | ImageGroupModule,
     ) -> list[str]:
         """专门处理图片组/容器里的合法 URL 提取"""
         valid_urls = []

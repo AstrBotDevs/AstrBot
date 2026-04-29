@@ -1,8 +1,10 @@
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import Callable
 
 from astrbot import logger
 from astrbot.core.message.components import At, AtAll, Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.filter.command_group import CommandGroupFilter
@@ -10,9 +12,6 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
-
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
 
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
@@ -34,13 +33,13 @@ def build_unique_session_id(event: AstrMessageEvent) -> str | None:
 
 @register_stage
 class WakingCheckStage(Stage):
-    """检查是否需要唤醒。唤醒机器人有如下几点条件：
+    """检查是否需要唤醒｡唤醒机器人有如下几点条件:
 
     1. 机器人被 @ 了
     2. 机器人的消息被提到了
-    3. 以 wake_prefix 前缀开头，并且消息没有以 At 消息段开头
-    4. 插件（Star）的 handler filter 通过
-    5. 私聊情况下，位于 admins_id 列表中的管理员的消息（在白名单阶段中）
+    3. 以 wake_prefix 前缀开头,并且消息没有以 At 消息段开头
+    4. 插件(Star)的 handler filter 通过
+    5. 私聊情况下,位于 admins_id 列表中的管理员的消息(在白名单阶段中)
     """
 
     async def initialize(self, ctx: PipelineContext) -> None:
@@ -69,7 +68,8 @@ class WakingCheckStage(Stage):
             False,
         )
         self.disable_builtin_commands = self.ctx.astrbot_config.get(
-            "disable_builtin_commands", False
+            "disable_builtin_commands",
+            False,
         )
         platform_settings = self.ctx.astrbot_config.get("platform_settings", {})
         self.unique_session = platform_settings.get("unique_session", False)
@@ -77,7 +77,7 @@ class WakingCheckStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         # apply unique session
         if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
             sid = build_unique_session_id(event)
@@ -111,7 +111,7 @@ class WakingCheckStage(Stage):
                     and str(messages[0].qq) != str(event.get_self_id())
                     and str(messages[0].qq) != "all"
                 ):
-                    # 如果是群聊，且第一个消息段是 At 消息，但不是 At 机器人或 At 全体成员，则不唤醒
+                    # 如果是群聊,且第一个消息段是 At 消息,但不是 At 机器人或 At 全体成员,则不唤醒
                     break
                 is_wake = True
                 event.is_at_or_wake_command = True
@@ -151,7 +151,7 @@ class WakingCheckStage(Stage):
         # 将 plugins_name 设置到 event 中
         enabled_plugins_name = self.ctx.astrbot_config.get("plugin_set", ["*"])
         if enabled_plugins_name == ["*"]:
-            # 如果是 *，则表示所有插件都启用
+            # 如果是 *,则表示所有插件都启用
             event.plugins_name = None
         else:
             event.plugins_name = enabled_plugins_name
@@ -201,11 +201,11 @@ class WakingCheckStage(Stage):
                     if self.no_permission_reply:
                         await event.send(
                             MessageChain().message(
-                                f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。",
+                                f"您(ID: {event.get_sender_id()})的权限不足以使用此指令｡通过 /sid 获取 ID 并请管理员添加｡",
                             ),
                         )
                     logger.info(
-                        f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足。",
+                        f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足｡",
                     )
                     event.stop_event()
                     return

@@ -27,12 +27,12 @@ class MockProvider:
         }
 
     async def text_chat(self, **kwargs):
-        """模拟 LLM 调用，返回摘要"""
+        """模拟 LLM 调用,返回摘要"""
         messages = kwargs.get("messages", [])
-        # 简单的摘要逻辑：返回消息数量统计
+        # 简单的摘要逻辑:返回消息数量统计
         return LLMResponse(
             role="assistant",
-            completion_text=f"历史对话包含 {len(messages) - 1} 条消息，主要讨论了技术话题。",
+            completion_text=f"历史对话包含 {len(messages) - 1} 条消息,主要讨论了技术话题｡",
         )
 
     def get_model(self):
@@ -75,7 +75,7 @@ class TestContextManager:
         """Test initialization with LLM-based compression."""
         mock_provider = MockProvider()
         config = ContextConfig(
-            llm_compress_provider=mock_provider,  # type: ignore
+            llm_compress_provider=mock_provider,  # type: ignore[arg-type]
             llm_compress_keep_recent=5,
             llm_compress_instruction="Summarize the conversation",
         )
@@ -560,7 +560,7 @@ class TestContextManager:
         manager = ContextManager(config)
 
         # Verify the default threshold is 0.82
-        assert manager.compressor.compression_threshold == 0.82
+        assert manager.compressor.compression_threshold == 0.82  # type: ignore[attr-defined]
 
         # Test threshold logic
         messages = [self.create_message("user", "x" * 81)]  # ~24 tokens
@@ -665,7 +665,7 @@ class TestContextManager:
         """Test LLM compression using MockProvider."""
         mock_provider = MockProvider()
         config = ContextConfig(
-            llm_compress_provider=mock_provider,  # type: ignore
+            llm_compress_provider=mock_provider,  # type: ignore[arg-type]
             llm_compress_keep_recent=3,
             llm_compress_instruction="请总结对话内容",
             max_context_tokens=100,

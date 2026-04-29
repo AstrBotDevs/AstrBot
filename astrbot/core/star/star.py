@@ -8,7 +8,7 @@ from astrbot.core.config import AstrBotConfig
 
 star_registry: list[StarMetadata] = []
 star_map: dict[str, StarMetadata] = {}
-"""key 是模块路径，__module__"""
+"""key 是模块路径,__module__"""
 
 if TYPE_CHECKING:
     from . import Star
@@ -16,9 +16,9 @@ if TYPE_CHECKING:
 
 @dataclass
 class StarMetadata:
-    """插件的元数据。
+    """插件的元数据｡
 
-    当 activated 为 False 时，star_cls 可能为 None，请不要在插件未激活时调用 star_cls 的方法。
+    当 activated 为 False 时,star_cls 可能为 None,请不要在插件未激活时调用 star_cls 的方法｡
     """
 
     name: str | None = None
@@ -62,10 +62,10 @@ class StarMetadata:
     """插件 Logo 的路径"""
 
     support_platforms: list[str] = field(default_factory=list)
-    """插件声明支持的平台适配器 ID 列表（对应 ADAPTER_NAME_2_TYPE 的 key）"""
+    """插件声明支持的平台适配器 ID 列表(对应 ADAPTER_NAME_2_TYPE 的 key)"""
 
     astrbot_version: str | None = None
-    """插件要求的 AstrBot 版本范围（PEP 440 specifier，如 >=4.13.0,<4.17.0）"""
+    """插件要求的 AstrBot 版本范围(PEP 440 specifier,如 >=4.13.0,<4.17.0)"""
 
     def __str__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"

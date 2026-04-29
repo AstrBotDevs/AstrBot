@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import TypedDict, TypeVar
+from typing import Any, TypedDict, TypeVar
 
 from astrbot.core import AstrBotConfig, logger
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
@@ -13,7 +13,7 @@ from astrbot.core.utils.shared_preferences import SharedPreferences
 _VT = TypeVar("_VT")
 
 
-class ConfInfo(TypedDict):
+class ConfInfo(TypedDict, total=False):
     """Configuration information for a specific session or platform."""
 
     id: str  # UUID of the configuration or "default"
@@ -42,7 +42,7 @@ class AstrBotConfigManager:
         self.confs: dict[str, AstrBotConfig] = {}
         """uuid / "default" -> AstrBotConfig"""
         self.confs["default"] = default_config
-        self.abconf_data = None
+        self.abconf_data: dict | None = None
         self._load_all_configs()
 
     def _get_abconf_data(self) -> dict:
@@ -54,7 +54,7 @@ class AstrBotConfigManager:
                 scope="global",
                 scope_id="global",
             )
-        return self.abconf_data
+        return self.abconf_data  # type: ignore[return-value]
 
     def _load_all_configs(self) -> None:
         """Load all configurations from the shared preferences."""
@@ -107,12 +107,13 @@ class AstrBotConfigManager:
         abconf_name: str | None = None,
     ) -> None:
         """保存配置文件的映射关系"""
-        abconf_data = self.sp.get(
+        raw_abconf: dict[str, Any] | None = self.sp.get(
             "abconf_mapping",
             {},
             scope="global",
             scope_id="global",
         )
+        abconf_data: dict[str, dict[str, str]] = raw_abconf or {}
         random_word = abconf_name or uuid.uuid4().hex[:8]
         abconf_data[abconf_id] = {
             "path": abconf_path,
@@ -122,7 +123,7 @@ class AstrBotConfigManager:
         self.abconf_data = abconf_data
 
     def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
-        """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
+        """获取指定 umo 的配置文件｡如果不存在,则 fallback 到默认配置文件｡"""
         if not umo:
             return self.confs["default"]
         if isinstance(umo, MessageSession):
@@ -191,11 +192,14 @@ class AstrBotConfigManager:
             raise ValueError("不能删除默认配置文件")
 
         # 从映射中移除
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
+        abconf_data: dict[str, dict[str, str]] = (
+            self.sp.get(
+                "abconf_mapping",
+                {},
+                scope="global",
+                scope_id="global",
+            )
+            or {}
         )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
@@ -242,11 +246,14 @@ class AstrBotConfigManager:
         if conf_id == "default":
             raise ValueError("不能更新默认配置文件的信息")
 
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
+        abconf_data: dict[str, dict[str, str]] = (
+            self.sp.get(
+                "abconf_mapping",
+                {},
+                scope="global",
+                scope_id="global",
+            )
+            or {}
         )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
@@ -266,9 +273,9 @@ class AstrBotConfigManager:
         self,
         umo: str | None = None,
         key: str | None = None,
-        default: _VT = None,
-    ) -> _VT:
-        """获取配置项。umo 为 None 时使用默认配置"""
+        default: _VT | None = None,
+    ) -> _VT | None:
+        """获取配置项｡umo 为 None 时使用默认配置"""
         if umo is None:
             return self.confs["default"].get(key, default)
         conf = self.get_conf(umo)

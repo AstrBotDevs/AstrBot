@@ -85,87 +85,79 @@ class KBSQLiteDatabase:
 
         创建所有必要的索引以优化查询性能
         """
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                # 创建知识库表索引
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_kb_kb_id "
-                        "ON knowledge_bases(kb_id)",
-                    ),
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_kb_name "
-                        "ON knowledge_bases(kb_name)",
-                    ),
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_kb_created_at "
-                        "ON knowledge_bases(created_at)",
-                    ),
-                )
+        async with self.get_db() as session, session.begin():
+            # 创建知识库表索引
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_kb_kb_id ON knowledge_bases(kb_id)",
+                ),
+            )
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_kb_name "
+                    "ON knowledge_bases(kb_name)",
+                ),
+            )
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_kb_created_at "
+                    "ON knowledge_bases(created_at)",
+                ),
+            )
 
-                # 创建文档表索引
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_doc_doc_id "
-                        "ON kb_documents(doc_id)",
-                    ),
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_doc_kb_id "
-                        "ON kb_documents(kb_id)",
-                    ),
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_doc_name "
-                        "ON kb_documents(doc_name)",
-                    ),
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_doc_type "
-                        "ON kb_documents(file_type)",
-                    ),
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_doc_created_at "
-                        "ON kb_documents(created_at)",
-                    ),
-                )
+            # 创建文档表索引
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_doc_doc_id ON kb_documents(doc_id)",
+                ),
+            )
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_doc_kb_id ON kb_documents(kb_id)",
+                ),
+            )
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_doc_name ON kb_documents(doc_name)",
+                ),
+            )
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_doc_type "
+                    "ON kb_documents(file_type)",
+                ),
+            )
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_doc_created_at "
+                    "ON kb_documents(created_at)",
+                ),
+            )
 
-                # 创建多媒体表索引
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_media_media_id "
-                        "ON kb_media(media_id)",
-                    ),
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_media_doc_id "
-                        "ON kb_media(doc_id)",
-                    ),
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_media_kb_id ON kb_media(kb_id)",
-                    ),
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_media_type "
-                        "ON kb_media(media_type)",
-                    ),
-                )
+            # 创建多媒体表索引
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_media_media_id "
+                    "ON kb_media(media_id)",
+                ),
+            )
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_media_doc_id ON kb_media(doc_id)",
+                ),
+            )
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_media_kb_id ON kb_media(kb_id)",
+                ),
+            )
+            await session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_media_type ON kb_media(media_type)",
+                ),
+            )
 
-                await session.commit()
+            await session.commit()
 
     async def close(self) -> None:
         """关闭数据库连接"""
@@ -260,7 +252,8 @@ class KBSQLiteDatabase:
             }
 
     async def get_documents_with_metadata_batch(
-        self, doc_ids: set[str]
+        self,
+        doc_ids: set[str],
     ) -> dict[str, dict]:
         """批量获取文档及其所属知识库元数据
 
@@ -275,7 +268,7 @@ class KBSQLiteDatabase:
             return {}
 
         metadata_map: dict[str, dict] = {}
-        # SQLite 参数上限为 999，分片查询避免超限
+        # SQLite 参数上限为 999,分片查询避免超限
         chunk_size = 900
         doc_id_list = list(doc_ids)
 

@@ -2,9 +2,10 @@ try:
     import faiss
 except ModuleNotFoundError:
     raise ImportError(
-        "faiss 未安装。请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装。",
-    )
+        "faiss 未安装｡请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装｡",
+    ) from None
 import os
+from typing import Any
 
 import numpy as np
 
@@ -13,8 +14,8 @@ class EmbeddingStorage:
     def __init__(self, dimension: int, path: str | None = None) -> None:
         self.dimension = dimension
         self.path = path
-        self.index = None
-        if path and os.path.exists(path):
+        self.index: Any
+        if path is not None and os.path.exists(path):
             self.index = faiss.read_index(path)
         else:
             base_index = faiss.IndexFlatL2(dimension)
@@ -84,12 +85,7 @@ class EmbeddingStorage:
         await self.save_index()
 
     async def save_index(self) -> None:
-        """保存索引
-
-        Args:
-            path (str): 保存索引的路径
-
-        """
-        if self.index is None:
+        """保存索引"""
+        if self.path is None:
             return
         faiss.write_index(self.index, self.path)

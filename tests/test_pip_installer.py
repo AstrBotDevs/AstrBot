@@ -699,7 +699,7 @@ async def test_install_raises_dedicated_pip_install_error_on_non_conflict_failur
 
     installer = PipInstaller("")
 
-    with pytest.raises(pip_installer_module.PipInstallError, match="错误码：2"):
+    with pytest.raises(pip_installer_module.PipInstallError, match="错误码:2"):
         await installer.install(package_name="demo-package")
 
 
@@ -715,7 +715,7 @@ async def test_run_pip_with_classification_raises_install_error_on_non_conflict_
 
     installer = PipInstaller("")
 
-    with pytest.raises(pip_installer_module.PipInstallError, match="错误码：3"):
+    with pytest.raises(pip_installer_module.PipInstallError, match="错误码:3"):
         await installer._run_pip_with_classification(["install", "demo-package"])
 
 
@@ -965,8 +965,8 @@ def test_get_core_constraints_caches_fallback_resolution(monkeypatch):
     finally:
         core_constraints_module._get_core_constraints.cache_clear()
 
-    assert first == ("shared-lib==2.0",)
-    assert second == ("shared-lib==2.0",)
+    assert first == ("shared-lib>=1.0",)
+    assert second == ("shared-lib>=1.0",)
     assert distribution_calls == ["AstrBot", "AstrBot-App"]
     assert distributions_calls == ["scan"]
 
@@ -1028,7 +1028,7 @@ def test_get_core_constraints_skips_distributions_with_unreadable_top_level(
     finally:
         core_constraints_module._get_core_constraints.cache_clear()
 
-    assert constraints == ("shared-lib==2.0",)
+    assert constraints == ("shared-lib>=1.0",)
 
 
 def test_core_constraints_file_propagates_inner_conflict_without_fake_warning(

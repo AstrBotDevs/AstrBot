@@ -13,6 +13,7 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from astrbot.core.astr_main_agent import (
     MainAgentBuildConfig,
     MainAgentBuildResult,
@@ -27,6 +28,15 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook
+from astrbot.core.pipeline.process_stage.follow_up import (
+    FollowUpCapture,
+    finalize_follow_up_capture,
+    prepare_follow_up_capture,
+    register_active_runner,
+    try_capture_follow_up,
+    unregister_active_runner,
+)
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
@@ -36,17 +46,6 @@ from astrbot.core.provider.entities import (
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
-
-from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
-from ....context import PipelineContext, call_event_hook
-from ...follow_up import (
-    FollowUpCapture,
-    finalize_follow_up_capture,
-    prepare_follow_up_capture,
-    register_active_runner,
-    try_capture_follow_up,
-    unregister_active_runner,
-)
 
 
 class InternalAgentSubStage(Stage):
@@ -75,6 +74,7 @@ class InternalAgentSubStage(Stage):
             "buffer_intermediate_messages",
             False,
         )
+        self.provider_wake_prefix: str = settings.get("wake_prefix", "")
         self.show_reasoning = settings.get("display_reasoning_text", False)
         self.sanitize_context_by_modalities: bool = settings.get(
             "sanitize_context_by_modalities",
@@ -147,9 +147,8 @@ class InternalAgentSubStage(Stage):
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
-    async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None, None]:
+    async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
+        provider_wake_prefix = self.provider_wake_prefix
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
@@ -395,7 +394,7 @@ class InternalAgentSubStage(Stage):
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
-            logger.error(f"Error occurred while processing agent: {e}")
+            logger.error(f"Error occurred while processing agent: {e}", exc_info=True)
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
             )

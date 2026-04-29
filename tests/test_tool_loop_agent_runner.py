@@ -3,7 +3,7 @@ import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, AsyncGenerator, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -42,13 +42,13 @@ class MockProvider(Provider):
     async def get_models(self) -> list[str]:
         return ["test_model"]
 
-    async def text_chat(self, **kwargs) -> LLMResponse:
+    async def text_chat(self, **kwargs) -> LLMResponse:  # type: ignore[override]
         self.call_count += 1
 
         # 检查工具是否被禁用
         func_tool = kwargs.get("func_tool")
 
-        # 如果工具被禁用或超过最大调用次数，返回正常响应
+        # 如果工具被禁用或超过最大调用次数,返回正常响应
         if func_tool is None or self.call_count > self.max_calls_before_normal_response:
             return LLMResponse(
                 role="assistant",
@@ -74,7 +74,7 @@ class MockProvider(Provider):
             usage=TokenUsage(input_other=10, output=5),
         )
 
-    async def text_chat_stream(self, **kwargs):
+    async def text_chat_stream(self, **kwargs) -> AsyncGenerator[LLMResponse, None]:  # type: ignore[override]
         response = await self.text_chat(**kwargs)
         response.is_chunk = True
         yield response
@@ -86,17 +86,14 @@ class MockToolExecutor:
     """模拟工具执行器"""
 
     @classmethod
-    def execute(cls, tool, run_context, **tool_args):
-        async def generator():
-            # 模拟工具返回结果，使用正确的类型
-            from mcp.types import CallToolResult, TextContent
+    async def execute(cls, tool, run_context, **tool_args):
+        # 模拟工具返回结果,使用正确的类型
+        from mcp.types import CallToolResult, TextContent
 
-            result = CallToolResult(
-                content=[TextContent(type="text", text="工具执行结果")]
-            )
-            yield result
-
-        return generator()
+        result = CallToolResult(
+            content=[TextContent(type="text", text="工具执行结果")]
+        )
+        yield result
 
 
 class LargeTextToolExecutor:
@@ -123,23 +120,20 @@ class MockMixedContentToolExecutor:
     """模拟返回图片 + 文本的工具执行器"""
 
     @classmethod
-    def execute(cls, tool, run_context, **tool_args):
-        async def generator():
-            from mcp.types import CallToolResult, ImageContent, TextContent
+    async def execute(cls, tool, run_context, **tool_args):
+        from mcp.types import CallToolResult, ImageContent, TextContent
 
-            result = CallToolResult(
-                content=[
-                    ImageContent(
-                        type="image",
-                        data="dGVzdA==",
-                        mimeType="image/png",
-                    ),
-                    TextContent(type="text", text="直播间标题：新游首发：零~红蝶~"),
-                ]
-            )
-            yield result
-
-        return generator()
+        result = CallToolResult(
+            content=[
+                ImageContent(
+                    type="image",
+                    data="dGVzdA==",
+                    mimeType="image/png",
+                ),
+                TextContent(type="text", text="直播间标题:新游首发:零~红蝶~"),
+            ]
+        )
+        yield result
 
 
 class MockFailingProvider(MockProvider):
@@ -338,6 +332,11 @@ class BlockingSubagentContext:
     def get_config(self, **_kwargs):
         return {"provider_settings": {}}
 
+    def get_llm_tool_manager(self):
+        from unittest.mock import MagicMock
+
+        return MagicMock()
+
     async def tool_loop_agent(self, **_kwargs):
         self.started.set()
         try:
@@ -411,10 +410,10 @@ async def test_max_step_limit_functionality(
 ):
     """测试最大步数限制功能"""
 
-    # 设置模拟provider，让它总是返回工具调用
+    # 设置模拟provider,让它总是返回工具调用
     mock_provider.should_call_tools = True
     mock_provider.max_calls_before_normal_response = (
-        100  # 设置一个很大的值，确保不会自然结束
+        100  # 设置一个很大的值,确保不会自然结束
     )
 
     # 初始化runner
@@ -438,7 +437,7 @@ async def test_max_step_limit_functionality(
     # 验证结果
     assert runner.done(), "代理应该在达到最大步数后完成"
 
-    # 验证工具被禁用（这是最重要的验证点）
+    # 验证工具被禁用(这是最重要的验证点)
     assert runner.req.func_tool is None, "达到最大步数后工具应该被禁用"
 
     # 验证有最终响应
@@ -454,9 +453,9 @@ async def test_max_step_limit_functionality(
 async def test_normal_completion_without_max_step(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
-    """测试正常完成（不触发最大步数限制）"""
+    """测试正常完成(不触发最大步数限制)"""
 
-    # 设置模拟provider，让它在第2次调用时返回正常响应
+    # 设置模拟provider,让它在第2次调用时返回正常响应
     mock_provider.should_call_tools = True
     mock_provider.max_calls_before_normal_response = 2
 
@@ -482,19 +481,19 @@ async def test_normal_completion_without_max_step(
     assert runner.done(), "代理应该正常完成"
 
     # 验证没有触发最大步数限制 - 通过检查provider调用次数
-    # mock_provider在第2次调用后返回正常响应，所以不应该达到max_steps(10)
+    # mock_provider在第2次调用后返回正常响应,所以不应该达到max_steps(10)
     assert mock_provider.call_count < max_steps, (
         f"正常完成时调用次数({mock_provider.call_count})应该小于最大步数({max_steps})"
     )
 
-    # 验证没有最大步数警告消息（注意：实际注入的是user角色的消息）
+    # 验证没有最大步数警告消息(注意:实际注入的是user角色的消息)
     user_messages = [m for m in runner.run_context.messages if m.role == "user"]
     max_step_messages = [
         m for m in user_messages if "工具调用次数已达到上限" in m.content
     ]
     assert len(max_step_messages) == 0, "正常完成时不应该有步数限制消息"
 
-    # 验证工具仍然可用（没有被禁用）
+    # 验证工具仍然可用(没有被禁用)
     assert runner.req.func_tool is not None, "正常完成时工具不应该被禁用"
 
 
@@ -508,7 +507,7 @@ async def test_max_step_with_streaming(
     mock_provider.should_call_tools = True
     mock_provider.max_calls_before_normal_response = 100
 
-    # 初始化runner，启用流式响应
+    # 初始化runner,启用流式响应
     await runner.reset(
         provider=mock_provider,
         request=provider_request,
@@ -579,7 +578,7 @@ async def test_hooks_called_with_max_step(
 async def test_tool_result_includes_all_calltoolresult_content(
     runner, mock_provider, provider_request, mock_hooks, monkeypatch
 ):
-    """工具返回多个 content 项时，tool result 应包含全部内容。"""
+    """工具返回多个 content 项时,tool result 应包含全部内容｡"""
 
     from astrbot.core.agent.tool_image_cache import tool_image_cache
 
@@ -623,7 +622,7 @@ async def test_tool_result_includes_all_calltoolresult_content(
 
     content = str(tool_messages[0].content)
     assert "Image returned and cached at path='/tmp/call_123_0.png'." in content
-    assert "直播间标题：新游首发：零~红蝶~" in content
+    assert "直播间标题:新游首发:零~红蝶~" in content
     assert saved_images == [
         {
             "base64_data": "dGVzdA==",
@@ -1194,7 +1193,7 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 
 @pytest.mark.asyncio
 async def test_skills_like_requery_passes_extra_user_content_parts():
-    """skills-like 模式 re-query 时应传递 extra_user_content_parts（如 image_caption）"""
+    """skills-like 模式 re-query 时应传递 extra_user_content_parts(如 image_caption)"""
     from astrbot.core.agent.message import TextPart
 
     captured_kwargs = {}
@@ -1203,7 +1202,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
         async def text_chat(self, **kwargs) -> LLMResponse:
             self.call_count += 1
             if self.call_count == 1:
-                # 第一次调用：返回工具选择（light schema）
+                # 第一次调用:返回工具选择(light schema)
                 return LLMResponse(
                     role="assistant",
                     completion_text="选择工具",
@@ -1213,7 +1212,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                     usage=TokenUsage(input_other=10, output=5),
                 )
             if self.call_count == 2:
-                # 第二次调用：re-query with param schema
+                # 第二次调用:re-query with param schema
                 captured_kwargs.update(kwargs)
                 return LLMResponse(
                     role="assistant",
@@ -1223,7 +1222,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                     tools_call_ids=["call_2"],
                     usage=TokenUsage(input_other=10, output=5),
                 )
-            # 后续调用：正常回复
+            # 后续调用:正常回复
             return LLMResponse(
                 role="assistant",
                 completion_text="最终回复",

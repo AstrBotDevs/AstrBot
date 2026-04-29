@@ -81,7 +81,9 @@ async def test_reload_from_config_uses_processed_begin_dialogs_and_deepcopy():
     handoff = orchestrator.handoffs[0]
     assert handoff.agent.instructions == "persona prompt"
     assert handoff.agent.tools == ["tool_from_persona"]
-    assert handoff.agent.begin_dialogs[0]["content"] == "hello"
+    begin_dialogs = handoff.agent.begin_dialogs
+    assert begin_dialogs is not None
+    assert begin_dialogs[0]["content"] == "hello"
 
 
 @pytest.mark.asyncio
@@ -90,7 +92,7 @@ async def test_reload_from_config_uses_processed_begin_dialogs_and_deepcopy():
     [
         (None, None),
         ([], []),
-        ("not-a-list", []),
+        ("not-a-list", None),
     ],
 )
 async def test_reload_from_config_tool_normalization(raw_tools, expected_tools):

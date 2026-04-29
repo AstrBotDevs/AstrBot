@@ -9,6 +9,13 @@ from typing import Generic, TypeVar
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOL_MODULE_PATH = REPO_ROOT / "astrbot/core/agent/tool.py"
 
+# Used for mocking astrbot.core.agent.run_context below
+_TContext = TypeVar("_TContext")
+
+
+class _ContextWrapper(Generic[_TContext]):
+    pass
+
 
 def load_tool_module():
     package_names = [
@@ -30,18 +37,15 @@ def load_tool_module():
     sys.modules[message_result_module.__name__] = message_result_module
 
     run_context_module = types.ModuleType("astrbot.core.agent.run_context")
-    run_context_module.TContext = TypeVar("TContext")
-
-    class ContextWrapper(Generic[run_context_module.TContext]):
-        pass
-
-    run_context_module.ContextWrapper = ContextWrapper
+    run_context_module.TContext = _TContext
+    run_context_module.ContextWrapper = _ContextWrapper
     sys.modules[run_context_module.__name__] = run_context_module
 
     spec = importlib.util.spec_from_file_location(
         "astrbot.core.agent.tool", TOOL_MODULE_PATH
     )
-    assert spec and spec.loader
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)

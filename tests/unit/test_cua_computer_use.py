@@ -280,7 +280,7 @@ async def test_cua_config_log_does_not_include_api_key(monkeypatch):
         FakeCuaBooter,
         raising=False,
     )
-    monkeypatch.setattr(computer_client.logger, "info", log_messages.append)
+    monkeypatch.setattr(computer_client.logger, "info", lambda *args: log_messages.append(args[0] if args else ""))
 
     ctx = FakeContext(
         {

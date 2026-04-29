@@ -4,10 +4,9 @@ import uuid
 import numpy as np
 
 from astrbot import logger
-from astrbot.core.exceptions import KnowledgeBaseUploadError
+from astrbot.core.db.vec_db.base import BaseVecDB, Result
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 
-from ..base import BaseVecDB, Result
 from .document_storage import DocumentStorage
 from .embedding_storage import EmbeddingStorage
 
@@ -42,18 +41,18 @@ class FaissVecDB(BaseVecDB):
         metadata: dict | None = None,
         id: str | None = None,
     ) -> int:
-        """插入一条文本和其对应向量，自动生成 ID 并保持一致性。"""
+        """插入一条文本和其对应向量,自动生成 ID 并保持一致性｡"""
         metadata = metadata or {}
         str_id = id or str(uuid.uuid4())  # 使用 UUID 作为原始 ID
 
         vector = await self.embedding_provider.get_embedding(content)
-        vector = np.array(vector, dtype=np.float32)
+        vector_array = np.array(vector, dtype=np.float32)
 
         # 使用 DocumentStorage 的方法插入文档
         int_id = await self.document_storage.insert_document(str_id, content, metadata)
 
         # 插入向量到 FAISS
-        await self.embedding_storage.insert(vector, int_id)
+        await self.embedding_storage.insert(vector_array, int_id)
         return int_id
 
     async def insert_batch(
@@ -66,10 +65,10 @@ class FaissVecDB(BaseVecDB):
         max_retries: int = 3,
         progress_callback=None,
     ) -> list[int]:
-        """批量插入文本和其对应向量，自动生成 ID 并保持一致性。
+        """批量插入文本和其对应向量,自动生成 ID 并保持一致性｡
 
         Args:
-            progress_callback: 进度回调函数，接收参数 (current, total)
+            progress_callback: 进度回调函数,接收参数 (current, total)
 
         """
         metadatas = metadatas or [{} for _ in contents]
@@ -77,35 +76,9 @@ class FaissVecDB(BaseVecDB):
 
         if not contents:
             logger.debug(
-                "No contents provided for batch insert; skipping embedding generation."
+                "No contents provided for batch insert; skipping embedding generation.",
             )
             return []
-
-        content_count = len(contents)
-        if len(metadatas) != content_count:
-            raise KnowledgeBaseUploadError(
-                stage="storage",
-                user_message=(
-                    f"存储失败：文本分块数量与元数据数量不一致（期望 {content_count}，"
-                    f"实际 {len(metadatas)}）。"
-                ),
-                details={
-                    "expected_contents": content_count,
-                    "actual_metadatas": len(metadatas),
-                },
-            )
-        if len(ids) != content_count:
-            raise KnowledgeBaseUploadError(
-                stage="storage",
-                user_message=(
-                    f"存储失败：文本分块数量与文档 ID 数量不一致（期望 {content_count}，"
-                    f"实际 {len(ids)}）。"
-                ),
-                details={
-                    "expected_contents": content_count,
-                    "actual_ids": len(ids),
-                },
-            )
 
         start = time.time()
         logger.debug(f"Generating embeddings for {len(contents)} contents...")
@@ -120,20 +93,6 @@ class FaissVecDB(BaseVecDB):
         logger.debug(
             f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds.",
         )
-        if len(vectors) != content_count:
-            raise KnowledgeBaseUploadError(
-                stage="embedding",
-                user_message=(
-                    "向量化失败：嵌入模型返回的向量数量与文本分块数量不一致"
-                    f"（期望 {content_count}，实际 {len(vectors)}）。"
-                    "这通常说明当前 Embedding 接口未完整返回批量结果，"
-                    "或该服务不兼容当前批量请求格式。"
-                ),
-                details={
-                    "expected_contents": content_count,
-                    "actual_vectors": len(vectors),
-                },
-            )
 
         # 使用 DocumentStorage 的批量插入方法
         int_ids = await self.document_storage.insert_documents_batch(
@@ -141,70 +100,27 @@ class FaissVecDB(BaseVecDB):
             contents,
             metadatas,
         )
-        if len(int_ids) != content_count:
-            raise KnowledgeBaseUploadError(
-                stage="storage",
-                user_message=(
-                    f"存储失败：写入文档索引后返回的内部 ID 数量与文本分块数量不一致"
-                    f"（期望 {content_count}，实际 {len(int_ids)}）。"
-                ),
-                details={
-                    "expected_contents": content_count,
-                    "actual_int_ids": len(int_ids),
-                },
-            )
 
         # 批量插入向量到 FAISS
-        try:
-            vectors_array = np.asarray(vectors, dtype=np.float32)
-        except (TypeError, ValueError) as exc:
-            raise KnowledgeBaseUploadError(
-                stage="embedding",
-                user_message=(
-                    "向量化失败：嵌入模型返回的向量格式不正确，"
-                    "无法转换为统一的浮点向量矩阵。"
-                ),
-                details={"vector_count": len(vectors)},
-            ) from exc
-        if vectors_array.ndim != 2:
-            raise KnowledgeBaseUploadError(
-                stage="embedding",
-                user_message=(
-                    "向量化失败：嵌入模型返回的向量格式不正确，无法构造成二维向量矩阵。"
-                ),
-                details={"actual_ndim": int(vectors_array.ndim)},
-            )
-        if vectors_array.shape[1] != self.embedding_storage.dimension:
-            raise KnowledgeBaseUploadError(
-                stage="embedding",
-                user_message=(
-                    "向量化失败：返回向量维度与当前知识库索引维度不一致"
-                    f"（期望 {self.embedding_storage.dimension}，"
-                    f"实际 {vectors_array.shape[1]}）。"
-                ),
-                details={
-                    "expected_dimension": self.embedding_storage.dimension,
-                    "actual_dimension": int(vectors_array.shape[1]),
-                },
-            )
+        vectors_array = np.array(vectors).astype("float32")
         await self.embedding_storage.insert_batch(vectors_array, int_ids)
         return int_ids
 
     async def retrieve(
         self,
         query: str,
-        k: int = 5,
+        top_k: int = 5,
         fetch_k: int = 20,
         rerank: bool = False,
         metadata_filters: dict | None = None,
     ) -> list[Result]:
-        """搜索最相似的文档。
+        """搜索最相似的文档｡
 
         Args:
             query (str): 查询文本
-            k (int): 返回的最相似文档的数量
+            top_k (int): 返回的最相似文档的数量
             fetch_k (int): 在根据 metadata 过滤前从 FAISS 中获取的数量
-            rerank (bool): 是否使用重排序。这需要在实例化时提供 rerank_provider, 如果未提供并且 rerank 为 True, 不会抛出异常。
+            rerank (bool): 是否使用重排序｡这需要在实例化时提供 rerank_provider, 如果未提供并且 rerank 为 True, 不会抛出异常｡
             metadata_filters (dict): 元数据过滤器
 
         Returns:
@@ -214,7 +130,7 @@ class FaissVecDB(BaseVecDB):
         embedding = await self.embedding_provider.get_embedding(query)
         scores, indices = await self.embedding_storage.search(
             vector=np.array([embedding]).astype("float32"),
-            k=fetch_k if metadata_filters else k,
+            k=fetch_k if metadata_filters else top_k,
         )
         if len(indices[0]) == 0 or indices[0][0] == -1:
             return []
@@ -238,7 +154,7 @@ class FaissVecDB(BaseVecDB):
             score = scores[0][i]
             result_docs.append(Result(similarity=float(score), data=fetch_doc))
 
-        top_k_results = result_docs[:k]
+        top_k_results = result_docs[:top_k]
 
         if rerank and self.rerank_provider:
             documents = [doc.data["text"] for doc in top_k_results]
@@ -255,17 +171,18 @@ class FaissVecDB(BaseVecDB):
 
         return top_k_results
 
-    async def delete(self, doc_id: str) -> None:
-        """删除一条文档块（chunk）"""
+    async def delete(self, doc_id: str) -> bool:
+        """删除一条文档块(chunk)"""
         # 获得对应的 int id
         result = await self.document_storage.get_document_by_doc_id(doc_id)
         int_id = result["id"] if result else None
         if int_id is None:
-            return
+            return False
 
         # 使用 DocumentStorage 的删除方法
         await self.document_storage.delete_document_by_doc_id(doc_id)
         await self.embedding_storage.delete([int_id])
+        return True
 
     async def close(self) -> None:
         await self.document_storage.close()

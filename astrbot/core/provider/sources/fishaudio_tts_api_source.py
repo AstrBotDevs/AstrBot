@@ -3,16 +3,16 @@ import re
 import uuid
 from typing import Annotated, Literal
 
+import aiofiles
 import ormsgpack
 from httpx import AsyncClient
 from pydantic import BaseModel, conint
 
 from astrbot import logger
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 
 class ServeReferenceAudio(BaseModel):
@@ -32,9 +32,9 @@ class ServeTTSRequest(BaseModel):
     # 例如 https://fish.audio/m/626bb6d3f3364c9cbc3aa6a67300a664/
     # 其中reference_id为 626bb6d3f3364c9cbc3aa6a67300a664
     reference_id: str | None = None
-    # 对中英文文本进行标准化，这可以提高数字的稳定性
+    # 对中英文文本进行标准化,这可以提高数字的稳定性
     normalize: bool = True
-    # 平衡模式将延迟减少到300毫秒，但可能会降低稳定性
+    # 平衡模式将延迟减少到300毫秒,但可能会降低稳定性
     latency: Literal["normal", "balanced"] = "normal"
 
 
@@ -85,7 +85,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         sort_options = ["score", "task_count", "created_at"]
         async with AsyncClient(
             base_url=self.api_base.replace("/v1", ""),
-            proxy=self.proxy if self.proxy else None,
+            proxy=self.proxy or None,
         ) as client:
             for sort_by in sort_options:
                 params = {"title": character, "sort_by": sort_by}
@@ -121,24 +121,31 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         return bool(re.match(pattern, reference_id.strip()))
 
     async def _generate_request(self, text: str) -> ServeTTSRequest:
-        # 向前兼容逻辑：优先使用reference_id，如果没有则使用角色名称查询
+        # 向前兼容逻辑:优先使用reference_id,如果没有则使用角色名称查询
         if self.reference_id and self.reference_id.strip():
             # 验证reference_id格式
             if not self._validate_reference_id(self.reference_id):
                 raise ValueError(
                     f"无效的FishAudio参考模型ID: '{self.reference_id}'. "
-                    f"请确保ID是32位十六进制字符串（例如: 626bb6d3f3364c9cbc3aa6a67300a664）。"
-                    f"您可以从 https://fish.audio/zh-CN/discovery 获取有效的模型ID。",
+                    f"请确保ID是32位十六进制字符串(例如: 626bb6d3f3364c9cbc3aa6a67300a664)｡"
+                    f"您可以从 https://fish.audio/zh-CN/discovery 获取有效的模型ID｡",
                 )
-            reference_id = self.reference_id.strip()
+            resolved_reference_id = self.reference_id.strip()
         else:
             # 回退到原来的角色名称查询逻辑
-            reference_id = await self._get_reference_id_by_character(self.character)
+            fetched_reference_id = await self._get_reference_id_by_character(
+                self.character,
+            )
+            if fetched_reference_id is None:
+                raise ValueError(
+                    f"未找到 FishAudio 角色 '{self.character}' 对应的参考模型ID｡",
+                )
+            resolved_reference_id = fetched_reference_id
 
         return ServeTTSRequest(
             text=text,
             format="wav",
-            reference_id=reference_id,
+            reference_id=resolved_reference_id,
         )
 
     async def get_audio(self, text: str) -> str:
@@ -149,7 +156,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         async with AsyncClient(
             base_url=self.api_base,
             timeout=self.timeout,
-            proxy=self.proxy if self.proxy else None,
+            proxy=self.proxy or None,
         ).stream(
             "POST",
             "/tts",
@@ -157,14 +164,15 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
         ) as response:
             if response.status_code == 200 and response.headers.get(
-                "content-type", ""
+                "content-type",
+                "",
             ).startswith("audio/"):
-                with open(path, "wb") as f:
+                async with aiofiles.open(path, "wb") as f:
                     async for chunk in response.aiter_bytes():
-                        f.write(chunk)
+                        await f.write(chunk)
                 return path
             error_bytes = await response.aread()
             error_text = error_bytes.decode("utf-8", errors="replace")[:1024]
             raise Exception(
-                f"Fish Audio API请求失败: 状态码 {response.status_code}, 响应内容: {error_text}"
+                f"Fish Audio API请求失败: 状态码 {response.status_code}, 响应内容: {error_text}",
             )

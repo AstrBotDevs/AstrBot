@@ -4,7 +4,7 @@ version = "4.23.6"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 license = { text = "AGPL-3.0-or-later" }
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 
 keywords = ["AstrBot", "Agent", "Chatbot", "IM"]
 
@@ -15,11 +15,13 @@ dependencies = [
   "aiosqlite>=0.21.0",
   "anthropic>=0.51.0",
   "apscheduler>=3.11.0",
+  "beautifulsoup4>=4.13.4",
   "certifi>=2025.4.26",
   "chardet~=5.1.0",
   "loguru>=0.7.2",
   "cryptography>=44.0.3",
   "dashscope>=1.23.2",
+  "defusedxml>=0.7.1",
   "deprecated>=1.2.18",
   "dingtalk-stream>=0.22.1",
   "docstring-parser>=0.16",
@@ -28,6 +30,7 @@ dependencies = [
   "google-genai>=1.56.0",
   "httpx[socks]>=0.28.1",
   "lark-oapi>=1.4.15",
+  "lxml-html-clean>=0.4.2",
   "mcp>=1.8.0",
   "openai>=1.78.0",
   "ormsgpack>=1.9.1",
@@ -36,12 +39,12 @@ dependencies = [
   "psutil>=5.8.0,<7.2.0",
   "py-cord>=2.6.1",
   "pydantic>=2.12.5",
-  "pydub>=0.25.1",
+  "quart>=0.19.0,<0.20.0",
   "pyjwt>=2.10.1",
   "qrcode>=8.2",
   "python-telegram-bot>=22.6",
   "qq-botpy>=1.2.1",
-  "quart>=0.20.0",
+  "readability-lxml>=0.8.4.1",
   "silk-python>=0.2.6",
   "slack-sdk>=3.35.0",
   "sqlalchemy[asyncio]>=2.0.41",
@@ -64,26 +67,49 @@ dependencies = [
   "python-socks>=2.8.0",
   "pysocks>=1.7.1",
   "packaging>=24.2",
-  "python-ripgrep==0.0.8",
+  "quart-cors>=0.8.0",
+  "anyio>=4.12.1",
+  "argon2-cffi>=23.1.0",
+  "plumbum>=1.10.0",
+  "openai-agents>=0.12.5",
+  "fastapi>=0.135.1",
+  "pytest-asyncio>=0.25.0",
 ]
+[project.urls]
+Homepage = "https://astrbot.app"
+Repository = "https://github.com/AstrBotDevs/AstrBot"
+[project.scripts]
+astrbot = "astrbot:cli"
 
 [dependency-groups]
 dev = [
   "commitizen>=4.9.1",
+  "mypy>=1.19.1",
   "pytest>=8.4.1",
-  "pytest-asyncio>=1.1.0",
+  "pytest-asyncio>=0.25.0",
   "pytest-cov>=6.2.1",
   "ruff>=0.15.0",
+  "textual-dev>=1.8.0",
 ]
 
-[project.scripts]
-astrbot = "astrbot.cli.__main__:cli"
-
-[project.urls]
-Repository = "https://github.com/AstrBotDevs/AstrBot"
-
 [tool.ruff]
-exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]
+exclude = [
+    "astrbot/core/utils/t2i/local_strategy.py",
+    "astrbot/api/all.py",
+    "astrbot/api/message_components.py",
+    "astrbot/api/platform/__init__.py",
+    "astrbot/api/star/__init__.py",
+    "astrbot/core/config/__init__.py",
+    "astrbot/core/provider/func_tool_manager.py",
+    "astrbot/core/skills/__init__.py",
+    "astrbot/core/tools/__init__.py",
+    "tests",
+    "tests/**",
+    "rust",
+    "examples",
+    "**/tests/**",
+    "**/scripts",
+]
 line-length = 88
 target-version = "py310"
 
@@ -92,40 +118,47 @@ select = [
   "F",     # Pyflakes
   "W",     # pycodestyle warnings
   "E",     # pycodestyle errors
+  "B",     # bugbear
+  "I",     # isort
+  "UP",    # pyupgrade
   "ASYNC", # flake8-async
   "C4",    # flake8-comprehensions
+  "T10",   # flake8-debugger
+  "T20",   # flake8-print
+  "PYI",   # flake8-pyi
+  "PT",    # flake8-pytest-style
   "Q",     # flake8-quotes
-  "I",     # import-order
-  "UP",    # pyupgrade
-  # "SIM", # flake8-simplify 
+  "TID",   # flake8-tidy-imports
 ]
 ignore = [
-  "F403",
-  "F405",
   "E501",
-  "ASYNC230", # TODO: handle ASYNC230 in AstrBot
-  "ASYNC240", # TODO: handle ASYNC240 in AstrBot
 ]
 
 [tool.pyright]
+stubPath = "types"
 typeCheckingMode = "basic"
-pythonVersion = "3.10"
+pythonVersion = "3.12"
 reportMissingTypeStubs = false
 reportMissingImports = false
 include = ["astrbot"]
-exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
+exclude = [
+    "dashboard",
+    "node_modules",
+    "dist",
+    "data",
+    "tests",
+    "tests/**",
+    "**/tests/**",
+    "**/__pycache__",
+]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+mypy_path = "types"
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
-# Include bundled dashboard dist even though it is not tracked by VCS.
-[tool.hatch.build.targets.wheel]
-artifacts = ["astrbot/dashboard/dist/**"]
-
-# Custom build hook: builds the Vue dashboard and copies dist into the package.
-[tool.hatch.build.hooks.custom]
-path = "scripts/hatch_build.py"
-
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"

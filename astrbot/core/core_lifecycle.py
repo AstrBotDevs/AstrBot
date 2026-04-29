@@ -15,6 +15,7 @@ import threading
 import time
 import traceback
 from asyncio import Queue
+from enum import Enum
 
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
@@ -41,6 +42,13 @@ from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
 
 from . import astrbot_config, html_renderer
 from .event_bus import EventBus
+
+
+class LifecycleState(Enum):
+    CREATED = "created"
+    CORE_READY = "core_ready"
+    RUNTIME_READY = "runtime_ready"
+    RUNTIME_FAILED = "runtime_failed"
 
 
 class AstrBotCoreLifecycle:
@@ -79,6 +87,299 @@ class AstrBotCoreLifecycle:
                 del os.environ["no_proxy"]
             logger.debug("HTTP proxy cleared")
 
+        # Lifecycle compatibility fields
+        # Expose lifecycle state and event flags expected by tests and older consumers.
+        self.lifecycle_state = LifecycleState.CREATED
+        self.core_initialized = False
+        self.runtime_ready = False
+        self.runtime_failed = False
+        self.runtime_ready_event = asyncio.Event()
+        self.runtime_failed_event = asyncio.Event()
+        self.runtime_bootstrap_error = None
+        self.start_time = 0
+        self.runtime_bootstrap_task = None
+
+        # runtime placeholders and defaults expected by tests and runtime code.
+        # These used to be set later in the full initialize() path; tests and some
+        # callers expect these attributes to exist even when only the core phase
+        # was performed. Initialize them conservatively here.
+        self.curr_tasks: list[asyncio.Task] = []
+        self.dashboard_shutdown_event: asyncio.Event | None = None
+        self.event_bus = None
+        self.pipeline_scheduler_mapping: dict = {}
+
+    def _set_lifecycle_state(self, state: LifecycleState) -> None:
+        """Set lifecycle state and maintain compatibility flags/events.
+
+        This method keeps the simple compatibility surface used by tests that
+        expect boolean flags and asyncio Events alongside the enum state.
+        """
+        self.lifecycle_state = state
+
+        if state == LifecycleState.CREATED:
+            self.core_initialized = False
+            self.runtime_ready = False
+            self.runtime_failed = False
+            try:
+                self.runtime_ready_event.clear()
+            except Exception:
+                pass
+            try:
+                self.runtime_failed_event.clear()
+            except Exception:
+                pass
+        elif state == LifecycleState.CORE_READY:
+            self.core_initialized = True
+            self.runtime_ready = False
+            self.runtime_failed = False
+            try:
+                self.runtime_ready_event.clear()
+            except Exception:
+                pass
+            try:
+                self.runtime_failed_event.clear()
+            except Exception:
+                pass
+        elif state == LifecycleState.RUNTIME_READY:
+            self.core_initialized = True
+            self.runtime_ready = True
+            self.runtime_failed = False
+            try:
+                self.runtime_ready_event.set()
+            except Exception:
+                pass
+            try:
+                self.runtime_failed_event.clear()
+            except Exception:
+                pass
+        elif state == LifecycleState.RUNTIME_FAILED:
+            self.core_initialized = True
+            self.runtime_ready = False
+            self.runtime_failed = True
+            try:
+                self.runtime_ready_event.clear()
+            except Exception:
+                pass
+            try:
+                self.runtime_failed_event.set()
+            except Exception:
+                pass
+
+    async def initialize_core(self) -> None:
+        """Compatibility method for older 'initialize_core' split-phase initialization.
+
+        This performs the fast/core initialization phase only (sufficient to get
+        the process started and to schedule the runtime bootstrap later). It is
+        intentionally a subset of the full `initialize` method so tests and
+        older callers that expect a split initialization can rely on it.
+        """
+        # Logging and configuration
+        logger.info("AstrBot v" + VERSION)
+        if os.environ.get("TESTING", ""):
+            LogManager.configure_logger(
+                logger,
+                self.astrbot_config,
+                override_level="DEBUG",
+            )
+            LogManager.configure_trace_logger(self.astrbot_config)
+        else:
+            LogManager.configure_logger(logger, self.astrbot_config)
+            LogManager.configure_trace_logger(self.astrbot_config)
+
+        # Core quick initializations
+        await self.db.initialize()
+
+        await html_renderer.initialize()
+
+        # Initialize UMOP config router (fast)
+        self.umop_config_router = UmopConfigRouter(sp=sp)
+        await self.umop_config_router.initialize()
+
+        # AstrBot config manager
+        self.astrbot_config_mgr = AstrBotConfigManager(
+            default_config=self.astrbot_config,
+            ucr=self.umop_config_router,
+            sp=sp,
+        )
+        self.temp_dir_cleaner = TempDirCleaner(
+            max_size_getter=lambda: self.astrbot_config_mgr.default_conf.get(
+                TempDirCleaner.CONFIG_KEY,
+                TempDirCleaner.DEFAULT_MAX_SIZE,
+            ),
+        )
+
+        # Apply migrations (keep same behavior)
+        try:
+            await migra(
+                self.db,
+                self.astrbot_config_mgr,
+                self.umop_config_router,
+                self.astrbot_config_mgr,
+            )
+        except Exception as e:
+            logger.error(f"AstrBot migration failed: {e!s}")
+            logger.error(traceback.format_exc())
+
+        # Initialize event queue
+        self.event_queue = Queue()
+
+        # Initialize persona manager (fast)
+        self.persona_mgr = PersonaManager(self.db, self.astrbot_config_mgr)
+        await self.persona_mgr.initialize()
+
+        # Instantiate provider manager (don't run .initialize() here)
+        self.provider_manager = ProviderManager(
+            self.astrbot_config_mgr,
+            self.db,
+            self.persona_mgr,
+        )
+
+        # Instantiate platform manager (don't run .initialize() here)
+        self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
+
+        # Instantiate conversation manager and other lightweight managers
+        self.conversation_manager = ConversationManager(self.db)
+        self.platform_message_history_manager = PlatformMessageHistoryManager(self.db)
+
+        # Instantiate KB manager but defer initialize()
+        self.kb_manager = KnowledgeBaseManager(self.provider_manager)
+
+        # Instantiate CronJob manager
+        self.cron_manager = CronJobManager(self.db)
+
+        # Dynamic subagents orchestrator (may be patched in tests)
+        await self._init_or_reload_subagent_orchestrator()
+
+        # Prepare star/plugin context (without reloading plugins)
+        self.star_context = Context(
+            self.event_queue,
+            self.astrbot_config,
+            self.db,
+            self.provider_manager,
+            self.platform_manager,
+            self.conversation_manager,
+            self.platform_message_history_manager,
+            self.persona_mgr,
+            self.astrbot_config_mgr,
+            self.kb_manager,
+            self.cron_manager,
+            self.subagent_orchestrator,
+        )
+
+        # Instantiate plugin manager (do not reload here)
+        self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
+
+        # Record that we finished the core phase
+        self._set_lifecycle_state(LifecycleState.CORE_READY)
+
+        # Prepare updater instance as in original initialize (constructor call)
+        self.astrbot_updator = AstrBotUpdator()
+
+        # Leave other runtime initializations (plugin reload, provider init, etc.)
+        # to `bootstrap_runtime`.
+
+        # Initialize dashboard shutdown event (matches full initialize behavior)
+        self.dashboard_shutdown_event = asyncio.Event()
+
+    async def bootstrap_runtime(self) -> None:
+        """Compatibility method for runtime bootstrap (deferred initialization).
+
+        This completes the remaining initialization steps that were deferred by
+        `initialize_core`, such as plugin reloads, provider initialization, KB init,
+        pipeline scheduler loading and platform initialization.
+        """
+        # Guard: require core phase completed
+        if getattr(self, "lifecycle_state", None) != LifecycleState.CORE_READY:
+            raise RuntimeError("bootstrap_runtime must be called after initialize_core")
+
+        # Reset runtime artifacts if re-attempting bootstrap after a failure
+        self.event_bus = None
+        self.pipeline_scheduler_mapping = {}
+
+        try:
+            # Reload plugins (this may register runtime routes/tasks)
+            await self.plugin_manager.reload()
+
+            # Initialize providers and KB (deferred heavy work)
+            await self.provider_manager.initialize()
+            await self.kb_manager.initialize()
+
+            # Load pipeline schedulers (may be async and expensive)
+            self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
+
+            # Create event bus now that pipeline schedulers exist
+            self.event_bus = EventBus(
+                self.event_queue,
+                self.pipeline_scheduler_mapping,
+                self.astrbot_config_mgr,
+            )
+
+            # Initialize platform adapters (deferred)
+            await self.platform_manager.initialize()
+
+            # Schedule auxiliary background tasks (metadata/task creation)
+            asyncio.create_task(update_llm_metadata())
+
+            # All runtime initialization complete
+            self._set_lifecycle_state(LifecycleState.RUNTIME_READY)
+            self.runtime_bootstrap_error = None
+            return
+        except Exception as e:
+            # Mark runtime failed for compatibility and rethrow so callers can react
+            self.runtime_bootstrap_error = e
+            self._set_lifecycle_state(LifecycleState.RUNTIME_FAILED)
+
+            # Attempt to run cleanup similar to original initialize() error paths
+            try:
+                # attempt graceful termination of partial runtime subsystems
+                if getattr(self, "plugin_manager", None) and hasattr(
+                    self.plugin_manager,
+                    "cleanup_loaded_plugins",
+                ):
+                    await self.plugin_manager.cleanup_loaded_plugins()
+            except Exception:
+                logger.error(
+                    "Failed cleaning up plugins after runtime bootstrap failure",
+                )
+
+            # Reset event_bus to None so callers can detect partial init
+            self.event_bus = None
+
+            try:
+                if getattr(self, "provider_manager", None) and hasattr(
+                    self.provider_manager,
+                    "terminate",
+                ):
+                    await self.provider_manager.terminate()
+            except Exception:
+                logger.error(
+                    "Failed terminating provider_manager after runtime bootstrap failure",
+                )
+
+            try:
+                if getattr(self, "platform_manager", None) and hasattr(
+                    self.platform_manager,
+                    "terminate",
+                ):
+                    await self.platform_manager.terminate()
+            except Exception:
+                logger.error(
+                    "Failed terminating platform_manager after runtime bootstrap failure",
+                )
+
+            try:
+                if getattr(self, "kb_manager", None) and hasattr(
+                    self.kb_manager,
+                    "terminate",
+                ):
+                    await self.kb_manager.terminate()
+            except Exception:
+                logger.error(
+                    "Failed terminating kb_manager after runtime bootstrap failure",
+                )
+
+            raise
+
     async def _init_or_reload_subagent_orchestrator(self) -> None:
         """Create (if needed) and reload the subagent orchestrator from config.
 
@@ -106,7 +407,9 @@ class AstrBotCoreLifecycle:
         logger.info("AstrBot v" + VERSION)
         if os.environ.get("TESTING", ""):
             LogManager.configure_logger(
-                logger, self.astrbot_config, override_level="DEBUG"
+                logger,
+                self.astrbot_config,
+                override_level="DEBUG",
             )
             LogManager.configure_trace_logger(self.astrbot_config)
         else:
@@ -222,7 +525,7 @@ class AstrBotCoreLifecycle:
         self.start_time = int(time.time())
 
         # 初始化当前任务列表
-        self.curr_tasks: list[asyncio.Task] = []
+        self.curr_tasks = []
 
         # 根据配置实例化各个平台适配器
         await self.platform_manager.initialize()
@@ -232,14 +535,20 @@ class AstrBotCoreLifecycle:
 
         asyncio.create_task(update_llm_metadata())
 
+        # Mark runtime ready now that the full initialize() path has completed.
+        self._set_lifecycle_state(LifecycleState.RUNTIME_READY)
+        self.runtime_bootstrap_error = None
+
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""
         # 创建一个异步任务来执行事件总线的 dispatch() 方法
         # dispatch是一个无限循环的协程, 从事件队列中获取事件并处理
-        event_bus_task = asyncio.create_task(
-            self.event_bus.dispatch(),
-            name="event_bus",
-        )
+        event_bus_task = None
+        if self.event_bus:
+            event_bus_task = asyncio.create_task(
+                self.event_bus.dispatch(),
+                name="event_bus",
+            )
         cron_task = None
         if self.cron_manager:
             cron_task = asyncio.create_task(
@@ -258,7 +567,10 @@ class AstrBotCoreLifecycle:
         for task in self.star_context._register_tasks:
             extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
 
-        tasks_ = [event_bus_task, *(extra_tasks if extra_tasks else [])]
+        tasks_ = []
+        if event_bus_task:
+            tasks_.append(event_bus_task)
+        tasks_.extend(extra_tasks or [])
         if cron_task:
             tasks_.append(cron_task)
         if temp_dir_cleaner_task:
@@ -313,46 +625,97 @@ class AstrBotCoreLifecycle:
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
 
     async def stop(self) -> None:
-        """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
-        if self.temp_dir_cleaner:
-            await self.temp_dir_cleaner.stop()
+        """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器.
 
-        # 请求停止所有正在运行的异步任务
-        for task in self.curr_tasks:
-            task.cancel()
-
-        if self.cron_manager:
-            await self.cron_manager.shutdown()
-
-        for plugin in self.plugin_manager.context.get_all_stars():
+        This method is defensive: not all attributes may exist if only a partial
+        initialization was performed (tests construct lifecycle objects and call
+        stop() in different phases). Guard attribute accesses and log failures
+        instead of raising AttributeError.
+        """
+        # Stop temp dir cleaner if present
+        if self.temp_dir_cleaner is not None:
             try:
-                await self.plugin_manager._terminate_plugin(plugin)
-            except Exception as e:
-                logger.warning(traceback.format_exc())
-                logger.warning(
-                    f"插件 {plugin.name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题。",
+                await self.temp_dir_cleaner.stop()
+            except Exception:
+                logger.exception("Error stopping temp_dir_cleaner")
+
+        # Cancel currently tracked tasks if any
+        curr_tasks = getattr(self, "curr_tasks", None)
+        if curr_tasks:
+            for task in list(curr_tasks):
+                try:
+                    task.cancel()
+                except Exception:
+                    logger.exception("Error cancelling task")
+
+        # Shutdown cron manager if present
+        if self.cron_manager is not None:
+            try:
+                await self.cron_manager.shutdown()
+            except Exception:
+                logger.exception("Error shutting down cron_manager")
+
+        # Terminate plugins if plugin_manager and context exist
+        if getattr(self, "plugin_manager", None) and getattr(
+            self.plugin_manager,
+            "context",
+            None,
+        ):
+            try:
+                for plugin in self.plugin_manager.context.get_all_stars():
+                    try:
+                        await self.plugin_manager._terminate_plugin(plugin)
+                    except Exception:
+                        logger.exception("Failed to terminate plugin")
+            except Exception:
+                logger.exception(
+                    "Error iterating plugin_manager.context.get_all_stars()",
                 )
 
-        await self.provider_manager.terminate()
-        await self.platform_manager.terminate()
-        await self.kb_manager.terminate()
-        self.dashboard_shutdown_event.set()
-
-        # 再次遍历curr_tasks等待每个任务真正结束
-        for task in self.curr_tasks:
+        # Terminate other managers if present
+        if getattr(self, "provider_manager", None):
             try:
-                await task
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                logger.error(f"任务 {task.get_name()} 发生错误: {e}")
+                await self.provider_manager.terminate()
+            except Exception:
+                logger.exception("Error terminating provider_manager")
+
+        if getattr(self, "platform_manager", None):
+            try:
+                await self.platform_manager.terminate()
+            except Exception:
+                logger.exception("Error terminating platform_manager")
+
+        if getattr(self, "kb_manager", None):
+            try:
+                await self.kb_manager.terminate()
+            except Exception:
+                logger.exception("Error terminating kb_manager")
+
+        # Signal dashboard shutdown if event exists
+        if self.dashboard_shutdown_event is not None:
+            try:
+                self.dashboard_shutdown_event.set()
+            except Exception:
+                logger.exception("Error setting dashboard_shutdown_event")
+
+        # Await tasks to finish (if any)
+        if curr_tasks:
+            for task in list(curr_tasks):
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    name = task.get_name() if hasattr(task, "get_name") else str(task)
+                    logger.error(f"任务 {name} 发生错误: {e}")
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
-        self.dashboard_shutdown_event.set()
+        if self.dashboard_shutdown_event is not None:
+            self.dashboard_shutdown_event.set()
         threading.Thread(
             target=self.astrbot_updator._reboot,
             name="restart",
