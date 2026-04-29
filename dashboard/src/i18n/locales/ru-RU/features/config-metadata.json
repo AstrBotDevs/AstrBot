@@ -1302,6 +1302,14 @@
                 "description": "Модель эмбеддингов",
                 "hint": "Имя модели эмбеддингов."
             },
+            "embedding_send_dimensions": {
+                "description": "Отправлять параметр dimensions",
+                "hint": "Отправлять ли параметр dimensions в запросах embeddings. Некоторые OpenAI-совместимые сервисы, например NVIDIA, его не поддерживают; отключите этот параметр, но оставьте embedding_dimensions как локальную размерность векторного индекса."
+            },
+            "embedding_input_type": {
+                "description": "Тип входа Embedding",
+                "hint": "Некоторым сервисам embeddings нужен параметр input_type. Для retrieval embedding моделей NVIDIA используйте query. Оставьте пустым, чтобы не отправлять."
+            },
             "embedding_api_key": {
                 "description": "API Base URL"
             },

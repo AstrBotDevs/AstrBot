@@ -1800,6 +1800,8 @@ CONFIG_METADATA_2 = {
                         "embedding_api_base": "",
                         "embedding_model": "",
                         "embedding_dimensions": 1024,
+                        "embedding_send_dimensions": True,
+                        "embedding_input_type": "",
                         "timeout": 20,
                         "proxy": "",
                     },
@@ -2148,6 +2150,16 @@ CONFIG_METADATA_2 = {
                         "description": "嵌入模型",
                         "type": "string",
                         "hint": "嵌入模型名称。",
+                    },
+                    "embedding_send_dimensions": {
+                        "description": "发送嵌入维度参数",
+                        "type": "bool",
+                        "hint": "是否在请求中发送 dimensions 参数。部分兼容 OpenAI 的服务（如 NVIDIA）不支持该参数，需要关闭，但 embedding_dimensions 仍会作为本地向量索引维度使用。",
+                    },
+                    "embedding_input_type": {
+                        "description": "嵌入输入类型",
+                        "type": "string",
+                        "hint": "部分嵌入服务需要 input_type 参数。例如 NVIDIA 的检索嵌入模型可填写 query。留空则不发送。",
                     },
                     "embedding_api_key": {
                         "description": "API Key",

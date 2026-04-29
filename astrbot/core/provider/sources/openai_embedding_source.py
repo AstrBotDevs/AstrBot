@@ -68,8 +68,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def _embedding_kwargs(self) -> dict:
         """构建嵌入请求的可选参数"""
         kwargs = {}
+        extra_body = {}
         dim_val = self.provider_config.get("embedding_dimensions")
-        if dim_val not in (None, "", 0):
+        send_dimensions = self.provider_config.get("embedding_send_dimensions", True)
+        if dim_val not in (None, "", 0) and send_dimensions:
             try:
                 dim_int = int(dim_val)
                 if dim_int > 0:
@@ -78,6 +80,13 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 logger.warning(
                     f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."
                 )
+
+        input_type = self.provider_config.get("embedding_input_type")
+        if input_type:
+            extra_body["input_type"] = input_type
+
+        if extra_body:
+            kwargs["extra_body"] = extra_body
         return kwargs
 
     def get_dim(self) -> int:

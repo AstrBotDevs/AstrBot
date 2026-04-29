@@ -895,10 +895,11 @@ class ConfigRoute(Route):
             if inspect.iscoroutinefunction(init_fn):
                 await init_fn()
 
-            # 通过实际请求检测模型原生维度（不传 dimensions 参数，避免模型不支持时报错）
+            # 通过实际请求检测模型原生维度
             vec = await inst.client.embeddings.create(
                 input="echo",
                 model=inst.model,
+                **inst._embedding_kwargs(),
             )
             dim = len(vec.data[0].embedding)
 
