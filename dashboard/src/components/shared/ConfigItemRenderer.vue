@@ -92,7 +92,7 @@
       :model-value="modelValue"
       @update:model-value="val => { emitUpdate(val); listSearchText = '' }"
       v-model:search="listSearchText"
-      :items="getSelectItems(itemMeta)"
+      :items="listSelectItems"
       item-title="title"
       item-value="value"
       :disabled="itemMeta?.readonly"
@@ -239,7 +239,7 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const numericTemp = ref(null)
@@ -279,6 +279,12 @@ const { getRaw } = useModuleI18n('features/config-metadata')
 function emitUpdate(val) {
   emit('update:modelValue', val)
 }
+
+const listSelectItems = computed(() =>
+  props.itemMeta?.type === 'list' && props.itemMeta?.options
+    ? getSelectItems(props.itemMeta)
+    : []
+)
 
 function toNumber(val) {
   const n = parseFloat(val)
