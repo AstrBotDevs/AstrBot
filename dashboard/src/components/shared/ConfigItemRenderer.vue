@@ -87,10 +87,11 @@
       ></v-checkbox>
     </div>
 
-    <v-select
+    <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
+      @update:model-value="val => { emitUpdate(val); listSearchText = '' }"
+      v-model:search="listSearchText"
       :items="getSelectItems(itemMeta)"
       item-title="title"
       item-value="value"
@@ -101,7 +102,7 @@
       hide-details
       chips
       multiple
-    ></v-select>
+    ></v-autocomplete>
 
     <v-select
       v-else-if="itemMeta?.options"
@@ -242,6 +243,7 @@ import { ref } from 'vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const numericTemp = ref(null)
+const listSearchText = ref('')
 
 const props = defineProps({
   modelValue: {
