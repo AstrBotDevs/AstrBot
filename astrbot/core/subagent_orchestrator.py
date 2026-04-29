@@ -112,7 +112,7 @@ class SubAgentOrchestrator:
 
         self.handoffs = handoffs
 
-    async def register_static_subagents_to_manager(self, session_id: str) -> None:
+    def register_static_subagents_to_manager(self, session_id: str) -> None:
         """Register all static subagents (from config) into SubAgentManager.
 
         This makes static subagents enjoy the same unified management as
@@ -136,7 +136,7 @@ class SubAgentOrchestrator:
                 agent = handoff.agent
                 # The agent.tools may contain skill names; we pass them along
                 # SubAgentManager will filter and build skills prompt as needed
-                await SubAgentManager.register_static_subagent(
+                SubAgentManager.register_static_subagent(
                     session_id=session_id,
                     handoff_tool=handoff,
                     skills=skills,

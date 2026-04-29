@@ -1000,7 +1000,7 @@ async def _apply_subagent_manager_tools(
 
         session_id = event.unified_msg_origin
         # Register static subagents from config into SubAgentManager for unified management
-        await so.register_static_subagents_to_manager(session_id)
+        so.register_static_subagents_to_manager(session_id)
 
         # Register dynamic subagent management tools (only when dynamic creation is enabled)
         if enable_dynamic:

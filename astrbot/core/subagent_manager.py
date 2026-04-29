@@ -781,7 +781,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         return f"transfer_to_{config.name}", handoff_tool
 
     @classmethod
-    async def register_static_subagent(
+    def register_static_subagent(
         cls,
         session_id: str,
         handoff_tool: HandoffTool,
