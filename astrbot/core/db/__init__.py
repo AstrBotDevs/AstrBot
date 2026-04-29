@@ -801,6 +801,13 @@ class BaseDatabase(abc.ABC):
         """Delete a Platform session by its ID."""
         ...
 
+    @abc.abstractmethod
+    async def migrate_user_webchat_data(
+        self, old_username: str, new_username: str
+    ) -> None:
+        """Migrate all webchat user data when username is changed."""
+        ...
+
     # ====
     # ChatUI Project Management
     # ====
