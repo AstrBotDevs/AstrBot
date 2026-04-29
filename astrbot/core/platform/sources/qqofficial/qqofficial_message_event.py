@@ -9,6 +9,7 @@ from typing import cast
 import aiofiles
 import botpy
 import botpy.errors
+import botpy.interaction
 import botpy.message
 import botpy.types
 import botpy.types.message
@@ -31,6 +32,9 @@ from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url, file_to_base64
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
+
+from ._markdown_media import image_to_markdown_fragment
+from .components import QQCButton, QQCKeyboard
 
 
 def _patch_qq_botpy_formdata() -> None:
@@ -70,12 +74,13 @@ _qqofficial_retry = retry(
 
 
 class QQOfficialMessageEvent(AstrMessageEvent):
-    MARKDOWN_NOT_ALLOWED_ERROR = "不允许发送原生 markdown"
     IMAGE_FILE_TYPE = 1
     VIDEO_FILE_TYPE = 2
     VOICE_FILE_TYPE = 3
     FILE_FILE_TYPE = 4
     STREAM_MARKDOWN_NEWLINE_ERROR = "流式消息md分片需要\\n结束"
+    # 没有正文但带 keyboard 时的占位（QQ markdown content 不可为空）
+    EMPTY_MARKDOWN_PLACEHOLDER = "​"
 
     def __init__(
         self,
@@ -194,10 +199,22 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             botpy.message.Message
             | botpy.message.GroupMessage
             | botpy.message.DirectMessage
-            | botpy.message.C2CMessage,
+            | botpy.message.C2CMessage
+            | botpy.interaction.Interaction,
         ):
             logger.warning(f"[QQOfficial] 不支持的消息源类型: {type(source)}")
             return None
+
+        # 先预扫消息链判断是否存在 keyboard / 裸按钮：有的话强制 markdown，
+        # 并让 _parse_to_qqofficial 把图片转成 markdown 语法以便共存。
+        use_md = getattr(self.send_buffer, "use_markdown_", None)
+        has_keyboard_component = any(
+            isinstance(seg, (QQCKeyboard, QQCButton)) for seg in self.send_buffer.chain
+        )
+        if has_keyboard_component and use_md is False:
+            logger.warning("[QQOfficial] 检测到 QQC 按钮组件，自动启用 markdown 模式")
+            use_md = True
+        convert_img = has_keyboard_component and use_md is not False
 
         (
             plain_text,
@@ -207,7 +224,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             video_file_source,
             file_source,
             file_name,
-        ) = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
+            keyboard_payload,
+        ) = await QQOfficialMessageEvent._parse_to_qqofficial(
+            self.send_buffer,
+            convert_image_to_markdown=convert_img,
+        )
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
         if stream and (image_base64 or record_file_path):
@@ -221,6 +242,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             and not record_file_path
             and not video_file_source
             and not file_source
+            and not keyboard_payload
         ):
             return None
 
@@ -235,25 +257,46 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             plain_text = plain_text + "\n"
 
-        # 根据消息链的 use_markdown_ 标记决定发送模式
-        use_md = getattr(self.send_buffer, "use_markdown_", None)
+        # keyboard 要求 markdown content 非空，补零宽占位
+        if keyboard_payload and not plain_text:
+            plain_text = self.EMPTY_MARKDOWN_PLACEHOLDER
+
+        is_interaction = isinstance(source, botpy.interaction.Interaction)
         if use_md is False:
             payload: dict = {
                 "content": plain_text,
                 "msg_type": 0,
-                "msg_id": self.message_obj.message_id,
             }
         else:
             payload = {
                 "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
                 "msg_type": 2,
-                "msg_id": self.message_obj.message_id,
             }
+            if keyboard_payload is not None:
+                payload["keyboard"] = keyboard_payload
 
-        if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
+        # 按钮回调用 event_id 换取被动回复配额；其余用 msg_id。
+        # message_id 在 _parse_interaction_to_abm 里已经被设为 interaction.event_id，
+        # 这里两条分支只是字段名不同。
+        if is_interaction:
+            payload["event_id"] = self.message_obj.message_id
+        else:
+            payload["msg_id"] = self.message_obj.message_id
+
+        if not isinstance(
+            source,
+            botpy.message.Message | botpy.message.DirectMessage,
+        ):
             payload["msg_seq"] = random.randint(1, 10000)
 
         ret = None
+        # 若 keyboard 和非 markdown-内联媒体同时存在，媒体路径会把 msg_type 改成 7
+        # 并 pop markdown/keyboard。这里预先探测，稍后补发一条带 keyboard 的 markdown 消息。
+        media_overrides_keyboard = keyboard_payload is not None and (
+            image_base64 or record_file_path or video_file_source or file_source
+        )
+        if media_overrides_keyboard:
+            payload.pop("keyboard", None)
 
         match source:
             case botpy.message.GroupMessage():
@@ -305,13 +348,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload["msg_type"] = 7
                         payload.pop("markdown", None)
                         payload["content"] = plain_text or None
-                ret = await self._send_with_markdown_fallback(
+                ret = await self._send_with_stream_newline_fix(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
                         group_openid=source.group_openid,  # type: ignore
                         **retry_payload,
                     ),
                     payload=payload,
-                    plain_text=plain_text,
                     stream=stream,
                 )
 
@@ -361,24 +403,22 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload.pop("markdown", None)
                         payload["content"] = plain_text or None
                 if stream:
-                    ret = await self._send_with_markdown_fallback(
+                    ret = await self._send_with_stream_newline_fix(
                         send_func=lambda retry_payload: self.post_c2c_message(
                             openid=source.author.user_openid,
                             **retry_payload,
                             stream=stream,
                         ),
                         payload=payload,
-                        plain_text=plain_text,
                         stream=stream,
                     )
                 else:
-                    ret = await self._send_with_markdown_fallback(
+                    ret = await self._send_with_stream_newline_fix(
                         send_func=lambda retry_payload: self.post_c2c_message(
                             openid=source.author.user_openid,
                             **retry_payload,
                         ),
                         payload=payload,
-                        plain_text=plain_text,
                         stream=stream,
                     )
                 logger.debug(f"Message sent to C2C: {ret}")
@@ -388,13 +428,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     payload["file_image"] = image_path
                 # Guild text-channel send API (/channels/{channel_id}/messages) does not use v2 msg_type.
                 payload.pop("msg_type", None)
-                ret = await self._send_with_markdown_fallback(
+                ret = await self._send_with_stream_newline_fix(
                     send_func=lambda retry_payload: self.bot.api.post_message(
                         channel_id=source.channel_id,
                         **retry_payload,
                     ),
                     payload=payload,
-                    plain_text=plain_text,
                     stream=stream,
                 )
 
@@ -403,18 +442,71 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     payload["file_image"] = image_path
                 # Guild DM send API (/dms/{guild_id}/messages) does not use v2 msg_type.
                 payload.pop("msg_type", None)
-                ret = await self._send_with_markdown_fallback(
+                ret = await self._send_with_stream_newline_fix(
                     send_func=lambda retry_payload: self.bot.api.post_dms(
                         guild_id=source.guild_id,
                         **retry_payload,
                     ),
                     payload=payload,
-                    plain_text=plain_text,
                     stream=stream,
                 )
 
+            case botpy.interaction.Interaction():
+                # 按钮点击回调的回复：按 chat_type 路由
+                # chat_type: 0=频道 / 1=群 / 2=C2C
+                #
+                # 已知限制：本分支不上传 QQ 富媒体（msg_type=7），因此不支持语音/视频/文件
+                if record_file_path or video_file_source or file_source:
+                    logger.warning(
+                        "[QQOfficial] Interaction 回调暂不支持发送语音/视频/文件，"
+                        "本次发送已跳过（chain 中检测到非图片媒体）。"
+                    )
+                    return None
+                chat_type = source.chat_type
+                if chat_type == 1 and source.group_openid:
+                    ret = await self._send_with_stream_newline_fix(
+                        send_func=lambda retry_payload: self.bot.api.post_group_message(
+                            group_openid=source.group_openid,  # type: ignore
+                            **retry_payload,
+                        ),
+                        payload=payload,
+                        stream=stream,
+                    )
+                elif chat_type == 2 and source.user_openid:
+                    ret = await self._send_with_stream_newline_fix(
+                        send_func=lambda retry_payload: self.post_c2c_message(
+                            openid=source.user_openid,  # type: ignore
+                            **retry_payload,
+                        ),
+                        payload=payload,
+                        stream=stream,
+                    )
+                elif chat_type == 0 and source.channel_id:
+                    # 频道：v1 接口不接受 msg_type / msg_seq / event_id
+                    guild_payload = payload.copy()
+                    guild_payload.pop("msg_type", None)
+                    guild_payload.pop("msg_seq", None)
+                    # 频道接口用 msg_id 或 event_id 都可，保留 event_id
+                    ret = await self._send_with_stream_newline_fix(
+                        send_func=lambda retry_payload: self.bot.api.post_message(
+                            channel_id=source.channel_id,  # type: ignore
+                            **retry_payload,
+                        ),
+                        payload=guild_payload,
+                        stream=stream,
+                    )
+                else:
+                    logger.warning(
+                        "[QQOfficial] interaction 无法路由: chat_type=%s",
+                        chat_type,
+                    )
+
             case _:
                 pass
+
+        # 非图片媒体抢占了 msg_type=7，补发一条 markdown+keyboard
+        if media_overrides_keyboard and keyboard_payload:
+            await self._send_keyboard_followup(source, plain_text, keyboard_payload)
 
         await super().send(self.send_buffer)
 
@@ -422,13 +514,67 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return ret
 
-    async def _send_with_markdown_fallback(
+    async def _send_keyboard_followup(
+        self,
+        source,
+        plain_text: str,
+        keyboard_payload: dict,
+    ) -> None:
+        """在媒体消息之后补发一条仅含 markdown+keyboard 的 msg_type=2 消息。"""
+        content = plain_text or self.EMPTY_MARKDOWN_PLACEHOLDER
+        followup: dict = {
+            "markdown": MarkdownPayload(content=content),
+            "msg_type": 2,
+            "msg_id": self.message_obj.message_id,
+            "keyboard": keyboard_payload,
+            "msg_seq": random.randint(1, 10000),
+        }
+        try:
+            if isinstance(source, botpy.message.GroupMessage):
+                if not source.group_openid:
+                    return
+                await self.bot.api.post_group_message(
+                    group_openid=source.group_openid,
+                    **followup,
+                )
+            elif isinstance(source, botpy.message.C2CMessage):
+                await self.post_c2c_message(
+                    openid=source.author.user_openid,
+                    **followup,
+                )
+            else:
+                logger.debug(
+                    "[QQOfficial] 消息源 %s 不支持 keyboard，忽略补发", type(source)
+                )
+        except Exception as e:
+            logger.warning(f"[QQOfficial] keyboard 补发失败: {e}")
+
+    def is_button_interaction(self) -> bool:
+        """当前事件是否来自 QQ 消息按钮点击回调。"""
+        raw = getattr(self.message_obj, "raw_message", None)
+        return isinstance(raw, botpy.interaction.Interaction)
+
+    def get_interaction_button_id(self) -> str:
+        """获取被点击按钮的 id（`QQCButton.id`）；非交互事件返回空串。"""
+        if not self.is_button_interaction():
+            return ""
+        raw = cast(botpy.interaction.Interaction, self.message_obj.raw_message)
+        return getattr(raw.data.resolved, "button_id", "") or ""
+
+    def get_interaction_button_data(self) -> str:
+        """获取被点击按钮的 data（`QQCButton.data`）；非交互事件返回空串。"""
+        if not self.is_button_interaction():
+            return ""
+        raw = cast(botpy.interaction.Interaction, self.message_obj.raw_message)
+        return getattr(raw.data.resolved, "button_data", "") or ""
+
+    async def _send_with_stream_newline_fix(
         self,
         send_func,
         payload: dict,
-        plain_text: str,
         stream: dict | None = None,
     ):
+        """发送包装：流式 markdown 分片若因缺失换行被拒，补 `\\n` 重试一次。"""
         try:
             return await send_func(payload)
         except botpy.errors.ServerError as err:
@@ -451,27 +597,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     "[QQOfficial] 流式 markdown 分片换行校验失败，已修正后重试一次。"
                 )
                 return await send_func(retry_payload)
-
-            if (
-                self.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
-                or not payload.get("markdown")
-                or not plain_text
-            ):
-                raise
-
-            logger.warning(
-                "[QQOfficial] markdown 发送被拒绝，回退到 content 模式重试。"
-            )
-            fallback_payload = payload.copy()
-            fallback_payload.pop("markdown", None)
-            fallback_payload["content"] = plain_text
-            if fallback_payload.get("msg_type") == 2:
-                fallback_payload["msg_type"] = 0
-            if stream:
-                fallback_content = cast(str, fallback_payload.get("content") or "")
-                if fallback_content and not fallback_content.endswith("\n"):
-                    fallback_payload["content"] = fallback_content + "\n"
-            return await send_func(fallback_payload)
+            raise
 
     async def upload_group_and_c2c_image(
         self,
@@ -617,18 +743,52 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return message.Message(**result)
 
     @staticmethod
-    async def _parse_to_qqofficial(message: MessageChain):
+    async def _parse_to_qqofficial(
+        message: MessageChain,
+        convert_image_to_markdown: bool = False,
+    ):
+        """将 MessageChain 解析为发送 payload 所需要素。
+
+        Args:
+            message: 消息链
+            convert_image_to_markdown: 若为 True 且图片能注册到文件服务，则将图片
+                转成 markdown `![](url)` 语法追加到 plain_text，并跳过 base64 上传；
+                这样图片能和 keyboard/markdown 共存于同一条 msg_type=2 消息。
+
+        Returns:
+            (plain_text, image_base64, image_file_path, record_file_path,
+             video_file_source, file_source, file_name, keyboard_payload)
+        """
         plain_text = ""
-        image_base64 = None  # only one img supported
+        image_base64 = None  # only one img supported for msg_type=7 path
         image_file_path = None
         record_file_path = None
         video_file_source = None
         file_source = None
         file_name = None
+        keyboard_payload: dict | None = None
+        pending_buttons: list[QQCButton] = []
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
-            elif isinstance(i, Image) and not image_base64:
+            elif isinstance(i, QQCKeyboard):
+                keyboard_payload = i.to_dict()
+            elif isinstance(i, QQCButton):
+                pending_buttons.append(i)
+            elif isinstance(i, Image):
+                # markdown 模式下尽量把图片转成 markdown 语法，以便与 keyboard 共存
+                if convert_image_to_markdown:
+                    fragment = await image_to_markdown_fragment(i)
+                    if fragment is not None:
+                        plain_text += fragment
+                        continue
+                    # 失败时回退到 msg_type=7 路径
+                    logger.warning(
+                        "[QQOfficial] 图片转 markdown 失败，回退到 msg_type=7；"
+                        "若消息链包含 keyboard 则 keyboard 会被丢弃。"
+                    )
+                if image_base64:
+                    continue  # msg_type=7 路径只带第一张
                 if i.file and i.file.startswith("file:///"):
                     image_base64 = file_to_base64(i.file[8:])
                     image_file_path = i.file[8:]
@@ -681,6 +841,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_source = i.url
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
+
+        # 裸 QQCButton 自动包一层 keyboard（仅当未显式传 QQCKeyboard 时）
+        if keyboard_payload is None and pending_buttons:
+            keyboard_payload = QQCKeyboard(rows=[pending_buttons]).to_dict()
+
         return (
             plain_text,
             image_base64,
@@ -689,4 +854,5 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             video_file_source,
             file_source,
             file_name,
+            keyboard_payload,
         )
