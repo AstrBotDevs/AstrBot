@@ -5,6 +5,7 @@ import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.config.default import DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
 from astrbot.core.message.components import Image
 
 
@@ -12,9 +13,13 @@ class _DummyEvent:
     def __init__(self, message_components: list[object] | None = None) -> None:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
         self.message_obj = SimpleNamespace(message=message_components or [])
+        self._extras: dict[str, object] = {}
 
-    def get_extra(self, _key: str):
-        return None
+    def get_extra(self, key: str, default=None):
+        return self._extras.get(key, default)
+
+    def set_extra(self, key: str, value) -> None:
+        self._extras[key] = value
 
 
 class _DummyTool:
@@ -343,3 +348,543 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
     )
 
     assert image_urls == []
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_rejects_when_call_limit_reached():
+    captured: dict = {}
+
+    class _EventWithExtras:
+        def __init__(self) -> None:
+            self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+            self.message_obj = SimpleNamespace(message=[])
+            self._extras = {
+                FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY: 1,
+            }
+
+        def get_extra(self, key: str, default=None):
+            return self._extras.get(key, default)
+
+        def set_extra(self, key: str, value):
+            self._extras[key] = value
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {
+            "provider_settings": {},
+            "subagent_orchestrator": {"max_handoff_calls_per_run": 1},
+        },
+    )
+    event = _EventWithExtras()
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert "handoff_call_limit_reached" in results[0].content[0].text
+    assert captured == {}
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_increments_call_count_on_success():
+    class _EventWithExtras:
+        def __init__(self) -> None:
+            self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+            self.message_obj = SimpleNamespace(message=[])
+            self._extras: dict[str, int] = {}
+
+        def get_extra(self, key: str, default=None):
+            return self._extras.get(key, default)
+
+        def set_extra(self, key: str, value):
+            self._extras[key] = value
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**_kwargs):
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {
+            "provider_settings": {},
+            "subagent_orchestrator": {"max_handoff_calls_per_run": 2},
+        },
+    )
+    event = _EventWithExtras()
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert (
+        event._extras[FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY]
+        == 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_enforces_call_limit_across_multiple_calls():
+    call_count = {"tool_loop": 0}
+
+    class _EventWithExtras:
+        def __init__(self) -> None:
+            self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+            self.message_obj = SimpleNamespace(message=[])
+            self._extras: dict[str, int] = {}
+
+        def get_extra(self, key: str, default=None):
+            return self._extras.get(key, default)
+
+        def set_extra(self, key: str, value):
+            self._extras[key] = value
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**_kwargs):
+        call_count["tool_loop"] += 1
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {
+            "provider_settings": {},
+            "subagent_orchestrator": {"max_handoff_calls_per_run": 2},
+        },
+    )
+    event = _EventWithExtras()
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    first_results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="first",
+        image_urls=[],
+    ):
+        first_results.append(result)
+    assert len(first_results) == 1
+    assert "handoff_call_limit_reached" not in first_results[0].content[0].text
+    assert (
+        event._extras[FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY]
+        == 1
+    )
+
+    second_results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="second",
+        image_urls=[],
+    ):
+        second_results.append(result)
+    assert len(second_results) == 1
+    assert "handoff_call_limit_reached" not in second_results[0].content[0].text
+    assert (
+        event._extras[FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY]
+        == 2
+    )
+
+    third_results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="third",
+        image_urls=[],
+    ):
+        third_results.append(result)
+    assert len(third_results) == 1
+    assert "handoff_call_limit_reached" in third_results[0].content[0].text
+    assert (
+        event._extras[FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY]
+        == 2
+    )
+    assert call_count["tool_loop"] == 2
+
+
+def test_get_event_extra_returns_default_for_noncallable_get_extra():
+    event = SimpleNamespace(get_extra="not-callable")
+    assert (
+        FunctionToolExecutor._get_event_extra(event, "missing", default=42) == 42
+    )
+
+
+def test_get_event_extra_supports_single_arg_getter_signature():
+    class _EventWithSingleArgGetter:
+        def __init__(self) -> None:
+            self._extras = {"present": "value"}
+
+        def get_extra(self, key: str):
+            return self._extras.get(key)
+
+    event = _EventWithSingleArgGetter()
+    assert FunctionToolExecutor._get_event_extra(event, "present", default=42) == "value"
+    assert FunctionToolExecutor._get_event_extra(event, "missing", default=42) == 42
+
+
+def test_get_event_extra_supports_keyword_only_getter_signature():
+    class _EventWithKeywordOnlyGetter:
+        def __init__(self) -> None:
+            self._extras = {"present": "value"}
+
+        def get_extra(self, *, key: str, default=None):
+            return self._extras.get(key, default)
+
+    event = _EventWithKeywordOnlyGetter()
+    assert FunctionToolExecutor._get_event_extra(event, "present", default=42) == "value"
+    assert FunctionToolExecutor._get_event_extra(event, "missing", default=42) == 42
+
+
+def test_get_event_extra_propagates_internal_type_error():
+    class _EventWithBrokenGetter:
+        def get_extra(self, _key: str, _default=None):
+            raise TypeError("internal get_extra failure")
+
+    with pytest.raises(TypeError, match="internal get_extra failure"):
+        FunctionToolExecutor._get_event_extra(
+            _EventWithBrokenGetter(),
+            "missing",
+            default=42,
+        )
+
+
+def test_set_event_extra_returns_false_for_noncallable_set_extra():
+    event = SimpleNamespace(set_extra="not-callable")
+    assert (
+        FunctionToolExecutor._set_event_extra(event, "key", "value") is False
+    )
+
+
+def test_set_event_extra_returns_false_for_setter_exception():
+    class _EventWithBrokenSetter:
+        def set_extra(self, _key: str, _value) -> None:
+            raise ValueError("broken setter")
+
+    assert (
+        FunctionToolExecutor._set_event_extra(
+            _EventWithBrokenSetter(),
+            "key",
+            "value",
+        )
+        is False
+    )
+
+
+def test_handoff_default_limit_is_sourced_from_config_default():
+    assert (
+        FunctionToolExecutor._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
+        == DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_rejects_when_call_counter_persist_fails():
+    call_count = {"tool_loop": 0}
+
+    class _EventWithBrokenSetter:
+        def __init__(self) -> None:
+            self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+            self.message_obj = SimpleNamespace(message=[])
+            self._extras: dict[str, int] = {}
+
+        def get_extra(self, key: str, default=None):
+            return self._extras.get(key, default)
+
+        def set_extra(self, _key: str, _value):
+            raise TypeError("set_extra signature mismatch")
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**_kwargs):
+        call_count["tool_loop"] += 1
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {
+            "provider_settings": {},
+            "subagent_orchestrator": {"max_handoff_calls_per_run": 8},
+        },
+    )
+    event = _EventWithBrokenSetter()
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert "handoff_call_limit_reached" in results[0].content[0].text
+    assert call_count["tool_loop"] == 0
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_rejects_when_call_counter_read_fails():
+    call_count = {"tool_loop": 0}
+
+    class _EventWithBrokenGetter:
+        def __init__(self) -> None:
+            self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+            self.message_obj = SimpleNamespace(message=[])
+
+        def get_extra(self, _key: str, _default=None):
+            raise TypeError("internal get_extra failure")
+
+        def set_extra(self, _key: str, _value):
+            return None
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**_kwargs):
+        call_count["tool_loop"] += 1
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {
+            "provider_settings": {},
+            "subagent_orchestrator": {"max_handoff_calls_per_run": 8},
+        },
+    )
+    event = _EventWithBrokenGetter()
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert "handoff_call_limit_reached" in results[0].content[0].text
+    assert call_count["tool_loop"] == 0
+
+
+def test_check_and_increment_handoff_calls_rejects_when_limit_resolution_fails():
+    class _EventWithExtras:
+        def __init__(self) -> None:
+            self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+            self.message_obj = SimpleNamespace(message=[])
+            self._extras: dict[str, int] = {}
+
+        def get_extra(self, key: str, default=None):
+            return self._extras.get(key, default)
+
+        def set_extra(self, key: str, value):
+            self._extras[key] = value
+
+    event = _EventWithExtras()
+
+    def _raise_get_config(**_kwargs):
+        raise RuntimeError("config unavailable")
+
+    context = SimpleNamespace(get_config=_raise_get_config)
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+    allowed, max_handoff_calls = FunctionToolExecutor._check_and_increment_handoff_calls(
+        run_context
+    )
+
+    assert allowed is False
+    assert (
+        max_handoff_calls
+        == FunctionToolExecutor._DEFAULT_MAX_HANDOFF_CALLS_PER_RUN
+    )
+    assert event._extras == {}
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_rejects_when_event_extra_exceeds_sanity_limit():
+    call_count = {"tool_loop": 0}
+
+    class _EventWithHugeCount:
+        def __init__(self) -> None:
+            self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+            self.message_obj = SimpleNamespace(message=[])
+            self._extras: dict[str, int] = {
+                FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY: 10**12
+            }
+
+        def get_extra(self, key: str, default=None):
+            return self._extras.get(key, default)
+
+        def set_extra(self, key: str, value):
+            self._extras[key] = value
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**_kwargs):
+        call_count["tool_loop"] += 1
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {
+            "provider_settings": {},
+            "subagent_orchestrator": {"max_handoff_calls_per_run": 128},
+        },
+    )
+    event = _EventWithHugeCount()
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert "handoff_call_limit_reached" in results[0].content[0].text
+    assert call_count["tool_loop"] == 0
+    assert (
+        event._extras[FunctionToolExecutor._HANDOFF_CALL_COUNT_EXTRA_KEY]
+        == 10**12
+    )
+
+
+def _build_run_context_for_handoff_limit(config: dict):
+    event = SimpleNamespace(
+        unified_msg_origin="webchat:FriendMessage:webchat!user!session",
+        message_obj=SimpleNamespace(message=[]),
+    )
+    context = SimpleNamespace(get_config=lambda **_kwargs: config)
+    return ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_limit"),
+    [
+        ({}, 8),
+        ({"subagent_orchestrator": None}, 8),
+        ({"subagent_orchestrator": "not-a-dict"}, 8),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": 0}}, 1),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": -3}}, 1),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": 129}}, 128),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": "abc"}}, 8),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": "3.14"}}, 8),
+        ({"subagent_orchestrator": {"max_handoff_calls_per_run": "10"}}, 10),
+    ],
+)
+def test_resolve_handoff_call_limit_with_malformed_and_boundary_configs(
+    config: dict,
+    expected_limit: int,
+):
+    run_context = _build_run_context_for_handoff_limit(config)
+    assert FunctionToolExecutor._resolve_handoff_call_limit(run_context) == expected_limit
