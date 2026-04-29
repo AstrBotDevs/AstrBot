@@ -654,35 +654,60 @@ class MisskeyPlatformAdapter(Platform):
 
         return await super().send_by_session(session, message_chain)
 
-    async def _resolve_parent_note(
+    async def _resolve_reply_target(
         self,
         current: dict[str, Any],
-        depth: int,
-    ) -> tuple[dict[str, Any] | None, str | None]:
-        """根据当前 note 解析父帖。返回 (parent_dict, relation_label) 或 (None, None)。
+    ) -> dict[str, Any] | None:
+        """解析当前 note 的 reply 目标（被回复的原帖）。
 
-        depth==0 时优先用 payload 中已展开的对象（reply / renote）；缺失时回退 API。
-        depth>=1 时通常 payload 不再嵌套展开，主要靠 API 拉取。
-        reply 和 renote 同时存在（reply-with-quote）时返回 reply，调用方需要单独处理 renote。
+        优先用 payload 中已展开的 `reply` 对象；缺失时通过 `replyId`
+        走一次 notes/show API 回退。两者皆无返回 None。
         """
         reply_obj = current.get("reply")
         if isinstance(reply_obj, dict):
-            return reply_obj, "被回复的原帖"
+            return reply_obj
         reply_id = current.get("replyId")
         if reply_id and self.api:
             fetched = await self.api.get_note(str(reply_id))
             if isinstance(fetched, dict):
-                return fetched, "被回复的原帖"
+                return fetched
+        return None
 
+    async def _resolve_renote_target(
+        self,
+        current: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """解析当前 note 的 renote 目标（被引用/转发的原帖）。
+
+        优先用 payload 中已展开的 `renote` 对象；缺失时通过 `renoteId`
+        走一次 notes/show API 回退。两者皆无返回 None。
+        """
         renote_obj = current.get("renote")
         if isinstance(renote_obj, dict):
-            return renote_obj, "被引用/转发的原帖"
+            return renote_obj
         renote_id = current.get("renoteId")
         if renote_id and self.api:
             fetched = await self.api.get_note(str(renote_id))
             if isinstance(fetched, dict):
-                return fetched, "被引用/转发的原帖"
+                return fetched
+        return None
 
+    async def _resolve_parent_note(
+        self,
+        current: dict[str, Any],
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """解析当前 note 的父帖（按优先级返回首个候选）。
+
+        优先返回 reply 目标（被回复的原帖）；reply 不存在时回退到 renote 目标
+        （被引用/转发的原帖）。reply-with-quote 场景：返回 reply，调用方需要
+        再单独走 _resolve_renote_target 取引用帖。
+        """
+        reply_parent = await self._resolve_reply_target(current)
+        if reply_parent is not None:
+            return reply_parent, "被回复的原帖"
+        renote_parent = await self._resolve_renote_target(current)
+        if renote_parent is not None:
+            return renote_parent, "被引用/转发的原帖"
         return None, None
 
     async def _build_parent_note_context(
@@ -694,8 +719,21 @@ class MisskeyPlatformAdapter(Platform):
         - depth=0 时如果同时存在 reply + renote（reply-with-quote），两个都注入。
         - 顶层（depth=0）父帖作者是机器人自己时整段跳过，避免反馈循环。
         - 链中循环或 API 失败时静默截断，不阻断消息处理。
+        - 返回值会被作为后缀拼到 ``message_str`` 末尾，因此自带前导分隔符
+          ``\\n\\n---\\n``，让 LLM 看到的 prompt 形如「用户文本 \\n--- 父帖摘要」。
+          放尾部而非头部是为了不破坏 wake_prefix 与命令前缀的 startswith 匹配。
         """
         if self.reply_context_max_depth <= 0:
+            return ""
+
+        # 既无 reply/replyId 又无 renote/renoteId 的独立帖子，没有父帖可追，直接退出，
+        # 避免空循环以及无谓的 API 调用。
+        if not (
+            raw_data.get("reply")
+            or raw_data.get("replyId")
+            or raw_data.get("renote")
+            or raw_data.get("renoteId")
+        ):
             return ""
 
         blocks: list[str] = []
@@ -704,7 +742,7 @@ class MisskeyPlatformAdapter(Platform):
         labelled_by_depth = self.reply_context_max_depth > 1
 
         for depth in range(self.reply_context_max_depth):
-            parent, relation = await self._resolve_parent_note(current, depth)
+            parent, relation = await self._resolve_parent_note(current)
             if not isinstance(parent, dict):
                 break
 
@@ -728,31 +766,31 @@ class MisskeyPlatformAdapter(Platform):
                     label = f"{label} - 第{depth + 1}层"
                 blocks.append(f"[{label}]\n{summary}")
 
-            # depth=0 且当前是 reply：如果还有 renote（reply-with-quote），也补上
-            if (
-                depth == 0
-                and relation == "被回复的原帖"
-                and isinstance(current.get("renote"), dict)
-            ):
-                renote_obj = current["renote"]
-                renote_id = str(renote_obj.get("id") or "")
-                if renote_id and renote_id not in visited:
-                    visited.add(renote_id)
-                    quote_summary = summarize_note_for_context(
-                        renote_obj,
-                        max_text_length=self.reply_context_max_text_length,
-                    )
-                    if quote_summary:
-                        quote_label = "被引用/转发的原帖"
-                        if labelled_by_depth:
-                            quote_label = f"{quote_label} - 第1层"
-                        blocks.append(f"[{quote_label}]\n{quote_summary}")
+            # depth=0 且当前是 reply：如果还有 renote（reply-with-quote），也补上。
+            # 走 _resolve_renote_target 而不是只检查 isinstance(current.get("renote"))，
+            # 这样 payload 仅给 renoteId 时也能通过 API 回退拉取引用帖。
+            if depth == 0 and relation == "被回复的原帖":
+                renote_parent = await self._resolve_renote_target(current)
+                if isinstance(renote_parent, dict):
+                    renote_id = str(renote_parent.get("id") or "")
+                    if renote_id and renote_id not in visited:
+                        visited.add(renote_id)
+                        quote_summary = summarize_note_for_context(
+                            renote_parent,
+                            max_text_length=self.reply_context_max_text_length,
+                        )
+                        if quote_summary:
+                            quote_label = "被引用/转发的原帖"
+                            if labelled_by_depth:
+                                quote_label = f"{quote_label} - 第1层"
+                            blocks.append(f"[{quote_label}]\n{quote_summary}")
 
             current = parent
 
         if not blocks:
             return ""
-        return "\n\n".join(blocks) + "\n---\n"
+        # 作为 message_str 的后缀返回，前导分隔符确保与用户原文有清晰边界
+        return "\n\n---\n" + "\n\n".join(blocks)
 
     async def convert_message(self, raw_data: dict[str, Any]) -> AstrBotMessage:
         """将 Misskey 贴文数据转换为 AstrBotMessage 对象"""
@@ -771,7 +809,11 @@ class MisskeyPlatformAdapter(Platform):
             is_chat=False,
         )
 
-        # 评论区原帖上下文：作为前缀注入到消息链与 message_str
+        # 评论区原帖上下文：拼到 message_str 尾部，避免破坏 wake_prefix / 命令
+        # 前缀 startswith 匹配（waking_check 与 star.filter.command 都是头部匹配）。
+        # LLM 主路径直接读 message_str（astr_main_agent / agent third_party 都遍历
+        # message chain 时只取多模态 Comp，忽略 Comp.Plain），所以这里不再把
+        # parent_ctx 加到 message.message —— 那会变成读不到的死代码。
         parent_ctx = ""
         if self.include_reply_context:
             try:
@@ -779,8 +821,6 @@ class MisskeyPlatformAdapter(Platform):
             except Exception as e:
                 logger.warning(f"[Misskey] 构建父帖上下文失败: {e}")
                 parent_ctx = ""
-            if parent_ctx:
-                message.message.append(Comp.Plain(parent_ctx))
 
         message_parts = []
         raw_text = raw_data.get("text", "")
@@ -811,7 +851,7 @@ class MisskeyPlatformAdapter(Platform):
             if message_parts
             else ""
         )
-        message.message_str = parent_ctx + body if parent_ctx else body
+        message.message_str = body + parent_ctx if parent_ctx else body
         return message
 
     async def convert_chat_message(self, raw_data: dict[str, Any]) -> AstrBotMessage:
