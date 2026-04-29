@@ -893,6 +893,14 @@
               "description": "表情列表(飞书表情枚举名)",
               "hint": "表情枚举名参考:[https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)"
             }
+          },
+          "footer": {
+            "status": {
+              "description": "[飞书] 流式卡片显示生成状态"
+            },
+            "elapsed": {
+              "description": "[飞书] 流式卡片显示生成耗时"
+            }
           }
         },
         "telegram": {

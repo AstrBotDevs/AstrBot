@@ -892,6 +892,14 @@
                             "description": "Список эмодзи (Lark Enum Names)",
                             "hint": "Справка по именам эмодзи Lark."
                         }
+                    },
+                    "footer": {
+                        "status": {
+                            "description": "[Lark] Показывать статус генерации в потоковых карточках"
+                        },
+                        "elapsed": {
+                            "description": "[Lark] Показывать время генерации в потоковых карточках"
+                        }
                     }
                 },
                 "telegram": {

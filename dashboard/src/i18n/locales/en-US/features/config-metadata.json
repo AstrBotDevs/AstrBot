@@ -891,6 +891,14 @@
               "description": "Emoji List (Lark Emoji Enum Names)",
               "hint": "Emoji enum names reference: [https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)"
             }
+          },
+          "footer": {
+            "status": {
+              "description": "[Lark] Show Generation Status in Streaming Cards"
+            },
+            "elapsed": {
+              "description": "[Lark] Show Elapsed Time in Streaming Cards"
+            }
           }
         },
         "telegram": {
