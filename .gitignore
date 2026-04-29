@@ -92,3 +92,4 @@ dashboard/pnpm-lock.yaml
 .obsidian
 dashboard/.codex
 .codex
+.zed/settings.json
