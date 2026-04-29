@@ -227,6 +227,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         fallback_providers: list[Provider] | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
+        # external abort signal for SubAgent control (does not affect main agent)
+        external_abort_signal: asyncio.Event | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -276,7 +278,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.agent_hooks = agent_hooks
         self.run_context = run_context
         self._aborted = False
-        self._abort_signal = asyncio.Event()
+        # Use external abort signal if provided (for SubAgent), otherwise create new one
+        self._abort_signal = (
+            external_abort_signal
+            if external_abort_signal is not None
+            else asyncio.Event()
+        )
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
         self._last_tool_name: str | None = None
@@ -1010,6 +1017,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if not req.func_tool:
                     return
 
+                # Prefer dynamic tools when available
+                func_tool = self._resolve_dynamic_subagent_tool(func_tool_name)
+
+                # If not found in dynamic tools, check regular tool sets
+                if func_tool is None:
+                    if (
+                        self.tool_schema_mode == "skills_like"
+                        and self._skill_like_raw_tool_set
+                    ):
+                        # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
+                        # so we need to get the tool from the raw tool set
+                        func_tool = self._skill_like_raw_tool_set.get_tool(
+                            func_tool_name
+                        )
+                    else:
+                        func_tool = req.func_tool.get_tool(func_tool_name)
                 if (
                     self.tool_schema_mode == "skills_like"
                     and self._skill_like_raw_tool_set
@@ -1140,6 +1163,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         "The tool has returned a data type that is not supported."
                                     )
                         if result_parts:
+                            result_content = "\n\n".join(result_parts)
+                            # Check for dynamic tool creation marker
+                            self._maybe_register_dynamic_tool_from_result(
+                                result_content
+                            )
+
                             inline_result = "\n\n".join(result_parts)
                             inline_result = await self._materialize_large_tool_result(
                                 tool_call_id=func_tool_id,
@@ -1335,7 +1364,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._abort_signal.set()
 
     def _is_stop_requested(self) -> bool:
+        # Check if abort signal is set
         return self._abort_signal.is_set()
+
+    def is_abort_signal_set(self) -> bool:
+        """检查 abort_signal 是否已被设置（用于外部控制）"""
+        return self._abort_signal.is_set()
+
+    def reset_abort_signal(self) -> None:
+        """重置 abort_signal（用于复用 runner）"""
+        self._abort_signal.clear()
+        self._aborted = False
 
     def was_aborted(self) -> bool:
         return self._aborted
@@ -1346,15 +1385,37 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _finalize_aborted_step(
         self,
         llm_resp: LLMResponse | None = None,
+        manual_stop: bool = False,
     ) -> AgentResponse:
-        logger.info("Agent execution was requested to stop by user.")
+        """终结被中断的步骤
+
+        Args:
+            llm_resp: LLM响应对象
+            manual_stop: 是否是主Agent手动停止SubAgent（True时使用不同的消息提示）
+        """
+        if manual_stop:
+            logger.info("SubAgent execution was manually stopped by main agent.")
+        else:
+            logger.info("Agent execution was requested to stop by user.")
+
         if llm_resp is None:
             llm_resp = LLMResponse(role="assistant", completion_text="")
+
+        # 根据停止类型选择不同的消息
         if llm_resp.role != "assistant":
+            if manual_stop:
+                # SubAgent被主Agent手动停止，使用更简洁的消息
+                interruption_msg = (
+                    "[SYSTEM: SubAgent was manually stopped by main agent. "
+                    "Partial output before interruption is preserved.]"
+                )
+            else:
+                interruption_msg = self.USER_INTERRUPTION_MESSAGE
             llm_resp = LLMResponse(
                 role="assistant",
-                completion_text=self.USER_INTERRUPTION_MESSAGE,
+                completion_text=interruption_msg,
             )
+
         self.final_llm_resp = llm_resp
         self._aborted = True
         self._transition_state(AgentState.DONE)
@@ -1431,3 +1492,68 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     abort_task.cancel()
                     with suppress(asyncio.CancelledError):
                         await abort_task
+
+    def _resolve_dynamic_subagent_tool(self, func_tool_name: str):
+        run_context_context = getattr(self.run_context, "context", None)
+        if run_context_context is None:
+            return None
+
+        event = getattr(run_context_context, "event", None)
+        if event is None:
+            return None
+
+        session_id = getattr(event, "unified_msg_origin", None)
+        if not session_id:
+            return None
+
+        try:
+            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+            dynamic_handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(
+                session_id
+            )
+        except Exception:
+            return None
+
+        for h in dynamic_handoffs:
+            if h.name == func_tool_name or f"transfer_to_{h.name}" == func_tool_name:
+                return h
+        return None
+
+    def _maybe_register_dynamic_tool_from_result(self, result_content: str) -> None:
+        if not result_content.startswith("__DYNAMIC_TOOL_CREATED__:"):
+            return
+
+        parts = result_content.split(":", 3)
+        if len(parts) < 4:
+            return
+
+        new_tool_name = parts[1]
+        new_tool_obj_name = parts[2]
+        logger.info(f"[EnhancedSubAgent] Tool created: {new_tool_name}")
+
+        run_context_context = getattr(self.run_context, "context", None)
+        event = (
+            getattr(run_context_context, "event", None) if run_context_context else None
+        )
+        session_id = getattr(event, "unified_msg_origin", None) if event else None
+        if not session_id:
+            return
+
+        try:
+            from astrbot.core.dynamic_subagent_manager import DynamicSubAgentManager
+
+            handoffs = DynamicSubAgentManager.get_handoff_tools_for_session(session_id)
+        except Exception as e:
+            logger.warning(f"[EnhancedSubAgent] Failed to load dynamic handoffs: {e}")
+            return
+
+        for handoff in handoffs:
+            if (
+                handoff.name == new_tool_obj_name
+                or handoff.name == new_tool_name.replace("transfer_to_", "")
+            ):
+                if self.req.func_tool:
+                    self.req.func_tool.add_tool(handoff)
+                logger.info(f"[EnhancedSubAgent] Added {handoff.name} to func_tool set")
+                break

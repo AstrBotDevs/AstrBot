@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -14,7 +16,7 @@ class AstrAgentContext:
     """The star context instance"""
     event: AstrMessageEvent
     """The message event associated with the agent context."""
-    extra: dict[str, str] = Field(default_factory=dict)
+    extra: dict[str, Any] = Field(default_factory=dict)
     """Customized extra data."""
 
 
