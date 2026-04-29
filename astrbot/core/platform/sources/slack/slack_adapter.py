@@ -19,12 +19,18 @@ from astrbot.api.platform import (
     Platform,
     PlatformMetadata,
 )
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
 from .client import SlackSocketClient, SlackWebhookClient
+from .session_codec import (
+    build_slack_text_fallbacks,
+    encode_thread_session_id,
+    resolve_target_from_session,
+)
 from .slack_event import SlackMessageEvent
+from .slack_send_utils import send_with_blocks_and_fallback
 
 
 @register_platform_adapter(
@@ -76,43 +82,48 @@ class SlackAdapter(Platform):
         self.webhook_client = None
 
         self.bot_self_id = None
+        # Canonical fallback configuration for Slack sends. Both adapter and event
+        # paths consume these via explicit arguments.
+        self.text_fallbacks = build_slack_text_fallbacks(
+            platform_config.get("text_fallbacks"),
+        )
 
     async def send_by_session(
         self,
-        session: MessageSesion,
+        session: MessageSession,
         message_chain: MessageChain,
     ) -> None:
-        blocks, text = await SlackMessageEvent._parse_slack_blocks(
-            message_chain=message_chain,
-            web_client=self.web_client,
+        channel_id, thread_ts = resolve_target_from_session(
+            session_id=session.session_id
         )
-
-        try:
-            if session.message_type == MessageType.GROUP_MESSAGE:
-                # 发送到频道
-                channel_id = (
-                    session.session_id.split("_")[-1]
-                    if "_" in session.session_id
-                    else session.session_id
-                )
-                await self.web_client.chat_postMessage(
-                    channel=channel_id,
-                    text=text,
-                    blocks=blocks if blocks else None,
-                )
-            else:
-                # 发送私信
-                await self.web_client.chat_postMessage(
-                    channel=session.session_id,
-                    text=text,
-                    blocks=blocks if blocks else None,
-                )
-        except Exception as e:
-            logger.error(f"Slack 发送消息失败: {e}")
+        await send_with_blocks_and_fallback(
+            web_client=self.web_client,
+            channel=channel_id,
+            thread_ts=thread_ts,
+            message_chain=message_chain,
+            fallbacks=self.text_fallbacks,
+            parse_blocks=SlackMessageEvent._parse_slack_blocks,
+            build_text_fallback=SlackMessageEvent._build_text_fallback_from_chain,
+            session_id=session.session_id,
+        )
 
         await super().send_by_session(session, message_chain)
 
+    @staticmethod
+    def _unwrap_message_replied_event(event: dict) -> dict:
+        """Flatten Slack message_replied envelopes for normal message processing."""
+        if event.get("subtype") == "message_replied":
+            nested_message = event.get("message")
+            if isinstance(nested_message, dict):
+                merged = dict(event)
+                merged.update(nested_message)
+                if not merged.get("channel"):
+                    merged["channel"] = event.get("channel", "")
+                return merged
+        return event
+
     async def convert_message(self, event: dict) -> AstrBotMessage:
+        event = self._unwrap_message_replied_event(event)
         logger.debug(f"[slack] RawMessage {event}")
 
         abm = AstrBotMessage()
@@ -146,7 +157,13 @@ class SlackAdapter(Platform):
             abm.group_id = channel_id
 
         # 设置会话ID
-        if abm.type == MessageType.GROUP_MESSAGE:
+        channel_id_for_session = str(channel_id or "")
+        # thread_ts may come from unwrapped `message_replied` payloads.
+        thread_ts = str(event.get("thread_ts", "") or "")
+        if thread_ts and channel_id_for_session:
+            # Slack threads can appear in channels and DMs.
+            abm.session_id = encode_thread_session_id(channel_id_for_session, thread_ts)
+        elif abm.type == MessageType.GROUP_MESSAGE:
             abm.session_id = abm.group_id
         else:
             abm.session_id = user_id
@@ -418,6 +435,7 @@ class SlackAdapter(Platform):
             platform_meta=self.meta(),
             session_id=message.session_id,
             web_client=self.web_client,
+            text_fallbacks=self.text_fallbacks,
         )
 
         self.commit_event(message_event)
