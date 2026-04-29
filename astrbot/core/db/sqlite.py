@@ -362,7 +362,13 @@ class SQLiteDatabase(BaseDatabase):
                 return new_conversation
 
     async def update_conversation(
-        self, cid, title=None, persona_id=None, content=None, token_usage=None
+        self,
+        cid,
+        title=None,
+        persona_id=None,
+        clear_persona=False,
+        content=None,
+        token_usage=None,
     ):
         async with self.get_db() as session:
             session: AsyncSession
@@ -375,6 +381,8 @@ class SQLiteDatabase(BaseDatabase):
                     values["title"] = title
                 if persona_id is not None:
                     values["persona_id"] = persona_id
+                if clear_persona:
+                    values["persona_id"] = None
                 if content is not None:
                     values["content"] = content
                 if token_usage is not None:
