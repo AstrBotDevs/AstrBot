@@ -748,6 +748,22 @@ class MisskeyAPI:
         """获取当前用户信息"""
         return await self._make_request("i", {})
 
+    async def get_note(self, note_id: str) -> dict[str, Any] | None:
+        """通过 notes/show 获取帖子详情。失败返回 None，不抛异常。
+
+        私密帖 / 未联邦化的 remote 帖 / 已被删除帖会返回 403 或 404，
+        这些是预期行为，因此降级到 debug 级日志。
+        """
+        if not note_id:
+            return None
+        try:
+            result = await self._make_request("notes/show", {"noteId": note_id})
+            if isinstance(result, dict):
+                return result
+        except Exception as e:
+            logger.debug(f"[Misskey API] 获取帖子失败 ({note_id}): {e}")
+        return None
+
     async def send_message(
         self,
         user_id_or_payload: Any,

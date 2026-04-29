@@ -37,6 +37,7 @@ from .misskey_utils import (
     process_files,
     resolve_message_visibility,
     serialize_message_chain,
+    summarize_note_for_context,
 )
 
 # Constants
@@ -91,6 +92,24 @@ class MisskeyPlatformAdapter(Platform):
         except Exception:
             self.max_download_bytes = None
 
+        # 评论区原帖上下文注入
+        self.include_reply_context = bool(
+            self.config.get("misskey_include_reply_context", True),
+        )
+        try:
+            self.reply_context_max_depth = max(
+                0,
+                min(int(self.config.get("misskey_reply_context_max_depth", 1)), 5),
+            )
+        except Exception:
+            self.reply_context_max_depth = 1
+        try:
+            _raw_len = int(self.config.get("misskey_reply_context_max_text_length", 500))
+            # -1 表示不截断；否则强制下限 50 防止误填导致摘要几乎为空
+            self.reply_context_max_text_length = -1 if _raw_len < 0 else max(50, _raw_len)
+        except Exception:
+            self.reply_context_max_text_length = 500
+
         self.api: MisskeyAPI | None = None
         self._running = False
         self.bot_self_id = ""
@@ -110,6 +129,10 @@ class MisskeyPlatformAdapter(Platform):
             "misskey_download_timeout": 15,
             "misskey_download_chunk_size": 65536,
             "misskey_max_download_bytes": None,
+            # 评论区原帖上下文注入
+            "misskey_include_reply_context": True,
+            "misskey_reply_context_max_depth": 1,
+            "misskey_reply_context_max_text_length": 500,
         }
         default_config.update(self.config)
 
@@ -631,6 +654,106 @@ class MisskeyPlatformAdapter(Platform):
 
         return await super().send_by_session(session, message_chain)
 
+    async def _resolve_parent_note(
+        self,
+        current: dict[str, Any],
+        depth: int,
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """根据当前 note 解析父帖。返回 (parent_dict, relation_label) 或 (None, None)。
+
+        depth==0 时优先用 payload 中已展开的对象（reply / renote）；缺失时回退 API。
+        depth>=1 时通常 payload 不再嵌套展开，主要靠 API 拉取。
+        reply 和 renote 同时存在（reply-with-quote）时返回 reply，调用方需要单独处理 renote。
+        """
+        reply_obj = current.get("reply")
+        if isinstance(reply_obj, dict):
+            return reply_obj, "被回复的原帖"
+        reply_id = current.get("replyId")
+        if reply_id and self.api:
+            fetched = await self.api.get_note(str(reply_id))
+            if isinstance(fetched, dict):
+                return fetched, "被回复的原帖"
+
+        renote_obj = current.get("renote")
+        if isinstance(renote_obj, dict):
+            return renote_obj, "被引用/转发的原帖"
+        renote_id = current.get("renoteId")
+        if renote_id and self.api:
+            fetched = await self.api.get_note(str(renote_id))
+            if isinstance(fetched, dict):
+                return fetched, "被引用/转发的原帖"
+
+        return None, None
+
+    async def _build_parent_note_context(
+        self,
+        raw_data: dict[str, Any],
+    ) -> str:
+        """从一条 note 出发，向上追溯 reply / renote 链，返回拼好的纯文本上下文。
+
+        - depth=0 时如果同时存在 reply + renote（reply-with-quote），两个都注入。
+        - 顶层（depth=0）父帖作者是机器人自己时整段跳过，避免反馈循环。
+        - 链中循环或 API 失败时静默截断，不阻断消息处理。
+        """
+        if self.reply_context_max_depth <= 0:
+            return ""
+
+        blocks: list[str] = []
+        visited: set[str] = set()
+        current = raw_data
+        labelled_by_depth = self.reply_context_max_depth > 1
+
+        for depth in range(self.reply_context_max_depth):
+            parent, relation = await self._resolve_parent_note(current, depth)
+            if not isinstance(parent, dict):
+                break
+
+            parent_id = str(parent.get("id") or "")
+            if not parent_id or parent_id in visited:
+                break
+            visited.add(parent_id)
+
+            if depth == 0:
+                parent_uid = str((parent.get("user") or {}).get("id") or "")
+                if parent_uid and parent_uid == self.bot_self_id:
+                    return ""
+
+            summary = summarize_note_for_context(
+                parent,
+                max_text_length=self.reply_context_max_text_length,
+            )
+            if summary:
+                label = relation or "被回复的原帖"
+                if labelled_by_depth:
+                    label = f"{label} - 第{depth + 1}层"
+                blocks.append(f"[{label}]\n{summary}")
+
+            # depth=0 且当前是 reply：如果还有 renote（reply-with-quote），也补上
+            if (
+                depth == 0
+                and relation == "被回复的原帖"
+                and isinstance(current.get("renote"), dict)
+            ):
+                renote_obj = current["renote"]
+                renote_id = str(renote_obj.get("id") or "")
+                if renote_id and renote_id not in visited:
+                    visited.add(renote_id)
+                    quote_summary = summarize_note_for_context(
+                        renote_obj,
+                        max_text_length=self.reply_context_max_text_length,
+                    )
+                    if quote_summary:
+                        quote_label = "被引用/转发的原帖"
+                        if labelled_by_depth:
+                            quote_label = f"{quote_label} - 第1层"
+                        blocks.append(f"[{quote_label}]\n{quote_summary}")
+
+            current = parent
+
+        if not blocks:
+            return ""
+        return "\n\n".join(blocks) + "\n---\n"
+
     async def convert_message(self, raw_data: dict[str, Any]) -> AstrBotMessage:
         """将 Misskey 贴文数据转换为 AstrBotMessage 对象"""
         sender_info = extract_sender_info(raw_data, is_chat=False)
@@ -647,6 +770,17 @@ class MisskeyPlatformAdapter(Platform):
             self.bot_self_id,
             is_chat=False,
         )
+
+        # 评论区原帖上下文：作为前缀注入到消息链与 message_str
+        parent_ctx = ""
+        if self.include_reply_context:
+            try:
+                parent_ctx = await self._build_parent_note_context(raw_data)
+            except Exception as e:
+                logger.warning(f"[Misskey] 构建父帖上下文失败: {e}")
+                parent_ctx = ""
+            if parent_ctx:
+                message.message.append(Comp.Plain(parent_ctx))
 
         message_parts = []
         raw_text = raw_data.get("text", "")
@@ -672,11 +806,12 @@ class MisskeyPlatformAdapter(Platform):
         if poll and isinstance(poll, dict):
             self._process_poll_data(message, poll, message_parts)
 
-        message.message_str = (
+        body = (
             " ".join(part for part in message_parts if part.strip())
             if message_parts
             else ""
         )
+        message.message_str = parent_ctx + body if parent_ctx else body
         return message
 
     async def convert_chat_message(self, raw_data: dict[str, Any]) -> AstrBotMessage:
