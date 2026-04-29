@@ -63,6 +63,23 @@ class ProviderOpenAIOfficial(Provider):
         return text[: cls._ERROR_TEXT_CANDIDATE_MAX_CHARS]
 
     @staticmethod
+    def _deduplicate_self_repeating(
+        value: str | None, min_length: int = 20
+    ) -> str | None:
+        """If string is a self-repeating pattern like 'astr_kb_searchastr_kb_search'
+        (exactly 2 repetitions, min 20 chars), return the base unit.
+        This handles streaming chunk duplication issues for tool names/IDs.
+        Returns None unchanged."""
+        if value is None:
+            return None
+        if not value or len(value) < min_length:
+            return value
+        half = len(value) // 2
+        if value[:half] == value[half:]:
+            return value[:half]
+        return value
+
+    @staticmethod
     def _safe_json_dump(value: Any) -> str | None:
         try:
             return json.dumps(value, ensure_ascii=False, default=str)
@@ -887,21 +904,27 @@ class ProviderOpenAIOfficial(Provider):
                 if tool_call.type == "function":
                     # workaround for #1454
                     if isinstance(tool_call.function.arguments, str):
+                        deduped_args = self._deduplicate_self_repeating(
+                            tool_call.function.arguments
+                        )
                         try:
-                            args = json.loads(tool_call.function.arguments)
+                            args = json.loads(deduped_args)
                         except json.JSONDecodeError as e:
                             logger.error(f"解析参数失败: {e}")
                             args = {}
                     else:
                         args = tool_call.function.arguments
                     args_ls.append(args)
-                    func_name_ls.append(tool_call.function.name)
-                    tool_call_ids.append(tool_call.id)
+                    func_name_ls.append(
+                        self._deduplicate_self_repeating(tool_call.function.name)
+                    )
+                    deduped_id = self._deduplicate_self_repeating(tool_call.id)
+                    tool_call_ids.append(deduped_id)
 
                     # gemini-2.5 / gemini-3 series extra_content handling
                     extra_content = getattr(tool_call, "extra_content", None)
-                    if extra_content is not None:
-                        tool_call_extra_content_dict[tool_call.id] = extra_content
+                    if extra_content is not None and deduped_id is not None:
+                        tool_call_extra_content_dict[deduped_id] = extra_content
 
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
