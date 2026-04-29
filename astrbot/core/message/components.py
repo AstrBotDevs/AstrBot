@@ -146,25 +146,29 @@ class Record(BaseMessageComponent):
             str: 语音的本地路径，以绝对路径表示。
 
         """
-        if not self.file:
-            raise Exception(f"not a valid file: {self.file}")
-        if self.file.startswith("file:///"):
-            return self.file[8:]
-        if self.file.startswith("http"):
-            file_path = await download_image_by_url(self.file)
+        url = self.url or self.file
+        if not url:
+            raise ValueError("No valid file or URL provided")
+        if url.startswith("file:///"):
+            return url[8:]
+        if url.startswith("http"):
+            file_path = os.path.join(
+                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.amr"
+            )
+            await download_file(url, file_path)
             return os.path.abspath(file_path)
-        if self.file.startswith("base64://"):
-            bs64_data = self.file.removeprefix("base64://")
+        if url.startswith("base64://"):
+            bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
             file_path = os.path.join(
-                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.jpg"
+                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.amr"
             )
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(file_path)
-        if os.path.exists(self.file):
-            return os.path.abspath(self.file)
-        raise Exception(f"not a valid file: {self.file}")
+        if os.path.exists(url):
+            return os.path.abspath(url)
+        raise Exception(f"not a valid file: {url}")
 
     async def convert_to_base64(self) -> str:
         """将语音统一转换为 base64 编码。这个方法避免了手动判断语音数据类型，直接返回语音数据的 base64 编码。
@@ -173,20 +177,23 @@ class Record(BaseMessageComponent):
             str: 语音的 base64 编码，不以 base64:// 或者 data:image/jpeg;base64, 开头。
 
         """
-        # convert to base64
-        if not self.file:
-            raise Exception(f"not a valid file: {self.file}")
-        if self.file.startswith("file:///"):
-            bs64_data = file_to_base64(self.file[8:])
-        elif self.file.startswith("http"):
-            file_path = await download_image_by_url(self.file)
+        url = self.url or self.file
+        if not url:
+            raise ValueError("No valid file or URL provided")
+        if url.startswith("file:///"):
+            bs64_data = file_to_base64(url[8:])
+        elif url.startswith("http"):
+            file_path = os.path.join(
+                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.amr"
+            )
+            await download_file(url, file_path)
             bs64_data = file_to_base64(file_path)
-        elif self.file.startswith("base64://"):
-            bs64_data = self.file
-        elif os.path.exists(self.file):
-            bs64_data = file_to_base64(self.file)
+        elif url.startswith("base64://"):
+            bs64_data = url
+        elif os.path.exists(url):
+            bs64_data = file_to_base64(url)
         else:
-            raise Exception(f"not a valid file: {self.file}")
+            raise Exception(f"not a valid file: {url}")
         bs64_data = bs64_data.removeprefix("base64://")
         return bs64_data
 
