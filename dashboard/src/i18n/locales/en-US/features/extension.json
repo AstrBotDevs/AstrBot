@@ -91,7 +91,27 @@
   },
   "empty": {
     "noPlugins": "No Extensions",
-    "noPluginsDesc": "Try installing extensions or showing system extensions"
+    "noPluginsDesc": "Try installing extensions or adjusting the search"
+  },
+  "detail": {
+    "contents": "Plugin Handlers",
+    "noContents": "No handlers",
+    "notFound": "Plugin not found",
+    "docsTitle": "Documentation",
+    "docsEmpty": "No documentation",
+    "handlerGroups": {
+      "commands": "Commands / Command Groups",
+      "hooks": "Hooks",
+      "functionTools": "Function Tools",
+      "eventListeners": "Event Listeners"
+    },
+    "info": {
+      "title": "Info",
+      "author": "Author",
+      "category": "Category",
+      "authorWebsite": "Author Website",
+      "repository": "Repository"
+    }
   },
   "market": {
     "recommended": "🥳 Recommended",
@@ -144,8 +164,7 @@
     "updated": "Last Updated",
     "updateStatus": "Update Status",
     "ascending": "Ascending",
-    "descending": "Descending",
-    "pinUpdatesOnTop": "Pin Updates on Top"
+    "descending": "Descending"
   },
   "tags": {
     "danger": "Danger"
@@ -223,6 +242,7 @@
     "supportedFormats": "Supports .zip extension files",
     "updateAllSuccess": "All upgradable extensions have been updated!",
     "updateAllFailed": "{failed} of {total} extensions failed to update:",
+    "noUpdatesAvailable": "No extensions have updates available",
     "fillSourceNameAndUrl": "Please fill in the complete source name and URL",
     "invalidUrl": "Please enter a valid URL",
     "enterJsonUrl": "Please enter a URL that returns plugin list JSON data"

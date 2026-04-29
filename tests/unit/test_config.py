@@ -291,6 +291,30 @@ class TestConfigValidation:
         assert "level2" in config.nested["level1"]
         assert config.nested["level1"]["level2"]["value"] == 42
 
+    def test_integrity_log_does_not_include_inserted_secret_value(
+        self, temp_config_path, monkeypatch
+    ):
+        """Default values may contain secrets and should not be logged."""
+        from astrbot.core.config import astrbot_config
+
+        existing_config = {}
+        default_config = {"api_key": "secret-value"}
+        messages = []
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump(existing_config, f)
+
+        def capture_info(message, *args):
+            messages.append(message % args if args else message)
+
+        monkeypatch.setattr(astrbot_config.logger, "info", capture_info)
+
+        AstrBotConfig(config_path=temp_config_path, default_config=default_config)
+
+        assert messages
+        assert all("secret-value" not in message for message in messages)
+        assert all("api_key" not in message for message in messages)
+        assert any("Config key missing" in message for message in messages)
+
 
 class TestConfigHotReload:
     """Tests for config hot reload functionality."""

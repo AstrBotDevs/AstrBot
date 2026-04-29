@@ -93,3 +93,181 @@ def test_anthropic_empty_output_raises_empty_model_output_error():
             completion_id="msg_empty",
             stop_reason="end_turn",
         )
+
+
+def _make_anthropic_provider_for_payload_tests() -> anthropic_source.ProviderAnthropic:
+    return anthropic_source.ProviderAnthropic(
+        provider_config={"model": "claude-test"},
+        provider_settings={},
+        use_api_key=False,
+    )
+
+
+def test_prepare_payload_merges_consecutive_tool_results_into_single_user_message():
+    provider = _make_anthropic_provider_for_payload_tests()
+
+    _, new_messages = provider._prepare_payload(
+        [
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Reading files"}],
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": "call_00",
+                        "function": {
+                            "name": "astrbot_file_read_tool",
+                            "arguments": '{"path": "/tmp/one.txt"}',
+                        },
+                    },
+                    {
+                        "type": "function",
+                        "id": "call_01",
+                        "function": {
+                            "name": "astrbot_file_read_tool",
+                            "arguments": '{"path": "/tmp/two.txt"}',
+                        },
+                    },
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_00",
+                "content": "one",
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_01",
+                "content": "two",
+            },
+        ]
+    )
+
+    assert len(new_messages) == 2
+    assert new_messages[1]["role"] == "user"
+    assert new_messages[1]["content"] == [
+        {"type": "tool_result", "tool_use_id": "call_00", "content": "one"},
+        {"type": "tool_result", "tool_use_id": "call_01", "content": "two"},
+    ]
+
+
+def test_prepare_payload_keeps_single_tool_result_as_single_user_message():
+    provider = _make_anthropic_provider_for_payload_tests()
+
+    _, new_messages = provider._prepare_payload(
+        [
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Reading file"}],
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": "call_00",
+                        "function": {
+                            "name": "astrbot_file_read_tool",
+                            "arguments": '{"path": "/tmp/one.txt"}',
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_00",
+                "content": "one",
+            },
+        ]
+    )
+
+    assert len(new_messages) == 2
+    assert new_messages[1] == {
+        "role": "user",
+        "content": [
+            {"type": "tool_result", "tool_use_id": "call_00", "content": "one"}
+        ],
+    }
+
+
+def test_prepare_payload_does_not_merge_non_consecutive_tool_results():
+    provider = _make_anthropic_provider_for_payload_tests()
+
+    _, new_messages = provider._prepare_payload(
+        [
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "First tool"}],
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": "call_00",
+                        "function": {
+                            "name": "astrbot_file_read_tool",
+                            "arguments": '{"path": "/tmp/one.txt"}',
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_00",
+                "content": "one",
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Second tool"}],
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": "call_01",
+                        "function": {
+                            "name": "astrbot_file_read_tool",
+                            "arguments": '{"path": "/tmp/two.txt"}',
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_01",
+                "content": "two",
+            },
+        ]
+    )
+
+    assert new_messages == [
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "First tool"},
+                {
+                    "type": "tool_use",
+                    "name": "astrbot_file_read_tool",
+                    "input": {"path": "/tmp/one.txt"},
+                    "id": "call_00",
+                },
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "call_00", "content": "one"}
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "Second tool"},
+                {
+                    "type": "tool_use",
+                    "name": "astrbot_file_read_tool",
+                    "input": {"path": "/tmp/two.txt"},
+                    "id": "call_01",
+                },
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "call_01", "content": "two"}
+            ],
+        },
+    ]

@@ -1,4 +1,7 @@
-import { EXTENSION_ROUTE_NAME } from './routeConstants.mjs';
+import {
+  EXTENSION_DETAILS_ROUTE_NAME,
+  EXTENSION_ROUTE_NAME
+} from './routeConstants.mjs';
 
 const MainRoutes = {
   path: '/main',
@@ -21,6 +24,11 @@ const MainRoutes = {
     {
       name: EXTENSION_ROUTE_NAME,
       path: '/extension',
+      component: () => import('@/views/ExtensionPage.vue')
+    },
+    {
+      name: EXTENSION_DETAILS_ROUTE_NAME,
+      path: '/extension/:pluginId',
       component: () => import('@/views/ExtensionPage.vue')
     },
     {
