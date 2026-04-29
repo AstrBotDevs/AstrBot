@@ -988,6 +988,12 @@
         "group_message_max_cnt": {
           "description": "Maximum Message Count"
         },
+        "context_prompt": {
+          "description": "Context Awareness Prompt"
+        },
+        "active_reply_suffix_prompt": {
+          "description": "Active Reply Suffix Prompt"
+        },
         "image_caption": {
           "description": "Auto-understand Images",
           "hint": "Requires setting a group chat image caption model."

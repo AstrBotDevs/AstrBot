@@ -990,6 +990,12 @@
         "group_message_max_cnt": {
           "description": "最大消息数量"
         },
+        "context_prompt": {
+          "description": "上下文感知提示词"
+        },
+        "active_reply_suffix_prompt": {
+          "description": "主动回复后缀提示词"
+        },
         "image_caption": {
           "description": "自动理解图片",
           "hint": "需要设置群聊图片转述模型。"
