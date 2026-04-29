@@ -440,6 +440,8 @@ rpds-py==0.30.0
     #   jsonschema
     #   referencing
 ruff==0.15.7
+satori-python-core==1.3.3
+    # via astrbot
 shipyard-neo-sdk==0.2.0
     # via astrbot
 shipyard-python-sdk==0.2.4
