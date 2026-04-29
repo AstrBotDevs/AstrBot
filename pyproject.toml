@@ -141,7 +141,16 @@ pythonVersion = "3.12"
 reportMissingTypeStubs = false
 reportMissingImports = false
 include = ["astrbot"]
-exclude = ["dashboard", "node_modules", "dist", "data", "tests", "tests/**", "**/tests/**"]
+exclude = [
+    "dashboard",
+    "node_modules",
+    "dist",
+    "data",
+    "tests",
+    "tests/**",
+    "**/tests/**",
+    "**/__pycache__",
+]
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]

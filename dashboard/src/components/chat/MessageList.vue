@@ -381,7 +381,6 @@ import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
 import ReasoningBlock from "./message_list_comps/ReasoningBlock.vue";
 import MessagePartsRenderer from "./message_list_comps/MessagePartsRenderer.vue";
-import RefNode from "./message_list_comps/RefNode.vue";
 import ActionRef from "./message_list_comps/ActionRef.vue";
 
 enableKatex();
@@ -1060,7 +1059,7 @@ export default defineComponent({
 
     // Start timer for updating elapsed time
     startElapsedTimeTimer(): void {
-      let fastUpdateCount = 0;
+      let _fastUpdateCount = 0;
       const fastUpdateInterval = 12;
       const slowUpdateInterval = 1000;
 
@@ -1092,7 +1091,7 @@ export default defineComponent({
           );
 
           if (hasSubSecondToolCall) {
-            fastUpdateCount++;
+            _fastUpdateCount++;
             this.elapsedTimeTimer = setTimeout(updateTime, fastUpdateInterval);
           } else {
             this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);

@@ -1,6 +1,6 @@
 """会话插件管理器 - 负责管理每个会话的插件启停状态"""
 
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -11,14 +11,15 @@ class SessionPluginSettings(TypedDict, total=False):
     disabled_plugins: list[str]
 
 
-def _normalize_session_plugin_config(value: object) -> dict[str, SessionPluginSettings]:
+def _normalize_session_plugin_config(value: object) -> dict[str, dict[str, list[str]]]:
     if not isinstance(value, dict):
         return {}
-    config: dict[str, SessionPluginSettings] = {}
+    config: dict[str, dict[str, list[str]]] = {}
     for session_id, raw_settings in value.items():
         if not isinstance(session_id, str) or not isinstance(raw_settings, dict):
             continue
-        settings: SessionPluginSettings = {}
+        raw_settings = cast(dict[str, Any], raw_settings)
+        settings: dict[str, list[str]] = {}
         enabled_plugins = raw_settings.get("enabled_plugins")
         if isinstance(enabled_plugins, list) and all(
             isinstance(plugin_name, str) for plugin_name in enabled_plugins

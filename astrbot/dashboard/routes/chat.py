@@ -191,9 +191,10 @@ class BotMessageAccumulator:
         tool_call_id = str(tool_result.get("id") or "")
         if not tool_call_id:
             return
-        tool_call: dict[str, Any] = self.pending_tool_calls.pop(tool_call_id, None) or {
-            "id": tool_call_id
-        }
+        existing = self.pending_tool_calls.pop(tool_call_id, None)
+        tool_call: dict[str, Any] = (
+            existing if existing is not None else {"id": tool_call_id}
+        )
         tool_call["result"] = tool_result.get("result")
         tool_call["finished_ts"] = tool_result.get("ts")
         self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})

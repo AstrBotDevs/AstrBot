@@ -5,11 +5,12 @@ import logging
 import random
 import uuid
 from collections.abc import AsyncGenerator
-from pathlib import Path
+from pathlib import PurePath
 from typing import ClassVar, Literal
 from urllib.parse import urlparse
 
 import aiofiles
+import anyio
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -250,7 +251,7 @@ class ProviderGoogleGenAI(Provider):
             logprobs=payloads.get("logprobs"),
             seed=payloads.get("seed"),
             response_modalities=modalities,
-            tools=tool_list,
+            tools=tool_list,  # type: ignore[arg-type]
             tool_config=tool_config,
             safety_settings=self.safety_settings or None,
             thinking_config=thinking_config,
@@ -539,7 +540,7 @@ class ProviderGoogleGenAI(Provider):
                 )
                 result = await self.client.models.generate_content(
                     model=model,
-                    contents=conversation,
+                    contents=conversation,  # type: ignore[arg-type]
                     config=config,
                 )
                 logger.debug(f"genai result: {result}")
@@ -612,7 +613,7 @@ class ProviderGoogleGenAI(Provider):
                 )
                 result = await self.client.models.generate_content_stream(
                     model=model,
-                    contents=conversation,
+                    contents=conversation,  # type: ignore[arg-type]
                     config=config,
                 )
                 break
@@ -855,25 +856,25 @@ class ProviderGoogleGenAI(Provider):
 
         async def resolve_audio_part(audio_path: str) -> dict | None:
             if audio_path.startswith("http"):
-                suffix = Path(urlparse(audio_path).path).suffix or ".wav"
-                temp_dir = Path(get_astrbot_temp_path())
-                temp_dir.mkdir(parents=True, exist_ok=True)
+                suffix = PurePath(urlparse(audio_path).path).suffix or ".wav"
+                temp_path = anyio.Path(get_astrbot_temp_path())
+                await temp_path.mkdir(parents=True, exist_ok=True)
                 resolved_path = str(
-                    temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}",
+                    temp_path / f"provider_audio_{uuid.uuid4().hex}{suffix}",
                 )
                 await download_file(audio_path, resolved_path)
-            elif audio_path.startswith("file:///"):
+            elif audio_path.startswith("file:///:"):
                 resolved_path = audio_path.replace("file:///", "")
             else:
                 resolved_path = audio_path
 
-            suffix = Path(resolved_path).suffix.lower()
+            suffix = PurePath(resolved_path).suffix.lower()
             if suffix != ".mp3":
                 resolved_path = await ensure_wav(resolved_path)
                 suffix = ".wav"
 
             try:
-                audio_bytes = Path(resolved_path).read_bytes()
+                audio_bytes = await anyio.Path(resolved_path).read_bytes()
             except OSError as exc:
                 logger.warning(
                     f"Failed to read audio file {resolved_path}, skipping. Error: {exc}",

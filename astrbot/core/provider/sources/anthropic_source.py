@@ -1,10 +1,9 @@
 import base64
 import json
 from collections.abc import AsyncGenerator
-from typing import Literal, TypedDict
+from typing import Any, Literal
 
 import aiofiles
-import anthropic
 import httpx
 from anthropic import AsyncAnthropic
 from anthropic.types import (
@@ -43,17 +42,6 @@ from astrbot.core.utils.network_utils import (
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
-    class _ToolUseBufferEntry(TypedDict, total=False):
-        id: str
-        name: str
-        input: dict[str, object]
-        input_json: str
-
-    class _FinalToolCall(TypedDict):
-        id: str
-        name: str
-        input: dict[str, object]
-
     @staticmethod
     def _ensure_usable_response(
         llm_response: LLMResponse,
@@ -241,7 +229,7 @@ class ProviderAnthropic(Provider):
                 )
 
                 if can_append_to_previous_tool_results:
-                    last_content.append(tool_result_block)
+                    last_content.append(tool_result_block)  # type: ignore[union-attr]
                 else:
                     new_messages.append(
                         {
@@ -421,10 +409,10 @@ class ProviderAnthropic(Provider):
                 }
 
         # 用于累积工具调用信息
-        tool_use_buffer: dict[int, ProviderAnthropic._ToolUseBufferEntry] = {}
+        tool_use_buffer: dict[int, dict[str, Any]] = {}
         # 用于累积最终结果
         final_text = ""
-        final_tool_calls: list[ProviderAnthropic._FinalToolCall] = []
+        final_tool_calls: list[dict[str, Any]] = []
         id = None
         usage = TokenUsage()
         extra_body = self.provider_config.get("custom_extra_body", {})
@@ -439,7 +427,6 @@ class ProviderAnthropic(Provider):
             **payloads,
             extra_body=extra_body,
         ) as stream:
-            assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
                 if isinstance(event, RawMessageStartEvent):
                     id = event.message.id

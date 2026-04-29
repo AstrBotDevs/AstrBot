@@ -8,10 +8,11 @@ import re
 import uuid
 from collections.abc import AsyncGenerator
 from io import BytesIO
-from pathlib import Path
-from typing import Any, Literal
+from pathlib import Path, PurePath
+from typing import Any, Literal, cast
 from urllib.parse import unquote, urlparse
 
+import anyio
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import NotFoundError
@@ -200,7 +201,7 @@ class ProviderOpenAIOfficial(Provider):
                 image_format = str(image.format or "").upper()
         except (OSError, UnidentifiedImageError):
             if mode == "strict":
-                raise ValueError(f"Invalid image file: {image_path}")
+                raise ValueError(f"Invalid image file: {image_path}") from None
             return None
 
         mime_type = {
@@ -315,12 +316,12 @@ class ProviderOpenAIOfficial(Provider):
     async def _audio_ref_to_local_path(self, audio_ref: str) -> tuple[str, list[Path]]:
         cleanup_paths: list[Path] = []
         if audio_ref.startswith("http"):
-            suffix = Path(urlparse(audio_ref).path).suffix or ".wav"
-            temp_dir = Path(get_astrbot_temp_path())
-            temp_dir.mkdir(parents=True, exist_ok=True)
-            target_path = temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
+            suffix = PurePath(urlparse(audio_ref).path).suffix or ".wav"
+            temp_path = anyio.Path(get_astrbot_temp_path())
+            await temp_path.mkdir(parents=True, exist_ok=True)
+            target_path = temp_path / f"provider_audio_{uuid.uuid4().hex}{suffix}"
             await download_file(audio_ref, str(target_path))
-            cleanup_paths.append(target_path)
+            cleanup_paths.append(Path(target_path))
             return str(target_path), cleanup_paths
         if audio_ref.startswith("file://"):
             return self._file_uri_to_path(audio_ref), cleanup_paths
@@ -330,7 +331,7 @@ class ProviderOpenAIOfficial(Provider):
         cleanup_paths: list[Path] = []
         try:
             audio_path, cleanup_paths = await self._audio_ref_to_local_path(audio_ref)
-            suffix = Path(audio_path).suffix.lower()
+            suffix = PurePath(audio_path).suffix.lower()
             if suffix == ".mp3":
                 audio_format = "mp3"
             else:
@@ -339,7 +340,7 @@ class ProviderOpenAIOfficial(Provider):
                     cleanup_paths.append(Path(converted_audio_path))
                 audio_path = converted_audio_path
                 audio_format = "wav"
-            audio_bytes = Path(audio_path).read_bytes()
+            audio_bytes = await anyio.Path(audio_path).read_bytes()
         except Exception as exc:
             logger.warning("音频 %s 预处理失败，将忽略。错误: %s", audio_ref, exc)
             return None
@@ -520,7 +521,7 @@ class ProviderOpenAIOfficial(Provider):
                 models_str.append(model.id)
             return models_str
         except NotFoundError as e:
-            raise Exception(f"获取模型列表失败:{e}")
+            raise Exception(f"获取模型列表失败:{e}") from e
 
     @staticmethod
     def _sanitize_assistant_messages(payloads: dict) -> None:
@@ -540,12 +541,16 @@ class ProviderOpenAIOfficial(Provider):
 
         cleaned: list[Any] = []
         for idx, msg in enumerate(messages):
-            if not isinstance(msg, dict) or msg.get("role") != "assistant":
+            if not isinstance(msg, dict):
+                cleaned.append(msg)
+                continue
+            msg = cast(dict[str, Any], msg)
+            if msg.get("role") != "assistant":
                 cleaned.append(msg)
                 continue
 
-            content = msg.get("content")
-            tool_calls = msg.get("tool_calls")
+            content: Any = msg.get("content")
+            tool_calls: Any = msg.get("tool_calls")
 
             if _is_empty(content) and not tool_calls:
                 logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
@@ -892,16 +897,17 @@ class ProviderOpenAIOfficial(Provider):
 
                 if tool_call.type == "function":
                     # workaround for #1454
-                    if isinstance(tool_call.function.arguments, str):
+                    func = tool_call.function  # type: ignore[union-attr]
+                    if isinstance(func.arguments, str):
                         try:
-                            args = json.loads(tool_call.function.arguments)
+                            args = json.loads(func.arguments)
                         except json.JSONDecodeError as e:
                             logger.error(f"解析参数失败: {e}")
                             args = {}
                     else:
-                        args = tool_call.function.arguments
+                        args = func.arguments
                     args_ls.append(args)
-                    func_name_ls.append(tool_call.function.name)
+                    func_name_ls.append(func.name)
                     tool_call_ids.append(tool_call.id)
 
                     # gemini-2.5 / gemini-3 series extra_content handling

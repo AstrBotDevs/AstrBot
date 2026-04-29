@@ -284,7 +284,7 @@ async def test_openai_payload_handles_none_think_content():
                 {
                     "role": "assistant",
                     "content": [
-                        {"type": "think", "think": None},  # type: ignore
+                        {"type": "think", "think": None},
                         {"type": "text", "text": "final answer"},
                     ],
                 }
