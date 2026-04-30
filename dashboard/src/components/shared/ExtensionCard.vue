@@ -131,6 +131,7 @@ const togglePin = () => {
     v-bind="attrs"
     class="extension-card mx-auto d-flex flex-column h-100"
     elevation="0"
+    variant="outlined"
     height="100%"
     :ripple="false"
     :style="{
