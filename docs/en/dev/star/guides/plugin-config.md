@@ -56,6 +56,10 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 - `editor_theme`: Optional. The theme for the code editor. Options are `vs-light` (default) and `vs-dark`.
 - `_special`: Optional. Used to call AstrBot's visualization features for provider selection, persona selection, knowledge base selection, etc. See details below.
 
+### Configuration Internationalization (Optional)
+
+Configuration `description`, `hint`, and select `labels` can follow the WebUI language. See [Plugin Internationalization](./plugin-i18n).
+
 When the code editor is enabled, it looks like this:
 
 ![editor_mode](https://files.astrbot.app/docs/source/images/plugin/image-6.png)

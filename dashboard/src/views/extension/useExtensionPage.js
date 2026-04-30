@@ -127,6 +127,7 @@ export const useExtensionPage = () => {
   const extension_config = reactive({
     metadata: {},
     config: {},
+    i18n: {},
   });
   const pluginMarketData = ref([]);
   const loadingDialog = reactive({
@@ -138,6 +139,7 @@ export const useExtensionPage = () => {
   const showPluginInfoDialog = ref(false);
   const selectedPlugin = ref({});
   const curr_namespace = ref("");
+  const currentConfigPlugin = ref("");
   const updatingAll = ref(false);
   
   const readmeDialog = reactive({
@@ -854,6 +856,7 @@ export const useExtensionPage = () => {
   
   const openExtensionConfig = async (extension_name) => {
     curr_namespace.value = extension_name;
+    currentConfigPlugin.value = extension_name;
     configDialog.value = true;
     try {
       const res = await axios.get(
@@ -861,6 +864,7 @@ export const useExtensionPage = () => {
       );
       extension_config.metadata = res.data.data.metadata;
       extension_config.config = res.data.data.config;
+      extension_config.i18n = res.data.data.i18n || {};
     } catch (err) {
       toast(err, "error");
     }
@@ -878,8 +882,10 @@ export const useExtensionPage = () => {
         toast(res.data.message, "error");
       }
       configDialog.value = false;
+      currentConfigPlugin.value = "";
       extension_config.metadata = {};
       extension_config.config = {};
+      extension_config.i18n = {};
       getExtensions();
     } catch (err) {
       toast(err, "error");

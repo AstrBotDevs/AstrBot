@@ -1498,7 +1498,7 @@ class ConfigRoute(Route):
         }
 
     async def _get_plugin_config(self, plugin_name: str):
-        ret: dict = {"metadata": None, "config": None}
+        ret: dict = {"metadata": None, "config": None, "i18n": {}}
 
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:
@@ -1514,6 +1514,7 @@ class ConfigRoute(Route):
                         "items": plugin_md.config.schema,  # 初始化时通过 __setattr__ 存入了 schema
                     },
                 }
+                ret["i18n"] = plugin_md.i18n
                 break
 
         return ret

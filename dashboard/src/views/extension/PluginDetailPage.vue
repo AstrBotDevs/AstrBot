@@ -4,6 +4,7 @@ import axios from "axios";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const props = defineProps({
   plugin: {
@@ -21,6 +22,7 @@ const props = defineProps({
 });
 
 const { tm, router } = props.state;
+const { pluginName, pluginDesc: resolvePluginDesc } = usePluginI18n();
 
 const markdown = new MarkdownIt({
   html: true,
@@ -75,9 +77,7 @@ const logoLoadFailed = ref(false);
 const detailPageRef = ref(null);
 const isHeaderStuck = ref(false);
 
-const displayName = computed(() =>
-  props.plugin.display_name?.length ? props.plugin.display_name : props.plugin.name,
-);
+const displayName = computed(() => pluginName(props.plugin));
 
 const pluginDesc = computed(() => {
   const desc =
@@ -86,7 +86,7 @@ const pluginDesc = computed(() => {
     props.marketPlugin?.desc ||
     props.marketPlugin?.description ||
     "";
-  return String(desc || "").trim();
+  return String(resolvePluginDesc(props.plugin, desc) || "").trim();
 });
 
 const logoSrc = computed(() => {

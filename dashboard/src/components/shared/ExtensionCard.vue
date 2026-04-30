@@ -6,6 +6,7 @@ import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
 import PluginPlatformChip from "./PluginPlatformChip.vue";
 import StyledMenu from "./StyledMenu.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const props = defineProps({
   extension: {
@@ -45,6 +46,7 @@ const attrs = useAttrs();
 
 // 国际化
 const { tm } = useModuleI18n("features/extension");
+const { pluginName, pluginDesc } = usePluginI18n();
 
 const supportPlatforms = computed(() => {
   const platforms = props.extension?.support_platforms;
@@ -72,6 +74,10 @@ const logoSrc = computed(() => {
     ? logo
     : defaultPluginIcon;
 });
+
+const localizedName = computed(() => pluginName(props.extension));
+
+const localizedDesc = computed(() => pluginDesc(props.extension));
 
 watch(
   () => props.extension?.logo,
@@ -170,17 +176,15 @@ const togglePin = () => {
               <v-tooltip
                 location="top"
                 :text="
-                  extension.display_name?.length &&
-                  extension.display_name !== extension.name
-                    ? `${extension.display_name} (${extension.name})`
+                  localizedName?.length &&
+                  localizedName !== extension.name
+                    ? `${localizedName} (${extension.name})`
                     : extension.name
                 "
               >
                 <template v-slot:activator="{ props: titleTooltipProps }">
                   <span v-bind="titleTooltipProps" class="extension-title__text">{{
-                    extension.display_name?.length
-                      ? extension.display_name
-                      : extension.name
+                    localizedName
                   }}</span>
                 </template>
               </v-tooltip>
@@ -280,7 +284,7 @@ const togglePin = () => {
             class="extension-desc"
             :class="{ 'text-caption': $vuetify.display.xs }"
           >
-            {{ extension.desc }}
+            {{ localizedDesc }}
           </div>
         </div>
       </div>

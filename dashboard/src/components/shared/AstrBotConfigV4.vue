@@ -6,6 +6,7 @@ import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
 import PersonaQuickPreview from './PersonaQuickPreview.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
 
 
 const props = defineProps({
@@ -28,19 +29,14 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
-const { tm, getRaw } = useModuleI18n('features/config-metadata')
+const { getRaw } = useModuleI18n('features/config-metadata')
 const { tm: tmConfig } = useModuleI18n('features/config')
+const { translateIfKey } = useConfigTextResolver()
 
 const hintMarkdown = new MarkdownIt({
   linkify: true,
   breaks: true
 })
-
-// 翻译器函数 - 如果是国际化键则翻译，否则原样返回
-const translateIfKey = (value) => {
-  if (!value || typeof value !== 'string') return value
-  return tm(value)
-}
 
 const renderHint = (value) => {
   const text = translateIfKey(value)

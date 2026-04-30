@@ -331,6 +331,7 @@ const selectedMarketPlugin = computed(() => {
             :iterable="extension_config.config"
             :metadataKey="curr_namespace"
             :pluginName="curr_namespace"
+            :pluginI18n="extension_config.i18n"
           />
           <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
         </div>

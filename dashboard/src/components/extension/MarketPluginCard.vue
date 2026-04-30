@@ -40,6 +40,7 @@ const handleInstall = (plugin) => {
 <template>
   <v-card
     class="rounded-lg d-flex flex-column plugin-card"
+    variant="outlined"
     elevation="0"
   >
 
@@ -238,6 +239,16 @@ const handleInstall = (plugin) => {
 </template>
 
 <style scoped>
+.plugin-card {
+  background: rgb(var(--v-theme-surface));
+  transition: background-color 0.16s ease;
+}
+
+.plugin-card:hover,
+.plugin-card:focus-within {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+
 .plugin-card-content {
   padding: 12px;
   padding-bottom: 8px;

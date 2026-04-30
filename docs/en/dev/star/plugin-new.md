@@ -51,6 +51,8 @@ You can add a `logo.png` file in the plugin directory as the plugin's logo. Plea
 
 You can modify (or add) the `display_name` field in the `metadata.yaml` file to serve as the plugin's display name in scenarios like the plugin marketplace, making it easier for users to read.
 
+Plugin display names and descriptions can follow the WebUI language. See [Plugin Internationalization](./guides/plugin-i18n).
+
 ### Declare Supported Platforms (Optional)
 
 You can add a `support_platforms` field (`list[str]`) to `metadata.yaml` to declare which platform adapters your plugin supports. The WebUI plugin page will display this field.
