@@ -52,6 +52,8 @@
     "selectFile": "Select File",
     "refresh": "Refresh",
     "updateAll": "Update All",
+    "pin": "Pin",
+    "unpin": "Unpin",
     "deleteSource": "Delete Source",
     "reshuffle": "Shuffle Again"
   },

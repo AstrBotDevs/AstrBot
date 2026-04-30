@@ -20,6 +20,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  isPinned: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // 定义要发送到父组件的事件
@@ -32,6 +36,7 @@ const emit = defineEmits([
   "view-handlers",
   "view-readme",
   "view-changelog",
+  "toggle-pin",
 ]);
 
 const showUninstallDialog = ref(false);
@@ -113,6 +118,10 @@ const viewReadme = () => {
 
 const viewChangelog = () => {
   emit("view-changelog", props.extension);
+};
+
+const togglePin = () => {
+  emit("toggle-pin", props.extension);
 };
 
 </script>
@@ -280,6 +289,22 @@ const viewChangelog = () => {
     <v-card-actions class="extension-actions" @click.stop>
       <template v-if="!marketMode">
         <v-spacer></v-spacer>
+        <v-tooltip location="top">
+          <template v-slot:activator="{ props: pinTooltipProps }">
+            <v-btn
+              v-bind="pinTooltipProps"
+              :aria-label="isPinned ? tm('buttons.unpin') : tm('buttons.pin')"
+              :color="isPinned ? 'primary' : 'secondary'"
+              :icon="isPinned ? 'mdi-pin' : 'mdi-pin-outline'"
+              size="small"
+              variant="tonal"
+              class="extension-pin-btn"
+              @click="togglePin"
+            ></v-btn>
+          </template>
+          <span>{{ isPinned ? tm("buttons.unpin") : tm("buttons.pin") }}</span>
+        </v-tooltip>
+
         <v-tooltip location="top" :text="tm('buttons.viewDocs')">
           <template v-slot:activator="{ props: actionProps }">
             <v-btn
@@ -302,20 +327,6 @@ const viewChangelog = () => {
               variant="tonal"
               color="primary"
               @click="configure"
-            ></v-btn>
-          </template>
-        </v-tooltip>
-
-        <v-tooltip v-if="extension?.repo" location="top" :text="tm('buttons.viewRepo')">
-          <template v-slot:activator="{ props: actionProps }">
-            <v-btn
-              v-bind="actionProps"
-              icon="mdi-github"
-              size="small"
-              variant="tonal"
-              color="secondary"
-              :href="extension.repo"
-              target="_blank"
             ></v-btn>
           </template>
         </v-tooltip>
@@ -463,6 +474,10 @@ const viewChangelog = () => {
 .extension-switch-wrap {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+}
+
+.extension-pin-btn {
   flex-shrink: 0;
 }
 

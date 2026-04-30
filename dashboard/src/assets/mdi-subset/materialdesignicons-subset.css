@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 257 icons */
+/* Auto-generated MDI subset – 259 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -782,6 +782,14 @@
 
 .mdi-phone-in-talk::before {
   content: "\F03F6";
+}
+
+.mdi-pin::before {
+  content: "\F0403";
+}
+
+.mdi-pin-outline::before {
+  content: "\F0931";
 }
 
 .mdi-play::before {
