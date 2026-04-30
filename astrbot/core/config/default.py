@@ -166,6 +166,7 @@ DEFAULT_CONFIG = {
         },
         "computer_use_runtime": "none",
         "computer_use_require_admin": True,
+        "python_exec_timeout": 30,
         "sandbox": {
             "booter": "shipyard_neo",
             "shipyard_endpoint": "",
@@ -2812,6 +2813,9 @@ CONFIG_METADATA_2 = {
                     "tool_call_timeout": {
                         "type": "int",
                     },
+                    "python_exec_timeout": {
+                        "type": "int",
+                    },
                     "tool_schema_mode": {
                         "type": "string",
                     },
@@ -3292,6 +3296,11 @@ CONFIG_METADATA_3 = {
                         "description": "需要 AstrBot 管理员权限",
                         "type": "bool",
                         "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
+                    },
+                    "provider_settings.python_exec_timeout": {
+                        "description": "Python 执行超时时间（秒）",
+                        "type": "int",
+                        "hint": "仅影响本地 Python 执行工具的超时设置。",
                     },
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",

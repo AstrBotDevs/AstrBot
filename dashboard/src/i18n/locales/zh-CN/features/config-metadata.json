@@ -168,6 +168,10 @@
           "description": "需要 AstrBot 管理员权限",
           "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
         },
+        "python_exec_timeout": {
+          "description": "Python 执行超时时间（秒）",
+          "hint": "仅影响本地 Python 执行工具的超时设置。"
+        },
         "sandbox": {
           "booter": {
             "description": "沙箱环境驱动器"

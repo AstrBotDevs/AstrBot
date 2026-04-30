@@ -166,6 +166,10 @@
           "description": "Require AstrBot Admin Permission",
           "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
         },
+        "python_exec_timeout": {
+          "description": "Python execution timeout (seconds)",
+          "hint": "Only affects the local Python execution tool."
+        },
         "sandbox": {
           "booter": {
             "description": "Sandbox Environment Driver"

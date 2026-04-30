@@ -108,9 +108,18 @@ class LocalPythonTool(FunctionTool):
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
+        cfg = context.context.context.get_config(
+            umo=context.context.event.unified_msg_origin
+        )
+        provider_settings = cfg.get("provider_settings", {})
+        timeout = provider_settings.get("python_exec_timeout", 30)
+        try:
+            timeout = int(timeout)
+        except (TypeError, ValueError):
+            timeout = 30
         sb = get_local_booter()
         try:
-            result = await sb.python.exec(code, silent=silent)
+            result = await sb.python.exec(code, timeout=timeout, silent=silent)
             return await handle_result(result, context.context.event)
         except Exception as e:
             return f"Error executing code: {str(e)}"
