@@ -116,6 +116,7 @@ const {
   reloadPlugin,
   viewReadme,
   viewChangelog,
+  openInstallDialog,
   handleInstallPlugin,
   confirmDangerInstall,
   cancelDangerInstall,
@@ -365,7 +366,7 @@ const togglePinnedExtension = (extension) => {
                     z-index: 10000;
                     border-radius: 16px;
                   "
-                  @click="dialog = true"
+                  @click="openInstallDialog"
                 >
                   <span class="v-btn__overlay"></span>
                   <span class="v-btn__underlay"></span>

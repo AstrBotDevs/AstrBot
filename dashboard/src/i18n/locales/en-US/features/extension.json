@@ -109,8 +109,12 @@
     },
     "info": {
       "title": "Info",
+      "version": "Version",
       "author": "Author",
       "category": "Category",
+      "stars": "Stars",
+      "tags": "Tags",
+      "astrbotVersion": "AstrBot Version Requirement",
       "authorWebsite": "Author Website",
       "repository": "Repository"
     }
@@ -152,8 +156,6 @@
     "sourceExists": "This source already exists",
     "installPlugin": "Install Plugin",
     "randomPlugins": "🎲 Random Plugins",
-    "showRandomPlugins": "Show Random Plugins",
-    "hideRandomPlugins": "Hide Random Plugins",
     "sourceSafetyWarning": "Even with the default source, plugin stability and security cannot be fully guaranteed. Please verify carefully before use."
   },
   "sort": {

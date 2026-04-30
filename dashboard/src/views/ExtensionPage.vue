@@ -12,8 +12,11 @@ import MarketPluginsTab from "./extension/MarketPluginsTab.vue";
 import PluginDetailPage from "./extension/PluginDetailPage.vue";
 import { useExtensionPage } from "./extension/useExtensionPage";
 import { computed } from "vue";
+import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const pageState = useExtensionPage();
+const { pluginName, pluginDesc } = usePluginI18n();
 
 const {
   commonStore,
@@ -124,6 +127,8 @@ const {
   reloadPlugin,
   viewReadme,
   viewChangelog,
+  openInstallDialog,
+  closeInstallDialog,
   handleInstallPlugin,
   confirmDangerInstall,
   cancelDangerInstall,
@@ -158,6 +163,8 @@ const selectedPluginId = computed(() => {
   return Array.isArray(pluginId) ? pluginId[0] : pluginId || "";
 });
 
+const selectedDetailTab = computed(() => extractTabFromHash(route.hash) || "installed");
+
 const selectedInstalledPlugin = computed(() => {
   if (!selectedPluginId.value) return null;
   const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
@@ -165,23 +172,59 @@ const selectedInstalledPlugin = computed(() => {
 });
 
 const selectedMarketPlugin = computed(() => {
-  const plugin = selectedInstalledPlugin.value;
-  if (!plugin) return null;
   const market = Array.isArray(pluginMarketData.value) ? pluginMarketData.value : [];
-  const repo = plugin.repo?.toLowerCase();
+  const installedPlugin = selectedInstalledPlugin.value;
+  const repo = installedPlugin?.repo?.toLowerCase();
   return (
+    market.find((item) => item.name === selectedPluginId.value) ||
     market.find((item) => repo && item.repo?.toLowerCase() === repo) ||
-    market.find((item) => item.name === plugin.name) ||
     null
   );
+});
+
+const selectedDetailPlugin = computed(() => {
+  if (selectedDetailTab.value === "market" && selectedMarketPlugin.value) {
+    return selectedMarketPlugin.value;
+  }
+  return selectedInstalledPlugin.value || selectedMarketPlugin.value;
+});
+
+const installDialogPluginName = computed(() =>
+  selectedInstallPlugin.value ? pluginName(selectedInstallPlugin.value) : "",
+);
+
+const installDialogPluginDesc = computed(() =>
+  String(
+    selectedInstallPlugin.value
+      ? pluginDesc(
+          selectedInstallPlugin.value,
+          selectedInstallPlugin.value.desc ||
+            selectedInstallPlugin.value.description ||
+            "",
+        )
+      : "",
+  ).trim(),
+);
+
+const installDialogPluginAuthor = computed(() => {
+  const author = selectedInstallPlugin.value?.author;
+  if (Array.isArray(author)) return author.join(", ");
+  if (author && typeof author === "object") return author.name || "";
+  return typeof author === "string" ? author.trim() : "";
+});
+
+const installDialogPluginLogo = computed(() => {
+  const logo = selectedInstallPlugin.value?.logo;
+  return typeof logo === "string" && logo.trim() ? logo : defaultPluginIcon;
 });
 </script>
 
 <template>
   <PluginDetailPage
-    v-if="selectedPluginId && selectedInstalledPlugin"
-    :plugin="selectedInstalledPlugin"
+    v-if="selectedPluginId && selectedDetailPlugin"
+    :plugin="selectedDetailPlugin"
     :market-plugin="selectedMarketPlugin"
+    :source-tab="selectedDetailTab"
     :state="pageState"
   />
 
@@ -195,10 +238,10 @@ const selectedMarketPlugin = computed(() => {
         icon="mdi-arrow-left"
         variant="text"
         density="comfortable"
-        @click="router.push({ name: 'Extensions', hash: '#installed' })"
+        @click="router.push({ name: 'Extensions', hash: `#${selectedDetailTab}` })"
       />
       <h2 class="text-h3 mb-0 ml-2">
-        {{ tm("titles.installedAstrBotPlugins") }}
+        {{ selectedDetailTab === "market" ? tm("tabs.market") : tm("titles.installedAstrBotPlugins") }}
         <v-icon icon="mdi-chevron-right" size="24" class="mx-1" />
         {{ selectedPluginId }}
       </h2>
@@ -607,12 +650,87 @@ const selectedMarketPlugin = computed(() => {
       </v-card-title>
 
       <div class="v-card-text">
-        <v-tabs v-model="uploadTab" color="primary">
+        <div v-if="selectedMarketInstallPlugin" class="market-install-confirm">
+          <div class="market-install-confirm__header">
+            <img
+              :src="installDialogPluginLogo"
+              :alt="installDialogPluginName"
+              class="market-install-confirm__logo"
+            />
+            <div class="market-install-confirm__meta">
+              <div class="market-install-confirm__name">
+                {{ installDialogPluginName }}
+              </div>
+              <div
+                v-if="installDialogPluginAuthor"
+                class="market-install-confirm__author"
+              >
+                {{ tm("detail.info.author") }}: {{ installDialogPluginAuthor }}
+              </div>
+            </div>
+          </div>
+
+          <v-divider class="my-4" />
+
+          <div v-if="installDialogPluginDesc" class="market-install-confirm__section">
+            <div class="market-install-confirm__section-title">
+              {{ tm("table.headers.description") }}
+            </div>
+            <div class="market-install-confirm__desc">
+              {{ installDialogPluginDesc }}
+            </div>
+          </div>
+
+          <div v-if="selectedInstallPlugin" class="mt-4">
+            <v-chip
+              v-if="selectedInstallPlugin.astrbot_version"
+              size="small"
+              color="secondary"
+              variant="outlined"
+              class="mr-2 mb-2"
+            >
+              {{ tm("card.status.astrbotVersion") }}:
+              {{ selectedInstallPlugin.astrbot_version }}
+            </v-chip>
+            <v-chip
+              v-if="normalizePlatformList(selectedInstallPlugin.support_platforms).length"
+              size="small"
+              color="info"
+              variant="outlined"
+              class="mb-2"
+            >
+              {{ tm("card.status.supportPlatform") }}:
+              {{
+                getPlatformDisplayList(selectedInstallPlugin.support_platforms).join(
+                  ", ",
+                )
+              }}
+            </v-chip>
+            <v-alert
+              v-if="
+                selectedInstallPlugin.astrbot_version &&
+                installCompat.checked &&
+                !installCompat.compatible
+              "
+              type="warning"
+              variant="tonal"
+              density="comfortable"
+              class="mt-2"
+            >
+              {{ installCompat.message }}
+            </v-alert>
+          </div>
+
+          <ProxySelector class="mt-4" />
+        </div>
+
+        <template v-else>
+          <v-tabs v-model="uploadTab" color="primary">
           <v-tab value="file">{{ tm("dialogs.install.fromFile") }}</v-tab>
           <v-tab value="url">{{ tm("dialogs.install.fromUrl") }}</v-tab>
-        </v-tabs>
+          </v-tabs>
 
-        <v-window v-model="uploadTab" class="mt-4">
+          <v-window v-model="uploadTab" class="mt-4">
           <v-window-item value="file">
             <div class="d-flex flex-column align-center justify-center pa-4">
               <v-file-input
@@ -712,12 +830,13 @@ const selectedMarketPlugin = computed(() => {
               <ProxySelector></ProxySelector>
             </div>
           </v-window-item>
-        </v-window>
+          </v-window>
+        </template>
       </div>
 
       <div class="v-card-actions">
         <v-spacer></v-spacer>
-        <v-btn color="grey" variant="text" @click="dialog = false">{{
+        <v-btn color="grey" variant="text" @click="closeInstallDialog">{{
           tm("buttons.cancel")
         }}</v-btn>
         <v-btn color="primary" variant="text" @click="newExtension">{{
@@ -928,6 +1047,50 @@ const selectedMarketPlugin = computed(() => {
 .fab-button:hover {
   transform: translateY(-4px) scale(1.05);
   box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+}
+
+.market-install-confirm {
+  padding: 8px;
+}
+
+.market-install-confirm__header {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+}
+
+.market-install-confirm__logo {
+  border-radius: 14px;
+  height: 64px;
+  object-fit: cover;
+  width: 64px;
+}
+
+.market-install-confirm__meta {
+  min-width: 0;
+}
+
+.market-install-confirm__name {
+  color: rgba(var(--v-theme-on-surface), 0.92);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-install-confirm__author,
+.market-install-confirm__desc {
+  color: rgba(var(--v-theme-on-surface), 0.64);
+  line-height: 1.55;
+  font-size: 0.875rem;
+}
+
+.market-install-confirm__section-title {
+  color: rgba(var(--v-theme-on-surface), 0.92);
+  font-weight: 700;
+  margin-bottom: 8px;
 }
 </style>
 

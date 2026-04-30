@@ -80,7 +80,6 @@ const {
   sortBy,
   sortOrder,
   randomPluginNames,
-  showRandomPlugins,
   marketCategoryFilter,
   marketCategoryItems,
   normalizeStr,
@@ -96,7 +95,6 @@ const {
   randomPlugins,
   shufflePlugins,
   refreshRandomPlugins,
-  toggleRandomPluginsVisibility,
   displayItemsPerPage,
   totalPages,
   paginatedPlugins,
@@ -125,6 +123,7 @@ const {
   reloadPlugin,
   viewReadme,
   viewChangelog,
+  openInstallDialog,
   handleInstallPlugin,
   confirmDangerInstall,
   cancelDangerInstall,
@@ -175,6 +174,15 @@ const marketCategorySelectItems = computed(() =>
     value: item.value,
   })),
 );
+
+const openMarketPluginDetail = (plugin) => {
+  if (!plugin?.name) return;
+  router.push({
+    name: "ExtensionDetails",
+    params: { pluginId: plugin.name },
+    hash: "#market",
+  });
+};
 </script>
 
 <template>
@@ -205,20 +213,6 @@ const marketCategorySelectItems = computed(() =>
                     </template>
                   </v-tooltip>
 
-                  <v-btn
-                    color="primary"
-                    variant="tonal"
-                    rounded="md"
-                    class="text-none px-2"
-                    :prepend-icon="showRandomPlugins ? 'mdi-eye-off' : 'mdi-eye'"
-                    @click="toggleRandomPluginsVisibility"
-                  >
-                    {{
-                      showRandomPlugins
-                        ? tm("market.hideRandomPlugins")
-                        : tm("market.showRandomPlugins")
-                    }}
-                  </v-btn>
                 </div>
 
                 <v-text-field
@@ -263,7 +257,7 @@ const marketCategorySelectItems = computed(() =>
                     z-index: 10000;
                     border-radius: 16px;
                   "
-                  @click="dialog = true"
+                  @click="openInstallDialog"
                 >
                   <span class="v-btn__overlay"></span>
                   <span class="v-btn__underlay"></span>
@@ -347,6 +341,7 @@ const marketCategorySelectItems = computed(() =>
                     :default-plugin-icon="defaultPluginIcon"
                     :show-plugin-full-name="showPluginFullName"
                     @install="handleInstallPlugin"
+                    @open="openMarketPluginDetail"
                   />
                 </v-col>
               </v-row>
@@ -364,7 +359,7 @@ const marketCategorySelectItems = computed(() =>
               </div>
 
               <v-expand-transition>
-                <div v-if="showRandomPlugins">
+                <div v-if="randomPlugins.length > 0">
                   <div
                     class="d-flex align-center mb-2 mt-4"
                     style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
@@ -397,6 +392,7 @@ const marketCategorySelectItems = computed(() =>
                         :default-plugin-icon="defaultPluginIcon"
                         :show-plugin-full-name="showPluginFullName"
                         @install="handleInstallPlugin"
+                        @open="openMarketPluginDetail"
                       />
                     </v-col>
                   </v-row>
