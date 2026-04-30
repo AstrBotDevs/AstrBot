@@ -52,6 +52,8 @@
     "selectFile": "选择文件",
     "refresh": "刷新",
     "updateAll": "更新全部插件",
+    "pin": "置顶",
+    "unpin": "取消置顶",
     "deleteSource": "删除源",
     "reshuffle": "随机一发"
   },
