@@ -259,7 +259,7 @@
             "Truncate by Turns",
             "Compress by LLM"
           ],
-          "hint": "This strategy only triggers after turn-based limiting, when context tokens approach the model's window limit. When 'Truncate by Turns' is selected, the oldest N conversation turns will be discarded based on the 'Turns to Discard' setting above. When 'Compress by LLM' is selected, the specified model will be used for context compression."
+          "hint": "This strategy only triggers after turn-based limiting, when context tokens approach the model's window limit. When 'Truncate by Turns' is selected, the oldest N conversation turns will be discarded based on the 'Turns to Discard When Limit Exceeded' setting above. When 'Compress by LLM' is selected, the specified model will be used for context compression."
         },
         "llm_compress_instruction": {
           "description": "Context Compression Instruction",
