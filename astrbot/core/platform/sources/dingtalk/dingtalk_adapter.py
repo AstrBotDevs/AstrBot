@@ -759,6 +759,10 @@ class DingtalkPlatformAdapter(Platform):
                     logger.info("钉钉适配器已被关闭")
                     return
                 logger.error(f"钉钉机器人启动失败: {e}")
+            finally:
+                # 确保 task 完成或取消
+                if not task.done():
+                    task.cancel()
 
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, start_client, loop)
