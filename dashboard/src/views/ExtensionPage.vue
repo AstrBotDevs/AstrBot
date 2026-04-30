@@ -237,8 +237,11 @@ const selectedMarketPlugin = computed(() => {
           <!-- 已安装的 MCP 服务器标签页内容 -->
           <v-tab-item v-if="activeTab === 'mcp'">
             <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
+              <div class="d-flex flex-column" style="gap: 6px">
                 <h2 class="text-h2 mb-0">{{ tm("tabs.installedMcpServers") }}</h2>
+                <div class="text-body-2 text-medium-emphasis">
+                  {{ t("features.tooluse.mcpServers.description") }}
+                </div>
               </div>
             </div>
             <v-card
@@ -255,8 +258,11 @@ const selectedMarketPlugin = computed(() => {
           <!-- Skills 标签页内容 -->
           <v-tab-item v-if="activeTab === 'skills'">
             <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
+              <div class="d-flex flex-column" style="gap: 6px">
                 <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
+                <div class="text-body-2 text-medium-emphasis">
+                  {{ tm("skills.runtimeHint") }}
+                </div>
               </div>
             </div>
             <v-card

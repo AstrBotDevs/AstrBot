@@ -134,6 +134,7 @@ const togglePin = () => {
     variant="outlined"
     height="100%"
     :ripple="false"
+    variant="outlined"
     :style="{
       position: 'relative',
       backgroundColor:
