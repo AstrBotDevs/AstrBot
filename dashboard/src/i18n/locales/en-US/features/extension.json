@@ -52,6 +52,8 @@
     "selectFile": "Select File",
     "refresh": "Refresh",
     "updateAll": "Update All",
+    "pin": "Pin",
+    "unpin": "Unpin",
     "deleteSource": "Delete Source",
     "reshuffle": "Shuffle Again"
   },
@@ -107,8 +109,12 @@
     },
     "info": {
       "title": "Info",
+      "version": "Version",
       "author": "Author",
       "category": "Category",
+      "stars": "Stars",
+      "tags": "Tags",
+      "astrbotVersion": "AstrBot Version Requirement",
       "authorWebsite": "Author Website",
       "repository": "Repository"
     }
@@ -150,8 +156,6 @@
     "sourceExists": "This source already exists",
     "installPlugin": "Install Plugin",
     "randomPlugins": "🎲 Random Plugins",
-    "showRandomPlugins": "Show Random Plugins",
-    "hideRandomPlugins": "Hide Random Plugins",
     "sourceSafetyWarning": "Even with the default source, plugin stability and security cannot be fully guaranteed. Please verify carefully before use."
   },
   "sort": {
@@ -348,7 +352,17 @@
     "sourceSandboxOnly": "Sandbox Preset Skill",
     "sourceBoth": "Local + Sandbox",
     "sandboxDiscoveryPending": "Sandbox preset skills have not been discovered yet. Start at least one sandbox session to populate this list.",
-    "sandboxPresetReadonly": "Sandbox preset skills are read-only here. You cannot delete or enable/disable them from Local Skills."
+    "sandboxPresetReadonly": "Sandbox preset skills are read-only here. You cannot delete or enable/disable them from Local Skills.",
+    "openEditor": "View/Edit",
+    "editorTitle": "Edit Skill",
+    "editorLoadFailed": "Failed to load Skill file",
+    "editorSaveFailed": "Failed to save Skill file",
+    "editorSaveSuccess": "Saved successfully",
+    "saveFile": "Save file",
+    "readonly": "Read-only",
+    "unsaved": "Unsaved",
+    "noFileSelected": "No file selected",
+    "discardChanges": "This file has unsaved changes. Discard them?"
   },
   "card": {
     "actions": {

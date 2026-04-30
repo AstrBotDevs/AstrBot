@@ -17,36 +17,6 @@ import {
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-const useRandomPluginsDisplay = ({ activeTab, marketSearch, currentPage }) => {
-  const showRandomPlugins = ref(true);
-
-  const toggleRandomPluginsVisibility = () => {
-    showRandomPlugins.value = !showRandomPlugins.value;
-  };
-
-  const collapseRandomPlugins = () => {
-    showRandomPlugins.value = false;
-  };
-
-  watch(marketSearch, () => {
-    if (activeTab.value === "market") {
-      collapseRandomPlugins();
-    }
-  });
-
-  watch(currentPage, (newPage, oldPage) => {
-    if (newPage === oldPage) return;
-    if (activeTab.value !== "market") return;
-    collapseRandomPlugins();
-  });
-
-  return {
-    showRandomPlugins,
-    toggleRandomPluginsVisibility,
-    collapseRandomPlugins,
-  };
-};
-
 const buildFailedPluginItems = (raw) => {
   return Object.entries(raw || {}).map(([dirName, info]) => {
     const detail = info && typeof info === "object" ? info : {};
@@ -127,6 +97,7 @@ export const useExtensionPage = () => {
   const extension_config = reactive({
     metadata: {},
     config: {},
+    i18n: {},
   });
   const pluginMarketData = ref([]);
   const loadingDialog = reactive({
@@ -138,6 +109,7 @@ export const useExtensionPage = () => {
   const showPluginInfoDialog = ref(false);
   const selectedPlugin = ref({});
   const curr_namespace = ref("");
+  const currentConfigPlugin = ref("");
   const updatingAll = ref(false);
   
   const readmeDialog = reactive({
@@ -215,15 +187,6 @@ export const useExtensionPage = () => {
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
   const marketCategoryFilter = ref("all");
-  const {
-    showRandomPlugins,
-    toggleRandomPluginsVisibility,
-    collapseRandomPlugins,
-  } = useRandomPluginsDisplay({
-    activeTab,
-    marketSearch,
-    currentPage,
-  });
   
   // 插件市场拼音搜索
   
@@ -854,6 +817,7 @@ export const useExtensionPage = () => {
   
   const openExtensionConfig = async (extension_name) => {
     curr_namespace.value = extension_name;
+    currentConfigPlugin.value = extension_name;
     configDialog.value = true;
     try {
       const res = await axios.get(
@@ -861,6 +825,7 @@ export const useExtensionPage = () => {
       );
       extension_config.metadata = res.data.data.metadata;
       extension_config.config = res.data.data.config;
+      extension_config.i18n = res.data.data.i18n || {};
     } catch (err) {
       toast(err, "error");
     }
@@ -878,8 +843,10 @@ export const useExtensionPage = () => {
         toast(res.data.message, "error");
       }
       configDialog.value = false;
+      currentConfigPlugin.value = "";
       extension_config.metadata = {};
       extension_config.config = {};
+      extension_config.i18n = {};
       getExtensions();
     } catch (err) {
       toast(err, "error");
@@ -917,6 +884,26 @@ export const useExtensionPage = () => {
     changelogDialog.repoUrl = plugin.repo;
     changelogDialog.show = true;
   };
+
+  const resetInstallDialogState = () => {
+    selectedMarketInstallPlugin.value = null;
+    extension_url.value = "";
+    upload_file.value = null;
+    uploadTab.value = "file";
+    installCompat.checked = false;
+    installCompat.compatible = true;
+    installCompat.message = "";
+  };
+
+  const openInstallDialog = () => {
+    resetInstallDialogState();
+    dialog.value = true;
+  };
+
+  const closeInstallDialog = () => {
+    dialog.value = false;
+    resetInstallDialogState();
+  };
   
   // 为表格视图创建一个处理安装插件的函数
   const handleInstallPlugin = async (plugin) => {
@@ -926,6 +913,7 @@ export const useExtensionPage = () => {
     } else {
       selectedMarketInstallPlugin.value = plugin;
       extension_url.value = plugin.repo;
+      upload_file.value = null;
       dialog.value = true;
       uploadTab.value = "url";
     }
@@ -936,6 +924,7 @@ export const useExtensionPage = () => {
     if (selectedDangerPlugin.value) {
       selectedMarketInstallPlugin.value = selectedDangerPlugin.value;
       extension_url.value = selectedDangerPlugin.value.repo;
+      upload_file.value = null;
       dialog.value = true;
       uploadTab.value = "url";
     }
@@ -1252,6 +1241,7 @@ export const useExtensionPage = () => {
 
     onLoadingDialogResult(1, resData.message);
     dialog.value = false;
+    selectedMarketInstallPlugin.value = null;
     await getExtensions();
     checkAlreadyInstalled();
 
@@ -1453,6 +1443,9 @@ export const useExtensionPage = () => {
         installCompat.checked = false;
         installCompat.compatible = true;
         installCompat.message = "";
+        if (!dialogOpen) {
+          selectedMarketInstallPlugin.value = null;
+        }
         return;
       }
       await checkInstallCompatibility();
@@ -1559,7 +1552,6 @@ export const useExtensionPage = () => {
     sortBy,
     sortOrder,
     randomPluginNames,
-    showRandomPlugins,
     normalizeStr,
     toPinyinText,
     toInitials,
@@ -1572,8 +1564,6 @@ export const useExtensionPage = () => {
     randomPlugins,
     shufflePlugins,
     refreshRandomPlugins,
-    toggleRandomPluginsVisibility,
-    collapseRandomPlugins,
     displayItemsPerPage,
     totalPages,
     paginatedPlugins,
@@ -1605,6 +1595,8 @@ export const useExtensionPage = () => {
     reloadPlugin,
     viewReadme,
     viewChangelog,
+    openInstallDialog,
+    closeInstallDialog,
     handleInstallPlugin,
     confirmDangerInstall,
     cancelDangerInstall,

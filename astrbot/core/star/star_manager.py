@@ -13,6 +13,7 @@ import tempfile
 import traceback
 from dataclasses import dataclass
 from enum import Enum, auto
+from pathlib import Path
 from types import ModuleType
 
 import yaml
@@ -513,9 +514,48 @@ class PluginManager:
                     if isinstance(metadata.get("astrbot_version"), str)
                     else None
                 ),
+                i18n=PluginManager._load_plugin_i18n(plugin_path),
             )
 
         return metadata
+
+    @staticmethod
+    def _load_plugin_i18n(plugin_path: str) -> dict[str, dict]:
+        plugin_root = Path(plugin_path)
+        i18n_dir = plugin_root / ".astrbot-plugin" / "i18n"
+        if not i18n_dir.is_dir():
+            return {}
+
+        translations: dict[str, dict] = {}
+        try:
+            for file_path in i18n_dir.iterdir():
+                if file_path.suffix.lower() != ".json":
+                    continue
+                locale = file_path.stem
+                if not locale or len(locale) > 32:
+                    continue
+                if not file_path.is_file():
+                    continue
+                if file_path.stat().st_size > 1024 * 1024:
+                    logger.warning("插件 i18n 文件超过 1MB，已跳过: %s", file_path)
+                    continue
+
+                try:
+                    with file_path.open(encoding="utf-8") as f:
+                        locale_data = json.load(f)
+                    if isinstance(locale_data, dict):
+                        translations[locale] = locale_data
+                    else:
+                        logger.warning(
+                            "插件 i18n 文件内容不是 JSON object，已跳过: %s",
+                            file_path,
+                        )
+                except Exception as exc:
+                    logger.warning("加载插件 i18n 文件失败 %s: %s", file_path, exc)
+        except OSError as exc:
+            logger.warning("读取插件 i18n 目录失败 %s: %s", i18n_dir, exc)
+
+        return translations
 
     @staticmethod
     def _normalize_plugin_dir_name(plugin_name: str) -> str:
@@ -942,6 +982,7 @@ class PluginManager:
                             metadata.display_name = metadata_yaml.display_name
                             metadata.support_platforms = metadata_yaml.support_platforms
                             metadata.astrbot_version = metadata_yaml.astrbot_version
+                            metadata.i18n = metadata_yaml.i18n
                     except Exception as e:
                         logger.warning(
                             f"插件 {root_dir_name} 元数据载入失败: {e!s}。使用默认元数据。",

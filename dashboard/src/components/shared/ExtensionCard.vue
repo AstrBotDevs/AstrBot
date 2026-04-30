@@ -6,6 +6,7 @@ import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
 import PluginPlatformChip from "./PluginPlatformChip.vue";
 import StyledMenu from "./StyledMenu.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const props = defineProps({
   extension: {
@@ -17,6 +18,10 @@ const props = defineProps({
     default: false,
   },
   highlight: {
+    type: Boolean,
+    default: false,
+  },
+  isPinned: {
     type: Boolean,
     default: false,
   },
@@ -32,6 +37,7 @@ const emit = defineEmits([
   "view-handlers",
   "view-readme",
   "view-changelog",
+  "toggle-pin",
 ]);
 
 const showUninstallDialog = ref(false);
@@ -40,6 +46,7 @@ const attrs = useAttrs();
 
 // 国际化
 const { tm } = useModuleI18n("features/extension");
+const { pluginName, pluginDesc } = usePluginI18n();
 
 const supportPlatforms = computed(() => {
   const platforms = props.extension?.support_platforms;
@@ -67,6 +74,10 @@ const logoSrc = computed(() => {
     ? logo
     : defaultPluginIcon;
 });
+
+const localizedName = computed(() => pluginName(props.extension));
+
+const localizedDesc = computed(() => pluginDesc(props.extension));
 
 watch(
   () => props.extension?.logo,
@@ -115,6 +126,10 @@ const viewChangelog = () => {
   emit("view-changelog", props.extension);
 };
 
+const togglePin = () => {
+  emit("toggle-pin", props.extension);
+};
+
 </script>
 
 <template>
@@ -124,6 +139,7 @@ const viewChangelog = () => {
     elevation="0"
     height="100%"
     :ripple="false"
+    variant="outlined"
     :style="{
       position: 'relative',
       backgroundColor:
@@ -160,17 +176,15 @@ const viewChangelog = () => {
               <v-tooltip
                 location="top"
                 :text="
-                  extension.display_name?.length &&
-                  extension.display_name !== extension.name
-                    ? `${extension.display_name} (${extension.name})`
+                  localizedName?.length &&
+                  localizedName !== extension.name
+                    ? `${localizedName} (${extension.name})`
                     : extension.name
                 "
               >
                 <template v-slot:activator="{ props: titleTooltipProps }">
                   <span v-bind="titleTooltipProps" class="extension-title__text">{{
-                    extension.display_name?.length
-                      ? extension.display_name
-                      : extension.name
+                    localizedName
                   }}</span>
                 </template>
               </v-tooltip>
@@ -270,7 +284,7 @@ const viewChangelog = () => {
             class="extension-desc"
             :class="{ 'text-caption': $vuetify.display.xs }"
           >
-            {{ extension.desc }}
+            {{ localizedDesc }}
           </div>
         </div>
       </div>
@@ -279,6 +293,22 @@ const viewChangelog = () => {
     <v-card-actions class="extension-actions" @click.stop>
       <template v-if="!marketMode">
         <v-spacer></v-spacer>
+        <v-tooltip location="top">
+          <template v-slot:activator="{ props: pinTooltipProps }">
+            <v-btn
+              v-bind="pinTooltipProps"
+              :aria-label="isPinned ? tm('buttons.unpin') : tm('buttons.pin')"
+              :color="isPinned ? 'primary' : 'secondary'"
+              :icon="isPinned ? 'mdi-pin' : 'mdi-pin-outline'"
+              size="small"
+              variant="tonal"
+              class="extension-pin-btn"
+              @click="togglePin"
+            ></v-btn>
+          </template>
+          <span>{{ isPinned ? tm("buttons.unpin") : tm("buttons.pin") }}</span>
+        </v-tooltip>
+
         <v-tooltip location="top" :text="tm('buttons.viewDocs')">
           <template v-slot:activator="{ props: actionProps }">
             <v-btn
@@ -301,20 +331,6 @@ const viewChangelog = () => {
               variant="tonal"
               color="primary"
               @click="configure"
-            ></v-btn>
-          </template>
-        </v-tooltip>
-
-        <v-tooltip v-if="extension?.repo" location="top" :text="tm('buttons.viewRepo')">
-          <template v-slot:activator="{ props: actionProps }">
-            <v-btn
-              v-bind="actionProps"
-              icon="mdi-github"
-              size="small"
-              variant="tonal"
-              color="secondary"
-              :href="extension.repo"
-              target="_blank"
             ></v-btn>
           </template>
         </v-tooltip>
@@ -462,6 +478,10 @@ const viewChangelog = () => {
 .extension-switch-wrap {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+}
+
+.extension-pin-btn {
   flex-shrink: 0;
 }
 

@@ -409,6 +409,7 @@ class PluginRoute(Route):
                 "support_platforms": plugin.support_platforms,
                 "astrbot_version": plugin.astrbot_version,
                 "installed_at": self._get_plugin_installed_at(plugin),
+                "i18n": plugin.i18n,
             }
             # 检查是否为全空的幽灵插件
             if not any(

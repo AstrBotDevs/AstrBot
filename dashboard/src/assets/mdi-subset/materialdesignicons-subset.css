@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 256 icons */
+/* Auto-generated MDI subset – 259 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -138,10 +138,6 @@
 
 .mdi-calendar-edit::before {
   content: "\F08A7";
-}
-
-.mdi-calendar-multiple::before {
-  content: "\F00F1";
 }
 
 .mdi-calendar-plus::before {
@@ -364,6 +360,10 @@
   content: "\F01DA";
 }
 
+.mdi-download-outline::before {
+  content: "\F0B8F";
+}
+
 .mdi-emoticon::before {
   content: "\F0C68";
 }
@@ -404,8 +404,8 @@
   content: "\F0215";
 }
 
-.mdi-file-code::before {
-  content: "\F022E";
+.mdi-file-code-outline::before {
+  content: "\F102B";
 }
 
 .mdi-file-delimited-outline::before {
@@ -784,6 +784,14 @@
   content: "\F03F6";
 }
 
+.mdi-pin::before {
+  content: "\F0403";
+}
+
+.mdi-pin-outline::before {
+  content: "\F0931";
+}
+
 .mdi-play::before {
   content: "\F040A";
 }
@@ -938,6 +946,10 @@
 
 .mdi-subdirectory-arrow-right::before {
   content: "\F060D";
+}
+
+.mdi-sync::before {
+  content: "\F04E6";
 }
 
 .mdi-text::before {
