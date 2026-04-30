@@ -2,7 +2,7 @@
   "title": "知识库管理",
   "subtitle": "统一管理和查询知识库内容",
   "list": {
-    "title": "我的知识库",
+    "title": "知识库",
     "subtitle": "管理您的所有知识库集合",
     "create": "创建知识库",
     "refresh": "刷新列表",
