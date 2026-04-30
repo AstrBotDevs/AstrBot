@@ -1,6 +1,7 @@
 import asyncio
 import json
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Literal, NoReturn, cast
@@ -747,22 +748,54 @@ class DingtalkPlatformAdapter(Platform):
     async def run(self) -> None:
         # await self.client_.start()
         # 钉钉的 SDK 并没有实现真正的异步，start() 里面有堵塞方法。
+        # SDK 内部已有 while True 重连循环，但需要监控 task 状态，
+        # 如果 task 意外退出则重新启动。
+        MAX_RETRIES = 5
+        retry_count = 0
+
         def start_client(loop: asyncio.AbstractEventLoop) -> None:
-            try:
-                self._shutdown_event = threading.Event()
-                task = loop.create_task(self.client_.start())
-                self._shutdown_event.wait()
-                if task.done():
-                    task.result()
-            except Exception as e:
-                if "Graceful shutdown" in str(e):
-                    logger.info("钉钉适配器已被关闭")
+            nonlocal retry_count
+            while retry_count < MAX_RETRIES:
+                try:
+                    self._shutdown_event = threading.Event()
+                    task = loop.create_task(self.client_.start())
+                    self._shutdown_event.wait()
+                    if task.done():
+                        exc = task.exception()
+                        if exc:
+                            if "Graceful shutdown" in str(exc):
+                                logger.info("钉钉适配器已被关闭")
+                                return
+                            logger.error(f"钉钉 SDK task 异常退出: {exc}")
+                            retry_count += 1
+                            if retry_count < MAX_RETRIES:
+                                logger.info(
+                                    f"钉钉适配器尝试重连 ({retry_count}/{MAX_RETRIES})..."
+                                )
+                                time.sleep(10)
+                                continue
+                            else:
+                                logger.error("钉钉适配器重连失败，已达最大重试次数")
+                                return
+                    # task 仍在运行，shutdown_event 被设置（正常关闭）
                     return
-                logger.error(f"钉钉机器人启动失败: {e}")
-            finally:
-                # 确保 task 完成或取消
-                if not task.done():
-                    task.cancel()
+                except Exception as e:
+                    if "Graceful shutdown" in str(e):
+                        logger.info("钉钉适配器已被关闭")
+                        return
+                    logger.error(f"钉钉机器人启动失败: {e}")
+                    retry_count += 1
+                    if retry_count < MAX_RETRIES:
+                        logger.info(
+                            f"钉钉适配器尝试重连 ({retry_count}/{MAX_RETRIES})..."
+                        )
+                        time.sleep(10)
+                    else:
+                        logger.error("钉钉适配器重连失败，已达最大重试次数")
+                        return
+                finally:
+                    if not task.done():
+                        task.cancel()
 
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, start_client, loop)
