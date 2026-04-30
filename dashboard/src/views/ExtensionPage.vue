@@ -636,15 +636,6 @@ const installDialogPluginLogo = computed(() => {
     <div
       class="v-card v-card--density-default rounded-lg v-card--variant-elevated"
     >
-      <div class="v-card__loader">
-        <v-progress-linear
-          :indeterminate="loading_"
-          color="primary"
-          height="2"
-          :active="loading_"
-        ></v-progress-linear>
-      </div>
-
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ tm("dialogs.install.title") }}
       </v-card-title>
@@ -839,7 +830,13 @@ const installDialogPluginLogo = computed(() => {
         <v-btn color="grey" variant="text" @click="closeInstallDialog">{{
           tm("buttons.cancel")
         }}</v-btn>
-        <v-btn color="primary" variant="text" @click="newExtension">{{
+        <v-btn
+          color="primary"
+          variant="text"
+          :loading="loading_"
+          :disabled="loading_"
+          @click="newExtension"
+        >{{
           tm("buttons.install")
         }}</v-btn>
       </div>

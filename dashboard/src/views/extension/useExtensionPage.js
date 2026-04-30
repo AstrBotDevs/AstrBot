@@ -1189,23 +1189,19 @@ export const useExtensionPage = () => {
     versionCompatibilityDialog.show = false;
   };
 
-  const handleInstallResponse = async (resData, { toastStatus = false } = {}) => {
+  const handleInstallResponse = async (resData) => {
     if (
       resData.status === "warning" &&
       resData.data?.warning_type === "astrbot_version_incompatible"
     ) {
-      onLoadingDialogResult(2, resData.message, -1);
+      toast(resData.message, "warning");
       showVersionCompatibilityWarning(resData.message);
       await refreshExtensionsAfterInstallFailure();
       return false;
     }
 
-    if (toastStatus) {
-      toast(resData.message, resData.status === "ok" ? "success" : "error");
-    }
-
     if (resData.status === "error") {
-      onLoadingDialogResult(2, resData.message, -1);
+      toast(resData.message, "error");
       await refreshExtensionsAfterInstallFailure();
       return false;
     }
@@ -1239,7 +1235,7 @@ export const useExtensionPage = () => {
       extension_url.value = "";
     }
 
-    onLoadingDialogResult(1, resData.message);
+    toast(resData.message, "success");
     dialog.value = false;
     selectedMarketInstallPlugin.value = null;
     await getExtensions();
@@ -1263,35 +1259,21 @@ export const useExtensionPage = () => {
       toast(tm("messages.dontFillBoth"), "error");
       return;
     }
-    loading_.value = true;
-    loadingDialog.title = tm("status.loading");
-    loadingDialog.show = true;
-
     const source = upload_file.value !== null ? "file" : "url";
-    toast(
-      source === "file"
-        ? tm("messages.installing")
-        : tm("messages.installingFromUrl") + " " + extension_url.value,
-      "primary",
-    );
+    loading_.value = true;
 
     try {
       const res = await performInstallRequest({ source, ignoreVersionCheck });
       loading_.value = false;
 
-      const canContinue = await handleInstallResponse(res.data, {
-        toastStatus: source === "url",
-      });
+      const canContinue = await handleInstallResponse(res.data);
       if (!canContinue) return;
 
       await finalizeSuccessfulInstall(res.data, source);
     } catch (err) {
       loading_.value = false;
       const message = resolveErrorMessage(err, tm("messages.installFailed"));
-      if (source === "url") {
-        toast(message, "error");
-      }
-      onLoadingDialogResult(2, message, -1);
+      toast(message, "error");
       await refreshExtensionsAfterInstallFailure();
     }
   };
