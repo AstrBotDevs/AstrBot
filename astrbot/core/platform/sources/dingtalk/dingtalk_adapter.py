@@ -756,12 +756,19 @@ class DingtalkPlatformAdapter(Platform):
         def start_client(loop: asyncio.AbstractEventLoop) -> None:
             nonlocal retry_count
             while retry_count < MAX_RETRIES:
+                task = None
                 try:
                     self._shutdown_event = threading.Event()
                     task = loop.create_task(self.client_.start())
+                    # 当 task 完成时唤醒线程（无论是正常退出还是异常退出）
+                    task.add_done_callback(lambda _: self._shutdown_event.set())
                     self._shutdown_event.wait()
                     if task.done():
-                        exc = task.exception()
+                        try:
+                            exc = task.exception()
+                        except asyncio.CancelledError:
+                            logger.info("钉钉适配器 task 已取消")
+                            return
                         if exc:
                             if "Graceful shutdown" in str(exc):
                                 logger.info("钉钉适配器已被关闭")
@@ -794,7 +801,8 @@ class DingtalkPlatformAdapter(Platform):
                         logger.error("钉钉适配器重连失败，已达最大重试次数")
                         return
                 finally:
-                    if not task.done():
+                    # 仅在重试/失败路径取消 task，正常关闭不取消
+                    if task is not None and not task.done() and retry_count > 0:
                         task.cancel()
 
         loop = asyncio.get_running_loop()
