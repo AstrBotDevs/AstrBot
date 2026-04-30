@@ -8,6 +8,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
 from astrbot.core.computer.computer_client import get_booter, get_local_booter
+from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.message_event_result import MessageChain
 
 from ..registry import builtin_tool
@@ -20,6 +21,9 @@ _SANDBOX_PYTHON_TOOL_CONFIG = {
 _LOCAL_PYTHON_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "local",
 }
+_DEFAULT_PYTHON_EXEC_TIMEOUT = DEFAULT_CONFIG["provider_settings"].get(
+    "python_exec_timeout", 30
+)
 
 param_schema = {
     "type": "object",
@@ -112,11 +116,16 @@ class LocalPythonTool(FunctionTool):
             umo=context.context.event.unified_msg_origin
         )
         provider_settings = cfg.get("provider_settings", {})
-        timeout = provider_settings.get("python_exec_timeout", 30)
+        timeout = provider_settings.get(
+            "python_exec_timeout",
+            _DEFAULT_PYTHON_EXEC_TIMEOUT,
+        )
         try:
             timeout = int(timeout)
         except (TypeError, ValueError):
-            timeout = 30
+            timeout = _DEFAULT_PYTHON_EXEC_TIMEOUT
+        if timeout <= 0:
+            timeout = _DEFAULT_PYTHON_EXEC_TIMEOUT
         sb = get_local_booter()
         try:
             result = await sb.python.exec(code, timeout=timeout, silent=silent)
