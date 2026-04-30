@@ -347,7 +347,17 @@
         "sourceSandboxOnly": "Предустановленный Sandbox навык",
         "sourceBoth": "Локальный + Sandbox",
         "sandboxDiscoveryPending": "Предустановленные Sandbox навыки не найдены. Запустите сессию Sandbox хотя бы один раз.",
-        "sandboxPresetReadonly": "Предустановленные навыки Sandbox доступны только для чтения и не могут быть удалены здесь."
+        "sandboxPresetReadonly": "Предустановленные навыки Sandbox доступны только для чтения и не могут быть удалены здесь.",
+        "openEditor": "Просмотр/правка",
+        "editorTitle": "Редактировать навык",
+        "editorLoadFailed": "Не удалось открыть файл навыка",
+        "editorSaveFailed": "Не удалось сохранить файл навыка",
+        "editorSaveSuccess": "Сохранено",
+        "saveFile": "Сохранить файл",
+        "readonly": "Только чтение",
+        "unsaved": "Не сохранено",
+        "noFileSelected": "Файл не выбран",
+        "discardChanges": "В файле есть несохраненные изменения. Отменить их?"
     },
     "card": {
         "actions": {

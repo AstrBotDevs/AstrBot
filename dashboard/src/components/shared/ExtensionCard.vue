@@ -124,6 +124,7 @@ const viewChangelog = () => {
     elevation="0"
     height="100%"
     :ripple="false"
+    variant="outlined"
     :style="{
       position: 'relative',
       backgroundColor:

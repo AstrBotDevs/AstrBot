@@ -21,9 +21,8 @@
     <!-- 主内容 -->
     <div v-else class="document-content">
       <!-- 文档信息卡片 -->
-      <v-card elevation="2" class="mb-6">
+      <v-card variant="outlined" class="mb-6">
         <v-card-title>{{ t('info.title') }}</v-card-title>
-        <v-divider />
         <v-card-text>
           <v-row>
             <v-col cols="12" md="3">
@@ -78,7 +77,7 @@
       </v-card>
 
       <!-- 分块列表 -->
-      <v-card elevation="2">
+      <v-card variant="outlined">
         <v-card-title class="d-flex align-center pa-4">
           <span>{{ t('chunks.title') }}</span>
           <v-chip class="ml-2" size="small" variant="tonal">
@@ -96,8 +95,6 @@
             style="max-width: 300px"
           /> -->
         </v-card-title>
-
-        <v-divider />
 
         <v-card-text class="pa-0">
           <v-data-table
@@ -187,7 +184,6 @@
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />
         </v-card-title>
-        <v-divider />
         <v-card-text class="pa-6">
           <v-list density="comfortable">
             <v-list-item>
@@ -215,14 +211,11 @@
             </v-list-item>
           </v-list>
 
-          <v-divider class="my-4" />
-
           <div class="text-caption text-medium-emphasis mb-2">{{ t('view.content') }}</div>
           <div class="chunk-content-view">
             {{ selectedChunk?.content }}
           </div>
         </v-card-text>
-        <v-divider />
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn variant="text" @click="showViewDialog = false">
@@ -432,6 +425,10 @@ onMounted(() => {
   max-width: 1400px;
   margin: 0 auto;
   animation: fadeIn 0.3s ease;
+}
+
+.document-detail-page :deep(.v-card--variant-outlined) {
+  background: rgb(var(--v-theme-surface));
 }
 
 @keyframes fadeIn {

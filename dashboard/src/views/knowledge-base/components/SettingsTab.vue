@@ -1,8 +1,7 @@
 <template>
   <div class="settings-tab">
-    <v-card elevation="2">
+    <v-card variant="outlined">
       <v-card-title class="pa-4">{{ t('settings.title') }}</v-card-title>
-      <v-divider />
 
       <v-card-text class="pa-6">
         <v-form ref="formRef">
@@ -103,8 +102,6 @@
           </v-alert>
         </v-form>
       </v-card-text>
-
-      <v-divider />
 
       <v-card-actions class="pa-4">
         <v-spacer />

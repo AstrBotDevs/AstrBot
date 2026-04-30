@@ -1,12 +1,11 @@
 <template>
   <div class="retrieval-tab">
-    <v-card elevation="2">
+    <v-card variant="outlined">
       <v-card-title class="pa-4 pb-0">{{ t('retrieval.title') }}</v-card-title>
       <v-card-subtitle class="pb-4 pt-2">
         {{ t('retrieval.subtitle') }}
       </v-card-subtitle>
 
-      <v-divider />
       <v-progress-linear v-if="loading" indeterminate color="primary" height="2" />
 
       <v-card-text class="pa-6">
@@ -58,8 +57,6 @@
 
         <!-- 检索结果 -->
         <div v-if="hasSearched" class="results-section">
-          <v-divider class="mb-4" />
-
           <div class="d-flex align-center mb-4">
             <h3 class="text-h6">{{ t('retrieval.results') }}</h3>
             <v-chip class="ml-3" color="primary" variant="tonal" size="small">
@@ -92,8 +89,6 @@
                   {{ t('retrieval.score') }}: {{ result.score.toFixed(4) }}
                 </v-chip>
               </v-card-title>
-
-              <v-divider />
 
               <v-card-text class="pa-4">
                 <div class="content-box">

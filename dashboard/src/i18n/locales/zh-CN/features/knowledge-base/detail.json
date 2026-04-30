@@ -1,6 +1,9 @@
 {
   "title": "知识库详情",
   "backToList": "返回列表",
+  "breadcrumb": {
+    "list": "知识库"
+  },
   "tabs": {
     "overview": "概览",
     "documents": "文档管理",

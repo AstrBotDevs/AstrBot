@@ -12,6 +12,7 @@
     },
     "mcpServers": {
         "title": "MCP Сервера",
+        "description": "Управление MCP-серверами",
         "buttons": {
             "refresh": "Обновить",
             "add": "Добавить сервер",

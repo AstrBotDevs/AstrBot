@@ -1,6 +1,9 @@
 ﻿{
     "title": "Детали базы знаний",
     "backToList": "К списку",
+    "breadcrumb": {
+        "list": "Базы знаний"
+    },
     "tabs": {
         "overview": "Обзор",
         "documents": "Документы",

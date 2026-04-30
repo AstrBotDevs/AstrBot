@@ -3,7 +3,6 @@
     <v-container fluid class="dashboard-shell pa-4 pa-md-6">
       <div class="dashboard-header">
         <div class="dashboard-header-main">
-          <div class="dashboard-eyebrow">{{ tm('header.eyebrow') }}</div>
           <div class="d-flex align-center flex-wrap" style="gap: 8px;">
             <h1 class="dashboard-title">{{ tm('page.title') }}</h1>
             <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>

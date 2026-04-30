@@ -348,7 +348,17 @@
     "sourceSandboxOnly": "Sandbox Preset Skill",
     "sourceBoth": "Local + Sandbox",
     "sandboxDiscoveryPending": "Sandbox preset skills have not been discovered yet. Start at least one sandbox session to populate this list.",
-    "sandboxPresetReadonly": "Sandbox preset skills are read-only here. You cannot delete or enable/disable them from Local Skills."
+    "sandboxPresetReadonly": "Sandbox preset skills are read-only here. You cannot delete or enable/disable them from Local Skills.",
+    "openEditor": "View/Edit",
+    "editorTitle": "Edit Skill",
+    "editorLoadFailed": "Failed to load Skill file",
+    "editorSaveFailed": "Failed to save Skill file",
+    "editorSaveSuccess": "Saved successfully",
+    "saveFile": "Save file",
+    "readonly": "Read-only",
+    "unsaved": "Unsaved",
+    "noFileSelected": "No file selected",
+    "discardChanges": "This file has unsaved changes. Discard them?"
   },
   "card": {
     "actions": {

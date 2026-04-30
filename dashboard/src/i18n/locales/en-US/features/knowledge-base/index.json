@@ -2,7 +2,7 @@
   "title": "Knowledge Base Management",
   "subtitle": "Manage and query knowledge base contents",
   "list": {
-    "title": "My Knowledge Bases",
+    "title": "Knowledge Bases",
     "subtitle": "Manage all your knowledge base collections",
     "create": "Create Knowledge Base",
     "refresh": "Refresh List",

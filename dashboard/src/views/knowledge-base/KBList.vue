@@ -1,69 +1,84 @@
 <template>
   <div class="kb-list-page">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <div>
-        <h1 class="text-h4 mb-2">{{ t('list.title') }}</h1>
-        <p class="text-subtitle-1 text-medium-emphasis">{{ t('list.subtitle') }}</p>
-      </div>
-      <v-btn icon="mdi-information-outline" variant="text" size="small" color="grey"
-        href="https://docs.astrbot.app/use/knowledge-base.html" target="_blank" />
-    </div>
-
-    <!-- 操作按钮栏 -->
-    <div class="action-bar mb-6">
-      <v-btn prepend-icon="mdi-plus" color="primary" variant="elevated" @click="showCreateDialog = true">
-        {{ t('list.create') }}
-      </v-btn>
-      <v-btn prepend-icon="mdi-refresh" variant="tonal" @click="loadKnowledgeBases" :loading="loading">
-        {{ t('list.refresh') }}
-      </v-btn>
-    </div>
-
-    <!-- 知识库网格 -->
     <div v-if="loading && kbList.length === 0" class="loading-container">
       <v-progress-circular indeterminate color="primary" size="64" />
       <p class="mt-4 text-medium-emphasis">{{ t('list.loading') }}</p>
     </div>
 
-    <div v-else-if="kbList.length > 0" class="kb-grid">
-      <v-card v-for="kb in kbList" :key="kb.kb_id" class="kb-card" elevation="2" :hover="!kb.init_error"
-        :class="{ 'kb-card-error': kb.init_error }"
-        @click="!kb.init_error && navigateToDetail(kb.kb_id)">
-        <!-- Error badge -->
-        <v-badge v-if="kb.init_error" color="error" icon="mdi-alert-circle"
-          class="kb-error-badge position-absolute" style="top: 0; right: 0; transform: translate(34%, -34%);" />
-        <div class="kb-card-content" :class="{ 'kb-card-content-error': kb.init_error }">
-          <div class="kb-emoji">{{ kb.emoji || '📚' }}</div>
-          <h3 class="kb-name">{{ kb.kb_name }}</h3>
-          <p v-if="!kb.init_error" class="kb-description text-medium-emphasis">{{ kb.description || '暂无描述' }}</p>
+    <div v-else-if="kbList.length > 0" class="kb-list">
+      <OutlinedActionListItem
+        v-for="kb in kbList"
+        :key="kb.kb_id"
+        :title="kb.kb_name"
+        :clickable="!kb.init_error"
+        @click="navigateToDetail(kb.kb_id)"
+      >
+        <template #title-prepend>
+          <span class="kb-list-emoji">{{ kb.emoji || '📚' }}</span>
+        </template>
 
-          <!-- Error message display -->
-          <div v-if="kb.init_error" class="kb-error-panel mt-3 mb-2">
+        <template #title-extra>
+          <v-chip
+            v-if="kb.init_error"
+            color="error"
+            size="x-small"
+            variant="tonal"
+          >
+            {{ t('list.initError') }}
+          </v-chip>
+        </template>
+
+        <div v-if="!kb.init_error" class="kb-description text-body-2 text-medium-emphasis">
+          {{ kb.description || '暂无描述' }}
+        </div>
+
+        <div v-if="kb.init_error" class="kb-error-panel">
             <div class="kb-error-title">
               <v-icon size="16" color="error">mdi-close-circle</v-icon>
               <span>{{ t('list.initError') }}</span>
             </div>
             <div class="kb-error-detail" :title="kb.init_error">{{ kb.init_error }}</div>
-          </div>
+        </div>
 
-          <div class="kb-stats mt-4" v-if="!kb.init_error">
+        <div class="kb-stats" v-if="!kb.init_error">
             <div class="stat-item">
-              <v-icon size="small" color="primary">mdi-file-document</v-icon>
+              <v-icon size="small">mdi-file-document</v-icon>
               <span>{{ kb.doc_count || 0 }} {{ t('list.documents') }}</span>
             </div>
             <div class="stat-item">
-              <v-icon size="small" color="secondary">mdi-text-box</v-icon>
+              <v-icon size="small">mdi-text-box</v-icon>
               <span>{{ kb.chunk_count || 0 }} {{ t('list.chunks') }}</span>
             </div>
-          </div>
-
-          <div class="kb-actions" :class="{ 'error-actions': kb.init_error }">
-            <v-btn v-if="!kb.init_error" icon="mdi-pencil" size="small" variant="text" color="info" @click.stop="editKB(kb)" />
-            <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click.stop="confirmDelete(kb)" />
-          </div>
         </div>
-      </v-card>
+
+        <template #actions>
+          <v-tooltip v-if="!kb.init_error" :text="t('card.edit')" location="top">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-pencil-outline"
+                variant="text"
+                size="small"
+                class="list-action-icon-btn"
+                @click.stop="editKB(kb)"
+              />
+            </template>
+          </v-tooltip>
+
+          <v-tooltip :text="t('card.delete')" location="top">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-delete-outline"
+                variant="text"
+                size="small"
+                class="list-action-icon-btn"
+                @click.stop="confirmDelete(kb)"
+              />
+            </template>
+          </v-tooltip>
+        </template>
+      </OutlinedActionListItem>
     </div>
 
     <!-- 空状态 -->
@@ -74,6 +89,36 @@
         @click="showCreateDialog = true">
         {{ t('list.create') }}
       </v-btn>
+    </div>
+
+    <div class="kb-fab-stack">
+      <v-tooltip :text="t('list.refresh')" location="left">
+        <template #activator="{ props }">
+          <v-btn
+            v-bind="props"
+            color="darkprimary"
+            icon="mdi-refresh"
+            size="x-large"
+            variant="elevated"
+            class="kb-fab"
+            :loading="loading"
+            @click="loadKnowledgeBases()"
+          />
+        </template>
+      </v-tooltip>
+      <v-tooltip :text="t('list.create')" location="left">
+        <template #activator="{ props }">
+          <v-btn
+            v-bind="props"
+            color="darkprimary"
+            icon="mdi-plus"
+            size="x-large"
+            variant="elevated"
+            class="kb-fab"
+            @click="showCreateDialog = true"
+          />
+        </template>
+      </v-tooltip>
     </div>
 
     <!-- 创建/编辑对话框 -->
@@ -214,6 +259,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
+import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/index')
 const router = useRouter()
@@ -454,114 +500,31 @@ onMounted(() => {
 
 <style scoped>
 .kb-list-page {
-  padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
-}
-
-.action-bar {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-/* 知识库网格 */
-.kb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 24px;
-}
-
-.kb-card {
-  position: relative;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.kb-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15) !important;
-}
-
-/* Error state card styles */
-.kb-card-error {
-  cursor: not-allowed;
-  border: 1px solid rgba(var(--v-theme-error), 0.3);
-  background-color: rgba(var(--v-theme-error), 0.02) !important;
-  overflow: visible; /* Allow badge to overflow */
-}
-
-.kb-card-error:hover {
-  transform: none;
-  box-shadow: 0 4px 12px rgba(var(--v-theme-error), 0.1) !important;
-  border-color: rgba(var(--v-theme-error), 0.5);
-}
-
-.kb-card-error .kb-emoji {
-  opacity: 0.7;
-  filter: grayscale(0.5);
-}
-
-.kb-card-error .kb-name {
-  color: rgba(var(--v-theme-on-surface), 0.7);
-}
-
-.kb-error-badge {
-  z-index: 10;
-  opacity: 0.9;
-}
-
-.kb-card-content {
-  padding: 24px;
+.kb-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  min-height: 260px;
-  position: relative;
+  gap: 12px;
 }
 
-.kb-card-content-error {
-  justify-content: center;
-  gap: 8px;
-}
-
-.kb-emoji {
-  font-size: 56px;
-  margin-bottom: 8px;
-}
-
-.kb-name {
+.kb-list-emoji {
   font-size: 1.25rem;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: rgb(var(--v-theme-on-surface));
+  line-height: 1;
 }
 
 .kb-description {
-  font-size: 0.875rem;
-  line-height: 1.5;
-  max-height: 3em;
-  overflow: hidden;
-  text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
 }
 
 .kb-stats {
   display: flex;
   gap: 16px;
-  width: 100%;
-  justify-content: center;
+  margin-top: 6px;
 }
 
 .kb-error-panel {
@@ -599,22 +562,38 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 0.875rem;
+  color: rgba(var(--v-theme-on-surface), 0.62);
+}
+
+.list-action-icon-btn {
+  color: rgba(var(--v-theme-on-surface), 0.78);
+}
+
+.list-action-icon-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08);
   color: rgb(var(--v-theme-on-surface));
-  font-weight: 500;
 }
 
-.kb-actions {
-  position: absolute;
-  bottom: 16px;
-  right: 16px;
+.kb-fab-stack {
+  align-items: center;
+  bottom: 52px;
   display: flex;
-  gap: 8px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  flex-direction: column;
+  gap: 16px;
+  position: fixed;
+  right: 52px;
+  z-index: 10000;
 }
 
-.kb-card:hover .kb-actions {
-  opacity: 1;
+.kb-fab {
+  border-radius: 16px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.kb-fab:hover {
+  box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+  transform: translateY(-4px) scale(1.05);
 }
 
 /* 空状态 */
@@ -676,14 +655,6 @@ onMounted(() => {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .kb-list-page {
-    padding: 16px;
-  }
-
-  .kb-grid {
-    grid-template-columns: 1fr;
-  }
-
   .emoji-grid {
     grid-template-columns: repeat(6, 1fr);
   }

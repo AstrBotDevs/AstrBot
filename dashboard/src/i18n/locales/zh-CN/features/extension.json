@@ -348,7 +348,17 @@
     "sourceSandboxOnly": "Sandbox 预置 Skill",
     "sourceBoth": "本地 + Sandbox",
     "sandboxDiscoveryPending": "尚未发现 Sandbox 预置 Skill。请至少启动一次 Sandbox 会话后再查看。",
-    "sandboxPresetReadonly": "Sandbox 预置 Skill 在此处为只读，无法在本地 Skills 页面删除或启用/禁用。"
+    "sandboxPresetReadonly": "Sandbox 预置 Skill 在此处为只读，无法在本地 Skills 页面删除或启用/禁用。",
+    "openEditor": "查看/编辑",
+    "editorTitle": "编辑 Skill",
+    "editorLoadFailed": "读取 Skill 文件失败",
+    "editorSaveFailed": "保存 Skill 文件失败",
+    "editorSaveSuccess": "保存成功",
+    "saveFile": "保存文件",
+    "readonly": "只读",
+    "unsaved": "未保存",
+    "noFileSelected": "未选择文件",
+    "discardChanges": "当前文件有未保存修改，确定要丢弃吗？"
   },
   "card": {
     "actions": {

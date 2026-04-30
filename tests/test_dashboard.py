@@ -1212,3 +1212,102 @@ async def test_batch_upload_skills_partial_success(
     assert data["data"]["failed"] == [
         {"filename": "bad_skill.zip", "error": "install failed"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_skill_file_browser_and_editor_security(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+    tmp_path,
+):
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    skills_root = tmp_path / "skills"
+    skill_dir = skills_root / "demo_skill"
+    skill_dir.mkdir(parents=True)
+    skill_md = skill_dir / "SKILL.md"
+    skill_md.write_text(
+        "---\ndescription: Demo skill\n---\n# Demo\n",
+        encoding="utf-8",
+    )
+    (skill_dir / "notes.txt").write_text("notes", encoding="utf-8")
+    (skill_dir / "large.md").write_text("x" * (512 * 1024 + 1), encoding="utf-8")
+    (skill_dir / "binary.md").write_bytes(b"\xff\xfe\x00")
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("outside", encoding="utf-8")
+    if hasattr(os, "symlink"):
+        os.symlink(outside_file, skill_dir / "outside-link.txt")
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
+        lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+
+    test_client = app.test_client()
+
+    list_response = await test_client.get(
+        "/api/skills/files?name=demo_skill",
+        headers=authenticated_header,
+    )
+    list_data = await list_response.get_json()
+    assert list_data["status"] == "ok"
+    listed_paths = {item["path"] for item in list_data["data"]["entries"]}
+    assert "SKILL.md" in listed_paths
+    assert "outside-link.txt" not in listed_paths
+
+    read_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=SKILL.md",
+        headers=authenticated_header,
+    )
+    read_data = await read_response.get_json()
+    assert read_data["status"] == "ok"
+    assert "# Demo" in read_data["data"]["content"]
+
+    update_response = await test_client.post(
+        "/api/skills/file",
+        json={
+            "name": "demo_skill",
+            "path": "SKILL.md",
+            "content": "# Updated\n",
+        },
+        headers=authenticated_header,
+    )
+    update_data = await update_response.get_json()
+    assert update_data["status"] == "ok"
+    assert skill_md.read_text(encoding="utf-8") == "# Updated\n"
+
+    traversal_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=../outside.txt",
+        headers=authenticated_header,
+    )
+    traversal_data = await traversal_response.get_json()
+    assert traversal_data["status"] == "error"
+
+    symlink_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=outside-link.txt",
+        headers=authenticated_header,
+    )
+    symlink_data = await symlink_response.get_json()
+    assert symlink_data["status"] == "error"
+
+    large_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=large.md",
+        headers=authenticated_header,
+    )
+    large_data = await large_response.get_json()
+    assert large_data["status"] == "error"
+    assert large_data["message"] == "File is too large"
+
+    binary_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=binary.md",
+        headers=authenticated_header,
+    )
+    binary_data = await binary_response.get_json()
+    assert binary_data["status"] == "error"
+    assert binary_data["message"] == "File is not valid UTF-8 text"

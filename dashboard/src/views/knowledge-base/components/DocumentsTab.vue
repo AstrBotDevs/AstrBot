@@ -2,7 +2,7 @@
   <div class="documents-tab">
     <!-- 操作栏 -->
     <div class="action-bar mb-4">
-      <v-btn prepend-icon="mdi-upload" color="primary" variant="elevated" @click="showUploadDialog = true">
+      <v-btn prepend-icon="mdi-upload" color="primary" variant="outlined" @click="showUploadDialog = true">
         {{ t('documents.upload') }}
       </v-btn>
       <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :placeholder="'搜索文档...'" variant="outlined"
@@ -10,7 +10,7 @@
     </div>
 
     <!-- 文档列表 -->
-    <v-card elevation="2">
+    <v-card variant="outlined">
       <v-data-table :headers="headers" :items="documents" :loading="loading" :search="searchQuery" :items-per-page="10">
         <template #item.doc_name="{ item }">
           <div class="d-flex align-center gap-2">
@@ -64,8 +64,6 @@
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="closeUploadDialog" />
         </v-card-title>
-
-        <v-divider />
 
         <v-tabs v-model="uploadMode" grow class="mb-4">
           <v-tab value="file">{{ t('upload.fileUpload') }}</v-tab>
@@ -193,8 +191,6 @@
 
         </v-card-text>
 
-        <v-divider />
-
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn variant="text" @click="closeUploadDialog" :disabled="uploading">
@@ -212,14 +208,12 @@
     <v-dialog v-model="showDeleteDialog" max-width="450px">
       <v-card>
         <v-card-title class="pa-4 text-h6">{{ t('documents.delete') }}</v-card-title>
-        <v-divider />
         <v-card-text class="pa-6">
           <p>{{ t('documents.deleteConfirm', { name: deleteTarget?.doc_name || '' }) }}</p>
           <v-alert type="error" variant="tonal" density="compact" class="mt-4">
             {{ t('documents.deleteWarning') }}
           </v-alert>
         </v-card-text>
-        <v-divider />
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn variant="text" @click="showDeleteDialog = false">取消</v-btn>

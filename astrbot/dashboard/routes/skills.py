@@ -41,6 +41,23 @@ def _to_bool(value: Any, default: bool = False) -> bool:
 
 
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_SKILL_FILE_MAX_BYTES = 512 * 1024
+_EDITABLE_SKILL_FILE_SUFFIXES = {
+    ".css",
+    ".html",
+    ".ini",
+    ".js",
+    ".json",
+    ".md",
+    ".py",
+    ".sh",
+    ".toml",
+    ".ts",
+    ".txt",
+    ".yaml",
+    ".yml",
+}
+_EDITABLE_SKILL_FILENAMES = {"Dockerfile", "Makefile"}
 
 
 def _next_available_temp_path(temp_dir: str, filename: str) -> str:
@@ -63,6 +80,11 @@ class SkillsRoute(Route):
             "/skills/upload": ("POST", self.upload_skill),
             "/skills/batch-upload": ("POST", self.batch_upload_skills),
             "/skills/download": ("GET", self.download_skill),
+            "/skills/files": ("GET", self.list_skill_files),
+            "/skills/file": [
+                ("GET", self.get_skill_file),
+                ("POST", self.update_skill_file),
+            ],
             "/skills/update": ("POST", self.update_skill),
             "/skills/delete": ("POST", self.delete_skill),
             "/skills/neo/candidates": ("GET", self.get_neo_candidates),
@@ -76,6 +98,75 @@ class SkillsRoute(Route):
             "/skills/neo/delete-release": ("POST", self.delete_neo_release),
         }
         self.register_routes()
+
+    def _resolve_local_skill_dir(self, name: str) -> Path:
+        skill_name = str(name or "").strip()
+        if not skill_name:
+            raise ValueError("Missing skill name")
+        if not _SKILL_NAME_RE.match(skill_name):
+            raise ValueError("Invalid skill name")
+
+        skill_mgr = SkillManager()
+        if skill_mgr.is_sandbox_only_skill(skill_name):
+            raise PermissionError(
+                "Sandbox preset skill cannot be opened from local skill files."
+            )
+
+        skills_root = Path(skill_mgr.skills_root).resolve(strict=True)
+        skill_dir = (skills_root / skill_name).resolve(strict=True)
+        if not skill_dir.is_relative_to(skills_root):
+            raise PermissionError("Invalid skill path")
+        if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
+            raise FileNotFoundError("Local skill not found")
+        return skill_dir
+
+    def _resolve_skill_relative_path(
+        self,
+        skill_dir: Path,
+        relative_path: str | None,
+        *,
+        expect_file: bool,
+    ) -> Path:
+        raw_path = str(relative_path or ".").strip() or "."
+        normalized = Path(raw_path.replace("\\", "/"))
+        if normalized.is_absolute() or ".." in normalized.parts:
+            raise ValueError("Invalid relative path")
+
+        target = (skill_dir / normalized).resolve(strict=True)
+        if not target.is_relative_to(skill_dir):
+            raise PermissionError("Path escapes skill directory")
+        if expect_file and not target.is_file():
+            raise FileNotFoundError("Skill file not found")
+        if not expect_file and not target.is_dir():
+            raise FileNotFoundError("Skill directory not found")
+        return target
+
+    @staticmethod
+    def _skill_relative_path(skill_dir: Path, target: Path) -> str:
+        rel = target.relative_to(skill_dir).as_posix()
+        return "" if rel == "." else rel
+
+    @staticmethod
+    def _is_editable_skill_file(path: Path) -> bool:
+        return (
+            path.name in _EDITABLE_SKILL_FILENAMES
+            or path.suffix.lower() in _EDITABLE_SKILL_FILE_SUFFIXES
+        )
+
+    def _serialize_skill_file_entry(self, skill_dir: Path, path: Path) -> dict:
+        stat = path.stat()
+        is_dir = path.is_dir()
+        return {
+            "name": path.name,
+            "path": self._skill_relative_path(skill_dir, path),
+            "type": "directory" if is_dir else "file",
+            "size": 0 if is_dir else stat.st_size,
+            "editable": (
+                (not is_dir)
+                and self._is_editable_skill_file(path)
+                and stat.st_size <= _SKILL_FILE_MAX_BYTES
+            ),
+        }
 
     def _get_neo_client_config(self) -> tuple[str, str]:
         provider_settings = self.core_lifecycle.astrbot_config.get(
@@ -412,6 +503,137 @@ class SkillsRoute(Route):
                 as_attachment=True,
                 attachment_filename=f"{name}.zip",
                 conditional=True,
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
+
+    async def list_skill_files(self):
+        try:
+            name = str(request.args.get("name") or "").strip()
+            relative_path = request.args.get("path", "")
+            skill_dir = self._resolve_local_skill_dir(name)
+            target_dir = self._resolve_skill_relative_path(
+                skill_dir,
+                relative_path,
+                expect_file=False,
+            )
+
+            entries = []
+            for entry in sorted(
+                target_dir.iterdir(),
+                key=lambda item: (not item.is_dir(), item.name.lower()),
+            ):
+                try:
+                    resolved = entry.resolve(strict=True)
+                except OSError:
+                    continue
+                if not resolved.is_relative_to(skill_dir):
+                    continue
+                if not resolved.is_dir() and not resolved.is_file():
+                    continue
+                entries.append(self._serialize_skill_file_entry(skill_dir, resolved))
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "name": name,
+                        "path": self._skill_relative_path(skill_dir, target_dir),
+                        "entries": entries,
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
+
+    async def get_skill_file(self):
+        try:
+            name = str(request.args.get("name") or "").strip()
+            relative_path = request.args.get("path", "SKILL.md")
+            skill_dir = self._resolve_local_skill_dir(name)
+            target_file = self._resolve_skill_relative_path(
+                skill_dir,
+                relative_path,
+                expect_file=True,
+            )
+            if not self._is_editable_skill_file(target_file):
+                return Response().error("Unsupported file type").__dict__
+
+            size = target_file.stat().st_size
+            if size > _SKILL_FILE_MAX_BYTES:
+                return Response().error("File is too large").__dict__
+
+            try:
+                content = target_file.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                return Response().error("File is not valid UTF-8 text").__dict__
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "name": name,
+                        "path": self._skill_relative_path(skill_dir, target_file),
+                        "content": content,
+                        "size": size,
+                        "editable": True,
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
+
+    async def update_skill_file(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        try:
+            data = await request.get_json()
+            name = str(data.get("name") or "").strip()
+            relative_path = data.get("path", "SKILL.md")
+            content = data.get("content")
+            if not isinstance(content, str):
+                return Response().error("Missing file content").__dict__
+
+            encoded = content.encode("utf-8")
+            if len(encoded) > _SKILL_FILE_MAX_BYTES:
+                return Response().error("File content is too large").__dict__
+
+            skill_dir = self._resolve_local_skill_dir(name)
+            target_file = self._resolve_skill_relative_path(
+                skill_dir,
+                relative_path,
+                expect_file=True,
+            )
+            if not self._is_editable_skill_file(target_file):
+                return Response().error("Unsupported file type").__dict__
+
+            target_file.write_text(content, encoding="utf-8")
+
+            try:
+                await sync_skills_to_active_sandboxes()
+            except Exception:
+                logger.warning("Failed to sync edited skills to active sandboxes.")
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "name": name,
+                        "path": self._skill_relative_path(skill_dir, target_file),
+                        "size": len(encoded),
+                    }
+                )
+                .__dict__
             )
         except Exception as e:
             logger.error(traceback.format_exc())

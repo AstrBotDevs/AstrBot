@@ -12,6 +12,7 @@
   },
   "mcpServers": {
     "title": "MCP 服务器",
+    "description": "管理 MCP 服务器",
     "buttons": {
       "refresh": "刷新",
       "add": "新增服务器",

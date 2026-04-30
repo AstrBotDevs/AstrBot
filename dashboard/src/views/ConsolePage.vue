@@ -7,20 +7,13 @@ const { tm } = useModuleI18n('features/console');
 </script>
 
 <template>
-  <div style="height: 100%;">
-    <div
-      style="background-color: var(--v-theme-surface); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; justify-content: space-between;">
+  <div class="console-page">
+    <div class="console-header">
       <div>
-        <h4>{{ tm('title') }}</h4>
-        <v-alert
-          type="info"
-          variant="tonal"
-          density="compact"
-          class="mt-2"
-          style="max-width: 600px;"
-        >
+        <h1 class="text-h2 mb-1">{{ tm('title') }}</h1>
+        <p class="text-body-2 text-medium-emphasis mb-0">
           {{ tm('debugHint.text') }}
-        </v-alert>
+        </p>
       </div>
       <div class="d-flex align-center">
         <v-switch
@@ -28,6 +21,7 @@ const { tm } = useModuleI18n('features/console');
           :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
           hide-details
           density="compact"
+          inset
           color="primary"
           style="margin-right: 16px;"
         ></v-switch>
@@ -58,7 +52,7 @@ const { tm } = useModuleI18n('features/console');
         </v-dialog>
       </div>
     </div>
-    <ConsoleDisplayer ref="consoleDisplayer" style="height: calc(100vh - 220px); " />
+    <ConsoleDisplayer ref="consoleDisplayer" class="console-display" />
   </div>
 </template>
 <script>
@@ -108,7 +102,27 @@ export default {
 
 </script>
 
-<style>
+<style scoped>
+.console-page {
+  height: 100%;
+  margin: 0 auto;
+  max-width: 1400px;
+  padding: 24px;
+  width: 100%;
+}
+
+.console-header {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.console-display {
+  height: calc(100vh - 190px);
+  width: 100%;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -121,5 +135,16 @@ export default {
 
 .fade-in {
   animation: fadeIn 0.2s ease-in-out;
+}
+
+@media (max-width: 768px) {
+  .console-page {
+    padding: 16px;
+  }
+
+  .console-header {
+    flex-direction: column;
+    gap: 12px;
+  }
 }
 </style>

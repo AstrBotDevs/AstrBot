@@ -12,6 +12,7 @@
   },
   "mcpServers": {
     "title": "MCP Servers",
+    "description": "Manage MCP servers",
     "buttons": {
       "refresh": "Refresh",
       "add": "Add Server",
