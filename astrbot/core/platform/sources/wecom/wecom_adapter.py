@@ -504,7 +504,6 @@ class WecomPlatformAdapter(Platform):
             file_path = temp_dir / f"weixinkefu_{uuid.uuid4().hex}_{file_name}"
             file_path.write_bytes(resp.content)
 
-            abm.message_str = "[文件]"
             abm.message = [File(name=file_name, file=str(file_path))]
         else:
             logger.warning(f"未实现的微信客服消息事件: {msg}")
