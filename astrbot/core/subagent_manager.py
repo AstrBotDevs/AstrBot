@@ -58,6 +58,7 @@ class SubAgentSession:
     protected_agents: set = field(
         default_factory=set
     )  # 若某个agent受到保护，则不会被自动清理
+    history_enabled: bool = True  # 是否保存子代理历史
     subagent_histories: dict = field(default_factory=dict)  # 存储每个子代理的历史上下文
     shared_context: list = field(default_factory=list)  # 公共上下文列表
     shared_context_enabled: bool = False  # 是否启用公共上下文
@@ -73,6 +74,7 @@ class SubAgentManager:
     _max_subagent_count: int = 3
     _auto_cleanup_per_turn: bool = True
     _shared_context_enabled: bool = False
+    _history_enabled: bool = True  # 是否启用子代理历史记忆功能
     _shared_context_maxlen: int = 300  # 公共上下文保留的历史消息条数
     _subagent_history_maxlen: int = 300  # 每个subagent最多保留的历史消息条数
     _execution_timeout: float = 1200.0  # SubAgent 执行超时时间（秒） 总时长
@@ -196,12 +198,14 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         tools_blacklist: list[str] = None,
         tools_inherent: list[str] = None,
         execution_timeout: float = 1200.0,
+        history_enabled: bool = True,
         **kwargs,
     ) -> None:
         """Configure SubAgentManager settings"""
         cls._max_subagent_count = max_subagent_count
         cls._auto_cleanup_per_turn = auto_cleanup_per_turn
         cls._shared_context_enabled = shared_context_enabled
+        cls._history_enabled = history_enabled
         cls._shared_context_maxlen = shared_context_maxlen
         cls._subagent_history_maxlen = subagent_history_maxlen
         cls._execution_timeout = execution_timeout
@@ -239,6 +243,10 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
     @classmethod
     def is_shared_context_enabled(cls) -> bool:
         return cls._shared_context_enabled
+
+    @classmethod
+    def is_history_enabled(cls) -> bool:
+        return cls._history_enabled
 
     @classmethod
     def register_blacklisted_tool(cls, tool_name: str) -> None:
@@ -297,6 +305,9 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         cls, session_id: str, agent_name: str, current_messages: list
     ) -> None:
         """Update conversation history for a subagent"""
+        if not cls._history_enabled:
+            return
+
         session = cls.get_session(session_id)
 
         if not session or agent_name not in session.protected_agents:
@@ -340,6 +351,8 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
     @classmethod
     def get_subagent_history(cls, session_id: str, agent_name: str) -> list:
         """Get conversation history for a subagent"""
+        if not cls._history_enabled:
+            return []
         session = cls.get_session(session_id)
         if not session:
             return []
@@ -689,6 +702,16 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         return agent_name in session.protected_agents
 
     @classmethod
+    def set_history_enabled(cls, session_id: str, enabled: bool) -> None:
+        """Enable or disable history for subagents"""
+        session = cls._get_or_create_session(session_id)
+        session.history_enabled = enabled
+        logger.info(
+            "[SubAgent:History] Subagent history %s",
+            "enabled" if enabled else "disabled",
+        )
+
+    @classmethod
     def set_shared_context_enabled(cls, session_id: str, enabled: bool) -> None:
         """Enable or disable shared context for a session"""
         session = cls._get_or_create_session(session_id)
@@ -765,8 +788,8 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         if config.provider_id:
             handoff_tool.provider_id = config.provider_id
         session.handoff_tools[config.name] = handoff_tool
-        # 初始化subagent的历史上下文
-        if config.name not in session.subagent_histories:
+        # 初始化subagent的历史上下文（仅当历史功能启用时）
+        if cls._history_enabled and config.name not in session.subagent_histories:
             session.subagent_histories[config.name] = []
         # 初始化subagent状态
         cls.set_subagent_status(session_id, config.name, "IDLE")
@@ -827,7 +850,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
                 handoff_tool.provider_id = config.provider_id
             session.handoff_tools[config.name] = handoff_tool
 
-            if config.name not in session.subagent_histories:
+            if cls._history_enabled and config.name not in session.subagent_histories:
                 session.subagent_histories[config.name] = []
 
             cls.set_subagent_status(session_id, config.name, "IDLE")

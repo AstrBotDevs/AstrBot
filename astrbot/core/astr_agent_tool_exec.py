@@ -828,28 +828,36 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         agent_name = getattr(tool.agent, "name", None)
         subagent_history = []
         if agent_name:
-            try:
-                stored_history = SubAgentManager.get_subagent_history(umo, agent_name)
-                if stored_history:
-                    # 将历史消息转换为 Message 对象
-                    for hist_msg in stored_history:
-                        try:
-                            if isinstance(hist_msg, dict):
-                                subagent_history.append(
-                                    Message.model_validate(hist_msg)
-                                )
-                            elif isinstance(hist_msg, Message):
-                                subagent_history.append(hist_msg)
-                        except Exception:
-                            continue
-                    if subagent_history:
-                        logger.debug(
-                            f"[SubAgentHistory] Loaded {len(subagent_history)} history messages for {agent_name}"
-                        )
+            # 仅在历史功能启用时加载历史
+            if SubAgentManager.is_history_enabled():
+                try:
+                    stored_history = SubAgentManager.get_subagent_history(
+                        umo, agent_name
+                    )
+                    if stored_history:
+                        # 将历史消息转换为 Message 对象
+                        for hist_msg in stored_history:
+                            try:
+                                if isinstance(hist_msg, dict):
+                                    subagent_history.append(
+                                        Message.model_validate(hist_msg)
+                                    )
+                                elif isinstance(hist_msg, Message):
+                                    subagent_history.append(hist_msg)
+                            except Exception:
+                                continue
+                        if subagent_history:
+                            logger.debug(
+                                f"[SubAgentHistory] Loaded {len(subagent_history)} history messages for {agent_name}"
+                            )
 
-            except Exception as e:
-                logger.warning(
-                    f"[SubAgentHistory] Failed to load history for {agent_name}: {e}"
+                except Exception as e:
+                    logger.warning(
+                        f"[SubAgentHistory] Failed to load history for {agent_name}: {e}"
+                    )
+            else:
+                logger.debug(
+                    f"[SubAgentHistory] History is disabled, skipping load for {agent_name}"
                 )
         return subagent_history, agent_name
 
@@ -883,7 +891,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if agent_name and runner_messages:
             from astrbot.core.subagent_manager import SubAgentManager
 
-            SubAgentManager.update_subagent_history(umo, agent_name, runner_messages)
+            # 仅在历史功能启用时保存历史
+            if SubAgentManager.is_history_enabled():
+                SubAgentManager.update_subagent_history(
+                    umo, agent_name, runner_messages
+                )
+            else:
+                logger.debug(
+                    f"[SubAgentHistory] History is disabled, skipping save for {agent_name}"
+                )
         else:
             return
 

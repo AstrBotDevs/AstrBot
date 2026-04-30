@@ -220,6 +220,7 @@ DEFAULT_CONFIG = {
             ],
             "tools_inherent": ["astrbot_execute_shell", "astrbot_execute_python"],
         },
+        "history_enabled": True,
         "shared_context_enabled": True,
         "shared_context_maxlen": 300,
         "subagent_history_maxlen": 300,

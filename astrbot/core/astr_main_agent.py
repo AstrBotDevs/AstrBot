@@ -985,6 +985,7 @@ async def _apply_subagent_manager_tools(
         # Configure SubAgentManager with settings from subagent_orchestrator
         dynamic_cfg = orch_config.get("dynamic_agents", {})
         enable_dynamic = dynamic_cfg.get("enabled", False)
+        history_enabled = orch_config.get("history_enabled", False)
         shared_context_enabled = orch_config.get("shared_context_enabled", False)
         SubAgentManager.configure(
             max_subagent_count=dynamic_cfg.get("max_dynamic_subagent_count", 3),
@@ -995,29 +996,34 @@ async def _apply_subagent_manager_tools(
             tools_blacklist=dynamic_cfg.get("tools_blacklist", None),
             tools_inherent=dynamic_cfg.get("tools_inherent", None),
             execution_timeout=orch_config.get("execution_timeout", 1200),
+            history_enabled=orch_config.get("history_enabled", True),
         )
 
-        # Enable shared context if configured
-        if shared_context_enabled:
-            SubAgentManager.set_shared_context_enabled(event.unified_msg_origin, True)
+        # Enable subagent history and shared context if configured
+        SubAgentManager.set_history_enabled(event.unified_msg_origin, history_enabled)
+        SubAgentManager.set_shared_context_enabled(
+            event.unified_msg_origin, shared_context_enabled
+        )
 
         session_id = event.unified_msg_origin
         # Register static subagents from config into SubAgentManager for unified management
         so.register_static_subagents_to_manager(session_id)
 
         # Register dynamic subagent management tools (only when dynamic creation is enabled)
+        # Always register `wait_for_subagent` for better background task running
+        req.func_tool.add_tool(WAIT_FOR_SUBAGENT_TOOL)
         if enable_dynamic:
             req.func_tool.add_tool(CREATE_SUBAGENT_TOOL)
-            req.func_tool.add_tool(RESET_SUBAGENT_TOOL)
             req.func_tool.add_tool(REMOVE_SUBAGENT_TOOL)
             req.func_tool.add_tool(LIST_SUBAGENTS_TOOL)
+            if SubAgentManager.is_history_enabled():
+                req.func_tool.add_tool(RESET_SUBAGENT_TOOL)
             if SubAgentManager.is_auto_cleanup_per_turn():
                 req.func_tool.add_tool(PROTECT_SUBAGENT_TOOL)
                 req.func_tool.add_tool(UNPROTECT_SUBAGENT_TOOL)
             if SubAgentManager.is_shared_context_enabled():
                 req.func_tool.add_tool(VIEW_SHARED_CONTEXT_TOOL)
                 req.func_tool.add_tool(SEND_SHARED_CONTEXT_TOOL_FOR_MAIN_AGENT)
-            req.func_tool.add_tool(WAIT_FOR_SUBAGENT_TOOL)
 
             # Inject subagent capability system prompt for dynamic creation
             task_router_prompt = SubAgentManager.build_task_router_prompt(session_id)
