@@ -38,7 +38,9 @@ class PluginUpdator(RepoZipUpdator):
             raise Exception(f"Plugin {plugin.name} does not specify a repository URL.")
 
         if not plugin.root_dir_name:
-            raise Exception(f"Plugin {plugin.name} does not specify a root directory name.")
+            raise Exception(
+                f"Plugin {plugin.name} does not specify a root directory name."
+            )
 
         plugin_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
 
