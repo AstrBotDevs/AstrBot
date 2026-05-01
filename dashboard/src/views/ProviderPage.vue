@@ -676,18 +676,29 @@ async function testSingleProvider(provider) {
 
     const startTime = performance.now()
     const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`)
-    if (res.data && res.data.status === 'ok') {
-      const index = providerStatuses.value.findIndex(s => s.id === provider.id)
-      if (index !== -1) {
-        providerStatuses.value.splice(index, 1, res.data.data)
-      }
-      const latency = Math.max(0, Math.round(performance.now() - startTime))
-      showMessage(tm('models.testSuccessWithLatency', { id: provider.id, latency }))
-    } else {
+    if (!res.data || res.data.status !== 'ok') {
       throw new Error(res.data?.message || `Failed to check status for ${provider.id}`)
     }
+
+    const result = res.data.data
+    if (!result) {
+      throw new Error(`Failed to check status for ${provider.id}`)
+    }
+
+    const index = providerStatuses.value.findIndex(s => s.id === provider.id)
+    if (index !== -1) {
+      providerStatuses.value.splice(index, 1, result)
+    }
+
+    const isAvailable = result.status === 'available' && result.error == null
+    if (!isAvailable) {
+      throw new Error(result.error || tm('models.testError'))
+    }
+
+    const latency = Math.max(0, Math.round(performance.now() - startTime))
+    showMessage(tm('models.testSuccessWithLatency', { id: provider.id, latency }))
   } catch (err) {
-    const errorMessage = err.response?.data?.message || err.message || 'Unknown error'
+    const errorMessage = err.response?.data?.message || err.message || tm('models.testError')
     const index = providerStatuses.value.findIndex(s => s.id === provider.id)
     const failedStatus = {
       id: provider.id,
@@ -698,6 +709,7 @@ async function testSingleProvider(provider) {
     if (index !== -1) {
       providerStatuses.value.splice(index, 1, failedStatus)
     }
+    showMessage(errorMessage, 'error')
   } finally {
     const index = testingProviders.value.indexOf(provider.id)
     if (index > -1) {
