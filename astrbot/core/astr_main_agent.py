@@ -152,6 +152,8 @@ class MainAgentBuildConfig:
     This enforce max turns before compression"""
     dequeue_context_length: int = 1
     """The number of oldest turns to remove when context length limit is reached."""
+    fallback_max_context_tokens: int = 128000
+    """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""
     llm_safety_mode: bool = True
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
@@ -1367,6 +1369,11 @@ async def build_main_agent(
             provider.provider_config["max_context_tokens"] = model_info["limit"][
                 "context"
             ]
+        else:
+            # fallback: default to configured fallback value
+            provider.provider_config["max_context_tokens"] = (
+                config.fallback_max_context_tokens
+            )
 
     if event.get_platform_name() == "webchat":
         asyncio.create_task(_handle_webchat(event, req, provider))

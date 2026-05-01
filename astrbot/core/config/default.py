@@ -309,7 +309,7 @@ CHAT_PROVIDER_TEMPLATE = {
     "model": "",
     "modalities": [],
     "custom_extra_body": {},
-    "max_context_tokens": 0,
+    "max_context_tokens": 128000,
 }
 
 """
@@ -3541,6 +3541,14 @@ CONFIG_METADATA_3 = {
                         "hint": "留空时将降级为“按对话轮数截断”的策略。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.fallback_max_context_tokens": {
+                        "description": "上下文窗口兜底值",
+                        "type": "int",
+                        "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。",
+                        "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
