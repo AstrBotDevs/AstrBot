@@ -1199,6 +1199,18 @@ export default {
     background-color: #f9f9f9;
 }
 
+/* 让 ToolCallCard 内部的 args/result 自然展开，由外层容器统一滚动，避免双滚动条 */
+.conversation-messages-container .detail-json,
+.conversation-messages-container .detail-result {
+    max-height: none;
+    overflow: visible;
+}
+
+/* 历史回放无真实状态数据，隐藏 IPython 工具的"已完成"标签，与其它工具卡片保持一致 */
+.conversation-messages-container .tool-call-inline-status {
+    display: none;
+}
+
 /* 暗色模式下的聊天消息容器 */
 .v-theme--dark .conversation-messages-container {
     background-color: #1e1e1e;
