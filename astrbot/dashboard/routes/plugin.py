@@ -504,6 +504,7 @@ class PluginRoute(Route):
 
         post_data = await request.get_json()
         repo_url = post_data["url"]
+        download_url = str(post_data.get("download_url") or "").strip()
         ignore_version_check = bool(post_data.get("ignore_version_check", False))
 
         proxy: str = post_data.get("proxy", None)
@@ -516,6 +517,7 @@ class PluginRoute(Route):
                 repo_url,
                 proxy,
                 ignore_version_check=ignore_version_check,
+                download_url=download_url,
             )
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {repo_url} 成功。")

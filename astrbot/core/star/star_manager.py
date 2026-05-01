@@ -1347,7 +1347,11 @@ class PluginManager:
         self._rebuild_failed_plugin_info()
 
     async def install_plugin(
-        self, repo_url: str, proxy: str = "", ignore_version_check: bool = False
+        self,
+        repo_url: str,
+        proxy: str = "",
+        ignore_version_check: bool = False,
+        download_url: str = "",
     ):
         """从仓库 URL 安装插件
 
@@ -1356,6 +1360,7 @@ class PluginManager:
         Args:
             repo_url (str): 要安装的插件仓库 URL
             proxy (str, optional): 用于下载的代理服务器。默认为空字符串。
+            download_url (str, optional): 插件压缩包下载地址。提供时优先从此地址下载安装包。
 
         Returns:
             dict | None: 安装成功时返回包含插件信息的字典:
@@ -1383,7 +1388,14 @@ class PluginManager:
                     raise Exception(
                         f"安装失败：目录 {os.path.basename(plugin_path)} 已存在。"
                     )
-                plugin_path = await self.updator.install(repo_url, proxy)
+                if download_url:
+                    plugin_path = await self.updator.install(
+                        repo_url,
+                        proxy,
+                        download_url=download_url,
+                    )
+                else:
+                    plugin_path = await self.updator.install(repo_url, proxy)
 
                 # reload the plugin
                 dir_name = os.path.basename(plugin_path)

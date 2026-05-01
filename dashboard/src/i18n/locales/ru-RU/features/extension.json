@@ -63,7 +63,8 @@
         "system": "Системный",
         "loading": "Загрузка...",
         "installed": "Установлен",
-        "unknown": "Неизвестно"
+        "unknown": "Неизвестно",
+        "incompatible": "Несовместимо"
     },
     "tooltips": {
         "enable": "Включить",
@@ -115,6 +116,7 @@
             "stars": "Звезды",
             "tags": "Теги",
             "astrbotVersion": "Требуемая версия AstrBot",
+            "supportPlatforms": "Поддерживаемые платформы",
             "authorWebsite": "Сайт автора",
             "repository": "Репозиторий"
         }
@@ -197,7 +199,10 @@
             "title": "Установка плагина",
             "fromFile": "Из файла",
             "fromUrl": "По ссылке",
-            "supportPlatformsCount": "Поддерживает платформ: {count}"
+            "supportPlatformsCount": "Поддерживает платформ: {count}",
+            "sectionTitle": "Установка",
+            "downloadSource": "Пакет плагина будет установлен из:",
+            "githubSecurityWarning": "AstrBot не может гарантировать безопасность плагинов, загруженных с GitHub. Устанавливайте только если доверяете источнику плагина."
         },
         "danger_warning": {
             "title": "Внимание!",

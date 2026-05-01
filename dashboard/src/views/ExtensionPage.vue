@@ -152,6 +152,9 @@ const {
   getPlatformDisplayList,
   resolveSelectedInstallPlugin,
   selectedInstallPlugin,
+  selectedInstallDownloadUrl,
+  selectedInstallSourceUrl,
+  installUsesGithubSource,
   checkInstallCompatibility,
   refreshPluginMarket,
   handleLocaleChange,
@@ -706,13 +709,39 @@ const installDialogPluginLogo = computed(() => {
               type="warning"
               variant="tonal"
               density="comfortable"
-              class="mt-2"
+              class="market-install-alert mt-2 mb-3"
             >
               {{ installCompat.message }}
             </v-alert>
           </div>
 
-          <ProxySelector class="mt-4" />
+          <div
+            v-if="selectedInstallSourceUrl"
+            class="market-install-confirm__section-title mt-4"
+          >
+            {{ tm("dialogs.install.sectionTitle") }}
+          </div>
+          <div
+            v-if="selectedInstallSourceUrl"
+            class="market-install-source text-caption text-medium-emphasis mb-3"
+          >
+            <div>{{ tm("dialogs.install.downloadSource") }}</div>
+            <div class="market-install-source__url">
+              {{ selectedInstallSourceUrl }}
+            </div>
+          </div>
+
+          <v-alert
+            v-if="installUsesGithubSource"
+            type="warning"
+            variant="tonal"
+            density="comfortable"
+            class="market-install-alert mt-4 mb-4"
+          >
+            {{ tm("dialogs.install.githubSecurityWarning") }}
+          </v-alert>
+
+          <ProxySelector v-if="!selectedInstallDownloadUrl" class="mt-4" />
         </div>
 
         <template v-else>
@@ -812,13 +841,39 @@ const installDialogPluginLogo = computed(() => {
                   type="warning"
                   variant="tonal"
                   density="comfortable"
-                  class="mt-2"
+                  class="market-install-alert mt-2 mb-3"
                 >
                   {{ installCompat.message }}
                 </v-alert>
               </div>
 
-              <ProxySelector></ProxySelector>
+              <div
+                v-if="selectedInstallSourceUrl"
+                class="market-install-confirm__section-title mt-4"
+              >
+                {{ tm("dialogs.install.sectionTitle") }}
+              </div>
+              <div
+                v-if="selectedInstallSourceUrl"
+                class="market-install-source text-caption text-medium-emphasis mb-3"
+              >
+                <div>{{ tm("dialogs.install.downloadSource") }}</div>
+                <div class="market-install-source__url">
+                  {{ selectedInstallSourceUrl }}
+                </div>
+              </div>
+
+              <v-alert
+                v-if="installUsesGithubSource"
+                type="warning"
+                variant="tonal"
+                density="comfortable"
+                class="market-install-alert mb-4"
+              >
+                {{ tm("dialogs.install.githubSecurityWarning") }}
+              </v-alert>
+
+              <ProxySelector v-if="!selectedInstallDownloadUrl"></ProxySelector>
             </div>
           </v-window-item>
           </v-window>
@@ -1088,6 +1143,20 @@ const installDialogPluginLogo = computed(() => {
   color: rgba(var(--v-theme-on-surface), 0.92);
   font-weight: 700;
   margin-bottom: 8px;
+}
+
+.market-install-alert {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.market-install-source {
+  min-width: 0;
+}
+
+.market-install-source__url {
+  overflow-x: auto;
+  white-space: nowrap;
 }
 </style>
 

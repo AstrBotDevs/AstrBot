@@ -176,6 +176,7 @@ export const useCommonStore = defineStore("common", {
                 "pinned": pluginData?.pinned ? pluginData.pinned : false,
                 "stars": pluginData?.stars ? pluginData.stars : 0,
                 "updated_at": pluginData?.updated_at ? pluginData.updated_at : "",
+                "download_url": pluginData?.download_url ? pluginData.download_url : "",
                 "display_name": pluginData?.display_name ? pluginData.display_name : "",
                 "i18n": pluginData?.i18n && typeof pluginData.i18n === 'object' ? pluginData.i18n : {},
                 "astrbot_version": pluginData?.astrbot_version ? pluginData.astrbot_version : "",

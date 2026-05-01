@@ -81,6 +81,15 @@ const handleOpen = () => {
           >
             {{ tm("market.recommended") }}
           </v-chip>
+          <v-chip
+            v-if="plugin?.astrbot_compatible === false"
+            color="error"
+            size="x-small"
+            label
+            class="market-incompatible-chip"
+          >
+            {{ tm("status.incompatible") }}
+          </v-chip>
         </div>
 
         <div class="d-flex align-center plugin-meta">
@@ -135,17 +144,6 @@ const handleOpen = () => {
           {{ plugin.desc }}
         </div>
 
-        <div
-          v-if="platformDisplayList.length"
-          class="plugin-badges"
-        >
-          <PluginPlatformChip
-            :platforms="plugin.support_platforms"
-            size="x-small"
-            :chip-style="{ height: '20px' }"
-          />
-        </div>
-
         <div class="plugin-stats"></div>
       </div>
     </v-card-text>
@@ -154,6 +152,16 @@ const handleOpen = () => {
       style="gap: 6px; padding: 8px 12px; padding-top: 0"
       @click.stop
     >
+      <div
+        v-if="platformDisplayList.length"
+        class="plugin-badges"
+      >
+        <PluginPlatformChip
+          :platforms="plugin.support_platforms"
+          size="x-small"
+          :chip-style="{ height: '20px' }"
+        />
+      </div>
       <v-spacer></v-spacer>
       <v-btn
         v-if="plugin?.repo"
@@ -256,6 +264,12 @@ const handleOpen = () => {
 .market-recommended-chip {
   flex-shrink: 0;
   font-weight: bold;
+  height: 20px;
+}
+
+.market-incompatible-chip {
+  flex-shrink: 0;
+  font-weight: 700;
   height: 20px;
 }
 
