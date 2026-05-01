@@ -58,6 +58,42 @@ class AgentGroupMemberPreset:
     source_type: str = "subagent"
     subagent_preset: str = ""
     persona_id: str = ""
+    checkpoint_async_enabled: bool | None = None
+    """null = inherit, true = enabled, false = disabled"""
+    checkpoint_async_provider_id: str | None = None
+    """null = inherit from chain"""
+
+
+def resolve_checkpoint_enabled(
+    member_value: bool | None,
+    preset_value: bool | None = None,
+    category_default: bool = False,
+) -> bool:
+    """Resolve checkpoint enabled value using the chain:
+    member > preset > category_default
+    Returns the first non-None value, or category_default.
+    """
+    if member_value is not None:
+        return member_value
+    if preset_value is not None:
+        return preset_value
+    return category_default
+
+
+def resolve_checkpoint_provider_id(
+    member_value: str | None,
+    preset_value: str | None = None,
+    global_value: str = "",
+) -> str:
+    """Resolve checkpoint provider_id using the chain:
+    member > preset > global
+    Returns the first non-None, non-empty value.
+    """
+    if member_value:
+        return member_value
+    if preset_value:
+        return preset_value
+    return global_value
 
 
 @dataclass
