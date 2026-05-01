@@ -220,7 +220,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 else session
             )
         except Exception as exc:
-            return f"error: invalid session: {exc}"
+            return f"error: invalid session: {exc} - session should be a string in the format of 'platform_id:platform_type:session_id'."
 
         await context.context.context.send_message(
             target_session,
