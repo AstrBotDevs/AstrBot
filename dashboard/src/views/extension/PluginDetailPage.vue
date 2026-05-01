@@ -5,6 +5,7 @@ import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { usePluginI18n } from "@/utils/pluginI18n";
+import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 
 const props = defineProps({
   plugin: {
@@ -184,6 +185,15 @@ const astrbotVersionDisplay = computed(() =>
   ).trim(),
 );
 
+const supportPlatformsDisplay = computed(() => {
+  const platforms = firstPresentValue(
+    props.plugin.support_platforms,
+    props.marketPlugin?.support_platforms,
+  );
+  if (!Array.isArray(platforms)) return [];
+  return platforms.filter((platform) => typeof platform === "string");
+});
+
 const infoRows = computed(() => {
   const rows = [
     { label: tm("detail.info.version"), value: versionDisplay.value, optional: true },
@@ -199,6 +209,12 @@ const infoRows = computed(() => {
     {
       label: tm("detail.info.astrbotVersion"),
       value: astrbotVersionDisplay.value,
+      optional: true,
+    },
+    {
+      label: tm("detail.info.supportPlatforms"),
+      value: supportPlatformsDisplay.value,
+      kind: "platforms",
       optional: true,
     },
     {
@@ -674,6 +690,9 @@ onBeforeUnmount(() => {
                   >
                     {{ tag === "danger" ? tm("tags.danger") : tag }}
                   </v-chip>
+                </div>
+                <div v-else-if="row.kind === 'platforms'" class="detail-tags">
+                  <PluginPlatformChip :platforms="row.value" />
                 </div>
                 <button
                   v-else-if="row.href"

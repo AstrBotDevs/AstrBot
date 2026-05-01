@@ -40,6 +40,7 @@ export const useExtensionPage = () => {
   const { tm } = useModuleI18n("features/extension");
   const router = useRouter();
   const route = useRoute();
+  const marketCompatibilityCache = new Map();
   
   const getSelectedGitHubProxy = () => {
     if (typeof window === "undefined" || !window.localStorage) return "";
@@ -904,6 +905,32 @@ export const useExtensionPage = () => {
     dialog.value = false;
     resetInstallDialogState();
   };
+
+  const normalizeInstallUrl = (value) =>
+    String(value || "").trim().replace(/\/+$/, "");
+
+  const isGithubRepoUrl = (value) =>
+    /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+(?:\.git)?(?:\/tree\/[^/\s]+)?$/i.test(
+      normalizeInstallUrl(value),
+    );
+
+  const selectedInstallDownloadUrl = computed(() => {
+    const plugin = selectedInstallPlugin.value;
+    const downloadUrl = String(plugin?.download_url || "").trim();
+    if (!downloadUrl) return "";
+    if (normalizeInstallUrl(plugin?.repo) !== normalizeInstallUrl(extension_url.value)) {
+      return "";
+    }
+    return downloadUrl;
+  });
+
+  const selectedInstallSourceUrl = computed(
+    () => selectedInstallDownloadUrl.value || String(extension_url.value || "").trim(),
+  );
+
+  const installUsesGithubSource = computed(
+    () => !selectedInstallDownloadUrl.value && isGithubRepoUrl(extension_url.value),
+  );
   
   // 为表格视图创建一个处理安装插件的函数
   const handleInstallPlugin = async (plugin) => {
@@ -1166,6 +1193,58 @@ export const useExtensionPage = () => {
     }
     pluginMarketData.value = notInstalled.concat(installed);
   };
+
+  const normalizeAstrBotVersionSpec = (value) => String(value || "").trim();
+
+  const checkAstrBotVersionCompatibility = async (versionSpec) => {
+    const normalizedSpec = normalizeAstrBotVersionSpec(versionSpec);
+    if (!normalizedSpec) {
+      return { checked: false, compatible: true, message: "" };
+    }
+
+    if (marketCompatibilityCache.has(normalizedSpec)) {
+      return marketCompatibilityCache.get(normalizedSpec);
+    }
+
+    try {
+      const res = await axios.post("/api/plugin/check-compat", {
+        astrbot_version: normalizedSpec,
+      });
+      const result = {
+        checked: res.data.status === "ok",
+        compatible:
+          res.data.status === "ok" ? !!res.data.data?.compatible : true,
+        message: res.data.data?.message || "",
+      };
+      marketCompatibilityCache.set(normalizedSpec, result);
+      return result;
+    } catch (err) {
+      console.debug("Failed to check plugin compatibility:", err);
+      const result = { checked: false, compatible: true, message: "" };
+      marketCompatibilityCache.set(normalizedSpec, result);
+      return result;
+    }
+  };
+
+  const annotateMarketCompatibility = async () => {
+    const specs = [
+      ...new Set(
+        pluginMarketData.value
+          .map((plugin) => normalizeAstrBotVersionSpec(plugin?.astrbot_version))
+          .filter(Boolean),
+      ),
+    ];
+
+    await Promise.all(specs.map((spec) => checkAstrBotVersionCompatibility(spec)));
+
+    pluginMarketData.value.forEach((plugin) => {
+      const spec = normalizeAstrBotVersionSpec(plugin?.astrbot_version);
+      const result = spec ? marketCompatibilityCache.get(spec) : null;
+      plugin.astrbot_compat_checked = !!result?.checked;
+      plugin.astrbot_compatible = result ? result.compatible : true;
+      plugin.astrbot_compat_message = result?.message || "";
+    });
+  };
   
   const showVersionCompatibilityWarning = (message) => {
     versionCompatibilityDialog.message = message;
@@ -1223,7 +1302,8 @@ export const useExtensionPage = () => {
 
     return axios.post("/api/plugin/install", {
       url: extension_url.value,
-      proxy: getSelectedGitHubProxy(),
+      download_url: selectedInstallDownloadUrl.value,
+      proxy: selectedInstallDownloadUrl.value ? "" : getSelectedGitHubProxy(),
       ignore_version_check: ignoreVersionCheck,
     });
   };
@@ -1338,6 +1418,7 @@ export const useExtensionPage = () => {
       pluginMarketData.value = data;
       trimExtensionName();
       checkAlreadyInstalled();
+      await annotateMarketCompatibility();
       checkUpdate();
       refreshRandomPlugins();
       currentPage.value = 1; // 重置到第一页
@@ -1379,6 +1460,7 @@ export const useExtensionPage = () => {
       pluginMarketData.value = data;
       trimExtensionName();
       checkAlreadyInstalled();
+      await annotateMarketCompatibility();
       checkUpdate();
       refreshRandomPlugins();
     } catch (err) {
@@ -1602,6 +1684,9 @@ export const useExtensionPage = () => {
     getPlatformDisplayList,
     resolveSelectedInstallPlugin,
     selectedInstallPlugin,
+    selectedInstallDownloadUrl,
+    selectedInstallSourceUrl,
+    installUsesGithubSource,
     checkInstallCompatibility,
     refreshPluginMarket,
     handleLocaleChange,
