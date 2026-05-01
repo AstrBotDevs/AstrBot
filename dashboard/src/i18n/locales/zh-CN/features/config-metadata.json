@@ -792,6 +792,10 @@
       "disable_builtin_commands": {
         "description": "禁用自带指令",
         "hint": "禁用所有 AstrBot 自带指令,如 help, provider, model 等"
+      },
+      "disable_metrics": {
+        "description": "禁用匿名使用统计",
+        "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。"
       }
     },
     "whitelist": {

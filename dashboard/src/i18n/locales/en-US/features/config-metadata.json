@@ -790,6 +790,10 @@
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
         "hint": "Disable all built-in AstrBot commands such as help, provider, model, etc."
+      },
+      "disable_metrics": {
+        "description": "Disable Anonymous Usage Statistics",
+        "hint": "When disabled, AstrBot will not upload anonymous usage statistics."
       }
     },
     "whitelist": {
