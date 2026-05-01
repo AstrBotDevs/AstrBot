@@ -22,20 +22,17 @@ class Metric:
     _flush_task: asyncio.Task | None = None
     _lock: asyncio.Lock | None = None
     _lock_loop: asyncio.AbstractEventLoop | None = None
-    _disable_metrics: bool = False
 
     @staticmethod
     def _is_disabled() -> bool:
         """检查是否禁用指标上传（配置或环境变量）"""
-        if Metric._disable_metrics:
-            return True
         if os.environ.get("ASTRBOT_DISABLE_METRICS", "0") == "1":
             return True
         try:
             from astrbot.core import astrbot_config
 
             return astrbot_config.get("disable_metrics", False)
-        except Exception:
+        except (ImportError, AttributeError, KeyError):
             return False
 
     @staticmethod
