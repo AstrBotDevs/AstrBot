@@ -2,8 +2,10 @@
 import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const { tm } = useModuleI18n("features/extension");
+const { pluginShortDesc } = usePluginI18n();
 
 const props = defineProps({
   plugin: {
@@ -29,6 +31,10 @@ const normalizePlatformList = (platforms) => {
 
 const platformDisplayList = computed(() =>
   normalizePlatformList(props.plugin?.support_platforms),
+);
+
+const cardDescription = computed(() =>
+  pluginShortDesc(props.plugin, props.plugin?.short_desc || props.plugin?.desc || ""),
 );
 
 const handleInstall = (plugin) => {
@@ -141,7 +147,7 @@ const handleOpen = () => {
         </div>
 
         <div class="text-caption plugin-description">
-          {{ plugin.desc }}
+          {{ cardDescription }}
         </div>
 
         <div class="plugin-stats"></div>

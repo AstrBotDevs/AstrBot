@@ -166,6 +166,7 @@ export const useCommonStore = defineStore("common", {
                 ...pluginData,
                 "name": pluginData.name || key, // 优先使用插件数据中的name字段，否则使用键名
                 "desc": pluginData.desc,
+                "short_desc": pluginData?.short_desc ? pluginData.short_desc : "",
                 "author": pluginData.author,
                 "repo": pluginData.repo,
                 "installed": false,

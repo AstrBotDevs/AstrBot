@@ -83,6 +83,7 @@ export const getPluginSearchFields = (plugin) => {
     plugin?.name,
     plugin?.trimmedName,
     plugin?.display_name,
+    plugin?.short_desc,
     plugin?.desc,
     plugin?.author,
     plugin?.repo,

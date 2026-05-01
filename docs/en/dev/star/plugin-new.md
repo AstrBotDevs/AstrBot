@@ -53,6 +53,14 @@ You can modify (or add) the `display_name` field in the `metadata.yaml` file to 
 
 Plugin display names and descriptions can follow the WebUI language. See [Plugin Internationalization](./guides/plugin-i18n).
 
+### Plugin Short Description (Optional)
+
+You can add a `short_desc` field to `metadata.yaml` as the short description shown on plugin marketplace cards. Keep it to a concise one-sentence summary. If it is not provided, cards fall back to `desc`.
+
+```yaml
+short_desc: A one-line summary of your plugin.
+```
+
 ### Declare Supported Platforms (Optional)
 
 You can add a `support_platforms` field (`list[str]`) to `metadata.yaml` to declare which platform adapters your plugin supports. The WebUI plugin page will display this field.

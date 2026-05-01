@@ -497,6 +497,11 @@ class PluginManager:
                 name=metadata["name"],
                 author=metadata["author"],
                 desc=metadata["desc"],
+                short_desc=(
+                    metadata["short_desc"]
+                    if isinstance(metadata.get("short_desc"), str)
+                    else None
+                ),
                 version=metadata["version"],
                 repo=metadata["repo"] if "repo" in metadata else None,
                 display_name=metadata.get("display_name", None),
@@ -736,6 +741,7 @@ class PluginManager:
                         "name": metadata.name,
                         "author": metadata.author,
                         "desc": metadata.desc,
+                        "short_desc": metadata.short_desc,
                         "version": metadata.version,
                         "repo": metadata.repo,
                         "display_name": metadata.display_name,
@@ -977,6 +983,7 @@ class PluginManager:
                             metadata.name = metadata_yaml.name
                             metadata.author = metadata_yaml.author
                             metadata.desc = metadata_yaml.desc
+                            metadata.short_desc = metadata_yaml.short_desc
                             metadata.version = metadata_yaml.version
                             metadata.repo = metadata_yaml.repo
                             metadata.display_name = metadata_yaml.display_name
