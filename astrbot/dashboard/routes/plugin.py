@@ -14,6 +14,7 @@ from quart import request
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
+from astrbot.core.computer.computer_client import sync_skills_to_active_sandboxes
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
@@ -89,6 +90,12 @@ class PluginRoute(Route):
 
         self._logo_cache = {}
 
+    async def _sync_skills_after_plugin_change(self) -> None:
+        try:
+            await sync_skills_to_active_sandboxes()
+        except Exception:
+            logger.warning("Failed to sync plugin-provided skills to active sandboxes.")
+
     async def check_plugin_compatibility(self):
         try:
             data = await request.get_json()
@@ -129,6 +136,7 @@ class PluginRoute(Route):
             success, err = await self.plugin_manager.reload_failed_plugin(dir_name)
 
             if success:
+                await self._sync_skills_after_plugin_change()
                 return Response().ok(None, f"插件 {dir_name} 重载成功。").__dict__
             else:
                 return Response().error(f"重载失败: {err}").__dict__
@@ -151,6 +159,7 @@ class PluginRoute(Route):
             success, message = await self.plugin_manager.reload(plugin_name)
             if not success:
                 return Response().error(message or "插件重载失败").__dict__
+            await self._sync_skills_after_plugin_change()
             return Response().ok(None, "重载成功。").__dict__
         except Exception as e:
             logger.error(f"/api/plugin/reload: {traceback.format_exc()}")
@@ -520,6 +529,7 @@ class PluginRoute(Route):
                 download_url=download_url,
             )
             # self.core_lifecycle.restart()
+            await self._sync_skills_after_plugin_change()
             logger.info(f"安装插件 {repo_url} 成功。")
             return Response().ok(plugin_info, "安装成功。").__dict__
         except PluginVersionIncompatibleError as e:
@@ -561,6 +571,7 @@ class PluginRoute(Route):
                 ignore_version_check=ignore_version_check,
             )
             # self.core_lifecycle.restart()
+            await self._sync_skills_after_plugin_change()
             logger.info(f"安装插件 {file.filename} 成功")
             return Response().ok(plugin_info, "安装成功。").__dict__
         except PluginVersionIncompatibleError as e:
@@ -595,6 +606,7 @@ class PluginRoute(Route):
                 delete_config=delete_config,
                 delete_data=delete_data,
             )
+            await self._sync_skills_after_plugin_change()
             logger.info(f"卸载插件 {plugin_name} 成功")
             return Response().ok(None, "卸载成功").__dict__
         except Exception as e:
@@ -623,6 +635,7 @@ class PluginRoute(Route):
                 delete_config=delete_config,
                 delete_data=delete_data,
             )
+            await self._sync_skills_after_plugin_change()
             logger.info(f"卸载失败插件 {dir_name} 成功")
             return Response().ok(None, "卸载成功").__dict__
         except Exception as e:
@@ -645,6 +658,7 @@ class PluginRoute(Route):
             await self.plugin_manager.update_plugin(plugin_name, proxy)
             # self.core_lifecycle.restart()
             await self.plugin_manager.reload(plugin_name)
+            await self._sync_skills_after_plugin_change()
             logger.info(f"更新插件 {plugin_name} 成功。")
             return Response().ok(None, "更新成功。").__dict__
         except Exception as e:
@@ -696,6 +710,8 @@ class PluginRoute(Route):
                 results.append(result)
 
         failed = [r for r in results if r["status"] == "error"]
+        if len(failed) < len(results):
+            await self._sync_skills_after_plugin_change()
         message = (
             "批量更新完成，全部成功。"
             if not failed

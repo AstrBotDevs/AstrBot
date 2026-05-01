@@ -31,6 +31,24 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
     return skills
 
 
+def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
+    """Collect local and plugin-provided skills that should be synced."""
+    skill_manager = SkillManager(skills_root=str(Path(get_astrbot_skills_path())))
+    sync_dirs: list[tuple[str, Path]] = []
+    for skill in skill_manager.list_skills(
+        active_only=False,
+        runtime="local",
+        show_sandbox_path=False,
+    ):
+        if skill.source_type == "sandbox_only":
+            continue
+        skill_md = Path(skill.path)
+        if not skill_md.is_file():
+            continue
+        sync_dirs.append((skill.name, skill_md.parent))
+    return sync_dirs
+
+
 def _discover_bay_credentials(endpoint: str) -> str:
     """Try to auto-discover Bay API key from credentials.json.
 
@@ -382,21 +400,24 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     Backward-compatible orchestrator: keep historical behavior while internally
     splitting into `apply` and `scan` phases.
     """
-    skills_root = Path(get_astrbot_skills_path())
-    if not skills_root.is_dir():
-        return
-    local_skill_dirs = _list_local_skill_dirs(skills_root)
+    sync_skill_dirs = _collect_sync_skill_dirs()
 
     temp_dir = Path(get_astrbot_temp_path())
     temp_dir.mkdir(parents=True, exist_ok=True)
     zip_base = temp_dir / "skills_bundle"
     zip_path = zip_base.with_suffix(".zip")
+    bundle_root = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"
 
     try:
-        if local_skill_dirs:
+        if sync_skill_dirs:
             if zip_path.exists():
                 zip_path.unlink()
-            shutil.make_archive(str(zip_base), "zip", str(skills_root))
+            if bundle_root.exists():
+                shutil.rmtree(bundle_root)
+            bundle_root.mkdir(parents=True)
+            for skill_name, skill_dir in sync_skill_dirs:
+                shutil.copytree(skill_dir, bundle_root / skill_name)
+            shutil.make_archive(str(zip_base), "zip", str(bundle_root))
             remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
             logger.info("Uploading skills bundle to sandbox...")
             await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
@@ -420,6 +441,11 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             len(managed),
         )
     finally:
+        if bundle_root.exists():
+            try:
+                shutil.rmtree(bundle_root)
+            except Exception:
+                logger.warning(f"Failed to remove temp skills bundle: {bundle_root}")
         if zip_path.exists():
             try:
                 zip_path.unlink()
