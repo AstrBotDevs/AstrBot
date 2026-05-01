@@ -6,6 +6,7 @@ import certifi
 import httpx
 import pytest
 
+from astrbot.core.star.updator import PluginUpdator
 from astrbot.core.zip_updator import RepoZipUpdator
 
 
@@ -139,6 +140,44 @@ def fake_async_client_state() -> _FakeAsyncClientState:
 
 
 @pytest.mark.asyncio
+async def test_plugin_updator_install_prefers_download_url(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls = {}
+    updator = PluginUpdator()
+    updator.plugin_store_path = str(tmp_path)
+
+    async def fake_download_file(url: str, path: str, timeout: float = 1800.0):  # noqa: ARG001
+        calls["download"] = (url, path)
+        Path(path).write_bytes(b"zip-data")
+
+    async def fail_download_from_repo_url(*args, **kwargs):  # noqa: ARG001
+        raise AssertionError("install should use download_url instead of GitHub")
+
+    def fake_unzip_file(zip_path: str, target_dir: str):
+        calls["unzip"] = (zip_path, target_dir)
+
+    monkeypatch.setattr(updator, "_download_file", fake_download_file)
+    monkeypatch.setattr(updator, "download_from_repo_url", fail_download_from_repo_url)
+    monkeypatch.setattr(updator, "unzip_file", fake_unzip_file)
+
+    plugin_path = await updator.install(
+        "https://github.com/Owner/plugin-name",
+        proxy="https://gh-proxy.example",
+        download_url="https://cdn.example/plugin.zip",
+    )
+
+    expected_path = tmp_path / "plugin_name"
+    assert plugin_path == str(expected_path)
+    assert calls["download"] == (
+        "https://cdn.example/plugin.zip",
+        str(expected_path) + ".zip",
+    )
+    assert calls["unzip"] == (str(expected_path) + ".zip", str(expected_path))
+
+
+@pytest.mark.asyncio
 async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
     monkeypatch: pytest.MonkeyPatch,
     fake_async_client_state: _FakeAsyncClientState,
@@ -187,7 +226,9 @@ async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
             "zipball_url": "https://example.com/astrbot.zip",
         }
     ]
-    assert fake_async_client_state.requested_urls == ["https://api.soulter.top/releases"]
+    assert fake_async_client_state.requested_urls == [
+        "https://api.soulter.top/releases"
+    ]
     assert fake_async_client_state.init_kwargs is not None
     assert fake_async_client_state.init_kwargs["follow_redirects"] is True
     assert fake_async_client_state.init_kwargs["timeout"] == 30.0
@@ -221,7 +262,9 @@ async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
         zip_updator_module,
         "download_file",
         lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("download_from_repo_url should not use aiohttp download_file")
+            AssertionError(
+                "download_from_repo_url should not use aiohttp download_file"
+            )
         ),
         raising=False,
     )

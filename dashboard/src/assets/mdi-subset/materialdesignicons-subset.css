@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 261 icons */
+/* Auto-generated MDI subset – 259 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -112,6 +112,10 @@
   content: "\F09D1";
 }
 
+.mdi-broadcast::before {
+  content: "\F1720";
+}
+
 .mdi-broom::before {
   content: "\F00E2";
 }
@@ -134,10 +138,6 @@
 
 .mdi-calendar-edit::before {
   content: "\F08A7";
-}
-
-.mdi-calendar-multiple::before {
-  content: "\F00F1";
 }
 
 .mdi-calendar-plus::before {
@@ -360,6 +360,10 @@
   content: "\F01DA";
 }
 
+.mdi-download-outline::before {
+  content: "\F0B8F";
+}
+
 .mdi-emoticon::before {
   content: "\F0C68";
 }
@@ -400,8 +404,8 @@
   content: "\F0215";
 }
 
-.mdi-file-code::before {
-  content: "\F022E";
+.mdi-file-code-outline::before {
+  content: "\F102B";
 }
 
 .mdi-file-delimited-outline::before {
@@ -462,10 +466,6 @@
 
 .mdi-filter-remove::before {
   content: "\F0234";
-}
-
-.mdi-filter-variant::before {
-  content: "\F0236";
 }
 
 .mdi-folder::before {
@@ -550,6 +550,10 @@
 
 .mdi-home::before {
   content: "\F02DC";
+}
+
+.mdi-hook::before {
+  content: "\F06E2";
 }
 
 .mdi-identifier::before {
@@ -760,10 +764,6 @@
   content: "\F03E4";
 }
 
-.mdi-pause-circle-outline::before {
-  content: "\F03E6";
-}
-
 .mdi-pencil::before {
   content: "\F03EB";
 }
@@ -794,10 +794,6 @@
 
 .mdi-play::before {
   content: "\F040A";
-}
-
-.mdi-play-circle-outline::before {
-  content: "\F040D";
 }
 
 .mdi-plus::before {
@@ -952,6 +948,10 @@
   content: "\F060D";
 }
 
+.mdi-sync::before {
+  content: "\F04E6";
+}
+
 .mdi-text::before {
   content: "\F09A8";
 }
@@ -1022,14 +1022,6 @@
 
 .mdi-view-dashboard::before {
   content: "\F056E";
-}
-
-.mdi-view-grid::before {
-  content: "\F0570";
-}
-
-.mdi-view-list::before {
-  content: "\F0572";
 }
 
 .mdi-volume-high::before {

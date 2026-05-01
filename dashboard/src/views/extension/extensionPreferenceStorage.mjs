@@ -1,11 +1,5 @@
-export const SHOW_RESERVED_PLUGINS_STORAGE_KEY = "showReservedPlugins";
-export const PLUGIN_LIST_VIEW_MODE_STORAGE_KEY = "pluginListViewMode";
-export const PIN_UPDATES_ON_TOP_STORAGE_KEY = "pinUpdatesOnTop";
+export const PINNED_EXTENSIONS_STORAGE_KEY = "astrbot.pinnedExtensions";
 
-/**
- * Resolve the storage backend for reading preferences.
- * Pass `null` to explicitly disable storage access in callers/tests.
- */
 const getStorageForRead = (storageOverride) => {
   if (storageOverride === null) {
     return null;
@@ -26,10 +20,6 @@ const getStorageForRead = (storageOverride) => {
   }
 };
 
-/**
- * Resolve the storage backend for writing preferences.
- * Pass `null` to explicitly disable storage access in callers/tests.
- */
 const getStorageForWrite = (storageOverride) => {
   if (storageOverride === null) {
     return null;
@@ -50,34 +40,49 @@ const getStorageForWrite = (storageOverride) => {
   }
 };
 
-export const readBooleanPreference = (key, fallback, storage) => {
+const normalizePinnedExtensions = (value) => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set();
+  return value
+    .filter((item) => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.trim())
+    .filter((item) => {
+      if (seen.has(item)) {
+        return false;
+      }
+      seen.add(item);
+      return true;
+    });
+};
+
+export const readPinnedExtensions = (storage) => {
   const targetStorage = getStorageForRead(storage);
   if (!targetStorage) {
-    return fallback;
+    return [];
   }
 
   try {
-    const saved = targetStorage.getItem(key);
-    if (saved === "true") {
-      return true;
-    }
-    if (saved === "false") {
-      return false;
-    }
-    return fallback;
+    const raw = targetStorage.getItem(PINNED_EXTENSIONS_STORAGE_KEY);
+    return normalizePinnedExtensions(raw ? JSON.parse(raw) : []);
   } catch {
-    return fallback;
+    return [];
   }
 };
 
-export const writeBooleanPreference = (key, value, storage) => {
+export const writePinnedExtensions = (names, storage) => {
   const targetStorage = getStorageForWrite(storage);
   if (!targetStorage) {
     return;
   }
 
   try {
-    targetStorage.setItem(key, String(value));
+    targetStorage.setItem(
+      PINNED_EXTENSIONS_STORAGE_KEY,
+      JSON.stringify(normalizePinnedExtensions(names)),
+    );
   } catch {
     // Ignore restricted storage environments.
   }

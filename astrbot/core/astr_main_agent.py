@@ -47,6 +47,9 @@ from astrbot.core.tools.computer_tools import (
     BrowserExecTool,
     CreateSkillCandidateTool,
     CreateSkillPayloadTool,
+    CuaKeyboardTypeTool,
+    CuaMouseClickTool,
+    CuaScreenshotTool,
     EvaluateSkillCandidateTool,
     ExecuteShellTool,
     FileDownloadTool,
@@ -149,6 +152,8 @@ class MainAgentBuildConfig:
     This enforce max turns before compression"""
     dequeue_context_length: int = 1
     """The number of oldest turns to remove when context length limit is reached."""
+    fallback_max_context_tokens: int = 128000
+    """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""
     llm_safety_mode: bool = True
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
@@ -395,6 +400,9 @@ async def _ensure_persona_and_skills(
     set_persona_custom_error_message_on_event(
         event, extract_persona_custom_error_message_from_persona(persona)
     )
+
+    if req.system_prompt is None:
+        req.system_prompt = ""
 
     if persona:
         # Inject persona system prompt
@@ -1015,6 +1023,22 @@ def _apply_sandbox_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
 
+    if booter == "cua":
+        req.system_prompt += (
+            "\n[CUA Desktop Control]\n"
+            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
+            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
+            "After each visible step, call `astrbot_cua_screenshot` with "
+            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
+            "monitor progress. When typing, inspect the screenshot first and confirm "
+            "the target field is focused and empty or safe to append to. Use "
+            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
+            "for text input; use text=`\\n` for Enter.\n"
+        )
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
+
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 
@@ -1345,6 +1369,11 @@ async def build_main_agent(
             provider.provider_config["max_context_tokens"] = model_info["limit"][
                 "context"
             ]
+        else:
+            # fallback: default to configured fallback value
+            provider.provider_config["max_context_tokens"] = (
+                config.fallback_max_context_tokens
+            )
 
     if event.get_platform_name() == "webchat":
         asyncio.create_task(_handle_webchat(event, req, provider))

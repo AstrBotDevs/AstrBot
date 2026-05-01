@@ -87,11 +87,12 @@
       ></v-checkbox>
     </div>
 
-    <v-select
+    <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
-      :items="getSelectItems(itemMeta)"
+      @update:model-value="val => { emitUpdate(val); listSearchText = '' }"
+      v-model:search="listSearchText"
+      :items="listSelectItems"
       item-title="title"
       item-value="value"
       :disabled="itemMeta?.readonly"
@@ -101,7 +102,7 @@
       hide-details
       chips
       multiple
-    ></v-select>
+    ></v-autocomplete>
 
     <v-select
       v-else-if="itemMeta?.options"
@@ -212,6 +213,9 @@
       v-else-if="itemMeta?.type === 'dict'"
       :model-value="modelValue"
       :item-meta="itemMeta"
+      :plugin-name="pluginName"
+      :plugin-i18n="pluginI18n"
+      :config-key="configKey"
       @update:model-value="emitUpdate"
       class="config-field"
     />
@@ -238,10 +242,12 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { usePluginI18n } from '@/utils/pluginI18n'
 
 const numericTemp = ref(null)
+const listSearchText = ref('')
 
 const props = defineProps({
   modelValue: {
@@ -255,6 +261,10 @@ const props = defineProps({
   pluginName: {
     type: String,
     default: ''
+  },
+  pluginI18n: {
+    type: Object,
+    default: () => ({})
   },
   configKey: {
     type: String,
@@ -273,10 +283,17 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'get-embedding-dim', 'open-fullscreen'])
 const { t } = useI18n()
 const { getRaw } = useModuleI18n('features/config-metadata')
+const { configText } = usePluginI18n()
 
 function emitUpdate(val) {
   emit('update:modelValue', val)
 }
+
+const listSelectItems = computed(() =>
+  props.itemMeta?.type === 'list' && props.itemMeta?.options
+    ? getSelectItems(props.itemMeta)
+    : []
+)
 
 function toNumber(val) {
   const n = parseFloat(val)
@@ -289,6 +306,17 @@ function getLabel(itemMeta, index, option) {
 }
 
 function getTranslatedLabels(itemMeta) {
+  if (
+    props.pluginName
+    && props.configKey
+    && props.pluginI18n
+    && Object.keys(props.pluginI18n).length > 0
+  ) {
+    const translatedLabels = configText(props.pluginI18n, props.configKey, 'labels', null)
+    if (Array.isArray(translatedLabels)) {
+      return translatedLabels
+    }
+  }
   if (!itemMeta?.labels) return null
   if (typeof itemMeta.labels === 'string') {
     const translatedLabels = getRaw(itemMeta.labels)

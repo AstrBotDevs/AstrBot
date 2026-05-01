@@ -9,8 +9,7 @@
     "handlersOperation": "管理行为"
   },
   "titles": {
-    "installedAstrBotPlugins": "已安装的 AstrBot 插件",
-    "pinnedPlugins": "置顶插件"
+    "installedAstrBotPlugins": "已安装的 AstrBot 插件"
   },
   "failedPlugins": {
     "title": "加载失败插件（{count}）",
@@ -53,18 +52,19 @@
     "selectFile": "选择文件",
     "refresh": "刷新",
     "updateAll": "更新全部插件",
-    "deleteSource": "删除源",
     "pin": "置顶",
     "unpin": "取消置顶",
+    "deleteSource": "删除源",
     "reshuffle": "随机一发"
   },
   "status": {
     "enabled": "启用",
     "disabled": "禁用",
     "system": "系统",
-    "loading": "加载中...",
-    "installed": "已安装",
-    "unknown": "未知"
+        "loading": "加载中...",
+        "installed": "已安装",
+        "unknown": "未知",
+        "incompatible": "不兼容"
   },
   "tooltips": {
     "enable": "点击启用",
@@ -94,7 +94,32 @@
   },
   "empty": {
     "noPlugins": "暂无插件",
-    "noPluginsDesc": "尝试安装插件或者显示系统插件"
+    "noPluginsDesc": "尝试安装插件或调整搜索条件"
+  },
+  "detail": {
+    "contents": "插件行为",
+    "noContents": "暂无行为",
+    "notFound": "未找到该插件",
+    "docsTitle": "文档",
+    "docsEmpty": "暂无文档",
+    "handlerGroups": {
+      "commands": "指令/指令组",
+      "hooks": "钩子",
+      "functionTools": "函数工具",
+      "eventListeners": "事件监听器"
+    },
+    "info": {
+      "title": "信息",
+      "version": "版本",
+      "author": "作者",
+      "category": "类别",
+      "stars": "Star数",
+            "tags": "标签",
+            "astrbotVersion": "AstrBot 版本要求",
+            "supportPlatforms": "支持平台",
+            "authorWebsite": "作者网站",
+      "repository": "仓库"
+    }
   },
   "market": {
     "recommended": "🥳 推荐",
@@ -133,8 +158,6 @@
     "sourceExists": "该插件源已存在",
     "installPlugin": "安装插件",
     "randomPlugins": "🎲 随机插件",
-    "showRandomPlugins": "显示随机插件",
-    "hideRandomPlugins": "隐藏随机插件",
     "sourceSafetyWarning": "即使是默认插件源，我们也不能完全保证插件的稳定性和安全性，使用前请谨慎核查。"
   },
   "sort": {
@@ -147,8 +170,7 @@
     "updated": "更新时间",
     "updateStatus": "更新状态",
     "ascending": "升序",
-    "descending": "降序",
-    "pinUpdatesOnTop": "有更新置顶"
+    "descending": "降序"
   },
   "tags": {
     "danger": "危险"
@@ -178,7 +200,10 @@
       "title": "安装插件",
       "fromFile": "从文件安装",
       "fromUrl": "从链接安装",
-      "supportPlatformsCount": "支持 {count} 个平台"
+      "supportPlatformsCount": "支持 {count} 个平台",
+      "sectionTitle": "安装",
+      "downloadSource": "将从以下位置安装插件包体：",
+      "githubSecurityWarning": "AstrBot 不能保证从 GitHub 上下载的插件的安全性。请确认你信任该插件来源后再安装。"
     },
     "danger_warning": {
       "title": "警告",
@@ -226,6 +251,7 @@
     "supportedFormats": "支持 .zip 格式的插件文件",
     "updateAllSuccess": "所有可更新的插件都已更新！",
     "updateAllFailed": "有 {failed}/{total} 个插件更新失败:",
+    "noUpdatesAvailable": "当前没有可更新的插件",
     "fillSourceNameAndUrl": "请填写完整的插件源名称和地址",
     "invalidUrl": "请输入有效的URL地址",
     "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址"
@@ -331,7 +357,17 @@
     "sourceSandboxOnly": "Sandbox 预置 Skill",
     "sourceBoth": "本地 + Sandbox",
     "sandboxDiscoveryPending": "尚未发现 Sandbox 预置 Skill。请至少启动一次 Sandbox 会话后再查看。",
-    "sandboxPresetReadonly": "Sandbox 预置 Skill 在此处为只读，无法在本地 Skills 页面删除或启用/禁用。"
+    "sandboxPresetReadonly": "Sandbox 预置 Skill 在此处为只读，无法在本地 Skills 页面删除或启用/禁用。",
+    "openEditor": "查看/编辑",
+    "editorTitle": "编辑 Skill",
+    "editorLoadFailed": "读取 Skill 文件失败",
+    "editorSaveFailed": "保存 Skill 文件失败",
+    "editorSaveSuccess": "保存成功",
+    "saveFile": "保存文件",
+    "readonly": "只读",
+    "unsaved": "未保存",
+    "noFileSelected": "未选择文件",
+    "discardChanges": "当前文件有未保存修改，确定要丢弃吗？"
   },
   "card": {
     "actions": {
