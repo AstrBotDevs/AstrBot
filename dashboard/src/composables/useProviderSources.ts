@@ -539,7 +539,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
   }
 
-  async function addModelProvider(modelName: string) {
+  function buildModelProviderConfig(modelName: string) {
     if (!selectedProviderSource.value) return
 
     const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
@@ -568,15 +568,20 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       max_context_tokens = metadata.limit.context
     }
 
-    const newProvider = {
+    return {
       id: newId,
-      enable: false,
+      enable: true,
       provider_source_id: sourceId,
       model: modelName,
       modalities,
       custom_extra_body: {},
       max_context_tokens: max_context_tokens
     }
+  }
+
+  async function addModelProvider(modelName: string) {
+    const newProvider = buildModelProviderConfig(modelName)
+    if (!newProvider) return
 
     try {
       const res = await axios.post('/api/config/provider/new', newProvider)
@@ -737,6 +742,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     deleteProviderSource,
     saveProviderSource,
     fetchAvailableModels,
+    buildModelProviderConfig,
     addModelProvider,
     deleteProvider,
     modelAlreadyConfigured,
