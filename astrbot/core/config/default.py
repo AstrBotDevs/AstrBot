@@ -2943,6 +2943,11 @@ CONFIG_METADATA_2 = {
             "callback_api_base": {
                 "type": "string",
             },
+            "disable_metrics": {
+                "description": "禁用匿名使用统计",
+                "type": "bool",
+                "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。",
+            },
             "log_level": {
                 "type": "string",
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
@@ -3820,11 +3825,6 @@ CONFIG_METADATA_3 = {
                         "description": "禁用自带指令",
                         "type": "bool",
                         "hint": "禁用所有 AstrBot 的自带指令，如 help, provider, model 等。",
-                    },
-                    "disable_metrics": {
-                        "description": "禁用匿名使用统计",
-                        "type": "bool",
-                        "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。",
                     },
                 },
             },
