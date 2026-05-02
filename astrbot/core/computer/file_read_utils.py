@@ -73,7 +73,7 @@ class FileProbe:
 
 @dataclass(frozen=True)
 class ParsedDocument:
-    kind: Literal["docx", "pdf"]
+    kind: Literal["docx", "epub", "pdf"]
     file_bytes: bytes
     text: str
 
@@ -91,7 +91,7 @@ print(
     json.dumps(
         {{
             "size_bytes": path.stat().st_size,
-            "sample_b64": base64.b64encode(sample).decode("ascii"),
+            "sample_b64": base64.b64encode(sample).decode("utf-8"),
         }}
     )
 )
@@ -140,7 +140,7 @@ print(
     json.dumps(
         {{
             "size_bytes": len(data),
-            "base64": base64.b64encode(data).decode("ascii"),
+            "base64": base64.b64encode(data).decode("utf-8"),
         }}
     )
 )
@@ -278,7 +278,7 @@ async def _probe_local_file(path: str) -> dict[str, str | int]:
             sample = file_obj.read(_FILE_SNIFF_BYTES)
         return {
             "size_bytes": file_path.stat().st_size,
-            "sample_b64": base64.b64encode(sample).decode("ascii"),
+            "sample_b64": base64.b64encode(sample).decode("utf-8"),
         }
 
     return await to_thread(_run)
@@ -289,7 +289,7 @@ async def _read_local_image_base64(path: str) -> dict[str, str | int]:
         data = Path(path).read_bytes()
         return {
             "size_bytes": len(data),
-            "base64": base64.b64encode(data).decode("ascii"),
+            "base64": base64.b64encode(data).decode("utf-8"),
         }
 
     return await to_thread(_run)
@@ -319,7 +319,7 @@ async def _compress_image_bytes_to_base64(data: bytes) -> dict[str, str | int]:
 
         return {
             "size_bytes": len(compressed_bytes),
-            "base64": base64.b64encode(compressed_bytes).decode("ascii"),
+            "base64": base64.b64encode(compressed_bytes).decode("utf-8"),
             "mime_type": "image/jpeg",
         }
 
@@ -371,6 +371,18 @@ def _is_docx_bytes(file_bytes: bytes) -> bool:
     return any(name.startswith("word/") for name in names)
 
 
+def _is_epub_bytes(file_bytes: bytes) -> bool:
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as archive:
+            names = set(archive.namelist())
+            with archive.open("mimetype") as mimetype_file:
+                mimetype = mimetype_file.read(64).decode("utf-8").strip()
+    except (KeyError, OSError, UnicodeDecodeError, zipfile.BadZipFile):
+        return False
+
+    return mimetype == "application/epub+zip" and "META-INF/container.xml" in names
+
+
 async def _parse_local_docx_text(file_bytes: bytes, file_name: str) -> str:
     from astrbot.core.knowledge_base.parsers.markitdown_parser import (
         MarkitdownParser,
@@ -387,22 +399,47 @@ async def _parse_local_pdf_text(file_bytes: bytes, file_name: str) -> str:
     return result.text
 
 
+async def _parse_local_epub_text(file_bytes: bytes, file_name: str) -> str:
+    from astrbot.core.knowledge_base.parsers.epub_parser import EpubParser
+
+    result = await EpubParser().parse(file_bytes, file_name)
+    return result.text
+
+
 async def _parse_local_supported_document(
     path: str,
     sample: bytes,
 ) -> ParsedDocument | None:
     file_name = Path(path).name
+    suffix = Path(path).suffix.lower()
     if _looks_like_pdf(path, sample):
         file_bytes = await _read_local_file_bytes(path)
         text = await _parse_local_pdf_text(file_bytes, file_name)
         return ParsedDocument(kind="pdf", file_bytes=file_bytes, text=text)
 
-    if Path(path).suffix.lower() == ".docx" or _looks_like_zip_container(sample):
+    if suffix == ".epub":
+        file_bytes = await _read_local_file_bytes(path)
+        if not _is_epub_bytes(file_bytes):
+            return None
+        text = await _parse_local_epub_text(file_bytes, file_name)
+        return ParsedDocument(kind="epub", file_bytes=file_bytes, text=text)
+
+    if suffix == ".docx":
         file_bytes = await _read_local_file_bytes(path)
         if not _is_docx_bytes(file_bytes):
             return None
         text = await _parse_local_docx_text(file_bytes, file_name)
         return ParsedDocument(kind="docx", file_bytes=file_bytes, text=text)
+
+    if _looks_like_zip_container(sample):
+        file_bytes = await _read_local_file_bytes(path)
+        if _is_epub_bytes(file_bytes):
+            text = await _parse_local_epub_text(file_bytes, file_name)
+            return ParsedDocument(kind="epub", file_bytes=file_bytes, text=text)
+        if _is_docx_bytes(file_bytes):
+            text = await _parse_local_docx_text(file_bytes, file_name)
+            return ParsedDocument(kind="docx", file_bytes=file_bytes, text=text)
+        return None
 
     return None
 
@@ -659,14 +696,14 @@ async def read_file_tool_result(
             return "Error reading file: image payload is empty."
         raw_bytes = base64.b64decode(raw_base64_data)
         compressed_payload = await _compress_image_bytes_to_base64(raw_bytes)
-        base64_data = str(compressed_payload.get("base64", "") or "")
-        if not base64_data:
+        compressed_base64_data = str(compressed_payload.get("base64", "") or "")
+        if not compressed_base64_data:
             return "Error reading file: compressed image payload is empty."
         return mcp.types.CallToolResult(
             content=[
                 mcp.types.ImageContent(
                     type="image",
-                    data=base64_data,
+                    data=compressed_base64_data,
                     mimeType=str(
                         compressed_payload.get("mime_type", "") or "image/jpeg"
                     ),

@@ -5,13 +5,12 @@
 >
 > 以下教程默认您的设备上已经安装 Python，并且版本 `>=3.10`
 
-
 ## 下载/克隆仓库
 
 如果你的电脑上安装了 `git`，你可以通过以下命令来下载源码：
 
 ```bash
-git clone https://github.com/AstrBotDevs/AstrBot.git
+git clone https://github.com/AstrBotDevs/AstrBot
 # 上面的代码默认会拉取最新的提交的源码，如果你需要拉取最新稳定发行版本的源码，可以使用以下命令：
 # git clone --depth=1 --branch $(git ls-remote --tags --sort='-v:refname' https://github.com/AstrBotDevs/AstrBot.git | head -n1 | awk -F/ '{print $3}') https://github.com/AstrBotDevs/AstrBot.git
 cd AstrBot

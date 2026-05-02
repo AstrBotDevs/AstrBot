@@ -92,6 +92,95 @@ def _make_large_text() -> str:
     return "".join(f"line-{index:05d}-{'x' * 48}\n" for index in range(6000))
 
 
+def _make_epub_bytes(*, chapter_count: int = 1) -> bytes:
+    manifest_items = [
+        '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>'
+    ]
+    spine_items = ['<itemref idref="nav"/>']
+    nav_links = []
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, mode="w") as archive:
+        archive.writestr(
+            "mimetype",
+            "application/epub+zip",
+            compress_type=zipfile.ZIP_STORED,
+        )
+        archive.writestr(
+            "META-INF/container.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>
+""",
+        )
+
+        for index in range(1, chapter_count + 1):
+            manifest_items.append(
+                f'<item id="chapter{index}" href="chapter{index}.xhtml" '
+                'media-type="application/xhtml+xml"/>'
+            )
+            spine_items.append(f'<itemref idref="chapter{index}"/>')
+            nav_links.append(f'<li><a href="chapter{index}.xhtml">Chapter {index}</a></li>')
+            archive.writestr(
+                f"OEBPS/chapter{index}.xhtml",
+                f"""<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>Chapter {index}</title>
+  </head>
+  <body>
+    <h1>Chapter {index}</h1>
+    <p>Paragraph {index}</p>
+  </body>
+</html>
+""",
+            )
+
+        archive.writestr(
+            "OEBPS/nav.xhtml",
+            """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>Navigation</title>
+  </head>
+  <body>
+    <nav epub:type="toc" xmlns:epub="http://www.idpf.org/2007/ops">
+      <ol>
+        {links}
+      </ol>
+    </nav>
+  </body>
+</html>
+""".format(links="".join(nav_links)),
+        )
+        archive.writestr(
+            "OEBPS/content.opf",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">test-book</dc:identifier>
+    <dc:title>Test Book</dc:title>
+    <dc:language>en</dc:language>
+  </metadata>
+  <manifest>
+    {manifest}
+  </manifest>
+  <spine>
+    {spine}
+  </spine>
+</package>
+""".format(
+                manifest="".join(manifest_items),
+                spine="".join(spine_items),
+            ),
+        )
+
+    return buffer.getvalue()
+
+
 def test_detect_text_encoding_allows_utf8_probe_cut_mid_character():
     sample = '{"results": ["中文内容"]}'.encode()[:-1]
 
@@ -228,6 +317,36 @@ async def test_file_read_tool_reads_docx_via_parser_and_magic(
     )
 
     assert result == "doc-line-1\ndoc-line-2\n"
+
+
+def test_is_epub_bytes_rejects_plain_zip_archive():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, mode="w") as archive:
+        archive.writestr("README.txt", "hello")
+
+    assert file_read_utils._is_epub_bytes(buffer.getvalue()) is False
+
+
+@pytest.mark.asyncio
+async def test_file_read_tool_reads_epub_via_parser_and_magic(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    epub_path = workspace / "novel.bin"
+    epub_path.write_bytes(_make_epub_bytes(chapter_count=2))
+
+    async def _fake_parse_epub(_file_bytes: bytes, _file_name: str) -> str:
+        return "# Chapter 1\n\nParagraph 1\n"
+
+    monkeypatch.setattr(file_read_utils, "_parse_local_epub_text", _fake_parse_epub)
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(),
+        path="novel.bin",
+    )
+
+    assert result == "# Chapter 1\n\nParagraph 1\n"
 
 
 @pytest.mark.asyncio

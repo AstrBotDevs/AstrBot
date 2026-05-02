@@ -39,6 +39,9 @@
   "actions": {
     "copy": "Копировать",
     "regenerate": "Перегенерировать",
+    "retry": "Повторить",
+    "retryWithModel": "Использовать другую модель",
+    "noAvailableModels": "Нет доступных моделей",
     "like": "Нравится",
     "dislike": "Не нравится",
     "share": "Поделиться",
@@ -59,6 +62,15 @@
   "toolStatus": {
     "done": "Готово",
     "running": "Выполняется"
+  },
+  "thread": {
+    "title": "Thread",
+    "askInThread": "Спросить в ветке",
+    "count": "Веток: {count}",
+    "createFailed": "Не удалось создать ветку",
+    "delete": "Удалить ветку",
+    "confirmDelete": "Удалить эту ветку? Это действие необратимо.",
+    "placeholder": "Спросить об этом фрагменте..."
   },
   "conversation": {
     "newConversation": "Новый чат",
@@ -101,7 +113,9 @@
     "title": "Конфигурация"
   },
   "reasoning": {
-    "thinking": "Рассуждение"
+    "thinking": "Рассуждение",
+    "think": "Размышление",
+    "toolUsed": "Использование инструмента"
   },
   "reply": {
     "replyTo": "В ответ на",
@@ -123,9 +137,9 @@
   },
   "stats": {
     "tokens": "Токены",
-    "inputTokens": "Входящие",
+    "inputTokens": "Входящие (прочие)",
     "outputTokens": "Исходящие",
-    "cachedTokens": "Кэшированные",
+    "cachedTokens": "Входящие (кэш)",
     "duration": "Время",
     "ttft": "Время до первого токена"
   },

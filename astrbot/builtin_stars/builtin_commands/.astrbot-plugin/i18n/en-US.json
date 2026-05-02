@@ -1,0 +1,6 @@
+{
+  "metadata": {
+    "display_name": "Built-in Commands",
+    "desc": "AstrBot's internal plugin, providing built-in commands such as /reset, /help, and /sid."
+  }
+}

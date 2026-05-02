@@ -409,6 +409,7 @@ class PluginRoute(Route):
                 "support_platforms": plugin.support_platforms,
                 "astrbot_version": plugin.astrbot_version,
                 "installed_at": self._get_plugin_installed_at(plugin),
+                "i18n": plugin.i18n,
             }
             # 检查是否为全空的幽灵插件
             if not any(
@@ -503,6 +504,7 @@ class PluginRoute(Route):
 
         post_data = await request.get_json()
         repo_url = post_data["url"]
+        download_url = str(post_data.get("download_url") or "").strip()
         ignore_version_check = bool(post_data.get("ignore_version_check", False))
 
         proxy: str = post_data.get("proxy", None)
@@ -515,6 +517,7 @@ class PluginRoute(Route):
                 repo_url,
                 proxy,
                 ignore_version_check=ignore_version_check,
+                download_url=download_url,
             )
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {repo_url} 成功。")

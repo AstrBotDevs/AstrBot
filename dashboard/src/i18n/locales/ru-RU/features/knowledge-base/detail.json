@@ -1,6 +1,9 @@
 ﻿{
     "title": "Детали базы знаний",
     "backToList": "К списку",
+    "breadcrumb": {
+        "list": "Базы знаний"
+    },
     "tabs": {
         "overview": "Обзор",
         "documents": "Документы",
@@ -46,7 +49,7 @@
         "title": "Добавление контента",
         "selectFile": "Файл",
         "dropzone": "Нажмите или перетащите файл сюда",
-        "supportedFormats": "Форматы: ",
+        "supportedFormats": "Форматы: .txt, .md, .pdf, .docx, .epub, .xls, .xlsx",
         "maxSize": "Максимум: 128MB",
         "chunkSettings": "Фрагментация",
         "batchSettings": "Пакетная обработка",

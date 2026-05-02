@@ -18,6 +18,7 @@ from astrbot.core.db.po import (
     PlatformStat,
     Preference,
     SessionProjectRelation,
+    WebChatThread,
 )
 from astrbot.core.knowledge_base.models import (
     KBDocument,
@@ -46,6 +47,7 @@ MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "preferences": Preference,
     "platform_message_history": PlatformMessageHistory,
     "platform_sessions": PlatformSession,
+    "webchat_threads": WebChatThread,
     "chatui_projects": ChatUIProject,
     "session_project_relations": SessionProjectRelation,
     "attachments": Attachment,
