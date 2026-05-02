@@ -296,7 +296,9 @@ class PluginRoute(Route):
 
             remote_md5 = await self._fetch_remote_md5(source.md5_url)
             if remote_md5 is None:
-                logger.warning("Cannot fetch remote MD5, using cache without validation")
+                logger.warning(
+                    "Cannot fetch remote MD5, using cache without validation"
+                )
                 return True  # 如果无法获取远程MD5，认为缓存有效
 
             is_valid = cached_md5 == remote_md5
