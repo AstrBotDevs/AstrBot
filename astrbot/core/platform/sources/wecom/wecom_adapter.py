@@ -4,7 +4,9 @@ import sys
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, cast
+from urllib.parse import unquote
 
 import quart
 from requests import Response
@@ -15,7 +17,7 @@ from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.messages import BaseMessage
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Image, Plain, Record
+from astrbot.api.message_components import File, Image, Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -38,6 +40,27 @@ if sys.version_info >= (3, 12):
     from typing import override
 else:
     from typing_extensions import override
+
+
+def _extract_wecom_media_filename(disposition: str | None) -> str | None:
+    if not disposition:
+        return None
+
+    for part in disposition.split(";"):
+        token = part.strip()
+        token_lower = token.lower()
+        if token_lower.startswith("filename*="):
+            value = token.split("=", 1)[1].strip().strip('"')
+            if value.lower().startswith("utf-8''"):
+                value = value[7:]
+            filename = Path(unquote(value).replace("\\", "/")).name
+            return filename or None
+        if token_lower.startswith("filename="):
+            value = token.split("=", 1)[1].strip().strip('"')
+            filename = Path(value.replace("\\", "/")).name
+            return filename or None
+
+    return None
 
 
 class WecomServer:
@@ -459,6 +482,29 @@ class WecomPlatformAdapter(Platform):
                 return
 
             abm.message = [Record(file=path_wav, url=path_wav)]
+        elif msgtype == "file":
+            media_id = msg.get("file", {}).get("media_id", "")
+            if not media_id:
+                logger.warning(f"微信客服文件消息缺少 media_id: {msg}")
+                return
+
+            resp: Response = await asyncio.get_running_loop().run_in_executor(
+                None,
+                self.client.media.download,
+                media_id,
+            )
+
+            file_name = (
+                _extract_wecom_media_filename(
+                    resp.headers.get("Content-Disposition"),
+                )
+                or f"weixinkefu_{media_id}.bin"
+            )
+            temp_dir = Path(get_astrbot_temp_path())
+            file_path = temp_dir / f"weixinkefu_{uuid.uuid4().hex}_{file_name}"
+            file_path.write_bytes(resp.content)
+
+            abm.message = [File(name=file_name, file=str(file_path))]
         else:
             logger.warning(f"未实现的微信客服消息事件: {msg}")
             return
