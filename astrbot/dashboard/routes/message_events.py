@@ -5,6 +5,7 @@ def build_message_saved_event(
     saved_record,
     refs: dict | None = None,
     *,
+    llm_checkpoint_id: str | None = None,
     chat_mode: bool = False,
 ) -> dict:
     payload = {
@@ -16,6 +17,8 @@ def build_message_saved_event(
     }
     if refs:
         payload["data"]["refs"] = refs
+    if llm_checkpoint_id is not None:
+        payload["data"]["llm_checkpoint_id"] = llm_checkpoint_id
     if chat_mode:
         payload["ct"] = "chat"
     return payload

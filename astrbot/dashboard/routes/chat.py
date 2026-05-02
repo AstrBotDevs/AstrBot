@@ -922,9 +922,7 @@ class ChatRoute(Route):
                                 saved_info = build_message_saved_event(
                                     saved_record,
                                     saved_refs,
-                                )
-                                saved_info["data"]["llm_checkpoint_id"] = (
-                                    llm_checkpoint_id
+                                    llm_checkpoint_id=llm_checkpoint_id,
                                 )
                                 try:
                                     yield f"data: {json.dumps(saved_info, ensure_ascii=False)}\n\n"

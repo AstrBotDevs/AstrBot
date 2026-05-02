@@ -600,6 +600,7 @@ class LiveChatRoute(Route):
                             build_message_saved_event(
                                 saved_record,
                                 saved_refs,
+                                llm_checkpoint_id=llm_checkpoint_id,
                                 chat_mode=True,
                             ),
                         )

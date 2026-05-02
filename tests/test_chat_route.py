@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.dashboard.routes.chat import _poll_webchat_stream_result
 from astrbot.dashboard.routes.message_events import build_message_saved_event
-from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 
 class _QueueThatRaises:
@@ -84,6 +84,33 @@ def test_build_message_saved_event_includes_refs(chat_mode: bool):
             "id": 42,
             "created_at": to_utc_isoformat(saved_record.created_at),
             "refs": refs,
+        },
+    }
+    if chat_mode:
+        expected["ct"] = "chat"
+
+    assert payload == expected
+
+
+@pytest.mark.parametrize("chat_mode", [False, True])
+def test_build_message_saved_event_includes_checkpoint_id(chat_mode: bool):
+    saved_record = SimpleNamespace(
+        id=42,
+        created_at=datetime(2026, 4, 21, 12, 0, tzinfo=timezone.utc),
+    )
+
+    payload = build_message_saved_event(
+        saved_record,
+        llm_checkpoint_id="checkpoint-1",
+        chat_mode=chat_mode,
+    )
+
+    expected = {
+        "type": "message_saved",
+        "data": {
+            "id": 42,
+            "created_at": to_utc_isoformat(saved_record.created_at),
+            "llm_checkpoint_id": "checkpoint-1",
         },
     }
     if chat_mode:

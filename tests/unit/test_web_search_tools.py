@@ -122,9 +122,14 @@ def test_normalize_legacy_web_search_config_migrates_firecrawl_and_exa_keys():
 @pytest.mark.parametrize(
     ("search_type", "expected"),
     [
+        ("auto", "auto"),
+        ("neural", "neural"),
+        ("fast", "fast"),
         ("deep-lite", "deep-lite"),
+        ("deep", "deep"),
         ("deep-reasoning", "deep-reasoning"),
         ("instant", "instant"),
+        (" INSTANT ", "instant"),
         ("unsupported", "auto"),
     ],
 )
@@ -152,6 +157,56 @@ async def test_exa_web_search_tool_normalizes_search_type(
 
     assert result == "Error: Exa web searcher does not return any results."
     assert captured["payload"]["type"] == expected
+
+
+@pytest.mark.asyncio
+async def test_exa_web_search_tool_uses_default_for_invalid_max_results(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict[str, object] = {}
+
+    async def fake_exa_search(provider_settings: dict, payload: dict, timeout: int):
+        captured["payload"] = payload
+        return []
+
+    monkeypatch.setattr(tools, "_exa_search", fake_exa_search)
+
+    tool = tools.ExaWebSearchTool()
+    result = await tool.call(
+        _context_with_provider_settings({"websearch_exa_key": ["test-key"]}),
+        query="AstrBot",
+        max_results="not-a-number",
+    )
+
+    assert result == "Error: Exa web searcher does not return any results."
+    assert captured["payload"]["numResults"] == 10
+
+
+@pytest.mark.asyncio
+async def test_exa_find_similar_uses_default_for_invalid_max_results(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict[str, object] = {}
+
+    async def fake_exa_find_similar(
+        provider_settings: dict,
+        payload: dict,
+        timeout: int,
+    ):
+        captured["payload"] = payload
+        return []
+
+    monkeypatch.setattr(tools, "_exa_find_similar", fake_exa_find_similar)
+
+    tool = tools.ExaFindSimilarTool()
+    result = await tool.call(
+        _context_with_provider_settings({"websearch_exa_key": ["test-key"]}),
+        url="https://example.com",
+        max_results="not-a-number",
+    )
+
+    assert result == "Error: Exa find similar does not return any results."
+    assert captured["payload"]["numResults"] == 10
 
 
 def test_get_exa_base_url_rejects_endpoint_path():
@@ -253,6 +308,45 @@ async def test_exa_helpers_preserve_favicon(
 
     assert captured["url"]
     assert results[0].favicon == "https://example.com/favicon.ico"
+
+
+@pytest.mark.asyncio
+async def test_exa_extract_raises_status_error(monkeypatch: pytest.MonkeyPatch):
+    response_payload = {
+        "results": [],
+        "statuses": [
+            {
+                "id": "https://example.com/missing",
+                "status": "error",
+                "error": {
+                    "tag": "CRAWL_NOT_FOUND",
+                    "httpStatusCode": 404,
+                },
+            }
+        ],
+    }
+    captured: dict[str, object] = {}
+
+    async def fake_get(provider_settings: dict) -> str:
+        return "test-key"
+
+    monkeypatch.setattr(tools._EXA_KEY_ROTATOR, "get", fake_get)
+    monkeypatch.setattr(
+        tools.aiohttp,
+        "ClientSession",
+        lambda **kwargs: _FakeExaSession(response_payload, captured),
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        await tools._exa_extract(
+            {"websearch_exa_key": ["test-key"]},
+            {"urls": ["https://example.com/missing"], "text": True},
+        )
+
+    assert str(exc_info.value) == (
+        "Error: Exa content extraction failed: "
+        "https://example.com/missing: CRAWL_NOT_FOUND (HTTP 404)"
+    )
 
 
 @pytest.mark.asyncio

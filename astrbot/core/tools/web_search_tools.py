@@ -146,6 +146,20 @@ def _normalize_timeout(timeout: int | float | str | None) -> aiohttp.ClientTimeo
     return aiohttp.ClientTimeout(total=max(timeout_value, MIN_WEB_SEARCH_TIMEOUT))
 
 
+def _normalize_count(
+    value: int | float | str | None,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    try:
+        count = int(value) if value is not None else default
+    except (TypeError, ValueError):
+        count = default
+    return max(minimum, min(count, maximum))
+
+
 def _cache_favicon(url: str, favicon: str | None) -> None:
     if favicon:
         sp.temporary_cache["_ws_favicon"][url] = favicon
@@ -194,6 +208,26 @@ def _search_result_payload(results: list[SearchResult]) -> str:
         )
         _cache_favicon(result.url, result.favicon)
     return json.dumps({"results": ret_ls}, ensure_ascii=False)
+
+
+def _format_exa_contents_status_error(statuses: list[dict]) -> str | None:
+    failed_statuses = [
+        status
+        for status in statuses
+        if status.get("status") and status["status"] != "success"
+    ]
+    if not failed_statuses:
+        return None
+
+    errors = []
+    for status in failed_statuses:
+        error = status.get("error") or {}
+        details = error.get("tag") or "unknown error"
+        http_status = error.get("httpStatusCode")
+        if http_status is not None:
+            details = f"{details} (HTTP {http_status})"
+        errors.append(f"{status.get('id', 'unknown URL')}: {details}")
+    return "Error: Exa content extraction failed: " + "; ".join(errors)
 
 
 async def _tavily_search(
@@ -526,6 +560,11 @@ async def _exa_extract(
                     )
                 )
             data = await response.json()
+            status_error = _format_exa_contents_status_error(
+                data.get("statuses", []),
+            )
+            if status_error:
+                raise ValueError(status_error)
             return data.get("results", [])
 
 
@@ -756,7 +795,12 @@ class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
         if search_type not in _EXA_SEARCH_TYPES:
             search_type = "auto"
 
-        max_results = max(1, min(int(kwargs.get("max_results", 10)), 100))
+        max_results = _normalize_count(
+            kwargs.get("max_results"),
+            default=10,
+            minimum=1,
+            maximum=100,
+        )
         payload = {
             "query": kwargs["query"],
             "numResults": max_results,
@@ -871,7 +915,12 @@ class ExaFindSimilarTool(FunctionTool[AstrAgentContext]):
             provider_settings,
             {
                 "url": url,
-                "numResults": max(1, min(int(kwargs.get("max_results", 10)), 100)),
+                "numResults": _normalize_count(
+                    kwargs.get("max_results"),
+                    default=10,
+                    minimum=1,
+                    maximum=100,
+                ),
                 "contents": {"text": {"maxCharacters": 500}},
             },
             timeout=kwargs.get("timeout", MIN_WEB_SEARCH_TIMEOUT),
