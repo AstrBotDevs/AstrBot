@@ -282,44 +282,48 @@ const installDialogPluginLogo = computed(() => {
 
           <!-- 已安装的 MCP 服务器标签页内容 -->
           <v-tab-item v-if="activeTab === 'mcp'">
-            <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex flex-column" style="gap: 6px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.installedMcpServers") }}</h2>
-                <div class="text-body-2 text-medium-emphasis">
-                  {{ t("features.tooluse.mcpServers.description") }}
+            <div class="extension-detail-width">
+              <div class="mb-4 pt-4 pb-4">
+                <div class="d-flex flex-column" style="gap: 6px">
+                  <h2 class="text-h2 mb-0">{{ tm("tabs.installedMcpServers") }}</h2>
+                  <div class="text-body-2 text-medium-emphasis">
+                    {{ t("features.tooluse.mcpServers.description") }}
+                  </div>
                 </div>
               </div>
+              <v-card
+                class="rounded-lg"
+                variant="flat"
+                style="background-color: transparent"
+              >
+                <v-card-text class="pa-0">
+                  <McpServersSection />
+                </v-card-text>
+              </v-card>
             </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <McpServersSection />
-              </v-card-text>
-            </v-card>
           </v-tab-item>
 
           <!-- Skills 标签页内容 -->
           <v-tab-item v-if="activeTab === 'skills'">
-            <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex flex-column" style="gap: 6px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
-                <div class="text-body-2 text-medium-emphasis">
-                  {{ tm("skills.runtimeHint") }}
+            <div class="extension-detail-width">
+              <div class="mb-4 pt-4 pb-4">
+                <div class="d-flex flex-column" style="gap: 6px">
+                  <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
+                  <div class="text-body-2 text-medium-emphasis">
+                    {{ tm("skills.runtimeHint") }}
+                  </div>
                 </div>
               </div>
+              <v-card
+                class="rounded-lg"
+                variant="flat"
+                style="background-color: transparent"
+              >
+                <v-card-text class="pa-0">
+                  <SkillsSection />
+                </v-card-text>
+              </v-card>
             </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <SkillsSection />
-              </v-card-text>
-            </v-card>
           </v-tab-item>
 
           <!-- 插件市场标签页内容 -->
@@ -1099,6 +1103,12 @@ const installDialogPluginLogo = computed(() => {
 .fab-button:hover {
   transform: translateY(-4px) scale(1.05);
   box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+}
+
+.extension-detail-width {
+  margin: 0 auto;
+  max-width: 1040px;
+  width: 100%;
 }
 
 .market-install-confirm {

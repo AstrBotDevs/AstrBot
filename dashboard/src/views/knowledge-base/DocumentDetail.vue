@@ -422,7 +422,7 @@ onMounted(() => {
 <style scoped>
 .document-detail-page {
   padding: 24px;
-  max-width: 1400px;
+  max-width: 1040px;
   margin: 0 auto;
   animation: fadeIn 0.3s ease;
 }

@@ -304,7 +304,6 @@ def save_config(
 ) -> None:
     """验证并保存配置"""
     errors = None
-    logger.info(f"Saving config, is_core={is_core}")
 
     # Snapshot old Computer config for change detection
     if is_core:
@@ -992,10 +991,6 @@ class ConfigRoute(Route):
             terminate_fn = getattr(inst, "terminate", None)
             if inspect.iscoroutinefunction(terminate_fn):
                 await terminate_fn()
-
-            logger.info(
-                f"获取到 provider_source {provider_source_id} 的模型列表: {models}",
-            )
 
             return (
                 Response()
