@@ -98,7 +98,7 @@
                 @toggle-provider-enable="toggleProviderEnable"
                 @test-provider="testProvider"
                 @delete-provider="deleteProvider"
-                @add-model-provider="addModelProvider"
+                @add-model-provider="openModelAddDialog"
               />
             </section>
           </div>
@@ -140,13 +140,12 @@
     </v-dialog>
 
     <v-dialog v-model="showProviderEditDialog" width="800">
-      <v-card :title="providerEditData?.id || tm('dialogs.config.editTitle')">
+      <v-card :title="providerEditDialogTitle">
         <v-card-text class="py-4">
-          <small style="color: gray;">不建议修改 ID，可能会导致指向该模型的相关配置（如默认模型、插件相关配置等）失效。旧版本 AstrBot 的 “提供商 ID” 是下方的 “ID”。</small>
           <AstrBotConfig
             v-if="providerEditData"
             :iterable="providerEditData"
-            :metadata="configSchema"
+            :metadata="providerModelConfigSchema"
             metadataKey="provider"
             :is-editing="true"
           />
@@ -179,11 +178,11 @@
 
 <script setup>
 import { ref } from 'vue'
-import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
+import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
 import { useProviderSources } from '@/composables/useProviderSources'
 
 const props = defineProps({
@@ -235,7 +234,7 @@ const {
   deleteProviderSource,
   saveProviderSource,
   fetchAvailableModels,
-  addModelProvider,
+  buildModelProviderConfig,
   deleteProvider,
   testProvider,
   toggleProviderEnable,
@@ -248,10 +247,25 @@ const {
 })
 
 const showManualModelDialog = ref(false)
-const showProviderEditDialog = ref(false)
-const providerEditData = ref(null)
-const providerEditOriginalId = ref('')
-const savingProviders = ref([])
+
+const {
+  showProviderEditDialog,
+  providerEditData,
+  savingProviders,
+  providerModelConfigSchema,
+  providerEditDialogTitle,
+  openProviderEdit,
+  openModelAddDialog,
+  saveEditedProvider
+} = useProviderModelConfigDialog({
+  selectedProviderSource,
+  configSchema,
+  buildModelProviderConfig,
+  modelAlreadyConfigured,
+  loadConfig,
+  tm,
+  showMessage
+})
 
 function openManualModelDialog() {
   if (!selectedProviderSource.value) {
@@ -276,39 +290,10 @@ async function confirmManualModel() {
     showMessage(tm('models.manualModelExists'), 'error')
     return
   }
-  await addModelProvider(modelId)
   showManualModelDialog.value = false
+  openModelAddDialog(modelId)
 }
 
-function openProviderEdit(provider) {
-  providerEditData.value = JSON.parse(JSON.stringify(provider))
-  providerEditOriginalId.value = provider.id
-  showProviderEditDialog.value = true
-}
-
-async function saveEditedProvider() {
-  if (!providerEditData.value) return
-
-  savingProviders.value.push(providerEditData.value.id)
-  try {
-    const res = await axios.post('/api/config/provider/update', {
-      id: providerEditOriginalId.value || providerEditData.value.id,
-      config: providerEditData.value
-    })
-
-    if (res.data.status === 'error') {
-      throw new Error(res.data.message)
-    }
-
-    showMessage(res.data.message || tm('providerSources.saveSuccess'))
-    showProviderEditDialog.value = false
-    await loadConfig()
-  } catch (err) {
-    showMessage(err.response?.data?.message || err.message || tm('providerSources.saveError'), 'error')
-  } finally {
-    savingProviders.value = savingProviders.value.filter(id => id !== providerEditData.value?.id)
-  }
-}
 </script>
 
 <style scoped>

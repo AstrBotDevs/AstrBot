@@ -1178,7 +1178,7 @@
       },
       "modalities": {
         "description": "模型能力",
-        "hint": "模型支持的模态。如所填写的模型不支持图像，请取消勾选图像。",
+        "hint": "模型支持的模态及能力。",
         "labels": [
           "文本",
           "图像",
@@ -1187,7 +1187,7 @@
         ]
       },
       "custom_headers": {
-        "description": "自定义添加请求头",
+        "description": "自定义请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
       },
       "ollama_disable_thinking": {
@@ -1196,7 +1196,7 @@
       },
       "custom_extra_body": {
         "description": "自定义请求体参数",
-        "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
+        "hint": "用于在请求时添加额外的参数，如 temperature, top_p, max_tokens, reasoning_effort 等。",
         "template_schema": {
           "temperature": {
             "description": "温度参数",
@@ -1592,7 +1592,7 @@
       },
       "max_context_tokens": {
         "description": "模型上下文窗口大小",
-        "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有），也可手动修改。"
+        "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有）。"
       },
       "dify_api_key": {
         "description": "API Key",
