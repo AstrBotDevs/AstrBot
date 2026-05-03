@@ -1,5 +1,4 @@
 import asyncio
-import copy
 import json
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
