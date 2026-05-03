@@ -382,7 +382,10 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Required string: search query to execute."},
+                "query": {
+                    "type": "string",
+                    "description": "Required string: search query to execute.",
+                },
                 "max_results": {
                     "type": "integer",
                     "description": "Optional. The maximum number of results to return. Default is 7. Range is 5-20.",
