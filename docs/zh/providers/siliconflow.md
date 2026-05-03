@@ -4,6 +4,8 @@
 
 ## 配置对话模型
 
+点击进入[硅基流动](https://cloud.siliconflow.cn/i/zMCYMSt2)平台注册并实名认证。
+
 在硅基流动 [API Keys](https://cloud.siliconflow.cn/me/account/ak) 页面创建一个新的 API Key，留存备用。
 
 在硅基流动[模型页面](https://cloud.siliconflow.cn/me/models)选择需要使用的模型，留存模型名称备用。
