@@ -519,6 +519,9 @@ class PluginManager:
                     if isinstance(metadata.get("astrbot_version"), str)
                     else None
                 ),
+                pages=metadata["pages"]
+                if isinstance(metadata.get("pages"), list)
+                else [],
                 i18n=PluginManager._load_plugin_i18n(plugin_path),
             )
 

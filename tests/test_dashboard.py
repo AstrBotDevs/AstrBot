@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import pytest
 import pytest_asyncio
-from quart import Quart
+from quart import Quart, jsonify
 from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
@@ -44,8 +44,7 @@ def _strip_query(url: str) -> str:
 @pytest.fixture
 def registered_plugin_page(core_lifecycle_td: AstrBotCoreLifecycle, monkeypatch):
     plugin_root = (
-        Path(core_lifecycle_td.plugin_manager.plugin_store_path)
-        / PLUGIN_PAGE_DEMO_NAME
+        Path(core_lifecycle_td.plugin_manager.plugin_store_path) / PLUGIN_PAGE_DEMO_NAME
     )
     page_root = plugin_root / "pages" / PLUGIN_PAGE_DEMO_PAGE_NAME
     shared_root = page_root / "shared"
@@ -228,6 +227,44 @@ async def test_auth_login_secure_cookie_override(
     assert jwt_cookie_header
     assert "Secure" in jwt_cookie_header
     assert "SameSite=Strict" in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_plugin_web_api_supports_dynamic_route(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    authenticated_header: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls = []
+
+    async def group_detail(name: str):
+        calls.append(name)
+        return jsonify({"name": name})
+
+    monkeypatch.setattr(
+        core_lifecycle_td.star_context,
+        "registered_web_apis",
+        [
+            (
+                f"/{PLUGIN_PAGE_DEMO_NAME}/groups/<name>",
+                group_detail,
+                ["GET"],
+                "Group detail",
+            ),
+        ],
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plug/{PLUGIN_PAGE_DEMO_NAME}/groups/example",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data == {"name": "example"}
+    assert calls == ["example"]
 
 
 def test_plugin_page_content_path_escapes_plugin_name():
