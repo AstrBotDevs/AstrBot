@@ -48,6 +48,27 @@ class RespondStage(Stage):
         Comp.RPS: lambda _: True,  # 猜拳魔法表情
         Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
     }
+    _platform_component_validators = {
+        "discord_embed": lambda comp: any(
+            bool(getattr(comp, attr, None))
+            for attr in (
+                "title",
+                "description",
+                "color",
+                "url",
+                "thumbnail",
+                "image",
+                "footer",
+                "fields",
+            )
+        )
+        or callable(getattr(comp, "to_discord_embed", None)),
+        "discord_view": lambda comp: bool(
+            getattr(comp, "components", None)
+            or getattr(comp, "view", None)
+            or callable(getattr(comp, "to_discord_view", None)),
+        ),
+    }
 
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -118,6 +139,12 @@ class RespondStage(Stage):
 
         for comp in chain:
             comp_type = type(comp)
+            component_type = getattr(comp, "type", None)
+            component_type = getattr(component_type, "value", component_type)
+
+            if component_type in self._platform_component_validators:
+                if self._platform_component_validators[component_type](comp):
+                    return False
 
             # 检查组件类型是否在字典中
             if comp_type in self._component_validators:

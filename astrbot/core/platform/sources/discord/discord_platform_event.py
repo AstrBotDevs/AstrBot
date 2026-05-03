@@ -4,7 +4,7 @@ import binascii
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import discord
 from discord.types.interactions import ComponentInteractionData
@@ -27,9 +27,62 @@ from .components import DiscordEmbed, DiscordView
 # 自定义Discord视图组件（兼容旧版本）
 class DiscordViewComponent(BaseMessageComponent):
     type: str = "discord_view"
+    view: Any
 
     def __init__(self, view: discord.ui.View) -> None:
-        self.view = view
+        super().__init__(view=view)
+
+
+def _component_type(component: BaseMessageComponent) -> str | None:
+    component_type = getattr(component, "type", None)
+    return getattr(component_type, "value", component_type)
+
+
+def _is_component_type(component: BaseMessageComponent, component_type: str) -> bool:
+    return _component_type(component) == component_type
+
+
+def _to_discord_embed(component: BaseMessageComponent) -> discord.Embed:
+    converter = getattr(component, "to_discord_embed", None)
+    if callable(converter):
+        return converter()
+
+    embed = discord.Embed()
+    if title := getattr(component, "title", None):
+        embed.title = title
+    if description := getattr(component, "description", None):
+        embed.description = description
+    if color := getattr(component, "color", None):
+        embed.color = color
+    if url := getattr(component, "url", None):
+        embed.url = url
+    if thumbnail := getattr(component, "thumbnail", None):
+        embed.set_thumbnail(url=thumbnail)
+    if image := getattr(component, "image", None):
+        embed.set_image(url=image)
+    if footer := getattr(component, "footer", None):
+        embed.set_footer(text=footer)
+
+    for field in getattr(component, "fields", None) or []:
+        embed.add_field(
+            name=field.get("name", ""),
+            value=field.get("value", ""),
+            inline=field.get("inline", False),
+        )
+
+    return embed
+
+
+def _to_discord_view(component: BaseMessageComponent) -> discord.ui.View | None:
+    existing_view = getattr(component, "view", None)
+    if isinstance(existing_view, discord.ui.View):
+        return existing_view
+
+    converter = getattr(component, "to_discord_view", None)
+    if callable(converter):
+        return converter()
+
+    return None
 
 
 class DiscordPlatformEvent(AstrMessageEvent):
@@ -248,18 +301,22 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         logger.warning(f"[Discord] 获取文件失败: {i.name}")
                 except Exception as e:
                     logger.warning(f"[Discord] 处理文件失败: {i.name}, 错误: {e}")
-            elif isinstance(i, DiscordEmbed):
+            elif isinstance(i, DiscordEmbed) or _is_component_type(i, "discord_embed"):
                 # Discord Embed消息
-                embeds.append(i.to_discord_embed())
-            elif isinstance(i, DiscordView):
+                embeds.append(_to_discord_embed(i))
+            elif (
+                isinstance(i, DiscordView)
+                or isinstance(i, DiscordViewComponent)
+                or _is_component_type(i, "discord_view")
+            ):
                 # Discord视图组件（按钮、选择菜单等）
-                view = i.to_discord_view()
-            elif isinstance(i, DiscordViewComponent):
-                # 如果消息链中包含Discord视图组件（兼容旧版本）
-                if isinstance(i.view, discord.ui.View):
-                    view = i.view
+                parsed_view = _to_discord_view(i)
+                if parsed_view:
+                    view = parsed_view
             else:
-                logger.debug(f"[Discord] 忽略了不支持的消息组件: {i.type}")
+                logger.debug(
+                    f"[Discord] 忽略了不支持的消息组件: {getattr(i, 'type', None)}"
+                )
 
         content = "".join(content_parts)
         if len(content) > 2000:
