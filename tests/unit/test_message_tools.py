@@ -1,5 +1,6 @@
 """Tests for send_message_to_user session handling."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -153,10 +154,9 @@ async def test_messages_as_json_string_with_newlines():
     """JSON-string messages preserve multiline text after parsing."""
     tool = SendMessageToUserTool()
     ctx = _make_context(current_session="feishu:GroupMessage:oc_xxx")
-    import json as _json
 
     long_text = "line1\n\nline2\nline3"
-    messages_str = _json.dumps([{"type": "plain", "text": long_text}])
+    messages_str = json.dumps([{"type": "plain", "text": long_text}])
     result = await tool.call(ctx, messages=messages_str, session="oc_xxx")
     assert "Message sent to session" in result
     call_args = ctx.context.context.send_message.call_args

@@ -138,7 +138,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         if isinstance(messages, str):
             try:
                 messages = json.loads(messages)
-            except (json.JSONDecodeError, TypeError):
+            except json.JSONDecodeError:
                 pass
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
