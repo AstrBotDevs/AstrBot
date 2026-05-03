@@ -64,7 +64,7 @@ class DiscordEmbed(BaseMessageComponent):
             embed.title = self.title
         if self.description:
             embed.description = self.description
-        if self.color:
+        if self.color is not None:
             embed.color = self.color
         if self.url:
             embed.url = self.url
@@ -154,38 +154,30 @@ class DiscordView(BaseMessageComponent):
         view = discord.ui.View(timeout=self.timeout)
 
         for component in self.components or []:
-            raw_type = getattr(component, "type", None)
-            comp_type = getattr(raw_type, "value", raw_type)
-            if isinstance(component, DiscordButton) or comp_type == "discord_button":
-                style_name = getattr(component, "style", "primary")
-                label = getattr(component, "label", "")
-                url = getattr(component, "url", None)
-                custom_id = getattr(component, "custom_id", None)
-                emoji = getattr(component, "emoji", None)
-                disabled = getattr(component, "disabled", False)
+            if isinstance(component, DiscordButton):
                 button_style = getattr(
                     discord.ButtonStyle,
-                    style_name,
+                    component.style,
                     discord.ButtonStyle.primary,
                 )
 
-                if url:
+                if component.url:
                     # URL按钮
                     button = discord.ui.Button(
-                        label=label,
+                        label=component.label,
                         style=discord.ButtonStyle.link,
-                        url=url,
-                        emoji=emoji,
-                        disabled=disabled,
+                        url=component.url,
+                        emoji=component.emoji,
+                        disabled=component.disabled,
                     )
                 else:
                     # 普通按钮
                     button = discord.ui.Button(
-                        label=label,
+                        label=component.label,
                         style=button_style,
-                        custom_id=custom_id,
-                        emoji=emoji,
-                        disabled=disabled,
+                        custom_id=component.custom_id,
+                        emoji=component.emoji,
+                        disabled=component.disabled,
                     )
 
                 view.add_item(button)
