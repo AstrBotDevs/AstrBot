@@ -35,8 +35,8 @@ param_schema = {
         },
         "timeout": {
             "type": "integer",
-            "description": "Optional timeout in seconds for code execution. Omit or set to 0 to use tool_call_timeout.",
-            "default": 0,
+            "description": "Optional timeout in seconds for code execution.",
+            "default": 30,
         },
     },
     "required": ["code"],
@@ -86,7 +86,7 @@ class PythonTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         code: str,
         silent: bool = False,
-        timeout: int = 0,
+        timeout: int = 30,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
@@ -126,7 +126,7 @@ class LocalPythonTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         code: str,
         silent: bool = False,
-        timeout: int = 0,
+        timeout: int = 30,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
