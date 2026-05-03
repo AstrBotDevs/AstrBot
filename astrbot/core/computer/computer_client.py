@@ -33,7 +33,16 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
 
 def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
     """Collect local and plugin-provided skills that should be synced."""
-    skill_manager = SkillManager(skills_root=str(Path(get_astrbot_skills_path())))
+    skills_root = Path(get_astrbot_skills_path())
+    if not skills_root.is_dir():
+        return []
+
+    try:
+        skill_manager = SkillManager(skills_root=str(skills_root))
+    except OSError as exc:
+        logger.warning("[Computer] Failed to initialize skill manager: %s", exc)
+        return []
+
     sync_dirs: list[tuple[str, Path]] = []
     for skill in skill_manager.list_skills(
         active_only=False,
@@ -47,6 +56,12 @@ def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
             continue
         sync_dirs.append((skill.name, skill_md.parent))
     return sync_dirs
+
+
+def _normalize_shell_exec_result(result: object) -> dict:
+    if isinstance(result, dict):
+        return result
+    return {"exit_code": 0, "stdout": "", "stderr": ""}
 
 
 def _discover_bay_credentials(endpoint: str) -> str:
@@ -369,7 +384,9 @@ async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
     executed in a separate phase to keep failure domains clear.
     """
     logger.info("[Computer] Skill sync phase=apply start")
-    apply_result = await booter.shell.exec(_build_apply_sync_command())
+    apply_result = _normalize_shell_exec_result(
+        await booter.shell.exec(_build_apply_sync_command())
+    )
     if not _shell_exec_succeeded(apply_result):
         detail = _format_exec_error_detail(apply_result)
         logger.error("[Computer] Skill sync phase=apply failed: %s", detail)
@@ -380,7 +397,9 @@ async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
 async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
     """Scan sandbox skills and return normalized payload for cache update."""
     logger.info("[Computer] Skill sync phase=scan start")
-    scan_result = await booter.shell.exec(_build_scan_command())
+    scan_result = _normalize_shell_exec_result(
+        await booter.shell.exec(_build_scan_command())
+    )
     if not _shell_exec_succeeded(scan_result):
         detail = _format_exec_error_detail(scan_result)
         logger.error("[Computer] Skill sync phase=scan failed: %s", detail)
