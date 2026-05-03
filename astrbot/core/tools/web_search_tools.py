@@ -117,6 +117,12 @@ def _get_runtime(context) -> tuple[dict, dict, str]:
     return cfg, provider_settings, event.unified_msg_origin
 
 
+def _validate_search_query(kwargs: dict) -> str | None:
+    # Keep provider behavior aligned when the model omits or blanks the required query.
+    query = str(kwargs.get("query") or "").strip()
+    return query or None
+
+
 def _cache_favicon(url: str, favicon: str | None) -> None:
     if favicon:
         sp.temporary_cache["_ws_favicon"][url] = favicon
@@ -424,7 +430,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_tavily_key", []):
             return "Error: Tavily API key is not configured in AstrBot."
 
-        query = str(kwargs.get("query") or "").strip()
+        query = _validate_search_query(kwargs)
         if not query:
             return "Error: 'query' parameter is required but was not provided."
 
@@ -553,7 +559,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_bocha_key", []):
             return "Error: BoCha API key is not configured in AstrBot."
 
-        query = str(kwargs.get("query") or "").strip()
+        query = _validate_search_query(kwargs)
         if not query:
             return "Error: 'query' parameter is required but was not provided."
 
@@ -611,7 +617,7 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_brave_key", []):
             return "Error: Brave API key is not configured in AstrBot."
 
-        query = str(kwargs.get("query") or "").strip()
+        query = _validate_search_query(kwargs)
         if not query:
             return "Error: 'query' parameter is required but was not provided."
 
@@ -676,7 +682,7 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_firecrawl_key", []):
             return "Error: Firecrawl API key is not configured in AstrBot."
 
-        query = str(kwargs.get("query") or "").strip()
+        query = _validate_search_query(kwargs)
         if not query:
             return "Error: 'query' parameter is required but was not provided."
 
@@ -794,7 +800,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_baidu_app_builder_key", ""):
             return "Error: Baidu AI Search API key is not configured in AstrBot."
 
-        query = str(kwargs.get("query") or "").strip()
+        query = _validate_search_query(kwargs)
         if not query:
             return "Error: 'query' parameter is required but was not provided."
 
