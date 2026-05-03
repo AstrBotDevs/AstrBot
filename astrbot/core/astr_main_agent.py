@@ -38,8 +38,13 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
-from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
+from astrbot.core.skills.skill_manager import (
+    SkillInfo,
+    SkillManager,
+    build_skills_prompt,
+)
 from astrbot.core.star.context import Context
+from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.computer_tools import (
     AnnotateExecutionTool,
@@ -375,6 +380,38 @@ def _build_local_mode_prompt() -> str:
     )
 
 
+def _filter_skills_for_current_config(
+    skills: list[SkillInfo],
+    cfg: dict,
+) -> list[SkillInfo]:
+    plugin_set = cfg.get("plugin_set", ["*"])
+    allowed_plugins = (
+        None
+        if not isinstance(plugin_set, list) or "*" in plugin_set
+        else {str(name) for name in plugin_set}
+    )
+    plugin_by_root_dir = {
+        metadata.root_dir_name: metadata
+        for metadata in star_registry
+        if metadata.root_dir_name
+    }
+    filtered: list[SkillInfo] = []
+    for skill in skills:
+        if skill.source_type != "plugin":
+            filtered.append(skill)
+            continue
+
+        plugin = plugin_by_root_dir.get(skill.plugin_name)
+        if not plugin or not plugin.activated:
+            continue
+        if plugin.reserved or allowed_plugins is None:
+            filtered.append(skill)
+            continue
+        if plugin.name is not None and plugin.name in allowed_plugins:
+            filtered.append(skill)
+    return filtered
+
+
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
@@ -417,6 +454,7 @@ async def _ensure_persona_and_skills(
     runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
+    skills = _filter_skills_for_current_config(skills, cfg)
 
     if skills:
         if persona and persona.get("skills") is not None:

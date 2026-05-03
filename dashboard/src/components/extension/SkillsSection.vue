@@ -66,7 +66,7 @@
                 variant="tonal"
                 :color="sourceTypeColor(skill.source_type)"
               >
-                {{ sourceTypeLabel(skill.source_type) }}
+                {{ sourceTypeLabel(skill.source_type, skill) }}
               </v-chip>
             </template>
 
@@ -88,11 +88,7 @@
                     variant="text"
                     size="small"
                     class="list-action-icon-btn"
-                    :disabled="
-                      itemLoading[skill.name] ||
-                      false ||
-                      isSandboxPresetSkill(skill)
-                    "
+                    :disabled="itemLoading[skill.name] || isReadOnlySourceSkill(skill)"
                     @click.stop="downloadSkill(skill)"
                   />
                 </template>
@@ -106,7 +102,7 @@
                     variant="text"
                     size="small"
                     class="list-action-icon-btn"
-                    :disabled="itemLoading[skill.name] || isSandboxPresetSkill(skill)"
+                    :disabled="itemLoading[skill.name] || isReadOnlySourceSkill(skill)"
                     @click.stop="confirmDelete(skill)"
                   />
                 </template>
@@ -948,7 +944,12 @@ export default {
       return payload.skills || [];
     };
 
-    const sourceTypeLabel = (sourceType) => {
+    const sourceTypeLabel = (sourceType, skill = null) => {
+      if (sourceType === "plugin") {
+        return tm("skills.sourcePlugin", {
+          plugin: skill?.source_label || skill?.plugin_name || "",
+        });
+      }
       if (sourceType === "sandbox_only") return tm("skills.sourceSandboxOnly");
       if (sourceType === "both") return tm("skills.sourceBoth");
       return tm("skills.sourceLocalOnly");
@@ -956,12 +957,16 @@ export default {
 
     const sourceTypeColor = (sourceType) => {
       if (sourceType === "sandbox_only") return "indigo";
+      if (sourceType === "plugin") return "secondary";
       if (sourceType === "both") return "success";
       return "primary";
     };
 
     const isSandboxPresetSkill = (skill) =>
       skill?.source_type === "sandbox_only";
+    const isPluginProvidedSkill = (skill) => skill?.source_type === "plugin";
+    const isReadOnlySourceSkill = (skill) =>
+      isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
 
     const normalizeNeoItemsPayload = (res) => {
       const payload = res?.data?.data || [];
@@ -1265,6 +1270,10 @@ export default {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
       }
+      if (isPluginProvidedSkill(skill)) {
+        showMessage(tm("skills.pluginReadonly"), "warning");
+        return;
+      }
       skillToDelete.value = skill;
       deleteDialog.value = true;
     };
@@ -1295,6 +1304,10 @@ export default {
     const downloadSkill = async (skill) => {
       if (isSandboxPresetSkill(skill)) {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
+        return;
+      }
+      if (isPluginProvidedSkill(skill)) {
+        showMessage(tm("skills.pluginReadonly"), "warning");
         return;
       }
       itemLoading[skill.name] = true;
@@ -1827,6 +1840,8 @@ export default {
       sourceTypeLabel,
       sourceTypeColor,
       isSandboxPresetSkill,
+      isPluginProvidedSkill,
+      isReadOnlySourceSkill,
     };
   },
 };

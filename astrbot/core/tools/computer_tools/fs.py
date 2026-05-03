@@ -12,9 +12,11 @@ Behavior when `provider_settings.computer_use_require_admin=True`:
   access depends on the local runtime implementation and host OS permissions.
   Upload and download tools are defined here, but `LocalBooter` does not
   implement them and the main agent does not expose them in local mode.
-- Member + local: read/write/edit/grep are restricted to `data/skills`,
-  `data/workspaces/{normalized_umo}`, and `/tmp/.astrbot`. Upload/download are
-  denied by `check_admin_permission` if invoked.
+- Member + local: read/grep are restricted to `data/skills`,
+  plugin-provided `data/plugins/*/skills`,
+  `data/workspaces/{normalized_umo}`, and `/tmp/.astrbot`; write/edit are
+  restricted to the same local roots except plugin-provided Skills, which are
+  read-only. Upload/download are denied by `check_admin_permission` if invoked.
 - Admin + sandbox: read/write/edit/grep are not path-restricted by this
   module;
   sandbox filesystem boundaries are enforced by the sandbox runtime. Upload and
@@ -45,6 +47,7 @@ from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.file_read_utils import read_file_tool_result
 from astrbot.core.message.components import File, Image
 from astrbot.core.utils.astrbot_path import (
+    get_astrbot_plugin_path,
     get_astrbot_skills_path,
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
@@ -67,15 +70,22 @@ _SANDBOX_RUNTIME_TOOL_CONFIG = {
 _IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
-def _restricted_env_path_labels(umo: str) -> list[str]:
+def _restricted_env_path_labels(umo: str, *, include_plugin_skills: bool) -> list[str]:
     """Labels for the allowed directories in a local(not sandbox) and restricted(not admin) environment"""
     normalized_umo = normalize_umo_for_workspace(umo)
-    return [
+    labels = [
         "data/skills",
-        f"data/workspaces/{normalized_umo}",
-        get_astrbot_system_tmp_path(),
-        get_astrbot_temp_path(),
     ]
+    if include_plugin_skills:
+        labels.append("data/plugins/*/skills")
+    labels.extend(
+        [
+            f"data/workspaces/{normalized_umo}",
+            get_astrbot_system_tmp_path(),
+            get_astrbot_temp_path(),
+        ]
+    )
+    return labels
 
 
 def get_astrbot_workspaces_path() -> str:
@@ -89,8 +99,30 @@ def _workspace_root(umo: str) -> Path:
     return (Path(get_astrbot_workspaces_path()) / normalized_umo).resolve(strict=False)
 
 
+def _plugin_skill_roots() -> tuple[Path, ...]:
+    plugins_root = Path(get_astrbot_plugin_path())
+    if not plugins_root.exists():
+        return ()
+    return tuple(
+        (plugin_dir / "skills").resolve(strict=False)
+        for plugin_dir in plugins_root.iterdir()
+        if plugin_dir.is_dir() and (plugin_dir / "skills").is_dir()
+    )
+
+
 def _read_allowed_roots(umo: str) -> tuple[Path, ...]:
     """Non-admin users can only read files within these directories (and their subdirectories)"""
+    return (
+        Path(get_astrbot_skills_path()).resolve(strict=False),
+        *_plugin_skill_roots(),
+        _workspace_root(umo),
+        Path(get_astrbot_system_tmp_path()).resolve(strict=False),
+        Path(get_astrbot_temp_path()).resolve(strict=False),
+    )
+
+
+def _write_allowed_roots(umo: str) -> tuple[Path, ...]:
+    """Non-admin users cannot modify plugin-provided Skills."""
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
         _workspace_root(umo),
@@ -131,11 +163,16 @@ def _resolve_user_path(path: str, *, local_env: bool, umo: str) -> Path:
     return (Path.cwd() / candidate).resolve(strict=False)
 
 
-def _is_path_within_allowed_roots(path: str, umo: str) -> bool:
+def _is_path_within_allowed_roots(
+    path: str,
+    *,
+    umo: str,
+    allowed_roots: tuple[Path, ...],
+) -> bool:
     resolved = _resolve_user_path(path, local_env=True, umo=umo)
     return any(
         resolved == allowed_root or resolved.is_relative_to(allowed_root)
-        for allowed_root in _read_allowed_roots(umo)
+        for allowed_root in allowed_roots
     )
 
 
@@ -145,14 +182,24 @@ def _normalize_rw_path(
     restricted: bool,
     local_env: bool,
     umo: str,
+    write: bool = False,
 ) -> str:
     normalized_path = _resolve_tool_path(path, local_env=local_env, umo=umo)
     if not normalized_path:
         raise ValueError("`path` must be a non-empty string.")
-    if restricted and not _is_path_within_allowed_roots(normalized_path, umo):
-        allowed = ", ".join(_restricted_env_path_labels(umo))
+    if restricted:
+        allowed_roots = _write_allowed_roots(umo) if write else _read_allowed_roots(umo)
+    if restricted and not _is_path_within_allowed_roots(
+        normalized_path,
+        umo=umo,
+        allowed_roots=allowed_roots,
+    ):
+        allowed = ", ".join(
+            _restricted_env_path_labels(umo, include_plugin_skills=not write)
+        )
+        access = "Write" if write else "Read"
         raise PermissionError(
-            "Read access is restricted for this user. "
+            f"{access} access is restricted for this user. "
             f"Allowed directories: {allowed}. Blocked path: {normalized_path}."
         )
     return normalized_path
@@ -290,6 +337,7 @@ class FileWriteTool(FunctionTool):
                     restricted=restricted,
                     local_env=local_env,
                     umo=context.context.event.unified_msg_origin,
+                    write=True,
                 )
                 if local_env
                 else path.strip()
@@ -368,6 +416,7 @@ class FileEditTool(FunctionTool):
                     restricted=restricted,
                     local_env=local_env,
                     umo=umo,
+                    write=True,
                 )
                 if local_env
                 else path.strip()
@@ -532,10 +581,16 @@ class GrepTool(FunctionTool):
             disallowed = [
                 path
                 for path in normalized
-                if not _is_path_within_allowed_roots(path, umo)
+                if not _is_path_within_allowed_roots(
+                    path,
+                    umo=umo,
+                    allowed_roots=_read_allowed_roots(umo),
+                )
             ]
             if disallowed:
-                allowed = ", ".join(_restricted_env_path_labels(umo))
+                allowed = ", ".join(
+                    _restricted_env_path_labels(umo, include_plugin_skills=True)
+                )
                 blocked = ", ".join(disallowed)
                 raise PermissionError(
                     "Read access is restricted for this user. "

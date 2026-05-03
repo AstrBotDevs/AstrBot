@@ -329,6 +329,7 @@ async def test_plugins(
     assert data["status"] == "ok"
     for plugin in data["data"]:
         assert "installed_at" in plugin
+        assert "components" not in plugin
         installed_at = plugin["installed_at"]
         if installed_at is None:
             continue
@@ -386,9 +387,21 @@ async def test_plugins(
         data = await response.get_json()
         assert data["status"] == "ok"
         assert len(data["data"]) == 1
+        assert "components" not in data["data"][0]
         installed_at = data["data"][0]["installed_at"]
         assert installed_at is not None
         datetime.fromisoformat(installed_at)
+
+        response = await test_client.get(
+            f"/api/plugin/detail?name={test_plugin_name}",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["name"] == test_plugin_name
+        assert "components" in data["data"]
+        assert isinstance(data["data"]["components"], list)
 
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
