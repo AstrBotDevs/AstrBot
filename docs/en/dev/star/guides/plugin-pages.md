@@ -20,6 +20,8 @@ AstrBot scans `pages/<page_name>/index.html`; directories without `index.html` a
 
 If you only need a few editable settings, prefer [`_conf_schema.json`](./plugin-config.md). Plugin Pages are more suitable for complex forms, dashboards, logs, file transfer, SSE, and custom interaction flows.
 
+Once Pages are registered, users can open the AstrBot WebUI Plugins page, click the plugin card to enter the plugin detail page, and then view and open the registered Pages from that detail page.
+
 ## Minimal Frontend Example
 
 `pages/bridge-demo/index.html`

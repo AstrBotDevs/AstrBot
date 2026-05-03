@@ -20,6 +20,8 @@ AstrBot 会扫描 `pages/<page_name>/index.html`；没有 `index.html` 的目录
 
 如果只是让用户填写几个配置项，优先使用 [`_conf_schema.json`](./plugin-config.md)。插件 Pages 更适合复杂表单、Dashboard、日志、文件上传下载、SSE 和自定义交互流程。
 
+一旦注册了 Pages，用户可以在：AstrBot WebUI 插件页中的插件卡片中，点击插件卡片进入插件详细页面，在插件详细页面中可以看到并进入注册的 Pages。
+
 ## 最小前端示例
 
 `pages/bridge-demo/index.html`
