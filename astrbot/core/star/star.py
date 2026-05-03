@@ -27,6 +27,8 @@ class StarMetadata:
     """插件作者"""
     desc: str | None = None
     """插件简介"""
+    short_desc: str | None = None
+    """插件短简介"""
     version: str | None = None
     """插件版本"""
     repo: str | None = None

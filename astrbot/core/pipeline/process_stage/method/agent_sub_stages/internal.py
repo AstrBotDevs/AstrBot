@@ -107,6 +107,9 @@ class InternalAgentSubStage(Stage):
         )
         if self.dequeue_context_length <= 0:
             self.dequeue_context_length = 1
+        self.fallback_max_context_tokens: int = settings.get(
+            "fallback_max_context_tokens", 128000
+        )
 
         self.llm_safety_mode = settings.get("llm_safety_mode", True)
         self.safety_mode_strategy = settings.get(
@@ -136,6 +139,7 @@ class InternalAgentSubStage(Stage):
             llm_compress_provider_id=self.llm_compress_provider_id,
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
+            fallback_max_context_tokens=self.fallback_max_context_tokens,
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,

@@ -37,6 +37,7 @@ def _write_local_test_plugin(plugin_path: Path, repo_url: str):
         "version": "1.0.0",
         "author": "AstrBot Team",
         "desc": "Local test plugin",
+        "short_desc": "Local test short description",
     }
     with open(plugin_path / "metadata.yaml", "w", encoding="utf-8") as f:
         yaml.dump(metadata, f)
@@ -104,6 +105,7 @@ def test_load_plugin_metadata_includes_i18n(tmp_path: Path):
     metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert metadata is not None
+    assert metadata.short_desc == "Local test short description"
     assert metadata.i18n == {"zh-CN": {"metadata": {"display_name": "你好世界"}}}
 
 

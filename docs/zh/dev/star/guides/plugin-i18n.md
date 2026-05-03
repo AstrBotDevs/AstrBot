@@ -18,17 +18,18 @@ your_plugin/
 
 当当前语言没有对应翻译、某个字段缺失，或语言文件不存在时，AstrBot 会回退到默认文案：
 
-- 插件名称和描述回退到 `metadata.yaml` 中的 `display_name`、`desc`。
+- 插件名称、卡片短描述和描述回退到 `metadata.yaml` 中的 `display_name`、`short_desc`、`desc`。
 - 配置项文案回退到 `_conf_schema.json` 中的 `description`、`hint`、`labels`。
 
 ## 元数据
 
-`metadata` 用于覆盖插件在插件页展示的名称和描述。
+`metadata` 用于覆盖插件在插件页展示的名称、卡片短描述和描述。
 
 ```json
 {
   "metadata": {
     "display_name": "天气助手",
+    "short_desc": "一句话天气查询。",
     "desc": "查询天气并提供出行建议。"
   }
 }

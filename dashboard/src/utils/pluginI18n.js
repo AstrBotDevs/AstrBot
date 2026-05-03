@@ -45,6 +45,14 @@ export function usePluginI18n() {
     )
   }
 
+  const pluginShortDesc = (plugin, fallback = '') => {
+    return resolve(
+      plugin?.i18n,
+      'metadata.short_desc',
+      fallback || plugin?.short_desc || plugin?.desc || plugin?.description || '',
+    )
+  }
+
   const configText = (i18n, path, attr, fallback = '') => {
     const key = path ? `config.${path}.${attr}` : `config.${attr}`
     return resolve(i18n, key, fallback)
@@ -55,6 +63,7 @@ export function usePluginI18n() {
     resolve,
     pluginName,
     pluginDesc,
+    pluginShortDesc,
     configText,
   }
 }

@@ -61,9 +61,10 @@
     "enabled": "启用",
     "disabled": "禁用",
     "system": "系统",
-    "loading": "加载中...",
-    "installed": "已安装",
-    "unknown": "未知"
+        "loading": "加载中...",
+        "installed": "已安装",
+        "unknown": "未知",
+        "incompatible": "不兼容"
   },
   "tooltips": {
     "enable": "点击启用",
@@ -113,9 +114,10 @@
       "author": "作者",
       "category": "类别",
       "stars": "Star数",
-      "tags": "标签",
-      "astrbotVersion": "AstrBot 版本要求",
-      "authorWebsite": "作者网站",
+            "tags": "标签",
+            "astrbotVersion": "AstrBot 版本要求",
+            "supportPlatforms": "支持平台",
+            "authorWebsite": "作者网站",
       "repository": "仓库"
     }
   },
@@ -198,7 +200,10 @@
       "title": "安装插件",
       "fromFile": "从文件安装",
       "fromUrl": "从链接安装",
-      "supportPlatformsCount": "支持 {count} 个平台"
+      "supportPlatformsCount": "支持 {count} 个平台",
+      "sectionTitle": "安装",
+      "downloadSource": "将从以下位置安装插件包体：",
+      "githubSecurityWarning": "AstrBot 不能保证从 GitHub 上下载的插件的安全性。请确认你信任该插件来源后再安装。"
     },
     "danger_warning": {
       "title": "警告",

@@ -55,6 +55,14 @@ git clone 插件仓库地址
 
 插件展示名和描述支持按 WebUI 语言显示，详见[插件国际化](./guides/plugin-i18n)。
 
+### 插件短描述（可选）
+
+你可以在 `metadata.yaml` 中新增 `short_desc` 字段，作为插件市场卡片上的短描述。它适合写成一句简短介绍；如果没有提供，卡片会回退显示 `desc`。
+
+```yaml
+short_desc: 一句话介绍你的插件。
+```
+
 ### 声明支持平台（Optional）
 
 你可以在 `metadata.yaml` 中新增 `support_platforms` 字段（`list[str]`），声明插件支持的平台适配器。WebUI 插件页会展示该字段。

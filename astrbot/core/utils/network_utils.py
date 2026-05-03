@@ -106,8 +106,8 @@ def create_proxy_client(
         provider_label: The provider name for log prefix (e.g., "OpenAI", "Gemini")
         proxy: The proxy address (e.g., "http://127.0.0.1:7890"), or None/empty
         headers: Optional custom headers to include in every request
-        verify: Optional override for TLS verification. Defaults to the shared
-            system SSL context when not provided.
+        verify: Optional override for TLS verification. Defaults to the hybrid
+                SSL context (system store + certifi) when not provided.
         httpx_module: Optional httpx module to construct AsyncClient from. This is
             useful when a provider SDK performs isinstance checks against its own
             httpx import.

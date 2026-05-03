@@ -2,8 +2,10 @@
 import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const { tm } = useModuleI18n("features/extension");
+const { pluginShortDesc } = usePluginI18n();
 
 const props = defineProps({
   plugin: {
@@ -29,6 +31,10 @@ const normalizePlatformList = (platforms) => {
 
 const platformDisplayList = computed(() =>
   normalizePlatformList(props.plugin?.support_platforms),
+);
+
+const cardDescription = computed(() =>
+  pluginShortDesc(props.plugin, props.plugin?.short_desc || props.plugin?.desc || ""),
 );
 
 const handleInstall = (plugin) => {
@@ -81,6 +87,15 @@ const handleOpen = () => {
           >
             {{ tm("market.recommended") }}
           </v-chip>
+          <v-chip
+            v-if="plugin?.astrbot_compatible === false"
+            color="error"
+            size="x-small"
+            label
+            class="market-incompatible-chip"
+          >
+            {{ tm("status.incompatible") }}
+          </v-chip>
         </div>
 
         <div class="d-flex align-center plugin-meta">
@@ -132,18 +147,7 @@ const handleOpen = () => {
         </div>
 
         <div class="text-caption plugin-description">
-          {{ plugin.desc }}
-        </div>
-
-        <div
-          v-if="platformDisplayList.length"
-          class="plugin-badges"
-        >
-          <PluginPlatformChip
-            :platforms="plugin.support_platforms"
-            size="x-small"
-            :chip-style="{ height: '20px' }"
-          />
+          {{ cardDescription }}
         </div>
 
         <div class="plugin-stats"></div>
@@ -154,6 +158,16 @@ const handleOpen = () => {
       style="gap: 6px; padding: 8px 12px; padding-top: 0"
       @click.stop
     >
+      <div
+        v-if="platformDisplayList.length"
+        class="plugin-badges"
+      >
+        <PluginPlatformChip
+          :platforms="plugin.support_platforms"
+          size="x-small"
+          :chip-style="{ height: '20px' }"
+        />
+      </div>
       <v-spacer></v-spacer>
       <v-btn
         v-if="plugin?.repo"
@@ -256,6 +270,12 @@ const handleOpen = () => {
 .market-recommended-chip {
   flex-shrink: 0;
   font-weight: bold;
+  height: 20px;
+}
+
+.market-incompatible-chip {
+  flex-shrink: 0;
+  font-weight: 700;
   height: 20px;
 }
 

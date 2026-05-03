@@ -152,6 +152,9 @@ const {
   getPlatformDisplayList,
   resolveSelectedInstallPlugin,
   selectedInstallPlugin,
+  selectedInstallDownloadUrl,
+  selectedInstallSourceUrl,
+  installUsesGithubSource,
   checkInstallCompatibility,
   refreshPluginMarket,
   handleLocaleChange,
@@ -279,44 +282,48 @@ const installDialogPluginLogo = computed(() => {
 
           <!-- 已安装的 MCP 服务器标签页内容 -->
           <v-tab-item v-if="activeTab === 'mcp'">
-            <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex flex-column" style="gap: 6px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.installedMcpServers") }}</h2>
-                <div class="text-body-2 text-medium-emphasis">
-                  {{ t("features.tooluse.mcpServers.description") }}
+            <div class="extension-detail-width">
+              <div class="mb-4 pt-4 pb-4">
+                <div class="d-flex flex-column" style="gap: 6px">
+                  <h2 class="text-h2 mb-0">{{ tm("tabs.installedMcpServers") }}</h2>
+                  <div class="text-body-2 text-medium-emphasis">
+                    {{ t("features.tooluse.mcpServers.description") }}
+                  </div>
                 </div>
               </div>
+              <v-card
+                class="rounded-lg"
+                variant="flat"
+                style="background-color: transparent"
+              >
+                <v-card-text class="pa-0">
+                  <McpServersSection />
+                </v-card-text>
+              </v-card>
             </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <McpServersSection />
-              </v-card-text>
-            </v-card>
           </v-tab-item>
 
           <!-- Skills 标签页内容 -->
           <v-tab-item v-if="activeTab === 'skills'">
-            <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex flex-column" style="gap: 6px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
-                <div class="text-body-2 text-medium-emphasis">
-                  {{ tm("skills.runtimeHint") }}
+            <div class="extension-detail-width">
+              <div class="mb-4 pt-4 pb-4">
+                <div class="d-flex flex-column" style="gap: 6px">
+                  <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
+                  <div class="text-body-2 text-medium-emphasis">
+                    {{ tm("skills.runtimeHint") }}
+                  </div>
                 </div>
               </div>
+              <v-card
+                class="rounded-lg"
+                variant="flat"
+                style="background-color: transparent"
+              >
+                <v-card-text class="pa-0">
+                  <SkillsSection />
+                </v-card-text>
+              </v-card>
             </div>
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <SkillsSection />
-              </v-card-text>
-            </v-card>
           </v-tab-item>
 
           <!-- 插件市场标签页内容 -->
@@ -636,15 +643,6 @@ const installDialogPluginLogo = computed(() => {
     <div
       class="v-card v-card--density-default rounded-lg v-card--variant-elevated"
     >
-      <div class="v-card__loader">
-        <v-progress-linear
-          :indeterminate="loading_"
-          color="primary"
-          height="2"
-          :active="loading_"
-        ></v-progress-linear>
-      </div>
-
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ tm("dialogs.install.title") }}
       </v-card-title>
@@ -715,13 +713,39 @@ const installDialogPluginLogo = computed(() => {
               type="warning"
               variant="tonal"
               density="comfortable"
-              class="mt-2"
+              class="market-install-alert mt-2 mb-3"
             >
               {{ installCompat.message }}
             </v-alert>
           </div>
 
-          <ProxySelector class="mt-4" />
+          <div
+            v-if="selectedInstallSourceUrl"
+            class="market-install-confirm__section-title mt-4"
+          >
+            {{ tm("dialogs.install.sectionTitle") }}
+          </div>
+          <div
+            v-if="selectedInstallSourceUrl"
+            class="market-install-source text-caption text-medium-emphasis mb-3"
+          >
+            <div>{{ tm("dialogs.install.downloadSource") }}</div>
+            <div class="market-install-source__url">
+              {{ selectedInstallSourceUrl }}
+            </div>
+          </div>
+
+          <v-alert
+            v-if="installUsesGithubSource"
+            type="warning"
+            variant="tonal"
+            density="comfortable"
+            class="market-install-alert mt-4 mb-4"
+          >
+            {{ tm("dialogs.install.githubSecurityWarning") }}
+          </v-alert>
+
+          <ProxySelector v-if="!selectedInstallDownloadUrl" class="mt-4" />
         </div>
 
         <template v-else>
@@ -821,13 +845,39 @@ const installDialogPluginLogo = computed(() => {
                   type="warning"
                   variant="tonal"
                   density="comfortable"
-                  class="mt-2"
+                  class="market-install-alert mt-2 mb-3"
                 >
                   {{ installCompat.message }}
                 </v-alert>
               </div>
 
-              <ProxySelector></ProxySelector>
+              <div
+                v-if="selectedInstallSourceUrl"
+                class="market-install-confirm__section-title mt-4"
+              >
+                {{ tm("dialogs.install.sectionTitle") }}
+              </div>
+              <div
+                v-if="selectedInstallSourceUrl"
+                class="market-install-source text-caption text-medium-emphasis mb-3"
+              >
+                <div>{{ tm("dialogs.install.downloadSource") }}</div>
+                <div class="market-install-source__url">
+                  {{ selectedInstallSourceUrl }}
+                </div>
+              </div>
+
+              <v-alert
+                v-if="installUsesGithubSource"
+                type="warning"
+                variant="tonal"
+                density="comfortable"
+                class="market-install-alert mb-4"
+              >
+                {{ tm("dialogs.install.githubSecurityWarning") }}
+              </v-alert>
+
+              <ProxySelector v-if="!selectedInstallDownloadUrl"></ProxySelector>
             </div>
           </v-window-item>
           </v-window>
@@ -839,7 +889,13 @@ const installDialogPluginLogo = computed(() => {
         <v-btn color="grey" variant="text" @click="closeInstallDialog">{{
           tm("buttons.cancel")
         }}</v-btn>
-        <v-btn color="primary" variant="text" @click="newExtension">{{
+        <v-btn
+          color="primary"
+          variant="text"
+          :loading="loading_"
+          :disabled="loading_"
+          @click="newExtension"
+        >{{
           tm("buttons.install")
         }}</v-btn>
       </div>
@@ -1049,6 +1105,12 @@ const installDialogPluginLogo = computed(() => {
   box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
 }
 
+.extension-detail-width {
+  margin: 0 auto;
+  max-width: 1040px;
+  width: 100%;
+}
+
 .market-install-confirm {
   padding: 8px;
 }
@@ -1091,6 +1153,20 @@ const installDialogPluginLogo = computed(() => {
   color: rgba(var(--v-theme-on-surface), 0.92);
   font-weight: 700;
   margin-bottom: 8px;
+}
+
+.market-install-alert {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.market-install-source {
+  min-width: 0;
+}
+
+.market-install-source__url {
+  overflow-x: auto;
+  white-space: nowrap;
 }
 </style>
 

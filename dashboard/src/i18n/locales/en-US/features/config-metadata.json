@@ -246,20 +246,20 @@
       "description": "Context Management Strategy",
       "provider_settings": {
         "max_context_length": {
-          "description": "Maximum Conversation Turns",
-          "hint": "Discards the oldest parts when this count is exceeded. One conversation round counts as 1, -1 means unlimited"
+          "description": "Max Turns Before Compression",
+          "hint": "Limits history turns before any compression strategy is applied; -1 means no turn-based limit"
         },
         "dequeue_context_length": {
-          "description": "Dequeue Conversation Turns",
-          "hint": "Number of conversation turns to discard at once when maximum context length is exceeded"
+          "description": "Turns to Discard When Limit Exceeded",
+          "hint": "Number of old conversation turns to discard at once when the turn limit is exceeded; also used as fallback when compression is unavailable"
         },
         "context_limit_reached_strategy": {
-          "description": "Handling When Model Context Window is Exceeded",
+          "description": "Handling When Context Approaches Model Limit",
           "labels": [
             "Truncate by Turns",
             "Compress by LLM"
           ],
-          "hint": "When 'Truncate by Turns' is selected, the oldest N conversation turns will be discarded based on the 'Dequeue Conversation Turns' setting above. When 'Compress by LLM' is selected, the specified model will be used for context compression."
+          "hint": "This strategy only triggers after turn-based limiting, when context tokens approach the model's window limit. When 'Truncate by Turns' is selected, the oldest N conversation turns will be discarded based on the 'Turns to Discard When Limit Exceeded' setting above. When 'Compress by LLM' is selected, the specified model will be used for context compression."
         },
         "llm_compress_instruction": {
           "description": "Context Compression Instruction",
@@ -272,6 +272,10 @@
         "llm_compress_provider_id": {
           "description": "Model Provider ID for Context Compression",
           "hint": "When left empty, will fall back to the 'Truncate by Turns' strategy."
+        },
+        "fallback_max_context_tokens": {
+          "description": "Fallback context window size",
+          "hint": "When max_context_tokens is 0 and the model is not in built-in metadata, use this value as the context window size. Default: 128000."
         }
       }
     },

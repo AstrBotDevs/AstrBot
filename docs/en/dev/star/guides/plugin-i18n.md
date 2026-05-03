@@ -18,17 +18,18 @@ Locale file names use WebUI locales, such as `zh-CN.json` and `en-US.json`. Each
 
 When the current locale has no translation, a field is missing, or the locale file does not exist, AstrBot falls back to the default text:
 
-- Plugin names and descriptions fall back to `display_name` and `desc` in `metadata.yaml`.
+- Plugin names, card short descriptions, and descriptions fall back to `display_name`, `short_desc`, and `desc` in `metadata.yaml`.
 - Configuration text falls back to `description`, `hint`, and `labels` in `_conf_schema.json`.
 
 ## Metadata
 
-`metadata` overrides the plugin name and description shown on plugin pages.
+`metadata` overrides the plugin name, card short description, and description shown on plugin pages.
 
 ```json
 {
   "metadata": {
     "display_name": "Weather Assistant",
+    "short_desc": "One-line weather lookup.",
     "desc": "Query weather and provide travel suggestions."
   }
 }
