@@ -805,7 +805,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
             top_k = 50
 
         payload = {
-            "messages": [{"role": "user", "content": query [:72]}],
+            "messages": [{"role": "user", "content": query[:72]}],
             "search_source": "baidu_search_v2",
             "resource_type_filter": [{"type": "web", "top_k": top_k}],
         }
