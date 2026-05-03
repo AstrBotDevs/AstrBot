@@ -1,84 +1,165 @@
 <template>
   <div class="tools-page">
     <v-container fluid class="pa-0" elevation="0">
-      <!-- 页面标题 -->
-      <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-8">
-        <div>
-          <v-btn color="success" prepend-icon="mdi-plus" class="me-2" variant="tonal"
-            @click="showMcpServerDialog = true" >
-            {{ tm('mcpServers.buttons.add') }}
-          </v-btn>
-          <v-btn color="success" prepend-icon="mdi-refresh" variant="tonal" @click="showSyncMcpServerDialog = true"
-            >
-            {{ tm('mcpServers.buttons.sync') }}
-          </v-btn>
-        </div>
-      </v-row>
-
       <!-- MCP 服务器部分 -->
       <div v-if="mcpServers.length === 0" class="text-center pa-8">
         <v-icon size="64" color="grey-lighten-1">mdi-server-off</v-icon>
         <p class="text-grey mt-4">{{ tm('mcpServers.empty') }}</p>
       </div>
 
-      <v-row v-else>
-        <v-col v-for="(server, index) in mcpServers || []" :key="index" cols="12" md="6" lg="4" xl="3">
-          <item-card style="background-color: rgb(var(--v-theme-mcpCardBg));" :item="server" title-field="name"
-            enabled-field="active" @toggle-enabled="updateServerStatus" @delete="deleteServer" @edit="editServer">
-            <template v-slot:item-details="{ item }">
-              <div class="d-flex align-center mb-2">
-                <v-icon size="small" color="grey" class="me-2">mdi-file-code</v-icon>
-                <span class="text-caption text-medium-emphasis text-truncate" :title="getServerConfigSummary(item)">
-                  {{ getServerConfigSummary(item) }}
-                </span>
-              </div>
+      <div v-else class="mcp-server-list">
+        <OutlinedActionListItem
+          v-for="server in mcpServers || []"
+          :key="server.name"
+          :title="server.name"
+          clickable
+          @click="editServer(server)"
+        >
+          <div
+            class="mcp-server-config text-body-2 text-medium-emphasis"
+            :title="getServerConfigSummary(server)"
+          >
+            <v-icon
+              :icon="getServerConfigIcon(server)"
+              size="small"
+              class="me-1"
+            />
+            <span>{{ getServerConfigSummary(server) }}</span>
+          </div>
 
-              <div class="d-flex" style="gap: 8px;">
-                <div>
-                  <div v-if="item.tools && item.tools.length > 0">
-                    <div class="d-flex align-center mb-1">
-                      <v-icon size="small" color="grey" class="me-2">mdi-tools</v-icon>
-                      <v-dialog max-width="600px">
-                        <template v-slot:activator="{ props: listToolsProps }">
-                          <span class="text-caption text-medium-emphasis cursor-pointer" v-bind="listToolsProps"
-                            style="text-decoration: underline;">
-                            {{ tm('mcpServers.status.availableTools', { count: item.tools.length }) }} ({{ item.tools.length }})
-                          </span>
-                        </template>
-                        <template v-slot:default="{ isActive }">
-                          <v-card style="padding: 16px;">
-                            <v-card-title class="d-flex align-center">
-                              <span>{{ tm('mcpServers.status.availableTools') }}</span>
-                            </v-card-title>
-                            <v-card-text>
-                              <ul>
-                                <li v-for="(tool, idx) in item.tools" :key="idx" style="margin: 8px 0px;">{{ tool }}</li>
-                              </ul>
-                            </v-card-text>
-                            <v-card-actions class="d-flex justify-end">
-                              <v-btn variant="text" color="primary" @click="isActive.value = false">
-                                Close
-                              </v-btn>
-                            </v-card-actions>
-                          </v-card>
-                        </template>
-                      </v-dialog>
-                    </div>
-                  </div>
-                  <div v-else class="text-caption text-medium-emphasis">
-                    <v-icon size="small" color="warning" class="me-1">mdi-alert-circle</v-icon>
-                    {{ tm('mcpServers.status.noTools') }}
-                  </div>
-                </div>
-                <div v-if="mcpServerUpdateLoaders[item.name]" class="text-caption text-medium-emphasis">
-                  <v-progress-circular indeterminate color="primary" size="16"></v-progress-circular>
-                </div>
-              </div>
+          <div class="mcp-server-tools text-caption text-medium-emphasis">
+            <template v-if="server.tools && server.tools.length > 0">
+              <v-dialog max-width="600px">
+                <template v-slot:activator="{ props: listToolsProps }">
+                  <button
+                    v-bind="listToolsProps"
+                    class="mcp-server-tools__button"
+                    type="button"
+                    @click.stop
+                  >
+                    <v-icon size="small" class="me-1">mdi-tools</v-icon>
+                    {{
+                      tm('mcpServers.status.availableTools', {
+                        count: server.tools.length,
+                      })
+                    }}
+                    ({{ server.tools.length }})
+                  </button>
+                </template>
+                <template v-slot:default="{ isActive }">
+                  <v-card style="padding: 16px;">
+                    <v-card-title class="d-flex align-center">
+                      <span>{{ tm('mcpServers.status.availableTools') }}</span>
+                    </v-card-title>
+                    <v-card-text>
+                      <ul>
+                        <li
+                          v-for="(tool, idx) in server.tools"
+                          :key="idx"
+                          style="margin: 8px 0px;"
+                        >
+                          {{ tool }}
+                        </li>
+                      </ul>
+                    </v-card-text>
+                    <v-card-actions class="d-flex justify-end">
+                      <v-btn
+                        variant="text"
+                        color="primary"
+                        @click="isActive.value = false"
+                      >
+                        Close
+                      </v-btn>
+                    </v-card-actions>
+                  </v-card>
+                </template>
+              </v-dialog>
             </template>
-          </item-card>
-        </v-col>
-      </v-row>
+            <template v-else>
+              <v-icon size="small" color="warning" class="me-1">
+                mdi-alert-circle
+              </v-icon>
+              {{ tm('mcpServers.status.noTools') }}
+            </template>
+          </div>
+
+          <template #actions>
+            <v-tooltip :text="t('core.common.itemCard.delete')" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-delete-outline"
+                  variant="text"
+                  size="small"
+                  class="list-action-icon-btn"
+                  @click.stop="deleteServer(server)"
+                />
+              </template>
+            </v-tooltip>
+          </template>
+
+          <template #control>
+            <v-progress-circular
+              v-if="mcpServerUpdateLoaders[server.name]"
+              indeterminate
+              color="primary"
+              size="18"
+            />
+
+            <v-tooltip location="top">
+              <template #activator="{ props }">
+                <v-switch
+                  v-bind="props"
+                  color="primary"
+                  density="compact"
+                  hide-details
+                  inset
+                  :model-value="server.active"
+                  :loading="mcpServerUpdateLoaders[server.name] || false"
+                  :disabled="mcpServerUpdateLoaders[server.name] || false"
+                  @click.stop
+                  @update:model-value="updateServerStatus(server)"
+                />
+              </template>
+              <span>{{
+                server.active
+                  ? t('core.common.itemCard.enabled')
+                  : t('core.common.itemCard.disabled')
+              }}</span>
+            </v-tooltip>
+          </template>
+        </OutlinedActionListItem>
+      </div>
     </v-container>
+
+    <div class="mcp-fab-stack">
+      <v-tooltip :text="tm('mcpServers.buttons.sync')" location="left">
+        <template #activator="{ props }">
+          <v-btn
+            v-bind="props"
+            color="darkprimary"
+            icon="mdi-sync"
+            size="x-large"
+            variant="elevated"
+            class="mcp-fab"
+            @click="showSyncMcpServerDialog = true"
+          />
+        </template>
+      </v-tooltip>
+      <v-tooltip :text="tm('mcpServers.buttons.add')" location="left">
+        <template #activator="{ props }">
+          <v-btn
+            v-bind="props"
+            color="darkprimary"
+            icon="mdi-plus"
+            size="x-large"
+            variant="elevated"
+            class="mcp-fab"
+            @click="showMcpServerDialog = true"
+          />
+        </template>
+      </v-tooltip>
+    </div>
 
     <!-- 添加/编辑 MCP 服务器对话框 -->
     <v-dialog v-model="showMcpServerDialog" max-width="750px">
@@ -220,8 +301,8 @@
 <script>
 import axios from 'axios';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import ItemCard from '@/components/shared/ItemCard.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
@@ -231,7 +312,7 @@ export default {
   name: 'McpServersSection',
   components: {
     VueMonacoEditor,
-    ItemCard
+    OutlinedActionListItem
   },
   setup() {
     const { t } = useI18n();
@@ -272,6 +353,9 @@ export default {
     },
     getServerConfigSummary() {
       return (server) => {
+        if (server.transport) {
+          return String(server.transport).trim();
+        }
         if (server.command) {
           return `${server.command} ${(server.args || []).join(' ')}`;
         }
@@ -282,6 +366,21 @@ export default {
           return this.tm('mcpServers.status.configSummary', { keys: configKeys.join(', ') });
         }
         return this.tm('mcpServers.status.noConfig');
+      };
+    },
+    getServerConfigIcon() {
+      return (server) => {
+        const transport = String(server.transport || '').toLowerCase();
+        if (transport === 'streamable_http') {
+          return 'mdi-web';
+        }
+        if (transport === 'sse') {
+          return 'mdi-broadcast';
+        }
+        if (server.command) {
+          return 'mdi-console-line';
+        }
+        return 'mdi-file-code-outline';
       };
     }
   },
@@ -544,6 +643,73 @@ export default {
   padding-top: 8px;
 }
 
+.mcp-server-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mcp-server-config {
+  align-items: center;
+  display: flex;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.mcp-server-config span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-server-tools {
+  align-items: center;
+  display: flex;
+  margin-top: 6px;
+}
+
+.mcp-server-tools__button {
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  display: inline-flex;
+  text-decoration: underline;
+}
+
+.mcp-server-tools__button:hover {
+  color: rgb(var(--v-theme-primary));
+}
+
+.list-action-icon-btn {
+  color: rgba(var(--v-theme-on-surface), 0.78);
+}
+
+.list-action-icon-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.mcp-fab-stack {
+  align-items: center;
+  bottom: 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: fixed;
+  right: 52px;
+  z-index: 10000;
+}
+
+.mcp-fab {
+  border-radius: 16px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.mcp-fab:hover {
+  box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+  transform: translateY(-4px) scale(1.05);
+}
+
 .monaco-container {
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
@@ -551,4 +717,5 @@ export default {
   margin-top: 4px;
   overflow: hidden;
 }
+
 </style>

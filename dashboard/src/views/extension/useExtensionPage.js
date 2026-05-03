@@ -17,36 +17,6 @@ import {
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-const useRandomPluginsDisplay = ({ activeTab, marketSearch, currentPage }) => {
-  const showRandomPlugins = ref(true);
-
-  const toggleRandomPluginsVisibility = () => {
-    showRandomPlugins.value = !showRandomPlugins.value;
-  };
-
-  const collapseRandomPlugins = () => {
-    showRandomPlugins.value = false;
-  };
-
-  watch(marketSearch, () => {
-    if (activeTab.value === "market") {
-      collapseRandomPlugins();
-    }
-  });
-
-  watch(currentPage, (newPage, oldPage) => {
-    if (newPage === oldPage) return;
-    if (activeTab.value !== "market") return;
-    collapseRandomPlugins();
-  });
-
-  return {
-    showRandomPlugins,
-    toggleRandomPluginsVisibility,
-    collapseRandomPlugins,
-  };
-};
-
 const buildFailedPluginItems = (raw) => {
   return Object.entries(raw || {}).map(([dirName, info]) => {
     const detail = info && typeof info === "object" ? info : {};
@@ -70,6 +40,7 @@ export const useExtensionPage = () => {
   const { tm } = useModuleI18n("features/extension");
   const router = useRouter();
   const route = useRoute();
+  const marketCompatibilityCache = new Map();
   
   const getSelectedGitHubProxy = () => {
     if (typeof window === "undefined" || !window.localStorage) return "";
@@ -127,6 +98,7 @@ export const useExtensionPage = () => {
   const extension_config = reactive({
     metadata: {},
     config: {},
+    i18n: {},
   });
   const pluginMarketData = ref([]);
   const loadingDialog = reactive({
@@ -138,6 +110,7 @@ export const useExtensionPage = () => {
   const showPluginInfoDialog = ref(false);
   const selectedPlugin = ref({});
   const curr_namespace = ref("");
+  const currentConfigPlugin = ref("");
   const updatingAll = ref(false);
   
   const readmeDialog = reactive({
@@ -215,15 +188,6 @@ export const useExtensionPage = () => {
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
   const marketCategoryFilter = ref("all");
-  const {
-    showRandomPlugins,
-    toggleRandomPluginsVisibility,
-    collapseRandomPlugins,
-  } = useRandomPluginsDisplay({
-    activeTab,
-    marketSearch,
-    currentPage,
-  });
   
   // 插件市场拼音搜索
   
@@ -854,6 +818,7 @@ export const useExtensionPage = () => {
   
   const openExtensionConfig = async (extension_name) => {
     curr_namespace.value = extension_name;
+    currentConfigPlugin.value = extension_name;
     configDialog.value = true;
     try {
       const res = await axios.get(
@@ -861,6 +826,7 @@ export const useExtensionPage = () => {
       );
       extension_config.metadata = res.data.data.metadata;
       extension_config.config = res.data.data.config;
+      extension_config.i18n = res.data.data.i18n || {};
     } catch (err) {
       toast(err, "error");
     }
@@ -878,8 +844,10 @@ export const useExtensionPage = () => {
         toast(res.data.message, "error");
       }
       configDialog.value = false;
+      currentConfigPlugin.value = "";
       extension_config.metadata = {};
       extension_config.config = {};
+      extension_config.i18n = {};
       getExtensions();
     } catch (err) {
       toast(err, "error");
@@ -917,6 +885,52 @@ export const useExtensionPage = () => {
     changelogDialog.repoUrl = plugin.repo;
     changelogDialog.show = true;
   };
+
+  const resetInstallDialogState = () => {
+    selectedMarketInstallPlugin.value = null;
+    extension_url.value = "";
+    upload_file.value = null;
+    uploadTab.value = "file";
+    installCompat.checked = false;
+    installCompat.compatible = true;
+    installCompat.message = "";
+  };
+
+  const openInstallDialog = () => {
+    resetInstallDialogState();
+    dialog.value = true;
+  };
+
+  const closeInstallDialog = () => {
+    dialog.value = false;
+    resetInstallDialogState();
+  };
+
+  const normalizeInstallUrl = (value) =>
+    String(value || "").trim().replace(/\/+$/, "");
+
+  const isGithubRepoUrl = (value) =>
+    /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+(?:\.git)?(?:\/tree\/[^/\s]+)?$/i.test(
+      normalizeInstallUrl(value),
+    );
+
+  const selectedInstallDownloadUrl = computed(() => {
+    const plugin = selectedInstallPlugin.value;
+    const downloadUrl = String(plugin?.download_url || "").trim();
+    if (!downloadUrl) return "";
+    if (normalizeInstallUrl(plugin?.repo) !== normalizeInstallUrl(extension_url.value)) {
+      return "";
+    }
+    return downloadUrl;
+  });
+
+  const selectedInstallSourceUrl = computed(
+    () => selectedInstallDownloadUrl.value || String(extension_url.value || "").trim(),
+  );
+
+  const installUsesGithubSource = computed(
+    () => !selectedInstallDownloadUrl.value && isGithubRepoUrl(extension_url.value),
+  );
   
   // 为表格视图创建一个处理安装插件的函数
   const handleInstallPlugin = async (plugin) => {
@@ -926,6 +940,7 @@ export const useExtensionPage = () => {
     } else {
       selectedMarketInstallPlugin.value = plugin;
       extension_url.value = plugin.repo;
+      upload_file.value = null;
       dialog.value = true;
       uploadTab.value = "url";
     }
@@ -936,6 +951,7 @@ export const useExtensionPage = () => {
     if (selectedDangerPlugin.value) {
       selectedMarketInstallPlugin.value = selectedDangerPlugin.value;
       extension_url.value = selectedDangerPlugin.value.repo;
+      upload_file.value = null;
       dialog.value = true;
       uploadTab.value = "url";
     }
@@ -1177,6 +1193,58 @@ export const useExtensionPage = () => {
     }
     pluginMarketData.value = notInstalled.concat(installed);
   };
+
+  const normalizeAstrBotVersionSpec = (value) => String(value || "").trim();
+
+  const checkAstrBotVersionCompatibility = async (versionSpec) => {
+    const normalizedSpec = normalizeAstrBotVersionSpec(versionSpec);
+    if (!normalizedSpec) {
+      return { checked: false, compatible: true, message: "" };
+    }
+
+    if (marketCompatibilityCache.has(normalizedSpec)) {
+      return marketCompatibilityCache.get(normalizedSpec);
+    }
+
+    try {
+      const res = await axios.post("/api/plugin/check-compat", {
+        astrbot_version: normalizedSpec,
+      });
+      const result = {
+        checked: res.data.status === "ok",
+        compatible:
+          res.data.status === "ok" ? !!res.data.data?.compatible : true,
+        message: res.data.data?.message || "",
+      };
+      marketCompatibilityCache.set(normalizedSpec, result);
+      return result;
+    } catch (err) {
+      console.debug("Failed to check plugin compatibility:", err);
+      const result = { checked: false, compatible: true, message: "" };
+      marketCompatibilityCache.set(normalizedSpec, result);
+      return result;
+    }
+  };
+
+  const annotateMarketCompatibility = async () => {
+    const specs = [
+      ...new Set(
+        pluginMarketData.value
+          .map((plugin) => normalizeAstrBotVersionSpec(plugin?.astrbot_version))
+          .filter(Boolean),
+      ),
+    ];
+
+    await Promise.all(specs.map((spec) => checkAstrBotVersionCompatibility(spec)));
+
+    pluginMarketData.value.forEach((plugin) => {
+      const spec = normalizeAstrBotVersionSpec(plugin?.astrbot_version);
+      const result = spec ? marketCompatibilityCache.get(spec) : null;
+      plugin.astrbot_compat_checked = !!result?.checked;
+      plugin.astrbot_compatible = result ? result.compatible : true;
+      plugin.astrbot_compat_message = result?.message || "";
+    });
+  };
   
   const showVersionCompatibilityWarning = (message) => {
     versionCompatibilityDialog.message = message;
@@ -1200,23 +1268,19 @@ export const useExtensionPage = () => {
     versionCompatibilityDialog.show = false;
   };
 
-  const handleInstallResponse = async (resData, { toastStatus = false } = {}) => {
+  const handleInstallResponse = async (resData) => {
     if (
       resData.status === "warning" &&
       resData.data?.warning_type === "astrbot_version_incompatible"
     ) {
-      onLoadingDialogResult(2, resData.message, -1);
+      toast(resData.message, "warning");
       showVersionCompatibilityWarning(resData.message);
       await refreshExtensionsAfterInstallFailure();
       return false;
     }
 
-    if (toastStatus) {
-      toast(resData.message, resData.status === "ok" ? "success" : "error");
-    }
-
     if (resData.status === "error") {
-      onLoadingDialogResult(2, resData.message, -1);
+      toast(resData.message, "error");
       await refreshExtensionsAfterInstallFailure();
       return false;
     }
@@ -1238,7 +1302,8 @@ export const useExtensionPage = () => {
 
     return axios.post("/api/plugin/install", {
       url: extension_url.value,
-      proxy: getSelectedGitHubProxy(),
+      download_url: selectedInstallDownloadUrl.value,
+      proxy: selectedInstallDownloadUrl.value ? "" : getSelectedGitHubProxy(),
       ignore_version_check: ignoreVersionCheck,
     });
   };
@@ -1250,8 +1315,9 @@ export const useExtensionPage = () => {
       extension_url.value = "";
     }
 
-    onLoadingDialogResult(1, resData.message);
+    toast(resData.message, "success");
     dialog.value = false;
+    selectedMarketInstallPlugin.value = null;
     await getExtensions();
     checkAlreadyInstalled();
 
@@ -1273,35 +1339,21 @@ export const useExtensionPage = () => {
       toast(tm("messages.dontFillBoth"), "error");
       return;
     }
-    loading_.value = true;
-    loadingDialog.title = tm("status.loading");
-    loadingDialog.show = true;
-
     const source = upload_file.value !== null ? "file" : "url";
-    toast(
-      source === "file"
-        ? tm("messages.installing")
-        : tm("messages.installingFromUrl") + " " + extension_url.value,
-      "primary",
-    );
+    loading_.value = true;
 
     try {
       const res = await performInstallRequest({ source, ignoreVersionCheck });
       loading_.value = false;
 
-      const canContinue = await handleInstallResponse(res.data, {
-        toastStatus: source === "url",
-      });
+      const canContinue = await handleInstallResponse(res.data);
       if (!canContinue) return;
 
       await finalizeSuccessfulInstall(res.data, source);
     } catch (err) {
       loading_.value = false;
       const message = resolveErrorMessage(err, tm("messages.installFailed"));
-      if (source === "url") {
-        toast(message, "error");
-      }
-      onLoadingDialogResult(2, message, -1);
+      toast(message, "error");
       await refreshExtensionsAfterInstallFailure();
     }
   };
@@ -1366,6 +1418,7 @@ export const useExtensionPage = () => {
       pluginMarketData.value = data;
       trimExtensionName();
       checkAlreadyInstalled();
+      await annotateMarketCompatibility();
       checkUpdate();
       refreshRandomPlugins();
       currentPage.value = 1; // 重置到第一页
@@ -1407,6 +1460,7 @@ export const useExtensionPage = () => {
       pluginMarketData.value = data;
       trimExtensionName();
       checkAlreadyInstalled();
+      await annotateMarketCompatibility();
       checkUpdate();
       refreshRandomPlugins();
     } catch (err) {
@@ -1453,6 +1507,9 @@ export const useExtensionPage = () => {
         installCompat.checked = false;
         installCompat.compatible = true;
         installCompat.message = "";
+        if (!dialogOpen) {
+          selectedMarketInstallPlugin.value = null;
+        }
         return;
       }
       await checkInstallCompatibility();
@@ -1559,7 +1616,6 @@ export const useExtensionPage = () => {
     sortBy,
     sortOrder,
     randomPluginNames,
-    showRandomPlugins,
     normalizeStr,
     toPinyinText,
     toInitials,
@@ -1572,8 +1628,6 @@ export const useExtensionPage = () => {
     randomPlugins,
     shufflePlugins,
     refreshRandomPlugins,
-    toggleRandomPluginsVisibility,
-    collapseRandomPlugins,
     displayItemsPerPage,
     totalPages,
     paginatedPlugins,
@@ -1605,6 +1659,8 @@ export const useExtensionPage = () => {
     reloadPlugin,
     viewReadme,
     viewChangelog,
+    openInstallDialog,
+    closeInstallDialog,
     handleInstallPlugin,
     confirmDangerInstall,
     cancelDangerInstall,
@@ -1628,6 +1684,9 @@ export const useExtensionPage = () => {
     getPlatformDisplayList,
     resolveSelectedInstallPlugin,
     selectedInstallPlugin,
+    selectedInstallDownloadUrl,
+    selectedInstallSourceUrl,
+    installUsesGithubSource,
     checkInstallCompatibility,
     refreshPluginMarket,
     handleLocaleChange,

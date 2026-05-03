@@ -1,7 +1,6 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
-from typing import Any, TypedDict
 
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -315,24 +314,6 @@ DEFAULT_CONFIG = {
     "disable_builtin_commands": False,
 }
 
-
-class ChatProviderTemplate(TypedDict):
-    id: str
-    provider_source_id: str
-    model: str
-    modalities: list
-    custom_extra_body: dict[str, Any]
-    max_context_tokens: int
-
-
-CHAT_PROVIDER_TEMPLATE = {
-    "id": "",
-    "provide_source_id": "",
-    "model": "",
-    "modalities": [],
-    "custom_extra_body": {},
-    "max_context_tokens": 0,
-}
 
 """
 AstrBot v3 时代的配置元数据，目前仅承担以下功能：
@@ -1992,13 +1973,13 @@ CONFIG_METADATA_2 = {
                         "options": ["text", "image", "audio", "tool_use"],
                         "labels": ["文本", "图像", "音频", "工具使用"],
                         "render_type": "checkbox",
-                        "hint": "模型支持的模态。如所填写的模型不支持图像，请取消勾选图像。",
+                        "hint": "模型支持的模态及能力。",
                     },
                     "custom_headers": {
-                        "description": "自定义添加请求头",
+                        "description": "自定义请求头",
                         "type": "dict",
                         "items": {},
-                        "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。",
+                        "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。",
                     },
                     "ollama_disable_thinking": {
                         "description": "关闭思考模式",
@@ -2009,7 +1990,7 @@ CONFIG_METADATA_2 = {
                         "description": "自定义请求体参数",
                         "type": "dict",
                         "items": {},
-                        "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
+                        "hint": "用于在请求时添加额外的参数，如 temperature, top_p, max_tokens, reasoning_effort 等。",
                         "template_schema": {
                             "temperature": {
                                 "name": "Temperature",
@@ -2652,7 +2633,7 @@ CONFIG_METADATA_2 = {
                     "max_context_tokens": {
                         "description": "模型上下文窗口大小",
                         "type": "int",
-                        "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有），也可手动修改。",
+                        "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有）",
                     },
                     "dify_api_key": {
                         "description": "API Key",
@@ -3563,6 +3544,14 @@ CONFIG_METADATA_3 = {
                         "hint": "留空时将降级为“按对话轮数截断”的策略。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.fallback_max_context_tokens": {
+                        "description": "上下文窗口兜底值",
+                        "type": "int",
+                        "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。",
+                        "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },

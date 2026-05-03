@@ -304,7 +304,6 @@ def save_config(
 ) -> None:
     """验证并保存配置"""
     errors = None
-    logger.info(f"Saving config, is_core={is_core}")
 
     # Snapshot old Computer config for change detection
     if is_core:
@@ -993,10 +992,6 @@ class ConfigRoute(Route):
             if inspect.iscoroutinefunction(terminate_fn):
                 await terminate_fn()
 
-            logger.info(
-                f"获取到 provider_source {provider_source_id} 的模型列表: {models}",
-            )
-
             return (
                 Response()
                 .ok({"models": models, "model_metadata": metadata_map})
@@ -1498,7 +1493,7 @@ class ConfigRoute(Route):
         }
 
     async def _get_plugin_config(self, plugin_name: str):
-        ret: dict = {"metadata": None, "config": None}
+        ret: dict = {"metadata": None, "config": None, "i18n": {}}
 
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:
@@ -1514,6 +1509,7 @@ class ConfigRoute(Route):
                         "items": plugin_md.config.schema,  # 初始化时通过 __setattr__ 存入了 schema
                     },
                 }
+                ret["i18n"] = plugin_md.i18n
                 break
 
         return ret

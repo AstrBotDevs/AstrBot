@@ -260,7 +260,7 @@ class PluginRoute(Route):
                 cache_data = json.load(f)
             return cache_data.get("md5")
         except Exception as e:
-            logger.warning(f"加载缓存MD5失败: {e}")
+            logger.warning(f"Failed to load cached MD5: {e}")
             return None
 
     async def _fetch_remote_md5(self, md5_url: str | None) -> str | None:
@@ -283,7 +283,7 @@ class PluginRoute(Route):
                     data = await response.json()
                     return data.get("md5", "")
         except Exception as e:
-            logger.debug(f"获取远程MD5失败: {e}")
+            logger.debug(f"Failed to fetch remote MD5: {e}")
         return None
 
     async def _is_cache_valid(self, source: RegistrySource) -> bool:
@@ -291,17 +291,19 @@ class PluginRoute(Route):
         try:
             cached_md5 = self._load_cached_md5(source.cache_file)
             if not cached_md5:
-                logger.debug("缓存文件中没有MD5信息")
+                logger.debug("MD5 not found in cache, treating cache as invalid")
                 return False
 
             remote_md5 = await self._fetch_remote_md5(source.md5_url)
             if remote_md5 is None:
-                logger.warning("无法获取远程MD5，将使用缓存")
+                logger.warning(
+                    "Cannot fetch remote MD5, using cache without validation"
+                )
                 return True  # 如果无法获取远程MD5，认为缓存有效
 
             is_valid = cached_md5 == remote_md5
             logger.debug(
-                f"插件数据MD5: 本地={cached_md5}, 远程={remote_md5}, 有效={is_valid}",
+                f"Plugin cache: local={cached_md5}, remote={remote_md5}, effective={is_valid}",
             )
             return is_valid
 
@@ -318,11 +320,11 @@ class PluginRoute(Route):
                     # 检查缓存是否有效
                     if "data" in cache_data and "timestamp" in cache_data:
                         logger.debug(
-                            f"加载缓存文件: {cache_file}, 缓存时间: {cache_data['timestamp']}",
+                            f"Loading cached file: {cache_file}, Cache time: {cache_data['timestamp']}",
                         )
                         return cache_data["data"]
         except Exception as e:
-            logger.warning(f"加载插件市场缓存失败: {e}")
+            logger.warning(f"Failed to load plugin market cache: {e}")
         return None
 
     def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None) -> None:
@@ -339,9 +341,9 @@ class PluginRoute(Route):
 
             with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(cache_data, f, ensure_ascii=False, indent=2)
-            logger.debug(f"插件市场数据已缓存到: {cache_file}, MD5: {md5}")
+            logger.debug(f"Cached plugin market data: {cache_file}, MD5: {md5}")
         except Exception as e:
-            logger.warning(f"保存插件市场缓存失败: {e}")
+            logger.warning(f"Failed to save plugin market cache: {e}")
 
     async def get_plugin_logo_token(self, logo_path: str):
         try:
@@ -409,6 +411,7 @@ class PluginRoute(Route):
                 "support_platforms": plugin.support_platforms,
                 "astrbot_version": plugin.astrbot_version,
                 "installed_at": self._get_plugin_installed_at(plugin),
+                "i18n": plugin.i18n,
             }
             # 检查是否为全空的幽灵插件
             if not any(
@@ -503,6 +506,7 @@ class PluginRoute(Route):
 
         post_data = await request.get_json()
         repo_url = post_data["url"]
+        download_url = str(post_data.get("download_url") or "").strip()
         ignore_version_check = bool(post_data.get("ignore_version_check", False))
 
         proxy: str = post_data.get("proxy", None)
@@ -515,6 +519,7 @@ class PluginRoute(Route):
                 repo_url,
                 proxy,
                 ignore_version_check=ignore_version_check,
+                download_url=download_url,
             )
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {repo_url} 成功。")
@@ -739,7 +744,6 @@ class PluginRoute(Route):
 
     async def get_plugin_readme(self):
         plugin_name = request.args.get("name")
-        logger.debug(f"正在获取插件 {plugin_name} 的README文件内容")
 
         if not plugin_name:
             logger.warning("插件名称为空")

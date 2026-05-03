@@ -441,7 +441,14 @@ class ProviderOpenAIOfficial(Provider):
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
-        return create_proxy_client("OpenAI", proxy)
+        httpx_module: Any = httpx
+        try:
+            from openai import _base_client as openai_base_client
+
+            httpx_module = getattr(openai_base_client, "httpx", httpx)
+        except ImportError:
+            pass
+        return create_proxy_client("OpenAI", proxy, httpx_module=httpx_module)
 
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
@@ -1069,7 +1076,7 @@ class ProviderOpenAIOfficial(Provider):
                     image_fallback_used,
                 )
             raise e
-        if "maximum context length" in str(e):
+        if "maximum context length" in str(e) or "context length" in str(e).lower():
             logger.warning(
                 f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}",
             )

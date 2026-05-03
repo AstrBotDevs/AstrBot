@@ -13,6 +13,7 @@ import tempfile
 import traceback
 from dataclasses import dataclass
 from enum import Enum, auto
+from pathlib import Path
 from types import ModuleType
 
 import yaml
@@ -496,6 +497,11 @@ class PluginManager:
                 name=metadata["name"],
                 author=metadata["author"],
                 desc=metadata["desc"],
+                short_desc=(
+                    metadata["short_desc"]
+                    if isinstance(metadata.get("short_desc"), str)
+                    else None
+                ),
                 version=metadata["version"],
                 repo=metadata["repo"] if "repo" in metadata else None,
                 display_name=metadata.get("display_name", None),
@@ -513,9 +519,48 @@ class PluginManager:
                     if isinstance(metadata.get("astrbot_version"), str)
                     else None
                 ),
+                i18n=PluginManager._load_plugin_i18n(plugin_path),
             )
 
         return metadata
+
+    @staticmethod
+    def _load_plugin_i18n(plugin_path: str) -> dict[str, dict]:
+        plugin_root = Path(plugin_path)
+        i18n_dir = plugin_root / ".astrbot-plugin" / "i18n"
+        if not i18n_dir.is_dir():
+            return {}
+
+        translations: dict[str, dict] = {}
+        try:
+            for file_path in i18n_dir.iterdir():
+                if file_path.suffix.lower() != ".json":
+                    continue
+                locale = file_path.stem
+                if not locale or len(locale) > 32:
+                    continue
+                if not file_path.is_file():
+                    continue
+                if file_path.stat().st_size > 1024 * 1024:
+                    logger.warning("插件 i18n 文件超过 1MB，已跳过: %s", file_path)
+                    continue
+
+                try:
+                    with file_path.open(encoding="utf-8") as f:
+                        locale_data = json.load(f)
+                    if isinstance(locale_data, dict):
+                        translations[locale] = locale_data
+                    else:
+                        logger.warning(
+                            "插件 i18n 文件内容不是 JSON object，已跳过: %s",
+                            file_path,
+                        )
+                except Exception as exc:
+                    logger.warning("加载插件 i18n 文件失败 %s: %s", file_path, exc)
+        except OSError as exc:
+            logger.warning("读取插件 i18n 目录失败 %s: %s", i18n_dir, exc)
+
+        return translations
 
     @staticmethod
     def _normalize_plugin_dir_name(plugin_name: str) -> str:
@@ -696,6 +741,7 @@ class PluginManager:
                         "name": metadata.name,
                         "author": metadata.author,
                         "desc": metadata.desc,
+                        "short_desc": metadata.short_desc,
                         "version": metadata.version,
                         "repo": metadata.repo,
                         "display_name": metadata.display_name,
@@ -937,11 +983,13 @@ class PluginManager:
                             metadata.name = metadata_yaml.name
                             metadata.author = metadata_yaml.author
                             metadata.desc = metadata_yaml.desc
+                            metadata.short_desc = metadata_yaml.short_desc
                             metadata.version = metadata_yaml.version
                             metadata.repo = metadata_yaml.repo
                             metadata.display_name = metadata_yaml.display_name
                             metadata.support_platforms = metadata_yaml.support_platforms
                             metadata.astrbot_version = metadata_yaml.astrbot_version
+                            metadata.i18n = metadata_yaml.i18n
                     except Exception as e:
                         logger.warning(
                             f"插件 {root_dir_name} 元数据载入失败: {e!s}。使用默认元数据。",
@@ -1306,7 +1354,11 @@ class PluginManager:
         self._rebuild_failed_plugin_info()
 
     async def install_plugin(
-        self, repo_url: str, proxy: str = "", ignore_version_check: bool = False
+        self,
+        repo_url: str,
+        proxy: str = "",
+        ignore_version_check: bool = False,
+        download_url: str = "",
     ):
         """从仓库 URL 安装插件
 
@@ -1315,6 +1367,7 @@ class PluginManager:
         Args:
             repo_url (str): 要安装的插件仓库 URL
             proxy (str, optional): 用于下载的代理服务器。默认为空字符串。
+            download_url (str, optional): 插件压缩包下载地址。提供时优先从此地址下载安装包。
 
         Returns:
             dict | None: 安装成功时返回包含插件信息的字典:
@@ -1342,7 +1395,14 @@ class PluginManager:
                     raise Exception(
                         f"安装失败：目录 {os.path.basename(plugin_path)} 已存在。"
                     )
-                plugin_path = await self.updator.install(repo_url, proxy)
+                if download_url:
+                    plugin_path = await self.updator.install(
+                        repo_url,
+                        proxy,
+                        download_url=download_url,
+                    )
+                else:
+                    plugin_path = await self.updator.install(repo_url, proxy)
 
                 # reload the plugin
                 dir_name = os.path.basename(plugin_path)
