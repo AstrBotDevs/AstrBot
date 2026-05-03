@@ -48,29 +48,6 @@ class RespondStage(Stage):
         Comp.RPS: lambda _: True,  # 猜拳魔法表情
         Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
     }
-    _platform_component_validators = {
-        "discord_embed": lambda comp: (
-            any(
-                bool(getattr(comp, attr, None))
-                for attr in (
-                    "title",
-                    "description",
-                    "url",
-                    "thumbnail",
-                    "image",
-                    "footer",
-                    "fields",
-                )
-            )
-            or getattr(comp, "color", None) is not None
-        )
-        or callable(getattr(comp, "to_discord_embed", None)),
-        "discord_view": lambda comp: bool(
-            getattr(comp, "components", None)
-            or getattr(comp, "view", None)
-            or callable(getattr(comp, "to_discord_view", None)),
-        ),
-    }
 
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -129,6 +106,37 @@ class RespondStage(Stage):
         # random
         return random.uniform(self.interval[0], self.interval[1])
 
+    def _platform_component_type(self, comp: BaseMessageComponent) -> str | None:
+        t = getattr(comp, "type", None)
+        return getattr(t, "value", t)
+
+    def _is_platform_component_non_empty(self, comp: BaseMessageComponent) -> bool:
+        ctype = self._platform_component_type(comp)
+        if ctype == "discord_embed":
+            return (
+                any(
+                    bool(getattr(comp, attr, None))
+                    for attr in (
+                        "title",
+                        "description",
+                        "url",
+                        "thumbnail",
+                        "image",
+                        "footer",
+                        "fields",
+                    )
+                )
+                or getattr(comp, "color", None) is not None
+                or callable(getattr(comp, "to_discord_embed", None))
+            )
+        if ctype == "discord_view":
+            return bool(
+                getattr(comp, "components", None)
+                or getattr(comp, "view", None)
+                or callable(getattr(comp, "to_discord_view", None)),
+            )
+        return False
+
     async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]) -> bool:
         """检查消息链是否为空
 
@@ -141,12 +149,9 @@ class RespondStage(Stage):
 
         for comp in chain:
             comp_type = type(comp)
-            component_type = getattr(comp, "type", None)
-            component_type = getattr(component_type, "value", component_type)
 
-            if component_type in self._platform_component_validators:
-                if self._platform_component_validators[component_type](comp):
-                    return False
+            if self._is_platform_component_non_empty(comp):
+                return False
 
             # 检查组件类型是否在字典中
             if comp_type in self._component_validators:

@@ -131,29 +131,35 @@ class DiscordView(BaseMessageComponent):
             raw_type = getattr(component, "type", None)
             comp_type = getattr(raw_type, "value", raw_type)
             if isinstance(component, DiscordButton) or comp_type == "discord_button":
+                style_name = getattr(component, "style", "primary")
+                label = getattr(component, "label", "")
+                url = getattr(component, "url", None)
+                custom_id = getattr(component, "custom_id", None)
+                emoji = getattr(component, "emoji", None)
+                disabled = getattr(component, "disabled", False)
                 button_style = getattr(
                     discord.ButtonStyle,
-                    component.style,
+                    style_name,
                     discord.ButtonStyle.primary,
                 )
 
-                if component.url:
+                if url:
                     # URL按钮
                     button = discord.ui.Button(
-                        label=component.label,
+                        label=label,
                         style=discord.ButtonStyle.link,
-                        url=component.url,
-                        emoji=component.emoji,
-                        disabled=component.disabled,
+                        url=url,
+                        emoji=emoji,
+                        disabled=disabled,
                     )
                 else:
                     # 普通按钮
                     button = discord.ui.Button(
-                        label=component.label,
+                        label=label,
                         style=button_style,
-                        custom_id=component.custom_id,
-                        emoji=component.emoji,
-                        disabled=component.disabled,
+                        custom_id=custom_id,
+                        emoji=emoji,
+                        disabled=disabled,
                     )
 
                 view.add_item(button)
