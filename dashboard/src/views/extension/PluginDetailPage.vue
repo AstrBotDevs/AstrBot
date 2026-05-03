@@ -308,6 +308,7 @@ const normalizeHandlerList = (source) => {
 };
 
 const componentGroupOrder = [
+  "page",
   "skill",
   "command",
   "llm_tool",
@@ -316,6 +317,7 @@ const componentGroupOrder = [
 ];
 
 const componentGroupIcons = {
+  page: "mdi-monitor-dashboard",
   skill: "mdi-lightning-bolt",
   command: "mdi-console-line",
   llm_tool: "mdi-tools",
@@ -448,6 +450,19 @@ const getComponentDescription = (component) =>
   String(
     component?.description || component?.desc || tm("status.unknown"),
   ).trim();
+
+const openComponentPage = (component) => {
+  const targetPluginName = component?.plugin_name || pluginData.value?.name;
+  const targetPageName = component?.page_name || component?.name;
+  if (!targetPluginName || !targetPageName) return;
+  router.push({
+    name: "PluginPage",
+    params: {
+      pluginName: targetPluginName,
+      pageName: targetPageName,
+    },
+  });
+};
 
 const getCommandRowKey = (component, path) =>
   component?.handler_full_name || component?.path || path.join(" ");
@@ -786,6 +801,17 @@ onBeforeUnmount(() => {
                         {{ getHandlerTiming(component) }}
                       </span>
                       <span>{{ getComponentDescription(component) }}</span>
+                      <v-btn
+                        v-if="group.key === 'page'"
+                        color="primary"
+                        size="small"
+                        variant="tonal"
+                        prepend-icon="mdi-open-in-new"
+                        class="ml-2"
+                        @click="openComponentPage(component)"
+                      >
+                        {{ tm("buttons.openPage") }}
+                      </v-btn>
                     </div>
                   </td>
                 </tr>

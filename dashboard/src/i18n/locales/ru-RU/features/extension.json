@@ -43,6 +43,8 @@
         "viewInfo": "Детали",
         "viewDocs": "Документация",
         "viewRepo": "Репозиторий",
+        "openPages": "Pages",
+        "openPage": "Открыть",
         "close": "Закрыть",
         "save": "Сохранить",
         "saveAndClose": "Сохранить и закрыть",
@@ -103,6 +105,7 @@
         "docsTitle": "Документация",
         "docsEmpty": "Документация отсутствует",
         "handlerGroups": {
+            "page": "Pages",
             "skill": "Skills",
             "command": "Команды / группы команд",
             "llm_tool": "LLM-инструменты",

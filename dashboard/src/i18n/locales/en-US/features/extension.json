@@ -43,6 +43,8 @@
     "viewInfo": "Handlers",
     "viewDocs": "Documentation",
     "viewRepo": "Repository",
+    "openPages": "Pages",
+    "openPage": "Open",
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",
@@ -103,6 +105,7 @@
     "docsTitle": "Documentation",
     "docsEmpty": "No documentation",
     "handlerGroups": {
+      "page": "Pages",
       "skill": "Skills",
       "command": "Commands / Command Groups",
       "llm_tool": "LLM Tools",
@@ -259,7 +262,11 @@
     "noUpdatesAvailable": "No extensions have updates available",
     "fillSourceNameAndUrl": "Please fill in the complete source name and URL",
     "invalidUrl": "Please enter a valid URL",
-    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data"
+    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
+    "pluginNotFound": "Plugin not found",
+    "pluginDisabled": "This plugin is disabled. Enable it before opening its page.",
+    "pluginPageNotFound": "Plugin page not found",
+    "pluginPageLoadFailed": "Failed to load the plugin page"
   },
   "upload": {
     "fromFile": "Install from File",

@@ -989,6 +989,7 @@ class PluginManager:
                             metadata.display_name = metadata_yaml.display_name
                             metadata.support_platforms = metadata_yaml.support_platforms
                             metadata.astrbot_version = metadata_yaml.astrbot_version
+                            metadata.pages = metadata_yaml.pages
                             metadata.i18n = metadata_yaml.i18n
                     except Exception as e:
                         logger.warning(
@@ -1376,7 +1377,7 @@ class PluginManager:
                 如果找不到插件元数据则返回 None。
 
         """
-        # this metric is for displaying plugins installation count in webui
+        # this metric is for displaying plugins installation count in pages
         asyncio.create_task(
             Metric.upload(
                 et="install_star",

@@ -43,6 +43,8 @@
     "viewInfo": "行为",
     "viewDocs": "文档",
     "viewRepo": "仓库",
+    "openPages": "Pages",
+    "openPage": "打开",
     "close": "关闭",
     "save": "保存",
     "saveAndClose": "保存并关闭",
@@ -103,7 +105,8 @@
     "docsTitle": "文档",
     "docsEmpty": "暂无文档",
     "handlerGroups": {
-      "skill": "Skills",
+      "page": "页面",
+      "skill": "技能",
       "command": "指令/指令组",
       "llm_tool": "LLM 工具",
       "listener": "事件监听器",
@@ -259,7 +262,11 @@
     "noUpdatesAvailable": "当前没有可更新的插件",
     "fillSourceNameAndUrl": "请填写完整的插件源名称和地址",
     "invalidUrl": "请输入有效的URL地址",
-    "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址"
+    "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址",
+    "pluginNotFound": "未找到该插件",
+    "pluginDisabled": "该插件当前已禁用，请先启用后再访问页面",
+    "pluginPageNotFound": "未找到该插件页面",
+    "pluginPageLoadFailed": "加载插件页面失败"
   },
   "upload": {
     "fromFile": "从文件安装",
