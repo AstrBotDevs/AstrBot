@@ -216,6 +216,31 @@ async def test_restricted_local_member_can_read_plugin_provided_skill(
 
 
 @pytest.mark.asyncio
+async def test_restricted_local_member_can_read_plugin_skill_inventory_even_if_plugin_inactive(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    plugin_skill = (
+        tmp_path
+        / "plugins"
+        / "astrbot_plugin_demo"
+        / "skills"
+        / "demo-skill"
+        / "SKILL.md"
+    )
+    plugin_skill.parent.mkdir(parents=True)
+    plugin_skill.write_text("# Demo Skill\n", encoding="utf-8")
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(role="member"),
+        path=str(plugin_skill),
+    )
+
+    assert result == "# Demo Skill\n"
+
+
+@pytest.mark.asyncio
 async def test_restricted_local_member_cannot_write_plugin_provided_skill(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,

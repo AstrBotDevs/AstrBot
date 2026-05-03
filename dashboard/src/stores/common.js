@@ -1,5 +1,5 @@
-import { defineStore } from 'pinia';
-import axios from 'axios';
+import { defineStore } from "pinia";
+import axios from "axios";
 
 export const useCommonStore = defineStore("common", {
   state: () => ({
@@ -10,114 +10,133 @@ export const useCommonStore = defineStore("common", {
 
     log_cache_max_len: 1000,
     startTime: -1,
+    astrbotVersion: "",
+    dashboardVersion: "",
 
     pluginMarketData: [],
   }),
   actions: {
     async createEventSource() {
       if (this.eventSource) {
-        return
+        return;
       }
       const controller = new AbortController();
       const { signal } = controller;
-      
+
       // 注意：这里如果之前改过 Polyfill 的话，可能需要保持原样
       // 如果是用 fetch 的话，这里是支持 Authorization Header 的
       const headers = {
-        'Content-Type': 'multipart/form-data',
-        'Authorization': 'Bearer ' + localStorage.getItem('token')
+        "Content-Type": "multipart/form-data",
+        Authorization: "Bearer " + localStorage.getItem("token"),
       };
-      
-      fetch('/api/live-log', {
-        method: 'GET',
+
+      fetch("/api/live-log", {
+        method: "GET",
         headers,
         signal,
-        cache: 'no-cache',
-      }).then(response => {
-        if (!response.ok) {
-          throw new Error(`SSE connection failed: ${response.status}`);
-        }
-        console.log('SSE stream opened');
-        this.sse_connected = true;
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let bufferedText = '';
-
-        const processStream = ({ done, value }) => {
-          if (done) {
-            console.log('SSE stream closed');
-            setTimeout(() => {
-              this.eventSource = null;
-              this.createEventSource();
-            }, 2000);
-            return;
+        cache: "no-cache",
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`SSE connection failed: ${response.status}`);
           }
+          console.log("SSE stream opened");
+          this.sse_connected = true;
 
-          // Accumulate partial chunks; SSE data may split JSON across reads.
-          const text = decoder.decode(value, { stream: true });
-          bufferedText += text;
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let bufferedText = "";
 
-          // Split completed events; keep the trailing partial in buffer.
-          const segments = bufferedText.split('\n\n');
-          bufferedText = segments.pop() || '';
-
-          segments.forEach(segment => {
-            const line = segment.trim();
-            if (!line.startsWith('data: ')) {
+          const processStream = ({ done, value }) => {
+            if (done) {
+              console.log("SSE stream closed");
+              setTimeout(() => {
+                this.eventSource = null;
+                this.createEventSource();
+              }, 2000);
               return;
             }
 
-            const logLine = line.replace('data: ', '').trim();
-            if (!logLine) {
-              return;
-            }
+            // Accumulate partial chunks; SSE data may split JSON across reads.
+            const text = decoder.decode(value, { stream: true });
+            bufferedText += text;
 
-            try {
-              const logObject = JSON.parse(logLine);
-              
-              // 修复：兼容 HTTP 环境的 UUID 生成 
-              if (!logObject.uuid) {
-                 if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            // Split completed events; keep the trailing partial in buffer.
+            const segments = bufferedText.split("\n\n");
+            bufferedText = segments.pop() || "";
+
+            segments.forEach((segment) => {
+              const line = segment.trim();
+              if (!line.startsWith("data: ")) {
+                return;
+              }
+
+              const logLine = line.replace("data: ", "").trim();
+              if (!logLine) {
+                return;
+              }
+
+              try {
+                const logObject = JSON.parse(logLine);
+
+                // 修复：兼容 HTTP 环境的 UUID 生成
+                if (!logObject.uuid) {
+                  if (
+                    typeof crypto !== "undefined" &&
+                    typeof crypto.randomUUID === "function"
+                  ) {
                     logObject.uuid = crypto.randomUUID();
-                 } else {
+                  } else {
                     // 手动生成 UUID v4
-                    logObject.uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-                        return v.toString(16);
-                    });
-                 }
-              }
+                    logObject.uuid =
+                      "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+                        /[xy]/g,
+                        function (c) {
+                          var r = (Math.random() * 16) | 0,
+                            v = c == "x" ? r : (r & 0x3) | 0x8;
+                          return v.toString(16);
+                        },
+                      );
+                  }
+                }
 
-              this.log_cache.push(logObject);
-              // Limit log cache size
-              if (this.log_cache.length > this.log_cache_max_len) {
-                this.log_cache.splice(0, this.log_cache.length - this.log_cache_max_len);
+                this.log_cache.push(logObject);
+                // Limit log cache size
+                if (this.log_cache.length > this.log_cache_max_len) {
+                  this.log_cache.splice(
+                    0,
+                    this.log_cache.length - this.log_cache_max_len,
+                  );
+                }
+              } catch (err) {
+                console.warn(
+                  "Failed to parse SSE log line, skipping:",
+                  err,
+                  logLine,
+                );
               }
-            } catch (err) {
-              console.warn('Failed to parse SSE log line, skipping:', err, logLine);
-            }
-          });
-          
-          return reader.read().then(processStream);
-        };
+            });
 
-        reader.read().then(processStream);
-      }).catch(error => {
-        console.error('SSE error:', error);
-        // Attempt to reconnect after a delay
-        this.log_cache.push({
-            type: 'log',
-            level: 'ERROR',
+            return reader.read().then(processStream);
+          };
+
+          reader.read().then(processStream);
+        })
+        .catch((error) => {
+          console.error("SSE error:", error);
+          // Attempt to reconnect after a delay
+          this.log_cache.push({
+            type: "log",
+            level: "ERROR",
             time: Date.now() / 1000,
-            data: 'SSE Connection failed, retrying in 5 seconds...',
-            uuid: 'error-' + Date.now() 
+            data: "SSE Connection failed, retrying in 5 seconds...",
+            uuid: "error-" + Date.now(),
+          });
+          setTimeout(() => {
+            this.eventSource = null;
+            this.createEventSource();
+          }, 1000);
         });
-        setTimeout(() => {
-          this.eventSource = null;
-          this.createEventSource();
-        }, 1000);
-      });
 
       // Store controller to allow closing the connection
       this.eventSource = controller;
@@ -129,19 +148,32 @@ export const useCommonStore = defineStore("common", {
       }
     },
     getLogCache() {
-      return this.log_cache
+      return this.log_cache;
     },
     async fetchStartTime() {
-      const res = await axios.get('/api/stat/start-time');
+      const res = await axios.get("/api/stat/start-time");
       this.startTime = res.data.data.start_time;
       return this.startTime;
     },
+    setAstrBotVersion(version, dashboardVersion = "") {
+      this.astrbotVersion = String(version || "").replace(/^v/i, "");
+      this.dashboardVersion = String(dashboardVersion || "");
+    },
+    async fetchAstrBotVersion(force = false) {
+      if (!force && this.astrbotVersion) {
+        return this.astrbotVersion;
+      }
+      const res = await axios.get("/api/stat/version");
+      const data = res.data?.data || {};
+      this.setAstrBotVersion(data.version, data.dashboard_version);
+      return this.astrbotVersion;
+    },
     getStartTime() {
       if (this.startTime !== -1) {
-        return this.startTime
+        return this.startTime;
       }
       this.fetchStartTime().catch(() => {});
-      return this.startTime
+      return this.startTime;
     },
     async getPluginCollections(force = false, customSource = null) {
       // 获取插件市场数据
@@ -150,49 +182,63 @@ export const useCommonStore = defineStore("common", {
       }
 
       // 构建URL
-      let url = force ? '/api/plugin/market_list?force_refresh=true' : '/api/plugin/market_list';
+      let url = force
+        ? "/api/plugin/market_list?force_refresh=true"
+        : "/api/plugin/market_list";
       if (customSource) {
-        url += (url.includes('?') ? '&' : '?') + `custom_registry=${encodeURIComponent(customSource)}`;
+        url +=
+          (url.includes("?") ? "&" : "?") +
+          `custom_registry=${encodeURIComponent(customSource)}`;
       }
 
-      return axios.get(url)
+      return axios
+        .get(url)
         .then((res) => {
-          let data = []
-          if (res.data.data && typeof res.data.data === 'object') {
+          let data = [];
+          if (res.data.data && typeof res.data.data === "object") {
             for (let key in res.data.data) {
               const pluginData = res.data.data[key];
-              
+
               data.push({
                 ...pluginData,
-                "name": pluginData.name || key, // 优先使用插件数据中的name字段，否则使用键名
-                "desc": pluginData.desc,
-                "short_desc": pluginData?.short_desc ? pluginData.short_desc : "",
-                "author": pluginData.author,
-                "repo": pluginData.repo,
-                "installed": false,
-                "version": pluginData?.version ? pluginData.version : "未知",
-                "social_link": pluginData?.social_link,
-                "tags": pluginData?.tags ? pluginData.tags : [],
-                "logo": pluginData?.logo ? pluginData.logo : "",
-                "pinned": pluginData?.pinned ? pluginData.pinned : false,
-                "stars": pluginData?.stars ? pluginData.stars : 0,
-                "updated_at": pluginData?.updated_at ? pluginData.updated_at : "",
-                "download_url": pluginData?.download_url ? pluginData.download_url : "",
-                "display_name": pluginData?.display_name ? pluginData.display_name : "",
-                "i18n": pluginData?.i18n && typeof pluginData.i18n === 'object' ? pluginData.i18n : {},
-                "astrbot_version": pluginData?.astrbot_version ? pluginData.astrbot_version : "",
-                "category": pluginData?.category ? pluginData.category : "",
-                "support_platforms": Array.isArray(pluginData?.support_platforms)
+                name: pluginData.name || key, // 优先使用插件数据中的name字段，否则使用键名
+                desc: pluginData.desc,
+                short_desc: pluginData?.short_desc ? pluginData.short_desc : "",
+                author: pluginData.author,
+                repo: pluginData.repo,
+                installed: false,
+                version: pluginData?.version ? pluginData.version : "未知",
+                social_link: pluginData?.social_link,
+                tags: pluginData?.tags ? pluginData.tags : [],
+                logo: pluginData?.logo ? pluginData.logo : "",
+                pinned: pluginData?.pinned ? pluginData.pinned : false,
+                stars: pluginData?.stars ? pluginData.stars : 0,
+                updated_at: pluginData?.updated_at ? pluginData.updated_at : "",
+                download_url: pluginData?.download_url
+                  ? pluginData.download_url
+                  : "",
+                display_name: pluginData?.display_name
+                  ? pluginData.display_name
+                  : "",
+                i18n:
+                  pluginData?.i18n && typeof pluginData.i18n === "object"
+                    ? pluginData.i18n
+                    : {},
+                astrbot_version: pluginData?.astrbot_version
+                  ? pluginData.astrbot_version
+                  : "",
+                category: pluginData?.category ? pluginData.category : "",
+                support_platforms: Array.isArray(pluginData?.support_platforms)
                   ? pluginData.support_platforms
                   : Array.isArray(pluginData?.support_platform)
-                    ? pluginData.support_platform
-                    : Array.isArray(pluginData?.platform)
-                      ? pluginData.platform
-                      : [],
-              })
+                  ? pluginData.support_platform
+                  : Array.isArray(pluginData?.platform)
+                  ? pluginData.platform
+                  : [],
+              });
             }
           }
-          
+
           this.pluginMarketData = data;
           return data;
         })
@@ -200,5 +246,5 @@ export const useCommonStore = defineStore("common", {
           return Promise.reject(err);
         });
     },
-  }
+  },
 });

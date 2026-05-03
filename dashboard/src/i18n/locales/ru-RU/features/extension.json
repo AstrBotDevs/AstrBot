@@ -103,6 +103,11 @@
         "docsTitle": "Документация",
         "docsEmpty": "Документация отсутствует",
         "handlerGroups": {
+            "skill": "Skills",
+            "command": "Команды / группы команд",
+            "llm_tool": "LLM-инструменты",
+            "listener": "Слушатели событий",
+            "hook": "Хуки",
             "commands": "Команды / группы команд",
             "hooks": "Хуки",
             "functionTools": "Функциональные инструменты",

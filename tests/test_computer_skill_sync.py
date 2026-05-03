@@ -51,8 +51,10 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
     monkeypatch, tmp_path: Path
 ):
     skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
     temp_root = tmp_path / "temp"
     skills_root.mkdir(parents=True, exist_ok=True)
+    plugins_root.mkdir(parents=True, exist_ok=True)
     temp_root.mkdir(parents=True, exist_ok=True)
 
     captured = {"skills": None}
@@ -63,6 +65,10 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
     monkeypatch.setattr(
         "astrbot.core.computer.computer_client.get_astrbot_skills_path",
         lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_plugin_path",
+        lambda: str(plugins_root),
     )
     monkeypatch.setattr(
         "astrbot.core.computer.computer_client.get_astrbot_temp_path",

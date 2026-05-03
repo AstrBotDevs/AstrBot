@@ -61,10 +61,10 @@
     "enabled": "启用",
     "disabled": "禁用",
     "system": "系统",
-        "loading": "加载中...",
-        "installed": "已安装",
-        "unknown": "未知",
-        "incompatible": "不兼容"
+    "loading": "加载中...",
+    "installed": "已安装",
+    "unknown": "未知",
+    "incompatible": "不兼容"
   },
   "tooltips": {
     "enable": "点击启用",
@@ -103,6 +103,11 @@
     "docsTitle": "文档",
     "docsEmpty": "暂无文档",
     "handlerGroups": {
+      "skill": "Skills",
+      "command": "指令/指令组",
+      "llm_tool": "LLM 工具",
+      "listener": "事件监听器",
+      "hook": "钩子",
       "commands": "指令/指令组",
       "hooks": "钩子",
       "functionTools": "函数工具",
@@ -114,10 +119,10 @@
       "author": "作者",
       "category": "类别",
       "stars": "Star数",
-            "tags": "标签",
-            "astrbotVersion": "AstrBot 版本要求",
-            "supportPlatforms": "支持平台",
-            "authorWebsite": "作者网站",
+      "tags": "标签",
+      "astrbotVersion": "AstrBot 版本要求",
+      "supportPlatforms": "支持平台",
+      "authorWebsite": "作者网站",
       "repository": "仓库"
     }
   },
