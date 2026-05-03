@@ -789,7 +789,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
             handoff_tool.provider_id = config.provider_id
         session.handoff_tools[config.name] = handoff_tool
         # 初始化subagent的历史上下文（仅当历史功能启用时）
-        if cls._history_enabled and config.name not in session.subagent_histories:
+        if cls._history_enabled:
             session.subagent_histories[config.name] = []
         # 初始化subagent状态
         cls.set_subagent_status(session_id, config.name, "IDLE")
