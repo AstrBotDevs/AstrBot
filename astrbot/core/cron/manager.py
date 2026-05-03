@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -262,6 +263,7 @@ class CronJobManager:
                 "run_at": (
                     job.payload.get("run_at") if isinstance(job.payload, dict) else None
                 ),
+                "session": session_str,
             },
             "cron_payload": payload,
         }
