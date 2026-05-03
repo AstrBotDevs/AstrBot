@@ -17,38 +17,6 @@ from ..stage import Stage, register_stage
 
 @register_stage
 class RespondStage(Stage):
-    # 组件类型到其非空判断函数的映射
-    _component_validators = {
-        Comp.Plain: lambda comp: bool(
-            comp.text and comp.text.strip(),
-        ),  # 纯文本消息需要strip
-        Comp.Face: lambda comp: comp.id is not None,  # QQ表情
-        Comp.Record: lambda comp: bool(comp.file),  # 语音
-        Comp.Video: lambda comp: bool(comp.file),  # 视频
-        Comp.At: lambda comp: bool(comp.qq) or bool(comp.name),  # @
-        Comp.Image: lambda comp: bool(comp.file),  # 图片
-        Comp.Reply: lambda comp: bool(comp.id) and comp.sender_id is not None,  # 回复
-        Comp.Poke: lambda comp: comp.target_id() is not None,  # 戳一戳
-        Comp.Node: lambda comp: bool(comp.content),  # 转发节点
-        Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
-        Comp.File: lambda comp: bool(comp.file_ or comp.url),
-        Comp.Json: lambda comp: bool(comp.data),  # Json 卡片
-        Comp.Share: lambda comp: bool(comp.url) or bool(comp.title),
-        Comp.Music: lambda comp: (
-            (comp.id and comp._type and comp._type != "custom")
-            or (comp._type == "custom" and comp.url and comp.audio and comp.title)
-        ),  # 音乐分享
-        Comp.Forward: lambda comp: bool(comp.id),  # 合并转发
-        Comp.Location: lambda comp: bool(
-            comp.lat is not None and comp.lon is not None
-        ),  # 位置
-        Comp.Contact: lambda comp: bool(comp._type and comp.id),  # 推荐好友 or 群
-        Comp.Shake: lambda _: True,  # 窗口抖动（戳一戳）
-        Comp.Dice: lambda _: True,  # 掷骰子魔法表情
-        Comp.RPS: lambda _: True,  # 猜拳魔法表情
-        Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
-    }
-
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.config = ctx.astrbot_config
@@ -106,37 +74,6 @@ class RespondStage(Stage):
         # random
         return random.uniform(self.interval[0], self.interval[1])
 
-    def _platform_component_type(self, comp: BaseMessageComponent) -> str | None:
-        t = getattr(comp, "type", None)
-        return getattr(t, "value", t)
-
-    def _is_platform_component_non_empty(self, comp: BaseMessageComponent) -> bool:
-        ctype = self._platform_component_type(comp)
-        if ctype == "discord_embed":
-            return (
-                any(
-                    bool(getattr(comp, attr, None))
-                    for attr in (
-                        "title",
-                        "description",
-                        "url",
-                        "thumbnail",
-                        "image",
-                        "footer",
-                        "fields",
-                    )
-                )
-                or getattr(comp, "color", None) is not None
-                or callable(getattr(comp, "to_discord_embed", None))
-            )
-        if ctype == "discord_view":
-            return bool(
-                getattr(comp, "components", None)
-                or getattr(comp, "view", None)
-                or callable(getattr(comp, "to_discord_view", None)),
-            )
-        return False
-
     async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]) -> bool:
         """检查消息链是否为空
 
@@ -148,15 +85,8 @@ class RespondStage(Stage):
             return True
 
         for comp in chain:
-            comp_type = type(comp)
-
-            if self._is_platform_component_non_empty(comp):
+            if not comp.empty():
                 return False
-
-            # 检查组件类型是否在字典中
-            if comp_type in self._component_validators:
-                if self._component_validators[comp_type](comp):
-                    return False
 
         # 如果所有组件都为空
         return True

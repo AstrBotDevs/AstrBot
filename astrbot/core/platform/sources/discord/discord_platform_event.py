@@ -32,6 +32,9 @@ class DiscordViewComponent(BaseMessageComponent):
     def __init__(self, view: discord.ui.View) -> None:
         super().__init__(view=view)
 
+    def empty(self) -> bool:
+        return self.view is None
+
 
 def _component_type(component: BaseMessageComponent) -> str | None:
     component_type = getattr(component, "type", None)

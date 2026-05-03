@@ -75,6 +75,8 @@ async def test_parse_to_discord_handles_duck_typed_discord_embed() -> None:
 async def test_respond_stage_keeps_non_empty_discord_components() -> None:
     stage = RespondStage()
 
+    assert DiscordEmbed().empty() is True
+    assert DiscordView().empty() is True
     assert await stage._is_empty_message_chain([DiscordEmbed(title="test")]) is False
     assert (
         await stage._is_empty_message_chain(

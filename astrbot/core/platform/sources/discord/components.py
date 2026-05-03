@@ -39,6 +39,23 @@ class DiscordEmbed(BaseMessageComponent):
             fields=fields or [],
         )
 
+    def empty(self) -> bool:
+        return not (
+            any(
+                bool(value)
+                for value in (
+                    self.title,
+                    self.description,
+                    self.url,
+                    self.thumbnail,
+                    self.image,
+                    self.footer,
+                    self.fields,
+                )
+            )
+            or self.color is not None
+        )
+
     def to_discord_embed(self) -> discord.Embed:
         """转换为Discord Embed对象"""
         embed = discord.Embed()
@@ -97,6 +114,9 @@ class DiscordButton(BaseMessageComponent):
             disabled=disabled,
         )
 
+    def empty(self) -> bool:
+        return not bool(self.label or self.url or self.custom_id or self.emoji)
+
 
 class DiscordReference(BaseMessageComponent):
     """Discord引用组件"""
@@ -107,6 +127,9 @@ class DiscordReference(BaseMessageComponent):
 
     def __init__(self, message_id: str, channel_id: str) -> None:
         super().__init__(message_id=message_id, channel_id=channel_id)
+
+    def empty(self) -> bool:
+        return not bool(self.message_id and self.channel_id)
 
 
 class DiscordView(BaseMessageComponent):
@@ -122,6 +145,9 @@ class DiscordView(BaseMessageComponent):
         timeout: float | None = None,
     ) -> None:
         super().__init__(components=components or [], timeout=timeout)
+
+    def empty(self) -> bool:
+        return not bool(self.components)
 
     def to_discord_view(self) -> discord.ui.View:
         """转换为Discord View对象"""
