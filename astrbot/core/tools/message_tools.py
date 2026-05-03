@@ -68,7 +68,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 },
                 "session": {
                     "type": "string",
-                    "description": "Optional. Target session string. Defaults to current session.",
+                    "description": (
+                        "Optional. Leave empty for the current session. "
+                        "Use 'platform_id:message_type:session_id' to target another session."
+                    ),
                 },
             },
             "required": ["messages"],
@@ -219,8 +222,27 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 if isinstance(session, str)
                 else session
             )
-        except Exception as exc:
-            return f"error: invalid session: {exc} - session should be a string in the format of 'platform_id:platform_type:session_id'."
+        except Exception:
+            # LLM 在 cron 等主动场景下可能只传 session_id（如 oc_xxx），
+            # 而不是完整的三段式 platform_id:message_type:session_id。
+            # 此时用 current_session 的前两段补全。
+            # 注意：这里的session是传入的session参数，实际上是用户输入的session_id
+            # current_session才是完整的三段式session字符串。
+            # 仅当传入字符串不含 ':'（明显是裸 session_id）时才用 current_session 补全，
+            # 避免 LLM 传了带 ':' 但格式错误的目标 session 被错误修复。
+            # issue: https://github.com/AstrBotDevs/AstrBot/issues/7907
+            if isinstance(session, str) and current_session and ":" not in session:
+                try:
+                    cur = MessageSession.from_str(current_session)
+                    target_session = MessageSession(
+                        platform_name=cur.platform_id,
+                        message_type=cur.message_type,
+                        session_id=session,
+                    )
+                except Exception:
+                    return f"error: invalid session: {session}"
+            else:
+                return f"error: invalid session: {session}"
 
         await context.context.context.send_message(
             target_session,
