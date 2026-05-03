@@ -295,6 +295,14 @@ async def my_custom_hook_1(self, event: AstrMessageEvent, req: ProviderRequest):
 >     )
 > ```
 >
+> If the appended content should only affect the current LLM request and should not be persisted into conversation history, call `.mark_as_temp()` to mark it as temporary:
+>
+> ```python
+> req.extra_user_content_parts.append(
+>     TextPart(text="<runtime_hint>This hint only applies to the current request.</runtime_hint>").mark_as_temp()
+> )
+> ```
+>
 > For long-term memory, knowledge bases, or external system queries that may be large or unnecessary for every round, do not put everything directly into the prompt. Prefer registering them as `llm_tool` functions so the model can call them when needed, or retrieve only a small relevant summary in your plugin and append that summary through `extra_user_content_parts`.
 
 > You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
