@@ -1,13 +1,18 @@
 <script setup>
-import TraceDisplayer from "@/components/shared/TraceDisplayer.vue";
-import SpanTree from "@/components/shared/SpanTree.vue";
 import SpanDetail from "@/components/shared/SpanDetail.vue";
+import SpanTree from "@/components/shared/SpanTree.vue";
+import TraceDisplayer from "@/components/shared/TraceDisplayer.vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { ref, onMounted, computed } from "vue";
 import axios from "axios";
+import { computed, onMounted, ref } from "vue";
+import { useTheme } from "vuetify";
+
+defineOptions({ name: "TracePage" });
 
 const { tm } = useModuleI18n("features/trace");
+const theme = useTheme();
 
+const isDark = computed(() => theme.global.current.value.dark);
 const traceEnabled = ref(false);
 const loading = ref(false);
 const traceDisplayerKey = ref(0);
@@ -199,227 +204,215 @@ const filteredSpans = computed(() => {
 </script>
 
 <template>
-  <div class="trace-page">
-    <!-- ── header bar ── -->
-    <div class="trace-header">
-      <div class="trace-info">
-        <v-icon size="small" color="info" class="mr-2"
-          >mdi-information-outline</v-icon
-        >
-        <span class="trace-hint">{{ tm("hint") }}</span>
-      </div>
-      <div class="trace-controls">
-        <v-btn
-          size="small"
-          variant="tonal"
-          color="error"
-          prepend-icon="mdi-delete-outline"
-          @click="clearDialog = true"
-          >{{ tm("clearAll") }}</v-btn
-        >
-        <v-switch
-          v-model="traceEnabled"
-          :loading="loading"
-          :disabled="loading"
-          color="primary"
-          hide-details
-          density="compact"
-          class="ml-2"
-          @update:model-value="updateTraceSettings"
-        >
-          <template #label>
-            <span class="switch-label">{{
-              traceEnabled ? tm("recording") : tm("paused")
-            }}</span>
-          </template>
-        </v-switch>
-      </div>
-    </div>
-
-    <!-- ── main content: list + detail panel ── -->
-    <div class="trace-main">
-      <!-- list panel -->
-      <div
-        class="trace-list-panel"
-        :class="{ 'panel-shrunk': detailDrawerOpen }"
-        :style="
-          detailDrawerOpen ? { width: listPanelWidth + 'px', flex: 'none' } : {}
-        "
-      >
-        <TraceDisplayer
-          :key="traceDisplayerKey"
-          :selected-trace-id="selectedTraceId"
-          @select-trace="selectTrace"
-        />
-      </div>
-
-      <div
-        v-if="detailDrawerOpen"
-        class="resizer-v"
-        @mousedown="startDraggingList"
-      />
-
-      <!-- detail panel -->
-      <transition name="slide-detail">
-        <div v-if="detailDrawerOpen" class="trace-detail-panel">
-          <!-- detail header -->
-          <div class="detail-panel-header">
-            <template v-if="traceDetail && !detailLoading">
-              <div class="detail-hd-main">
-                <div class="detail-hd-top">
-                  <span class="detail-hd-sender">{{
-                    traceDetail.sender_name || "Unknown"
-                  }}</span>
-                  <span
-                    v-if="traceDetail.message_outline"
-                    class="detail-hd-outline"
-                  >
-                    {{ traceDetail.message_outline }}
-                  </span>
-                </div>
-                <div class="detail-hd-badges">
-                  <v-chip
-                    v-if="traceDetail.status !== 'ok'"
-                    size="x-small"
-                    :color="
-                      traceDetail.status === 'ok'
-                        ? 'success'
-                        : traceDetail.status === 'error'
-                        ? 'error'
-                        : 'warning'
-                    "
-                    variant="tonal"
-                    rounded="pill"
-                    >{{ traceDetail.status }}</v-chip
-                  >
-                  <span class="detail-badge">{{
-                    formatDuration(traceDetail.duration_ms)
-                  }}</span>
-                  <span class="detail-badge">{{
-                    formatTime(traceDetail.started_at)
-                  }}</span>
-                  <div
-                    v-if="traceDetail.total_input_tokens"
-                    class="detail-tokens-tag"
-                  >
-                    <v-icon size="11" color="grey" class="mr-1"
-                      >mdi-arrow-up-bold-outline</v-icon
-                    >
-                    <span>{{ traceDetail.total_input_tokens }}</span>
-                    <v-icon size="11" color="grey" class="ml-2 mr-1"
-                      >mdi-arrow-down-bold-outline</v-icon
-                    >
-                    <span>{{ traceDetail.total_output_tokens }}</span>
-                    <span class="ml-1">tokens</span>
-                  </div>
-                </div>
-              </div>
-            </template>
-            <template v-else>
-              <span class="detail-panel-title">Trace Detail</span>
-            </template>
-            <v-spacer />
-            <v-btn
-              icon="mdi-close"
-              size="small"
-              variant="text"
-              @click="closeDetail"
-            />
-          </div>
-
-          <!-- loading -->
-          <div v-if="detailLoading" class="detail-loading">
-            <v-progress-circular indeterminate color="primary" size="32" />
-          </div>
-
-          <template v-else-if="traceDetail">
-            <!-- two-sub-panel: span tree + span detail -->
-            <div class="detail-body">
-              <!-- span tree (left) -->
-              <div
-                class="span-tree-panel"
-                :style="{ width: treePanelWidth + 'px', flex: 'none' }"
-              >
-                <div class="span-tree-header">
-                  <div class="st-header-top">
-                    <span>Spans</span>
-                    <div class="st-header-actions">
-                      <v-btn
-                        icon="mdi-unfold-more-horizontal"
-                        size="x-small"
-                        variant="text"
-                        density="compact"
-                        @click="expandSignal++"
-                      />
-                      <v-btn
-                        icon="mdi-unfold-less-horizontal"
-                        size="x-small"
-                        variant="text"
-                        density="compact"
-                        @click="collapseSignal++"
-                      />
-                    </div>
-                  </div>
-                  <div class="span-type-filters">
-                    <div
-                      v-for="t in SPAN_TYPES"
-                      :key="t.id"
-                      class="filter-chip"
-                      :class="{ inactive: excludedTypes.includes(t.id) }"
-                      :style="{ '--chip-color': t.color }"
-                      @click="toggleType(t.id)"
-                    >
-                      {{ t.label }}
-                    </div>
-                  </div>
-                </div>
-                <div class="span-tree-scroll">
-                  <SpanTree
-                    v-if="filteredSpans"
-                    :span="filteredSpans"
-                    :depth="0"
-                    :tree-lines="[]"
-                    :is-last="true"
-                    :selected-span-id="selectedSpan?.span_id"
-                    :expand-signal="expandSignal"
-                    :collapse-signal="collapseSignal"
-                    @select="selectedSpan = $event"
-                  />
-                  <div
-                    v-else-if="excludedTypes.length > 0"
-                    class="no-match-hint"
-                  >
-                    No matching spans
-                  </div>
-                </div>
-              </div>
-
-              <div class="resizer-v" @mousedown="startDraggingTree" />
-
-              <!-- span detail (right) -->
-              <div class="span-detail-panel">
-                <SpanDetail :span="selectedSpan" />
-              </div>
-            </div>
-          </template>
-
-          <div v-else class="detail-loading">
-            <v-icon color="grey" size="32">mdi-alert-circle-outline</v-icon>
-            <div
-              class="mt-2"
-              style="
-                font-size: 13px;
-                color: rgba(var(--v-theme-on-surface), 0.4);
-              "
-            >
-              Failed to load trace
-            </div>
-          </div>
+  <div class="dashboard-page trace-page" :class="{ 'is-dark': isDark }">
+    <v-container fluid class="dashboard-shell trace-shell pa-4 pa-md-6">
+      <div class="dashboard-header trace-header">
+        <div class="dashboard-header-main">
+          <h1 class="dashboard-title">{{ tm("title") }}</h1>
+          <p class="dashboard-subtitle">
+            {{ tm("hint") }}
+          </p>
         </div>
-      </transition>
-    </div>
+        <div class="dashboard-header-actions trace-controls">
+          <v-btn
+            size="small"
+            variant="tonal"
+            color="error"
+            prepend-icon="mdi-delete-outline"
+            @click="clearDialog = true"
+          >
+            {{ tm("clearAll") }}
+          </v-btn>
+          <v-switch
+            v-model="traceEnabled"
+            :loading="loading"
+            :disabled="loading"
+            color="primary"
+            hide-details
+            density="compact"
+            inset
+            @update:model-value="updateTraceSettings"
+          >
+            <template #label>
+              <span class="switch-label">
+                {{ traceEnabled ? tm("recording") : tm("paused") }}
+              </span>
+            </template>
+          </v-switch>
+        </div>
+      </div>
 
-    <!-- clear confirm dialog -->
+      <div class="trace-main">
+        <div
+          class="trace-list-panel"
+          :class="{ 'panel-shrunk': detailDrawerOpen }"
+          :style="
+            detailDrawerOpen
+              ? { width: listPanelWidth + 'px', flex: 'none' }
+              : {}
+          "
+        >
+          <TraceDisplayer
+            :key="traceDisplayerKey"
+            :selected-trace-id="selectedTraceId"
+            @select-trace="selectTrace"
+          />
+        </div>
+
+        <div
+          v-if="detailDrawerOpen"
+          class="resizer-v"
+          @mousedown="startDraggingList"
+        />
+
+        <transition name="slide-detail">
+          <div v-if="detailDrawerOpen" class="trace-detail-panel">
+            <div class="detail-panel-header">
+              <template v-if="traceDetail && !detailLoading">
+                <div class="detail-hd-main">
+                  <div class="detail-hd-top">
+                    <span class="detail-hd-sender">
+                      {{ traceDetail.sender_name || "Unknown" }}
+                    </span>
+                    <span
+                      v-if="traceDetail.message_outline"
+                      class="detail-hd-outline"
+                    >
+                      {{ traceDetail.message_outline }}
+                    </span>
+                  </div>
+                  <div class="detail-hd-badges">
+                    <v-chip
+                      v-if="traceDetail.status !== 'ok'"
+                      size="x-small"
+                      :color="
+                        traceDetail.status === 'ok'
+                          ? 'success'
+                          : traceDetail.status === 'error'
+                            ? 'error'
+                            : 'warning'
+                      "
+                      variant="tonal"
+                      rounded="pill"
+                    >
+                      {{ traceDetail.status }}
+                    </v-chip>
+                    <span class="detail-badge">
+                      {{ formatDuration(traceDetail.duration_ms) }}
+                    </span>
+                    <span class="detail-badge">
+                      {{ formatTime(traceDetail.started_at) }}
+                    </span>
+                    <div
+                      v-if="traceDetail.total_input_tokens"
+                      class="detail-tokens-tag"
+                    >
+                      <v-icon size="11" color="grey" class="mr-1">
+                        mdi-arrow-up-bold-outline
+                      </v-icon>
+                      <span>{{ traceDetail.total_input_tokens }}</span>
+                      <v-icon size="11" color="grey" class="ml-2 mr-1">
+                        mdi-arrow-down-bold-outline
+                      </v-icon>
+                      <span>{{ traceDetail.total_output_tokens }}</span>
+                      <span class="ml-1">tokens</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <span class="detail-panel-title">Trace Detail</span>
+              </template>
+              <v-spacer />
+              <v-btn
+                icon="mdi-close"
+                size="small"
+                variant="text"
+                @click="closeDetail"
+              />
+            </div>
+
+            <div v-if="detailLoading" class="detail-loading">
+              <v-progress-circular indeterminate color="primary" size="32" />
+            </div>
+
+            <template v-else-if="traceDetail">
+              <div class="detail-body">
+                <div
+                  class="span-tree-panel"
+                  :style="{ width: treePanelWidth + 'px', flex: 'none' }"
+                >
+                  <div class="span-tree-header">
+                    <div class="st-header-top">
+                      <span>Spans</span>
+                      <div class="st-header-actions">
+                        <v-btn
+                          icon="mdi-unfold-more-horizontal"
+                          size="x-small"
+                          variant="text"
+                          density="compact"
+                          @click="expandSignal++"
+                        />
+                        <v-btn
+                          icon="mdi-unfold-less-horizontal"
+                          size="x-small"
+                          variant="text"
+                          density="compact"
+                          @click="collapseSignal++"
+                        />
+                      </div>
+                    </div>
+                    <div class="span-type-filters">
+                      <div
+                        v-for="t in SPAN_TYPES"
+                        :key="t.id"
+                        class="filter-chip"
+                        :class="{ inactive: excludedTypes.includes(t.id) }"
+                        :style="{ '--chip-color': t.color }"
+                        @click="toggleType(t.id)"
+                      >
+                        {{ t.label }}
+                      </div>
+                    </div>
+                  </div>
+                  <div class="span-tree-scroll">
+                    <SpanTree
+                      v-if="filteredSpans"
+                      :span="filteredSpans"
+                      :depth="0"
+                      :tree-lines="[]"
+                      :is-last="true"
+                      :selected-span-id="selectedSpan?.span_id"
+                      :expand-signal="expandSignal"
+                      :collapse-signal="collapseSignal"
+                      @select="selectedSpan = $event"
+                    />
+                    <div
+                      v-else-if="excludedTypes.length > 0"
+                      class="no-match-hint"
+                    >
+                      No matching spans
+                    </div>
+                  </div>
+                </div>
+
+                <div class="resizer-v" @mousedown="startDraggingTree" />
+
+                <div class="span-detail-panel">
+                  <SpanDetail :span="selectedSpan" />
+                </div>
+              </div>
+            </template>
+
+            <div v-else class="detail-loading">
+              <v-icon color="grey" size="32">mdi-alert-circle-outline</v-icon>
+              <div class="detail-error">Failed to load trace</div>
+            </div>
+          </div>
+        </transition>
+      </div>
+    </v-container>
+
     <v-dialog v-model="clearDialog" max-width="400">
       <v-card>
         <v-card-title>{{ tm("clearAll") }}</v-card-title>
@@ -443,14 +436,9 @@ const filteredSpans = computed(() => {
   </div>
 </template>
 
-<script>
-export default {
-  name: "TracePage",
-  components: { TraceDisplayer, SpanTree, SpanDetail },
-};
-</script>
-
 <style scoped>
+@import "@/styles/dashboard-shell.css";
+
 .trace-page {
   height: 100%;
   display: flex;
@@ -458,34 +446,25 @@ export default {
   overflow: hidden;
 }
 
+.trace-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 .trace-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 16px;
-  background: rgba(var(--v-theme-primary), 0.04);
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   flex-shrink: 0;
-}
-
-.trace-info {
-  display: flex;
-  align-items: center;
-}
-
-.trace-hint {
-  font-size: 14px;
-  color: rgba(var(--v-theme-on-surface), 0.55);
 }
 
 .trace-controls {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 .switch-label {
-  font-size: 14px;
+  color: var(--dashboard-muted);
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -606,6 +585,11 @@ export default {
   justify-content: center;
   flex: 1;
   gap: 8px;
+}
+
+.detail-error {
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  font-size: 13px;
 }
 
 .detail-body {
@@ -747,5 +731,11 @@ export default {
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(var(--v-theme-primary), 0.25) transparent;
+}
+
+@media (max-width: 768px) {
+  .trace-header {
+    align-items: flex-start;
+  }
 }
 </style>

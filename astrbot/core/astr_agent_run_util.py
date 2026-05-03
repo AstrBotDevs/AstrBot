@@ -88,6 +88,31 @@ def _build_tool_result_status_message(
     return status_msg
 
 
+def _should_buffer_llm_result(
+    buffer_intermediate_messages: bool,
+    stream_to_general: bool,
+    agent_runner: AgentRunner,
+) -> bool:
+    return (
+        buffer_intermediate_messages
+        and not stream_to_general
+        and not agent_runner.streaming
+    )
+
+
+def _merge_buffered_llm_chains(
+    buffered_llm_chains: list[MessageChain],
+) -> MessageChain | None:
+    if not buffered_llm_chains:
+        return None
+
+    merged_chain = MessageChain()
+    for chain in buffered_llm_chains:
+        merged_chain.chain.extend(chain.chain)
+    buffered_llm_chains.clear()
+    return merged_chain
+
+
 async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 30,
@@ -95,6 +120,7 @@ async def run_agent(
     show_tool_call_result: bool = False,
     stream_to_general: bool = False,
     show_reasoning: bool = False,
+    buffer_intermediate_messages: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
@@ -110,6 +136,12 @@ async def run_agent(
     _step_span = None
     _tool_spans: dict[str, TraceSpan] = {}  # call_id -> TraceSpan
 
+    buffered_llm_chains: list[MessageChain] = []
+    can_buffer_llm_result = _should_buffer_llm_result(
+        buffer_intermediate_messages,
+        stream_to_general,
+        agent_runner,
+    )
     while step_idx < max_step + 1:
         step_idx += 1
 
@@ -152,6 +184,17 @@ async def run_agent(
                     agent_runner.request_stop()
 
                 if resp.type == "aborted":
+                    if can_buffer_llm_result:
+                        merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
+                        if merged_chain:
+                            astr_event.set_result(
+                                MessageEventResult(
+                                    chain=merged_chain.chain,
+                                    result_content_type=ResultContentType.LLM_RESULT,
+                                ),
+                            )
+                            yield merged_chain
+                            astr_event.clear_result()
                     if not stop_watcher.done():
                         stop_watcher.cancel()
                         try:
@@ -258,6 +301,12 @@ async def run_agent(
                         )
                         await astr_event.send(chain)
                     continue
+                elif resp.type == "llm_result":
+                    chain = resp.data["chain"]
+                    if chain.type == "reasoning":
+                        # For non-streaming mode, we handle reasoning in astrbot/core/astr_agent_hooks.py.
+                        # For streaming mode, we yield content immediately when received a reasoning chunk but not in here, see below.
+                        continue
 
                 if stream_to_general and resp.type == "streaming_delta":
                     continue
@@ -278,6 +327,10 @@ async def run_agent(
                         _step_span.finish()
 
                 if stream_to_general or not agent_runner.streaming:
+                    if can_buffer_llm_result and resp.type == "llm_result":
+                        buffered_llm_chains.append(resp.data["chain"])
+                        continue
+
                     content_typ = (
                         ResultContentType.LLM_RESULT
                         if resp.type == "llm_result"
@@ -289,7 +342,7 @@ async def run_agent(
                             result_content_type=content_typ,
                         ),
                     )
-                    yield
+                    yield resp.data["chain"]
                     astr_event.clear_result()
                 elif resp.type == "streaming_delta":
                     chain = resp.data["chain"]
@@ -297,6 +350,19 @@ async def run_agent(
                         # display the reasoning content only when configured
                         continue
                     yield resp.data["chain"]  # MessageChain
+
+            if can_buffer_llm_result and agent_runner.done():
+                merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
+                if merged_chain:
+                    astr_event.set_result(
+                        MessageEventResult(
+                            chain=merged_chain.chain,
+                            result_content_type=ResultContentType.LLM_RESULT,
+                        ),
+                    )
+                    yield merged_chain
+                    astr_event.clear_result()
+
             if not stop_watcher.done():
                 stop_watcher.cancel()
                 try:
@@ -401,6 +467,7 @@ async def run_live_agent(
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,
+    buffer_intermediate_messages: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
     """Live Mode 的 Agent 运行器，支持流式 TTS
 
@@ -424,6 +491,7 @@ async def run_live_agent(
             show_tool_call_result=show_tool_call_result,
             stream_to_general=False,
             show_reasoning=show_reasoning,
+            buffer_intermediate_messages=buffer_intermediate_messages,
         ):
             yield chain
         return
@@ -456,6 +524,7 @@ async def run_live_agent(
             show_tool_use,
             show_tool_call_result,
             show_reasoning,
+            buffer_intermediate_messages,
         )
     )
 
@@ -543,6 +612,7 @@ async def _run_agent_feeder(
     show_tool_use: bool,
     show_tool_call_result: bool,
     show_reasoning: bool,
+    buffer_intermediate_messages: bool,
 ) -> None:
     """运行 Agent 并将文本输出分句放入队列"""
     buffer = ""
@@ -554,6 +624,7 @@ async def _run_agent_feeder(
             show_tool_call_result=show_tool_call_result,
             stream_to_general=False,
             show_reasoning=show_reasoning,
+            buffer_intermediate_messages=buffer_intermediate_messages,
         ):
             if chain is None:
                 continue

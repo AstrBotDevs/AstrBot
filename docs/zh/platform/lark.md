@@ -88,9 +88,11 @@
 
 再点击上面的`保存`按钮。
 
-接下来，点击权限管理，点击开通权限，输入 `im:message:send,im:message,im:message:send_as_bot`。添加筛选到的权限。
+接下来，点击权限管理，点击开通权限，输入 `im:message,im:message:send_as_bot`。添加筛选到的权限。
 
 再次输入 `im:resource:upload,im:resource` 开通上传图片相关的权限。
+
+如果需要在群聊里使用，请额外开通 `im:message.group_at_msg:readonly` 和 `im:message.group_msg` 权限。
 
 如果需要使用流式输出，请额外开通 `创建与更新卡片(cardkit:card:write)` 权限。
 

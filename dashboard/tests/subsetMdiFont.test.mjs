@@ -11,6 +11,7 @@ import {
   resolveUsedIcons,
   extractUtilityCss,
   ICON_CLASS_PATTERN,
+  REQUIRED_ICONS,
 } from '../scripts/subset-mdi-font.mjs';
 
 // ── Helper: create a temporary directory tree for file-system tests ─────────
@@ -83,7 +84,11 @@ test('scanUsedIcons extracts mdi-* icon names from files', () => {
   assert.ok(icons instanceof Set);
   assert.ok(icons.has('mdi-home'));
   assert.ok(icons.has('mdi-close'));
-  assert.equal(icons.size, 2); // mdi-home deduplicated
+  for (const requiredIcon of REQUIRED_ICONS) {
+    assert.ok(icons.has(requiredIcon));
+  }
+  const expectedIcons = new Set([...REQUIRED_ICONS, 'mdi-home', 'mdi-close']);
+  assert.deepEqual(icons, expectedIcons);
 
   rmSync(tmp, { recursive: true });
 });
@@ -101,12 +106,30 @@ test('scanUsedIcons excludes utility classes', () => {
   rmSync(tmp, { recursive: true });
 });
 
-test('scanUsedIcons returns empty set when no icons found', () => {
+test('scanUsedIcons includes all required icons even when no mdi-* icons are found in source', () => {
   const tmp = makeTmpDir();
   writeFileSync(join(tmp, 'A.vue'), '<div>Hello</div>');
 
   const icons = scanUsedIcons(collectFiles(tmp, ['.vue']));
-  assert.equal(icons.size, 0);
+  for (const requiredIcon of REQUIRED_ICONS) {
+    assert.ok(icons.has(requiredIcon));
+  }
+  assert.equal(icons.size, REQUIRED_ICONS.size);
+
+  rmSync(tmp, { recursive: true });
+});
+
+test('scanUsedIcons deduplicates required icons when source already references them', () => {
+  const tmp = makeTmpDir();
+  const requiredIcon = [...REQUIRED_ICONS][0];
+  writeFileSync(join(tmp, 'A.vue'), `<v-icon>${requiredIcon}</v-icon><v-icon>mdi-home</v-icon>`);
+
+  const icons = [...scanUsedIcons(collectFiles(tmp, ['.vue']))];
+  assert.equal(icons.filter(icon => icon === requiredIcon).length, 1);
+  for (const builtInRequiredIcon of REQUIRED_ICONS) {
+    assert.ok(icons.includes(builtInRequiredIcon));
+  }
+  assert.ok(icons.includes('mdi-home'));
 
   rmSync(tmp, { recursive: true });
 });

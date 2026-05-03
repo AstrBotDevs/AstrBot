@@ -34,7 +34,7 @@ router.beforeEach(async (to, from, next) => {
 
   // 如果用户已登录且试图访问登录页面，则重定向到首页
   if (to.path === '/auth/login' && auth.has_token()) {
-    return next(auth.returnUrl || '/');
+    return next('/welcome');
   }
 
   if (to.matched.some((record) => record.meta.requiresAuth)) {

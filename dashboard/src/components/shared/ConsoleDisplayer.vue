@@ -5,7 +5,7 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
 </script>
 
 <template>
-  <div>
+  <div class="console-displayer-wrapper" id="console-wrapper">
     <div class="filter-controls mb-2" v-if="showLevelBtns">
       <v-chip-group v-model="selectedLevels" column multiple>
         <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter variant="flat" size="small"
@@ -13,9 +13,17 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
           {{ level }}
         </v-chip>
       </v-chip-group>
+      <v-spacer></v-spacer>
+      <v-btn
+        :icon="isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
+        variant="text"
+        density="compact"
+        class="me-4 fullscreen-btn"
+        @click="toggleFullscreen"
+      ></v-btn>
     </div>
 
-    <div id="term" style="background-color: #1e1e1e; padding: 16px; border-radius: 8px; overflow-y:auto; height: 100%">
+    <div id="term" class="console-term">
     </div>
   </div>
 </template>
@@ -26,15 +34,16 @@ export default {
   data() {
     return {
       autoScroll: true,
+      isFullscreen: false,
       logColorAnsiMap: {
-        '\u001b[1;34m': 'color: #39C5BB; font-weight: bold;',
-        '\u001b[1;36m': 'color: #00FFFF; font-weight: bold;',
-        '\u001b[1;33m': 'color: #FFFF00; font-weight: bold;',
-        '\u001b[31m': 'color: #FF0000;',
-        '\u001b[1;31m': 'color: #FF0000; font-weight: bold;',
+        '\u001b[1;34m': 'color: #6cb6d9; font-weight: bold;',
+        '\u001b[1;36m': 'color: #72c4cc; font-weight: bold;',
+        '\u001b[1;33m': 'color: #d4b95e; font-weight: bold;',
+        '\u001b[31m': 'color: #d46a6a;',
+        '\u001b[1;31m': 'color: #e06060; font-weight: bold;',
         '\u001b[0m': 'color: inherit; font-weight: normal;',
-        '\u001b[32m': 'color: #00FF00;',
-        'default': 'color: #FFFFFF;'
+        '\u001b[32m': 'color: #6cc070;',
+        'default': 'color: #c8c8c8;'
       },
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
       selectedLevels: [0, 1, 2, 3, 4],
@@ -80,8 +89,10 @@ export default {
   async mounted() {
     await this.fetchLogHistory();
     this.connectSSE();
+    document.addEventListener('fullscreenchange', this.handleFullscreenChange);
   },
   beforeUnmount() {
+    document.removeEventListener('fullscreenchange', this.handleFullscreenChange);
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
@@ -253,6 +264,51 @@ export default {
       this.autoScroll = !this.autoScroll;
     },
 
+    toggleFullscreen() {
+      const container = document.getElementById('console-wrapper');
+      if (!document.fullscreenElement) {
+        container.requestFullscreen().catch(err => {
+          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    },
+
+    handleFullscreenChange() {
+      this.isFullscreen = !!document.fullscreenElement;
+    },
+
+    appendLogContent(element, log) {
+      const levelMatch = log.match(/\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/);
+      if (!levelMatch) {
+        element.innerText = `${log}`;
+        return;
+      }
+
+      const levelStart = levelMatch.index;
+      const levelEnd = levelStart + levelMatch[0].length;
+      const prefix = log.slice(0, levelStart).trimEnd();
+      const message = log.slice(levelEnd).trimStart();
+
+      const prefixSpan = document.createElement('span');
+      prefixSpan.className = 'console-log-prefix';
+      prefixSpan.innerText = prefix;
+
+      const levelSpan = document.createElement('span');
+      levelSpan.className = 'console-log-level';
+      levelSpan.innerText = levelMatch[0];
+
+      const messageSpan = document.createElement('span');
+      messageSpan.className = 'console-log-message';
+      messageSpan.innerText = message;
+
+      element.classList.add('console-log-line--structured');
+      element.appendChild(prefixSpan);
+      element.appendChild(levelSpan);
+      element.appendChild(messageSpan);
+    },
+
     printLog(log) {
       let ele = document.getElementById('term')
       if (!ele) {
@@ -271,7 +327,7 @@ export default {
 
       span.style = style
       span.classList.add('console-log-line', 'fade-in')
-      span.innerText = `${log}`;
+      this.appendLogContent(span, log);
       ele.appendChild(span)
       if (this.autoScroll) {
         ele.scrollTop = ele.scrollHeight
@@ -282,20 +338,66 @@ export default {
 </script>
 
 <style scoped>
+.console-displayer-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#console-wrapper:fullscreen {
+  background-color: #1e1e1e;
+  padding: 20px;
+}
+
 .filter-controls {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
-  margin-left: 20px;
+}
+
+.console-term {
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.fullscreen-btn {
+    color: rgba(255, 255, 255, 0.7) !important; /* 提高在深色背景下的对比度 */
 }
 
 :deep(.console-log-line) {
   display: block;
-  margin-bottom: 2px;
+  margin: 0 0 2px;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, var(--astrbot-font-cjk-mono), monospace;
   font-size: 12px;
   white-space: pre-wrap;
+}
+
+:deep(.console-log-line--structured) {
+  display: grid;
+  grid-template-columns: max-content 10ch minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
+  white-space: normal;
+}
+
+:deep(.console-log-prefix),
+:deep(.console-log-level),
+:deep(.console-log-message) {
+  min-width: 0;
+  white-space: pre-wrap;
+}
+
+:deep(.console-log-level) {
+  font-variant-numeric: tabular-nums;
+}
+
+:deep(.console-log-message) {
+  overflow-wrap: anywhere;
 }
 
 :deep(.fade-in) {

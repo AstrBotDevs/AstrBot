@@ -12,7 +12,11 @@ class TemplateManager:
     所有创建、更新、删除操作仅影响用户目录，以确保更新框架时用户数据安全。
     """
 
-    CORE_TEMPLATES = ["base.html", "astrbot_powershell.html"]
+    CORE_TEMPLATES = [
+        "base.html",
+        "astrbot_powershell.html",
+        "astrbot_vitepress.html",
+    ]
 
     def __init__(self) -> None:
         self.builtin_template_dir = os.path.join(

@@ -39,6 +39,9 @@
   "actions": {
     "copy": "Copy",
     "regenerate": "Regenerate",
+    "retry": "Retry",
+    "retryWithModel": "Use another model",
+    "noAvailableModels": "No available models",
     "like": "Like",
     "dislike": "Dislike",
     "share": "Share",
@@ -48,13 +51,26 @@
     "fullscreen": "Fullscreen Mode",
     "exitFullscreen": "Exit Fullscreen",
     "reply": "Reply",
-    "providerConfig": "AI Configuration",
+    "providerConfig": "Model Configuration",
     "toolsUsed": "Tool Used",
     "toolCallUsed": "Used {name} tool",
     "pythonCodeAnalysis": "Python Code Analysis Used"
   },
   "ipython": {
     "output": "Output"
+  },
+  "toolStatus": {
+    "done": "Done",
+    "running": "Running"
+  },
+  "thread": {
+    "title": "Thread",
+    "askInThread": "Ask in thread",
+    "count": "{count} threads",
+    "createFailed": "Failed to create thread",
+    "delete": "Delete thread",
+    "confirmDelete": "Delete this thread? This action cannot be undone.",
+    "placeholder": "Ask about this excerpt..."
   },
   "conversation": {
     "newConversation": "New Conversation",
@@ -97,7 +113,9 @@
     "title": "Config"
   },
   "reasoning": {
-    "thinking": "Thinking Process"
+    "thinking": "Thinking Process",
+    "think": "Thinking",
+    "toolUsed": "Using Tool"
   },
   "reply": {
     "replyTo": "Reply to",
@@ -119,9 +137,9 @@
   },
   "stats": {
     "tokens": "Tokens",
-    "inputTokens": "Input Tokens",
+    "inputTokens": "Input (other)",
     "outputTokens": "Output Tokens",
-    "cachedTokens": "Cached Tokens",
+    "cachedTokens": "Input (cached)",
     "duration": "Duration",
     "ttft": "Time to First Token"
   },
@@ -158,4 +176,4 @@
     "partialFailure": "{failed} of {total} conversations failed to delete",
     "requestFailed": "Failed to delete conversations. Please try again."
   }
-} 
+}

@@ -31,6 +31,39 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
     return skills
 
 
+def _collect_sync_skill_dirs() -> list[tuple[str, Path]]:
+    """Collect local and plugin-provided skills that should be synced."""
+    skills_root = Path(get_astrbot_skills_path())
+    if not skills_root.is_dir():
+        return []
+
+    try:
+        skill_manager = SkillManager(skills_root=str(skills_root))
+    except OSError as exc:
+        logger.warning("[Computer] Failed to initialize skill manager: %s", exc)
+        return []
+
+    sync_dirs: list[tuple[str, Path]] = []
+    for skill in skill_manager.list_skills(
+        active_only=False,
+        runtime="local",
+        show_sandbox_path=False,
+    ):
+        if skill.source_type == "sandbox_only":
+            continue
+        skill_md = Path(skill.path)
+        if not skill_md.is_file():
+            continue
+        sync_dirs.append((skill.name, skill_md.parent))
+    return sync_dirs
+
+
+def _normalize_shell_exec_result(result: object) -> dict:
+    if isinstance(result, dict):
+        return result
+    return {"exit_code": 0, "stdout": "", "stderr": ""}
+
+
 def _discover_bay_credentials(endpoint: str) -> str:
     """Try to auto-discover Bay API key from credentials.json.
 
@@ -214,7 +247,7 @@ def parse_description(text: str) -> str:
     if end_idx is None:
         return ""
 
-    frontmatter = "\n".join(lines[1:end_idx])
+    frontmatter = "\\n".join(lines[1:end_idx])
     try:
         import yaml
     except ImportError:
@@ -351,7 +384,9 @@ async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
     executed in a separate phase to keep failure domains clear.
     """
     logger.info("[Computer] Skill sync phase=apply start")
-    apply_result = await booter.shell.exec(_build_apply_sync_command())
+    apply_result = _normalize_shell_exec_result(
+        await booter.shell.exec(_build_apply_sync_command())
+    )
     if not _shell_exec_succeeded(apply_result):
         detail = _format_exec_error_detail(apply_result)
         logger.error("[Computer] Skill sync phase=apply failed: %s", detail)
@@ -362,7 +397,9 @@ async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
 async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
     """Scan sandbox skills and return normalized payload for cache update."""
     logger.info("[Computer] Skill sync phase=scan start")
-    scan_result = await booter.shell.exec(_build_scan_command())
+    scan_result = _normalize_shell_exec_result(
+        await booter.shell.exec(_build_scan_command())
+    )
     if not _shell_exec_succeeded(scan_result):
         detail = _format_exec_error_detail(scan_result)
         logger.error("[Computer] Skill sync phase=scan failed: %s", detail)
@@ -382,21 +419,24 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     Backward-compatible orchestrator: keep historical behavior while internally
     splitting into `apply` and `scan` phases.
     """
-    skills_root = Path(get_astrbot_skills_path())
-    if not skills_root.is_dir():
-        return
-    local_skill_dirs = _list_local_skill_dirs(skills_root)
+    sync_skill_dirs = _collect_sync_skill_dirs()
 
     temp_dir = Path(get_astrbot_temp_path())
     temp_dir.mkdir(parents=True, exist_ok=True)
     zip_base = temp_dir / "skills_bundle"
     zip_path = zip_base.with_suffix(".zip")
+    bundle_root = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"
 
     try:
-        if local_skill_dirs:
+        if sync_skill_dirs:
             if zip_path.exists():
                 zip_path.unlink()
-            shutil.make_archive(str(zip_base), "zip", str(skills_root))
+            if bundle_root.exists():
+                shutil.rmtree(bundle_root)
+            bundle_root.mkdir(parents=True)
+            for skill_name, skill_dir in sync_skill_dirs:
+                shutil.copytree(skill_dir, bundle_root / skill_name)
+            shutil.make_archive(str(zip_base), "zip", str(bundle_root))
             remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
             logger.info("Uploading skills bundle to sandbox...")
             await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
@@ -420,6 +460,11 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             len(managed),
         )
     finally:
+        if bundle_root.exists():
+            try:
+                shutil.rmtree(bundle_root)
+            except Exception:
+                logger.warning(f"Failed to remove temp skills bundle: {bundle_root}")
         if zip_path.exists():
             try:
                 zip_path.unlink()
@@ -445,7 +490,22 @@ async def get_booter(
     if session_id in session_booter:
         booter = session_booter[session_id]
         if not await booter.available():
-            # rebuild
+            # Clean up old booter before rebuilding so sandbox resources
+            # on Bay (containers, volumes, networks) are not leaked.
+            # Only ShipyardNeoBooter supports delete_sandbox; other booters
+            # (local, boxlite, cua, etc.) are not backed by a remote sandbox
+            # manager and don't need it.
+            try:
+                if booter_type == "shipyard_neo":
+                    await booter.shutdown(delete_sandbox=True)
+                else:
+                    await booter.shutdown()
+            except Exception as shutdown_err:
+                logger.warning(
+                    "[Computer] Error shutting down stale booter for session %s: %s",
+                    session_id,
+                    shutdown_err,
+                )
             session_booter.pop(session_id, None)
     if session_id not in session_booter:
         uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
@@ -484,6 +544,15 @@ async def get_booter(
                 profile=profile,
                 ttl=ttl,
             )
+        elif booter_type == "cua":
+            from .booters.cua import CuaBooter, build_cua_booter_kwargs
+
+            cua_kwargs = build_cua_booter_kwargs(sandbox_cfg)
+            logger.info(
+                f"[Computer] CUA config: image={cua_kwargs['image']}, "
+                f"os_type={cua_kwargs['os_type']}, ttl={cua_kwargs['ttl']}"
+            )
+            client = CuaBooter(**cua_kwargs)
         elif booter_type == "boxlite":
             from .booters.boxlite import BoxliteBooter
 
@@ -499,6 +568,17 @@ async def get_booter(
             await _sync_skills_to_sandbox(client)
         except Exception as e:
             logger.error(f"Error booting sandbox for session {session_id}: {e}")
+            try:
+                if booter_type == "shipyard_neo":
+                    await client.shutdown(delete_sandbox=True)
+                else:
+                    await client.shutdown()
+            except Exception as shutdown_error:
+                logger.warning(
+                    "Failed to shutdown sandbox after boot error for session %s: %s",
+                    session_id,
+                    shutdown_error,
+                )
             raise e
 
         session_booter[session_id] = client

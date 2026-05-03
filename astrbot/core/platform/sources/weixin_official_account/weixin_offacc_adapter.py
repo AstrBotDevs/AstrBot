@@ -2,7 +2,6 @@ import asyncio
 import os
 import sys
 import time
-import uuid
 from collections.abc import Callable, Coroutine
 from typing import Any, cast
 
@@ -324,7 +323,6 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settingss = platform_settings
-        self.client_self_id = uuid.uuid4().hex[:8]
         self.api_base_url = platform_config.get(
             "api_base_url",
             "https://api.weixin.qq.com/cgi-bin/",

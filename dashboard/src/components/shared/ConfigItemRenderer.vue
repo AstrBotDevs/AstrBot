@@ -71,7 +71,7 @@
 
     <div
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options && itemMeta?.render_type === 'checkbox'"
-      class="d-flex flex-wrap gap-20"
+      class="checkbox-group d-flex flex-wrap"
     >
       <v-checkbox
         v-for="(option, optionIndex) in itemMeta.options"
@@ -80,17 +80,21 @@
         @update:model-value="emitUpdate"
         :label="getLabel(itemMeta, optionIndex, option)"
         :value="option"
-        class="mr-2"
+        class="config-checkbox"
         color="primary"
+        density="compact"
         hide-details
       ></v-checkbox>
     </div>
 
-    <v-combobox
+    <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
-      :items="itemMeta.options"
+      @update:model-value="val => { emitUpdate(val); listSearchText = '' }"
+      v-model:search="listSearchText"
+      :items="listSelectItems"
+      item-title="title"
+      item-value="value"
       :disabled="itemMeta?.readonly"
       density="compact"
       variant="outlined"
@@ -98,7 +102,7 @@
       hide-details
       chips
       multiple
-    ></v-combobox>
+    ></v-autocomplete>
 
     <v-select
       v-else-if="itemMeta?.options"
@@ -144,8 +148,9 @@
     >
       <v-slider
         v-if="itemMeta?.slider"
-        :model-value="toNumber(modelValue)"
-        @update:model-value="val => emitUpdate(toNumber(val))"
+        :model-value="toNumber(numericTemp ?? modelValue)"
+        @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
+        @end="numericTemp = null"
         :min="itemMeta?.slider?.min ?? 0"
         :max="itemMeta?.slider?.max ?? 100"
         :step="itemMeta?.slider?.step ?? 1"
@@ -155,8 +160,9 @@
         style="flex: 1"
       ></v-slider>
       <v-text-field
-        :model-value="modelValue"
-        @update:model-value="val => emitUpdate(toNumber(val))"
+        :model-value="numericTemp ?? modelValue"
+        @update:model-value="val => (numericTemp = val)"
+        @blur="() => { if (numericTemp != null) { emitUpdate(toNumber(numericTemp)) } numericTemp = null }"
         density="compact"
         variant="outlined"
         class="config-field"
@@ -207,6 +213,9 @@
       v-else-if="itemMeta?.type === 'dict'"
       :model-value="modelValue"
       :item-meta="itemMeta"
+      :plugin-name="pluginName"
+      :plugin-i18n="pluginI18n"
+      :config-key="configKey"
       @update:model-value="emitUpdate"
       class="config-field"
     />
@@ -233,7 +242,12 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
+import { computed, ref } from 'vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { usePluginI18n } from '@/utils/pluginI18n'
+
+const numericTemp = ref(null)
+const listSearchText = ref('')
 
 const props = defineProps({
   modelValue: {
@@ -247,6 +261,10 @@ const props = defineProps({
   pluginName: {
     type: String,
     default: ''
+  },
+  pluginI18n: {
+    type: Object,
+    default: () => ({})
   },
   configKey: {
     type: String,
@@ -265,10 +283,17 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'get-embedding-dim', 'open-fullscreen'])
 const { t } = useI18n()
 const { getRaw } = useModuleI18n('features/config-metadata')
+const { configText } = usePluginI18n()
 
 function emitUpdate(val) {
   emit('update:modelValue', val)
 }
+
+const listSelectItems = computed(() =>
+  props.itemMeta?.type === 'list' && props.itemMeta?.options
+    ? getSelectItems(props.itemMeta)
+    : []
+)
 
 function toNumber(val) {
   const n = parseFloat(val)
@@ -281,6 +306,17 @@ function getLabel(itemMeta, index, option) {
 }
 
 function getTranslatedLabels(itemMeta) {
+  if (
+    props.pluginName
+    && props.configKey
+    && props.pluginI18n
+    && Object.keys(props.pluginI18n).length > 0
+  ) {
+    const translatedLabels = configText(props.pluginI18n, props.configKey, 'labels', null)
+    if (Array.isArray(translatedLabels)) {
+      return translatedLabels
+    }
+  }
   if (!itemMeta?.labels) return null
   if (typeof itemMeta.labels === 'string') {
     const translatedLabels = getRaw(itemMeta.labels)
@@ -349,11 +385,41 @@ function getSpecialSubtype(value) {
   background-color: rgba(0, 0, 0, 0.5);
 }
 
-.gap-20 {
-  gap: 20px;
+.checkbox-group {
+  gap: 6px 12px;
+}
+
+.config-checkbox {
+  margin-right: 0;
+}
+
+.config-checkbox :deep(.v-selection-control) {
+  min-height: 28px;
+}
+
+.config-checkbox :deep(.v-selection-control__wrapper) {
+  width: 18px;
+  height: 18px;
+}
+
+.config-checkbox :deep(.v-icon) {
+  font-size: 18px;
+}
+
+.config-checkbox :deep(.v-label) {
+  font-size: 0.9rem;
 }
 
 :deep(.v-field__input) {
   font-size: 14px;
+}
+
+:deep(.config-field input[type='number']::-webkit-inner-spin-button),
+:deep(.config-field input[type='number']::-webkit-outer-spin-button) {
+  -webkit-appearance: none;
+}
+
+:deep(.config-field input[type='number']) {
+  -moz-appearance: textfield;
 }
 </style>

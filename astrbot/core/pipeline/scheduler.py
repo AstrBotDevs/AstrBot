@@ -136,4 +136,5 @@ class PipelineScheduler:
                 event.trace.finish()
         finally:
             _current_span.reset(span_token)
+            event.cleanup_temporary_local_files()
             active_event_registry.unregister(event)

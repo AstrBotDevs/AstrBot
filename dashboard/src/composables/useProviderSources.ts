@@ -58,6 +58,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const modelMetadata = ref<Record<string, any>>({})
   const loadingModels = ref(false)
   const savingSource = ref(false)
+  const savingProviderToggles = ref<string[]>([])
   const testingProviders = ref<string[]>([])
   const isSourceModified = ref(false)
   const configSchema = ref<Record<string, any>>({})
@@ -288,6 +289,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function supportsImageInput(meta: any) {
     const inputs = meta?.modalities?.input || []
     return inputs.includes('image')
+  }
+
+  function supportsAudioInput(meta: any) {
+    const inputs = meta?.modalities?.input || []
+    return inputs.includes('audio')
   }
 
   function supportsToolCall(meta: any) {
@@ -533,7 +539,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
   }
 
-  async function addModelProvider(modelName: string) {
+  function buildModelProviderConfig(modelName: string) {
     if (!selectedProviderSource.value) return
 
     const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
@@ -543,11 +549,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     let modalities: string[]
 
     if (!metadata) {
-      modalities = ['text', 'image', 'tool_use']
+      modalities = ['text', 'image', 'audio', 'tool_use']
     } else {
       modalities = ['text']
       if (supportsImageInput(metadata)) {
         modalities.push('image')
+      }
+      if (supportsAudioInput(metadata)) {
+        modalities.push('audio')
       }
       if (supportsToolCall(metadata)) {
         modalities.push('tool_use')
@@ -559,15 +568,20 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       max_context_tokens = metadata.limit.context
     }
 
-    const newProvider = {
+    return {
       id: newId,
-      enable: false,
+      enable: true,
       provider_source_id: sourceId,
       model: modelName,
       modalities,
       custom_extra_body: {},
       max_context_tokens: max_context_tokens
     }
+  }
+
+  async function addModelProvider(modelName: string) {
+    const newProvider = buildModelProviderConfig(modelName)
+    if (!newProvider) return
 
     try {
       const res = await axios.post('/api/config/provider/new', newProvider)
@@ -602,6 +616,33 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
   }
 
+  async function toggleProviderEnable(provider: any, value: boolean) {
+    if (!provider?.id || savingProviderToggles.value.includes(provider.id)) {
+      return false
+    }
+
+    savingProviderToggles.value.push(provider.id)
+    try {
+      const nextConfig = { ...provider, enable: Boolean(value) }
+      const response = await axios.post('/api/config/provider/update', {
+        id: provider.id,
+        config: nextConfig
+      })
+      if (response.data.status === 'error') {
+        throw new Error(response.data.message)
+      }
+      provider.enable = nextConfig.enable
+      showMessage(response.data.message || tm('messages.success.statusUpdate'))
+      return true
+    } catch (error: any) {
+      showMessage(error.response?.data?.message || error.message || tm('providerSources.saveError'), 'error')
+      return false
+    } finally {
+      await loadConfig()
+      savingProviderToggles.value = savingProviderToggles.value.filter((id) => id !== provider.id)
+    }
+  }
+
   async function testProvider(provider: any) {
     testingProviders.value.push(provider.id)
     try {
@@ -621,7 +662,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function loadConfig() {
-    loadProviderTemplate()
+    await loadProviderTemplate()
   }
 
   async function loadProviderTemplate() {
@@ -662,6 +703,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     modelMetadata,
     loadingModels,
     savingSource,
+    savingProviderToggles,
     testingProviders,
     isSourceModified,
     configSchema,
@@ -687,6 +729,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     getSourceDisplayName,
     getModelMetadata,
     supportsImageInput,
+    supportsAudioInput,
     supportsToolCall,
     supportsReasoning,
     formatContextLimit,
@@ -699,9 +742,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     deleteProviderSource,
     saveProviderSource,
     fetchAvailableModels,
+    buildModelProviderConfig,
     addModelProvider,
     deleteProvider,
     modelAlreadyConfigured,
+    toggleProviderEnable,
     testProvider,
     loadConfig,
     loadProviderTemplate

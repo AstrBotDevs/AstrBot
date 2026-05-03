@@ -12,6 +12,8 @@ export function getPlatformIcon(name) {
     return new URL('@/assets/images/platform_logos/onebot.png', import.meta.url).href
   } else if (name === 'qq_official' || name === 'qq_official_webhook') {
     return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
+  } else if (name === 'weixin_oc' || name === 'weixin_oc') {
+    return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
   } else if (name === 'wecom' || name === 'wecom_ai_bot') {
     return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
   } else if (name === 'weixin_official_account') {
@@ -36,6 +38,10 @@ export function getPlatformIcon(name) {
     return new URL('@/assets/images/platform_logos/misskey.png', import.meta.url).href
   } else if (name === 'line') {
     return new URL('@/assets/images/platform_logos/line.png', import.meta.url).href
+  } else if (name === 'matrix') {
+    return new URL('@/assets/images/platform_logos/matrix.svg', import.meta.url).href
+  } else if (name === 'mattermost') {
+    return new URL('@/assets/images/platform_logos/mattermost.svg', import.meta.url).href
   }
 }
 
@@ -48,8 +54,9 @@ export function getTutorialLink(platformType) {
   const tutorialMap = {
     "qq_official_webhook": "https://docs.astrbot.app/platform/qqofficial/webhook.html",
     "qq_official": "https://docs.astrbot.app/platform/qqofficial/websockets.html",
-    "aiocqhttp": "https://docs.astrbot.app/platform/aiocqhttp/napcat.html",
+    "aiocqhttp": "https://docs.astrbot.app/platform/aiocqhttp.html",
     "wecom": "https://docs.astrbot.app/platform/wecom.html",
+    "weixin_oc": "https://docs.astrbot.app/platform/weixin_oc.html",
     "wecom_ai_bot": "https://docs.astrbot.app/platform/wecom_ai_bot.html",
     "lark": "https://docs.astrbot.app/platform/lark.html",
     "telegram": "https://docs.astrbot.app/platform/telegram.html",
@@ -62,6 +69,7 @@ export function getTutorialLink(platformType) {
     "satori": "https://docs.astrbot.app/platform/satori/llonebot.html",
     "misskey": "https://docs.astrbot.app/platform/misskey.html",
     "line": "https://docs.astrbot.app/platform/line.html",
+    "matrix": "https://docs.astrbot.app/platform/matrix.html",
   }
   return tutorialMap[platformType] || "https://docs.astrbot.app";
 }
@@ -104,6 +112,7 @@ export function getPlatformDisplayName(platformId) {
     vocechat: 'vocechat (VoceChat)',
     satori: 'satori (Satori)',
     line: 'line (LINE)',
+    matrix: 'matrix (Matrix)',
   };
   return displayNameMap[platformId] || platformId;
 }

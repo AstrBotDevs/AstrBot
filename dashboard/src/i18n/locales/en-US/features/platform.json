@@ -123,6 +123,13 @@
     "unknown": "Unknown",
     "errors": "error(s)"
   },
+  "platformQr": {
+    "title": "QR Login",
+    "show": "Show QR",
+    "status": "QR Status",
+    "waiting": "Waiting for QR",
+    "close": "Close"
+  },
   "errorDialog": {
     "title": "Error Details",
     "platformId": "Platform ID",

@@ -3,7 +3,7 @@
 
 随着插件功能的增加，可能需要定义一些配置以让用户自定义插件的行为。
 
-AstrBot 提供了”强大“的配置解析和可视化功能。能够让用户在管理面板上直接配置插件，而不需要修改代码。
+AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户在管理面板上直接配置插件，而不需要修改代码。
 
 ## 配置定义
 
@@ -56,13 +56,25 @@ AstrBot 提供了”强大“的配置解析和可视化功能。能够让用户
 - `editor_theme`: 可选。代码编辑器的主题，可选值有 `vs-light`（默认）， `vs-dark`。
 - `_special`: 可选。用于调用 AstrBot 提供的可视化提供商选取、人格选取、知识库选取等功能，详见下文。
 
+### 配置项国际化（可选）
+
+配置项的 `description`、`hint` 和下拉选项 `labels` 支持按 WebUI 语言显示，详见[插件国际化](./plugin-i18n)。
+
 其中，如果启用了代码编辑器，效果如下图所示:
 
 ![editor_mode](https://files.astrbot.app/docs/source/images/plugin/image-6.png)
 
 ![editor_mode_fullscreen](https://files.astrbot.app/docs/source/images/plugin/image-7.png)
 
-**_special** 字段仅 v4.0.0 之后可用。目前支持填写 `select_provider`, `select_provider_tts`, `select_provider_stt`, `select_persona`，用于让用户快速选择用户在 WebUI 上已经配置好的模型提供商、人设等数据。结果均为字符串。以 select_provider 为例，将呈现以下效果:
+**_special** 字段仅 v4.0.0 之后可用。常用可填写值包括 `select_provider`, `select_provider_tts`, `select_provider_stt`, `select_persona`, `select_knowledgebase`，用于让用户快速选择在 WebUI 上已经配置好的模型提供商、人设、知识库等数据。
+
+- `select_provider`、`select_provider_tts`、`select_provider_stt`、`select_persona` 的结果为字符串。
+- `select_knowledgebase` 的结果为 `list` 类型，支持多选，建议将对应配置项的 `type` 设为 `list`，默认值设为 `[]`。
+
+> [!NOTE]
+> 此外，AstrBot Core 内部还使用了 `select_providers`、`provider_pool`、`persona_pool`、`select_plugin_set`、`t2i_template`、`get_embedding_dim`、`select_agent_runner_provider:*`（`*` 为运行器类型占位符）等 `_special` 值。这些属于内部实现，随时可能变动，请勿在插件中使用。
+
+以 `select_provider` 为例，将呈现以下效果:
 
 ![image](https://files.astrbot.app/docs/source/images/plugin/image-select-provider.png)
 

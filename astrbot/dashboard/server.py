@@ -23,8 +23,10 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
 
+from .plugin_page_auth import PluginPageAuth
 from .routes import *
 from .routes.api_key import ALL_OPEN_API_SCOPES
+from .routes.auth import DASHBOARD_JWT_COOKIE_NAME
 from .routes.backup import BackupRoute
 from .routes.live_chat import LiveChatRoute
 from .routes.platform import PlatformRoute
@@ -203,6 +205,7 @@ class AstrBotDashboard:
 
         allowed_endpoints = [
             "/api/auth/login",
+            "/api/auth/logout",
             "/api/file",
             "/api/platform/webhook",
             "/api/stat/start-time",
@@ -210,16 +213,30 @@ class AstrBotDashboard:
         ]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None
-        # 声明 JWT
-        token = request.headers.get("Authorization")
+        is_plugin_page_path = PluginPageAuth.is_protected_path(request.path)
+        token = self._extract_dashboard_jwt()
+        if not token and is_plugin_page_path:
+            token = PluginPageAuth.extract_asset_token()
         if not token:
             r = jsonify(Response().error("未授权").__dict__)
             r.status_code = 401
             return r
-        token = token.removeprefix("Bearer ")
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
-            g.username = payload["username"]
+            if PluginPageAuth.is_asset_token(
+                payload
+            ) and not PluginPageAuth.is_scope_valid(
+                payload,
+                request.path,
+            ):
+                r = jsonify(Response().error("Token 无效").__dict__)
+                r.status_code = 401
+                return r
+
+            username = payload.get("username")
+            if not isinstance(username, str) or not username.strip():
+                raise jwt.InvalidTokenError("missing username in token payload")
+            g.username = username
         except jwt.ExpiredSignatureError:
             r = jsonify(Response().error("Token 过期").__dict__)
             r.status_code = 401
@@ -228,6 +245,19 @@ class AstrBotDashboard:
             r = jsonify(Response().error("Token 无效").__dict__)
             r.status_code = 401
             return r
+
+    @staticmethod
+    def _extract_dashboard_jwt() -> str | None:
+        auth_header = request.headers.get("Authorization", "").strip()
+        if auth_header.startswith("Bearer "):
+            token = auth_header.removeprefix("Bearer ").strip()
+            if token:
+                return token
+
+        cookie_token = request.cookies.get(DASHBOARD_JWT_COOKIE_NAME, "").strip()
+        if cookie_token:
+            return cookie_token
+        return None
 
     @staticmethod
     def _extract_raw_api_key() -> str | None:
@@ -305,6 +335,61 @@ class AstrBotDashboard:
             logger.info("Initialized random JWT secret for dashboard.")
         self._jwt_secret = self.config["dashboard"]["jwt_secret"]
 
+    @staticmethod
+    def _resolve_dashboard_ssl_config(
+        ssl_config: dict,
+    ) -> tuple[bool, dict[str, str]]:
+        cert_file = (
+            os.environ.get("DASHBOARD_SSL_CERT")
+            or os.environ.get("ASTRBOT_DASHBOARD_SSL_CERT")
+            or ssl_config.get("cert_file", "")
+        )
+        key_file = (
+            os.environ.get("DASHBOARD_SSL_KEY")
+            or os.environ.get("ASTRBOT_DASHBOARD_SSL_KEY")
+            or ssl_config.get("key_file", "")
+        )
+        ca_certs = (
+            os.environ.get("DASHBOARD_SSL_CA_CERTS")
+            or os.environ.get("ASTRBOT_DASHBOARD_SSL_CA_CERTS")
+            or ssl_config.get("ca_certs", "")
+        )
+
+        if not cert_file or not key_file:
+            logger.warning(
+                "dashboard.ssl.enable is set, but cert_file or key_file is missing. SSL disabled.",
+            )
+            return False, {}
+
+        cert_path = Path(cert_file).expanduser()
+        key_path = Path(key_file).expanduser()
+        if not cert_path.is_file():
+            logger.warning(
+                f"dashboard.ssl.enable is set, but cert file is missing: {cert_path}. SSL disabled.",
+            )
+            return False, {}
+        if not key_path.is_file():
+            logger.warning(
+                f"dashboard.ssl.enable is set, but key file is missing: {key_path}. SSL disabled.",
+            )
+            return False, {}
+
+        resolved_ssl_config = {
+            "certfile": str(cert_path.resolve()),
+            "keyfile": str(key_path.resolve()),
+        }
+
+        if ca_certs:
+            ca_path = Path(ca_certs).expanduser()
+            if not ca_path.is_file():
+                logger.warning(
+                    f"dashboard.ssl.enable is set, but CA cert file is missing: {ca_path}. SSL disabled.",
+                )
+                return False, {}
+            resolved_ssl_config["ca_certs"] = str(ca_path.resolve())
+
+        return True, resolved_ssl_config
+
     def run(self):
         ip_addr = []
         dashboard_config = self.core_lifecycle.astrbot_config.get("dashboard", {})
@@ -327,16 +412,21 @@ class AstrBotDashboard:
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE"),
             bool(ssl_config.get("enable", False)),
         )
+        resolved_ssl_config: dict[str, str] = {}
+        if ssl_enable:
+            ssl_enable, resolved_ssl_config = self._resolve_dashboard_ssl_config(
+                ssl_config,
+            )
         scheme = "https" if ssl_enable else "http"
 
         if not enable:
-            logger.info("WebUI 已被禁用")
+            logger.info("WebUI disabled.")
             return None
 
-        logger.info(f"正在启动 WebUI, 监听地址: {scheme}://{host}:{port}")
+        logger.info("Starting WebUI at %s://%s:%s", scheme, host, port)
         if host == "0.0.0.0":
             logger.info(
-                "提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）",
+                "WebUI listens on all interfaces. Check security. Set dashboard.host in data/cmd_config.json to change it.",
             )
 
         if host not in ["localhost", "127.0.0.1"]:
@@ -360,16 +450,16 @@ class AstrBotDashboard:
 
             raise Exception(f"端口 {port} 已被占用")
 
-        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动，可访问\n\n"]
-        parts.append(f"   ➜  本地: {scheme}://localhost:{port}\n")
+        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI is ready\n\n"]
+        parts.append(f"   ➜  Local: {scheme}://localhost:{port}\n")
         for ip in ip_addr:
-            parts.append(f"   ➜  网络: {scheme}://{ip}:{port}\n")
-        parts.append("   ➜  默认用户名和密码: astrbot\n ✨✨✨\n")
+            parts.append(f"   ➜  Network: {scheme}://{ip}:{port}\n")
+        parts.append("   ➜  Default username/password: astrbot / astrbot\n ✨✨✨\n")
         display = "".join(parts)
 
         if not ip_addr:
             display += (
-                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
+                "Set dashboard.host in data/cmd_config.json to enable remote access.\n"
             )
 
         logger.info(display)
@@ -378,41 +468,10 @@ class AstrBotDashboard:
         config = HyperConfig()
         config.bind = [f"{host}:{port}"]
         if ssl_enable:
-            cert_file = (
-                os.environ.get("DASHBOARD_SSL_CERT")
-                or os.environ.get("ASTRBOT_DASHBOARD_SSL_CERT")
-                or ssl_config.get("cert_file", "")
-            )
-            key_file = (
-                os.environ.get("DASHBOARD_SSL_KEY")
-                or os.environ.get("ASTRBOT_DASHBOARD_SSL_KEY")
-                or ssl_config.get("key_file", "")
-            )
-            ca_certs = (
-                os.environ.get("DASHBOARD_SSL_CA_CERTS")
-                or os.environ.get("ASTRBOT_DASHBOARD_SSL_CA_CERTS")
-                or ssl_config.get("ca_certs", "")
-            )
-
-            cert_path = Path(cert_file).expanduser()
-            key_path = Path(key_file).expanduser()
-            if not cert_file or not key_file:
-                raise ValueError(
-                    "dashboard.ssl.enable 为 true 时，必须配置 cert_file 和 key_file。",
-                )
-            if not cert_path.is_file():
-                raise ValueError(f"SSL 证书文件不存在: {cert_path}")
-            if not key_path.is_file():
-                raise ValueError(f"SSL 私钥文件不存在: {key_path}")
-
-            config.certfile = str(cert_path.resolve())
-            config.keyfile = str(key_path.resolve())
-
-            if ca_certs:
-                ca_path = Path(ca_certs).expanduser()
-                if not ca_path.is_file():
-                    raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
-                config.ca_certs = str(ca_path.resolve())
+            config.certfile = resolved_ssl_config["certfile"]
+            config.keyfile = resolved_ssl_config["keyfile"]
+            if "ca_certs" in resolved_ssl_config:
+                config.ca_certs = resolved_ssl_config["ca_certs"]
 
         # 根据配置决定是否禁用访问日志
         disable_access_log = dashboard_config.get("disable_access_log", True)
@@ -427,4 +486,4 @@ class AstrBotDashboard:
 
     async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
-        logger.info("AstrBot WebUI 已经被优雅地关闭")
+        logger.info("AstrBot WebUI 已经被关闭")

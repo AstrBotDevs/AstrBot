@@ -1,4 +1,3 @@
-import traceback
 from pathlib import Path
 
 from astrbot.core import logger
@@ -37,8 +36,6 @@ class KnowledgeBaseManager:
     async def initialize(self) -> None:
         """初始化知识库模块"""
         try:
-            logger.info("正在初始化知识库模块...")
-
             # 初始化数据库
             await self._init_kb_database()
 
@@ -56,8 +53,7 @@ class KnowledgeBaseManager:
             logger.error(f"知识库模块导入失败: {e}")
             logger.warning("请确保已安装所需依赖: pypdf, aiofiles, Pillow, rank-bm25")
         except Exception as e:
-            logger.error(f"知识库模块初始化失败: {e}")
-            logger.error(traceback.format_exc())
+            logger.error(f"知识库模块初始化失败: {e}", exc_info=True)
 
     async def _init_kb_database(self) -> None:
         self.kb_db = KBSQLiteDatabase(DB_PATH.as_posix())
@@ -76,7 +72,14 @@ class KnowledgeBaseManager:
                 kb_root_dir=FILES_PATH,
                 chunker=CHUNKER,
             )
-            await kb_helper.initialize()
+            try:
+                await kb_helper.initialize()
+            except Exception as e:
+                kb_helper.init_error = str(e)
+                logger.error(
+                    f"知识库 {record.kb_name}({record.kb_id}) 初始化失败: {e}",
+                    exc_info=True,
+                )
             self.kb_insts[record.kb_id] = kb_helper
 
     async def create_kb(
@@ -179,6 +182,20 @@ class KnowledgeBaseManager:
             return None
 
         kb = kb_helper.kb
+        previous_state = {
+            "kb_name": kb.kb_name,
+            "description": kb.description,
+            "emoji": kb.emoji,
+            "embedding_provider_id": kb.embedding_provider_id,
+            "rerank_provider_id": kb.rerank_provider_id,
+            "chunk_size": kb.chunk_size,
+            "chunk_overlap": kb.chunk_overlap,
+            "top_k_dense": kb.top_k_dense,
+            "top_k_sparse": kb.top_k_sparse,
+            "top_m_final": kb.top_m_final,
+        }
+        previous_init_error = kb_helper.init_error
+
         if kb_name is not None:
             kb.kb_name = kb_name
         if description is not None:
@@ -198,12 +215,47 @@ class KnowledgeBaseManager:
             kb.top_k_sparse = top_k_sparse
         if top_m_final is not None:
             kb.top_m_final = top_m_final
+
+        # Build a new helper first. Keep current vec_db alive until new init succeeds.
+        new_helper = KBHelper(
+            kb_db=self.kb_db,
+            kb=kb,
+            provider_manager=self.provider_manager,
+            kb_root_dir=FILES_PATH,
+            chunker=CHUNKER,
+        )
+
+        try:
+            await new_helper.initialize()
+        except Exception as e:
+            # Roll back in-memory settings and keep current helper available.
+            kb.kb_name = previous_state["kb_name"]
+            kb.description = previous_state["description"]
+            kb.emoji = previous_state["emoji"]
+            kb.embedding_provider_id = previous_state["embedding_provider_id"]
+            kb.rerank_provider_id = previous_state["rerank_provider_id"]
+            kb.chunk_size = previous_state["chunk_size"]
+            kb.chunk_overlap = previous_state["chunk_overlap"]
+            kb.top_k_dense = previous_state["top_k_dense"]
+            kb.top_k_sparse = previous_state["top_k_sparse"]
+            kb.top_m_final = previous_state["top_m_final"]
+            kb_helper.init_error = previous_init_error
+            logger.error(
+                f"知识库 {kb.kb_name}({kb.kb_id}) 重新初始化失败，继续使用旧实例: {e}",
+                exc_info=True,
+            )
+            return kb_helper
+
         async with self.kb_db.get_db() as session:
             session.add(kb)
             await session.commit()
             await session.refresh(kb)
 
-        return kb_helper
+        old_helper = kb_helper
+        self.kb_insts[kb_id] = new_helper
+        await old_helper.terminate()
+        new_helper.init_error = None
+        return new_helper
 
     async def retrieve(
         self,
@@ -215,10 +267,20 @@ class KnowledgeBaseManager:
         """从指定知识库中检索相关内容"""
         kb_ids = []
         kb_id_helper_map = {}
+        unavailable_kbs = []
         for kb_name in kb_names:
             if kb_helper := await self.get_kb_by_name(kb_name):
+                if kb_helper.init_error:
+                    unavailable_kbs.append((kb_name, kb_helper.init_error))
+                    logger.warning(f"知识库 {kb_name} 不可用: {kb_helper.init_error}")
+                    continue
                 kb_ids.append(kb_helper.kb.kb_id)
                 kb_id_helper_map[kb_helper.kb.kb_id] = kb_helper
+
+        # all requested KBs are unavailable
+        if not kb_ids and unavailable_kbs:
+            errors = "; ".join(f"{n}: {e}" for n, e in unavailable_kbs)
+            raise ValueError(f"所有请求的知识库均不可用: {errors}")
 
         if not kb_ids:
             return {}
