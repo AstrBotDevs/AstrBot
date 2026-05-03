@@ -76,11 +76,12 @@ When enabled:
 
 - Admin users can use Shell, Python, file read, file write, file edit, and Grep search in `local` mode.
 - Non-admin users cannot use Shell or Python.
-- Non-admin users can only use file read, write, edit, and search inside restricted directories.
+- Non-admin users can only use file read, write, edit, and search inside restricted directories. Plugin-provided Skills are read/search-only and cannot be written or edited.
 
 Allowed directories for non-admin users in `local` mode include:
 
 - `data/skills`
+- `data/plugins/*/skills` (read-only, for plugin-provided Skills)
 - Current session's `data/workspaces/{normalized_umo}`
 - AstrBot temporary directories
 - `.astrbot` under the system temporary directory
