@@ -128,15 +128,9 @@ class DiscordView(BaseMessageComponent):
         view = discord.ui.View(timeout=self.timeout)
 
         for component in self.components or []:
-            if (
-                isinstance(component, DiscordButton)
-                or getattr(
-                    component,
-                    "type",
-                    None,
-                )
-                == "discord_button"
-            ):
+            raw_type = getattr(component, "type", None)
+            comp_type = getattr(raw_type, "value", raw_type)
+            if isinstance(component, DiscordButton) or comp_type == "discord_button":
                 button_style = getattr(
                     discord.ButtonStyle,
                     component.style,

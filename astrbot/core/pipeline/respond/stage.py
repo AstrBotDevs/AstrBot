@@ -49,18 +49,20 @@ class RespondStage(Stage):
         Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
     }
     _platform_component_validators = {
-        "discord_embed": lambda comp: any(
-            bool(getattr(comp, attr, None))
-            for attr in (
-                "title",
-                "description",
-                "color",
-                "url",
-                "thumbnail",
-                "image",
-                "footer",
-                "fields",
+        "discord_embed": lambda comp: (
+            any(
+                bool(getattr(comp, attr, None))
+                for attr in (
+                    "title",
+                    "description",
+                    "url",
+                    "thumbnail",
+                    "image",
+                    "footer",
+                    "fields",
+                )
             )
+            or getattr(comp, "color", None) is not None
         )
         or callable(getattr(comp, "to_discord_embed", None)),
         "discord_view": lambda comp: bool(

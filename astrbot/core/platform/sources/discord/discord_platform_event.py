@@ -80,7 +80,9 @@ def _to_discord_view(component: BaseMessageComponent) -> discord.ui.View | None:
 
     converter = getattr(component, "to_discord_view", None)
     if callable(converter):
-        return converter()
+        result = converter()
+        if isinstance(result, discord.ui.View):
+            return result
 
     return None
 
