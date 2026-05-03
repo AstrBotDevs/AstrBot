@@ -1,7 +1,7 @@
 # Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
 # License: Apache License 2.0
 
-from typing import Any, ClassVar, Literal, Self, cast
+from typing import Any, ClassVar, Literal, TypeVar, cast
 
 from pydantic import (
     BaseModel,
@@ -12,6 +12,8 @@ from pydantic import (
     model_validator,
 )
 from pydantic_core import core_schema
+
+ContentPartT = TypeVar("ContentPartT", bound="ContentPart")
 
 
 class ContentPart(BaseModel):
@@ -63,7 +65,7 @@ class ContentPart(BaseModel):
         # for subclasses, use the default schema
         return handler(source_type)
 
-    def mark_as_temp(self) -> Self:
+    def mark_as_temp(self: ContentPartT) -> ContentPartT:
         """Mark this content part as provider-facing only, not persisted."""
         self._no_save = True
         return self
