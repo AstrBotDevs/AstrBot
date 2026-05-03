@@ -382,7 +382,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Required. Search query."},
+                "query": {"type": "string", "description": "Required string: search query to execute."},
                 "max_results": {
                     "type": "integer",
                     "description": "Optional. The maximum number of results to return. Default is 7. Range is 5-20.",
@@ -421,6 +421,10 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_tavily_key", []):
             return "Error: Tavily API key is not configured in AstrBot."
 
+        query = str(kwargs.get("query") or "").strip()
+        if not query:
+            return "Error: 'query' parameter is required but was not provided."
+
         search_depth = kwargs.get("search_depth", "basic")
         if search_depth not in ["basic", "advanced"]:
             search_depth = "basic"
@@ -430,7 +434,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
             topic = "general"
 
         payload = {
-            "query": kwargs["query"],
+            "query": query,
             "max_results": kwargs.get("max_results", 7),
             "include_favicon": True,
             "search_depth": search_depth,
@@ -546,8 +550,12 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_bocha_key", []):
             return "Error: BoCha API key is not configured in AstrBot."
 
+        query = str(kwargs.get("query") or "").strip()
+        if not query:
+            return "Error: 'query' parameter is required but was not provided."
+
         payload = {
-            "query": kwargs["query"],
+            "query": query,
             "count": kwargs.get("count", 10),
             "summary": bool(kwargs.get("summary", False)),
         }
@@ -600,6 +608,10 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_brave_key", []):
             return "Error: Brave API key is not configured in AstrBot."
 
+        query = str(kwargs.get("query") or "").strip()
+        if not query:
+            return "Error: 'query' parameter is required but was not provided."
+
         count = int(kwargs.get("count", 10))
         if count < 1:
             count = 1
@@ -607,7 +619,7 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
             count = 20
 
         payload = {
-            "q": kwargs["query"],
+            "q": query,
             "count": count,
             "country": kwargs.get("country", "US"),
             "search_lang": kwargs.get("search_lang", "zh-hans"),
@@ -661,8 +673,12 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_firecrawl_key", []):
             return "Error: Firecrawl API key is not configured in AstrBot."
 
+        query = str(kwargs.get("query") or "").strip()
+        if not query:
+            return "Error: 'query' parameter is required but was not provided."
+
         payload = {
-            "query": kwargs["query"],
+            "query": query,
             "limit": kwargs.get("limit", 5),
             "sources": ["web"],
         }
@@ -775,6 +791,10 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         if not provider_settings.get("websearch_baidu_app_builder_key", ""):
             return "Error: Baidu AI Search API key is not configured in AstrBot."
 
+        query = str(kwargs.get("query") or "").strip()
+        if not query:
+            return "Error: 'query' parameter is required but was not provided."
+
         top_k = int(kwargs.get("top_k", 10))
         if top_k < 1:
             top_k = 1
@@ -782,7 +802,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
             top_k = 50
 
         payload = {
-            "messages": [{"role": "user", "content": str(kwargs["query"])[:72]}],
+            "messages": [{"role": "user", "content": str(query)[:72]}],
             "search_source": "baidu_search_v2",
             "resource_type_filter": [{"type": "web", "top_k": top_k}],
         }
