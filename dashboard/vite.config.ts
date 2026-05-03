@@ -74,10 +74,24 @@ export default defineConfig(({ command }) => ({
     webfontDl()
   ],
   resolve: {
-    alias: {
-      mermaid: 'mermaid/dist/mermaid.js',
-      '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
+    alias: [
+      {
+        find: /^shiki$/,
+        replacement: fileURLToPath(new URL('./src/utils/shikiLimitedBundle.js', import.meta.url))
+      },
+      {
+        find: /^stream-monaco$/,
+        replacement: fileURLToPath(new URL('./src/utils/streamMonacoDisabled.js', import.meta.url))
+      },
+      {
+        find: 'mermaid',
+        replacement: 'mermaid/dist/mermaid.js'
+      },
+      {
+        find: '@',
+        replacement: fileURLToPath(new URL('./src', import.meta.url))
+      }
+    ]
   },
   css: {
     preprocessorOptions: {
