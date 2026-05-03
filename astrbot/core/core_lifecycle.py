@@ -339,6 +339,7 @@ class AstrBotCoreLifecycle:
         """
         self._load()
         logger.info("AstrBot started.")
+        print("AstrBot 启动完成", flush=True)
 
         # 执行启动完成事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
