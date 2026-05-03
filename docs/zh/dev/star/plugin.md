@@ -548,6 +548,14 @@ async def my_custom_hook_1(self, event: AstrMessageEvent, req: ProviderRequest):
 >     )
 > ```
 >
+> 如果追加的内容只希望参与本轮 LLM 请求，不希望被持久化到会话历史中，可以调用 `.mark_as_temp()` 标记为临时内容：
+>
+> ```python
+> req.extra_user_content_parts.append(
+>     TextPart(text="<runtime_hint>这段提示只在本轮请求中生效。</runtime_hint>").mark_as_temp()
+> )
+> ```
+>
 > 对于长期记忆、知识库、外部系统查询等内容量较大或不一定每轮都需要的信息，不建议全部塞进提示词。可以优先注册为 `llm_tool`，让模型在需要时调用；也可以先在插件中检索出本轮真正相关的少量摘要，再放入 `extra_user_content_parts`。
 
 > 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
