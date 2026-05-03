@@ -290,7 +290,7 @@ const togglePin = () => {
       </div>
     </v-card-text>
 
-    <v-card-actions class="extension-actions" @click.stop>
+    <v-card-actions class="extension-actions">
       <template v-if="!marketMode">
         <v-spacer></v-spacer>
         <v-tooltip location="top">
@@ -303,7 +303,7 @@ const togglePin = () => {
               size="small"
               variant="tonal"
               class="extension-pin-btn"
-              @click="togglePin"
+              @click.stop="togglePin"
             ></v-btn>
           </template>
           <span>{{ isPinned ? tm("buttons.unpin") : tm("buttons.pin") }}</span>
@@ -317,7 +317,7 @@ const togglePin = () => {
               size="small"
               variant="tonal"
               color="info"
-              @click="viewReadme"
+              @click.stop="viewReadme"
             ></v-btn>
           </template>
         </v-tooltip>
@@ -330,7 +330,7 @@ const togglePin = () => {
               size="small"
               variant="tonal"
               color="primary"
-              @click="configure"
+              @click.stop="configure"
             ></v-btn>
           </template>
         </v-tooltip>
@@ -343,7 +343,7 @@ const togglePin = () => {
               size="small"
               variant="tonal"
               color="primary"
-              @click="reloadExtension"
+              @click.stop="reloadExtension"
             ></v-btn>
           </template>
         </v-tooltip>
@@ -356,14 +356,15 @@ const togglePin = () => {
               size="small"
               variant="tonal"
               color="secondary"
+              @click.stop
             ></v-btn>
           </template>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-information" @click="viewHandlers">
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-information" @click.stop="viewHandlers">
             <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click="updateExtension">
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click.stop="updateExtension">
             <v-list-item-title>{{
               extension.has_update
                 ? tm("card.actions.updateTo") + " " + extension.online_version
@@ -371,13 +372,13 @@ const togglePin = () => {
             }}</v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click="uninstallExtension">
+          <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click.stop="uninstallExtension">
             <v-list-item-title class="text-error">{{ tm("card.actions.uninstallPlugin") }}</v-list-item-title>
           </v-list-item>
         </StyledMenu>
       </template>
       <template v-else>
-        <v-btn color="primary" size="small" @click="viewReadme">
+        <v-btn color="primary" size="small" @click.stop="viewReadme">
           {{ tm("buttons.viewDocs") }}
         </v-btn>
       </template>

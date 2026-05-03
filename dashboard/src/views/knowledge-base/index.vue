@@ -56,7 +56,7 @@ const goToList = () => {
 <style scoped>
 .kb-container {
   margin: 0 auto;
-  max-width: 1400px;
+  max-width: 1040px;
   padding: 24px;
   width: 100%;
   height: 100%;
