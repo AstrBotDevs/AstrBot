@@ -3,7 +3,7 @@
 > [!TIP]
 > 需要 AstrBot 版本 >= 4.5.0。
 >
-> 我们在 4.5.0 版本中重新设计了全新的知识库系统，AstrBot 将原生支持知识库功能。下文介绍的是新版知识库的使用方法。如果您使用的是之前的版本，请参考[旧版知识库使用文档](https://docs.astrbot.app/zh/use/knowledge-base-old), 我们建议您升级到最新版以获得更好的体验。
+> 我们在 4.5.0 版本中重新设计了全新的知识库系统，AstrBot 将原生支持知识库功能。下文介绍的是新版知识库的使用方法。如果您使用的是之前的版本，请参考[旧版知识库使用文档](https://docs.astrbot.app/use/knowledge-base-old.html), 我们建议您升级到最新版以获得更好的体验。
 
 ![知识库预览](https://files.astrbot.app/docs/zh/use/image-3.png)
 
