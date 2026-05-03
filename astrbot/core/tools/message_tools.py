@@ -132,6 +132,14 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             ):
                 return permission_error
         messages = kwargs.get("messages")
+        # Some LLMs (e.g. MiniMax) may serialize the array value as a JSON string
+        # when the text contains newlines. Try to recover.
+        # https://github.com/AstrBotDevs/AstrBot/issues/7961
+        if isinstance(messages, str):
+            try:
+                messages = json.loads(messages)
+            except (json.JSONDecodeError, TypeError):
+                pass
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
 
