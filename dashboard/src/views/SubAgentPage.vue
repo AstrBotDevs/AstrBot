@@ -28,16 +28,11 @@
       </div>
 
       <!-- ============================================ -->
-      <!-- 第一部分：子代理编排 (subagent_orchestrator) -->
+      <!-- 第一部分：全局配置 + 静态子代理 (subagent_orchestrator) -->
       <!-- ============================================ -->
       <div class="config-section mb-6">
-        <div class="dashboard-section-head">
-          <div>
-            <div class="dashboard-section-title">{{ tm('section.orchestratorTitle') }}</div>
-            <div class="dashboard-section-subtitle">{{ tm('section.orchestratorSubtitle') }}</div>
-          </div>
-        </div>
 
+        <!-- 全局配置 -->
         <div class="dashboard-section-head mt-4">
           <div>
             <div class="dashboard-section-title">{{ tm('section.globalSettings') }}</div>
@@ -62,19 +57,90 @@
             </div>
           </div>
 
+          <!-- 启用历史记忆 -->
           <div class="setting-card">
             <div class="setting-card-head">
               <div>
-                <div class="setting-title">{{ tm('switches.dedupe') }}</div>
-                <div class="setting-subtitle">{{ tm('switches.dedupeHint') }}</div>
+                <div class="setting-title">{{ tm('historyEnabled.label') }}</div>
+                <div class="setting-subtitle">{{ tm('historyEnabled.hint') }}</div>
               </div>
               <v-switch
-                v-model="cfg.remove_main_duplicate_tools"
-                :disabled="!cfg.main_enable"
+                v-model="rootCfg.history_enabled"
                 color="primary"
                 hide-details
                 inset
                 density="comfortable"
+              />
+            </div>
+          </div>
+
+          <!-- 启用共享上下文 -->
+          <div class="setting-card">
+            <div class="setting-card-head">
+              <div>
+                <div class="setting-title">{{ tm('enhancedSwitches.sharedContext') }}</div>
+                <div class="setting-subtitle">{{ tm('enhancedSwitches.sharedContextHint') }}</div>
+              </div>
+              <v-switch
+                v-model="rootCfg.shared_context_enabled"
+                color="primary"
+                hide-details
+                inset
+                density="comfortable"
+              />
+            </div>
+          </div>
+
+          <!-- 最大历史消息数 -->
+          <div v-if="rootCfg.history_enabled" class="setting-card">
+            <div class="setting-card-head">
+              <div>
+                <div class="setting-title">{{ tm('enhancedFields.subagentHistoryMaxlen') }}</div>
+                <div class="setting-subtitle">{{ tm('enhancedFields.subagentHistoryMaxlenHint') }}</div>
+              </div>
+              <v-text-field
+                v-model.number="rootCfg.subagent_history_maxlen"
+                type="number"
+                density="compact"
+                variant="outlined"
+                style="width: 120px;"
+                hide-details
+              />
+            </div>
+          </div>
+
+          <!-- 共享上下文最大长度 -->
+          <div v-if="rootCfg.shared_context_enabled" class="setting-card">
+            <div class="setting-card-head">
+              <div>
+                <div class="setting-title">{{ tm('enhancedFields.sharedContextMaxlen') }}</div>
+                <div class="setting-subtitle">{{ tm('enhancedFields.sharedContextMaxlenHint') }}</div>
+              </div>
+              <v-text-field
+                v-model.number="rootCfg.shared_context_maxlen"
+                type="number"
+                density="compact"
+                variant="outlined"
+                style="width: 120px;"
+                hide-details
+              />
+            </div>
+          </div>
+
+          <!-- 执行超时时间 -->
+          <div class="setting-card">
+            <div class="setting-card-head">
+              <div>
+                <div class="setting-title">{{ tm('enhancedFields.executionTimeout') }}</div>
+                <div class="setting-subtitle">{{ tm('enhancedFields.executionTimeoutHint') }}</div>
+              </div>
+              <v-text-field
+                v-model.number="rootCfg.execution_timeout"
+                type="number"
+                density="compact"
+                variant="outlined"
+                style="width: 120px;"
+                hide-details
               />
             </div>
           </div>
@@ -94,7 +160,7 @@
           />
         </div>
 
-        <!-- 子代理列表 -->
+        <!-- 静态子代理配置 -->
         <div class="dashboard-section-head">
           <div>
             <div class="dashboard-section-title">{{ tm('section.title') }}</div>
@@ -108,6 +174,25 @@
             <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="addAgent">
               {{ tm('actions.add') }}
             </v-btn>
+          </div>
+        </div>
+
+        <div class="dashboard-form-grid global-settings-grid mb-5">
+          <div class="setting-card">
+            <div class="setting-card-head">
+              <div>
+                <div class="setting-title">{{ tm('switches.dedupe') }}</div>
+                <div class="setting-subtitle">{{ tm('switches.dedupeHint') }}</div>
+              </div>
+              <v-switch
+                v-model="cfg.remove_main_duplicate_tools"
+                :disabled="!cfg.main_enable"
+                color="primary"
+                hide-details
+                inset
+                density="comfortable"
+              />
+            </div>
           </div>
         </div>
 
@@ -304,104 +389,6 @@
                   />
                 </div>
               </div>
-
-              <!-- 执行超时时间 -->
-              <div class="setting-card">
-                <div class="setting-card-head">
-                  <div>
-                    <div class="setting-title">{{ tm('enhancedFields.executionTimeout') }}</div>
-                    <div class="setting-subtitle">{{ tm('enhancedFields.executionTimeoutHint') }}</div>
-                  </div>
-                  <v-text-field
-                    v-model.number="rootCfg.execution_timeout"
-                    type="number"
-                    density="compact"
-                    variant="outlined"
-                    style="width: 120px;"
-                    hide-details
-                  />
-                </div>
-              </div>
-            </div>
-
-            <!-- 历史与上下文 -->
-            <div class="dashboard-section-head mt-4">
-              <div>
-                <div class="dashboard-section-title">{{ tm('enhancedSection.sharedContext') }}</div>
-                <div class="dashboard-section-subtitle">{{ tm('enhancedSection.sharedContextHint') }}</div>
-              </div>
-            </div>
-
-            <div class="dashboard-form-grid global-settings-grid mb-5">
-              <!-- 启用历史记忆 -->
-              <div class="setting-card">
-                <div class="setting-card-head">
-                  <div>
-                    <div class="setting-title">{{ tm('historyEnabled.label') }}</div>
-                    <div class="setting-subtitle">{{ tm('historyEnabled.hint') }}</div>
-                  </div>
-                  <v-switch
-                    v-model="rootCfg.history_enabled"
-                    color="primary"
-                    hide-details
-                    inset
-                    density="comfortable"
-                  />
-                </div>
-              </div>
-
-              <!-- 最大历史消息数 -->
-              <div class="setting-card">
-                <div class="setting-card-head">
-                  <div>
-                    <div class="setting-title">{{ tm('enhancedFields.subagentHistoryMaxlen') }}</div>
-                    <div class="setting-subtitle">{{ tm('enhancedFields.subagentHistoryMaxlenHint') }}</div>
-                  </div>
-                  <v-text-field
-                    v-model.number="rootCfg.subagent_history_maxlen"
-                    type="number"
-                    density="compact"
-                    variant="outlined"
-                    style="width: 120px;"
-                    hide-details
-                  />
-                </div>
-              </div>
-
-              <!-- 启用共享上下文 -->
-              <div class="setting-card">
-                <div class="setting-card-head">
-                  <div>
-                    <div class="setting-title">{{ tm('enhancedSwitches.sharedContext') }}</div>
-                    <div class="setting-subtitle">{{ tm('enhancedSwitches.sharedContextHint') }}</div>
-                  </div>
-                  <v-switch
-                    v-model="rootCfg.shared_context_enabled"
-                    color="primary"
-                    hide-details
-                    inset
-                    density="comfortable"
-                  />
-                </div>
-              </div>
-
-              <!-- 共享上下文最大长度 -->
-              <div class="setting-card">
-                <div class="setting-card-head">
-                  <div>
-                    <div class="setting-title">{{ tm('enhancedFields.sharedContextMaxlen') }}</div>
-                    <div class="setting-subtitle">{{ tm('enhancedFields.sharedContextMaxlenHint') }}</div>
-                  </div>
-                  <v-text-field
-                    v-model.number="rootCfg.shared_context_maxlen"
-                    type="number"
-                    density="compact"
-                    variant="outlined"
-                    style="width: 120px;"
-                    hide-details
-                  />
-                </div>
-              </div>
             </div>
 
             <!-- 工具策略 -->
@@ -437,7 +424,7 @@
                   {{ tm('enhancedTools.emptyBlacklist') }}
                 </v-chip>
               </div>
-              <div class="mt-3">
+              <div class="mt-3 d-flex ga-2">
                 <v-btn
                   size="small"
                   variant="tonal"
@@ -446,6 +433,15 @@
                 >
                   <v-icon start>mdi-plus</v-icon>
                   {{ tm('enhancedTools.addTool') }}
+                </v-btn>
+                <v-btn
+                  size="small"
+                  variant="text"
+                  color="default"
+                  @click="resetBlacklistToDefault"
+                >
+                  <v-icon start>mdi-refresh</v-icon>
+                  {{ tm('enhancedTools.resetDefault') }}
                 </v-btn>
               </div>
             </div>
@@ -475,7 +471,7 @@
                   {{ tm('enhancedTools.emptyInherent') }}
                 </v-chip>
               </div>
-              <div class="mt-3">
+              <div class="mt-3 d-flex ga-2">
                 <v-btn
                   size="small"
                   variant="tonal"
@@ -484,6 +480,15 @@
                 >
                   <v-icon start>mdi-plus</v-icon>
                   {{ tm('enhancedTools.addTool') }}
+                </v-btn>
+                <v-btn
+                  size="small"
+                  variant="text"
+                  color="default"
+                  @click="resetInherentToDefault"
+                >
+                  <v-icon start>mdi-refresh</v-icon>
+                  {{ tm('enhancedTools.resetDefault') }}
                 </v-btn>
               </div>
             </div>
@@ -640,6 +645,23 @@ function toast(message: string, color: 'success' | 'error' | 'warning' = 'succes
   snackbar.value = { show: true, message, color }
 }
 
+const DEFAULT_BLACKLIST = [
+  'send_shared_context_for_main_agent',
+  'create_subagent',
+  'protect_subagent',
+  'unprotect_subagent',
+  'reset_subagent',
+  'remove_subagent',
+  'list_subagents',
+  'wait_for_subagent',
+  'view_shared_context'
+]
+
+const DEFAULT_INHERENT = [
+  'astrbot_execute_shell',
+  'astrbot_execute_python'
+]
+
 const cfg = ref<SubAgentConfig>({
   main_enable: false,
   remove_main_duplicate_tools: false,
@@ -651,8 +673,8 @@ const dynamicCfg = ref<DynamicAgentsConfig>({
   enabled: false,
   max_dynamic_subagent_count: 3,
   auto_cleanup_per_turn: true,
-  tools_blacklist: [],
-  tools_inherent: []
+  tools_blacklist: [...DEFAULT_BLACKLIST],
+  tools_inherent: [...DEFAULT_INHERENT]
 })
 
 const rootCfg = ref({
@@ -696,27 +718,26 @@ function normalizeConfig(raw: any): SubAgentConfig {
 }
 
 function normalizeDynamicAgents(raw: any): DynamicAgentsConfig {
-  // 兼容旧格式 enhanced_subagent
-  const src = raw?.dynamic_agents || raw?.enhanced_subagent || {}
+  const src = raw?.dynamic_agents || {}
+  const blacklist = Array.isArray(src?.tools_blacklist) ? src.tools_blacklist : null
+  const inherent = Array.isArray(src?.tools_inherent) ? src.tools_inherent : null
   return {
     enabled: !!src?.enabled,
-    max_dynamic_subagent_count: Number(src?.max_dynamic_subagent_count || src?.max_subagent_count) || 3,
+    max_dynamic_subagent_count: Number(src?.max_dynamic_subagent_count) || 3,
     auto_cleanup_per_turn: src?.auto_cleanup_per_turn !== false,
-    tools_blacklist: Array.isArray(src?.tools_blacklist) ? src.tools_blacklist : [],
-    tools_inherent: Array.isArray(src?.tools_inherent) ? src.tools_inherent : []
+    tools_blacklist: blacklist !== null ? blacklist : [...DEFAULT_BLACKLIST],
+    tools_inherent: inherent !== null ? inherent : [...DEFAULT_INHERENT]
   }
 }
 
 function normalizeRootConfig(raw: any) {
   const orchData = raw?.subagent_orchestrator || raw || {}
-  // 兼容旧格式 enhanced_subagent 中的根级字段
-  const oldEnhanced = raw?.enhanced_subagent || {}
   return {
     history_enabled: orchData?.history_enabled !== false,
-    shared_context_enabled: !!orchData?.shared_context_enabled || !!oldEnhanced?.shared_context_enabled,
-    shared_context_maxlen: Number(orchData?.shared_context_maxlen || oldEnhanced?.shared_context_maxlen) || 200,
-    subagent_history_maxlen: Number(orchData?.subagent_history_maxlen || oldEnhanced?.max_subagent_history) || 500,
-    execution_timeout: Number(orchData?.execution_timeout || oldEnhanced?.execution_timeout) || 600
+    shared_context_enabled: !!orchData?.shared_context_enabled,
+    shared_context_maxlen: Number(orchData?.shared_context_maxlen) || 200,
+    subagent_history_maxlen: Number(orchData?.subagent_history_maxlen) || 500,
+    execution_timeout: Number(orchData?.execution_timeout) || 600
   }
 }
 
@@ -943,6 +964,14 @@ function removeToolFromBlacklist(idx: number) {
 
 function removeToolFromInherent(idx: number) {
   dynamicCfg.value.tools_inherent.splice(idx, 1)
+}
+
+function resetBlacklistToDefault() {
+  dynamicCfg.value.tools_blacklist = [...DEFAULT_BLACKLIST]
+}
+
+function resetInherentToDefault() {
+  dynamicCfg.value.tools_inherent = [...DEFAULT_INHERENT]
 }
 
 function isToolInTargetList(toolName: string): boolean {

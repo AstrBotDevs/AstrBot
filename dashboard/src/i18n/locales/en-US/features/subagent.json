@@ -36,13 +36,11 @@
     "enabled": "Subagents will be placed in the main agent's tool set as tools, and the main agent will call subagents at appropriate times to complete tasks."
   },
   "section": {
-    "title": "Subagent Configuration",
-    "subtitle": "Configure delegatable subagents, personas, and descriptions for the main agent",
+    "title": "Static Subagent Configuration",
+    "subtitle": "Configure delegatable static subagents, personas, and descriptions for the main agent",
     "globalSettings": "Global Settings",
     "agentSetup": "Agent Setup",
-    "orchestratorTitle": "Subagent Orchestration",
-    "orchestratorSubtitle": "Configure basic orchestration features including subagent list and router system prompt",
-    "enhancedSettings": "Enhanced Subagent Settings",
+    "enhancedSettings": "Dynamic Subagent Settings",
     "enhancedSettingsHint": "Configure runtime parameters, resource limits, and tool strategies for dynamic subagents"
   },
   "cards": {
@@ -85,7 +83,7 @@
   },
   "routerSystemPrompt": {
     "label": "Router System Prompt",
-    "hint": "The main agent's routing prompt, used to guide the main agent in recognizing user intent and delegating tasks to subagents. Only effective when static subagents are enabled."
+    "hint": "The main agent's routing prompt, used to guide the main agent in recognizing user intent and delegating tasks to subagents. Only effective when dynamic subagents are not enabled."
   },
   "historyEnabled": {
     "label": "Enable History Memory",
@@ -129,10 +127,11 @@
     "inherentHint": "Tools inherent to subagents. Tools in this list are guaranteed to be assigned to subagents.",
     "selectTool": "Select Tool",
     "addTool": "Add Tool",
+    "resetDefault": "Reset to Default",
     "selectBlacklistTool": "Add Tool to Blacklist",
     "selectInherentTool": "Add Tool to Inherent List",
-    "emptyBlacklist": "No blacklisted tools",
-    "emptyInherent": "No inherent tools",
+    "emptyBlacklist": "No blacklisted tools (defaults restored)",
+    "emptyInherent": "No inherent tools (defaults restored)",
     "selectOrInputTool": "Select or type a tool name",
     "availableTools": "Available Tools"
   }

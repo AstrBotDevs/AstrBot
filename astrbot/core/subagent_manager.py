@@ -310,7 +310,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
 
         session = cls.get_session(session_id)
 
-        if not session or agent_name not in session.protected_agents:
+        if not session:
             return
 
         if agent_name not in session.subagent_histories:
@@ -337,7 +337,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
                 filtered_messages.append(msg)
 
         session.subagent_histories[agent_name].extend(filtered_messages)
-        if cls._subagent_history_maxlen < len(session.subagent_histories[agent_name]):
+        if cls._subagent_history_maxlen > len(session.subagent_histories[agent_name]):
             session.subagent_histories[agent_name] = session.subagent_histories[
                 agent_name
             ][-cls._subagent_history_maxlen :]
