@@ -1708,9 +1708,12 @@ class PluginRoute(Route):
         post_data = await request.get_json()
         plugin_name = post_data["name"]
         proxy: str = post_data.get("proxy", None)
+        download_url = str(post_data.get("download_url") or "").strip()
         try:
             logger.info(f"正在更新插件 {plugin_name}")
-            await self.plugin_manager.update_plugin(plugin_name, proxy)
+            await self.plugin_manager.update_plugin(
+                plugin_name, proxy, download_url=download_url
+            )
             # self.core_lifecycle.restart()
             await self.plugin_manager.reload(plugin_name)
             await self._sync_skills_after_plugin_change()
@@ -1731,9 +1734,12 @@ class PluginRoute(Route):
         post_data = await request.get_json()
         plugin_names: list[str] = post_data.get("names") or []
         proxy: str = post_data.get("proxy", "")
+        download_urls: dict[str, str] = post_data.get("download_urls") or {}
 
         if not isinstance(plugin_names, list) or not plugin_names:
             return Response().error("插件列表不能为空").__dict__
+        if not isinstance(download_urls, dict):
+            download_urls = {}
 
         results = []
         sem = asyncio.Semaphore(PLUGIN_UPDATE_CONCURRENCY)
@@ -1742,7 +1748,10 @@ class PluginRoute(Route):
             async with sem:
                 try:
                     logger.info(f"批量更新插件 {name}")
-                    await self.plugin_manager.update_plugin(name, proxy)
+                    download_url = str(download_urls.get(name) or "").strip()
+                    await self.plugin_manager.update_plugin(
+                        name, proxy, download_url=download_url
+                    )
                     return {"name": name, "status": "ok", "message": "更新成功"}
                 except Exception as e:
                     logger.error(

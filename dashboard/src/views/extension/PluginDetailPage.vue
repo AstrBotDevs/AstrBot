@@ -84,6 +84,10 @@ const readmeLoading = ref(false);
 const readmeError = ref("");
 const readmeEmpty = ref(false);
 const renderedReadme = ref("");
+const changelogLoading = ref(false);
+const changelogError = ref("");
+const changelogEmpty = ref(false);
+const renderedChangelog = ref("");
 const expandedCommandGroups = ref(new Set());
 const logoLoadFailed = ref(false);
 const detailPageRef = ref(null);
@@ -562,6 +566,20 @@ const fetchPluginDetail = async () => {
   }
 };
 
+const getDocumentUrl = (fieldName) => {
+  const plugin = pluginData.value || {};
+  const marketPlugin = props.marketPlugin || {};
+  return String(plugin[fieldName] || marketPlugin[fieldName] || "").trim();
+};
+
+const fetchRemoteMarkdown = async (url) => {
+  const res = await axios.get(url, {
+    responseType: "text",
+    transformResponse: [(data) => data],
+  });
+  return typeof res.data === "string" ? res.data : String(res.data || "");
+};
+
 const fetchReadme = async () => {
   const plugin = pluginData.value || {};
   if (!plugin?.name) return;
@@ -572,7 +590,25 @@ const fetchReadme = async () => {
   renderedReadme.value = "";
 
   if (isMarketDetail.value) {
-    readmeLoading.value = false;
+    const readmeUrl = getDocumentUrl("readme_url");
+    if (!readmeUrl) {
+      readmeEmpty.value = true;
+      readmeLoading.value = false;
+      return;
+    }
+
+    try {
+      const content = await fetchRemoteMarkdown(readmeUrl);
+      if (!content.trim()) {
+        readmeEmpty.value = true;
+        return;
+      }
+      renderedReadme.value = renderMarkdown(content);
+    } catch (err) {
+      readmeError.value = err?.message || String(err);
+    } finally {
+      readmeLoading.value = false;
+    }
     return;
   }
 
@@ -617,14 +653,83 @@ const fetchReadme = async () => {
   }
 };
 
-const showDocsSection = computed(() => !isMarketDetail.value);
+const fetchChangelog = async () => {
+  const plugin = pluginData.value || {};
+  if (!plugin?.name) return;
+
+  changelogLoading.value = true;
+  changelogError.value = "";
+  changelogEmpty.value = false;
+  renderedChangelog.value = "";
+
+  if (isMarketDetail.value) {
+    const changelogUrl = getDocumentUrl("changelog_url");
+    if (!changelogUrl) {
+      changelogEmpty.value = true;
+      changelogLoading.value = false;
+      return;
+    }
+
+    try {
+      const content = await fetchRemoteMarkdown(changelogUrl);
+      if (!content.trim()) {
+        changelogEmpty.value = true;
+        return;
+      }
+      renderedChangelog.value = renderMarkdown(content);
+    } catch (err) {
+      changelogError.value = err?.message || String(err);
+    } finally {
+      changelogLoading.value = false;
+    }
+    return;
+  }
+
+  try {
+    const res = await axios.get("/api/plugin/changelog", {
+      params: { name: plugin.name },
+    });
+
+    if (res.data.status !== "ok") {
+      changelogError.value =
+        res.data.message || tm("messages.operationFailed");
+      return;
+    }
+
+    const content = res.data.data?.content || "";
+    if (!content) {
+      changelogEmpty.value = true;
+      return;
+    }
+
+    renderedChangelog.value = renderMarkdown(content);
+  } catch (err) {
+    changelogError.value = err?.message || String(err);
+  } finally {
+    changelogLoading.value = false;
+  }
+};
+
+const showDocsSection = computed(
+  () => !isMarketDetail.value || !!getDocumentUrl("readme_url"),
+);
+
+const showChangelogSection = computed(
+  () => !isMarketDetail.value || !!getDocumentUrl("changelog_url"),
+);
 
 watch(
-  () => [props.plugin?.name, props.sourceTab],
+  () => [
+    props.plugin?.name,
+    props.sourceTab,
+    props.marketPlugin?.readme_url,
+    props.marketPlugin?.changelog_url,
+  ],
   async () => {
     logoLoadFailed.value = false;
     await fetchPluginDetail();
     fetchReadme();
+    fetchChangelog();
     scrollToHashTarget();
   },
   { immediate: true },
@@ -886,6 +991,26 @@ onBeforeUnmount(() => {
             {{ tm("detail.docsEmpty") }}
           </div>
           <div v-else class="docs-markdown" v-html="renderedReadme"></div>
+        </v-card-text>
+      </v-card>
+    </section>
+
+    <section v-if="showChangelogSection" class="detail-section">
+      <h3 class="detail-section__title">
+        {{ tm("detail.changelogTitle") }}
+      </h3>
+      <v-card class="rounded-lg docs-card" variant="outlined">
+        <v-card-text>
+          <div v-if="changelogLoading" class="docs-state">
+            <v-progress-circular indeterminate color="primary" />
+          </div>
+          <v-alert v-else-if="changelogError" type="error" variant="tonal">
+            {{ changelogError }}
+          </v-alert>
+          <div v-else-if="changelogEmpty" class="text-medium-emphasis">
+            {{ tm("detail.changelogEmpty") }}
+          </div>
+          <div v-else class="docs-markdown" v-html="renderedChangelog"></div>
         </v-card-text>
       </v-card>
     </section>

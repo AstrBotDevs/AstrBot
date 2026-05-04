@@ -104,6 +104,8 @@
         "notFound": "Плагин не найден",
         "docsTitle": "Документация",
         "docsEmpty": "Документация отсутствует",
+        "changelogTitle": "Журнал изменений",
+        "changelogEmpty": "Журнал изменений отсутствует",
         "handlerGroups": {
             "page": "Pages",
             "skill": "Skills",
@@ -211,6 +213,12 @@
             "sectionTitle": "Установка",
             "downloadSource": "Пакет плагина будет установлен из:",
             "githubSecurityWarning": "AstrBot не может гарантировать безопасность плагинов, загруженных с GitHub. Устанавливайте только если доверяете источнику плагина."
+        },
+        "update": {
+            "title": "Обновление плагина",
+            "sectionTitle": "Обновление",
+            "downloadSource": "Пакет обновления будет установлен из:",
+            "confirm": "Подтвердить обновление"
         },
         "danger_warning": {
             "title": "Внимание!",

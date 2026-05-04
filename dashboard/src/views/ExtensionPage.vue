@@ -49,6 +49,7 @@ const {
   updatingAll,
   readmeDialog,
   forceUpdateDialog,
+  updateConfirmDialog,
   updateAllConfirmDialog,
   changelogDialog,
   getInitialListViewMode,
@@ -111,6 +112,8 @@ const {
   uninstallExtension,
   handleUninstallConfirm,
   updateExtension,
+  closeUpdateConfirmDialog,
+  confirmUpdatePlugin,
   showUpdateAllConfirm,
   confirmUpdateAll,
   cancelUpdateAll,
@@ -152,6 +155,11 @@ const {
   selectedInstallDownloadUrl,
   selectedInstallSourceUrl,
   installUsesGithubSource,
+  selectedUpdateExtension,
+  selectedUpdateMarketPlugin,
+  selectedUpdateDownloadUrl,
+  selectedUpdateSourceUrl,
+  updateUsesGithubSource,
   checkInstallCompatibility,
   refreshPluginMarket,
   handleLocaleChange,
@@ -219,6 +227,28 @@ const installDialogPluginAuthor = computed(() => {
 
 const installDialogPluginLogo = computed(() => {
   const logo = selectedInstallPlugin.value?.logo;
+  return typeof logo === "string" && logo.trim() ? logo : defaultPluginIcon;
+});
+
+const updateDialogPlugin = computed(
+  () => selectedUpdateMarketPlugin.value || selectedUpdateExtension.value,
+);
+
+const updateDialogPluginName = computed(() =>
+  updateDialogPlugin.value ? pluginName(updateDialogPlugin.value) : "",
+);
+
+const updateDialogCurrentVersion = computed(() =>
+  String(selectedUpdateExtension.value?.version || "").trim(),
+);
+
+const updateDialogTargetVersion = computed(() =>
+  String(selectedUpdateMarketPlugin.value?.version || "").trim(),
+);
+
+const updateDialogPluginLogo = computed(() => {
+  const logo =
+    selectedUpdateMarketPlugin.value?.logo || selectedUpdateExtension.value?.logo;
   return typeof logo === "string" && logo.trim() ? logo : defaultPluginIcon;
 });
 </script>
@@ -1048,6 +1078,84 @@ const installDialogPluginLogo = computed(() => {
         <v-btn color="error" variant="text" @click="confirmRemoveSource">{{
           tm("buttons.deleteSource")
         }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- Update plugin confirmation dialog -->
+  <v-dialog v-model="updateConfirmDialog.show" width="500">
+    <v-card class="rounded-lg">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+        {{ tm("dialogs.update.title") }}
+      </v-card-title>
+      <v-card-text>
+        <div class="market-install-confirm">
+          <div class="market-install-confirm__header">
+            <img
+              :src="updateDialogPluginLogo"
+              :alt="updateDialogPluginName"
+              class="market-install-confirm__logo"
+            />
+            <div class="market-install-confirm__meta">
+              <div class="market-install-confirm__name">
+                {{ updateDialogPluginName }}
+              </div>
+              <div
+                v-if="updateDialogCurrentVersion || updateDialogTargetVersion"
+                class="market-install-confirm__author"
+              >
+                <template v-if="updateDialogTargetVersion">
+                  {{ updateDialogCurrentVersion || tm("status.unknown") }}
+                  <v-icon icon="mdi-arrow-right" size="14" class="mx-1" />
+                  {{ updateDialogTargetVersion }}
+                </template>
+                <template v-else>
+                  {{ tm("detail.info.version") }}:
+                  {{ updateDialogCurrentVersion || tm("status.unknown") }}
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <v-divider class="my-4" />
+
+          <div
+            v-if="selectedUpdateSourceUrl"
+            class="market-install-confirm__section-title"
+          >
+            {{ tm("dialogs.update.sectionTitle") }}
+          </div>
+          <div
+            v-if="selectedUpdateSourceUrl"
+            class="market-install-source text-caption text-medium-emphasis mb-3"
+          >
+            <div>{{ tm("dialogs.update.downloadSource") }}</div>
+            <div class="market-install-source__url">
+              {{ selectedUpdateSourceUrl }}
+            </div>
+          </div>
+
+          <v-alert
+            v-if="updateUsesGithubSource"
+            type="warning"
+            variant="tonal"
+            density="comfortable"
+            class="market-install-alert mt-4 mb-4"
+          >
+            {{ tm("dialogs.install.githubSecurityWarning") }}
+          </v-alert>
+
+          <ProxySelector v-if="!selectedUpdateDownloadUrl" class="mt-4" />
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="grey" variant="text" @click="closeUpdateConfirmDialog">
+          {{ tm("buttons.cancel") }}
+        </v-btn>
+        <v-btn color="primary" variant="flat" @click="confirmUpdatePlugin">
+          {{ tm("dialogs.update.confirm") }}
+        </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
