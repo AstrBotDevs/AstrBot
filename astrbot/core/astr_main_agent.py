@@ -46,6 +46,7 @@ from astrbot.core.skills.skill_manager import (
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
+from astrbot.core.subagent_manager import SubAgentManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.tools.computer_tools import (
     AnnotateExecutionTool,
@@ -1012,7 +1013,7 @@ async def _apply_subagent_manager_tools(
         req.func_tool = ToolSet()
 
     try:
-        from astrbot.core.subagent_manager import (
+        from astrbot.core.subagent_tools import (
             CREATE_SUBAGENT_TOOL,
             LIST_SUBAGENTS_TOOL,
             PROTECT_SUBAGENT_TOOL,
@@ -1022,7 +1023,6 @@ async def _apply_subagent_manager_tools(
             UNPROTECT_SUBAGENT_TOOL,
             VIEW_SHARED_CONTEXT_TOOL,
             WAIT_FOR_SUBAGENT_TOOL,
-            SubAgentManager,
         )
 
         # Configure SubAgentManager with settings from subagent_orchestrator
