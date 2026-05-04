@@ -73,14 +73,13 @@ class SubAgentRoute(Route):
                 dyn.setdefault("tools_blacklist", [])
                 dyn.setdefault("tools_inherent", [])
 
-            # Ensure each agent contains provider_id and persona_id.
+            # Backward/forward compatibility: ensure each agent contains provider_id.
             # None means follow global/default provider settings.
             if isinstance(data.get("agents"), list):
                 for a in data["agents"]:
                     if isinstance(a, dict):
                         a.setdefault("provider_id", None)
                         a.setdefault("persona_id", None)
-
             return jsonify(Response().ok(data=data).__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -93,23 +92,16 @@ class SubAgentRoute(Route):
                 return jsonify(Response().error("配置必须为 JSON 对象").__dict__)
 
             cfg = self.core_lifecycle.astrbot_config
-
-            # 统一格式：前端发送 {"subagent_orchestrator": {...}}
-            if "subagent_orchestrator" in data:
-                orch_data = data["subagent_orchestrator"]
-                cfg["subagent_orchestrator"] = orch_data
-
-                # Reload dynamic handoff tools if orchestrator exists
-                orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
-                if orch is not None:
-                    await orch.reload_from_config(orch_data)
-            else:
-                return jsonify(
-                    Response().error("缺少 subagent_orchestrator 字段").__dict__
-                )
+            cfg["subagent_orchestrator"] = data
 
             # Persist to cmd_config.json
+            # AstrBotConfigManager does not expose a `save()` method; persist via AstrBotConfig.
             cfg.save_config()
+
+            # Reload dynamic handoff tools if orchestrator exists
+            orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
+            if orch is not None:
+                await orch.reload_from_config(data)
 
             return jsonify(Response().ok(message="保存成功").__dict__)
         except Exception as e:
