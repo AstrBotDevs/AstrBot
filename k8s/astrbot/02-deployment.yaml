@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: astrbot-standalone
+  namespace: astrbot-standalone-ns
+  labels:
+    app: astrbot-standalone
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: astrbot-standalone
+  template:
+    metadata:
+      labels:
+        app: astrbot-standalone
+    spec:
+      containers:
+        - name: astrbot
+          image: soulter/astrbot:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          ports:
+            - containerPort: 6185
+              name: webui
+            - containerPort: 6199
+              name: qq-ws
+            # - containerPort: 6195
+            #   name: wecom-wh
+            # - containerPort: 6196
+            #   name: qq-off-wh
+          volumeMounts:
+            - name: data
+              mountPath: /AstrBot/data
+            - name: localtime
+              mountPath: /etc/localtime
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: astrbot-data-pvc
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
+            type: File

@@ -1,0 +1,108 @@
+{
+  "logoTitle": "AstrBot Dashboard",
+  "version": {
+    "hasNewVersion": "AstrBot has a new version!",
+    "dashboardHasNewVersion": "WebUI has a new version!"
+  },
+  "buttons": {
+    "update": "Update",
+    "account": "Account",
+    "theme": {
+      "light": "Light Mode",
+      "dark": "Dark Mode"
+    }
+  },
+  "updateDialog": {
+    "title": "Update AstrBot",
+    "currentVersion": "Current Version",
+    "status": {
+      "checking": "Checking for updates...",
+      "switching": "Switching version...",
+      "updating": "Updating..."
+    },
+    "tabs": {
+      "release": "😊 Release"
+    },
+    "updateToLatest": "Update to Latest Version",
+    "preRelease": "Pre-release",
+    "preReleaseWarning": {
+      "title": "Pre-release Version Notice",
+      "description": "Versions marked as pre-release may contain unknown issues or bugs and are not recommended for production use. If you encounter any problems, please visit ",
+      "issueLink": "GitHub Issues"
+    },
+    "tip": "💡 TIP:",
+    "tipContinue": "By default, the corresponding version of the WebUI files will be downloaded when switching versions. The WebUI code is located in the dashboard directory of the project, and you can use npm to build it yourself.",
+    "dockerTip": "When switching versions, it will try to update both the bot main program and the dashboard. If you are using Docker deployment, you can also re-pull the image or use",
+    "dockerTipLink": "watchtower",
+    "dockerTipContinue": "to automatically monitor and pull.",
+    "table": {
+      "tag": "Tag",
+      "publishDate": "Publish Date",
+      "content": "Content",
+      "sourceUrl": "Source URL",
+      "actions": "Actions",
+      "view": "View",
+      "switch": "Switch"
+    },
+    "releaseNotes": {
+      "title": "Release Notes"
+    },
+    "redirectConfirm": {
+      "title": "Leaving AstrBot",
+      "message": "You are about to open the GitHub Releases page. Continue?",
+      "latestLabel": "Latest",
+      "targetVersion": "Target version: ",
+      "currentVersion": "Current version: ",
+      "guideTitle": "Recommended after opening:",
+      "guideStep1": "Download the installer that matches your OS and architecture.",
+      "guideStep2": "Install it and restart AstrBot.",
+      "guideStep3": "If you use Docker, prefer the image update path."
+    },
+    "desktopApp": {
+      "title": "Update Desktop App",
+      "message": "Check and upgrade the AstrBot desktop application.",
+      "currentVersion": "Current version: ",
+      "latestVersion": "Latest version: ",
+      "checking": "Checking desktop app updates...",
+      "hasNewVersion": "A new version is available. Click confirm to upgrade.",
+      "isLatest": "Already on the latest version",
+      "installing": "Downloading and installing update. The app will restart automatically...",
+      "checkFailed": "Failed to check updates. Please try again later.",
+      "installFailed": "Upgrade failed. Please try again later."
+    },
+    "dashboardUpdate": {
+      "title": "Update Dashboard to Latest Version Only",
+      "currentVersion": "Current Version",
+      "hasNewVersion": "New version available!",
+      "isLatest": "Already the latest version.",
+      "downloadAndUpdate": "Download and Update"
+    }
+  },
+  "accountDialog": {
+    "title": "Modify Account",
+    "securityWarning": "Security Reminder: Please change the default password to ensure account security",
+    "form": {
+      "currentPassword": "Current Password",
+      "newPassword": "New Password",
+      "confirmPassword": "Confirm New Password",
+      "newUsername": "New Username (Optional)",
+      "passwordHint": "Password must be at least 8 characters",
+      "confirmPasswordHint": "Please enter new password again to confirm",
+      "usernameHint": "Leave blank to keep current username",
+      "defaultCredentials": "Default username and password are both astrbot"
+    },
+    "validation": {
+      "passwordRequired": "Please enter password",
+      "passwordMinLength": "Password must be at least 8 characters",
+      "passwordMatch": "Passwords do not match",
+      "usernameMinLength": "Username must be at least 3 characters"
+    },
+    "actions": {
+      "save": "Save Changes",
+      "cancel": "Cancel"
+    },
+    "messages": {
+      "updateFailed": "Update failed, please try again"
+    }
+  }
+}

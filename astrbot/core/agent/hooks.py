@@ -1,0 +1,30 @@
+from typing import Generic
+
+import mcp
+
+from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.provider.entities import LLMResponse
+
+from .run_context import ContextWrapper, TContext
+
+
+class BaseAgentRunHooks(Generic[TContext]):
+    async def on_agent_begin(self, run_context: ContextWrapper[TContext]) -> None: ...
+    async def on_tool_start(
+        self,
+        run_context: ContextWrapper[TContext],
+        tool: FunctionTool,
+        tool_args: dict | None,
+    ) -> None: ...
+    async def on_tool_end(
+        self,
+        run_context: ContextWrapper[TContext],
+        tool: FunctionTool,
+        tool_args: dict | None,
+        tool_result: mcp.types.CallToolResult | None,
+    ) -> None: ...
+    async def on_agent_done(
+        self,
+        run_context: ContextWrapper[TContext],
+        llm_response: LLMResponse,
+    ) -> None: ...

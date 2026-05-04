@@ -1,0 +1,107 @@
+{
+  "header": {
+    "eyebrow": "Automation",
+    "live": "Live Sync"
+  },
+  "page": {
+    "title": "Future Task Management",
+    "beta": "Experimental",
+    "subtitle": "See scheduled tasks for AstrBot. AstrBot will wake up, run them, and deliver the results.",
+    "proactive": {
+      "supported": "Proactive delivery is available only on the configured platforms below",
+      "unsupported": "No proactive messaging platforms enabled. Turn them on in Platform settings."
+    }
+  },
+  "actions": {
+    "create": "New Task",
+    "edit": "Edit",
+    "refresh": "Refresh",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "save": "Save",
+    "submit": "Create"
+  },
+  "overview": {
+    "totalTasks": "Total Tasks",
+    "totalTasksNote": "Registered future tasks",
+    "enabledTasks": "Enabled Tasks",
+    "enabledTasksNote": "Tasks ready to wake and run",
+    "oneOffTasks": "One-off Tasks",
+    "recurringTasksNote": "{count} recurring tasks",
+    "proactivePlatforms": "Proactive Platforms",
+    "proactivePlatformsNote": "Platforms able to deliver results proactively"
+  },
+  "section": {
+    "registered": {
+      "title": "Task List",
+      "subtitle": "Review the registered tasks, execution timing, and current state"
+    },
+    "delivery": {
+      "title": "Delivery Status",
+      "subtitle": "After a task runs, results are proactively sent back through supported platforms",
+      "support": "Proactive delivery",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "enabledPlatforms": "Enabled platforms"
+    },
+    "quickCreate": {
+      "title": "Quick Create",
+      "runMode": "Task mode",
+      "target": "Targeting"
+    },
+    "platforms": {
+      "title": "Supported Platforms"
+    }
+  },
+  "table": {
+    "title": "Registered Tasks",
+    "subtitle": "Track cron setup, session target, last run history, and enabled state",
+    "empty": "No tasks yet.",
+    "headers": {
+      "name": "Name",
+      "type": "Type",
+      "cron": "Cron",
+      "session": "Session ID",
+      "nextRun": "Next Run",
+      "lastRun": "Last Run",
+      "note": "Note",
+      "actions": "Actions"
+    },
+    "type": {
+      "once": "One-off",
+      "recurring": "Recurring",
+      "activeAgent": "Active Agent",
+      "workflow": "Workflow",
+      "unknown": "{type}"
+    },
+    "timezoneLocal": "local",
+    "notAvailable": "—"
+  },
+  "form": {
+    "title": "New Task",
+    "editTitle": "Edit Task",
+    "chatHint": "You can ask AstrBot in chat to create future tasks instead of adding them here.",
+    "runOnce": "One-off task",
+    "name": "Task name",
+    "note": "Task description",
+    "cron": "Cron expression",
+    "cronPlaceholder": "0 9 * * *",
+    "runAt": "Run at",
+    "session": "Target session (platform_id:message_type:session_id)",
+    "timezone": "Timezone (optional, e.g. Asia/Shanghai)",
+    "enabled": "Enabled"
+  },
+  "messages": {
+    "loadFailed": "Failed to load tasks",
+    "updateSuccess": "Updated successfully",
+    "updateFailed": "Failed to update",
+    "deleteSuccess": "Deleted",
+    "deleteFailed": "Failed to delete",
+    "sessionRequired": "Session is required",
+    "noteRequired": "Description is required",
+    "cronRequired": "Cron expression is required",
+    "runAtRequired": "Please select run time",
+    "createSuccess": "Created successfully",
+    "createFailed": "Failed to create"
+  }
+}

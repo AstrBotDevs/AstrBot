@@ -1,0 +1,4 @@
+name: astrbot
+desc: AstrBot's internal plugin, providing some basic capabilities.
+author: AstrBot Team
+version: 4.1.0

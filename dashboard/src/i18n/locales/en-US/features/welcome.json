@@ -1,0 +1,51 @@
+{
+  "greeting": {
+    "morning": "Good morning, welcome to AstrBot",
+    "afternoon": "Good afternoon, welcome to AstrBot",
+    "evening": "Good evening, welcome to AstrBot",
+    "newYear": "Happy New Year!"
+  },
+  "subtitle": "You can complete the basic onboarding first. Platform and chat provider setup can both be skipped.",
+  "announcement": {
+    "title": "Announcement"
+  },
+  "onboard": {
+    "title": "Quick Onboarding",
+    "subtitle": "Complete initialization directly on the welcome page.",
+    "step1Title": "Configure AI Model",
+    "step1Desc": "Configure AI models for AstrBot.",
+    "step2Title": "Configure Platform Bot",
+    "step2Desc": "Connect AstrBot to IM platforms like QQ, Lark, Slack, Telegram, etc.",
+    "step3Title": "Allow Agent to Use the Computer",
+    "step3Desc": "Set whether the Agent can access and use this computer.",
+    "step3HelpTitle": "Access Details",
+    "step3HelpItem1": "The Agent can access and use the workspace directory, which is isolated for each user, as well as Skills to handle more complex tasks.",
+    "step3HelpItem2": "For AstrBot administrators, the Agent is additionally allowed to execute shell commands, run Python code, and access all local directories on this machine.",
+    "step3HelpClose": "Close",
+    "step3SelectLabel": "Computer Access",
+    "step3Allow": "Allow",
+    "step3Deny": "Disallow",
+    "configure": "Configure",
+    "save": "Save",
+    "skip": "Skip",
+    "pending": "Pending",
+    "completed": "Completed",
+    "skipped": "Skipped",
+    "platformLoadFailed": "Failed to load platform configuration",
+    "providerLoadFailed": "Failed to load provider configuration",
+    "providerUpdateFailed": "Failed to update default chat provider in config file \"default\"",
+    "providerDefaultUpdated": "Default chat provider in config file \"default\" has been set to {id}",
+    "computerAccessUpdateFailed": "Failed to update Agent computer access",
+    "computerAccessAllowed": "Agent is now allowed to access and use the computer",
+    "computerAccessDenied": "Agent is no longer allowed to access and use the computer",
+    "step3HelpItem3": "For more detailed control, configure the Computer Access options under Settings -> General -> Computer Access."
+  },
+  "resources": {
+    "title": "Resources",
+    "githubDesc": "Give us a Star!",
+    "docsTitle": "Documentation",
+    "docsDesc": "Read the official AstrBot documentation.",
+    "afdianTitle": "Afdian",
+    "afdianDesc": "Support the AstrBot team on Afdian."
+  }
+}

@@ -1,0 +1,104 @@
+/* 自定义滚动条样式 - 跟随主题 */
+
+:root {
+  --astrbot-scrollbar-track: rgba(var(--v-theme-primary), 0.08);
+  --astrbot-scrollbar-thumb: rgba(var(--v-theme-primary), 0.72);
+  --astrbot-scrollbar-thumb-hover: rgba(var(--v-theme-primary), 0.84);
+  --astrbot-scrollbar-thumb-active: rgba(var(--v-theme-primary), 0.94);
+  --astrbot-scrollbar-thumb-border: rgba(var(--v-theme-surface), 0.5);
+  --astrbot-scrollbar-thumb-shadow: rgba(var(--v-theme-primary), 0.32);
+}
+
+/* 全局滚动条样式 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--astrbot-scrollbar-track);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--astrbot-scrollbar-thumb);
+  border-radius: 5px;
+  transition: all 0.3s ease;
+  border: 1px solid var(--astrbot-scrollbar-thumb-border);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--astrbot-scrollbar-thumb-hover);
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px var(--astrbot-scrollbar-thumb-shadow);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--astrbot-scrollbar-thumb-active);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 细滚动条变体 */
+.thin-scrollbar {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--astrbot-scrollbar-thumb);
+    border: none;
+  }
+}
+
+/* 聊天区域滚动条 */
+.chat-scrollbar {
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--astrbot-scrollbar-track);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--astrbot-scrollbar-thumb);
+    border-radius: 4px;
+    border: 1px solid var(--astrbot-scrollbar-thumb-border);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--astrbot-scrollbar-thumb-hover);
+  }
+}
+
+/* 隐藏滚动条变体 */
+.hidden-scrollbar {
+  ::-webkit-scrollbar {
+    width: 0px;
+    height: 0px;
+  }
+  
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* Firefox 兼容性 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--astrbot-scrollbar-thumb) var(--astrbot-scrollbar-track);
+}
+
+/* 平滑滚动 */
+html {
+  scroll-behavior: smooth;
+}
+
+/* 移动端触摸滚动优化 */
+* {
+  -webkit-overflow-scrolling: touch;
+} 

@@ -1,0 +1,55 @@
+{
+  "title": "Document Details",
+  "backToKB": "Back to Knowledge Base",
+  "info": {
+    "title": "Document Information",
+    "name": "Document Name",
+    "type": "File Type",
+    "size": "File Size",
+    "chunkCount": "Chunk Count",
+    "createdAt": "Uploaded At"
+  },
+  "chunks": {
+    "title": "Chunks",
+    "empty": "No chunks",
+    "index": "Index",
+    "content": "Content",
+    "charCount": "Characters",
+    "actions": "Actions",
+    "view": "View",
+    "edit": "Edit",
+    "delete": "Delete",
+    "preview": "Preview",
+    "search": "Search Chunks",
+    "searchPlaceholder": "Enter keywords to search chunks...",
+    "showing": "Showing",
+    "deleteConfirm": "Are you sure you want to delete this chunk?",
+    "deleteSuccess": "Chunk deleted successfully",
+    "deleteFailed": "Failed to delete chunk"
+  },
+  "edit": {
+    "title": "Edit Chunk",
+    "content": "Chunk Content",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saveSuccess": "Chunk saved successfully",
+    "saveFailed": "Failed to save chunk"
+  },
+  "delete": {
+    "title": "Delete Chunk",
+    "confirmText": "Are you sure you want to delete this chunk?",
+    "warning": "This action cannot be undone and may affect knowledge base retrieval performance.",
+    "cancel": "Cancel",
+    "confirm": "Delete",
+    "deleteSuccess": "Chunk deleted successfully",
+    "deleteFailed": "Failed to delete chunk"
+  },
+  "view": {
+    "title": "Chunk Details",
+    "index": "Index",
+    "content": "Content",
+    "charCount": "Characters",
+    "vecDocId": "Vector ID",
+    "close": "Close"
+  }
+}

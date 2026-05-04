@@ -1,0 +1,23 @@
+//
+// Light Buttons
+//
+
+.v-btn {
+  &.bg-lightsecondary {
+    &:hover,
+    &:active,
+    &:focus {
+      background-color: rgb(var(--v-theme-secondary)) !important;
+      color: $white !important;
+    }
+  }
+}
+
+.v-btn {
+  text-transform: capitalize;
+  letter-spacing: $btn-letter-spacing;
+}
+.v-btn--icon.v-btn--density-default {
+  width: calc(var(--v-btn-height) + 6px);
+  height: calc(var(--v-btn-height) + 6px);
+}

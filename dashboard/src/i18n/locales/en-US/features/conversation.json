@@ -1,0 +1,108 @@
+{
+  "title": "Conversation Management",
+  "subtitle": "Manage and view user conversation history",
+  "filters": {
+    "title": "Filter Conditions",
+    "platform": "Platform",
+    "type": "Type",
+    "search": "Search Keywords",
+    "reset": "Reset"
+  },
+  "history": {
+    "title": "Conversation History",
+    "refresh": "Refresh"
+  },
+  "batch": {
+    "deleteSelected": "Delete Selected ({count})",
+    "exportSelected": "Export Selected ({count})"
+  },
+  "pagination": {
+    "itemsPerPage": "Items per page",
+    "showingItems": "Showing {start}-{end} of {total} items"
+  },
+  "table": {
+    "headers": {
+      "title": "Conversation Title",
+      "platform": "Platform",
+      "type": "Type",
+      "cid": "Conversation ID",
+      "umo": "Unified Message Origin",
+      "sessionId": "Session ID",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "actions": "Actions"
+    },
+    "umoDisplay": {
+      "parsed": "Parsed",
+      "raw": "UMO"
+    }
+  },
+  "actions": {
+    "view": "View",
+    "edit": "Edit",
+    "delete": "Delete"
+  },
+  "messageTypes": {
+    "group": "Group Chat",
+    "friend": "Private Chat",
+    "unknown": "Unknown"
+  },
+  "status": {
+    "noTitle": "Untitled Conversation",
+    "unknown": "Unknown",
+    "noData": "No conversation records",
+    "emptyContent": "Conversation content is empty",
+    "audioNotSupported": "Your browser does not support audio playback."
+  },
+  "dialogs": {
+    "view": {
+      "title": "Conversation Details",
+      "editMode": "Edit Conversation",
+      "previewMode": "Preview Mode",
+      "saveChanges": "Save Changes",
+      "close": "Close",
+      "confirmClose": "You have unsaved changes, are you sure you want to close?"
+    },
+    "edit": {
+      "title": "Edit Conversation Information",
+      "titleLabel": "Conversation Title",
+      "titlePlaceholder": "Enter conversation title",
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    "delete": {
+      "title": "Confirm Delete",
+      "message": "Are you sure you want to delete conversation {title}? This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "batchDelete": {
+      "title": "Batch Delete Confirmation",
+      "message": "Are you sure you want to delete the selected {count} conversations? This action cannot be undone, please proceed with caution!",
+      "andMore": "and {count} more",
+      "cancel": "Cancel",
+      "confirm": "Batch Delete",
+      "warning": "Warning: This action cannot be undone!"
+    }
+  },
+  "messages": {
+    "fetchError": "Failed to fetch conversation list",
+    "saveSuccess": "Save successful",
+    "saveError": "Save failed",
+    "deleteSuccess": "Delete successful",
+    "deleteError": "Delete failed",
+    "historyError": "Failed to fetch conversation history",
+    "historySaveSuccess": "Conversation history saved successfully",
+    "historySaveError": "Failed to save conversation history",
+    "invalidJson": "Invalid JSON format",
+    "noItemSelected": "Please select conversations to delete first",
+    "batchDeleteSuccess": "Successfully deleted {count} conversations",
+    "batchDeleteError": "Batch delete failed",
+    "batchDeletePartial": "Delete completed: {deleted} successful, {failed} failed",
+    "exportSuccess": "Export successful",
+    "exportError": "Export failed",
+    "noItemSelectedForExport": "Please select conversations to export first",
+    "copySuccess": "Copied",
+    "copyError": "Copy failed"
+  }
+} 

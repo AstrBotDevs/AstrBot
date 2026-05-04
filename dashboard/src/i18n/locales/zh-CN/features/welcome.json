@@ -1,0 +1,51 @@
+{
+  "greeting": {
+    "morning": "上午好，欢迎使用 AstrBot",
+    "afternoon": "下午好，欢迎使用 AstrBot",
+    "evening": "晚上好，欢迎使用 AstrBot",
+    "newYear": "新年快乐！"
+  },
+  "subtitle": "可以先完成基础引导，平台和对话提供商都支持稍后再配置。",
+  "announcement": {
+    "title": "公告"
+  },
+  "onboard": {
+    "title": "快速引导",
+    "subtitle": "欢迎页可直接完成初始化。",
+    "step1Title": "配置 AI 模型",
+    "step1Desc": "为 AstrBot 配置 AI 模型。",
+    "step2Title": "配置平台机器人",
+    "step2Desc": "将 AstrBot 连接到 QQ、飞书、企业微信、Telegram 等 IM 平台。",
+    "step3Title": "允许 Agent 使用电脑",
+    "step3Desc": "设置 Agent 是否可以访问和使用当前电脑。",
+    "step3HelpTitle": "允许 Agent 使用电脑",
+    "step3HelpItem1": "Agent 将可以访问和使用工作区目录（每个用户的工作区目录相互独立）以及 Skills 来执行更多复杂任务。",
+    "step3HelpItem2": "对于 AstrBot 管理员，会额外允许 Agent 执行 Shell 命令、Python 代码，以及访问本机的所有目录。",
+    "step3HelpClose": "关闭",
+    "step3SelectLabel": "电脑访问权限",
+    "step3Allow": "允许",
+    "step3Deny": "不允许",
+    "configure": "去配置",
+    "save": "保存",
+    "skip": "跳过",
+    "pending": "待处理",
+    "completed": "已完成",
+    "skipped": "已跳过",
+    "platformLoadFailed": "加载平台配置失败",
+    "providerLoadFailed": "加载提供商配置失败",
+    "providerUpdateFailed": "更新 default 配置文件默认对话提供商失败",
+    "providerDefaultUpdated": "已将 default 配置文件的默认对话提供商设置为 {id}",
+    "computerAccessUpdateFailed": "更新 Agent 电脑访问权限失败",
+    "computerAccessAllowed": "已允许 Agent 访问和使用电脑",
+    "computerAccessDenied": "已禁止 Agent 访问和使用电脑",
+    "step3HelpItem3": "如需更多细化权限与能力配置，可前往 配置文件 -> 普通配置 -> 使用电脑能力 继续设置。"
+  },
+  "resources": {
+    "title": "相关资源",
+    "githubDesc": "给 AstrBot 点个 Star 吧！",
+    "docsTitle": "文档",
+    "docsDesc": "查阅 AstrBot 的官方文档。",
+    "afdianTitle": "爱发电",
+    "afdianDesc": "通过爱发电支持 AstrBot 团队。"
+  }
+}

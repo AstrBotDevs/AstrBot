@@ -1,0 +1,97 @@
+﻿{
+    "title": "Долгосрочная память",
+    "subtitle": "Управление памятью вашего AI-помощника",
+    "memories": {
+        "title": "Список воспоминаний",
+        "content": "Содержание",
+        "importance": "Важность",
+        "createTime": "Дата создания",
+        "lastAccess": "Последнее обращение",
+        "category": "Категория"
+    },
+    "categories": {
+        "personal": "Личное",
+        "preferences": "Предпочтения",
+        "conversations": "История диалогов",
+        "facts": "Факты",
+        "skills": "Навыки"
+    },
+    "importance": {
+        "high": "Высокая",
+        "medium": "Средняя",
+        "low": "Низкая"
+    },
+    "actions": {
+        "view": "Детали",
+        "edit": "Изменить",
+        "delete": "Удалить",
+        "pin": "Закрепить",
+        "unpin": "Открепить"
+    },
+    "filters": {
+        "all": "Все",
+        "category": "По категории",
+        "importance": "По важности",
+        "dateRange": "По периоду",
+        "title": "Фильтр",
+        "userIdLabel": "Фильтр по User ID",
+        "filterButton": "Применить",
+        "resetButton": "Сбросить",
+        "refreshButton": "Обновить граф"
+    },
+    "search": {
+        "title": "Поиск по памяти",
+        "userIdLabel": "ID пользователя",
+        "queryLabel": "Ключевое слово",
+        "searchButton": "Поиск",
+        "resultsTitle": "Результаты поиска",
+        "noResults": "Ничего не найдено",
+        "similarity": "Сходство",
+        "noTextContent": "Нет текста"
+    },
+    "addMemory": {
+        "title": "Добавить данные в память",
+        "textLabel": "Текст воспоминания",
+        "userIdLabel": "ID пользователя",
+        "summarizeLabel": "Нужна суммаризация",
+        "addButton": "Добавить"
+    },
+    "nodeDetails": {
+        "title": "Детали узла",
+        "id": "ID",
+        "type": "Тип",
+        "name": "Имя",
+        "userId": "ID пользователя",
+        "timestamp": "Метка времени"
+    },
+    "graphStats": {
+        "title": "Статистика графа",
+        "nodeCount": "Узлов",
+        "edgeCount": "Связей"
+    },
+    "factDialog": {
+        "title": "Факт из памяти",
+        "id": "ID",
+        "docId": "ID документа",
+        "createdAt": "Создано",
+        "updatedAt": "Обновлено",
+        "metadata": "Метаданные",
+        "metadataKey": "Ключ",
+        "metadataValue": "Значение",
+        "loading": "Загрузка...",
+        "close": "Закрыть",
+        "noValue": "нет",
+        "unknown": "неизвестно"
+    },
+    "messages": {
+        "searchQueryRequired": "Пожалуйста, введите запрос",
+        "searchSuccess": "Найдено записей: {count}",
+        "searchNoResults": "В памяти ничего не найдено",
+        "searchError": "Ошибка поиска",
+        "addSuccess": "Данные успешно добавлены в память!",
+        "addError": "Не удалось добавить данные",
+        "factDetailsError": "Ошибка загрузки деталей",
+        "metadataParseError": "Не удалось разобрать метаданные",
+        "relationNoMemoryData": "У этой связи нет ассоциированных данных"
+    }
+}

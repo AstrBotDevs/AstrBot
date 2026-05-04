@@ -1,0 +1,40 @@
+
+name: '🎉 Feature Request / 功能建议'
+title: "[Feature]"
+description: Submit a suggestion to help us improve. / 提交建议帮助我们改进。
+labels: [ "enhancement" ]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to suggest a new feature! Please explain your idea clearly and accurately. / 感谢您抽出时间提出新功能建议，请准确解释您的想法。
+
+  - type: textarea
+    attributes:
+      label: Description / 描述
+      description: Please describe the feature you want to be added in detail. / 请详细描述您希望添加的功能。
+
+  - type: textarea
+    attributes:
+      label: Use Case / 使用场景
+      description: Please describe the use case for this feature. / 请描述这个功能的使用场景。
+
+  - type: checkboxes
+    attributes:
+      label: Willing to Submit PR? / 是否愿意提交PR？
+      description: >
+        This is not required, but if you are willing to submit a PR to implement this feature, it would be greatly appreciated! / 这不是必需的，但如果您愿意提交 PR 来实现这个功能，我们将不胜感激！
+      options:
+        - label: Yes, I am willing to submit a PR. / 是的，我愿意提交 PR。
+
+  - type: checkboxes
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: >
+            I have read and agree to abide by the project's [Code of Conduct](https://docs.github.com/zh/site-policy/github-terms/github-community-code-of-conduct). /
+          required: true
+
+  - type: markdown
+    attributes:
+      value: "Thank you for filling out our form!"

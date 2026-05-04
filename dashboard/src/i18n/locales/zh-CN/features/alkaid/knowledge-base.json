@@ -1,0 +1,155 @@
+{
+  "title": "知识库",
+  "subtitle": "管理和查询知识库内容",
+  "documents": {
+    "title": "文档列表",
+    "name": "文档名称",
+    "size": "大小",
+    "uploadTime": "上传时间",
+    "status": "状态",
+    "actions": "操作"
+  },
+  "management": {
+    "delete": "删除",
+    "preview": "预览",
+    "download": "下载",
+    "reindex": "重新索引"
+  },
+  "notInstalled": {
+    "title": "还没有安装知识库插件",
+    "install": "立即安装"
+  },
+  "empty": {
+    "title": "还没有知识库，快创建一个吧！🙂",
+    "create": "创建知识库"
+  },
+  "list": {
+    "title": "知识库列表",
+    "create": "创建知识库",
+    "config": "配置",
+    "checkUpdate": "检查插件更新",
+    "updatePlugin": "更新插件到 {version}",
+    "knowledgeCount": "条知识",
+    "tips": "Tips: 在聊天页面通过 /kb 指令了解如何使用！"
+  },
+  "createDialog": {
+    "title": "创建新知识库",
+    "nameLabel": "知识库名称",
+    "descriptionLabel": "描述",
+    "descriptionPlaceholder": "知识库的简短描述...",
+    "embeddingModelLabel": "嵌入模型(Embedding Model)",
+    "rerankModelLabel": "重排序模型(Rerank Model)",
+    "providerInfo": "提供商 ID: {id} | 嵌入模型维度: {dimensions}",
+    "rerankProviderInfo": "提供商 ID: {id}",
+    "tips": "Tips: 一旦选择了一个知识库的嵌入模型，请不要再修改该提供商的模型或者向量维度信息，否则将严重影响该知识库的召回率甚至报错。",
+    "cancel": "取消",
+    "create": "创建"
+  },
+  "emojiPicker": {
+    "title": "选择表情",
+    "close": "关闭",
+    "categories": {
+      "emotions": "笑脸和情感",
+      "animals": "动物和自然",
+      "food": "食物和饮料",
+      "activities": "活动和物品",
+      "travel": "旅行和地点",
+      "symbols": "符号和旗帜"
+    }
+  },
+  "contentDialog": {
+    "title": "知识库管理",
+    "embeddingModel": "嵌入模型",
+    "vectorDimension": "向量维度",
+    "usage": "使用方式: 在聊天页中输入 \"/kb use {name}\"",
+    "tabs": {
+      "upload": "上传文件",
+      "search": "搜索内容",
+      "fromURL": "从URL导入"
+    }
+  },
+  "upload": {
+    "title": "上传文件到知识库",
+    "subtitle": "支持 txt、pdf、epub、word、excel 等多种格式",
+    "dropzone": "拖放文件到这里或点击上传",
+    "chunkSettings": {
+      "title": "分片设置",
+      "tooltip": "分片长度决定每块文本的大小，重叠长度决定相邻文本块之间的重叠程度。\n较小的分片更精确但会增加数量，适当的重叠可提高检索准确性。",
+      "chunkSizeLabel": "分片长度",
+      "chunkSizeHint": "控制每个文本块大小，留空使用默认值",
+      "overlapLabel": "重叠长度",
+      "overlapHint": "控制相邻文本块重叠度，留空使用默认值"
+    },
+    "upload": "上传文件",
+    "uploading": "正在上传..."
+  },
+  "search": {
+    "queryLabel": "搜索知识库内容",
+    "queryPlaceholder": "输入关键词搜索知识库内容...",
+    "resultCountLabel": "结果数量",
+    "searching": "正在搜索...",
+    "resultsTitle": "搜索结果",
+    "relevance": "相关度",
+    "noResults": "没有找到匹配的内容"
+  },
+  "deleteDialog": {
+    "title": "确认删除",
+    "confirmText": "您确定要删除知识库 {name} 吗？",
+    "warning": "此操作不可逆，所有知识库内容将被永久删除。",
+    "cancel": "取消",
+    "delete": "删除"
+  },
+  "messages": {
+    "pluginNotAvailable": "插件未安装或不可用",
+    "pluginNotActivated": "astrbot_plugin_knowledge_base 插件未启用，请前往插件管理页面启用，然后重启 AstrBot。",
+    "checkPluginFailed": "检查插件失败",
+    "installFailed": "安装失败",
+    "installPluginFailed": "安装插件失败",
+    "getKnowledgeBaseListFailed": "获取知识库列表失败",
+    "knowledgeBaseCreated": "知识库创建成功",
+    "createFailed": "创建失败",
+    "createKnowledgeBaseFailed": "创建知识库失败",
+    "pleaseEnterKnowledgeBaseName": "请输入知识库名称",
+    "pleaseSelectFile": "请先选择文件",
+    "operationSuccess": "操作成功: {message}",
+    "uploadFailed": "上传失败",
+    "fileUploadFailed": "文件上传失败",
+    "pleaseEnterSearchContent": "请输入搜索内容",
+    "noMatchingContent": "没有找到匹配的内容",
+    "searchFailed": "搜索失败",
+    "searchKnowledgeBaseFailed": "搜索知识库失败",
+    "deleteTargetNotExists": "删除目标不存在",
+    "knowledgeBaseDeleted": "知识库删除成功",
+    "deleteFailed": "删除失败",
+    "deleteKnowledgeBaseFailed": "删除知识库失败",
+    "getEmbeddingModelListFailed": "获取嵌入模型列表失败",
+    "updateAvailable": "发现新版本: {current} -> {latest}",
+    "pluginUpToDate": "插件已是最新版本",
+    "pluginNotFoundInMarket": "在插件市场中未找到该插件",
+    "checkUpdateFailed": "检查更新失败",
+    "updateSuccess": "插件更新成功",
+    "updateFailed": "更新失败",
+    "updatePluginFailed": "更新插件失败"
+  },
+  "importFromUrl": {
+    "title": "从 URL 导入",
+    "urlLabel": "网页 URL",
+    "urlPlaceholder": "请输入要提取知识的网页地址",
+    "optionsTitle": "导入选项",
+    "tooltip": "这些选项控制如何从URL内容中提取和处理文本。\n留空将使用插件的默认设置。\n启用LLM文本修复和摘要后可能花费时间较长。",
+    "useLlmRepairLabel": "启用LLM文本修复",
+    "useClusteringSummaryLabel": "启用聚类摘要",
+    "repairLlmProviderIdLabel": "文本修复模型",
+    "summarizeLlmProviderIdLabel": "摘要模型",
+    "embeddingProviderIdLabel": "嵌入模型",
+    "chunkSizeLabel": "分片长度",
+    "chunkOverlapLabel": "重叠长度",
+    "startImport": "开始导入",
+    "importing": "正在导入...",
+    "importSuccess": "导入成功",
+    "importFailed": "导入失败",
+    "uploadingChunks": "内容提取成功，正在上传分片...",
+    "preRequisite": "提示：请先前往插件市场安装 astrbot_plugin_url_2_knowledge_base 并根据插件文档内的指示完成 playwright 安装后才可使用本功能",
+    "allChunksUploaded": "所有分片上传成功"
+  }
+}

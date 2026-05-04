@@ -1,0 +1,214 @@
+{
+  "network": {
+    "title": "Network",
+    "githubProxy": {
+      "title": "GitHub Proxy Address",
+      "subtitle": "Set the GitHub proxy address used when downloading plugins or updating AstrBot. This is effective in mainland China's network environment. Can be customized, input takes effect in real time. All addresses do not guarantee stability. If errors occur when updating plugins/projects, please first check if the proxy address is working properly.",
+      "label": "Select GitHub Proxy Address"
+    },
+    "proxySelector": {
+      "title": "GitHub Proxy",
+      "noProxy": "Don't use GitHub Proxy",
+      "useProxy": "Use GitHub Proxy",
+      "testConnection": "Test Connection",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "custom": "Custom"
+    }
+  },
+  "theme": {
+    "title": "Theme",
+    "subtitle": "Customize theme primary and secondary colors. Changes apply immediately and are stored locally in your browser.",
+    "customize": {
+      "title": "Theme Colors",
+      "primary": "Primary Color",
+      "secondary": "Secondary Color",
+      "reset": "Reset to Default"
+    }
+  },
+  "system": {
+    "title": "System",
+    "restart": {
+      "title": "Restart",
+      "subtitle": "Restart AstrBot",
+      "button": "Restart"
+    },
+    "migration": {
+      "title": "Data Migration to v4.0.0",
+      "subtitle": "If you encounter data compatibility issues, you can manually start the database migration assistant",
+      "button": "Start Migration Assistant"
+    },
+    "backup": {
+      "title": "Backup & Restore",
+      "subtitle": "Export or import all AstrBot data for easy migration to a new server",
+      "button": "Backup Manager"
+    },
+    "cleanup": {
+      "title": "Log & Cache Cleanup",
+      "subtitle": "Review disk usage for logs and caches, then clean them from the UI without shell commands.",
+      "refresh": "Refresh Usage",
+      "cleanAll": "Clean All",
+      "panel": {
+        "title": "Cleanup Details",
+        "subtitle": "Current usage: {size}"
+      },
+      "fileCount": "{count} files",
+      "confirm": "Clean {target} now?",
+      "targetNames": {
+        "cache": "cache",
+        "logs": "logs",
+        "all": "logs and cache"
+      },
+      "targets": {
+        "cache": {
+          "title": "Cache",
+          "subtitle": "Remove temporary files, plugin market cache, and skill cache.",
+          "button": "Clean Cache"
+        },
+        "logs": {
+          "title": "Logs",
+          "subtitle": "Remove rotated logs and truncate the current active log files.",
+          "button": "Clean Logs"
+        }
+      },
+      "messages": {
+        "statusFailed": "Failed to load storage usage",
+        "cleanupSuccess": "Cleared {count} files and freed {size}",
+        "cleanupFailed": "Cleanup failed"
+      }
+    }
+  },
+  "sidebar": {
+    "title": "Sidebar",
+    "customize": {
+      "title": "Customize Sidebar",
+      "subtitle": "Drag to reorder modules, or move modules in/out of the \"More Features\" group. Settings are saved locally in your browser.",
+      "reset": "Reset to Default",
+      "mainItems": "Main Modules",
+      "moreItems": "More Features"
+    }
+  },
+  "backup": {
+    "dialog": {
+      "title": "Backup Manager"
+    },
+    "tabs": {
+      "export": "Export Backup",
+      "import": "Import Backup",
+      "list": "Backup List"
+    },
+    "export": {
+      "title": "Create Backup",
+      "description": "Export all data as a ZIP backup file, including database, knowledge base, config and attachments.",
+      "includes": "Backup includes: Main database, Knowledge bases (metadata + vector index + documents), Config files, Attachment files",
+      "button": "Start Export",
+      "processing": "Exporting...",
+      "wait": "Please wait, packaging data...",
+      "completed": "Export Completed!",
+      "download": "Download Backup",
+      "another": "Create New Backup",
+      "failed": "Export Failed",
+      "retry": "Retry"
+    },
+    "import": {
+      "title": "Import Backup",
+      "warning": "⚠️ Import will clear and overwrite existing data! Please make sure you have backed up your current data.",
+      "selectFile": "Select backup file (.zip)",
+      "uploadAndCheck": "Upload & Check",
+      "uploading": "Uploading...",
+      "uploadWait": "Please wait, uploading backup file...",
+      "uploadInit": "Initializing upload...",
+      "uploadingChunks": "Uploading chunks...",
+      "uploadComplete": "Upload complete, merging file...",
+      "checking": "Checking backup file...",
+      "invalidBackup": "Invalid backup file",
+      "backupContents": "Backup Contents",
+      "tables": "tables",
+      "knowledgeBases": "Knowledge Bases",
+      "configFiles": "Config Files",
+      "confirmImport": "Confirm Import",
+      "button": "Start Import",
+      "processing": "Importing...",
+      "wait": "Please wait, restoring data...",
+      "completed": "Import Completed!",
+      "restartRequired": "Data has been successfully imported. It is recommended to restart AstrBot immediately for all changes to take effect.",
+      "restartNow": "Restart Now",
+      "failed": "Import Failed",
+      "retry": "Retry",
+      "version": {
+        "backupVersion": "Backup Version",
+        "currentVersion": "Current Version",
+        "backupTime": "Backup Time",
+        "matchTitle": "✅ Version Match",
+        "matchMessage": "Import will clear and overwrite all existing data, including:\n• Main database (conversations, settings, etc.)\n• Knowledge bases\n• Plugins and plugin data\n• Configuration files\n\nThis action cannot be undone! Do you want to continue?",
+        "minorDiffTitle": "⚠️ Version Difference Warning",
+        "minorDiffMessage": "Minor version differences are usually compatible, but there may be some data structure changes.\nImport will clear and overwrite all existing data!\n\nDo you want to continue?",
+        "majorDiffTitle": "⛔ Cannot Import",
+        "majorDiffMessage": "Major version numbers are different. Cross-major-version import may cause data corruption.\nPlease use the same major version of AstrBot for import."
+      }
+    },
+    "list": {
+      "empty": "No backup files",
+      "refresh": "Refresh List",
+      "confirmDelete": "Are you sure you want to delete this backup file? This action cannot be undone.",
+      "uploaded": "Uploaded",
+      "restore": "Restore this backup",
+      "rename": "Rename",
+      "renameTitle": "Rename Backup File",
+      "newName": "New Filename",
+      "renameHint": "Filename can only contain letters, numbers, underscores, hyphens and dots",
+      "renameRequired": "Please enter a filename",
+      "renameInvalidChars": "Filename contains invalid characters",
+      "renameFailed": "Rename failed",
+      "ftpHint": "For large backup files, you can also upload directly to the data/backups directory via FTP/SFTP"
+    }
+  },
+  "apiKey": {
+    "title": "API Keys",
+    "manageTitle": "Developer Access Keys",
+    "subtitle": "Create API keys for external developers to call open HTTP APIs.",
+    "name": "Key Name",
+    "expiresInDays": "Expiration",
+    "expiryOptions": {
+      "day1": "1 day",
+      "day7": "7 days",
+      "day30": "30 days",
+      "day90": "90 days",
+      "permanent": "Permanent"
+    },
+    "permanentWarning": "Permanent API keys are high risk. Store them securely and use only when necessary.",
+    "scopes": "Scopes",
+    "create": "Create API Key",
+    "revoke": "Revoke",
+    "delete": "Delete",
+    "copy": "Copy",
+    "docsLink": "Open docs",
+    "plaintextHint": "Save this key now. The plaintext will not be shown again.",
+    "empty": "No API keys",
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "table": {
+      "name": "Name",
+      "prefix": "Prefix",
+      "scopes": "Scopes",
+      "status": "Status",
+      "lastUsed": "Last Used",
+      "createdAt": "Created At",
+      "actions": "Actions"
+    },
+    "messages": {
+      "loadFailed": "Failed to load API keys",
+      "scopeRequired": "Please select at least one scope",
+      "createSuccess": "API key created",
+      "createFailed": "Failed to create API key",
+      "revokeSuccess": "API key revoked",
+      "revokeFailed": "Failed to revoke API key",
+      "deleteSuccess": "API key deleted",
+      "deleteFailed": "Failed to delete API key",
+      "copySuccess": "API key copied",
+      "copyFailed": "Failed to copy API key"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+name: builtin_commands
+desc: AstrBot's internal plugin, providing all built-in commands such as /reset.
+author: Soulter
+version: 0.0.1

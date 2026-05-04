@@ -1,0 +1,142 @@
+﻿{
+    "title": "Боты",
+    "subtitle": "Управление адаптерами платформ для подключения к мессенджерам",
+    "adapters": "Адаптеры платформ",
+    "addAdapter": "Создать бота",
+    "emptyText": "Боты не настроены. Нажмите «Создать бота», чтобы начать.",
+    "viewWebhook": "Показать Webhook",
+    "webhookCopied": "URL скопирован в буфер обмена",
+    "webhookCopyFailed": "Не удалось скопировать, сделайте это вручную",
+    "webhookDialog": {
+        "title": "Адрес Webhook",
+        "description": "Используйте этот адрес для обратных вызовов. Убедитесь, что ваш AstrBot доступен из интернета. Рекомендуется указать «Внешний URL для Webhook» в Конфигурация -> Система.",
+        "close": "Закрыть"
+    },
+    "details": {
+        "adapterType": "Тип адаптера",
+        "token": "Токен",
+        "description": "Описание"
+    },
+    "logs": {
+        "title": "Логи платформы",
+        "expand": "Развернуть",
+        "collapse": "Свернуть"
+    },
+    "dialog": {
+        "add": "Добавить",
+        "edit": "Изменить",
+        "adapter": "Бот",
+        "refresh": "Обновить",
+        "cancel": "Отмена",
+        "save": "Сохранить",
+        "addPlatform": "Создать бота",
+        "connectTitle": "Подключение к {name}",
+        "viewTutorial": "Открыть руководство",
+        "noTemplates": "Шаблоны не найдены",
+        "idConflict": {
+            "title": "Конфликт ID",
+            "message": "Бот с ID «{id}» уже существует. Пожалуйста, используйте уникальный ID.",
+            "confirm": "Понятно"
+        },
+        "securityWarning": {
+            "title": "Безопасность",
+            "aiocqhttpTokenMissing": "Для защиты соединения крайне рекомендуется установить ws_reverse_token. Работа без токена небезопасна.",
+            "learnMore": "Подробнее"
+        },
+        "invalidPlatformId": "ID платформы не может содержать символы ':' или '!'."
+    },
+    "createDialog": {
+        "step1Title": "Выберите мессенджер",
+        "step1Hint": "Куда вы хотите подключить бота? (QQ, Telegram, Discord, WeChat и др.)",
+        "platformTypeLabel": "Платформа",
+        "configFileTitle": "Файл конфигурации",
+        "optional": "опционально",
+        "configHint": "Как настроить бота? Конфиг содержит модель, персонажа, базу знаний и набор плагинов.",
+        "configDefaultHint": "По умолчанию используется профиль «default». Вы сможете изменить его позже.",
+        "useExistingConfig": "Использовать существующий конфиг",
+        "selectConfigLabel": "Выберите профиль",
+        "createNewConfig": "Создать новый профиль",
+        "newConfigNameLabel": "Имя нового профиля",
+        "newConfigTitle": "Создание нового профиля",
+        "newConfigLoadFailed": "Не удалось загрузить шаблон конфигурации",
+        "addRouteRule": "Добавить правило маршрутизации",
+        "viewMode": "Просмотр",
+        "editMode": "Редактирование",
+        "noRouteRules": "Правила маршрутизации не заданы, будет использоваться профиль по умолчанию",
+        "sessionIdPlaceholder": "ID сессии или *",
+        "allSessions": "Все сессии",
+        "configMissing": "Файл конфигурации не найден",
+        "routeHint": "* При получении сообщения AstrBot ищет первое совпадение в списке сверху вниз. Используйте слэш-команду /sid, чтобы узнать ID текущей сессии. Если совпадений нет, используется профиль по умолчанию.",
+        "warningContinue": "Игнорировать и создать",
+        "warningEditAgain": "Вернуться к редактированию",
+        "configDrawerTitle": "Управление профилями",
+        "configDrawerIdLabel": "ID",
+        "configTableHeaders": {
+            "configId": "ID связанного профиля",
+            "scope": "Область применения"
+        },
+        "routeTableHeaders": {
+            "source": "Источник (тип:ID)",
+            "config": "Файл конфига",
+            "actions": "Действия"
+        },
+        "messageTypeOptions": {
+            "all": "Все сообщения",
+            "group": "Групповые (GroupMessage)",
+            "friend": "Личные (FriendMessage)"
+        },
+        "messageTypeLabels": {
+            "all": "Все",
+            "group": "Группа",
+            "friend": "ЛС"
+        }
+    },
+    "messages": {
+        "updateSuccess": "Обновлено!",
+        "addSuccess": "Добавлено!",
+        "deleteSuccess": "Удалено!",
+        "statusUpdateSuccess": "Статус обновлен!",
+        "deleteConfirm": "Вы уверены, что хотите удалить этого бота?",
+        "configNotFoundOpenConfig": "Целевой конфиг не найден. Открыта страница настроек для проверки.",
+        "updateMissingPlatformId": "Ошибка обновления: отсутствует ID платформы.",
+        "platformUpdateFailed": "Не удалось обновить платформу.",
+        "addSuccessWithConfig": "Бот успешно добавлен, профиль обновлен",
+        "configIdMissing": "Не удалось получить ID конфигурации.",
+        "routingUpdateFailed": "Ошибка обновления маршрутов: {message}",
+        "createConfigFailed": "Ошибка создания профиля: {message}",
+        "platformIdMissing": "Не удалось получить ID платформы.",
+        "routingSaveFailed": "Ошибка сохранения маршрутов: {message}"
+    },
+    "status": {
+        "enabled": "Включен",
+        "disabled": "Выключен",
+        "connecting": "Подключение",
+        "connected": "Подключен",
+        "disconnected": "Отключен",
+        "error": "Ошибка"
+    },
+    "runtimeStatus": {
+    "running": "Работает",
+    "error": "Ошибка",
+    "pending": "Ожидание",
+    "stopped": "Остановлен",
+    "unknown": "Неизвестно",
+    "errors": "ошибок"
+  },
+  "platformQr": {
+    "title": "QR вход",
+    "show": "Показать QR",
+    "status": "Статус QR",
+    "waiting": "Ожидание QR",
+    "close": "Закрыть"
+  },
+  "errorDialog": {
+        "title": "Детали ошибки",
+        "platformId": "ID платформы",
+        "errorCount": "Кол-во ошибок",
+        "lastError": "Последняя ошибка",
+        "occurredAt": "Время",
+        "traceback": "Стек вызовов",
+        "close": "Закрыть"
+    }
+}

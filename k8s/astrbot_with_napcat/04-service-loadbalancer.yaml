@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: astrbot-service-lb
+  namespace: astrbot-ns
+  labels:
+    app: astrbot-stack
+spec:
+  type: LoadBalancer
+  selector:
+    app: astrbot-stack
+  ports:
+    - name: napcat-web
+      port: 6099
+      targetPort: 6099
+    - name: astrbot-web
+      port: 6185
+      targetPort: 6185

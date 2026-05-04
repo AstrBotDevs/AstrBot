@@ -1,0 +1,158 @@
+﻿{
+    "title": "Управление сессиями",
+    "subtitle": "Настройка индивидуальных правил для конкретных диалогов. Эти правила имеют приоритет над глобальной конфигурацией.",
+    "buttons": {
+        "refresh": "Обновить",
+        "edit": "Изменить",
+        "editRule": "Редактировать правило",
+        "deleteAllRules": "Удалить все правила",
+        "addRule": "Добавить правило",
+        "save": "Сохранить",
+        "cancel": "Отмена",
+        "delete": "Удалить",
+        "clear": "Очистить",
+        "next": "Далее",
+        "editCustomName": "Изменить заметку",
+        "batchDelete": "Массовое удаление"
+    },
+    "customRules": {
+        "title": "Пользовательские правила",
+        "rulesCount": "правил",
+        "hasRules": "Настроено",
+        "noRules": "Индивидуальных правил нет",
+        "noRulesDesc": "Нажмите «Добавить правило», чтобы задать настройки для конкретного диалога",
+        "serviceConfig": "Сервис",
+        "pluginConfig": "Плагины",
+        "kbConfig": "База знаний",
+        "providerConfig": "Модель",
+        "configured": "Настроено",
+        "noCustomName": "Без заметки"
+    },
+    "quickEditName": {
+        "title": "Редактирование заметки"
+    },
+    "search": {
+        "placeholder": "Поиск сессии..."
+    },
+    "table": {
+        "headers": {
+            "umoInfo": "Источник (UMO)",
+            "rulesOverview": "Обзор правил",
+            "actions": "Действия"
+        }
+    },
+    "persona": {
+        "none": "Из конфигурации"
+    },
+    "provider": {
+        "followConfig": "Из конфигурации"
+    },
+    "addRule": {
+        "title": "Добавление правила",
+        "description": "Выберите источник сообщения (UMO) для настройки. Индивидуальные правила приоритетнее глобальных. Используйте команду /sid в чате, чтобы узнать информацию об источнике.",
+        "selectUmo": "Выберите сессию",
+        "noUmos": "Нет доступных сессий"
+    },
+    "ruleEditor": {
+        "title": "Редактор правил",
+        "description": "Настройте поведение для этой сессии. Настройки ниже перекроют глобальный конфиг.",
+        "serviceConfig": {
+            "title": "Сервисные настройки",
+            "sessionEnabled": "Обрабатывать сообщения",
+            "llmEnabled": "Использовать LLM",
+            "ttsEnabled": "Использовать TTS",
+            "customName": "Заметка для сессии"
+        },
+        "providerConfig": {
+            "title": "Выбор моделей",
+            "chatProvider": "Чат-модель",
+            "sttProvider": "STT (Распознавание)",
+            "ttsProvider": "TTS (Озвучка)"
+        },
+        "personaConfig": {
+            "title": "Персона",
+            "selectPersona": "Выберите Persona",
+            "hint": "При выборе Persona все диалоги из этого источника будут использовать именно её."
+        },
+        "pluginConfig": {
+            "title": "Плагины",
+            "disabledPlugins": "Отключенные плагины",
+            "hint": "Выберите плагины, которые нужно ОТКЛЮЧИТЬ в этой сессии. Остальные останутся активными."
+        },
+        "kbConfig": {
+            "title": "База знаний",
+            "selectKbs": "Выбор баз знаний",
+            "topK": "Количество результатов (Top K)",
+            "enableRerank": "Использовать Rerank"
+        }
+    },
+    "deleteConfirm": {
+        "title": "Подтверждение",
+        "message": "Удалить все настройки для этой сессии? Будут применены глобальные настройки."
+    },
+    "batchDeleteConfirm": {
+        "title": "Массовое удаление",
+        "message": "Удалить {count} выбранных правил? Будут применены глобальные настройки."
+    },
+    "batchOperations": {
+        "title": "Массовые операции",
+        "hint": "Быстрое изменение настроек для группы сессий",
+        "scope": "Область применения",
+        "scopeSelected": "Выбранные",
+        "scopeAll": "Все сессии",
+        "scopeGroup": "Все группы",
+        "scopePrivate": "Личные диалоги",
+        "llmStatus": "Статус LLM",
+        "ttsStatus": "Статус TTS",
+        "chatProvider": "Чат-модель",
+        "ttsProvider": "TTS-модель",
+        "apply": "Применить"
+    },
+    "groups": {
+        "title": "Управление группами",
+        "count": "групп: {count}",
+        "addToGroup": "Добавить в группу",
+        "create": "Создать группу",
+        "edit": "Изменить группу",
+        "name": "Имя группы",
+        "sessionsCount": "сессий: {count}",
+        "empty": "Пока нет групп. Нажмите «Создать группу», чтобы добавить.",
+        "availableSessions": "Доступные сессии ({count})",
+        "selectedSessions": "Выбранные сессии ({count})",
+        "searchPlaceholder": "Поиск...",
+        "noMatch": "Нет совпадений",
+        "noMembers": "Нет участников",
+        "customGroupDivider": "── Пользовательские группы ──",
+        "customGroupOption": "📁 {name} ({count})",
+        "groupOption": "{name} (сессий: {count})",
+        "deleteConfirm": "Вы уверены, что хотите удалить группу \"{name}\"?"
+    },
+    "status": {
+        "enabled": "Включено",
+        "disabled": "Выключено"
+    },
+    "messages": {
+        "refreshSuccess": "Данные обновлены",
+        "loadError": "Ошибка загрузки",
+        "saveSuccess": "Настройки сохранены",
+        "saveError": "Ошибка сохранения",
+        "clearSuccess": "Очищено",
+        "clearError": "Ошибка очистки",
+        "deleteSuccess": "Удалено",
+        "deleteError": "Ошибка удаления",
+        "noChanges": "Изменений не обнаружено",
+        "batchDeleteSuccess": "Массовое удаление выполнено",
+        "batchDeleteError": "Ошибка массового удаления",
+        "selectSessionsFirst": "Пожалуйста, сначала выберите сессии",
+        "selectAtLeastOneConfig": "Пожалуйста, выберите хотя бы одну настройку для изменения",
+        "batchUpdateSuccess": "Пакетное обновление успешно выполнено",
+        "partialUpdateFailed": "Некоторые обновления не выполнены",
+        "batchUpdateError": "Ошибка пакетного обновления",
+        "groupNameRequired": "Имя группы не может быть пустым",
+        "saveGroupError": "Ошибка сохранения группы",
+        "deleteGroupError": "Ошибка удаления группы",
+        "selectSessionsToAddFirst": "Пожалуйста, сначала выберите сессии для добавления",
+        "addToGroupSuccess": "Добавлено сессий в группу: {count}",
+        "addToGroupError": "Ошибка добавления в группу"
+    }
+}

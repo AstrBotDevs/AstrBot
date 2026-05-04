@@ -1,0 +1,179 @@
+{
+  "title": "Let's Chat!",
+  "subtitle": "Chat with AI Assistant",
+  "input": {
+    "placeholder": "Start typing...",
+    "send": "Send",
+    "clear": "Clear",
+    "upload": "Upload File",
+    "voice": "Voice Input",
+    "recordingPrompt": "Recording, please speak...",
+    "chatPrompt": "Let's chat!",
+    "dropToUpload": "Drop files to upload",
+    "stopGenerating": "Stop generating"
+  },
+  "message": {
+    "user": "User",
+    "assistant": "Assistant",
+    "system": "System",
+    "error": "Error Message",
+    "loading": "Thinking..."
+  },
+  "voice": {
+    "start": "Start Recording",
+    "stop": "Stop Recording",
+    "recording": "New Recording",
+    "processing": "Processing...",
+    "error": "Recording Failed",
+    "listening": "Listening...",
+    "speaking": "Speaking",
+    "startRecording": "Start Voice Input",
+    "liveMode": "Live Mode"
+  },
+  "welcome": {
+    "title": "Welcome to AstrBot",
+    "subtitle": "Your Intelligent Chat Assistant",
+    "quickActions": "Quick Actions",
+    "examples": "Example Questions"
+  },
+  "actions": {
+    "copy": "Copy",
+    "regenerate": "Regenerate",
+    "retry": "Retry",
+    "retryWithModel": "Use another model",
+    "noAvailableModels": "No available models",
+    "like": "Like",
+    "dislike": "Dislike",
+    "share": "Share",
+    "newChat": "New Chat",
+    "deleteChat": "Delete this conversation",
+    "editTitle": "Edit Title",
+    "fullscreen": "Fullscreen Mode",
+    "exitFullscreen": "Exit Fullscreen",
+    "reply": "Reply",
+    "providerConfig": "Model Configuration",
+    "toolsUsed": "Tool Used",
+    "toolCallUsed": "Used {name} tool",
+    "pythonCodeAnalysis": "Python Code Analysis Used"
+  },
+  "ipython": {
+    "output": "Output"
+  },
+  "toolStatus": {
+    "done": "Done",
+    "running": "Running"
+  },
+  "thread": {
+    "title": "Thread",
+    "askInThread": "Ask in thread",
+    "count": "{count} threads",
+    "createFailed": "Failed to create thread",
+    "delete": "Delete thread",
+    "confirmDelete": "Delete this thread? This action cannot be undone.",
+    "placeholder": "Ask about this excerpt..."
+  },
+  "conversation": {
+    "newConversation": "New Conversation",
+    "noHistory": "No conversation history",
+    "systemStatus": "System Status",
+    "llmService": "LLM Service",
+    "speechToText": "Speech to Text",
+    "editDisplayName": "Edit Session Name",
+    "displayName": "Session Name",
+    "displayNameUpdated": "Session name updated",
+    "displayNameUpdateFailed": "Failed to update session name",
+    "confirmDelete": "Are you sure you want to delete \"{name}\"? This action cannot be undone."
+  },
+  "modes": {
+    "darkMode": "Switch to Dark Mode",
+    "lightMode": "Switch to Light Mode"
+  },
+  "shortcuts": {
+    "help": "Get Help",
+    "voiceRecord": "Record Voice",
+    "pasteImage": "Paste Image",
+    "sendKey": {
+      "title": "Send Shortcut",
+      "enterToSend": "Enter to send",
+      "shiftEnterToSend": "Shift+Enter to send"
+    }
+  },
+  "streaming": {
+    "enabled": "Streaming enabled",
+    "disabled": "Streaming disabled",
+    "on": "Stream",
+    "off": "Normal"
+  },
+  "transport": {
+    "title": "Transport Mode",
+    "sse": "SSE",
+    "websocket": "WebSocket"
+  },
+  "config": {
+    "title": "Config"
+  },
+  "reasoning": {
+    "thinking": "Thinking Process",
+    "think": "Thinking",
+    "toolUsed": "Using Tool"
+  },
+  "reply": {
+    "replyTo": "Reply to",
+    "notFound": "Message not found"
+  },
+  "project": {
+    "title": "Projects",
+    "create": "Create Project",
+    "edit": "Edit Project",
+    "name": "Project Name",
+    "emoji": "Icon (Emoji)",
+    "description": "Description (Optional)",
+    "noSessions": "No conversations in this project",
+    "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
+  },
+  "time": {
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "stats": {
+    "tokens": "Tokens",
+    "inputTokens": "Input (other)",
+    "outputTokens": "Output Tokens",
+    "cachedTokens": "Input (cached)",
+    "duration": "Duration",
+    "ttft": "Time to First Token"
+  },
+  "refs": {
+    "title": "References",
+    "sources": "Sources"
+  },
+  "connection": {
+    "title": "Connection Status Notice",
+    "message": "The system detected that the chat connection needs to be re-established.",
+    "reasons": "This may be due to:",
+    "reasonWindowResize": "Switching chat window size (normal behavior)",
+    "reasonMultipleTabs": "Opening chat pages in other tabs",
+    "reasonNetworkIssue": "Temporary network interruption",
+    "notice": "Note: To ensure proper message delivery, the system only allows one active chat connection at a time. If you're using chat in multiple tabs, please keep only one page open.",
+    "understand": "Got it",
+    "status": {
+      "reconnecting": "Reconnecting...",
+      "reconnected": "Chat connection re-established",
+      "failed": "Connection failed, please refresh the page"
+    }
+  },
+  "errors": {
+    "sendMessageFailed": "Failed to send message, please try again",
+    "createSessionFailed": "Failed to create session, please refresh the page"
+  },
+  "batch": {
+    "selected": "{count} selected",
+    "confirmDelete": "Are you sure you want to delete {count} conversation(s)? This action cannot be undone.",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "delete": "Delete",
+    "exit": "Exit",
+    "partialFailure": "{failed} of {total} conversations failed to delete",
+    "requestFailed": "Failed to delete conversations. Please try again."
+  }
+}

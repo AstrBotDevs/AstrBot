@@ -1,0 +1,153 @@
+{
+  "title": "Providers",
+  "subtitle": "Can configure chat models in \"Chat Completion\". Additionally, \"Agent Runner\" includes integrations with third-party services like Dify, Coze, and Alibaba Bailian(DashScope).",
+  "providers": {
+    "title": "Service Providers",
+    "settings": "Settings",
+    "addProvider": "Add Provider",
+    "providerType": "Provider Type",
+    "tabs": {
+      "all": "All",
+      "chatCompletion": "Chat Completion",
+      "agentRunner": "Agent Runner",
+      "speechToText": "Speech to Text",
+      "textToSpeech": "Text to Speech",
+      "embedding": "Embedding",
+      "rerank": "Rerank"
+    },
+    "empty": {
+      "all": "No service providers available, click Add Provider to add one",
+      "typed": "No {type} type service providers available, click Add Provider to add one"
+    },
+    "description": {
+      "openai": "Supports all OpenAI API compatible providers.",
+      "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API compatibility layer.",
+      "default": ""
+    }
+  },
+  "availability": {
+    "title": "Provider Availability",
+    "subtitle": "Determined by testing model conversation availability, may incur API costs",
+    "refresh": "Refresh Status",
+    "noData": "Click \"Refresh Status\" button to get service provider availability",
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "pending": "Pending...",
+    "errorMessage": "Error Message",
+    "test": "Test"
+  },
+  "logs": {
+    "title": "Service Logs",
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
+  "dialogs": {
+    "addProvider": {
+      "title": "Service Provider",
+      "tabs": {
+        "basic": "Basic",
+        "agentRunner": "Agent Runner",
+        "speechToText": "Speech to Text",
+        "textToSpeech": "Text to Speech",
+        "embedding": "Embedding",
+        "rerank": "Rerank"
+      },
+      "noTemplates": "No this type provider templates available"
+    },
+    "config": {
+      "addTitle": "Add",
+      "editTitle": "Edit",
+      "provider": "Service Provider",
+      "cancel": "Cancel",
+      "save": "Save"
+    },
+    "settings": {
+      "title": "Service Provider Settings",
+      "sessionSeparation": {
+        "title": "Enable Provider Session Isolation",
+        "description": "Different sessions can independently select text generation, TTS, STT and other service providers."
+      },
+      "close": "Close"
+    }
+  },
+  "messages": {
+    "success": {
+      "update": "Updated successfully!",
+      "add": "Added successfully!",
+      "delete": "Deleted successfully!",
+      "statusUpdate": "Status updated successfully!",
+      "sessionSeparation": "Session isolation settings updated"
+    },
+    "error": {
+      "sessionSeparation": "Failed to get session isolation configuration",
+      "fetchStatus": "Failed to get service provider status",
+      "testError": "Test failed for {id}: {error}"
+    },
+    "confirm": {
+      "delete": "Are you sure you want to delete service provider {id}?"
+    }
+  },
+  "providerTypes": {
+    "title": "Provider Types"
+  },
+  "providerSources": {
+    "title": "Provider Sources",
+    "add": "Add",
+    "empty": "No provider sources",
+    "selectHint": "Please select a provider source",
+    "selectCreated": "Select created provider source",
+    "save": "Save Configuration",
+    "saveAndFetchModels": "Save and Fetch Models",
+    "fetchModels": "Fetch Model List",
+    "saveSuccess": "Provider source saved successfully",
+    "saveError": "Failed to save provider source",
+    "deleteConfirm": "Are you sure you want to delete provider source {id}? This will also delete all associated model configurations.",
+    "deleteSuccess": "Provider source deleted successfully",
+    "deleteError": "Failed to delete provider source",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "advancedConfig": "Advanced Configuration...",
+    "fields": {
+      "name": "Name",
+      "apiKey": "API Key",
+      "baseUrl": "Base URL"
+    },
+    "hints": {
+      "id": "Provider source ID (not provider ID)",
+      "key": "API key for authentication",
+      "apiBase": "Custom API endpoint URL",
+      "proxy": "HTTP/HTTPS proxy address, e.g. http://127.0.0.1:7890. Only affects this provider's API requests, doesn't interfere with Docker internal networking."
+    },
+    "labels": {
+      "proxy": "Proxy"
+    }
+  },
+  "models": {
+    "title": "Models",
+    "available": "Available Models",
+    "configured": "Configured Models",
+    "empty": "No configured models yet. Click \"Fetch Models\" above to add.",
+    "noModelsFound": "No available models found",
+    "fetchError": "Failed to fetch models",
+    "addSuccess": "Model {model} added successfully",
+    "deleteConfirm": "Are you sure you want to delete model {id}?",
+    "deleteSuccess": "Model deleted successfully",
+    "deleteError": "Failed to delete model",
+    "testSuccess": "Model {id} test passed",
+    "testSuccessWithLatency": "Model {id} test passed, latency {latency} ms",
+    "testError": "Model test failed",
+    "searchPlaceholder": "Search models or ID",
+    "manualAddButton": "Custom Model",
+    "manualDialogTitle": "Add Custom Model",
+    "manualDialogModelLabel": "Model ID (e.g. gpt-4.1-mini)",
+    "manualDialogPreviewLabel": "Display ID (auto generated)",
+    "manualDialogPreviewHint": "Generated as sourceId/modelId",
+    "manualModelRequired": "Please enter a model ID",
+    "manualModelExists": "Model already exists",
+    "configure": "Configure",
+    "tooltips": {
+      "providerId": "Provider ID",
+      "modelId": "Model ID"
+    }
+  }
+}

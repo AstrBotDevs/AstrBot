@@ -1,0 +1,36 @@
+{
+    "code": 0,
+    "message": "操作成功",
+    "data": {
+        "id": "573092175",
+        "username": "bot_username",
+        "identify_num": "9561",
+        "online": false,
+        "os": "Websocket",
+        "status": 0,
+        "avatar": "https://img.kookapp.cn/assets/bot.png?x-oss-process=style/icon",
+        "vip_avatar": "https://img.kookapp.cn/assets/bot.png?x-oss-process=style/icon",
+        "banner": "",
+        "nickname": "bot_nickname",
+        "roles": [
+            13726212
+        ],
+        "is_vip": false,
+        "vip_amp": false,
+        "bot": true,
+        "kpm_vip": null,
+        "wealth_level": 0,
+        "bot_status": 0,
+        "tag_info": {
+            "color": "#0096FF",
+            "bg_color": "#0096FF33",
+            "text": "机器人"
+        },
+        "mobile_verified": true,
+        "is_sys": false,
+        "client_id": "g3nsxNQhNMZFKatU",
+        "verified": false,
+        "joined_at": 1772260532000,
+        "active_time": 1776418003694
+    }
+}

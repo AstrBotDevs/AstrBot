@@ -1,0 +1,179 @@
+{
+  "title": "聊天吧!",
+  "subtitle": "与AI助手进行对话",
+  "input": {
+    "placeholder": "开始输入...",
+    "send": "发送",
+    "clear": "清空",
+    "upload": "上传文件",
+    "voice": "语音输入",
+    "recordingPrompt": "录音中，请说话...",
+    "chatPrompt": "聊天吧!",
+    "dropToUpload": "松开鼠标上传文件",
+    "stopGenerating": "停止生成"
+  },
+  "message": {
+    "user": "用户",
+    "assistant": "助手",
+    "system": "系统",
+    "error": "错误消息",
+    "loading": "思考中..."
+  },
+  "voice": {
+    "start": "开始录音",
+    "stop": "停止录音",
+    "recording": "新录音",
+    "processing": "处理中...",
+    "error": "录音失败",
+    "listening": "等待语音...",
+    "speaking": "正在说话",
+    "startRecording": "开始语音输入",
+    "liveMode": "实时对话"
+  },
+  "welcome": {
+    "title": "欢迎使用 AstrBot",
+    "subtitle": "您的智能对话助手",
+    "quickActions": "快速操作",
+    "examples": "示例问题"
+  },
+  "actions": {
+    "copy": "复制",
+    "regenerate": "重新生成",
+    "retry": "重试",
+    "retryWithModel": "使用其他模型",
+    "noAvailableModels": "暂无可用模型",
+    "like": "点赞",
+    "dislike": "踩",
+    "share": "分享",
+    "newChat": "创建对话",
+    "deleteChat": "删除此对话",
+    "editTitle": "编辑标题",
+    "fullscreen": "全屏模式",
+    "exitFullscreen": "退出全屏",
+    "reply": "引用回复",
+    "providerConfig": "模型配置",
+    "toolsUsed": "已使用工具",
+    "toolCallUsed": "已使用 {name} 工具",
+    "pythonCodeAnalysis": "已使用 Python 代码分析"
+  },
+  "ipython": {
+    "output": "输出"
+  },
+  "toolStatus": {
+    "done": "已完成",
+    "running": "运行中"
+  },
+  "thread": {
+    "title": "分支",
+    "askInThread": "在新分支中询问",
+    "count": "{count} 个分支",
+    "createFailed": "创建分支失败",
+    "delete": "删除分支",
+    "confirmDelete": "确定要删除这个分支吗？此操作无法撤销。",
+    "placeholder": "继续追问这段内容..."
+  },
+  "conversation": {
+    "newConversation": "新的聊天",
+    "noHistory": "暂无对话历史",
+    "systemStatus": "系统状态",
+    "llmService": "LLM 服务",
+    "speechToText": "语音转文本",
+    "editDisplayName": "编辑会话名称",
+    "displayName": "会话名称",
+    "displayNameUpdated": "会话名称已更新",
+    "displayNameUpdateFailed": "更新会话名称失败",
+    "confirmDelete": "确定要删除“{name}”吗？此操作无法撤销。"
+  },
+  "modes": {
+    "darkMode": "切换到夜间模式",
+    "lightMode": "切换到日间模式"
+  },
+  "shortcuts": {
+    "help": "获取帮助",
+    "voiceRecord": "录制语音",
+    "pasteImage": "粘贴图片",
+    "sendKey": {
+      "title": "发送快捷键",
+      "enterToSend": "Enter 发送",
+      "shiftEnterToSend": "Shift+Enter 发送"
+    }
+  },
+  "streaming": {
+    "enabled": "流式响应已开启",
+    "disabled": "流式响应已关闭",
+    "on": "流式",
+    "off": "普通"
+  },
+  "transport": {
+    "title": "通信传输模式",
+    "sse": "SSE",
+    "websocket": "WebSocket"
+  },
+  "config": {
+    "title": "配置文件"
+  },
+  "reasoning": {
+    "thinking": "思考过程",
+    "think": "思考",
+    "toolUsed": "使用工具"
+  },
+  "reply": {
+    "replyTo": "引用",
+    "notFound": "无法定位消息"
+  },
+  "project": {
+    "title": "项目",
+    "create": "创建项目",
+    "edit": "编辑项目",
+    "name": "项目名称",
+    "emoji": "图标 (Emoji)",
+    "description": "项目描述（可选）",
+    "noSessions": "该项目暂无对话",
+    "confirmDelete": "确定要删除项目 \"{title}\" 吗？项目中的对话不会被删除。"
+  },
+  "time": {
+    "today": "今天",
+    "yesterday": "昨天"
+  },
+  "stats": {
+    "tokens": "Token",
+    "inputTokens": "输入（其他）",
+    "outputTokens": "输出 Token",
+    "cachedTokens": "输入（缓存）",
+    "duration": "耗时",
+    "ttft": "首字时间"
+  },
+  "refs": {
+    "title": "引用",
+    "sources": "来源"
+  },
+  "connection": {
+    "title": "连接状态提醒",
+    "message": "系统检测到聊天连接需要重新建立。",
+    "reasons": "这可能是因为：",
+    "reasonWindowResize": "切换了聊天窗口大小（正常现象）",
+    "reasonMultipleTabs": "在其他标签页中打开了聊天页面",
+    "reasonNetworkIssue": "网络连接临时中断",
+    "notice": "注意：为了确保消息正确接收，系统只允许同时保持一个聊天连接。如果您在多个标签页中使用聊天功能，建议只保留一个页面。",
+    "understand": "我知道了",
+    "status": {
+      "reconnecting": "正在重新连接...",
+      "reconnected": "聊天连接已重新建立",
+      "failed": "连接失败，请刷新页面重试"
+    }
+  },
+  "errors": {
+    "sendMessageFailed": "发送消息失败，请重试",
+    "createSessionFailed": "创建会话失败，请刷新页面重试"
+  },
+  "batch": {
+    "selected": "已选择 {count} 个",
+    "confirmDelete": "确定要删除 {count} 个对话吗？此操作无法撤销。",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "delete": "删除",
+    "exit": "退出",
+    "partialFailure": "{total} 个对话中有 {failed} 个删除失败",
+    "requestFailed": "删除对话失败，请重试。"
+  }
+}

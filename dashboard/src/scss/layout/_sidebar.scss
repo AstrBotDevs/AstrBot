@@ -1,0 +1,124 @@
+/*This is for the logo*/
+.leftSidebar {
+  border: 0px;
+  border-right: 1px solid rgba(var(--v-theme-borderLight), 0.45);
+  box-shadow: none !important;
+}
+.listitem {
+  overflow-y: auto;
+  .v-list {
+    color: rgb(var(--v-theme-secondaryText));
+  }
+  .v-list-group__items .v-list-item,
+  .v-list-item {
+    border-radius: $border-radius-root;
+    padding-inline-start: calc(12px + var(--indent-padding) / 2) !important;
+    &:hover {
+      color: rgb(var(--v-theme-secondary));
+    }
+  }
+  .v-list-item--density-default.v-list-item--one-line {
+    min-height: 40px;
+  }
+}
+
+// 深色主题下的侧边栏悬停和选中样式
+.v-theme--PurpleThemeDark .leftSidebar {
+  .listitem {
+    .v-list-group__items .v-list-item,
+    .v-list-item {
+      &:hover {
+        color: rgb(var(--v-theme-primary)) !important;
+        
+        .v-list-item-title {
+          color: rgb(var(--v-theme-primary)) !important;
+        }
+        
+        .v-icon {
+          color: rgb(var(--v-theme-primary)) !important;
+        }
+      }
+      
+      // 选中状态的样式
+      &.v-list-item--active {
+        color: rgb(var(--v-theme-primary)) !important;
+        
+        .v-list-item-title {
+          color: rgb(var(--v-theme-primary)) !important;
+        }
+        
+        .v-icon {
+          color: rgb(var(--v-theme-primary)) !important;
+        }
+      }
+    }
+  }
+  .v-list-item--density-default.v-list-item--one-line {
+    min-height: 40px;
+  }
+}
+.v-navigation-drawer--rail {
+  .scrollnavbar .v-list .v-list-group__items,
+  .hide-menu {
+    opacity: 1;
+  }
+  .leftPadding {
+    margin-left: 0px;
+  }
+}
+@media only screen and (min-width: 1170px) {
+  .mini-sidebar {
+    .logo {
+      width: 90px;
+      overflow: hidden;
+    }
+    .leftSidebar:hover {
+      box-shadow: $box-shadow !important;
+    }
+    .v-navigation-drawer--expand-on-hover:hover {
+      .logo {
+        width: 100%;
+      }
+      .v-list .v-list-group__items,
+      .hide-menu {
+        opacity: 1;
+      }
+    }
+  }
+}
+
+// 新的flex布局样式
+.leftSidebar {
+  .sidebar-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    
+    .flex-grow-1 {
+      flex: 1 1 auto;
+      overflow-y: auto;
+    }
+    
+    .sidebar-footer {
+      padding: 16px;
+      background: inherit;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 13px;
+      text-align: center;
+      flex-shrink: 0;
+      
+      .v-btn {
+        width: 100%;
+        max-width: 180px;
+        margin-bottom: 8px !important;
+      }
+
+      .sidebar-footer-btn {
+        justify-content: flex-start;
+        text-align: left;
+      }
+    }
+  }
+}

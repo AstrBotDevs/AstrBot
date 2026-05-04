@@ -1,0 +1,25 @@
+default_install_hook_types: [pre-commit, prepare-commit-msg]
+ci:
+  autofix_commit_msg: ":balloon: auto fixes by pre-commit hooks"
+  autofix_prs: true
+  autoupdate_branch: master
+  autoupdate_schedule: weekly
+  autoupdate_commit_msg: ":balloon: pre-commit autoupdate"
+repos:
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.14.1
+  hooks:
+    # Run the linter.
+    - id: ruff-check
+      types_or: [ python, pyi ]
+      args: [ --fix ]
+    # Run the formatter.
+    - id: ruff-format
+      types_or: [ python, pyi ]
+      
+- repo: https://github.com/asottile/pyupgrade
+  rev: v3.21.0
+  hooks:
+    - id: pyupgrade
+      args: [--py310-plus]

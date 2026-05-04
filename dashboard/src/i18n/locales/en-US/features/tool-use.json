@@ -1,0 +1,172 @@
+{
+  "title": "Function Tool Management",
+  "subtitle": "Manage MCP servers and view available function tools",
+  "tooltip": {
+    "info": "What are Function Calling and MCP?",
+    "marketplace": "Browse and install MCP servers from the community",
+    "serverConfig": "MCP server (stdio) configuration supports the following fields:\ncommand: Command name (e.g. python or uv)\nargs: Command arguments array (e.g. [\"run\", \"server.py\"])\nenv: Environment variables object (e.g. {\"api_key\": \"abc\"})\ncwd: Working directory path (e.g. /path/to/server)\nencoding: Output encoding (default utf-8)\nencoding_error_handler: The text encoding error handler. Defaults to strict.\nOther fields please refer to MCP documentation\n⚠️ If you deploy AstrBot using Docker, make sure to install MCP servers in the data directory mounted by AstrBot"
+  },
+  "tabs": {
+    "local": "Local Servers",
+    "marketplace": "MCP Marketplace"
+  },
+  "mcpServers": {
+    "title": "MCP Servers",
+    "description": "Manage MCP servers",
+    "buttons": {
+      "refresh": "Refresh",
+      "add": "Add Server",
+      "useTemplateStdio": "Stdio Template",
+      "useTemplateStreamableHttp": "Streamable HTTP Template",
+      "useTemplateSse": "SSE Template",
+      "sync": "Sync MCP Servers"
+    },
+    "empty": "No MCP servers available, click Add Server to add one",
+    "status": {
+      "noTools": "No available tools",
+      "availableTools": "Available tools",
+      "configSummary": "Config: {keys}",
+      "noConfig": "No configuration set"
+    }
+  },
+  "functionTools": {
+    "title": "Function Tools",
+    "buttons": {
+      "view": "View Tools"
+    },
+    "search": "Search function tools",
+    "empty": "No function tools available",
+    "description": "Function Description",
+    "parameters": "Parameter List",
+    "noParameters": "This tool has no parameters",
+    "table": {
+      "paramName": "Parameter Name",
+      "type": "Type",
+      "description": "Description",
+      "required": "Required",
+      "origin": "Origin",
+      "originName": "Origin Name",
+      "readonly": "Read-only",
+      "actions": "Actions"
+    },
+    "configTags": {
+      "tooltipTitle": "This tool is enabled in config file {config} because:",
+      "conditions": {
+        "truthy": "{key} is enabled",
+        "equals": "{key} = {expected}",
+        "in": "{key} matched {expected}",
+        "fallback": "{key} is currently {actual}"
+      }
+    }
+  },
+  "marketplace": {
+    "title": "MCP Server Marketplace",
+    "search": "Search servers",
+    "buttons": {
+      "refresh": "Refresh",
+      "detail": "Details",
+      "import": "Import"
+    },
+    "loading": "Loading MCP server marketplace...",
+    "empty": "No MCP servers available",
+    "status": {
+      "availableTools": "Available tools ({count})",
+      "noToolsInfo": "No tool information available"
+    }
+  },
+  "dialogs": {
+    "addServer": {
+      "title": "Add MCP Server",
+      "editTitle": "Edit MCP Server",
+      "fields": {
+        "name": "Server Name",
+        "nameRequired": "Name is required",
+        "enable": "Enable Server",
+        "config": "Server Configuration"
+      },
+      "errors": {
+        "configEmpty": "Configuration cannot be empty",
+        "jsonFormat": "JSON format error: {error}",
+        "jsonParse": "JSON parse error: {error}"
+      },
+      "buttons": {
+        "cancel": "Cancel",
+        "save": "Save",
+        "testConnection": "Test Connection",
+        "sync": "Sync"
+      },
+      "tips": {
+        "timeoutConfig": "Please configure tool call timeout separately in the configuration page",
+        "transportRecommendation": "Prefer Streamable HTTP or SSE mode. Stdio mode starts a local process on the AstrBot host and should only be used for trusted MCP servers."
+      }
+    },
+    "serverDetail": {
+      "title": "Server Details",
+      "installConfig": "Installation Configuration",
+      "availableTools": "Available Tools",
+      "buttons": {
+        "close": "Close",
+        "importConfig": "Import Configuration"
+      }
+    },
+    "confirmDelete": "Are you sure you want to delete server {name}?"
+  },
+  "syncProvider": {
+    "title": "Sync MCP Servers",
+    "subtitle": "Sync MCP server configurations from providers to local",
+    "steps": {
+      "selectProvider": "Step 1: Select Provider",
+      "configureAuth": "Step 2: Configure Authentication",
+      "syncServers": "Step 3: Sync Servers"
+    },
+    "providers": {
+      "modelscope": "ModelScope",
+      "description": "ModelScope is an open model community providing MCP servers for various machine learning and AI services"
+    },
+    "fields": {
+      "provider": "Select Provider",
+      "accessToken": "Access Token",
+      "tokenRequired": "Access token is required",
+      "tokenHint": "Please enter your ModelScope access token"
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "previous": "Previous",
+      "next": "Next",
+      "sync": "Start Sync",
+      "getToken": "Get Token"
+    },
+    "status": {
+      "selectProvider": "Please select an MCP server provider",
+      "enterToken": "Please enter the access token to continue",
+      "readyToSync": "Ready to sync server configurations"
+    },
+    "messages": {
+      "syncSuccess": "MCP servers synced successfully!",
+      "syncError": "Sync failed: {error}",
+      "tokenHelp": "How to get a ModelScope access token? Click the button on the right for instructions"
+    }
+  },
+  "messages": {
+    "getServersError": "Failed to get MCP server list: {error}",
+    "getToolsError": "Failed to get function tools list: {error}",
+    "saveSuccess": "Save successful!",
+    "saveError": "Save failed: {error}",
+    "deleteSuccess": "Delete successful!",
+    "deleteError": "Delete failed: {error}",
+    "updateSuccess": "Update successful!",
+    "updateError": "Update failed: {error}",
+    "getMarketError": "Failed to get MCP marketplace server list: {error}",
+    "importError": {
+      "noConfig": "This server has no available configuration",
+      "invalidFormat": "Server configuration format is incorrect",
+      "failed": "Import configuration failed: {error}"
+    },
+    "configParseError": "Configuration parse error: {error}",
+    "noAvailableConfig": "No available configuration",
+    "toggleToolSuccess": "Tool status toggled successfully!",
+    "toggleToolReadonly": "Builtin tools are read-only and cannot be enabled or disabled.",
+    "toggleToolError": "Failed to toggle tool status: {error}",
+    "testError": "Test connection failed: {error}"
+  }
+}

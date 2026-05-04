@@ -1,0 +1,39 @@
+{
+  "network": {
+    "timeout": "网络请求超时，请稍后重试",
+    "connection": "网络连接失败，请检查网络状态",
+    "server": "服务器错误，请联系技术支持",
+    "unavailable": "服务暂不可用",
+    "forbidden": "访问被拒绝"
+  },
+  "validation": {
+    "required": "此字段为必填项",
+    "invalid": "输入格式不正确",
+    "tooLong": "输入内容过长",
+    "tooShort": "输入内容过短",
+    "email": "请输入有效的邮箱地址",
+    "url": "请输入有效的URL地址",
+    "number": "请输入有效的数字"
+  },
+  "auth": {
+    "unauthorized": "未授权访问，请重新登录",
+    "forbidden": "权限不足，无法执行此操作",
+    "tokenExpired": "登录已过期，请重新登录",
+    "invalidCredentials": "用户名或密码错误"
+  },
+  "file": {
+    "uploadFailed": "文件上传失败",
+    "invalidFormat": "不支持的文件格式",
+    "tooLarge": "文件大小超出限制",
+    "notFound": "文件未找到"
+  },
+  "operation": {
+    "failed": "操作失败",
+    "cancelled": "操作已取消",
+    "notSupported": "不支持此操作",
+    "conflict": "操作冲突，请稍后重试"
+  },
+  "browser": {
+    "audioNotSupported": "您的浏览器不支持音频播放。"
+  }
+}
