@@ -61,6 +61,33 @@ You can add a `short_desc` field to `metadata.yaml` as the short description sho
 short_desc: A one-line summary of your plugin.
 ```
 
+### Bundle Skills with a Plugin (Optional)
+
+Plugins can provide a `skills/` directory. After AstrBot loads the plugin, valid Skills inside that directory are automatically included in the Skill Manager, with their source shown as the plugin.
+
+For multiple Skills, use this structure:
+
+```text
+your_plugin/
+  metadata.yaml
+  main.py
+  skills/
+    web-search-helper/
+      SKILL.md
+    report-writer/
+      SKILL.md
+```
+
+If `skills/` itself is one Skill, you can also place `SKILL.md` directly under it:
+
+```text
+your_plugin/
+  skills/
+    SKILL.md
+```
+
+In that case, the Skill name uses the plugin directory name. Plugin-provided Skills are managed by the plugin and appear as read-only sources in the WebUI Skills page. They can be enabled or disabled, but cannot be deleted or edited from Local Skills. When the plugin is uninstalled or updated, its bundled Skills change with the plugin files.
+
 ### Declare Supported Platforms (Optional)
 
 You can add a `support_platforms` field (`list[str]`) to `metadata.yaml` to declare which platform adapters your plugin supports. The WebUI plugin page will display this field.

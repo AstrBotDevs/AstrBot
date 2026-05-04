@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 259 icons */
+/* Auto-generated MDI subset – 260 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -706,6 +706,10 @@
 
 .mdi-minus-box::before {
   content: "\F0375";
+}
+
+.mdi-monitor-dashboard::before {
+  content: "\F0A07";
 }
 
 .mdi-music-note-outline::before {

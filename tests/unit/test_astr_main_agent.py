@@ -14,6 +14,8 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.skills.skill_manager import SkillInfo
+from astrbot.core.star.star import StarMetadata
 
 
 @pytest.fixture
@@ -547,6 +549,84 @@ class TestApplyFileExtract:
 
 class TestEnsurePersonaAndSkills:
     """Tests for _ensure_persona_and_skills function."""
+
+    def test_filter_plugin_skills_uses_current_config_plugin_set(self, monkeypatch):
+        module = ama
+        monkeypatch.setattr(
+            module,
+            "star_registry",
+            [
+                StarMetadata(
+                    name="allowed_plugin",
+                    root_dir_name="astrbot_plugin_allowed",
+                    activated=True,
+                ),
+                StarMetadata(
+                    name="blocked_plugin",
+                    root_dir_name="astrbot_plugin_blocked",
+                    activated=True,
+                ),
+            ],
+        )
+        skills = [
+            SkillInfo(name="local", description="", path="local/SKILL.md", active=True),
+            SkillInfo(
+                name="allowed-skill",
+                description="",
+                path="allowed/SKILL.md",
+                active=True,
+                source_type="plugin",
+                plugin_name="astrbot_plugin_allowed",
+            ),
+            SkillInfo(
+                name="blocked-skill",
+                description="",
+                path="blocked/SKILL.md",
+                active=True,
+                source_type="plugin",
+                plugin_name="astrbot_plugin_blocked",
+            ),
+        ]
+
+        filtered = module._filter_skills_for_current_config(
+            skills,
+            {"plugin_set": ["allowed_plugin"]},
+        )
+
+        assert [skill.name for skill in filtered] == ["local", "allowed-skill"]
+
+    def test_filter_plugin_skills_skips_inactive_plugins_even_when_all_allowed(
+        self, monkeypatch
+    ):
+        module = ama
+        monkeypatch.setattr(
+            module,
+            "star_registry",
+            [
+                StarMetadata(
+                    name="inactive_plugin",
+                    root_dir_name="astrbot_plugin_inactive",
+                    activated=False,
+                )
+            ],
+        )
+        skills = [
+            SkillInfo(
+                name="inactive-skill",
+                description="",
+                path="inactive/SKILL.md",
+                active=True,
+                source_type="plugin",
+                plugin_name="astrbot_plugin_inactive",
+            )
+        ]
+
+        filtered = module._filter_skills_for_current_config(
+            skills,
+            {"plugin_set": ["*"]},
+        )
+
+        assert filtered == []
 
     @pytest.mark.asyncio
     async def test_ensure_persona_from_session(self, mock_event, mock_context):

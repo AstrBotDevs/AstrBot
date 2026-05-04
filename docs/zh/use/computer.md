@@ -74,11 +74,12 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 - 管理员可以使用 `local` 模式下的 Shell、Python、文件读取、文件写入、文件编辑和 Grep 搜索。
 - 非管理员不能使用 Shell 和 Python。
-- 非管理员只能在受限目录内使用文件读取、写入、编辑和搜索。
+- 非管理员只能在受限目录内使用文件读取、写入、编辑和搜索。插件内置 Skills 只允许读取和搜索，不允许写入或编辑。
 
 非管理员在 `local` 模式下允许访问的目录包括：
 
 - `data/skills`
+- `data/plugins/*/skills`（只读，用于插件内置 Skills）
 - 当前会话的 `data/workspaces/{normalized_umo}`
 - AstrBot 的临时目录
 - 系统临时目录中的 `.astrbot`

@@ -49,9 +49,11 @@ def _setup_local_fs_tools(
 ) -> Any:
     workspaces_root = tmp_path / "workspaces"
     skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
     temp_root = tmp_path / "temp"
     workspaces_root.mkdir()
     skills_root.mkdir()
+    plugins_root.mkdir()
     temp_root.mkdir()
 
     monkeypatch.setattr(
@@ -63,6 +65,11 @@ def _setup_local_fs_tools(
         fs_tools,
         "get_astrbot_skills_path",
         lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        fs_tools,
+        "get_astrbot_plugin_path",
+        lambda: str(plugins_root),
     )
     monkeypatch.setattr(
         fs_tools,
@@ -123,7 +130,9 @@ def _make_epub_bytes(*, chapter_count: int = 1) -> bytes:
                 'media-type="application/xhtml+xml"/>'
             )
             spine_items.append(f'<itemref idref="chapter{index}"/>')
-            nav_links.append(f'<li><a href="chapter{index}.xhtml">Chapter {index}</a></li>')
+            nav_links.append(
+                f'<li><a href="chapter{index}.xhtml">Chapter {index}</a></li>'
+            )
             archive.writestr(
                 f"OEBPS/chapter{index}.xhtml",
                 f"""<?xml version="1.0" encoding="utf-8"?>
@@ -179,6 +188,84 @@ def _make_epub_bytes(*, chapter_count: int = 1) -> bytes:
         )
 
     return buffer.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_restricted_local_member_can_read_plugin_provided_skill(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    plugin_skill = (
+        tmp_path
+        / "plugins"
+        / "astrbot_plugin_demo"
+        / "skills"
+        / "demo-skill"
+        / "SKILL.md"
+    )
+    plugin_skill.parent.mkdir(parents=True)
+    plugin_skill.write_text("# Demo Skill\n\nRead plugin docs.", encoding="utf-8")
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(role="member"),
+        path=str(plugin_skill),
+    )
+
+    assert result == "# Demo Skill\n\nRead plugin docs."
+
+
+@pytest.mark.asyncio
+async def test_restricted_local_member_can_read_plugin_skill_inventory_even_if_plugin_inactive(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    plugin_skill = (
+        tmp_path
+        / "plugins"
+        / "astrbot_plugin_demo"
+        / "skills"
+        / "demo-skill"
+        / "SKILL.md"
+    )
+    plugin_skill.parent.mkdir(parents=True)
+    plugin_skill.write_text("# Demo Skill\n", encoding="utf-8")
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(role="member"),
+        path=str(plugin_skill),
+    )
+
+    assert result == "# Demo Skill\n"
+
+
+@pytest.mark.asyncio
+async def test_restricted_local_member_cannot_write_plugin_provided_skill(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    _setup_local_fs_tools(monkeypatch, tmp_path)
+    plugin_skill = (
+        tmp_path
+        / "plugins"
+        / "astrbot_plugin_demo"
+        / "skills"
+        / "demo-skill"
+        / "SKILL.md"
+    )
+    plugin_skill.parent.mkdir(parents=True)
+    plugin_skill.write_text("# Demo Skill\n", encoding="utf-8")
+
+    result = await fs_tools.FileWriteTool().call(
+        _make_context(role="member"),
+        path=str(plugin_skill),
+        content="# Changed\n",
+    )
+
+    assert "Write access is restricted for this user." in result
+    assert "data/plugins/*/skills" not in result
+    assert plugin_skill.read_text(encoding="utf-8") == "# Demo Skill\n"
 
 
 def test_detect_text_encoding_allows_utf8_probe_cut_mid_character():
