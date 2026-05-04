@@ -340,6 +340,12 @@ class AstrBotCoreLifecycle:
         self._load()
         logger.info("AstrBot started.")
 
+        # Allow the event loop a chance to start the background tasks before emitting the signal.
+        # Emit the startup completion signal to stdout for AstrBot Launcher.
+        # The Launcher monitors stdout for this signal to determine when the instance is ready.
+        # This must use print (stdout) rather than logger (stderr) to be detectable by the Launcher.
+        await asyncio.sleep(0)
+        print("AstrBot 启动完成", flush=True)
         # 执行启动完成事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
             EventType.OnAstrBotLoadedEvent,
