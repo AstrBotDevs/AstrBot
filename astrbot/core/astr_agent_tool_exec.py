@@ -31,6 +31,7 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.subagent_manager import SubAgentManager
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
@@ -823,8 +824,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     def _load_subagent_history(
         umo: str, tool: HandoffTool
     ) -> tuple[list[Message], str]:
-        from astrbot.core.subagent_manager import SubAgentManager
-
         agent_name = getattr(tool.agent, "name", None)
         subagent_history = []
         if agent_name:
@@ -871,8 +870,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             f"# Role\nYour name is {agent_name}(used for tool calling)\n{base}\n"
         )
         if agent_name:
-            from astrbot.core.subagent_manager import SubAgentManager
-
             runtime = prov_settings.get("computer_use_runtime", "local")
             static_subagent_prompt = SubAgentManager.build_static_subagent_prompts(
                 umo, agent_name
@@ -889,8 +886,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         umo: str, runner_messages: list[Message], agent_name: str
     ) -> None:
         if agent_name and runner_messages:
-            from astrbot.core.subagent_manager import SubAgentManager
-
             # 仅在历史功能启用时保存历史
             if SubAgentManager.is_history_enabled():
                 SubAgentManager.update_subagent_history(
@@ -908,8 +903,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if not agent_name:
             return None
         try:
-            from astrbot.core.subagent_manager import SubAgentManager
-
             session = SubAgentManager.get_session(umo)
             if session and (agent_name in session.subagents):
                 subagent_task_id = SubAgentManager.create_pending_subagent_task(
@@ -967,8 +960,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @staticmethod
     def _get_subagent_execution_timeout() -> float:
         try:
-            from astrbot.core.subagent_manager import SubAgentManager
-
             return SubAgentManager.get_execution_timeout()
         except Exception:
             return -1
@@ -978,8 +969,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         umo: str,
         agent_name: str,
     ) -> None:
-        from astrbot.core.subagent_manager import SubAgentManager
-
         SubAgentManager.set_subagent_status(
             session_id=umo,
             agent_name=agent_name,
@@ -988,8 +977,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
     @staticmethod
     def _is_managed_subagent(umo: str, agent_name: str | None) -> bool:
-        from astrbot.core.subagent_manager import SubAgentManager
-
         if not agent_name:
             return False
         session = SubAgentManager.get_session(umo)
@@ -1011,8 +998,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool: HandoffTool,
         tool_args: dict,
     ) -> None:
-        from astrbot.core.subagent_manager import SubAgentManager
-
         success = error_text is None
         status = "COMPLETED" if success else "FAILED"
         SubAgentManager.set_subagent_status(

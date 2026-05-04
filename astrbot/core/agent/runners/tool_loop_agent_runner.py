@@ -47,6 +47,7 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
+from astrbot.core.subagent_manager import SubAgentManager
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -1506,12 +1507,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not session_id:
             return None
 
-        try:
-            from astrbot.core.subagent_manager import SubAgentManager
-
-            dynamic_handoffs = SubAgentManager.get_handoff_tools_for_session(session_id)
-        except Exception:
-            return None
+        dynamic_handoffs = SubAgentManager.get_handoff_tools_for_session(session_id)
 
         for h in dynamic_handoffs:
             if h.name == func_tool_name or f"transfer_to_{h.name}" == func_tool_name:
@@ -1538,13 +1534,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not session_id:
             return
 
-        try:
-            from astrbot.core.subagent_manager import SubAgentManager
-
-            handoffs = SubAgentManager.get_handoff_tools_for_session(session_id)
-        except Exception as e:
-            logger.warning(f"[SubAgent] Failed to load dynamic handoffs: {e}")
-            return
+        handoffs = SubAgentManager.get_handoff_tools_for_session(session_id)
 
         for handoff in handoffs:
             if (

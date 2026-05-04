@@ -19,6 +19,7 @@ from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.astr_main_agent import _get_workspace_path_for_umo
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
@@ -220,7 +221,6 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
             cls._tools_blacklist = {
                 "send_shared_context_for_main_agent",
                 "create_subagent",
-                "stop_subagent",
                 "protect_subagent",
                 "unprotect_subagent",
                 "reset_subagent",
@@ -337,7 +337,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
                 filtered_messages.append(msg)
 
         session.subagent_histories[agent_name].extend(filtered_messages)
-        if cls._subagent_history_maxlen > len(session.subagent_histories[agent_name]):
+        if len(session.subagent_histories[agent_name]) > cls._subagent_history_maxlen:
             session.subagent_histories[agent_name] = session.subagent_histories[
                 agent_name
             ][-cls._subagent_history_maxlen :]
@@ -1295,13 +1295,11 @@ class CreateSubAgentTool(FunctionTool):
         tools = kwargs.get("tools", {})
         skills = kwargs.get("skills", {})
         workdir = kwargs.get("workdir")
-        # 检查工作路径是否非法
-        if workdir is not None and self._check_path_safety(workdir):
-            pass
-        else:
-            workdir = get_astrbot_temp_path()
 
         session_id = context.context.event.unified_msg_origin
+        # 工作路径如果非法，回退到该session的默认工作路径
+        if workdir is None or (not self._check_path_safety(workdir)):
+            workdir = _get_workspace_path_for_umo(session_id)
         config = SubAgentConfig(
             name=name,
             system_prompt=system_prompt,
