@@ -25,6 +25,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
 )
+from astrbot.core.utils.io import ensure_dir
 from astrbot.core.utils.version_comparator import VersionComparator
 
 # 从共享常量模块导入
@@ -931,6 +932,11 @@ class AstrBotImporter:
                         if not _validate_path_within(target_path, target_dir):
                             result.add_warning(f"文件路径越界，已跳过: {name}")
                             continue
+
+                        if zf.getinfo(name).is_dir():
+                            ensure_dir(target_path)
+                            continue
+
                         target_path.parent.mkdir(parents=True, exist_ok=True)
 
                         with zf.open(name) as src, open(target_path, "wb") as dst:

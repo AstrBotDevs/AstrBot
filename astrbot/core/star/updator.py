@@ -4,7 +4,7 @@ import zipfile
 
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
-from astrbot.core.utils.io import on_error, remove_dir
+from astrbot.core.utils.io import ensure_dir, on_error, remove_dir
 
 from ..star.star import StarMetadata
 from ..updator import RepoZipUpdator
@@ -71,7 +71,7 @@ class PluginUpdator(RepoZipUpdator):
         return plugin_path
 
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
-        os.makedirs(target_dir, exist_ok=True)
+        ensure_dir(target_dir)
         update_dir = ""
         logger.info(f"Extracting archive: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:

@@ -37,6 +37,7 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import ensure_dir
 
 
 class StarTools:
@@ -305,7 +306,7 @@ class StarTools:
         )
 
         try:
-            data_dir.mkdir(parents=True, exist_ok=True)
+            ensure_dir(data_dir)
         except OSError as e:
             if isinstance(e, PermissionError):
                 raise RuntimeError(f"无法创建目录 {data_dir}：权限不足") from e
