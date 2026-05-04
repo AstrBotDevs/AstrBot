@@ -1,7 +1,7 @@
 # Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
 # License: Apache License 2.0
 
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, Literal, TypeVar, cast
 
 from pydantic import (
     BaseModel,
@@ -13,6 +13,8 @@ from pydantic import (
 )
 from pydantic_core import core_schema
 
+ContentPartT = TypeVar("ContentPartT", bound="ContentPart")
+
 
 class ContentPart(BaseModel):
     """A part of the content in a message."""
@@ -20,6 +22,7 @@ class ContentPart(BaseModel):
     __content_part_registry: ClassVar[dict[str, type["ContentPart"]]] = {}
 
     type: Literal["text", "think", "image_url", "audio_url"]
+    _no_save: bool = PrivateAttr(default=False)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -50,7 +53,10 @@ class ContentPart(BaseModel):
                     if not isinstance(type_value, str):
                         raise ValueError(f"Cannot validate {value} as ContentPart")
                     target_class = cls.__content_part_registry[type_value]
-                    return target_class.model_validate(value)
+                    part = target_class.model_validate(value)
+                    if cast(dict[str, Any], value).get("_no_save"):
+                        part._no_save = True
+                    return part
 
                 raise ValueError(f"Cannot validate {value} as ContentPart")
 
@@ -58,6 +64,17 @@ class ContentPart(BaseModel):
 
         # for subclasses, use the default schema
         return handler(source_type)
+
+    def mark_as_temp(self: ContentPartT) -> ContentPartT:
+        """Mark this content part as provider-facing only, not persisted."""
+        self._no_save = True
+        return self
+
+    def model_dump_for_context(self) -> dict[str, Any]:
+        data = self.model_dump()
+        if self._no_save:
+            data["_no_save"] = True
+        return data
 
 
 class TextPart(ContentPart):
@@ -329,7 +346,14 @@ def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
     """Dump runtime messages and reinsert bound checkpoint segments."""
     dumped: list[dict] = []
     for message in messages:
-        dumped.append(message.model_dump())
+        message_data = message.model_dump()
+        if isinstance(message.content, list):
+            message_data["content"] = [
+                part.model_dump()
+                for part in message.content
+                if not getattr(part, "_no_save", False)
+            ]
+        dumped.append(message_data)
         if message._checkpoint_after is not None:
             dumped.append(
                 CheckpointMessageSegment(content=message._checkpoint_after).model_dump()

@@ -1,4 +1,7 @@
-import { getSingletonHighlighter } from "shiki";
+import {
+  createHighlighter,
+  normalizeLimitedShikiLanguage,
+} from "./shikiLimitedBundle";
 
 export const SHIKI_THEMES = {
   light: "github-light",
@@ -8,8 +11,7 @@ export const SHIKI_THEMES = {
 let highlighterPromise;
 
 function normalizeLanguage(language) {
-  const normalized = (language || "text").trim().split(/\s+/, 1)[0].toLowerCase();
-  return normalized || "text";
+  return normalizeLimitedShikiLanguage(language);
 }
 
 export function escapeHtml(value = "") {
@@ -23,28 +25,16 @@ export function escapeHtml(value = "") {
 
 export async function getShikiHighlighter() {
   if (!highlighterPromise) {
-    highlighterPromise = getSingletonHighlighter({
+    highlighterPromise = createHighlighter({
       themes: Object.values(SHIKI_THEMES),
-      langs: ["text"],
     });
   }
 
   return highlighterPromise;
 }
 
-export async function ensureShikiLanguages(languages = []) {
+export async function ensureShikiLanguages() {
   const highlighter = await getShikiHighlighter();
-  const languagesToLoad = [...new Set(languages.map(normalizeLanguage))].filter(
-    (language) => language !== "text",
-  );
-
-  await Promise.all(
-    languagesToLoad.map((language) =>
-      highlighter.loadLanguage(language).catch((err) => {
-        console.warn(`Failed to load Shiki language "${language}".`, err);
-      }),
-    ),
-  );
 
   return highlighter;
 }

@@ -15,7 +15,7 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
 {
   "token": {
     "description": "Bot Token",
-    "type": "string",
+    "type": "string"
   },
   "sub_config": {
     "description": "测试嵌套配置",
