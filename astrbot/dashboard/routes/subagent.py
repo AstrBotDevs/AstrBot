@@ -92,16 +92,22 @@ class SubAgentRoute(Route):
                 return jsonify(Response().error("配置必须为 JSON 对象").__dict__)
 
             cfg = self.core_lifecycle.astrbot_config
-            cfg["subagent_orchestrator"] = data
+
+            if "subagent_orchestrator" in data:
+                orch_data = data["subagent_orchestrator"]
+                cfg["subagent_orchestrator"] = orch_data
+
+                # Reload dynamic handoff tools if orchestrator exists
+                orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
+                if orch is not None:
+                    await orch.reload_from_config(orch_data)
+            else:
+                return jsonify(
+                    Response().error("缺少 subagent_orchestrator 字段").__dict__
+                )
 
             # Persist to cmd_config.json
-            # AstrBotConfigManager does not expose a `save()` method; persist via AstrBotConfig.
             cfg.save_config()
-
-            # Reload dynamic handoff tools if orchestrator exists
-            orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
-            if orch is not None:
-                await orch.reload_from_config(data)
 
             return jsonify(Response().ok(message="保存成功").__dict__)
         except Exception as e:
