@@ -189,7 +189,13 @@ class PluginRoute(Route):
             return await self._plugin_page_error_response(
                 404, "Plugin Page bridge SDK not found"
             )
-        bridge_js = await self._read_plugin_page_binary(_PLUGIN_PAGE_BRIDGE_FILE)
+        bridge_js = await self._read_plugin_page_text(_PLUGIN_PAGE_BRIDGE_FILE)
+        initial_context = self._get_plugin_page_initial_context()
+        if initial_context:
+            context_json = json.dumps(initial_context, ensure_ascii=False)
+            bridge_js += (
+                f"\n;window.AstrBotPluginPage?.__setInitialContext({context_json});\n"
+            )
         response = cast(
             QuartResponse,
             await make_response(
@@ -203,6 +209,82 @@ class PluginRoute(Route):
             if plugin.name == plugin_name:
                 return plugin
         return None
+
+    @staticmethod
+    def _get_by_path(source: dict | None, key: str):
+        if not isinstance(source, dict) or not key:
+            return None
+        current = source
+        for part in key.split("."):
+            if not isinstance(current, dict) or part not in current:
+                return None
+            current = current[part]
+        return current
+
+    @staticmethod
+    def _get_request_locale(default: str = "zh-CN") -> str:
+        raw_locale = request.headers.get("Accept-Language", "").strip()
+        locale = raw_locale.split(",", 1)[0].split(";", 1)[0].strip()
+        if not locale or len(locale) > 32:
+            return default
+        return locale
+
+    def _get_plugin_page_initial_context(self) -> dict | None:
+        asset_token = request.args.get("asset_token", "").strip()
+        if not asset_token:
+            return None
+        jwt_secret = self.config.get("dashboard", {}).get("jwt_secret")
+        if not isinstance(jwt_secret, str) or not jwt_secret.strip():
+            return None
+
+        try:
+            payload = jwt.decode(asset_token, jwt_secret, algorithms=["HS256"])
+        except jwt.InvalidTokenError:
+            return None
+        if payload.get("token_type") != _PLUGIN_PAGE_ASSET_TOKEN_TYPE:
+            return None
+
+        plugin_name = payload.get("plugin_name")
+        page_name = payload.get("page_name")
+        if not isinstance(plugin_name, str) or not isinstance(page_name, str):
+            return None
+
+        plugin = self._get_plugin_metadata_by_name(plugin_name)
+        if not plugin:
+            return None
+
+        locale = (
+            payload.get("locale")
+            if isinstance(payload.get("locale"), str)
+            else self._get_request_locale()
+        )
+        plugin_i18n = plugin.i18n or {}
+        try:
+            plugin_root = self._get_plugin_root_dir(plugin)
+            fresh_i18n = PluginManager._load_plugin_i18n(str(plugin_root))
+            if fresh_i18n:
+                plugin_i18n = fresh_i18n
+        except (OSError, ValueError):
+            pass
+
+        locale_data = plugin_i18n.get(locale)
+        display_name = (
+            self._get_by_path(locale_data, "metadata.display_name")
+            or plugin.display_name
+            or plugin.name
+        )
+        page_title = (
+            self._get_by_path(locale_data, f"pages.{page_name}.title") or page_name
+        )
+
+        return {
+            "pluginName": plugin.name,
+            "displayName": display_name,
+            "pageName": page_name,
+            "pageTitle": page_title,
+            "locale": locale,
+            "i18n": plugin_i18n,
+        }
 
     @staticmethod
     def _normalize_plugin_page_path(
@@ -634,6 +716,7 @@ class PluginRoute(Route):
         page_data = {
             "name": page.name,
             "title": page.title,
+            "i18n_key": f"pages.{page.name}",
         }
         if include_content_path:
             asset_token = (
@@ -675,6 +758,7 @@ class PluginRoute(Route):
             "token_type": _PLUGIN_PAGE_ASSET_TOKEN_TYPE,
             "plugin_name": plugin_name,
             "page_name": page_name,
+            "locale": self._get_request_locale(),
             "iat": now,
             "exp": now + timedelta(seconds=_PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS),
         }
@@ -1285,6 +1369,7 @@ class PluginRoute(Route):
                 "name": page["title"],
                 "title": page["title"],
                 "page_name": page["name"],
+                "i18n_key": page["i18n_key"],
                 "description": "Plugin Page entry",
                 "plugin_name": plugin.name,
             }

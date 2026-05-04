@@ -4,9 +4,10 @@
 """
 
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 from astrbot.core.message.components import BaseMessageComponent
@@ -573,8 +574,9 @@ def create_mock_updater_update(
         Callable: 异步函数，可用于 monkeypatch.setattr
     """
 
-    async def mock_update(plugin, proxy: str = "") -> None:
+    async def mock_update(plugin, proxy: str = "", download_url: str = "") -> None:
         """Mock updater.update 方法。"""
+        del proxy, download_url
         plugin_dir = plugin_builder.get_plugin_path(plugin.name)
 
         # 创建更新标记文件

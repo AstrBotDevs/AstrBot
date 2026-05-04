@@ -958,8 +958,8 @@ async def test_update_plugin_dependency_install_flow(
     events = []
     _mock_missing_requirements(monkeypatch, {"networkx"})
 
-    async def mock_update(plugin, proxy=""):
-        del proxy
+    async def mock_update(plugin, proxy="", download_url=""):
+        del proxy, download_url
         events.append(("update", plugin.name))
 
     monkeypatch.setattr(plugin_manager_pm.updator, "update", mock_update)

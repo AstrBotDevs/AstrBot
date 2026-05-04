@@ -34,7 +34,12 @@ const props = defineProps({
 });
 
 const { tm, router } = props.state;
-const { pluginName, pluginDesc: resolvePluginDesc } = usePluginI18n();
+const {
+  pluginName,
+  pluginDesc: resolvePluginDesc,
+  pluginPageTitle,
+  pluginPageDescription,
+} = usePluginI18n();
 
 const markdown = new MarkdownIt({
   html: true,
@@ -426,6 +431,16 @@ const getHandlerCommand = (handler) =>
   ).trim();
 
 const getHandlerDisplayName = (handler, groupKey) => {
+  if (groupKey === "page") {
+    return pluginPageTitle(
+      pluginData.value,
+      handler,
+      handler?.title ||
+        handler?.name ||
+        handler?.page_name ||
+        tm("status.unknown"),
+    );
+  }
   if (handler?.name) {
     return handler.name;
   }
@@ -450,10 +465,16 @@ const toggleCommandGroup = (key) => {
   expandedCommandGroups.value = next;
 };
 
-const getComponentDescription = (component) =>
-  String(
-    component?.description || component?.desc || tm("status.unknown"),
-  ).trim();
+const getComponentDescription = (component) => {
+  const fallback =
+    component?.description || component?.desc || tm("status.unknown");
+  if (getComponentGroupKey(component) === "page") {
+    return String(
+      pluginPageDescription(pluginData.value, component, fallback),
+    ).trim();
+  }
+  return String(fallback).trim();
+};
 
 const openComponentPage = (component) => {
   const targetPluginName = component?.plugin_name || pluginData.value?.name;
@@ -691,8 +712,7 @@ const fetchChangelog = async () => {
     });
 
     if (res.data.status !== "ok") {
-      changelogError.value =
-        res.data.message || tm("messages.operationFailed");
+      changelogError.value = res.data.message || tm("messages.operationFailed");
       return;
     }
 
