@@ -80,6 +80,20 @@
           </div>
         </div>
 
+        <!-- 路由提示词 -->
+        <div class="dashboard-card dashboard-card--padded mb-5">
+          <div class="dashboard-section-title section-mini-title">{{ tm('routerSystemPrompt.label') }}</div>
+          <div class="dashboard-section-subtitle mb-3">{{ tm('routerSystemPrompt.hint') }}</div>
+          <v-textarea
+            v-model="cfg.router_system_prompt"
+            variant="outlined"
+            density="comfortable"
+            auto-grow
+            rows="4"
+            hide-details="auto"
+          />
+        </div>
+
         <!-- 子代理列表 -->
         <div class="dashboard-section-head">
           <div>
@@ -213,7 +227,7 @@
       </div>
 
       <!-- ============================================ -->
-      <!-- 第二部分：增强子代理 (enhanced_subagent)   -->
+      <!-- 第二部分：动态子代理设置 (dynamic_agents) -->
       <!-- ============================================ -->
       <v-divider class="mb-6" />
 
@@ -225,7 +239,7 @@
           </div>
         </div>
 
-        <!-- 启用增强子代理 -->
+        <!-- 启用动态子代理 -->
         <div class="dashboard-form-grid global-settings-grid mb-5">
           <div class="setting-card">
             <div class="setting-card-head">
@@ -234,7 +248,7 @@
                 <div class="setting-subtitle">{{ tm('enhancedSwitches.enableHint') }}</div>
               </div>
               <v-switch
-                v-model="enhancedCfg.enabled"
+                v-model="dynamicCfg.enabled"
                 color="primary"
                 hide-details
                 inset
@@ -245,7 +259,7 @@
         </div>
 
         <v-expand-transition>
-          <div v-show="enhancedCfg.enabled">
+          <div v-show="dynamicCfg.enabled">
             <!-- 运行参数 -->
             <div class="dashboard-section-head mt-4">
               <div>
@@ -255,20 +269,21 @@
             </div>
 
             <div class="dashboard-form-grid global-settings-grid mb-5">
-              <!-- 最大子代理数量 -->
+              <!-- 最大动态子代理数量 -->
               <div class="setting-card">
                 <div class="setting-card-head">
                   <div>
-                    <div class="setting-title">{{ tm('enhancedFields.maxSubagentCount') }}</div>
-                    <div class="setting-subtitle">{{ tm('enhancedFields.maxSubagentCountHint') }}</div>
+                    <div class="setting-title">{{ tm('enhancedFields.maxDynamicSubagentCount') }}</div>
+                    <div class="setting-subtitle">{{ tm('enhancedFields.maxDynamicSubagentCountHint') }}</div>
                   </div>
                   <v-text-field
-                    v-model.number="enhancedCfg.max_subagent_count"
+                    v-model.number="dynamicCfg.max_dynamic_subagent_count"
                     type="number"
+                    :rules="[v => v >= 1 || 'Minimum 1']"
                     density="compact"
                     variant="outlined"
                     style="width: 120px;"
-                    hide-details
+                    hide-details="auto"
                   />
                 </div>
               </div>
@@ -281,29 +296,11 @@
                     <div class="setting-subtitle">{{ tm('enhancedSwitches.autoCleanupHint') }}</div>
                   </div>
                   <v-switch
-                    v-model="enhancedCfg.auto_cleanup_per_turn"
+                    v-model="dynamicCfg.auto_cleanup_per_turn"
                     color="primary"
                     hide-details
                     inset
                     density="comfortable"
-                  />
-                </div>
-              </div>
-
-              <!-- 最大历史消息数 -->
-              <div class="setting-card">
-                <div class="setting-card-head">
-                  <div>
-                    <div class="setting-title">{{ tm('enhancedFields.maxSubagentHistory') }}</div>
-                    <div class="setting-subtitle">{{ tm('enhancedFields.maxSubagentHistoryHint') }}</div>
-                  </div>
-                  <v-text-field
-                    v-model.number="enhancedCfg.max_subagent_history"
-                    type="number"
-                    density="compact"
-                    variant="outlined"
-                    style="width: 120px;"
-                    hide-details
                   />
                 </div>
               </div>
@@ -316,7 +313,7 @@
                     <div class="setting-subtitle">{{ tm('enhancedFields.executionTimeoutHint') }}</div>
                   </div>
                   <v-text-field
-                    v-model.number="enhancedCfg.execution_timeout"
+                    v-model.number="rootCfg.execution_timeout"
                     type="number"
                     density="compact"
                     variant="outlined"
@@ -327,7 +324,7 @@
               </div>
             </div>
 
-            <!-- 共享上下文 -->
+            <!-- 历史与上下文 -->
             <div class="dashboard-section-head mt-4">
               <div>
                 <div class="dashboard-section-title">{{ tm('enhancedSection.sharedContext') }}</div>
@@ -336,14 +333,15 @@
             </div>
 
             <div class="dashboard-form-grid global-settings-grid mb-5">
+              <!-- 启用历史记忆 -->
               <div class="setting-card">
                 <div class="setting-card-head">
                   <div>
-                    <div class="setting-title">{{ tm('enhancedSwitches.sharedContext') }}</div>
-                    <div class="setting-subtitle">{{ tm('enhancedSwitches.sharedContextHint') }}</div>
+                    <div class="setting-title">{{ tm('historyEnabled.label') }}</div>
+                    <div class="setting-subtitle">{{ tm('historyEnabled.hint') }}</div>
                   </div>
                   <v-switch
-                    v-model="enhancedCfg.shared_context_enabled"
+                    v-model="rootCfg.history_enabled"
                     color="primary"
                     hide-details
                     inset
@@ -352,6 +350,42 @@
                 </div>
               </div>
 
+              <!-- 最大历史消息数 -->
+              <div class="setting-card">
+                <div class="setting-card-head">
+                  <div>
+                    <div class="setting-title">{{ tm('enhancedFields.subagentHistoryMaxlen') }}</div>
+                    <div class="setting-subtitle">{{ tm('enhancedFields.subagentHistoryMaxlenHint') }}</div>
+                  </div>
+                  <v-text-field
+                    v-model.number="rootCfg.subagent_history_maxlen"
+                    type="number"
+                    density="compact"
+                    variant="outlined"
+                    style="width: 120px;"
+                    hide-details
+                  />
+                </div>
+              </div>
+
+              <!-- 启用共享上下文 -->
+              <div class="setting-card">
+                <div class="setting-card-head">
+                  <div>
+                    <div class="setting-title">{{ tm('enhancedSwitches.sharedContext') }}</div>
+                    <div class="setting-subtitle">{{ tm('enhancedSwitches.sharedContextHint') }}</div>
+                  </div>
+                  <v-switch
+                    v-model="rootCfg.shared_context_enabled"
+                    color="primary"
+                    hide-details
+                    inset
+                    density="comfortable"
+                  />
+                </div>
+              </div>
+
+              <!-- 共享上下文最大长度 -->
               <div class="setting-card">
                 <div class="setting-card-head">
                   <div>
@@ -359,7 +393,7 @@
                     <div class="setting-subtitle">{{ tm('enhancedFields.sharedContextMaxlenHint') }}</div>
                   </div>
                   <v-text-field
-                    v-model.number="enhancedCfg.shared_context_maxlen"
+                    v-model.number="rootCfg.shared_context_maxlen"
                     type="number"
                     density="compact"
                     variant="outlined"
@@ -384,7 +418,7 @@
               <div class="dashboard-section-subtitle mb-3">{{ tm('enhancedTools.blacklistHint') }}</div>
               <div class="d-flex flex-wrap ga-2">
                 <v-chip
-                  v-for="(tool, idx) in enhancedCfg.tools_blacklist"
+                  v-for="(tool, idx) in dynamicCfg.tools_blacklist"
                   :key="tool"
                   closable
                   color="error"
@@ -395,7 +429,7 @@
                   {{ tool }}
                 </v-chip>
                 <v-chip
-                  v-if="enhancedCfg.tools_blacklist.length === 0"
+                  v-if="dynamicCfg.tools_blacklist.length === 0"
                   color="grey"
                   variant="text"
                   size="small"
@@ -422,7 +456,7 @@
               <div class="dashboard-section-subtitle mb-3">{{ tm('enhancedTools.inherentHint') }}</div>
               <div class="d-flex flex-wrap ga-2">
                 <v-chip
-                  v-for="(tool, idx) in enhancedCfg.tools_inherent"
+                  v-for="(tool, idx) in dynamicCfg.tools_inherent"
                   :key="tool"
                   closable
                   color="success"
@@ -433,7 +467,7 @@
                   {{ tool }}
                 </v-chip>
                 <v-chip
-                  v-if="enhancedCfg.tools_inherent.length === 0"
+                  v-if="dynamicCfg.tools_inherent.length === 0"
                   color="grey"
                   variant="text"
                   size="small"
@@ -542,19 +576,29 @@ type SubAgentItem = {
 type SubAgentConfig = {
   main_enable: boolean
   remove_main_duplicate_tools: boolean
+  router_system_prompt: string
   agents: SubAgentItem[]
 }
 
-type EnhancedSubagentConfig = {
+type DynamicAgentsConfig = {
   enabled: boolean
-  max_subagent_count: number
+  max_dynamic_subagent_count: number
   auto_cleanup_per_turn: boolean
-  shared_context_enabled: boolean
-  shared_context_maxlen: number
-  max_subagent_history: number
-  execution_timeout: number
   tools_blacklist: string[]
   tools_inherent: string[]
+}
+
+type SubAgentOrchestratorConfig = {
+  main_enable: boolean
+  remove_main_duplicate_tools: boolean
+  router_system_prompt: string
+  agents: SubAgentItem[]
+  dynamic_agents: DynamicAgentsConfig
+  history_enabled: boolean
+  shared_context_enabled: boolean
+  shared_context_maxlen: number
+  subagent_history_maxlen: number
+  execution_timeout: number
 }
 
 type AvailableTool = {
@@ -580,7 +624,6 @@ const snackbar = ref({
 })
 const expandedAgents = ref<Record<string, boolean>>({})
 const initialSnapshot = ref('')
-const enhancedInitialSnapshot = ref('')
 const hasLoaded = ref(false)
 
 // 工具选择器相关
@@ -600,19 +643,24 @@ function toast(message: string, color: 'success' | 'error' | 'warning' = 'succes
 const cfg = ref<SubAgentConfig>({
   main_enable: false,
   remove_main_duplicate_tools: false,
+  router_system_prompt: '',
   agents: []
 })
 
-const enhancedCfg = ref<EnhancedSubagentConfig>({
+const dynamicCfg = ref<DynamicAgentsConfig>({
   enabled: false,
-  max_subagent_count: 3,
+  max_dynamic_subagent_count: 3,
   auto_cleanup_per_turn: true,
-  shared_context_enabled: false,
-  shared_context_maxlen: 200,
-  max_subagent_history: 500,
-  execution_timeout: 600,
   tools_blacklist: [],
   tools_inherent: []
+})
+
+const rootCfg = ref({
+  history_enabled: true,
+  shared_context_enabled: false,
+  shared_context_maxlen: 200,
+  subagent_history_maxlen: 500,
+  execution_timeout: 600
 })
 
 const mainStateDescription = computed(() =>
@@ -621,9 +669,8 @@ const mainStateDescription = computed(() =>
 
 const hasUnsavedChanges = computed(() => {
   if (!hasLoaded.value) return false
-  const orchestratorChanged = serializeConfig(cfg.value) !== initialSnapshot.value
-  const enhancedChanged = serializeEnhancedConfig(enhancedCfg.value) !== enhancedInitialSnapshot.value
-  return orchestratorChanged || enhancedChanged
+  const currentSnapshot = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value)
+  return currentSnapshot !== initialSnapshot.value
 })
 
 function normalizeConfig(raw: any): SubAgentConfig {
@@ -633,6 +680,7 @@ function normalizeConfig(raw: any): SubAgentConfig {
   const orchData = raw?.subagent_orchestrator || raw || {}
   const main_enable = !!orchData?.main_enable
   const remove_main_duplicate_tools = !!orchData?.remove_main_duplicate_tools
+  const router_system_prompt = (orchData?.router_system_prompt ?? '').toString()
   const agentsRaw = Array.isArray(orchData?.agents) ? orchData.agents : []
 
   const agents: SubAgentItem[] = agentsRaw.map((a: any, i: number) => ({
@@ -644,39 +692,64 @@ function normalizeConfig(raw: any): SubAgentConfig {
     provider_id: (a?.provider_id ?? undefined) as string | undefined
   }))
 
-  return { main_enable, remove_main_duplicate_tools, agents }
+  return { main_enable, remove_main_duplicate_tools, router_system_prompt, agents }
 }
 
-function normalizeEnhancedConfig(raw: any): EnhancedSubagentConfig {
+function normalizeDynamicAgents(raw: any): DynamicAgentsConfig {
+  // 兼容旧格式 enhanced_subagent
+  const src = raw?.dynamic_agents || raw?.enhanced_subagent || {}
   return {
-    enabled: !!raw?.enabled,
-    max_subagent_count: Number(raw?.max_subagent_count) || 3,
-    auto_cleanup_per_turn: raw?.auto_cleanup_per_turn !== false,
-    shared_context_enabled: !!raw?.shared_context_enabled,
-    shared_context_maxlen: Number(raw?.shared_context_maxlen) || 200,
-    max_subagent_history: Number(raw?.max_subagent_history) || 500,
-    execution_timeout: Number(raw?.execution_timeout) || 600,
-    tools_blacklist: Array.isArray(raw?.tools_blacklist) ? raw.tools_blacklist : [],
-    tools_inherent: Array.isArray(raw?.tools_inherent) ? raw.tools_inherent : []
+    enabled: !!src?.enabled,
+    max_dynamic_subagent_count: Number(src?.max_dynamic_subagent_count || src?.max_subagent_count) || 3,
+    auto_cleanup_per_turn: src?.auto_cleanup_per_turn !== false,
+    tools_blacklist: Array.isArray(src?.tools_blacklist) ? src.tools_blacklist : [],
+    tools_inherent: Array.isArray(src?.tools_inherent) ? src.tools_inherent : []
   }
 }
 
-function serializeConfig(config: SubAgentConfig): string {
+function normalizeRootConfig(raw: any) {
+  const orchData = raw?.subagent_orchestrator || raw || {}
+  // 兼容旧格式 enhanced_subagent 中的根级字段
+  const oldEnhanced = raw?.enhanced_subagent || {}
+  return {
+    history_enabled: orchData?.history_enabled !== false,
+    shared_context_enabled: !!orchData?.shared_context_enabled || !!oldEnhanced?.shared_context_enabled,
+    shared_context_maxlen: Number(orchData?.shared_context_maxlen || oldEnhanced?.shared_context_maxlen) || 200,
+    subagent_history_maxlen: Number(orchData?.subagent_history_maxlen || oldEnhanced?.max_subagent_history) || 500,
+    execution_timeout: Number(orchData?.execution_timeout || oldEnhanced?.execution_timeout) || 600
+  }
+}
+
+function serializeFullConfig(config: SubAgentConfig, dynamic: DynamicAgentsConfig, root: any): string {
   return JSON.stringify({
     main_enable: config.main_enable,
     remove_main_duplicate_tools: config.remove_main_duplicate_tools,
+    router_system_prompt: config.router_system_prompt,
     agents: config.agents.map((agent) => ({
       name: agent.name,
       persona_id: agent.persona_id,
       public_description: agent.public_description,
       enabled: agent.enabled,
       provider_id: agent.provider_id ?? null
-    }))
+    })),
+    dynamic_agents: {
+      enabled: dynamic.enabled,
+      max_dynamic_subagent_count: dynamic.max_dynamic_subagent_count,
+      auto_cleanup_per_turn: dynamic.auto_cleanup_per_turn,
+      tools_blacklist: dynamic.tools_blacklist,
+      tools_inherent: dynamic.tools_inherent
+    },
+    history_enabled: root.history_enabled,
+    shared_context_enabled: root.shared_context_enabled,
+    shared_context_maxlen: root.shared_context_maxlen,
+    subagent_history_maxlen: root.subagent_history_maxlen,
+    execution_timeout: root.execution_timeout
   })
 }
 
-function serializeEnhancedConfig(config: EnhancedSubagentConfig): string {
-  return JSON.stringify(config)
+function addToolFromCombobox() {
+  if (!toolSelectorSearch.value) return
+  addToolToList(toolSelectorSearch.value)
 }
 
 async function loadAvailableTools() {
@@ -698,10 +771,10 @@ async function loadConfig() {
       const data = res.data.data
       // 兼容新旧格式：data 可能直接包含字段，或通过 subagent_orchestrator 嵌套
       cfg.value = normalizeConfig(data.subagent_orchestrator || data)
-      enhancedCfg.value = normalizeEnhancedConfig(data.enhanced_subagent || {})
+      dynamicCfg.value = normalizeDynamicAgents(data.subagent_orchestrator || data)
+      rootCfg.value = normalizeRootConfig(data.subagent_orchestrator || data)
       expandedAgents.value = Object.fromEntries(cfg.value.agents.map((agent) => [agent.__key, false]))
-      initialSnapshot.value = serializeConfig(cfg.value)
-      enhancedInitialSnapshot.value = serializeEnhancedConfig(enhancedCfg.value)
+      initialSnapshot.value = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value)
       hasLoaded.value = true
     } else {
       toast(res.data.message || tm('messages.loadConfigFailed'), 'error')
@@ -777,21 +850,32 @@ async function save() {
       subagent_orchestrator: {
         main_enable: cfg.value.main_enable,
         remove_main_duplicate_tools: cfg.value.remove_main_duplicate_tools,
+        router_system_prompt: cfg.value.router_system_prompt,
         agents: cfg.value.agents.map((agent) => ({
           name: agent.name,
           persona_id: agent.persona_id,
           public_description: agent.public_description,
           enabled: agent.enabled,
           provider_id: agent.provider_id
-        }))
-      },
-      enhanced_subagent: enhancedCfg.value
+        })),
+        dynamic_agents: {
+          enabled: dynamicCfg.value.enabled,
+          max_dynamic_subagent_count: dynamicCfg.value.max_dynamic_subagent_count,
+          auto_cleanup_per_turn: dynamicCfg.value.auto_cleanup_per_turn,
+          tools_blacklist: dynamicCfg.value.tools_blacklist,
+          tools_inherent: dynamicCfg.value.tools_inherent
+        },
+        history_enabled: rootCfg.value.history_enabled,
+        shared_context_enabled: rootCfg.value.shared_context_enabled,
+        shared_context_maxlen: rootCfg.value.shared_context_maxlen,
+        subagent_history_maxlen: rootCfg.value.subagent_history_maxlen,
+        execution_timeout: rootCfg.value.execution_timeout
+      }
     }
 
     const res = await axios.post('/api/subagent/config', payload)
     if (res.data.status === 'ok') {
-      initialSnapshot.value = serializeConfig(cfg.value)
-      enhancedInitialSnapshot.value = serializeEnhancedConfig(enhancedCfg.value)
+      initialSnapshot.value = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value)
       hasLoaded.value = true
       toast(res.data.message || tm('messages.saveSuccess'), 'success')
     } else {
@@ -842,35 +926,30 @@ function addToolToList(toolName: string) {
   if (!toolName || !toolName.trim()) return
   const name = toolName.trim()
   if (toolSelectorMode.value === 'blacklist') {
-    if (!enhancedCfg.value.tools_blacklist.includes(name)) {
-      enhancedCfg.value.tools_blacklist.push(name)
+    if (!dynamicCfg.value.tools_blacklist.includes(name)) {
+      dynamicCfg.value.tools_blacklist.push(name)
     }
   } else if (toolSelectorMode.value === 'inherent') {
-    if (!enhancedCfg.value.tools_inherent.includes(name)) {
-      enhancedCfg.value.tools_inherent.push(name)
+    if (!dynamicCfg.value.tools_inherent.includes(name)) {
+      dynamicCfg.value.tools_inherent.push(name)
     }
   }
   toolSelectorSearch.value = ''
 }
 
-function addToolFromCombobox() {
-  if (!toolSelectorSearch.value) return
-  addToolToList(toolSelectorSearch.value)
-}
-
 function removeToolFromBlacklist(idx: number) {
-  enhancedCfg.value.tools_blacklist.splice(idx, 1)
+  dynamicCfg.value.tools_blacklist.splice(idx, 1)
 }
 
 function removeToolFromInherent(idx: number) {
-  enhancedCfg.value.tools_inherent.splice(idx, 1)
+  dynamicCfg.value.tools_inherent.splice(idx, 1)
 }
 
 function isToolInTargetList(toolName: string): boolean {
   if (toolSelectorMode.value === 'blacklist') {
-    return enhancedCfg.value.tools_blacklist.includes(toolName)
+    return dynamicCfg.value.tools_blacklist.includes(toolName)
   } else {
-    return enhancedCfg.value.tools_inherent.includes(toolName)
+    return dynamicCfg.value.tools_inherent.includes(toolName)
   }
 }
 

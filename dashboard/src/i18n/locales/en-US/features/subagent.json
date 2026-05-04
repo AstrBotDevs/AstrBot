@@ -83,28 +83,36 @@
     "nameRequired": "Name is required",
     "namePattern": "Only lowercase letters, numbers, and underscores allowed"
   },
+  "routerSystemPrompt": {
+    "label": "Router System Prompt",
+    "hint": "The main agent's routing prompt, used to guide the main agent in recognizing user intent and delegating tasks to subagents. Only effective when static subagents are enabled."
+  },
+  "historyEnabled": {
+    "label": "Enable History Memory",
+    "hint": "Enable subagent context history. When on, subagents retain memory across multiple conversation turns."
+  },
   "empty": {
     "title": "No Subagents Configured",
     "subtitle": "Add a new subagent to get started",
     "action": "Create First Agent"
   },
   "enhancedSwitches": {
-    "enable": "Enable Enhanced Subagents",
-    "enableHint": "Enable dynamic subagent creation and management. When enabled, tools like create_dynamic_subagent can be used.",
+    "enable": "Enable Dynamic Subagents",
+    "enableHint": "Enable dynamic subagent creation and management. When enabled, the main LLM can dynamically create subagents at runtime using create_subagent tools. Can coexist with static subagent orchestration.",
     "autoCleanup": "Auto Cleanup Per Turn",
-    "autoCleanupHint": "Automatically clean up inactive subagents after each turn",
-    "sharedContext": "Shared Context",
-    "sharedContextHint": "Share partial context between subagents"
+    "autoCleanupHint": "Automatically clean up unprotected dynamic subagents after each conversation turn",
+    "sharedContext": "Enable Shared Context",
+    "sharedContextHint": "Enable shared context between subagents. Subagents can communicate via send_shared_context tools."
   },
   "enhancedFields": {
-    "maxSubagentCount": "Max Subagent Count",
-    "maxSubagentCountHint": "Maximum number of concurrent subagents",
+    "maxDynamicSubagentCount": "Max Dynamic Subagent Count",
+    "maxDynamicSubagentCountHint": "Maximum number of dynamic subagents allowed per session (including static ones)",
     "sharedContextMaxlen": "Shared Context Max Length",
-    "sharedContextMaxlenHint": "Maximum token count for shared context",
-    "maxSubagentHistory": "Max History Messages",
-    "maxSubagentHistoryHint": "Maximum history messages per subagent",
+    "sharedContextMaxlenHint": "Maximum number of messages in shared context",
+    "subagentHistoryMaxlen": "Max History Messages",
+    "subagentHistoryMaxlenHint": "Maximum history messages retained per subagent",
     "executionTimeout": "Execution Timeout (seconds)",
-    "executionTimeoutHint": "Maximum execution timeout for subagent tasks"
+    "executionTimeoutHint": "Maximum execution timeout for subagent tasks, -1 means unlimited"
   },
   "enhancedSection": {
     "runtimeParams": "Runtime Parameters",

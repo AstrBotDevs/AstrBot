@@ -83,6 +83,14 @@
     "nameRequired": "名称必填",
     "namePattern": "仅支持小写字母、数字和下划线"
   },
+  "routerSystemPrompt": {
+    "label": "路由提示词",
+    "hint": "主Agent的路由提示词，用于指导主Agent如何识别用户意图并委派任务给子代理。仅在启用静态子代理时有效。"
+  },
+  "historyEnabled": {
+    "label": "启用历史记忆",
+    "hint": "是否启用子代理的上下文历史功能，开启后子代理可以保留跨多轮对话的记忆"
+  },
   "empty": {
     "title": "未配置子代理",
     "subtitle": "添加一个新的子代理以开始",
@@ -90,21 +98,21 @@
   },
   "enhancedSwitches": {
     "enable": "启用动态子代理",
-    "enableHint": "启用动态子代理创建和管理能力。开启后由主LLM自主决定使用create_dynamic_subagent等工具动态创建。与普通子代理编排相互独立，可同时存在",
+    "enableHint": "启用动态子代理创建和管理能力。开启后主LLM可在运行时通过create_subagent等工具动态创建子代理。与静态子代理编排可同时存在",
     "autoCleanup": "每轮自动清理",
-    "autoCleanupHint": "每轮对话结束后自动清理未受保护的子代理",
-    "sharedContext": "共享上下文",
-    "sharedContextHint": "动态子代理之间共享部分上下文信息"
+    "autoCleanupHint": "每轮对话结束后自动清理未受保护的动态子代理",
+    "sharedContext": "启用共享上下文",
+    "sharedContextHint": "启用子代理间的公共上下文共享，子代理可通过send_shared_context工具互相通信"
   },
   "enhancedFields": {
-    "maxSubagentCount": "最大动态子代理数量",
-    "maxSubagentCountHint": "同时存在的最大动态子代理数量",
+    "maxDynamicSubagentCount": "最大动态子代理数量",
+    "maxDynamicSubagentCountHint": "单个会话允许的最大动态子代理数量（包含静态子代理）",
     "sharedContextMaxlen": "共享上下文最大长度",
-    "sharedContextMaxlenHint": "共享上下文的最大长度（信息条数）",
-    "maxSubagentHistory": "最大历史消息数",
-    "maxSubagentHistoryHint": "每个子代理保留的最大历史消息条数",
+    "sharedContextMaxlenHint": "共享上下文消息的最大数量（条）",
+    "subagentHistoryMaxlen": "最大历史消息数",
+    "subagentHistoryMaxlenHint": "每个子代理最多保留的历史消息条数",
     "executionTimeout": "执行超时时间(秒)",
-    "executionTimeoutHint": "子代理执行任务的最大超时时间"
+    "executionTimeoutHint": "子代理执行任务的最大超时时间，-1表示不限制"
   },
   "enhancedSection": {
     "runtimeParams": "运行参数",
