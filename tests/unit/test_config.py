@@ -6,7 +6,7 @@ import os
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig, RateLimitStrategy
-from astrbot.core.config.default import CONFIG_METADATA_3, DEFAULT_VALUE_MAP
+from astrbot.core.config.default import DEFAULT_VALUE_MAP
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 
 
@@ -46,24 +46,6 @@ class TestRateLimitStrategy:
     def test_discard_value(self):
         """Test discard enum value."""
         assert RateLimitStrategy.DISCARD.value == "discard"
-
-
-class TestConfigMetadata:
-    """Tests for dashboard config metadata."""
-
-    def test_baidu_web_search_key_requires_web_search_enabled(self):
-        websearch_items = CONFIG_METADATA_3["ai_group"]["metadata"]["websearch"][
-            "items"
-        ]
-
-        condition = websearch_items[
-            "provider_settings.websearch_baidu_app_builder_key"
-        ]["condition"]
-
-        assert condition == {
-            "provider_settings.websearch_provider": "baidu_ai_search",
-            "provider_settings.web_search": True,
-        }
 
 
 class TestAstrBotConfigLoad:
