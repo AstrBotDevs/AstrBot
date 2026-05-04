@@ -15,7 +15,7 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 {
   "token": {
     "description": "Bot Token",
-    "type": "string",
+    "type": "string"
   },
   "sub_config": {
     "description": "Test nested configuration",
