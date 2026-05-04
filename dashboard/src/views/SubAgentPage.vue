@@ -868,30 +868,28 @@ async function save() {
   saving.value = true
   try {
     const payload = {
-      subagent_orchestrator: {
-        main_enable: cfg.value.main_enable,
-        remove_main_duplicate_tools: cfg.value.remove_main_duplicate_tools,
-        router_system_prompt: cfg.value.router_system_prompt,
-        agents: cfg.value.agents.map((agent) => ({
-          name: agent.name,
-          persona_id: agent.persona_id,
-          public_description: agent.public_description,
-          enabled: agent.enabled,
-          provider_id: agent.provider_id
-        })),
-        dynamic_agents: {
-          enabled: dynamicCfg.value.enabled,
-          max_dynamic_subagent_count: dynamicCfg.value.max_dynamic_subagent_count,
-          auto_cleanup_per_turn: dynamicCfg.value.auto_cleanup_per_turn,
-          tools_blacklist: dynamicCfg.value.tools_blacklist,
-          tools_inherent: dynamicCfg.value.tools_inherent
-        },
-        history_enabled: rootCfg.value.history_enabled,
-        shared_context_enabled: rootCfg.value.shared_context_enabled,
-        shared_context_maxlen: rootCfg.value.shared_context_maxlen,
-        subagent_history_maxlen: rootCfg.value.subagent_history_maxlen,
-        execution_timeout: rootCfg.value.execution_timeout
-      }
+      main_enable: cfg.value.main_enable,
+      remove_main_duplicate_tools: cfg.value.remove_main_duplicate_tools,
+      router_system_prompt: cfg.value.router_system_prompt,
+      agents: cfg.value.agents.map((agent) => ({
+        name: agent.name,
+        persona_id: agent.persona_id,
+        public_description: agent.public_description,
+        enabled: agent.enabled,
+        provider_id: agent.provider_id
+      })),
+      dynamic_agents: {
+        enabled: dynamicCfg.value.enabled,
+        max_dynamic_subagent_count: dynamicCfg.value.max_dynamic_subagent_count,
+        auto_cleanup_per_turn: dynamicCfg.value.auto_cleanup_per_turn,
+        tools_blacklist: dynamicCfg.value.tools_blacklist,
+        tools_inherent: dynamicCfg.value.tools_inherent
+      },
+      history_enabled: rootCfg.value.history_enabled,
+      shared_context_enabled: rootCfg.value.shared_context_enabled,
+      shared_context_maxlen: rootCfg.value.shared_context_maxlen,
+      subagent_history_maxlen: rootCfg.value.subagent_history_maxlen,
+      execution_timeout: rootCfg.value.execution_timeout
     }
 
     const res = await axios.post('/api/subagent/config', payload)
