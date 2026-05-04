@@ -90,7 +90,7 @@ class LocalShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 300,
+        timeout: int | None = 30,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -123,7 +123,7 @@ class LocalShellComponent(ShellComponent):
                 shell=shell,
                 cwd=working_dir,
                 env=run_env,
-                timeout=timeout or 300,
+                timeout=timeout,
                 capture_output=True,
             )
             return {
@@ -150,16 +150,10 @@ class LocalPythonComponent(PythonComponent):
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
                     timeout=timeout,
                     capture_output=True,
-                    # text=True,
+                    text=True,
                 )
-                # stdout = "" if silent else result.stdout
-                # stderr = result.stderr if result.returncode != 0 else ""
-                stdout = "" if silent else _decode_shell_output(result.stdout)
-                stderr = (
-                    _decode_shell_output(result.stderr)
-                    if result.returncode != 0
-                    else ""
-                )
+                stdout = "" if silent else result.stdout
+                stderr = result.stderr if result.returncode != 0 else ""
                 return {
                     "data": {
                         "output": {"text": stdout, "images": []},
