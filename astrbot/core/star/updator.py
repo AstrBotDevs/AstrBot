@@ -1,5 +1,6 @@
 import os
 import shutil
+import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -78,8 +79,10 @@ class PluginUpdator(RepoZipUpdator):
 
         archive_root_dir = None
         with zipfile.ZipFile(zip_path, "r") as z:
-            archive_root_dir = self._get_archive_root_dir(z.infolist())
-            self._extract_archive_safely(z, target_path)
+            members = z.infolist()
+            archive_root_dir = self._get_archive_root_dir(members)
+            for member in members:
+                z.extract(member, target_path)
 
         extracted_root = target_path / archive_root_dir if archive_root_dir else None
         if extracted_root and extracted_root.is_dir():
@@ -104,10 +107,21 @@ class PluginUpdator(RepoZipUpdator):
             )
 
     def _rename_extracted_root_for_flattening(self, extracted_root: Path) -> Path:
-        temp_root = extracted_root.with_name(f".{extracted_root.name}.tmp")
-        self._remove_existing_path(temp_root)
+        temp_root = self._get_unique_flatten_temp_path(extracted_root)
         extracted_root.rename(temp_root)
         return temp_root
+
+    @staticmethod
+    def _get_unique_flatten_temp_path(extracted_root: Path) -> Path:
+        for _ in range(100):
+            temp_root = extracted_root.with_name(
+                f".{extracted_root.name}.{uuid.uuid4().hex}.tmp"
+            )
+            if not temp_root.exists() and not temp_root.is_symlink():
+                return temp_root
+        raise FileExistsError(
+            f"Could not allocate a temporary path for {extracted_root}"
+        )
 
     @staticmethod
     def _remove_existing_path(path: Path) -> None:
@@ -116,29 +130,25 @@ class PluginUpdator(RepoZipUpdator):
         elif path.exists() or path.is_symlink():
             path.unlink()
 
-    @classmethod
-    def _get_archive_root_dir(cls, members: list[zipfile.ZipInfo]) -> str | None:
+    @staticmethod
+    def _get_archive_root_dir(members: list[zipfile.ZipInfo]) -> str | None:
         root_dir = None
+        has_root_file = False
+        has_multiple_roots = False
         for member in members:
-            parts = cls._get_safe_member_parts(member.filename)
+            parts = PluginUpdator._get_safe_member_parts(member.filename)
             if not parts or member.is_dir():
                 continue
             if len(parts) == 1:
-                return None
+                has_root_file = True
+                continue
             if root_dir is None:
                 root_dir = parts[0]
             elif root_dir != parts[0]:
-                return None
+                has_multiple_roots = True
+        if has_root_file or has_multiple_roots:
+            return None
         return root_dir
-
-    @classmethod
-    def _extract_archive_safely(
-        cls, archive: zipfile.ZipFile, target_path: Path
-    ) -> None:
-        for member in archive.infolist():
-            cls._get_safe_member_parts(member.filename)
-        for member in archive.infolist():
-            archive.extract(member, target_path)
 
     @staticmethod
     def _get_safe_member_parts(member_name: str) -> tuple[str, ...]:
