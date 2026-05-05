@@ -83,12 +83,10 @@ class PluginUpdator(RepoZipUpdator):
 
         extracted_root = target_path / archive_root_dir if archive_root_dir else None
         if extracted_root and extracted_root.is_dir():
+            extracted_root = self._rename_extracted_root_for_flattening(extracted_root)
             for child in extracted_root.iterdir():
                 destination = target_path / child.name
-                if destination.is_dir() and not destination.is_symlink():
-                    shutil.rmtree(destination, onerror=on_error)
-                elif destination.exists() or destination.is_symlink():
-                    destination.unlink()
+                self._remove_existing_path(destination)
                 shutil.move(str(child), str(target_path))
 
         try:
@@ -99,11 +97,24 @@ class PluginUpdator(RepoZipUpdator):
             if extracted_root and extracted_root.exists():
                 shutil.rmtree(extracted_root, onerror=on_error)
             os.remove(zip_path)
-        except BaseException:
+        except Exception:
             logger.warning(
                 f"Failed to remove update files; you can manually delete {zip_path}"
                 + (f" and {extracted_root}" if extracted_root else ""),
             )
+
+    def _rename_extracted_root_for_flattening(self, extracted_root: Path) -> Path:
+        temp_root = extracted_root.with_name(f".{extracted_root.name}.tmp")
+        self._remove_existing_path(temp_root)
+        extracted_root.rename(temp_root)
+        return temp_root
+
+    @staticmethod
+    def _remove_existing_path(path: Path) -> None:
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path, onerror=on_error)
+        elif path.exists() or path.is_symlink():
+            path.unlink()
 
     @classmethod
     def _get_archive_root_dir(cls, members: list[zipfile.ZipInfo]) -> str | None:

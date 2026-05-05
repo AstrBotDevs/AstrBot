@@ -213,6 +213,23 @@ def test_plugin_updator_unzip_file_flattens_single_root_dir(tmp_path: Path) -> N
     assert not archive_path.exists()
 
 
+def test_plugin_updator_unzip_file_flattens_root_dir_with_same_named_child(
+    tmp_path: Path,
+) -> None:
+    archive_path = tmp_path / "same_named_child.zip"
+    target_path = tmp_path / "plugin_upload"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("my_plugin/main.py", "print('loaded')\n")
+        archive.writestr("my_plugin/my_plugin/__init__.py", "")
+
+    PluginUpdator().unzip_file(str(archive_path), str(target_path))
+
+    assert (target_path / "main.py").exists()
+    assert (target_path / "my_plugin" / "__init__.py").exists()
+    assert not (target_path / ".my_plugin.tmp").exists()
+    assert not archive_path.exists()
+
+
 def test_plugin_updator_unzip_file_rejects_unsafe_member_path(
     tmp_path: Path,
 ) -> None:
