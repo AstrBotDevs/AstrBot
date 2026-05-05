@@ -196,6 +196,18 @@ def test_plugin_updator_unzip_file_accepts_flat_plugin_archive(tmp_path: Path) -
     assert not archive_path.exists()
 
 
+def test_plugin_updator_unzip_file_rejects_empty_archive(tmp_path: Path) -> None:
+    archive_path = tmp_path / "empty_plugin.zip"
+    target_path = tmp_path / "plugin_upload"
+    with zipfile.ZipFile(archive_path, "w"):
+        pass
+
+    with pytest.raises(ValueError, match="Empty plugin archive"):
+        PluginUpdator().unzip_file(str(archive_path), str(target_path))
+
+    assert not any(target_path.iterdir())
+
+
 def test_plugin_updator_unzip_file_flattens_single_root_dir(tmp_path: Path) -> None:
     archive_path = tmp_path / "rooted_plugin.zip"
     target_path = tmp_path / "plugin_upload"
@@ -226,6 +238,23 @@ def test_plugin_updator_unzip_file_keeps_multiple_root_entries(
 
     assert (target_path / "plugin_a" / "main.py").exists()
     assert (target_path / "plugin_b" / "main.py").exists()
+    assert not (target_path / "main.py").exists()
+    assert not archive_path.exists()
+
+
+def test_plugin_updator_unzip_file_keeps_root_dir_with_extra_empty_root_dir(
+    tmp_path: Path,
+) -> None:
+    archive_path = tmp_path / "rooted_plugin_with_empty_dir.zip"
+    target_path = tmp_path / "plugin_upload"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("plugin/main.py", "print('loaded')\n")
+        archive.writestr("docs/", "")
+
+    PluginUpdator().unzip_file(str(archive_path), str(target_path))
+
+    assert (target_path / "plugin" / "main.py").exists()
+    assert (target_path / "docs").is_dir()
     assert not (target_path / "main.py").exists()
     assert not archive_path.exists()
 

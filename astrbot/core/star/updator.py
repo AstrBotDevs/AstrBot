@@ -133,19 +133,24 @@ class PluginUpdator(RepoZipUpdator):
     @staticmethod
     def _get_archive_root_dir(members: list[zipfile.ZipInfo]) -> str | None:
         root_dir = None
+        has_file = False
         has_root_file = False
         has_multiple_roots = False
         for member in members:
             parts = PluginUpdator._get_safe_member_parts(member.filename)
-            if not parts or member.is_dir():
+            if not parts:
                 continue
-            if len(parts) == 1:
+            if not member.is_dir():
+                has_file = True
+            if len(parts) == 1 and not member.is_dir():
                 has_root_file = True
                 continue
             if root_dir is None:
                 root_dir = parts[0]
             elif root_dir != parts[0]:
                 has_multiple_roots = True
+        if not has_file:
+            raise ValueError("Empty plugin archive")
         if has_root_file or has_multiple_roots:
             return None
         return root_dir
