@@ -104,6 +104,8 @@
     "notFound": "Plugin not found",
     "docsTitle": "Documentation",
     "docsEmpty": "No documentation",
+    "changelogTitle": "Changelog",
+    "changelogEmpty": "No changelog",
     "handlerGroups": {
       "page": "Pages",
       "skill": "Skills",
@@ -212,6 +214,12 @@
       "sectionTitle": "Install",
       "downloadSource": "The plugin package will be installed from:",
       "githubSecurityWarning": "AstrBot cannot guarantee the safety of plugins downloaded from GitHub. Install only if you trust the plugin source."
+    },
+    "update": {
+      "title": "Update Extension",
+      "sectionTitle": "Update",
+      "downloadSource": "The update package will be installed from:",
+      "confirm": "Confirm Update"
     },
     "danger_warning": {
       "title": "Dangerous Plugin Warning",

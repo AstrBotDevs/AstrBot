@@ -47,10 +47,12 @@ def registered_plugin_page(core_lifecycle_td: AstrBotCoreLifecycle, monkeypatch)
         Path(core_lifecycle_td.plugin_manager.plugin_store_path) / PLUGIN_PAGE_DEMO_NAME
     )
     page_root = plugin_root / "pages" / PLUGIN_PAGE_DEMO_PAGE_NAME
+    i18n_root = plugin_root / ".astrbot-plugin" / "i18n"
     shared_root = page_root / "shared"
     images_root = page_root / "images"
     shared_root.mkdir(parents=True, exist_ok=True)
     images_root.mkdir(parents=True, exist_ok=True)
+    i18n_root.mkdir(parents=True, exist_ok=True)
 
     (page_root / "index.html").write_text(
         """
@@ -92,6 +94,21 @@ window.renderTabs = renderTabs;
     )
     (images_root / "logo.svg").write_text(
         '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n',
+        encoding="utf-8",
+    )
+    (i18n_root / "zh-CN.json").write_text(
+        """
+{
+  "metadata": {
+    "display_name": "插件页面演示"
+  },
+  "pages": {
+    "bridge-demo": {
+      "title": "Bridge 演示页"
+    }
+  }
+}
+""".strip(),
         encoding="utf-8",
     )
 
@@ -326,6 +343,7 @@ async def test_plugin_detail_includes_scanned_page_component(
             "name": PLUGIN_PAGE_DEMO_PAGE_NAME,
             "title": PLUGIN_PAGE_DEMO_PAGE_NAME,
             "page_name": PLUGIN_PAGE_DEMO_PAGE_NAME,
+            "i18n_key": f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
             "description": "Plugin Page entry",
             "plugin_name": PLUGIN_PAGE_DEMO_NAME,
         }
@@ -351,6 +369,7 @@ async def test_plugin_page_entry_returns_signed_content_path(
     assert data["status"] == "ok"
     assert data["data"]["name"] == PLUGIN_PAGE_DEMO_PAGE_NAME
     assert data["data"]["title"] == PLUGIN_PAGE_DEMO_PAGE_NAME
+    assert data["data"]["i18n_key"] == f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
     assert data["data"]["content_path"].startswith(
         f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
     )
@@ -467,6 +486,11 @@ async def test_plugin_page_content_issues_scoped_asset_token(
     assert app_js_response.status_code == 200
     bridge_response = await anonymous_client.get(bridge_sdk_url.group(1))
     assert bridge_response.status_code == 200
+    bridge_js = (await bridge_response.get_data()).decode("utf-8")
+    assert "window.AstrBotPluginPage?.__setInitialContext" in bridge_js
+    assert '"locale": "zh-CN"' in bridge_js
+    assert '"displayName": "插件页面演示"' in bridge_js
+    assert '"pageTitle": "Bridge 演示页"' in bridge_js
     css_response = await anonymous_client.get(css_url.group(1))
     assert css_response.status_code == 200
 

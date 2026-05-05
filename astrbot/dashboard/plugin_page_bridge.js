@@ -3,6 +3,7 @@
   const SELF_ORIGIN = window.location.origin;
   const pendingRequests = new Map();
   const sseHandlers = new Map();
+  const contextHandlers = new Set();
   let requestCounter = 0;
   let subscriptionCounter = 0;
   let context = null;
@@ -13,7 +14,11 @@
   });
 
   function getTargetOrigin() {
-    if (typeof parentOrigin === "string" && parentOrigin && parentOrigin !== "null") {
+    if (
+      typeof parentOrigin === "string" &&
+      parentOrigin &&
+      parentOrigin !== "null"
+    ) {
       return parentOrigin;
     }
     if (SELF_ORIGIN !== "null") {
@@ -70,6 +75,63 @@
     }
   }
 
+  function getByPath(source, key) {
+    if (!source || typeof source !== "object" || !key) {
+      return undefined;
+    }
+
+    return String(key)
+      .split(".")
+      .reduce((current, part) => {
+        if (!current || typeof current !== "object" || !(part in current)) {
+          return undefined;
+        }
+        return current[part];
+      }, source);
+  }
+
+  function translate(key, fallback) {
+    const locale = context?.locale;
+    const messages = context?.i18n;
+    const locales = [locale, "zh-CN", "en-US"].filter(Boolean);
+    let value;
+    for (const candidateLocale of locales) {
+      value = getByPath(messages?.[candidateLocale], key);
+      if (value !== undefined && value !== null) {
+        break;
+      }
+    }
+    if (value === undefined || value === null) {
+      return fallback || "";
+    }
+    return typeof value === "string" ? value : String(value);
+  }
+
+  function notifyContextHandlers() {
+    contextHandlers.forEach((handler) => {
+      try {
+        handler(context);
+      } catch (error) {
+        console.error("AstrBotPluginPage context handler failed:", error);
+      }
+    });
+  }
+
+  function applyContext(nextContext) {
+    if (!nextContext || typeof nextContext !== "object") {
+      return;
+    }
+    context = {
+      ...(context || {}),
+      ...nextContext,
+    };
+    if (resolveReady) {
+      resolveReady(context);
+      resolveReady = null;
+    }
+    notifyContextHandlers();
+  }
+
   window.addEventListener("message", (event) => {
     if (event.source !== window.parent) {
       return;
@@ -87,11 +149,7 @@
     }
 
     if (message.kind === "context") {
-      context = message.context || null;
-      if (resolveReady) {
-        resolveReady(context);
-        resolveReady = null;
-      }
+      applyContext(message.context);
       return;
     }
 
@@ -104,7 +162,9 @@
       if (message.ok) {
         pending.resolve(message.data);
       } else {
-        pending.reject(new Error(message.error || "Plugin bridge request failed."));
+        pending.reject(
+          new Error(message.error || "Plugin bridge request failed."),
+        );
       }
       return;
     }
@@ -138,6 +198,30 @@
     },
     getContext() {
       return context;
+    },
+    getLocale() {
+      return context?.locale || "zh-CN";
+    },
+    getI18n() {
+      return context?.i18n || {};
+    },
+    t(key, fallback) {
+      return translate(key, fallback);
+    },
+    onContext(handler) {
+      if (typeof handler !== "function") {
+        return () => {};
+      }
+      contextHandlers.add(handler);
+      if (context) {
+        handler(context);
+      }
+      return () => {
+        contextHandlers.delete(handler);
+      };
+    },
+    __setInitialContext(nextContext) {
+      applyContext(nextContext);
     },
     apiGet(endpoint, params) {
       return makeRequest("api:get", { endpoint, params });
