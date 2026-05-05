@@ -1,3 +1,4 @@
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -175,6 +176,55 @@ async def test_plugin_updator_install_prefers_download_url(
         str(expected_path) + ".zip",
     )
     assert calls["unzip"] == (str(expected_path) + ".zip", str(expected_path))
+
+
+def test_plugin_updator_unzip_file_accepts_flat_plugin_archive(tmp_path: Path) -> None:
+    archive_path = tmp_path / "flat_plugin.zip"
+    target_path = tmp_path / "plugin_upload"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("main.py", "print('loaded')\n")
+        archive.writestr("metadata.yaml", "name: flat_plugin\n")
+        archive.writestr("commands/__init__.py", "")
+
+    PluginUpdator().unzip_file(str(archive_path), str(target_path))
+
+    assert (target_path / "main.py").read_text(encoding="utf-8") == "print('loaded')\n"
+    assert (target_path / "metadata.yaml").read_text(encoding="utf-8") == (
+        "name: flat_plugin\n"
+    )
+    assert (target_path / "commands" / "__init__.py").exists()
+    assert not archive_path.exists()
+
+
+def test_plugin_updator_unzip_file_flattens_single_root_dir(tmp_path: Path) -> None:
+    archive_path = tmp_path / "rooted_plugin.zip"
+    target_path = tmp_path / "plugin_upload"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("astrbot_plugin_demo-main/main.py", "print('loaded')\n")
+        archive.writestr("astrbot_plugin_demo-main/metadata.yaml", "name: demo\n")
+        archive.writestr("astrbot_plugin_demo-main/services/__init__.py", "")
+
+    PluginUpdator().unzip_file(str(archive_path), str(target_path))
+
+    assert (target_path / "main.py").exists()
+    assert (target_path / "metadata.yaml").exists()
+    assert (target_path / "services" / "__init__.py").exists()
+    assert not (target_path / "astrbot_plugin_demo-main").exists()
+    assert not archive_path.exists()
+
+
+def test_plugin_updator_unzip_file_rejects_unsafe_member_path(
+    tmp_path: Path,
+) -> None:
+    archive_path = tmp_path / "unsafe_plugin.zip"
+    target_path = tmp_path / "plugin_upload"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("../escape.py", "print('escape')\n")
+
+    with pytest.raises(ValueError, match="Unsafe path in zip archive"):
+        PluginUpdator().unzip_file(str(archive_path), str(target_path))
+
+    assert not (tmp_path / "escape.py").exists()
 
 
 @pytest.mark.asyncio
