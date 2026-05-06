@@ -10,6 +10,7 @@ import astrbot.core.provider.sources.openai_source as openai_source_module
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from astrbot.core.provider.sources.qiniu_source import ProviderQiniu
 
 
 class _ErrorWithBody(Exception):
@@ -331,6 +332,54 @@ async def test_groq_payload_drops_reasoning_content_from_assistant_history():
         ]
         assert "reasoning_content" not in assistant_message
         assert "reasoning" not in assistant_message
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_qiniu_get_models_fallback_on_failure(monkeypatch):
+    provider = ProviderQiniu(
+        provider_config={
+            "id": "test-qiniu",
+            "type": "qiniu_chat_completion",
+            "model": "deepseek-v3",
+            "key": ["k"],
+            "api_base": "https://api.qnaigc.com/v1",
+        },
+        provider_settings={},
+    )
+    try:
+
+        async def fail_list():
+            raise RuntimeError("unavailable")
+
+        monkeypatch.setattr(provider.client.models, "list", fail_list)
+        models = await provider.get_models()
+        assert models == ["deepseek-v3"]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_qiniu_get_models_fallback_when_empty(monkeypatch):
+    provider = ProviderQiniu(
+        provider_config={
+            "id": "test-qiniu-empty",
+            "type": "qiniu_chat_completion",
+            "model": "deepseek-v3",
+            "key": ["k"],
+            "api_base": "https://api.qnaigc.com/v1",
+        },
+        provider_settings={},
+    )
+    try:
+
+        async def empty_list():
+            return SimpleNamespace(data=[])
+
+        monkeypatch.setattr(provider.client.models, "list", empty_list)
+        models = await provider.get_models()
+        assert models == ["deepseek-v3"]
     finally:
         await provider.terminate()
 
