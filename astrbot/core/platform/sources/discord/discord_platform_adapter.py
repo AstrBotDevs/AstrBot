@@ -209,8 +209,7 @@ class DiscordPlatformAdapter(Platform):
         return str(content_type).split(";", maxsplit=1)[0].strip().lower()
 
     @staticmethod
-    def _is_audio_attachment(attachment: Any) -> bool:
-        content_type = DiscordPlatformAdapter._get_attachment_content_type(attachment)
+    def _is_audio_attachment(attachment: Any, content_type: str) -> bool:
         if content_type.startswith("audio/"):
             return True
 
@@ -269,7 +268,7 @@ class DiscordPlatformAdapter(Platform):
                     message_chain.append(
                         Image(file=attachment.url, filename=attachment.filename),
                     )
-                elif self._is_audio_attachment(attachment):
+                elif self._is_audio_attachment(attachment, content_type):
                     message_chain.append(
                         Record(file=attachment.url, url=attachment.url),
                     )
