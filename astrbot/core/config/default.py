@@ -111,6 +111,7 @@ DEFAULT_CONFIG = {
         "websearch_bocha_key": [],
         "websearch_brave_key": [],
         "websearch_baidu_app_builder_key": "",
+        "websearch_firecrawl_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
