@@ -1085,6 +1085,10 @@
         "description": "对外可达的回调接口地址",
         "hint": "外部服务可能会通过 AstrBot 生成的回调链接(如文件下载链接)访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址(host),因此需要通过此配置项显式指定外部服务如何访问 AstrBot 的地址。如 [http://localhost:6185](http://localhost:6185),[https://example.com](https://example.com) 等。"
       },
+      "disable_metrics": {
+        "description": "禁用匿名使用统计",
+        "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。"
+      },
       "dashboard": {
         "ssl": {
           "enable": {
