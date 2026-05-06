@@ -24,6 +24,18 @@ class Metric:
     _lock_loop: asyncio.AbstractEventLoop | None = None
 
     @staticmethod
+    def _is_disabled() -> bool:
+        """检查是否禁用指标上传（配置或环境变量）"""
+        if os.environ.get("ASTRBOT_DISABLE_METRICS", "0") == "1":
+            return True
+        try:
+            from astrbot.core import astrbot_config
+
+            return astrbot_config.get("disable_metrics", False)
+        except (ImportError, AttributeError, KeyError):
+            return False
+
+    @staticmethod
     def get_installation_id():
         """获取或创建一个唯一的安装ID"""
         if Metric._iid_cache is not None:
@@ -173,7 +185,7 @@ class Metric:
 
     @staticmethod
     async def _post_metrics(metrics_data: dict[str, Any]) -> None:
-        if os.environ.get("ASTRBOT_DISABLE_METRICS", "0") == "1":
+        if Metric._is_disabled():
             return
 
         base_url = "https://tickstats.soulter.top/api/metric/90a6c2a1"
@@ -204,7 +216,7 @@ class Metric:
 
         Powered by TickStats.
         """
-        if os.environ.get("ASTRBOT_DISABLE_METRICS", "0") == "1":
+        if Metric._is_disabled():
             return
 
         await Metric._save_platform_stats(kwargs)
