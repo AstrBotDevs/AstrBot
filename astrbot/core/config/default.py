@@ -3243,6 +3243,7 @@ CONFIG_METADATA_3 = {
                         "hint": "参考：https://console.bce.baidu.com/iam/#/iam/apikey/list",
                         "condition": {
                             "provider_settings.websearch_provider": "baidu_ai_search",
+                            "provider_settings.web_search": True,
                         },
                     },
                     "provider_settings.web_search_link": {
