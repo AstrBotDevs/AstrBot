@@ -540,7 +540,7 @@ async def _ensure_persona_and_skills(
             req.func_tool.add_tool(tool)
 
         # add subagent manager tools
-        await _apply_subagent_manager_tools(orch_cfg, req, event, so)
+        await _apply_subagent_manager_tools(plugin_context.get_config(), req, event, so)
 
         # check duplicates
         if remove_dup:
@@ -993,7 +993,7 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
 
 
 async def _apply_subagent_manager_tools(
-    orch_config: dict,
+    cfg: dict,
     req: ProviderRequest,
     event: AstrMessageEvent,
     so: SubAgentOrchestrator,
@@ -1005,8 +1005,9 @@ async def _apply_subagent_manager_tools(
     2. Register SubAgent management tools
     3. Register session's transfer_to_xxx tools
     """
+    orch_cfg = cfg.get("subagent_orchestrator", {})
 
-    if not orch_config.get("main_enable", False):
+    if not orch_cfg.get("main_enable", False):
         return
 
     if req.func_tool is None:
@@ -1026,20 +1027,23 @@ async def _apply_subagent_manager_tools(
         )
 
         # Configure SubAgentManager with settings from subagent_orchestrator
-        dynamic_cfg = orch_config.get("dynamic_agents", {})
+        dynamic_cfg = orch_cfg.get("dynamic_agents", {})
         enable_dynamic = dynamic_cfg.get("enabled", False)
-        history_enabled = orch_config.get("history_enabled", False)
-        shared_context_enabled = orch_config.get("shared_context_enabled", False)
+        history_enabled = orch_cfg.get("history_enabled", False)
+        shared_context_enabled = orch_cfg.get("shared_context_enabled", False)
         SubAgentManager.configure(
             max_subagent_count=dynamic_cfg.get("max_dynamic_subagent_count", 3),
             auto_cleanup_per_turn=dynamic_cfg.get("auto_cleanup_per_turn", True),
             shared_context_enabled=shared_context_enabled,
-            shared_context_maxlen=orch_config.get("shared_context_maxlen", 300),
-            subagent_history_maxlen=orch_config.get("subagent_history_maxlen", 300),
+            shared_context_maxlen=orch_cfg.get("shared_context_maxlen", 300),
+            subagent_history_maxlen=orch_cfg.get("subagent_history_maxlen", 300),
             tools_blacklist=dynamic_cfg.get("tools_blacklist", None),
             tools_inherent=dynamic_cfg.get("tools_inherent", None),
-            execution_timeout=orch_config.get("execution_timeout", 1200),
-            history_enabled=orch_config.get("history_enabled", True),
+            execution_timeout=orch_cfg.get("execution_timeout", 1200),
+            history_enabled=orch_cfg.get("history_enabled", True),
+            rule_prompt=dynamic_cfg.get("rule_prompt", ""),
+            time_prompt_enabled=orch_cfg.get("time_prompt_enabled", True),
+            timezone=cfg.get("timezone", None),
         )
 
         # Enable subagent history and shared context if configured

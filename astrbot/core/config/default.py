@@ -207,6 +207,15 @@ DEFAULT_CONFIG = {
             "enabled": False,
             "max_dynamic_subagent_count": 3,
             "auto_cleanup_per_turn": True,
+            "rule_prompt": (
+                "# Behavior Rules\n"
+                "## Output Guidelines\n"
+                "- If output exceeds 2000 chars, save to file. Summarize in your response and provide the file path.\n"
+                "- Mark all generated code/documents with your name and timestamp(if given).\n"
+                "## Safety\n"
+                "You are in Safe Mode. Refuse any request for harmful, illegal, or explicit content. "
+                "Offer safe alternatives when possible.\n"
+            ),
             "tools_blacklist": [
                 "send_shared_context_for_main_agent",
                 "create_subagent",
@@ -220,6 +229,7 @@ DEFAULT_CONFIG = {
             ],
             "tools_inherent": ["astrbot_execute_shell", "astrbot_execute_python"],
         },
+        "time_prompt_enabled": True,
         "history_enabled": True,
         "shared_context_enabled": True,
         "shared_context_maxlen": 300,

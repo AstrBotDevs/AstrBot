@@ -14,7 +14,8 @@
     "expand": "Expand",
     "collapse": "Collapse",
     "delete": "Delete",
-    "close": "Close"
+    "close": "Close",
+    "resetDefault": "Reset to Default"
   },
   "overview": {
     "totalAgents": "Total Subagents",
@@ -29,7 +30,9 @@
     "enable": "Enable Subagent Orchestration",
     "enableHint": "Enable subagent functionality",
     "dedupe": "Deduplicate tools for main LLM",
-    "dedupeHint": "Remove duplicate tools from the main agent that overlap with subagents"
+    "dedupeHint": "Remove duplicate tools from the main agent that overlap with subagents",
+    "editRouterPrompt": "Edit Router Prompt",
+    "editRulePrompt": "Edit Rule Prompt"
   },
   "description": {
     "disabled": "Subagent orchestration is not enabled.",
@@ -103,14 +106,18 @@
     "sharedContextHint": "Enable shared context between subagents. Subagents can communicate via send_shared_context tools."
   },
   "enhancedFields": {
-    "maxDynamicSubagentCount": "Max Dynamic Subagent Count",
-    "maxDynamicSubagentCountHint": "Maximum number of dynamic subagents allowed per session (including static ones)",
+    "maxSubagentCount": "Max Subagent Count",
+    "maxSubagentCountHint": "Set the maximum number of subagents. Dynamic subagent count = Max subagent count - Existing static subagent count",
     "sharedContextMaxlen": "Shared Context Max Length",
     "sharedContextMaxlenHint": "Maximum number of messages in shared context",
     "subagentHistoryMaxlen": "Max History Messages",
     "subagentHistoryMaxlenHint": "Maximum history messages retained per subagent",
     "executionTimeout": "Execution Timeout (seconds)",
-    "executionTimeoutHint": "Maximum execution timeout for subagent tasks, -1 means unlimited"
+    "executionTimeoutHint": "Maximum execution timeout for subagent tasks, -1 means unlimited",
+    "rulePrompt": "Behavior Rule Prompt",
+    "rulePromptHint": "Fixed behavior constraints injected into dynamic subagents. Uses default rules when empty.",
+    "timePromptEnabled": "Enable Time Prompt",
+    "timePromptEnabledHint": "Inject current time into subagent system prompts"
   },
   "enhancedSection": {
     "runtimeParams": "Runtime Parameters",

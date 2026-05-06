@@ -867,7 +867,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         agent_name = getattr(tool.agent, "name", None)
         base = tool.agent.instructions or ""
         subagent_system_prompt = (
-            f"# Role\nYour name is {agent_name}(used for tool calling)\n{base}\n"
+            f"# Role\nYour name is **{agent_name}** (used for tool calling)\n{base}\n"
         )
         if agent_name:
             runtime = prov_settings.get("computer_use_runtime", "local")

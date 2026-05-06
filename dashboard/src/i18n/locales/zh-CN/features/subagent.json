@@ -14,7 +14,8 @@
     "expand": "展开设置",
     "collapse": "收起设置",
     "delete": "删除",
-    "close": "关闭"
+    "close": "关闭",
+    "resetDefault": "恢复默认"
   },
   "overview": {
     "totalAgents": "子代理总数",
@@ -29,7 +30,9 @@
     "enable": "启用子代理编排",
     "enableHint": "启用子代理功能",
     "dedupe": "主 LLM 去重重复工具（与子代理重叠的工具将被隐藏）",
-    "dedupeHint": "从主代理中移除与子代理重复的工具"
+    "dedupeHint": "从主代理中移除与子代理重复的工具",
+    "editRouterPrompt": "编辑路由提示词",
+    "editRulePrompt": "编辑行为约束提示词"
   },
   "description": {
     "disabled": "未启动子代理编排功能。",
@@ -37,7 +40,7 @@
   },
   "section": {
     "title": "静态子代理配置",
-    "subtitle": "为主代理配置可委派的静态子代理、人格与描述信息",
+    "subtitle": "为主代理配置可委派的静态子代理、人格与描述信息。这些子代理会在Astrbot启动时就创建",
     "globalSettings": "全局配置",
     "agentSetup": "Agent 设置",
     "enhancedSettings": "动态子代理设置",
@@ -96,21 +99,25 @@
   },
   "enhancedSwitches": {
     "enable": "启用动态子代理",
-    "enableHint": "启用动态子代理创建和管理能力。开启后主LLM可在运行时通过create_subagent等工具动态创建子代理。与静态子代理编排可同时存在",
+    "enableHint": "启用动态子代理创建、管理和回收能力。开启后主Agent可在运行时通过create_subagent等工具动态创建子代理。与静态子代理编排可同时存在",
     "autoCleanup": "每轮自动清理",
     "autoCleanupHint": "每轮对话结束后自动清理未受保护的动态子代理",
     "sharedContext": "启用共享上下文",
     "sharedContextHint": "启用子代理间的公共上下文共享，子代理可通过send_shared_context工具互相通信"
   },
   "enhancedFields": {
-    "maxDynamicSubagentCount": "最大动态子代理数量",
-    "maxDynamicSubagentCountHint": "单个会话允许的最大动态子代理数量（包含静态子代理）",
+    "maxSubagentCount": "最大子代理数量",
+    "maxSubagentCountHint": "设置最大子代理数量。动态子代理数量 = 最大子代理数量 - 已有静态子代理数量",
     "sharedContextMaxlen": "共享上下文最大长度",
     "sharedContextMaxlenHint": "共享上下文消息的最大数量（条）",
     "subagentHistoryMaxlen": "最大历史消息数",
     "subagentHistoryMaxlenHint": "每个子代理最多保留的历史消息条数",
     "executionTimeout": "执行超时时间(秒)",
-    "executionTimeoutHint": "子代理执行任务的最大超时时间，-1表示不限制"
+    "executionTimeoutHint": "子代理执行任务的最大超时时间，-1表示不限制",
+    "rulePrompt": "行为约束提示词",
+    "rulePromptHint": "注入到动态子代理的固定行为约束，为空时使用默认规则",
+    "timePromptEnabled": "启用时间提示词",
+    "timePromptEnabledHint": "在子代理系统提示词中注入当前时间信息"
   },
   "enhancedSection": {
     "runtimeParams": "运行参数",
@@ -122,9 +129,9 @@
   },
   "enhancedTools": {
     "blacklist": "工具黑名单",
-    "blacklistHint": "动态子代理不可使用的工具列表。被加入黑名单的工具将不会分配给动态子代理。",
+    "blacklistHint": "动态子代理禁止使用的工具列表。被加入黑名单的工具将不会分配给动态子代理，即使主Agent试图分配。（注：插件注入的工具不会出现在编辑列表，请手动输入）",
     "inherent": "固有工具名单",
-    "inherentHint": "动态子代理固有的工具名单，在该名单内的工具会确保分配给动态子代理。",
+    "inherentHint": "动态子代理固有的工具名单，在该名单内的工具会确保分配给动态子代理，即使主Agent没有分配。（注：插件注入的工具不会出现在编辑列表，请手动输入）",
     "selectTool": "选择工具",
     "addTool": "添加工具",
     "resetDefault": "恢复默认",

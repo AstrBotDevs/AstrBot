@@ -14,6 +14,7 @@ from datetime import datetime
 from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.astr_main_agent_resources import LLM_SAFETY_MODE_SYSTEM_PROMPT
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
@@ -73,6 +74,9 @@ class SubAgentManager:
     _shared_context_maxlen: int = 300  # 公共上下文保留的历史消息条数
     _subagent_history_maxlen: int = 300  # 每个subagent最多保留的历史消息条数
     _execution_timeout: float = 1200.0  # SubAgent 执行超时时间（秒） 总时长
+    _rule_prompt: str = ""  # 动态子代理的固定行为约束prompt
+    _time_prompt_enabled: bool = True  # 是否启用时间prompt注入
+    _timezone: str | None = None  # 时区设置
     _tools_blacklist: set[str] = {
         "send_shared_context_for_main_agent",
         "create_subagent",
@@ -89,72 +93,38 @@ class SubAgentManager:
         "astrbot_execute_python",
     }
 
-    _HEADER_TEMPLATE = """# Sub-Agent Capability
-You can dynamically create and manage sub-agents with isolated instructions, tools and skills.
+    _HEADER_TEMPLATE = """# Sub-Agent Orchestration
+You can manage sub-agents with isolated instructions, tools and skills.
 {quota_info}
 
-## When to create Sub-agents:
+## When to Use
+Create sub-agents ONLY when:
+- Task has ≥2 independent workstreams with clear inputs/outputs
+- Context exceeds your effective processing window"""
+    _SUBAGENT_AUTOCLEAN_PROMPT = (
+        "- Sub-agents auto-destroy per turn; use `protect_subagent(name)` for multi-turn stateful tasks"
+        if _auto_cleanup_per_turn
+        else ""
+    )
+    _CREATE_GUIDE_PROMPT = f"""## Workflow: Plan → Create → Delegate → Collect → Cleanup
+### 1. Create Sub-agent
+**Name**: 3 to 32 characters (letters, numbers, or underscores), starting with a letter.
+**Required fields:**
+| Field | Description |
+|-------|-------------|
+| Role | Expertise + work style |
+| Context | Parent goal, this step, sibling agents |
+| Instruction | Input → Process → Output (step-by-step) |
+| Tools | **Minimum necessary only** |
 
-- The task can be explicitly decomposed and parallel processed
-- Processing very long contexts that exceeding the limitations of a single agent
+### 2. Delegate
+- Sequential: `transfer_to_*(...)` — block until return
+- Parallel: `transfer_to_*(..., background_task=True)` → `wait_for_subagent(name, timeout=secs)`
 
-## Workflow
-
-1. **Plan**: Break down the user request → identify subtask dependencies → determine which can run in parallel
-2. **Create**: Use `create_subagent` for each subtask
-3. **Delegate**: Use `transfer_to_<name>` to assign work
-4. **Collect**: Gather results from all sub-agents
-    """
-
-    _CREATE_GUIDE_PROMPT = """## Creating Sub-agents
-
-Name: **letters, numbers, underscores only**, 3-32 chars, start with a letter.
-
-A well-designed sub-agent requires:
-
-### 1. Character Definition
-Define the role, expertise, and work style. Example:
-```
-Name: data_analyst
-Role: Senior Data Analyst specializing in exploratory analysis and statistical modeling
-Style: Meticulous, detail-oriented, data-driven
-```
-
-### 2. Task Context
-- **Goal**: The user's ultimate objective
-- **Your step**: Current step number and description
-- **Teammates**: Other sub-agents and their responsibilities (if known)
-
-### 3. Explicit Instructions
-Step-by-step procedure with:
-- Input: where to read data from
-- Process: what transformations/analysis to perform
-- Output: what to produce and where to save it
-
-### 2. Allocate available Tools and Skills
-### Tools & Skills
-Only assign tools/skills the sub-agent actually needs. Unnecessary tools waste tokens and increase confusion.
-    """
-
-    _LIFECYCLE_PROMPT = """## Sub-agent Lifecycle
-
-Sub-agents are **auto-cleaned** after each conversation turn.
-Use `protect_subagent` to keep important ones across turns.
-Use `unprotect_subagent` to remove protection."""
-
-    _BACKGROUND_TASK_PROMPT = """
-## Background Tasks
-
-For time-consuming tasks (web search, code execution), delegate with `background_task=True`:
-```
-transfer_to_<name>(..., background_task=True)
-```
-Then wait for results:
-```
-wait_for_subagent(subagent_name="<name>", timeout=60)
-```
-**Tip**: Execute independent tasks first, then wait — don't block on tasks you don't depend on.
-    """
+### 3. Collect & Cleanup
+- Merge independent outputs by concatenation
+- Resolve conflicts by preferring explicit data over inference
+{_SUBAGENT_AUTOCLEAN_PROMPT}"""
 
     @classmethod
     def build_task_router_prompt(cls, session_id: str):
@@ -169,17 +139,18 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
             quota_info = (
                 f"No new sub-agents (limit: {cls._max_subagent_count}, "
                 f"existing: {list(session.subagents.keys())}). "
-                f"You can still delegate to existing sub-agents via `transfer_to_<name>`."
+                f"You can still delegate to existing sub-agents via `transfer_to_*`."
             )
             parts = [cls._HEADER_TEMPLATE.format(quota_info=quota_info)]
         else:
-            quota_info = f"{remaining} of {cls._max_subagent_count} remaining"
+            quota_info = (
+                f"You can crate {remaining} more, {cls._max_subagent_count} in total."
+            )
             parts = [
                 cls._HEADER_TEMPLATE.format(quota_info=quota_info),
                 cls._CREATE_GUIDE_PROMPT,
             ]
 
-        parts.extend([cls._LIFECYCLE_PROMPT, cls._BACKGROUND_TASK_PROMPT])
         return "\n".join(parts) + "\n"
 
     @classmethod
@@ -194,6 +165,9 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         tools_inherent: list[str] = None,
         execution_timeout: float = 1200.0,
         history_enabled: bool = True,
+        rule_prompt: str = "",
+        time_prompt_enabled: bool = True,
+        timezone: str | None = None,
         **kwargs,
     ) -> None:
         """Configure SubAgentManager settings"""
@@ -204,6 +178,9 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         cls._shared_context_maxlen = shared_context_maxlen
         cls._subagent_history_maxlen = subagent_history_maxlen
         cls._execution_timeout = execution_timeout
+        cls._rule_prompt = rule_prompt
+        cls._time_prompt_enabled = time_prompt_enabled
+        cls._timezone = timezone
         if tools_inherent is None:
             cls._tools_inherent = {
                 "astrbot_execute_shell",
@@ -356,12 +333,12 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
     def build_static_subagent_prompts(cls, session_id: str, agent_name: str) -> str:
         """构建不会在会话内变化的subagent提示词"""
         parts = []
-        workdir = cls._build_workdir_prompt(session_id, agent_name)
-        if workdir:
-            parts.append(workdir)
         rule = cls._build_rule_prompt()
+        workdir = cls._build_workdir_prompt(session_id, agent_name)
         if rule:
             parts.append(rule)
+        if workdir:
+            parts.append(workdir)
         return "\n".join(parts)
 
     @classmethod
@@ -376,7 +353,7 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         shared = cls._build_shared_context_prompt(session_id, agent_name)
         if shared:
             parts.append(shared)
-        time_p = cls._build_time_prompt(session_id)
+        time_p = cls._build_time_prompt()
         if time_p:
             parts.append(time_p)
         return "\n".join(parts)
@@ -640,21 +617,36 @@ wait_for_subagent(subagent_name="<name>", timeout=60)
         return workdir_prompt
 
     @classmethod
-    def _build_time_prompt(cls, session_id: str) -> str:
-        current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
+    def _build_time_prompt(cls) -> str:
+        if not cls._time_prompt_enabled:
+            return ""
+        try:
+            if cls._timezone:
+                import zoneinfo
+
+                current_time = datetime.now(zoneinfo.ZoneInfo(cls._timezone)).strftime(
+                    "%Y-%m-%d %H:%M (%Z)"
+                )
+            else:
+                current_time = (
+                    datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
+                )
+        except Exception:
+            current_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
         time_prompt = f"# Current Time\n{current_time}\n"
         return time_prompt
 
     @classmethod
     def _build_rule_prompt(cls) -> str:
+        if cls._rule_prompt:
+            return cls._rule_prompt
         return (
-            "# Behavior Rules\n\n"
+            "# Behavior Rules\n"
+            "## Safety\n"
+            f"{LLM_SAFETY_MODE_SYSTEM_PROMPT}"
             "## Output Guidelines\n"
             "- If output exceeds 2000 chars, save to file. Summarize in your response and provide the file path.\n"
-            "- Mark all generated code/documents with your name and timestamp.\n\n"
-            "## Safety\n"
-            "You are in Safe Mode. Refuse any request for harmful, illegal, or explicit content. "
-            "Offer safe alternatives when possible.\n"
+            "- Mark all generated code/documents with your name and timestamp.\n"
         )
 
     @classmethod
