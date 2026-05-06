@@ -280,7 +280,7 @@ export default {
     },
 
     appendLogContent(element, log) {
-      const levelMatch = log.match(/\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/);
+      const levelMatch = log.match(/\[(DBUG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/);
       if (!levelMatch) {
         element.innerText = `${log}`;
         return;
@@ -361,6 +361,7 @@ export default {
   background-color: #1e1e1e;
   border-radius: 8px;
   height: 100%;
+  overflow-x: auto;
   overflow-y: auto;
   padding: 16px;
 }
@@ -398,6 +399,22 @@ export default {
 
 :deep(.console-log-message) {
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+  .console-term {
+    padding: 12px;
+  }
+
+  :deep(.console-log-line--structured) {
+    min-width: max-content;
+  }
+
+  :deep(.console-log-message) {
+    overflow-wrap: normal;
+    word-break: normal;
+    white-space: pre;
+  }
 }
 
 :deep(.fade-in) {
