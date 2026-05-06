@@ -1,6 +1,6 @@
 import os
 import shutil
-import uuid
+import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -10,6 +10,9 @@ from astrbot.core.utils.io import ensure_dir, on_error, remove_dir
 
 from ..star.star import StarMetadata
 from ..updator import RepoZipUpdator
+
+ARCHIVE_METADATA_ROOT_DIRS = {"__MACOSX"}
+ARCHIVE_METADATA_FILE_NAMES = {".DS_Store"}
 
 
 class PluginUpdator(RepoZipUpdator):
@@ -77,51 +80,69 @@ class PluginUpdator(RepoZipUpdator):
         ensure_dir(target_path)
         logger.info(f"Extracting archive: {zip_path}")
 
-        archive_root_dir = None
-        with zipfile.ZipFile(zip_path, "r") as z:
-            members = z.infolist()
-            archive_root_dir = self._get_archive_root_dir(members)
-            for member in members:
-                z.extract(member, target_path)
-
-        extracted_root = target_path / archive_root_dir if archive_root_dir else None
-        if extracted_root and extracted_root.is_dir():
-            extracted_root = self._rename_extracted_root_for_flattening(extracted_root)
-            for child in extracted_root.iterdir():
-                destination = target_path / child.name
-                self._remove_existing_path(destination)
-                shutil.move(str(child), str(target_path))
-
+        staging_path = self._create_extract_temp_dir(target_path)
         try:
-            logger.info(
-                f"Removing temporary files: {zip_path}"
-                + (f" and {extracted_root}" if extracted_root else ""),
+            archive_root_dir = None
+            with zipfile.ZipFile(zip_path, "r") as z:
+                members = [
+                    member
+                    for member in z.infolist()
+                    if not self._is_archive_metadata_member(member.filename)
+                ]
+                archive_root_dir = self._get_archive_root_dir(members)
+                for member in members:
+                    z.extract(member, staging_path)
+
+            source_path = (
+                staging_path / archive_root_dir if archive_root_dir else staging_path
             )
-            if extracted_root and extracted_root.exists():
-                shutil.rmtree(extracted_root, onerror=on_error)
+            self._move_extracted_children(source_path, target_path)
+            self._remove_update_files(zip_path, staging_path)
+            if not staging_path.exists():
+                staging_path = None
+        finally:
+            if staging_path:
+                self._remove_staging_path_safely(staging_path)
+
+    @staticmethod
+    def _create_extract_temp_dir(target_path: Path) -> Path:
+        return Path(
+            tempfile.mkdtemp(
+                prefix=f".{target_path.name}.",
+                suffix=".extract",
+                dir=target_path.parent,
+            )
+        )
+
+    def _move_extracted_children(self, source_path: Path, target_path: Path) -> None:
+        for child in source_path.iterdir():
+            destination = target_path / child.name
+            self._remove_existing_path(destination)
+            shutil.move(str(child), str(target_path))
+
+    @staticmethod
+    def _remove_update_files(zip_path: str, staging_path: Path) -> None:
+        try:
+            logger.info(f"Removing temporary files: {zip_path} and {staging_path}")
+            shutil.rmtree(staging_path, onerror=on_error)
             os.remove(zip_path)
         except Exception:
             logger.warning(
-                f"Failed to remove update files; you can manually delete {zip_path}"
-                + (f" and {extracted_root}" if extracted_root else ""),
+                f"Failed to remove update files; you can manually delete {zip_path} "
+                f"and {staging_path}",
             )
-
-    def _rename_extracted_root_for_flattening(self, extracted_root: Path) -> Path:
-        temp_root = self._get_unique_flatten_temp_path(extracted_root)
-        extracted_root.rename(temp_root)
-        return temp_root
 
     @staticmethod
-    def _get_unique_flatten_temp_path(extracted_root: Path) -> Path:
-        for _ in range(100):
-            temp_root = extracted_root.with_name(
-                f".{extracted_root.name}.{uuid.uuid4().hex}.tmp"
+    def _remove_staging_path_safely(staging_path: Path) -> None:
+        if not staging_path.exists():
+            return
+        try:
+            shutil.rmtree(staging_path, onerror=on_error)
+        except Exception:
+            logger.warning(
+                f"Failed to remove temporary extract directory; "
+                f"you can manually delete {staging_path}",
             )
-            if not temp_root.exists() and not temp_root.is_symlink():
-                return temp_root
-        raise FileExistsError(
-            f"Could not allocate a temporary path for {extracted_root}"
-        )
 
     @staticmethod
     def _remove_existing_path(path: Path) -> None:
@@ -154,6 +175,16 @@ class PluginUpdator(RepoZipUpdator):
         if has_root_file or has_multiple_roots:
             return None
         return root_dir
+
+    @staticmethod
+    def _is_archive_metadata_member(member_name: str) -> bool:
+        parts = PluginUpdator._get_safe_member_parts(member_name)
+        if not parts:
+            return False
+        return (
+            parts[0] in ARCHIVE_METADATA_ROOT_DIRS
+            or parts[-1] in ARCHIVE_METADATA_FILE_NAMES
+        )
 
     @staticmethod
     def _get_safe_member_parts(member_name: str) -> tuple[str, ...]:

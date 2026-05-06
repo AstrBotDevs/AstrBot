@@ -225,6 +225,27 @@ def test_plugin_updator_unzip_file_flattens_single_root_dir(tmp_path: Path) -> N
     assert not archive_path.exists()
 
 
+def test_plugin_updator_unzip_file_ignores_macos_metadata_when_flattening(
+    tmp_path: Path,
+) -> None:
+    archive_path = tmp_path / "rooted_plugin_with_macos_metadata.zip"
+    target_path = tmp_path / "plugin_upload"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("astrbot_plugin_demo-main/main.py", "print('loaded')\n")
+        archive.writestr("astrbot_plugin_demo-main/metadata.yaml", "name: demo\n")
+        archive.writestr("astrbot_plugin_demo-main/.DS_Store", "")
+        archive.writestr("__MACOSX/._astrbot_plugin_demo-main", "")
+
+    PluginUpdator().unzip_file(str(archive_path), str(target_path))
+
+    assert (target_path / "main.py").exists()
+    assert (target_path / "metadata.yaml").exists()
+    assert not (target_path / "astrbot_plugin_demo-main").exists()
+    assert not (target_path / "__MACOSX").exists()
+    assert not (target_path / ".DS_Store").exists()
+    assert not archive_path.exists()
+
+
 def test_plugin_updator_unzip_file_keeps_multiple_root_entries(
     tmp_path: Path,
 ) -> None:
