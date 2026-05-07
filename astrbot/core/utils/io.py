@@ -289,9 +289,23 @@ async def download_dashboard(
             )
         except BaseException as _:
             if latest:
-                dashboard_release_url = "https://github.com/AstrBotDevs/AstrBot/releases/latest/download/dist.zip"
+                # Resolve latest release tag from GitHub API to construct correct asset URL
+                ssl_context = ssl.create_default_context(cafile=certifi.where())
+                async with aiohttp.ClientSession(
+                    connector=aiohttp.TCPConnector(ssl=ssl_context),
+                    trust_env=True,
+                ) as session:
+                    async with session.get(
+                        "https://api.github.com/repos/AstrBotDevs/AstrBot/releases/latest",
+                        timeout=30,
+                        headers={"Accept": "application/vnd.github+json"},
+                    ) as api_resp:
+                        api_resp.raise_for_status()
+                        release_data = await api_resp.json()
+                        tag = release_data["tag_name"]
             else:
-                dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{version}/dist.zip"
+                tag = version
+            dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{tag}/AstrBot-{tag}-dashboard.zip"
             if proxy:
                 dashboard_release_url = f"{proxy}/{dashboard_release_url}"
             await download_file(
