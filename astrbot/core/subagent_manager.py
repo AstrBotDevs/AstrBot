@@ -93,9 +93,8 @@ class SubAgentManager:
         "astrbot_execute_python",
     }
 
-    _HEADER_TEMPLATE = """# Sub-Agent Orchestration
-You can manage sub-agents with isolated instructions, tools and skills.
-{quota_info}
+    _HEADER_TEMPLATE = f"""# Sub-Agent Orchestration
+You can manage sub-agents with isolated instructions, tools and skills. Maximum {_max_subagent_count} subagents.
 
 ## When to Use
 Create sub-agents ONLY when:
@@ -132,25 +131,10 @@ Create sub-agents ONLY when:
         if not session:
             return ""
 
-        current_count = len(session.subagents)
-        remaining = cls._max_subagent_count - current_count
-
-        if remaining <= 0:
-            quota_info = (
-                f"No new sub-agents (limit: {cls._max_subagent_count}, "
-                f"existing: {list(session.subagents.keys())}). "
-                f"You can still delegate to existing sub-agents via `transfer_to_*`."
-            )
-            parts = [cls._HEADER_TEMPLATE.format(quota_info=quota_info)]
-        else:
-            quota_info = (
-                f"You can crate {remaining} more, {cls._max_subagent_count} in total."
-            )
-            parts = [
-                cls._HEADER_TEMPLATE.format(quota_info=quota_info),
-                cls._CREATE_GUIDE_PROMPT,
-            ]
-
+        parts = [
+            cls._HEADER_TEMPLATE,
+            cls._CREATE_GUIDE_PROMPT,
+        ]
         return "\n".join(parts) + "\n"
 
     @classmethod
