@@ -73,8 +73,7 @@ class PluginUpdator(RepoZipUpdator):
         ensure_dir(target_dir)
         logger.info(f"Extracting archive: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
-            first_entry = os.path.normpath(z.namelist()[0])
-            update_dir = "" if first_entry == "." else first_entry
+            update_dir = self._resolve_archive_root_dir(z.namelist())
             z.extractall(target_dir)
 
         self._finalize_extracted_archive(zip_path, target_dir, update_dir)

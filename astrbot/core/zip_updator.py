@@ -235,12 +235,41 @@ class RepoZipUpdator:
         """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
         ensure_dir(target_dir)
         with zipfile.ZipFile(zip_path, "r") as z:
-            first_entry = os.path.normpath(z.namelist()[0])
-            update_dir = "" if first_entry == "." else first_entry
+            update_dir = self._resolve_archive_root_dir(z.namelist())
             z.extractall(target_dir)
         logger.debug(f"解压文件完成: {zip_path}")
 
         self._finalize_extracted_archive(zip_path, target_dir, update_dir)
+
+    @staticmethod
+    def _resolve_archive_root_dir(entries: list[str]) -> str:
+        normalized_entries = [os.path.normpath(entry) for entry in entries]
+        portable_entries = [entry.replace("\\", "/") for entry in normalized_entries]
+        root_candidates: list[str] = []
+
+        for raw_entry, normalized_entry, portable_entry in zip(
+            entries, normalized_entries, portable_entries
+        ):
+            if normalized_entry == ".":
+                continue
+
+            has_children = any(
+                other_entry != portable_entry
+                and other_entry.startswith(f"{portable_entry}/")
+                for other_entry in portable_entries
+            )
+            if raw_entry.endswith(("/", "\\")) or has_children:
+                root_candidates.append(normalized_entry)
+                continue
+
+            parent_portable, _, _ = portable_entry.rpartition("/")
+            if not parent_portable:
+                return ""
+            root_candidates.append(parent_portable.replace("/", os.sep))
+
+        if not root_candidates:
+            return ""
+        return os.path.commonpath(root_candidates)
 
     def _finalize_extracted_archive(
         self,
