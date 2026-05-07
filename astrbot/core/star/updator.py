@@ -1,10 +1,9 @@
 import os
-import shutil
 import zipfile
 
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
-from astrbot.core.utils.io import ensure_dir, on_error, remove_dir
+from astrbot.core.utils.io import ensure_dir, remove_dir
 from astrbot.core.zip_updator import normalize_archive_root_dir
 
 from ..star.star import StarMetadata
@@ -73,40 +72,16 @@ class PluginUpdator(RepoZipUpdator):
 
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
         ensure_dir(target_dir)
-        update_dir = ""
         logger.info(f"Extracting archive: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = normalize_archive_root_dir(z.namelist()[0])
             z.extractall(target_dir)
 
-        if not update_dir:
-            try:
-                os.remove(zip_path)
-            except BaseException:
-                logger.warning(
-                    f"Failed to remove update files; you can manually delete {zip_path}",
-                )
-            return
-
-        update_root_path = os.path.normpath(os.path.join(target_dir, update_dir))
-        files = os.listdir(update_root_path)
-        for f in files:
-            update_item_path = os.path.normpath(os.path.join(update_root_path, f))
-            target_item_path = os.path.normpath(os.path.join(target_dir, f))
-            if os.path.isdir(update_item_path):
-                if os.path.exists(target_item_path):
-                    shutil.rmtree(target_item_path, onerror=on_error)
-            elif os.path.exists(target_item_path):
-                os.remove(target_item_path)
-            shutil.move(update_item_path, target_dir)
-
-        try:
-            logger.info(
-                f"Removing temporary files: {zip_path} and {update_root_path}",
-            )
-            shutil.rmtree(update_root_path, onerror=on_error)
-            os.remove(zip_path)
-        except BaseException:
-            logger.warning(
-                f"Failed to remove update files; you can manually delete {zip_path} and {update_root_path}",
-            )
+        self._finalize_extracted_archive(
+            zip_path,
+            target_dir,
+            update_dir,
+            extract_log=logger.info,
+            cleanup_log_template="Removing temporary files: {zip_path}{suffix}",
+            cleanup_warning_template="Failed to remove update files; you can manually delete {zip_path}{suffix}",
+        )
