@@ -289,7 +289,9 @@ class ResultDecorateStage(Stage):
                         ),
                     )
                 else:
-                    result.chain.insert(0, Plain(f"🤔 思考: {reasoning_content}\n"))
+                    result.chain.insert(
+                        0, Plain(f"🤔 思考: {reasoning_content}\n\n────\n")
+                    )
 
             if should_tts and tts_provider:
                 new_chain = []
