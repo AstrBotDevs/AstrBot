@@ -583,6 +583,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         raw = getattr(self.message_obj, "raw_message", None)
         return isinstance(raw, botpy.interaction.Interaction)
 
+    def get_message_outline(self) -> str:
+        """interaction 事件没有消息链，构造按钮摘要供日志使用。"""
+        if not self.is_button_interaction():
+            return super().get_message_outline()
+        button_id = self.get_interaction_button_id() or "?"
+        button_data = self.get_interaction_button_data()
+        if button_data:
+            return f"[Button] id={button_id} data={button_data}"
+        return f"[Button] id={button_id}"
+
     def get_interaction_button_id(self) -> str:
         """获取被点击按钮的 id（`QQCButton.id`）；非交互事件返回空串。"""
         if not self.is_button_interaction():
