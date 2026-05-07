@@ -588,14 +588,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         if not self.is_button_interaction():
             return ""
         raw = cast(botpy.interaction.Interaction, self.message_obj.raw_message)
-        return getattr(raw.data.resolved, "button_id", "") or ""
+        resolved = getattr(getattr(raw, "data", None), "resolved", None)
+        return getattr(resolved, "button_id", "") or ""
 
     def get_interaction_button_data(self) -> str:
         """获取被点击按钮的 data（`QQCButton.data`）；非交互事件返回空串。"""
         if not self.is_button_interaction():
             return ""
         raw = cast(botpy.interaction.Interaction, self.message_obj.raw_message)
-        return getattr(raw.data.resolved, "button_data", "") or ""
+        resolved = getattr(getattr(raw, "data", None), "resolved", None)
+        return getattr(resolved, "button_data", "") or ""
 
     async def _send_with_stream_newline_fix(
         self,
