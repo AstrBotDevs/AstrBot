@@ -343,6 +343,23 @@ class TestApplyKb:
         assert req.system_prompt == "System"
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("prompt", ["", "   \n\t"])
+    async def test_apply_kb_blank_prompt(self, prompt, mock_event, mock_context):
+        """Test applying knowledge base when prompt is blank."""
+        module = ama
+        req = ProviderRequest(prompt=prompt, system_prompt="System")
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60, kb_agentic_mode=False
+        )
+        retrieve = AsyncMock(return_value="KB result")
+
+        with patch("astrbot.core.astr_main_agent.retrieve_knowledge_base", retrieve):
+            await module._apply_kb(mock_event, req, mock_context, config)
+
+        retrieve.assert_not_awaited()
+        assert req.system_prompt == "System"
+
+    @pytest.mark.asyncio
     async def test_apply_kb_no_result(self, mock_event, mock_context):
         """Test applying knowledge base when no result is returned."""
         module = ama
