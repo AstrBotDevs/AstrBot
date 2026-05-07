@@ -76,6 +76,35 @@ python main.py
 :::
 
 
+## 更新前端
+
+AstrBot 包含两个前端项目：`docs`（文档站点）和 `dashboard`（管理面板）。当你需要更新前端时，执行以下步骤：
+
+### 1. 安装依赖
+
+```bash
+# 安装 docs（文档站点）依赖
+cd /root/AstrBot/docs
+bun install
+
+# 安装 dashboard（管理面板）依赖
+cd /root/AstrBot/dashboard
+bun install
+```
+
+> 如果你还没有安装 `bun`，可以用以下命令安装：
+> ```bash
+> curl -fsSL https://bun.sh/install | bash
+> ```
+
+### 2. 运行 / 构建
+
+- `bun run build` → 构建生产版本
+
+你可以根据实际需求选择运行哪个目录的前端。
+
+---
+
 ## 🎉 大功告成！
 
 如果一切顺利，你会看到 AstrBot 打印出的日志。
