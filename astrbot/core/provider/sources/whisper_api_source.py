@@ -36,6 +36,11 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             base_url=provider_config.get("api_base"),
             timeout=provider_config.get("timeout", NOT_GIVEN),
         )
+        # Optional language hint + prompt to guide Whisper transcription.
+        # Default empty = let Whisper auto-detect (preserves existing behavior).
+        # Users can configure these for higher accuracy on non-English speech.
+        self.language = provider_config.get("language", "")
+        self.prompt = provider_config.get("prompt", "")
 
         self.set_model(provider_config["model"])
 
@@ -119,6 +124,9 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         result = await self.client.audio.transcriptions.create(
             model=self.model_name,
             file=("audio.wav", open(audio_url, "rb")),
+            language=self.language or NOT_GIVEN,
+            prompt=self.prompt or NOT_GIVEN,
+            temperature=0,
         )
 
         # remove temp file
