@@ -220,6 +220,7 @@ class Context:
             func_tool=tools,
             contexts=context_,
             system_prompt=system_prompt or "",
+            extra_user_content_parts=kwargs.get("extra_user_content_parts", []),
         )
         if agent_context is None:
             agent_context = AstrAgentContext(

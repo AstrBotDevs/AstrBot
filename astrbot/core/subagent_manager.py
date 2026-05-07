@@ -330,8 +330,9 @@ Create sub-agents ONLY when:
         return session.subagent_histories.get(agent_name, [])
 
     @classmethod
-    def build_static_subagent_prompts(cls, session_id: str, agent_name: str) -> str:
-        """构建不会在会话内变化的subagent提示词"""
+    def build_subagent_system_prompt(
+        cls, session_id: str, agent_name: str, runtime: str
+    ) -> str:
         parts = []
         rule = cls._build_rule_prompt()
         workdir = cls._build_workdir_prompt(session_id, agent_name)
@@ -339,24 +340,37 @@ Create sub-agents ONLY when:
             parts.append(rule)
         if workdir:
             parts.append(workdir)
-        return "\n".join(parts)
-
-    @classmethod
-    def build_dynamic_subagent_prompts(
-        cls, session_id: str, agent_name: str, runtime: str
-    ) -> str:
-        """构建会话内可能变化的提示词（每次调用重建）"""
-        parts = []
         skills = cls._build_subagent_skills_prompt(session_id, agent_name, runtime)
         if skills:
             parts.append(skills)
-        shared = cls._build_shared_context_prompt(session_id, agent_name)
-        if shared:
-            parts.append(shared)
-        time_p = cls._build_time_prompt()
-        if time_p:
-            parts.append(time_p)
         return "\n".join(parts)
+
+    @classmethod
+    def build_subagent_extra_content_parts(
+        cls, session_id: str, agent_name: str
+    ) -> list:
+        """构建子代理的追加内容部分（extra_user_content_parts）。
+
+        将共享上下文和时间信息作为追加内容返回，它们将被注入到用户消息中，
+
+        Returns:
+            list[TextPart]: 追加内容部分列表
+        """
+        from astrbot.core.agent.message import TextPart
+
+        parts = []
+
+        # 1. 共享上下文
+        shared_context = cls._build_shared_context_prompt(session_id, agent_name)
+        if shared_context:
+            parts.append(TextPart(text=shared_context).mark_as_temp())
+
+        # 2. 时间信息
+        time_prompt = cls._build_time_prompt()
+        if time_prompt:
+            parts.append(TextPart(text=time_prompt).mark_as_temp())
+
+        return parts
 
     @classmethod
     def _build_subagent_skills_prompt(

@@ -382,6 +382,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             umo, tool, prov_settings
         )
 
+        # 构建子代理的追加内容
+        extra_content_parts = SubAgentManager.build_subagent_extra_content_parts(
+            umo, agent_name
+        )
+
         # 获取子代理的超时时间
         execution_timeout = cls._get_subagent_execution_timeout()
 
@@ -402,6 +407,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 tool_call_timeout=run_context.tool_call_timeout,
                 stream=stream,
                 runner_messages=runner_messages,
+                extra_user_content_parts=extra_content_parts,
             )
 
         # 添加执行超时控制
@@ -871,14 +877,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
         if agent_name:
             runtime = prov_settings.get("computer_use_runtime", "local")
-            static_subagent_prompt = SubAgentManager.build_static_subagent_prompts(
-                umo, agent_name
-            )
-            dynamic_subagent_prompt = SubAgentManager.build_dynamic_subagent_prompts(
+            subagent_system_prompt += SubAgentManager.build_subagent_system_prompt(
                 umo, agent_name, runtime
             )
-            subagent_system_prompt += static_subagent_prompt
-            subagent_system_prompt += dynamic_subagent_prompt
         return subagent_system_prompt
 
     @staticmethod
