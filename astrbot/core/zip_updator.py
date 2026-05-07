@@ -13,26 +13,6 @@ from astrbot.core.utils.io import ensure_dir, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
 
-def normalize_archive_root_dir(path: str) -> str:
-    normalized = os.path.normpath(path)
-    return "" if normalized == "." else normalized
-
-
-def _is_within_directory(directory: str, path: str) -> bool:
-    try:
-        return os.path.commonpath([directory, path]) == directory
-    except ValueError:
-        return False
-
-
-def _safe_join_within(root: str, *parts: str) -> str:
-    root_norm = os.path.normpath(root)
-    path = os.path.normpath(os.path.join(root_norm, *parts))
-    if not _is_within_directory(root_norm, path):
-        raise ValueError("path escapes root directory")
-    return path
-
-
 class ReleaseInfo:
     version: str
     published_at: str
@@ -255,7 +235,8 @@ class RepoZipUpdator:
         """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
         ensure_dir(target_dir)
         with zipfile.ZipFile(zip_path, "r") as z:
-            update_dir = normalize_archive_root_dir(z.namelist()[0])
+            first_entry = os.path.normpath(z.namelist()[0])
+            update_dir = "" if first_entry == "." else first_entry
             z.extractall(target_dir)
         logger.debug(f"解压文件完成: {zip_path}")
 
@@ -269,6 +250,15 @@ class RepoZipUpdator:
     ) -> None:
         target_root_path = os.path.normpath(target_dir)
 
+        def _join_under_root(root: str, *parts: str) -> str:
+            path = os.path.normpath(os.path.join(root, *parts))
+            try:
+                if os.path.commonpath([root, path]) != root:
+                    raise ValueError("path escapes root directory")
+            except ValueError as exc:
+                raise ValueError("path escapes root directory") from exc
+            return path
+
         if not update_dir:
             try:
                 os.remove(zip_path)
@@ -276,12 +266,12 @@ class RepoZipUpdator:
                 logger.warning(f"删除更新文件失败，可以手动删除 {zip_path}")
             return
 
-        update_root_path = _safe_join_within(target_root_path, update_dir)
+        update_root_path = _join_under_root(target_root_path, update_dir)
 
         files = os.listdir(update_root_path)
         for f in files:
-            update_item_path = _safe_join_within(update_root_path, f)
-            target_item_path = _safe_join_within(target_root_path, f)
+            update_item_path = _join_under_root(update_root_path, f)
+            target_item_path = _join_under_root(target_root_path, f)
             if os.path.isdir(update_item_path):
                 if os.path.exists(target_item_path):
                     shutil.rmtree(target_item_path, onerror=on_error)
