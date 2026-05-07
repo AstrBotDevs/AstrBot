@@ -167,6 +167,17 @@ class KBSQLiteDatabase:
 
                 await session.commit()
 
+    async def migrate_to_v2(self) -> None:
+        """Add enabled column to knowledge_bases table."""
+        async with self.get_db() as session:
+            try:
+                await session.execute(
+                    text("ALTER TABLE knowledge_bases ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT 1")
+                )
+                await session.commit()
+            except Exception:
+                pass  # Column already exists
+
     async def close(self) -> None:
         """关闭数据库连接"""
         await self.engine.dispose()
