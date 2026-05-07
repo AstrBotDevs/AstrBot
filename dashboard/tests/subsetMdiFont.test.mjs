@@ -1,26 +1,23 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, rmSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
 
 import {
   collectFiles,
-  scanUsedIcons,
-  parseIconCodepoints,
-  resolveUsedIcons,
   extractUtilityCss,
   ICON_CLASS_PATTERN,
+  parseIconCodepoints,
   REQUIRED_ICONS,
+  resolveUsedIcons,
+  scanUsedIcons,
 } from "../scripts/subset-mdi-font.mjs";
 
 // ── Helper: create a temporary directory tree for file-system tests ─────────
 
 function makeTmpDir() {
-  const base = join(
-    tmpdir(),
-    `mdi-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  );
+  const base = join(tmpdir(), `mdi-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(base, { recursive: true });
   return base;
 }
@@ -80,10 +77,7 @@ test("collectFiles yields nothing for empty directory", () => {
 
 test("scanUsedIcons extracts mdi-* icon names from files", () => {
   const tmp = makeTmpDir();
-  writeFileSync(
-    join(tmp, "A.vue"),
-    "<v-icon>mdi-home</v-icon><v-icon>mdi-close</v-icon>",
-  );
+  writeFileSync(join(tmp, "A.vue"), "<v-icon>mdi-home</v-icon><v-icon>mdi-close</v-icon>");
   writeFileSync(join(tmp, "B.vue"), 'icon="mdi-home"');
 
   const icons = scanUsedIcons(collectFiles(tmp, [".vue"]));
@@ -101,10 +95,7 @@ test("scanUsedIcons extracts mdi-* icon names from files", () => {
 
 test("scanUsedIcons excludes utility classes", () => {
   const tmp = makeTmpDir();
-  writeFileSync(
-    join(tmp, "A.vue"),
-    "mdi-spin mdi-rotate-90 mdi-flip-h mdi-home",
-  );
+  writeFileSync(join(tmp, "A.vue"), "mdi-spin mdi-rotate-90 mdi-flip-h mdi-home");
 
   const icons = scanUsedIcons(collectFiles(tmp, [".vue"]));
   assert.ok(icons.has("mdi-home"));
@@ -131,10 +122,7 @@ test("scanUsedIcons includes all required icons even when no mdi-* icons are fou
 test("scanUsedIcons deduplicates required icons when source already references them", () => {
   const tmp = makeTmpDir();
   const requiredIcon = [...REQUIRED_ICONS][0];
-  writeFileSync(
-    join(tmp, "A.vue"),
-    `<v-icon>${requiredIcon}</v-icon><v-icon>mdi-home</v-icon>`,
-  );
+  writeFileSync(join(tmp, "A.vue"), `<v-icon>${requiredIcon}</v-icon><v-icon>mdi-home</v-icon>`);
 
   const icons = [...scanUsedIcons(collectFiles(tmp, [".vue"]))];
   assert.equal(icons.filter((icon) => icon === requiredIcon).length, 1);
@@ -180,10 +168,7 @@ test("resolveUsedIcons separates resolved and missing icons", () => {
     ["mdi-close", "F0156"],
   ]);
 
-  const { resolvedIcons, missingIcons, subsetChars } = resolveUsedIcons(
-    usedIcons,
-    iconMap,
-  );
+  const { resolvedIcons, missingIcons, subsetChars } = resolveUsedIcons(usedIcons, iconMap);
 
   assert.ok(resolvedIcons.includes("mdi-home"));
   assert.ok(resolvedIcons.includes("mdi-close"));
@@ -201,10 +186,7 @@ test("resolveUsedIcons returns all missing when iconMap is empty", () => {
   const usedIcons = new Set(["mdi-home"]);
   const iconMap = new Map();
 
-  const { resolvedIcons, missingIcons, subsetChars } = resolveUsedIcons(
-    usedIcons,
-    iconMap,
-  );
+  const { resolvedIcons, missingIcons, subsetChars } = resolveUsedIcons(usedIcons, iconMap);
   assert.equal(resolvedIcons.length, 0);
   assert.deepEqual(missingIcons, ["mdi-home"]);
   assert.equal(subsetChars.length, 0);

@@ -11,7 +11,9 @@
     "build-prod": "vite build --base=/vue/free/",
     "preview": "vite preview --port 5050",
     "typecheck": "vue-tsc --noEmit",
-    "lint": "eslint . --fix",
+    "lint": "biome check --write",
+    "lint:check": "biome check",
+    "lint:unsafe": "biome check --write --unsafe",
     "postinstall": "node scripts/patch-dompurify.mjs"
   },
   "dependencies": {
@@ -50,20 +52,13 @@
     "yup": "1.7.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.13",
     "@mdi/font": "7.4.47",
-    "@rushstack/eslint-patch": "1.16.1",
     "@types/chance": "1.1.7",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^25.5.2",
     "@vitejs/plugin-vue": "6.0.5",
-    "@vue/eslint-config-prettier": "10.2.0",
-    "@vue/eslint-config-typescript": "14.7.0",
     "@vue/tsconfig": "^0.9.1",
-    "eslint": "10.1.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.5",
-    "eslint-plugin-vue": "10.8.0",
-    "prettier": "3.8.1",
     "sass": "1.98.0",
     "sass-loader": "16.0.7",
     "subset-font": "^2.5.0",

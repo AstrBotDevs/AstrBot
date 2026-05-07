@@ -1,10 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 
 test("waitForRouterReadyInBackground returns immediately and logs failures", async () => {
-  const module = await import("../src/utils/routerReadiness.mjs").catch(
-    () => null,
-  );
+  const module = await import("../src/utils/routerReadiness.mjs").catch(() => null);
 
   assert.ok(module?.waitForRouterReadyInBackground);
 
@@ -17,10 +15,7 @@ test("waitForRouterReadyInBackground returns immediately and logs failures", asy
     },
   };
 
-  const result = module.waitForRouterReadyInBackground(
-    { isReady: () => readyPromise },
-    logger,
-  );
+  const result = module.waitForRouterReadyInBackground({ isReady: () => readyPromise }, logger);
 
   assert.equal(result, undefined);
   await Promise.resolve();

@@ -247,7 +247,9 @@ class TestProviderRequest:
         req = ProviderRequest(tool_calls_result=[tcr1])
         tcr3 = MagicMock(spec=ToolCallsResult)
         req.append_tool_calls_result(tcr3)
-        assert len(req.tool_calls_result or []) == 2
+        from typing import cast
+        result = cast(list, req.tool_calls_result)
+        assert len(result) == 2
 
     def test_print_friendly_context_no_contexts(self):
         req = ProviderRequest(prompt="hello", image_urls=["a.png"], audio_urls=["b.wav"])

@@ -11,38 +11,18 @@
  * Fallback: if any step fails, copies the original full @mdi/font CSS and fonts
  * so the build never breaks.
  */
-import {
-  readFileSync,
-  writeFileSync,
-  copyFileSync,
-  readdirSync,
-  statSync,
-  existsSync,
-  mkdirSync,
-} from "fs";
-import { join, resolve, extname } from "path";
-import { fileURLToPath } from "url";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // Derive __dirname portably from import.meta.url (works across all Node ESM versions)
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const SRC = join(ROOT, "src");
-const MDI_CSS_PATH = join(
-  ROOT,
-  "node_modules/@mdi/font/css/materialdesignicons.css",
-);
-const MDI_TTF_PATH = join(
-  ROOT,
-  "node_modules/@mdi/font/fonts/materialdesignicons-webfont.ttf",
-);
-const MDI_WOFF2_PATH = join(
-  ROOT,
-  "node_modules/@mdi/font/fonts/materialdesignicons-webfont.woff2",
-);
-const MDI_WOFF_PATH = join(
-  ROOT,
-  "node_modules/@mdi/font/fonts/materialdesignicons-webfont.woff",
-);
+const MDI_CSS_PATH = join(ROOT, "node_modules/@mdi/font/css/materialdesignicons.css");
+const MDI_TTF_PATH = join(ROOT, "node_modules/@mdi/font/fonts/materialdesignicons-webfont.ttf");
+const MDI_WOFF2_PATH = join(ROOT, "node_modules/@mdi/font/fonts/materialdesignicons-webfont.woff2");
+const MDI_WOFF_PATH = join(ROOT, "node_modules/@mdi/font/fonts/materialdesignicons-webfont.woff");
 const OUT_DIR = join(ROOT, "src/assets/mdi-subset");
 
 // Utility classes that should not be treated as icon names
@@ -108,8 +88,7 @@ export const REQUIRED_ICONS = new Set([
 ]);
 
 // Regex to match individual icon class definitions in MDI CSS
-export const ICON_CLASS_PATTERN =
-  /\.(mdi-[a-z][a-z0-9-]*)::before\s*\{\s*content:\s*"\\([0-9A-Fa-f]+)"\s*;?\s*}/g;
+export const ICON_CLASS_PATTERN = /\.(mdi-[a-z][a-z0-9-]*)::before\s*\{\s*content:\s*"\\([0-9A-Fa-f]+)"\s*;?\s*}/g;
 
 // ── Helper functions ────────────────────────────────────────────────────────
 
@@ -197,10 +176,7 @@ function buildFallbackCss() {
         (_, ext) => `url("./materialdesignicons-webfont-subset.${ext}")`,
       )
       // Remove legacy eot/ttf sources
-      .replace(
-        /url\("\.\.\/fonts\/materialdesignicons-webfont\.(eot|ttf)\?[^"]*"\)[^,]*/g,
-        "",
-      )
+      .replace(/url\("\.\.\/fonts\/materialdesignicons-webfont\.(eot|ttf)\?[^"]*"\)[^,]*/g, "")
       // Clean up dangling commas/separators
       .replace(/src:\s*,/g, "src:")
       .replace(/,\s*;/g, ";")
@@ -214,27 +190,16 @@ function fallbackToFullFont(reason) {
 
   // Copy original font files
   if (existsSync(MDI_WOFF2_PATH)) {
-    copyFileSync(
-      MDI_WOFF2_PATH,
-      join(OUT_DIR, "materialdesignicons-webfont-subset.woff2"),
-    );
+    copyFileSync(MDI_WOFF2_PATH, join(OUT_DIR, "materialdesignicons-webfont-subset.woff2"));
   }
   if (existsSync(MDI_WOFF_PATH)) {
-    copyFileSync(
-      MDI_WOFF_PATH,
-      join(OUT_DIR, "materialdesignicons-webfont-subset.woff"),
-    );
+    copyFileSync(MDI_WOFF_PATH, join(OUT_DIR, "materialdesignicons-webfont-subset.woff"));
   }
 
-  writeFileSync(
-    join(OUT_DIR, "materialdesignicons-subset.css"),
-    buildFallbackCss(),
-  );
+  writeFileSync(join(OUT_DIR, "materialdesignicons-subset.css"), buildFallbackCss());
 
   const size = existsSync(MDI_WOFF2_PATH) ? statSync(MDI_WOFF2_PATH).size : 0;
-  console.warn(
-    `⚠️  Fallback complete: using full font (${(size / 1024).toFixed(1)} KB woff2)`,
-  );
+  console.warn(`⚠️  Fallback complete: using full font (${(size / 1024).toFixed(1)} KB woff2)`);
 }
 
 // ── Exported entry point ────────────────────────────────────────────────────
@@ -245,14 +210,10 @@ export async function runMdiSubset() {
   try {
     // Pre-checks
     if (!existsSync(MDI_CSS_PATH)) {
-      throw new Error(
-        `@mdi/font CSS not found at ${MDI_CSS_PATH}. Run 'pnpm install' first.`,
-      );
+      throw new Error(`@mdi/font CSS not found at ${MDI_CSS_PATH}. Run 'pnpm install' first.`);
     }
     if (!existsSync(MDI_TTF_PATH)) {
-      throw new Error(
-        `@mdi/font TTF not found at ${MDI_TTF_PATH}. Run 'pnpm install' first.`,
-      );
+      throw new Error(`@mdi/font TTF not found at ${MDI_TTF_PATH}. Run 'pnpm install' first.`);
     }
 
     // Dynamic import subset-font (may not be installed in all environments)
@@ -260,52 +221,31 @@ export async function runMdiSubset() {
     try {
       subsetFont = (await import("subset-font")).default;
     } catch (e) {
-      throw new Error(
-        `subset-font package not available: ${e.message}. Run 'pnpm install' first.`,
-      );
+      throw new Error(`subset-font package not available: ${e.message}. Run 'pnpm install' first.`);
     }
 
     // Step 1: Scan source files for mdi-* icon names
     const sourceFiles = collectFiles(SRC, [".vue", ".ts", ".js"]);
     const usedIcons = scanUsedIcons(sourceFiles);
     if (usedIcons.size === 0) {
-      throw new Error(
-        "No mdi-* icons found in source files. Something is wrong with scanning.",
-      );
+      throw new Error("No mdi-* icons found in source files. Something is wrong with scanning.");
     }
-    console.log(
-      `✅ Found ${usedIcons.size} unique mdi-* icons in source files`,
-    );
 
     // Step 2: Parse @mdi/font CSS to get codepoints for each icon
     const mdiCSS = readFileSync(MDI_CSS_PATH, "utf-8");
     const iconMap = parseIconCodepoints(mdiCSS);
     if (iconMap.size === 0) {
-      throw new Error(
-        "Could not parse any icon definitions from @mdi/font CSS. Format may have changed.",
-      );
+      throw new Error("Could not parse any icon definitions from @mdi/font CSS. Format may have changed.");
     }
-    console.log(`📦 MDI font CSS contains ${iconMap.size} icon definitions`);
 
     // Step 3: Resolve codepoints for used icons
-    const { resolvedIcons, missingIcons, subsetChars } = resolveUsedIcons(
-      usedIcons,
-      iconMap,
-    );
+    const { resolvedIcons, missingIcons, subsetChars } = resolveUsedIcons(usedIcons, iconMap);
     if (missingIcons.length > 0) {
-      console.warn(
-        `⚠️  ${missingIcons.length} icons not found in MDI CSS:`,
-        missingIcons.join(", "),
-      );
+      console.warn(`⚠️  ${missingIcons.length} icons not found in MDI CSS:`, missingIcons.join(", "));
     }
     if (resolvedIcons.length === 0) {
-      throw new Error(
-        "No icon codepoints could be resolved. Icon name format may have changed.",
-      );
+      throw new Error("No icon codepoints could be resolved. Icon name format may have changed.");
     }
-    console.log(
-      `🔍 Resolved ${resolvedIcons.length} codepoints for subsetting`,
-    );
 
     // Add space character
     subsetChars.push(" ");
@@ -313,21 +253,15 @@ export async function runMdiSubset() {
 
     // Step 4: Subset font with subset-font (pure JS/WASM)
     const fontBuffer = readFileSync(MDI_TTF_PATH);
-
-    console.log(`🔧 Subsetting font to woff2...`);
     const woff2Buffer = await subsetFont(fontBuffer, subsetText, {
       targetFormat: "woff2",
     });
-
-    console.log(`🔧 Subsetting font to woff...`);
     const woffBuffer = await subsetFont(fontBuffer, subsetText, {
       targetFormat: "woff",
     });
 
     if (woff2Buffer.length === 0 || woffBuffer.length === 0) {
-      throw new Error(
-        "subset-font produced empty output. Font file may be corrupted.",
-      );
+      throw new Error("subset-font produced empty output. Font file may be corrupted.");
     }
 
     const outWoff2 = join(OUT_DIR, "materialdesignicons-webfont-subset.woff2");
@@ -369,28 +303,15 @@ export async function runMdiSubset() {
     if (utilityCss) {
       css += `/* Utility classes (extracted from @mdi/font) */\n${utilityCss}\n`;
     } else {
-      console.warn(
-        "⚠️  Could not find MDI utility classes in original CSS, skipping",
-      );
+      console.warn("⚠️  Could not find MDI utility classes in original CSS, skipping");
     }
 
     const outCSS = join(OUT_DIR, "materialdesignicons-subset.css");
     writeFileSync(outCSS, css);
 
     // Report
-    const origSize = statSync(MDI_TTF_PATH).size;
-    const subsetWoff2Size = woff2Buffer.length;
-    console.log(`\n📊 Results:`);
-    console.log(`   Original TTF font: ${(origSize / 1024).toFixed(1)} KB`);
-    console.log(
-      `   Subset WOFF2:      ${(subsetWoff2Size / 1024).toFixed(1)} KB`,
-    );
-    console.log(
-      `   Reduction:         ${((1 - subsetWoff2Size / origSize) * 100).toFixed(1)}%`,
-    );
-    console.log(`   Icons included:    ${resolvedIcons.length}`);
-    console.log(`   CSS file:          ${outCSS}`);
-    console.log(`\n✅ MDI font subset generated successfully!`);
+    const _origSize = statSync(MDI_TTF_PATH).size;
+    const _subsetWoff2Size = woff2Buffer.length;
   } catch (err) {
     // Fallback: any failure → use original full font so build never breaks
     try {
@@ -405,10 +326,7 @@ export async function runMdiSubset() {
 
 // ── CLI entry point: allows running directly via `node scripts/subset-mdi-font.mjs` ──
 
-if (
-  import.meta.url.startsWith("file:") &&
-  process.argv[1] === fileURLToPath(import.meta.url)
-) {
+if (import.meta.url.startsWith("file:") && process.argv[1] === fileURLToPath(import.meta.url)) {
   runMdiSubset().catch((err) => {
     console.error(err);
     process.exit(1);

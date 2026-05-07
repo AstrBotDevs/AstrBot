@@ -74,9 +74,8 @@ class TestMessageConstruction:
 
     def test_invalid_role_raises(self):
         """An invalid role is rejected."""
-        invalid_role: str = "invalid_role"
         with pytest.raises(ValidationError):
-            Message(role=invalid_role, content="hi")
+            Message(role="invalid_role", content="hi")  # type: ignore[arg-type]
 
 
 class TestCheckpointMessage:

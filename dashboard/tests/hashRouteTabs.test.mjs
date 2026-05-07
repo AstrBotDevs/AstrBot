@@ -1,8 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-
-import * as hashRouteTabs from "../src/utils/hashRouteTabs.mjs";
+import test from "node:test";
 import { EXTENSION_ROUTE_NAME } from "../src/router/routeConstants.mjs";
+import * as hashRouteTabs from "../src/utils/hashRouteTabs.mjs";
 
 const { createTabRouteLocation, getValidHashTab } = hashRouteTabs;
 
@@ -22,10 +21,7 @@ test("getValidHashTab rejects empty and unknown hashes", () => {
 test("getValidHashTab uses the last hash segment when multiple hashes are present", () => {
   const validTabs = ["installed", "market", "mcp"];
 
-  assert.equal(
-    getValidHashTab("#/extension#foo#installed", validTabs),
-    "installed",
-  );
+  assert.equal(getValidHashTab("#/extension#foo#installed", validTabs), "installed");
 });
 
 test("createTabRouteLocation preserves the current path and query", () => {
