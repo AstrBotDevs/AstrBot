@@ -104,6 +104,28 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             ):
                 response.raise_for_status()
 
+                # MiniMax returns a JSON error body (not SSE) for cases like:
+                #   - quota / rate limit exceeded
+                #   - invalid voice_id / model
+                #   - API key issues
+                # Detect by Content-Type and surface the actual API error so callers
+                # see the real status_code / status_msg instead of a confusing
+                # parsing failure later in the SSE loop.
+                content_type = response.headers.get("Content-Type", "")
+                if "text/event-stream" not in content_type:
+                    body = await response.text()
+                    try:
+                        err_data = json.loads(body)
+                        base_resp = err_data.get("base_resp", {})
+                        err_msg = base_resp.get("status_msg", body[:200])
+                        err_code = base_resp.get("status_code", "unknown")
+                    except json.JSONDecodeError:
+                        err_msg = body[:200]
+                        err_code = "unknown"
+                    raise RuntimeError(
+                        f"MiniMax TTS API error (code={err_code}): {err_msg}"
+                    )
+
                 buffer = b""
                 while True:
                     chunk = await response.content.read(8192)
