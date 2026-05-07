@@ -25,6 +25,14 @@ def _is_within_directory(directory: str, path: str) -> bool:
         return False
 
 
+def _safe_join_within(root: str, *parts: str) -> str:
+    root_norm = os.path.normpath(root)
+    path = os.path.normpath(os.path.join(root_norm, *parts))
+    if not _is_within_directory(root_norm, path):
+        raise ValueError("path escapes root directory")
+    return path
+
+
 class ReleaseInfo:
     version: str
     published_at: str
@@ -251,24 +259,13 @@ class RepoZipUpdator:
             z.extractall(target_dir)
         logger.debug(f"解压文件完成: {zip_path}")
 
-        self._finalize_extracted_archive(
-            zip_path,
-            target_dir,
-            update_dir,
-            extract_log=logger.debug,
-            cleanup_warning_template="删除更新文件失败，可以手动删除 {zip_path}{suffix}",
-            cleanup_log_template="删除临时更新文件: {zip_path}{suffix}",
-        )
+        self._finalize_extracted_archive(zip_path, target_dir, update_dir)
 
     def _finalize_extracted_archive(
         self,
         zip_path: str,
         target_dir: str,
         update_dir: str,
-        *,
-        extract_log,
-        cleanup_log_template: str,
-        cleanup_warning_template: str,
     ) -> None:
         target_root_path = os.path.normpath(target_dir)
 
@@ -276,23 +273,15 @@ class RepoZipUpdator:
             try:
                 os.remove(zip_path)
             except Exception:
-                logger.warning(
-                    cleanup_warning_template.format(zip_path=zip_path, suffix="")
-                )
+                logger.warning(f"删除更新文件失败，可以手动删除 {zip_path}")
             return
 
-        update_root_path = os.path.normpath(os.path.join(target_root_path, update_dir))
-        if not _is_within_directory(target_root_path, update_root_path):
-            raise ValueError("update root escapes target directory")
+        update_root_path = _safe_join_within(target_root_path, update_dir)
 
         files = os.listdir(update_root_path)
         for f in files:
-            update_item_path = os.path.normpath(os.path.join(update_root_path, f))
-            target_item_path = os.path.normpath(os.path.join(target_root_path, f))
-            if not _is_within_directory(update_root_path, update_item_path):
-                raise ValueError("update item escapes extracted archive root")
-            if not _is_within_directory(target_root_path, target_item_path):
-                raise ValueError("target item escapes target directory")
+            update_item_path = _safe_join_within(update_root_path, f)
+            target_item_path = _safe_join_within(target_root_path, f)
             if os.path.isdir(update_item_path):
                 if os.path.exists(target_item_path):
                     shutil.rmtree(target_item_path, onerror=on_error)
@@ -301,20 +290,12 @@ class RepoZipUpdator:
             shutil.move(update_item_path, target_root_path)
 
         try:
-            extract_log(
-                cleanup_log_template.format(
-                    zip_path=zip_path,
-                    suffix=f" 和 {update_root_path}",
-                )
-            )
+            logger.debug(f"删除临时更新文件: {zip_path} 和 {update_root_path}")
             shutil.rmtree(update_root_path, onerror=on_error)
             os.remove(zip_path)
         except Exception:
             logger.warning(
-                cleanup_warning_template.format(
-                    zip_path=zip_path,
-                    suffix=f" 和 {update_root_path}",
-                ),
+                f"删除更新文件失败，可以手动删除 {zip_path} 和 {update_root_path}"
             )
 
     def format_name(self, name: str) -> str:

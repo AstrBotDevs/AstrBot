@@ -573,8 +573,8 @@ def test_plugin_unzip_file_normalizes_windows_extended_length_paths(
 @pytest.mark.parametrize(
     ("archive_root", "expected_error"),
     [
-        ("../escape/", "update root escapes target directory"),
-        ("C:/escape", "update root escapes target directory"),
+        ("../escape/", "path escapes root directory"),
+        ("C:/escape", "path escapes root directory"),
     ],
 )
 def test_repo_unzip_file_rejects_archive_roots_outside_target_dir(

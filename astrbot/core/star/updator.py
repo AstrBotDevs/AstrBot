@@ -77,11 +77,4 @@ class PluginUpdator(RepoZipUpdator):
             update_dir = normalize_archive_root_dir(z.namelist()[0])
             z.extractall(target_dir)
 
-        self._finalize_extracted_archive(
-            zip_path,
-            target_dir,
-            update_dir,
-            extract_log=logger.info,
-            cleanup_log_template="Removing temporary files: {zip_path}{suffix}",
-            cleanup_warning_template="Failed to remove update files; you can manually delete {zip_path}{suffix}",
-        )
+        self._finalize_extracted_archive(zip_path, target_dir, update_dir)
