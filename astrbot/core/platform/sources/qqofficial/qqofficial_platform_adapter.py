@@ -132,29 +132,36 @@ class botClient(Client):
         )
         self.platform.remember_session_scene(abm.session_id, scene)
         # interaction 不是消息，不更新会话级 msg_id 缓存
-        self._commit(abm, update_session_msg_id=False)
-        asyncio.create_task(self._ack_interaction(interaction))
+        event = self._commit(abm, update_session_msg_id=False)
+        asyncio.create_task(self._fallback_ack_interaction(event))
 
-    async def _ack_interaction(
-        self, interaction: botpy.interaction.Interaction
+    async def _fallback_ack_interaction(
+        self, event: QQOfficialMessageEvent
     ) -> None:
-        try:
-            await self.api.on_interaction_result(interaction.id, 0)
-        except Exception as e:
-            logger.warning(f"[QQOfficial] interaction ack 失败: {e}")
+        """等待插件主动 ack；超时则用 code 0 兜底，避免 QQ 端转圈。
 
-    def _commit(self, abm: AstrBotMessage, update_session_msg_id: bool = True) -> None:
+        QQ 官方平台要求 interaction 在 ~3s 内 ack。"""
+        try:
+            await asyncio.wait_for(event._interaction_ack_done.wait(), timeout=2.5)
+        except asyncio.TimeoutError:
+            pass
+        if not event._interaction_acked:
+            await event.ack_interaction(0)
+
+    def _commit(
+        self, abm: AstrBotMessage, update_session_msg_id: bool = True
+    ) -> QQOfficialMessageEvent:
         if update_session_msg_id:
             self.platform.remember_session_message_id(abm.session_id, abm.message_id)
-        self.platform.commit_event(
-            QQOfficialMessageEvent(
-                abm.message_str,
-                abm,
-                self.platform.meta(),
-                abm.session_id,
-                self.platform.client,
-            ),
+        event = QQOfficialMessageEvent(
+            abm.message_str,
+            abm,
+            self.platform.meta(),
+            abm.session_id,
+            self.platform.client,
         )
+        self.platform.commit_event(event)
+        return event
 
     async def bot_connect(self, session) -> None:
         logger.info("[QQOfficial] Websocket session starting.")

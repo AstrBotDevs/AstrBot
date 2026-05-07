@@ -299,6 +299,16 @@ class AstrMessageEvent(abc.ABC):
         默认实现为空，由具体平台按需重写。
         """
 
+    async def ack_interaction(self, code: int = 0) -> None:
+        """对平台交互回调（如按钮点击）进行 ack。
+
+        默认实现为空，由具体平台按需重写。
+
+        code 的语义由各平台自行定义。
+        QQ 官方:
+        0=成功, 1=操作失败, 2=操作频繁, 3=重复操作, 4=没有权限, 5=仅管理员。
+        """
+
     async def _pre_send(self) -> None:
         """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
 

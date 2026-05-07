@@ -93,6 +93,29 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None
+        self._interaction_acked = False
+        self._interaction_ack_done = asyncio.Event()
+
+    async def ack_interaction(self, code: int = 0) -> None:
+        """向 QQ 官方上报按钮交互结果。
+
+        code: 0=成功, 1=操作失败, 2=操作频繁, 3=重复操作, 4=没有权限, 5=仅管理员。
+
+        每个 interaction 只会真正上报一次，重复调用会被忽略。
+        非 interaction 事件调用本方法是 no-op。
+        """
+        if self._interaction_acked:
+            return
+        interaction = self.message_obj.raw_message
+        if not isinstance(interaction, botpy.interaction.Interaction):
+            return
+        self._interaction_acked = True
+        try:
+            await self.bot.api.on_interaction_result(interaction.id, code)
+        except Exception as e:
+            logger.warning(f"[QQOfficial] interaction ack 失败: {e}")
+        finally:
+            self._interaction_ack_done.set()
 
     async def send(self, message: MessageChain) -> None:
         self.send_buffer = message
