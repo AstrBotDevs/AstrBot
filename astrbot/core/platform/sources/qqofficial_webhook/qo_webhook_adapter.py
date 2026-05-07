@@ -74,6 +74,10 @@ class botClient(Client):
         self.platform.remember_session_scene(abm.session_id, "friend")
         self._commit(abm)
 
+    # interaction_id -> 等待 ack 的事件对象。webhook 模式下 ack code 必须通过 HTTP 响应体返回
+    # 因此 webhook 服务会在响应前从这里取出事件等待 ack。
+    pending_interactions: dict[str, "QQOfficialWebhookMessageEvent"] = {}
+
     # 收到按钮点击回调
     async def on_interaction_create(
         self, interaction: botpy.interaction.Interaction
@@ -89,29 +93,25 @@ class botClient(Client):
         )
         self.platform.remember_session_scene(abm.session_id, scene)
         # interaction 不是消息，不更新会话级 msg_id 缓存（避免污染主动推送）
-        self._commit(abm, update_session_msg_id=False)
-        asyncio.create_task(self._ack_interaction(interaction))
+        event = self._commit(abm, update_session_msg_id=False)
+        # 注册到 pending 表，由 webhook 服务的 handle_callback 在响应前取出
+        if interaction.id:
+            botClient.pending_interactions[interaction.id] = event
 
-    async def _ack_interaction(
-        self, interaction: botpy.interaction.Interaction
-    ) -> None:
-        try:
-            await self.api.on_interaction_result(interaction.id, 0)
-        except Exception as e:
-            logger.warning(f"[QQOfficial] interaction ack 失败: {e}")
-
-    def _commit(self, abm: AstrBotMessage, update_session_msg_id: bool = True) -> None:
+    def _commit(
+        self, abm: AstrBotMessage, update_session_msg_id: bool = True
+    ) -> QQOfficialWebhookMessageEvent:
         if update_session_msg_id:
             self.platform.remember_session_message_id(abm.session_id, abm.message_id)
-        self.platform.commit_event(
-            QQOfficialWebhookMessageEvent(
-                abm.message_str,
-                abm,
-                self.platform.meta(),
-                abm.session_id,
-                self,
-            )
+        event = QQOfficialWebhookMessageEvent(
+            abm.message_str,
+            abm,
+            self.platform.meta(),
+            abm.session_id,
+            self,
         )
+        self.platform.commit_event(event)
+        return event
 
 
 @register_platform_adapter("qq_official_webhook", "QQ 机器人官方 API 适配器(Webhook)")

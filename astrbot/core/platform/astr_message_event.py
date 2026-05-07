@@ -95,6 +95,9 @@ class AstrMessageEvent(abc.ABC):
         self.plugins_name: list[str] | None = None
         """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
 
+        self._pipeline_finished = asyncio.Event()
+        """事件的 pipeline 处理完毕（包含异常退出）时触发。供需要"等待事件处理完成"的适配器使用。"""
+
         # back_compability
         self.platform = platform_meta
 

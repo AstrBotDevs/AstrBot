@@ -95,6 +95,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self.send_buffer = None
         self._interaction_acked = False
         self._interaction_ack_done = asyncio.Event()
+        self._interaction_ack_code: int = 0
 
     async def ack_interaction(self, code: int = 0) -> None:
         """向 QQ 官方上报按钮交互结果。
@@ -105,11 +106,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         非 interaction 事件调用本方法是 no-op。
         """
         if self._interaction_acked:
+            logger.debug(f"[QQOfficial] ack_interaction 跳过(已 ack)，请求 code={code}")
             return
         interaction = self.message_obj.raw_message
         if not isinstance(interaction, botpy.interaction.Interaction):
             return
         self._interaction_acked = True
+        self._interaction_ack_code = code
+        logger.debug(
+            f"[QQOfficial] ack_interaction 发送 code={code} id={interaction.id}"
+        )
         try:
             await self.bot.api.on_interaction_result(interaction.id, code)
         except Exception as e:

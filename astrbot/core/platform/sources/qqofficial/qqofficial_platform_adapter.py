@@ -135,16 +135,24 @@ class botClient(Client):
         event = self._commit(abm, update_session_msg_id=False)
         asyncio.create_task(self._fallback_ack_interaction(event))
 
-    async def _fallback_ack_interaction(
-        self, event: QQOfficialMessageEvent
-    ) -> None:
-        """等待插件主动 ack；超时则用 code 0 兜底，避免 QQ 端转圈。
-
-        QQ 官方平台要求 interaction 在 ~3s 内 ack。"""
+    async def _fallback_ack_interaction(self, event: QQOfficialMessageEvent) -> None:
+        """等待下面任一条件即决定是否兜底：
+        - 插件主动 ack：什么都不做（plugin 已发 PUT code N）
+        - pipeline 处理完毕仍未 ack：发 PUT code 0（避免 QQ 客户端等待）
+        - 0.5s 超时：发 PUT code 0 兜底
+        """
+        ack_task = asyncio.create_task(event._interaction_ack_done.wait())
+        pipeline_task = asyncio.create_task(event._pipeline_finished.wait())
         try:
-            await asyncio.wait_for(event._interaction_ack_done.wait(), timeout=2.5)
-        except asyncio.TimeoutError:
-            pass
+            done, pending = await asyncio.wait(
+                {ack_task, pipeline_task},
+                return_when=asyncio.FIRST_COMPLETED,
+                timeout=0.5,
+            )
+            for task in pending:
+                task.cancel()
+        except Exception as e:
+            logger.warning(f"[QQOfficial] 等待 interaction ack 异常: {e}")
         if not event._interaction_acked:
             await event.ack_interaction(0)
 

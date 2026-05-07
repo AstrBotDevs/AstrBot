@@ -127,15 +127,71 @@ class QQOfficialWebhook:
             self._seen_event_ids[event_id] = now
 
         if event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
-            event = msg["t"].lower()
+            event_lower = msg["t"].lower()
             try:
-                func = self._connection.parser[event]
+                func = self._connection.parser[event_lower]
             except KeyError:
-                logger.error("_parser unknown event %s.", event)
-            else:
-                func(msg)
+                logger.error("_parser unknown event %s.", event_lower)
+                return {"opcode": 12}
+            func(msg)
+
+            # interaction_create 在 webhook 模式下 ack code 必须放进 HTTP
+            # 响应体（PUT /interactions/{id} 在 webhook 模式下会被 QQ 忽略）。
+            if event_lower == "interaction_create":
+                return await self._wait_interaction_ack(cast(dict, data))
 
         return {"opcode": 12}
+
+    async def _wait_interaction_ack(self, data: dict) -> dict:
+        """等待插件调用 event.ack_interaction(code)，把 code 放进响应体。
+
+        botClient.on_interaction_create 在创建事件后会立刻把它注册到
+        ``botClient.pending_interactions``。这里先轮询拿到事件对象，再
+        等待 ``_interaction_ack_done``，最后把 code 顶层返回。
+        """
+        from .qo_webhook_adapter import botClient as _botClient
+
+        interaction_id = data.get("id") or ""
+        if not interaction_id:
+            return {"code": 0}
+
+        # 等事件对象创建（on_interaction_create 是异步任务，可能尚未运行）
+        event_obj = None
+        for _ in range(50):
+            event_obj = _botClient.pending_interactions.get(interaction_id)
+            if event_obj is not None:
+                break
+            await asyncio.sleep(0.01)
+        if event_obj is None:
+            logger.warning(
+                f"[QQOfficial-Webhook] 未找到 interaction 事件对象 id={interaction_id}"
+            )
+            return {"code": 0}
+
+        #   等到下面任一条件即响应：
+        #   - 插件主动 ack（用插件指定的 code 响应）
+        #   - pipeline 处理完毕但插件未 ack（用 code=0 响应，与改动前行为对齐）
+        #   - 0.5s 超时兜底（超过会显示『三方未响应』）
+        ack_task = asyncio.create_task(event_obj._interaction_ack_done.wait())
+        pipeline_task = asyncio.create_task(event_obj._pipeline_finished.wait())
+        try:
+            done, pending = await asyncio.wait(
+                {ack_task, pipeline_task},
+                return_when=asyncio.FIRST_COMPLETED,
+                timeout=0.5,
+            )
+            for task in pending:
+                task.cancel()
+            if not done:
+                logger.info(
+                    f"[QQOfficial-Webhook] 等待 ack/pipeline 超时，使用 code=0 兜底 id={interaction_id}"
+                )
+        except Exception as e:
+            logger.warning(f"[QQOfficial-Webhook] 等待 interaction ack 异常: {e}")
+
+        code = event_obj._interaction_ack_code if event_obj._interaction_acked else 0
+        _botClient.pending_interactions.pop(interaction_id, None)
+        return {"code": code}
 
     async def start_polling(self) -> None:
         logger.info(
