@@ -72,6 +72,27 @@ class FakeFilesystem:
         return [path]
 
 
+class FakeFiles:
+    def __init__(self):
+        self.uploads = []
+        self.byte_writes = []
+        self.text_writes = []
+        self.text_reads = {}
+
+    async def upload(self, local_path: str, remote_path: str):
+        self.uploads.append((local_path, remote_path))
+
+    async def write_bytes(self, path: str, content: bytes):
+        self.byte_writes.append((path, content))
+
+    async def write_text(self, path: str, content: str):
+        self.text_writes.append((path, content))
+        self.text_reads[path] = content
+
+    async def read_text(self, path: str):
+        return self.text_reads[path]
+
+
 class FakeMouse:
     def __init__(self):
         self.clicks = []
@@ -537,6 +558,41 @@ async def test_cua_shell_and_python_accept_sync_sdk_methods():
 
 
 @pytest.mark.asyncio
+async def test_cua_filesystem_prefers_native_files_interface():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = SandboxWithoutFilesystem()
+    sandbox.files = FakeFiles()
+
+    fs = CuaFileSystemComponent(sandbox)
+    await fs.write_file("hello.txt", "hello")
+    result = await fs.read_file("hello.txt")
+
+    assert sandbox.files.text_writes == [("hello.txt", "hello")]
+    assert result["success"] is True
+    assert result["content"] == "hello"
+    assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
+async def test_cua_filesystem_uses_legacy_filesystem_when_files_lacks_method():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = SandboxWithoutFilesystem()
+    sandbox.files = type("UploadOnlyFiles", (), {"upload": FakeFiles().upload})()
+    sandbox.filesystem = FakeFilesystem()
+
+    fs = CuaFileSystemComponent(sandbox)
+    await fs.write_file("hello.txt", "hello")
+    result = await fs.read_file("hello.txt")
+
+    assert sandbox.filesystem.files == {"hello.txt": "hello"}
+    assert result["success"] is True
+    assert result["content"] == "hello"
+    assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
 async def test_cua_shell_normalizes_output_returncode_shape():
     from astrbot.core.computer.booters.cua import CuaShellComponent
 
@@ -677,6 +733,112 @@ async def test_cua_upload_file_fallback_rejects_non_posix_os_type(tmp_path):
     assert result["success"] is False
     assert "filesystem shell fallback is only supported for POSIX" in result["error"]
     assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
+async def test_cua_upload_file_prefers_native_files_upload(tmp_path):
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    local_file = tmp_path / "upload.txt"
+    local_file.write_text("hello", encoding="utf-8")
+    sandbox = SandboxWithoutFilesystem()
+    sandbox.files = FakeFiles()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    result = await booter.upload_file(str(local_file), "remote.txt")
+
+    assert result["success"] is True
+    assert sandbox.files.uploads == [(str(local_file), "remote.txt")]
+    assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
+async def test_cua_upload_file_uses_native_write_bytes_when_upload_missing(tmp_path):
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    class FilesWithoutUpload:
+        def __init__(self):
+            self.byte_writes = []
+
+        async def write_bytes(self, path: str, content: bytes):
+            self.byte_writes.append((path, content))
+
+    local_file = tmp_path / "upload.txt"
+    local_file.write_bytes(b"hello-bytes")
+    sandbox = SandboxWithoutFilesystem()
+    sandbox.files = FilesWithoutUpload()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    result = await booter.upload_file(str(local_file), "remote.txt")
+
+    assert result["success"] is True
+    assert sandbox.files.byte_writes == [("remote.txt", b"hello-bytes")]
+    assert sandbox.shell.commands == []
+
+
+@pytest.mark.asyncio
+async def test_cua_upload_file_propagates_native_upload_failure_result(tmp_path):
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    class FailingFilesUpload:
+        async def upload(self, local_path: str, remote_path: str):
+            return {"success": False, "error": "disk full"}
+
+    local_file = tmp_path / "upload.txt"
+    local_file.write_text("hello", encoding="utf-8")
+    sandbox = SandboxWithoutFilesystem()
+    sandbox.files = FailingFilesUpload()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    result = await booter.upload_file(str(local_file), "remote.txt")
+
+    assert result["success"] is False
+    assert result["error"] == "disk full"
 
 
 @pytest.mark.asyncio
