@@ -216,6 +216,13 @@ class TestAstrBotConfigLoad:
             DEFAULT_DASHBOARD_PASSWORD,
         )
 
+    def test_legacy_md5_password_requires_plain_password(self):
+        """Test that a leaked legacy MD5 hash cannot be used as the login password."""
+        legacy_hash = "77b90590a8945a7d36c963981a307dc9"
+
+        assert verify_dashboard_password(legacy_hash, DEFAULT_DASHBOARD_PASSWORD)
+        assert not verify_dashboard_password(legacy_hash, legacy_hash)
+
 
 class TestConfigValidation:
     """Tests for config validation and integrity checking."""
