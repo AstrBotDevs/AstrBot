@@ -300,6 +300,20 @@ class AstrBotDashboard:
             logger.info("Initialized random JWT secret for dashboard.")
         self._jwt_secret = self.config["dashboard"]["jwt_secret"]
 
+    def _build_dashboard_credentials_display(self) -> str:
+        username = self.config["dashboard"].get("username", "astrbot")
+        generated_password = getattr(self.config, "_generated_dashboard_password", None)
+        if not generated_password:
+            return f"   ➜  用户名: {username}\n ✨✨✨\n"
+
+        credentials_display = (
+            f"   ➜  初始用户名: {username}\n"
+            f"   ➜  初始密码: {generated_password}\n"
+            "   ➜  可以在登录后修改密码\n ✨✨✨\n"
+        )
+        object.__setattr__(self.config, "_generated_dashboard_password", None)
+        return credentials_display
+
     @staticmethod
     def _resolve_dashboard_ssl_config(
         ssl_config: dict,
@@ -419,7 +433,7 @@ class AstrBotDashboard:
         parts.append(f"   ➜  本地: {scheme}://localhost:{port}\n")
         for ip in ip_addr:
             parts.append(f"   ➜  网络: {scheme}://{ip}:{port}\n")
-        parts.append("   ➜  默认用户名和密码: astrbot\n ✨✨✨\n")
+        parts.append(self._build_dashboard_credentials_display())
         display = "".join(parts)
 
         if not ip_addr:

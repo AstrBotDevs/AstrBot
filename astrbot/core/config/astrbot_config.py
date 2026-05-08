@@ -5,7 +5,8 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
-    normalize_dashboard_password_hash,
+    generate_dashboard_password,
+    hash_dashboard_password,
 )
 
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
@@ -67,7 +68,13 @@ class AstrBotConfig(dict):
             and isinstance(conf["dashboard"], dict)
             and not conf["dashboard"].get("password")
         ):
-            conf["dashboard"]["password"] = normalize_dashboard_password_hash("")
+            generated_password = generate_dashboard_password()
+            conf["dashboard"]["password"] = hash_dashboard_password(generated_password)
+            object.__setattr__(
+                self,
+                "_generated_dashboard_password",
+                generated_password,
+            )
             has_new = True
         self.update(conf)
         if has_new:

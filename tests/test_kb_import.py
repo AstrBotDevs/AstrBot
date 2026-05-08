@@ -10,7 +10,10 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
+from astrbot.core.utils.auth_password import hash_dashboard_password
 from astrbot.dashboard.server import AstrBotDashboard
+
+_TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -44,6 +47,21 @@ async def core_lifecycle_td(tmp_path_factory):
 
     # kb_manager.get_kb.return_value = kb_helper # Removed this line as it's handled above
     core_lifecycle.kb_manager = kb_manager
+    generated_password = getattr(
+        core_lifecycle.astrbot_config,
+        "_generated_dashboard_password",
+        None,
+    )
+    dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
+    if not generated_password:
+        core_lifecycle.astrbot_config["dashboard"]["password"] = (
+            hash_dashboard_password(dashboard_password)
+        )
+    object.__setattr__(
+        core_lifecycle,
+        "_dashboard_plain_password",
+        dashboard_password,
+    )
 
     try:
         yield core_lifecycle
@@ -65,6 +83,9 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
 
 
 def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
+    generated_password = getattr(core_lifecycle_td, "_dashboard_plain_password", None)
+    if generated_password:
+        return generated_password
     password = core_lifecycle_td.astrbot_config["dashboard"]["password"]
     if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
         return "astrbot"

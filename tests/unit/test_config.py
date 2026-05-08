@@ -8,6 +8,11 @@ import pytest
 from astrbot.core.config.astrbot_config import AstrBotConfig, RateLimitStrategy
 from astrbot.core.config.default import DEFAULT_VALUE_MAP
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
+from astrbot.core.utils.auth_password import (
+    DEFAULT_DASHBOARD_PASSWORD,
+    validate_dashboard_password,
+    verify_dashboard_password,
+)
 
 
 @pytest.fixture
@@ -184,6 +189,32 @@ class TestAstrBotConfigLoad:
         # Now it exists
         assert config2.check_exist() is True
         assert os.path.exists(non_existent_path)
+
+    def test_empty_dashboard_password_generates_random_password(self, temp_config_path):
+        """Test that an empty dashboard password is replaced with a random password."""
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+            },
+        }
+
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+
+        generated_password = getattr(config, "_generated_dashboard_password", None)
+        assert isinstance(generated_password, str)
+        validate_dashboard_password(generated_password)
+        assert verify_dashboard_password(
+            config["dashboard"]["password"],
+            generated_password,
+        )
+        assert not verify_dashboard_password(
+            config["dashboard"]["password"],
+            DEFAULT_DASHBOARD_PASSWORD,
+        )
 
 
 class TestConfigValidation:

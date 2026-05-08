@@ -18,6 +18,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.utils.auth_password import hash_dashboard_password
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
@@ -26,6 +27,8 @@ from tests.fixtures.helpers import (
     create_mock_updater_install,
     create_mock_updater_update,
 )
+
+_TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -36,6 +39,21 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
+    generated_password = getattr(
+        core_lifecycle.astrbot_config,
+        "_generated_dashboard_password",
+        None,
+    )
+    dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
+    if not generated_password:
+        core_lifecycle.astrbot_config["dashboard"]["password"] = (
+            hash_dashboard_password(dashboard_password)
+        )
+    object.__setattr__(
+        core_lifecycle,
+        "_dashboard_plain_password",
+        dashboard_password,
+    )
     try:
         yield core_lifecycle
     finally:
@@ -60,6 +78,9 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
 
 def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
     """Return a login password compatible with both hashed and plain defaults."""
+    generated_password = getattr(core_lifecycle_td, "_dashboard_plain_password", None)
+    if generated_password:
+        return generated_password
     password = core_lifecycle_td.astrbot_config["dashboard"]["password"]
     if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
         return "astrbot"

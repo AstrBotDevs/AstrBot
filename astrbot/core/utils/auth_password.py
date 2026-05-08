@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import re
 import secrets
+import string
 from typing import Any
 
 _PBKDF2_ITERATIONS = 600_000
@@ -12,7 +13,24 @@ _PBKDF2_ALGORITHM = "pbkdf2_sha256"
 _PBKDF2_FORMAT = f"{_PBKDF2_ALGORITHM}$"
 _LEGACY_MD5_LENGTH = 32
 _DASHBOARD_PASSWORD_MIN_LENGTH = 12
+_GENERATED_DASHBOARD_PASSWORD_LENGTH = 24
 DEFAULT_DASHBOARD_PASSWORD = "astrbot"
+
+
+def generate_dashboard_password() -> str:
+    """Generate a strong dashboard password that satisfies the complexity policy."""
+    alphabet = string.ascii_letters + string.digits
+    password_chars = [
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.digits),
+        *(
+            secrets.choice(alphabet)
+            for _ in range(_GENERATED_DASHBOARD_PASSWORD_LENGTH - 3)
+        ),
+    ]
+    secrets.SystemRandom().shuffle(password_chars)
+    return "".join(password_chars)
 
 
 def hash_dashboard_password(raw_password: str) -> str:
@@ -45,13 +63,6 @@ def validate_dashboard_password(raw_password: str) -> None:
         raise ValueError("Password must include at least one lowercase letter")
     if not re.search(r"\d", raw_password):
         raise ValueError("Password must include at least one digit")
-
-
-def normalize_dashboard_password_hash(stored_password: str) -> str:
-    """Ensure dashboard password has a value, fallback to default dashboard password hash."""
-    if not stored_password:
-        return hash_dashboard_password(DEFAULT_DASHBOARD_PASSWORD)
-    return stored_password
 
 
 def _is_legacy_md5_hash(stored: str) -> bool:
