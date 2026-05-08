@@ -632,6 +632,71 @@ async def test_switch_current_rejects_non_running_sandbox(monkeypatch, tmp_path)
     assert registry.get_current_sandbox_id("session-a") is None
 
 
+def test_switch_current_releases_previous_current_sandbox_lease(monkeypatch, tmp_path):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+
+    class FakeBooter:
+        async def available(self):
+            return True
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    for sandbox_id in ("sb-old", "sb-new"):
+        registry.upsert_sandbox(
+            sandbox_id=sandbox_id,
+            sandbox_name=sandbox_id,
+            booter_type="cua",
+            provider="cua",
+            managed=True,
+            created_by_astrbot=True,
+            owner_user_id="session-a",
+            owner_session_id="session-a",
+            controller_user_id="session-a" if sandbox_id == "sb-old" else None,
+            controller_session_id="session-a" if sandbox_id == "sb-old" else None,
+            lease_expires_at=time.time() + 60 if sandbox_id == "sb-old" else None,
+            connect_info={},
+        )
+    registry.set_current_sandbox_id("session-a", "sb-old")
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+    computer_client.session_booter["sb-old"] = FakeBooter()
+    computer_client.session_booter["sb-new"] = FakeBooter()
+
+    computer_client.switch_current_cua_sandbox("session-a", "sb-new")
+
+    old_record = registry.get_sandbox("sb-old")
+    new_record = registry.get_sandbox("sb-new")
+    assert old_record["controller_session_id"] is None
+    assert old_record["lease_expires_at"] is None
+    assert new_record["controller_session_id"] == "session-a"
+    assert registry.get_current_sandbox_id("session-a") == "sb-new"
+
+
+@pytest.mark.asyncio
+async def test_destroy_cua_sandbox_prunes_boot_lock(monkeypatch, tmp_path):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-lock",
+        sandbox_name="lock",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+    )
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client._cua_boot_lock("sb-lock")
+
+    await computer_client.destroy_cua_sandbox("session-a", "sb-lock")
+
+    assert "sb-lock" not in computer_client._cua_boot_locks
+
+
 @pytest.mark.asyncio
 async def test_busy_sandbox_screenshot_is_allowed_without_taking_control(
     monkeypatch, tmp_path

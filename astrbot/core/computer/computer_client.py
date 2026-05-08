@@ -68,6 +68,10 @@ def _cua_boot_lock(sandbox_id: str) -> asyncio.Lock:
     return lock
 
 
+def _drop_cua_boot_lock(sandbox_id: str) -> None:
+    _cua_boot_locks.pop(sandbox_id, None)
+
+
 def _schedule_cua_idle_cleanup(sandbox_id: str, timeout: float) -> None:
     _clear_cua_idle_state(sandbox_id)
     if timeout <= 0:
@@ -125,6 +129,7 @@ def _schedule_cua_idle_cleanup(sandbox_id: str, timeout: float) -> None:
                     cua_registry.update_sandbox_status(sandbox_id, "stopped")
                 else:
                     cua_registry.delete_sandbox(sandbox_id)
+                    _drop_cua_boot_lock(sandbox_id)
                 _save_cua_registry()
                 return
         except asyncio.CancelledError:
@@ -512,6 +517,7 @@ async def cleanup_managed_cua_sandboxes() -> None:
                 )
         _clear_cua_idle_state(sandbox_id)
         cua_registry.delete_sandbox(sandbox_id)
+        _drop_cua_boot_lock(sandbox_id)
     cua_registry.save()
 
 
@@ -532,6 +538,11 @@ def switch_current_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
         raise RuntimeError(f"Sandbox {sandbox_id} is not running")
     if not _acquire_cua_sandbox_lease(sandbox_id, session_id):
         raise RuntimeError(f"Sandbox {sandbox_id} is busy")
+    previous_sandbox_id = cua_registry.get_current_sandbox_id(session_id)
+    if previous_sandbox_id and previous_sandbox_id != sandbox_id:
+        previous = cua_registry.get_sandbox(previous_sandbox_id)
+        if previous and previous.get("controller_session_id") == session_id:
+            cua_registry.release_lease(previous_sandbox_id)
     cua_registry.set_current_sandbox_id(session_id, sandbox_id)
     cua_registry.touch_sandbox(sandbox_id)
     _save_cua_registry()
@@ -597,6 +608,7 @@ async def destroy_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
         await booter.shutdown()
     _clear_cua_idle_state(sandbox_id)
     cua_registry.delete_sandbox(sandbox_id)
+    _drop_cua_boot_lock(sandbox_id)
     _save_cua_registry()
     return record
 
