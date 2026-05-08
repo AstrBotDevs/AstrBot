@@ -274,7 +274,7 @@ def test_cua_default_config_matches_booter_defaults():
     assert sandbox_defaults["cua_image"] == CUA_DEFAULT_CONFIG["image"]
     assert sandbox_defaults["cua_os_type"] == CUA_DEFAULT_CONFIG["os_type"]
     assert "cua_ttl" not in sandbox_defaults
-    assert sandbox_defaults["cua_idle_timeout"] == 0
+    assert sandbox_defaults["cua_idle_timeout"] == CUA_DEFAULT_CONFIG["idle_timeout"]
     assert (
         sandbox_defaults["cua_telemetry_enabled"]
         == CUA_DEFAULT_CONFIG["telemetry_enabled"]
