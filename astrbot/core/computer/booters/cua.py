@@ -232,6 +232,43 @@ def _has_component_method(root: Any, component_name: str, method_name: str) -> b
     return getattr(component, method_name, None) is not None
 
 
+def _resolve_files_components(sandbox: Any) -> tuple[Any, ...]:
+    components: list[Any] = []
+    seen_ids: set[int] = set()
+    for name in ("files", "filesystem"):
+        component = getattr(sandbox, name, None)
+        if component is None:
+            continue
+        component_id = id(component)
+        if component_id in seen_ids:
+            continue
+        seen_ids.add(component_id)
+        components.append(component)
+    return tuple(components)
+
+
+def _resolve_files_method(
+    components: tuple[Any, ...],
+    method_names: str | tuple[str, ...],
+) -> Any | None:
+    for component in components:
+        method = _resolve_component_method(component, method_names)
+        if method is not None:
+            return method
+    return None
+
+
+def _normalize_native_upload_result(raw: Any, file_name: str) -> dict[str, Any]:
+    payload = _maybe_model_dump(raw)
+    if not payload:
+        return {"success": True, "file_path": file_name}
+    if "file_path" not in payload and "path" not in payload:
+        payload["file_path"] = file_name
+    if "success" not in payload:
+        payload["success"] = not bool(payload.get("error") or payload.get("stderr"))
+    return payload
+
+
 class CuaShellComponent(ShellComponent):
     def __init__(self, sandbox: Any, os_type: str = "linux") -> None:
         self._sandbox = sandbox
@@ -360,7 +397,7 @@ class CuaFileSystemComponent(FileSystemComponent):
         self, sandbox: Any, os_type: str = CUA_DEFAULT_CONFIG["os_type"]
     ) -> None:
         self._shell = CuaShellComponent(sandbox, os_type=os_type)
-        self._fs = getattr(sandbox, "filesystem", None)
+        self._fs_components = _resolve_files_components(sandbox)
         self._os_type = os_type.lower()
         self._fallback = _PosixShellFileSystem(self._shell, self._os_type)
 
@@ -382,7 +419,9 @@ class CuaFileSystemComponent(FileSystemComponent):
         offset: int | None = None,
         limit: int | None = None,
     ) -> dict[str, Any]:
-        read_file = None if self._fs is None else getattr(self._fs, "read_file", None)
+        read_file = _resolve_files_method(
+            self._fs_components, ("read_file", "read_text")
+        )
         if read_file is None:
             return await self._fallback.read_file(path, encoding, offset, limit)
         else:
@@ -405,7 +444,9 @@ class CuaFileSystemComponent(FileSystemComponent):
         encoding: str = "utf-8",
     ) -> dict[str, Any]:
         _ = mode
-        write_file = None if self._fs is None else getattr(self._fs, "write_file", None)
+        write_file = _resolve_files_method(
+            self._fs_components, ("write_file", "write_text")
+        )
         if write_file is None:
             return await self._fallback.write_file(path, content, mode, encoding)
         else:
@@ -413,11 +454,9 @@ class CuaFileSystemComponent(FileSystemComponent):
         return {"success": True, "path": path}
 
     async def delete_file(self, path: str) -> dict[str, Any]:
-        delete = None
-        if self._fs is not None:
-            delete = getattr(self._fs, "delete", None) or getattr(
-                self._fs, "delete_file", None
-            )
+        delete = _resolve_files_method(
+            self._fs_components, ("delete", "delete_file", "remove")
+        )
         if delete is None:
             return await self._fallback.delete_file(path)
         else:
@@ -429,7 +468,7 @@ class CuaFileSystemComponent(FileSystemComponent):
         path: str = ".",
         show_hidden: bool = False,
     ) -> dict[str, Any]:
-        list_dir = None if self._fs is None else getattr(self._fs, "list_dir", None)
+        list_dir = _resolve_files_method(self._fs_components, ("list_dir", "list"))
         if list_dir is not None:
             entries = await _maybe_await(list_dir(path))
             return {"success": True, "path": path, "entries": entries}
@@ -802,6 +841,15 @@ class CuaBooter(ComputerBooter):
             return _maybe_model_dump(
                 await sandbox.upload_file(str(local_path), file_name)
             )
+        files_components = () if sandbox is None else _resolve_files_components(sandbox)
+        upload = _resolve_files_method(files_components, "upload")
+        if upload is not None:
+            result = await _maybe_await(upload(str(local_path), file_name))
+            return _normalize_native_upload_result(result, file_name)
+        write_bytes = _resolve_files_method(files_components, "write_bytes")
+        if write_bytes is not None:
+            result = await _maybe_await(write_bytes(file_name, local_path.read_bytes()))
+            return _normalize_native_upload_result(result, file_name)
         if not _is_posix_os_type(self.os_type):
             return _non_posix_filesystem_result(file_name, self.os_type)
         result = await _write_base64_via_shell(
