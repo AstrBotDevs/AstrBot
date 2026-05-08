@@ -169,7 +169,14 @@ class SandboxManager:
             if not self.acquire_lease(current_sandbox_id, session_id):
                 raise RuntimeError(f"Sandbox {current_sandbox_id} is busy")
             booter = self.session_booter[current_sandbox_id]
-            if await self.booter_available(booter):
+            try:
+                is_available = await self.booter_available(booter)
+            except Exception:
+                self.registry.release_lease(current_sandbox_id)
+                self.registry.update_sandbox_status(current_sandbox_id, "unknown")
+                self.save_registry()
+                raise
+            if is_available:
                 self.registry.touch_sandbox(current_sandbox_id)
                 self.save_registry()
                 self.schedule_idle_cleanup(
@@ -462,9 +469,10 @@ class SandboxManager:
         ):
             raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
         provider = self.get_provider(record.get("provider", ""))
-        booter = self.session_booter.pop(sandbox_id, None)
+        booter = self.session_booter.get(sandbox_id)
         if booter is not None:
             await provider.destroy_booter(booter, record)
+            self.session_booter.pop(sandbox_id, None)
         self.clear_idle_state(sandbox_id)
         self.registry.delete_sandbox(sandbox_id)
         self.drop_boot_lock(sandbox_id)
@@ -502,18 +510,21 @@ class SandboxManager:
                     sandbox_id,
                 )
                 continue
-            booter = self.session_booter.pop(sandbox_id, None)
+            provider = self.get_provider(record.get("provider", ""))
+            booter = self.session_booter.get(sandbox_id)
             if booter is not None:
                 try:
-                    await self.get_provider(record.get("provider", "")).destroy_booter(
-                        booter, record
-                    )
+                    await provider.destroy_booter(booter, record)
+                    self.session_booter.pop(sandbox_id, None)
                 except Exception as shutdown_err:
+                    self.registry.update_sandbox_status(sandbox_id, "unknown")
+                    self.save_registry()
                     logger.warning(
                         "[Computer] Failed to shutdown managed sandbox %s: %s",
                         sandbox_id,
                         shutdown_err,
                     )
+                    continue
             self.clear_idle_state(sandbox_id)
             self.registry.delete_sandbox(sandbox_id)
             self.drop_boot_lock(sandbox_id)
