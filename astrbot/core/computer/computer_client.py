@@ -584,7 +584,9 @@ async def copy_file_between_cua_sandboxes(
         Path(temp_dir) if temp_dir is not None else Path(get_astrbot_temp_path())
     )
     relay_root.mkdir(parents=True, exist_ok=True)
-    fd, relay_path = tempfile.mkstemp(prefix="cua-relay-", suffix=".tmp", dir=relay_root)
+    fd, relay_path = tempfile.mkstemp(
+        prefix="cua-relay-", suffix=".tmp", dir=relay_root
+    )
     os.close(fd)
     relay_file = Path(relay_path)
     try:
