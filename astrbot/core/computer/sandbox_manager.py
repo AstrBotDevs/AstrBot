@@ -242,6 +242,9 @@ class SandboxManager:
                     if is_available:
                         break
                     self.session_booter.pop(target_sandbox_id, None)
+                    self.registry.release_lease(target_sandbox_id)
+                    self.registry.update_sandbox_status(target_sandbox_id, "unknown")
+                    self.save_registry()
 
                 if not self.acquire_lease(target_sandbox_id, session_id):
                     target_sandbox_id = self._upsert_new_sandbox_record(
@@ -407,6 +410,11 @@ class SandboxManager:
             raise RuntimeError(f"Sandbox {sandbox_id} is not running")
         if not self.acquire_lease(sandbox_id, session_id):
             raise RuntimeError(f"Sandbox {sandbox_id} is busy")
+        return self._set_current_sandbox_after_lease(session_id, sandbox_id, record)
+
+    def _set_current_sandbox_after_lease(
+        self, session_id: str, sandbox_id: str, record: dict
+    ) -> dict:
         previous_sandbox_id = self.registry.get_current_sandbox_id(session_id)
         if previous_sandbox_id and previous_sandbox_id != sandbox_id:
             previous = self.registry.get_sandbox(previous_sandbox_id)
@@ -431,7 +439,9 @@ class SandboxManager:
             self.registry.update_sandbox_status(sandbox_id, "unknown")
             self.save_registry()
             raise RuntimeError(f"Sandbox {sandbox_id} is not running")
-        return self.switch_current_sandbox(session_id, sandbox_id)
+        if not self.acquire_lease(sandbox_id, session_id):
+            raise RuntimeError(f"Sandbox {sandbox_id} is busy")
+        return self._set_current_sandbox_after_lease(session_id, sandbox_id, record)
 
     def get_current_sandbox(self, session_id: str) -> dict:
         sandbox_id = self.registry.get_current_sandbox_id(session_id)

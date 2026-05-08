@@ -164,6 +164,36 @@ async def test_sandbox_manager_checked_switch_rejects_unavailable_booter(tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_sandbox_manager_checked_switch_releases_previous_current_lease(
+    tmp_path,
+):
+    manager, registry, provider = _manager(tmp_path)
+    for sandbox_id in ("old", "new"):
+        registry.upsert_sandbox(
+            sandbox_id=sandbox_id,
+            sandbox_name=sandbox_id,
+            booter_type="fake",
+            provider="fake",
+            managed=True,
+            created_by_astrbot=True,
+            owner_user_id="session-a",
+            owner_session_id="session-a",
+            controller_user_id="session-a" if sandbox_id == "old" else None,
+            controller_session_id="session-a" if sandbox_id == "old" else None,
+            lease_expires_at=time.time() + 60 if sandbox_id == "old" else None,
+            connect_info={},
+        )
+        manager.session_booter[sandbox_id] = FakeBooter(sandbox_id, provider)
+    registry.set_current_sandbox_id("session-a", "old")
+
+    await manager.switch_current_sandbox_checked("session-a", "new")
+
+    assert registry.get_sandbox("old")["controller_session_id"] is None
+    assert registry.get_sandbox("new")["controller_session_id"] == "session-a"
+    assert registry.get_current_sandbox_id("session-a") == "new"
+
+
+@pytest.mark.asyncio
 async def test_sandbox_manager_destroy_prunes_boot_lock(tmp_path):
     manager, registry, provider = _manager(tmp_path)
     registry.upsert_sandbox(
@@ -491,3 +521,36 @@ async def test_sandbox_manager_recreates_unavailable_cached_default_booter(tmp_p
     assert booter is manager.session_booter["existing"]
     assert booter._available is True
     assert provider.boots == [("session-a", "existing", {"image": "fake"})]
+    assert registry.get_sandbox("existing")["controller_session_id"] == "session-a"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_releases_lease_before_recreating_unavailable_target(
+    tmp_path,
+):
+    provider = FailingProvider()
+    registry = SandboxRegistry(storage_path=tmp_path / "registry.json")
+    manager = SandboxManager(registry=registry, providers={"fake": provider})
+    registry.upsert_sandbox(
+        sandbox_id="existing",
+        sandbox_name="existing",
+        booter_type="fake",
+        provider="fake",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        is_default=True,
+    )
+    manager.session_booter["existing"] = FakeBooter(
+        "existing", provider, available=False
+    )
+
+    with pytest.raises(RuntimeError, match="boot failed"):
+        await manager.get_or_create_booter(FakeContext(), "session-a", "fake")
+
+    record = registry.get_sandbox("existing")
+    assert record is not None
+    assert record["status"] == "unknown"
+    assert record["controller_session_id"] is None
