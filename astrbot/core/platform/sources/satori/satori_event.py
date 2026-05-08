@@ -1,4 +1,10 @@
-from typing import TYPE_CHECKING
+from base64 import b64decode
+from collections.abc import Callable
+from pathlib import Path
+from typing import TYPE_CHECKING, TypeVar
+
+from satori.const import Api
+from satori.element import E, Element, Resource
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -15,9 +21,42 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.message.components import AtAll, Face
+from astrbot.core.utils.io import download_image_by_url
 
 if TYPE_CHECKING:
     from .satori_adapter import SatoriPlatformAdapter
+
+
+TR = TypeVar("TR", bound=Resource)
+
+
+async def _components_to_element(
+    comp: Image | Record | Video | File, func: Callable[..., TR]
+) -> TR:
+    if hasattr(comp, "url") and comp.url:
+        return func(url=comp.url)
+    if not hasattr(comp, "file") or not comp.file:
+        raise ValueError("No valid file or URL provided")
+
+    if comp.file.startswith("file://"):
+        path = Path(comp.file[7:])
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+        raw_data = path.read_bytes()
+        return func(raw=raw_data)
+    if comp.file.startswith("http"):
+        image_file_path = await download_image_by_url(comp.file)
+        raw_data = Path(image_file_path).read_bytes()
+        return func(raw=raw_data)
+    if comp.file.startswith("base64://"):
+        bs64_data = comp.file[9:]
+        return func(raw=b64decode(bs64_data))
+    if Path(comp.file).exists():
+        raw_data = Path(comp.file).read_bytes()
+        return func(raw=raw_data)
+    else:
+        raise Exception(f"not a valid file: {comp.file}")
 
 
 class SatoriPlatformEvent(AstrMessageEvent):
@@ -31,15 +70,15 @@ class SatoriPlatformEvent(AstrMessageEvent):
     ) -> None:
         if adapter and hasattr(adapter, "logins") and adapter.logins:
             current_login = adapter.logins[0]
-            platform_name = current_login.get("platform", "satori")
-            user = current_login.get("user", {})
-            user_id = user.get("id", "") if user else ""
+            platform_name = current_login.platform or "satori"
+            user_id = current_login.user.id if current_login.user else None
             if not platform_meta.id and user_id:
                 platform_meta.id = f"{platform_name}({user_id})"
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.adapter = adapter
         self.platform = None
         self.user_id = None
+        self.referrer = None
         if (
             hasattr(message_obj, "raw_message")
             and message_obj.raw_message
@@ -50,6 +89,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             self.platform = login.get("platform")
             user = login.get("user", {})
             self.user_id = user.get("id") if user else None
+            self.referrer = message_obj.raw_message.get("referrer")
 
     @classmethod
     async def send_with_adapter(
@@ -57,36 +97,42 @@ class SatoriPlatformEvent(AstrMessageEvent):
         adapter: "SatoriPlatformAdapter",
         message: MessageChain,
         session_id: str,
+        referrer: dict | None = None,
     ):
         try:
             content_parts = []
             for component in message.chain:
-                component_content = await cls._convert_component_to_satori_static(
+                component_content = await cls._convert_component_to_satori(
                     component,
                 )
-                if component_content:
-                    content_parts.append(component_content)
+                content_parts.append(component_content)
+
+                # 特殊处理 Node 和 Nodes 组件
                 if isinstance(component, Node):
-                    node_content = await cls._convert_node_to_satori_static(component)
-                    if node_content:
-                        content_parts.append(node_content)
+                    # 单个转发节点
+                    node_content = await cls._convert_node_to_satori(component)
+                    content_parts.append(node_content)
+
                 elif isinstance(component, Nodes):
-                    node_content = await cls._convert_nodes_to_satori_static(component)
-                    if node_content:
-                        content_parts.append(node_content)
-            content = "".join(content_parts)
+                    # 合并转发消息
+                    node_content = await cls._convert_nodes_to_satori(component)
+                    content_parts.append(node_content)
+
+            content = "".join(str(i) for i in content_parts)
             channel_id = session_id
-            data = {"channel_id": channel_id, "content": content}
+            data = {"channel_id": channel_id, "content": content, "referrer": referrer}
+
             platform = None
             user_id = None
-            if hasattr(adapter, "logins") and adapter.logins:
+
+            if adapter.logins:
                 current_login = adapter.logins[0]
-                platform = current_login.get("platform", "")
-                user = current_login.get("user", {})
-                user_id = user.get("id", "") if user else ""
+                platform = current_login.platform or "satori"
+                user_id = current_login.user.id if current_login.user else None
+
             result = await adapter.send_http_request(
                 "POST",
-                "/message.create",
+                Api.MESSAGE_CREATE,
                 data,
                 platform,
                 user_id,
@@ -102,31 +148,37 @@ class SatoriPlatformEvent(AstrMessageEvent):
         platform = getattr(self, "platform", None)
         user_id = getattr(self, "user_id", None)
         if not platform or not user_id:
-            if hasattr(self.adapter, "logins") and self.adapter.logins:
+            if self.adapter.logins:
                 current_login = self.adapter.logins[0]
-                platform = current_login.get("platform", "")
-                user = current_login.get("user", {})
-                user_id = user.get("id", "") if user else ""
+                platform = current_login.platform or "satori"
+                user_id = current_login.user.id if current_login.user else None
+
         try:
             content_parts = []
             for component in message.chain:
                 component_content = await self._convert_component_to_satori(component)
-                if component_content:
-                    content_parts.append(component_content)
+                content_parts.append(component_content)
+
+                # 特殊处理 Node 和 Nodes 组件
                 if isinstance(component, Node):
                     node_content = await self._convert_node_to_satori(component)
-                    if node_content:
-                        content_parts.append(node_content)
+                    content_parts.append(node_content)
+
                 elif isinstance(component, Nodes):
                     node_content = await self._convert_nodes_to_satori(component)
-                    if node_content:
-                        content_parts.append(node_content)
-            content = "".join(content_parts)
+                    content_parts.append(node_content)
+
+            content = "".join(str(i) for i in content_parts)
             channel_id = self.session_id
-            data = {"channel_id": channel_id, "content": content}
+            data = {
+                "channel_id": channel_id,
+                "content": content,
+                "referrer": self.referrer,
+            }
+
             result = await self.adapter.send_http_request(
                 "POST",
-                "/message.create",
+                Api.MESSAGE_CREATE,
                 data,
                 platform,
                 user_id,
@@ -158,19 +210,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                                 temp_chain = MessageChain([Plain(text=content)])
                                 await self.send(temp_chain)
                                 content_parts = []
-                            try:
-                                image_base64 = await component.convert_to_base64()
-                                if image_base64:
-                                    img_chain = MessageChain(
-                                        [
-                                            Plain(
-                                                text=f'<img src="data:image/jpeg;base64,{image_base64}"/>',
-                                            ),
-                                        ],
-                                    )
-                                    await self.send(img_chain)
-                            except Exception as e:
-                                logger.error(f"图片转换为base64失败: {e}")
+                            await self.send(MessageChain([component]))
                         else:
                             content_parts.append(str(component))
             if content_parts:
@@ -181,179 +221,105 @@ class SatoriPlatformEvent(AstrMessageEvent):
             logger.error(f"Satori 流式消息发送异常: {e}")
         return await super().send_streaming(generator, use_fallback)
 
-    async def _convert_component_to_satori(self, component) -> str:
+    @staticmethod
+    async def _convert_component_to_satori(component) -> Element:
         """将单个消息组件转换为 Satori 格式"""
         try:
             if isinstance(component, Plain):
-                text = (
-                    component.text.replace("&", "&amp;")
-                    .replace("<", "&lt;")
-                    .replace(">", "&gt;")
-                )
-                return text
+                return E.text(component.text)
+
             if isinstance(component, At):
-                if component.qq:
-                    return f'<at id="{component.qq}"/>'
-                if component.name:
-                    return f'<at name="{component.name}"/>'
-            elif isinstance(component, Image):
+                qq = (
+                    component.qq
+                    if isinstance(component.qq, str)
+                    else str(component.qq)
+                    if isinstance(component.qq, int)
+                    else None
+                )
+                if qq:
+                    return E.at(id=qq, name=component.name)
+                return E.at(name=component.name)
+
+            if isinstance(component, AtAll):
+                return E.at_all()
+
+            if isinstance(component, Face):
+                return E.emoji(id=str(component.id))
+
+            if isinstance(component, Image):
                 try:
-                    image_base64 = await component.convert_to_base64()
-                    if image_base64:
-                        return f'<img src="data:image/jpeg;base64,{image_base64}"/>'
+                    return await _components_to_element(component, E.image)
                 except Exception as e:
-                    logger.error(f"图片转换为base64失败: {e}")
-            elif isinstance(component, File):
-                return f"""<file src="{component.file}" name="{component.name or "文件"}"/>"""
-            elif isinstance(component, Record):
+                    logger.error(f"图片转换失败: {e}")
+
+            if isinstance(component, File):
                 try:
-                    record_base64 = await component.convert_to_base64()
-                    if record_base64:
-                        return f'<audio src="data:audio/wav;base64,{record_base64}"/>'
+                    elem = await _components_to_element(component, E.file)
+                    elem.title = component.name or "文件"
+                    return elem
                 except Exception as e:
-                    logger.error(f"语音转换为base64失败: {e}")
-            elif isinstance(component, Reply):
-                return f'<reply id="{component.id}"/>'
-            elif isinstance(component, Video):
+                    logger.error(f"文件转换失败: {e}")
+
+            if isinstance(component, Video):
                 try:
-                    video_path_url = await component.convert_to_file_path()
-                    if video_path_url:
-                        return f'<video src="{video_path_url}"/>'
+                    return await _components_to_element(component, E.video)
                 except Exception as e:
-                    logger.error(f"视频文件转换失败: {e}")
-            elif isinstance(component, Forward):
-                return f'<message id="{component.id}" forward/>'
-            return ""
+                    logger.error(f"视频转换失败: {e}")
+
+            if isinstance(component, Record):
+                try:
+                    return await _components_to_element(component, E.audio)
+                except Exception as e:
+                    logger.error(f"语音转换失败: {e}")
+
+            if isinstance(component, Reply):
+                return E.quote(id=str(component.id))
+
+            if isinstance(component, Forward):
+                return E.message(id=str(component.id), forward=True)
+
+            # 对于其他未处理的组件类型,返回空字符串
+            return E.text("")
+
         except Exception as e:
             logger.error(f"转换消息组件失败: {e}")
-            return ""
+            return E.text("")
 
-    async def _convert_node_to_satori(self, node: Node) -> str:
+    @classmethod
+    async def _convert_node_to_satori(cls, node: Node) -> Element:
         """将单个转发节点转换为 Satori 格式"""
         try:
             content_parts = []
             if node.content:
                 for content_component in node.content:
-                    component_content = await self._convert_component_to_satori(
+                    ans = await cls._convert_component_to_satori(
                         content_component,
                     )
-                    if component_content:
-                        content_parts.append(component_content)
-            content = "".join(content_parts)
-            if not content.strip():
-                content = "[转发消息]"
-            author_attrs = []
-            if node.uin:
-                author_attrs.append(f'id="{node.uin}"')
-            if node.name:
-                author_attrs.append(f'name="{node.name}"')
-            author_attr_str = " ".join(author_attrs)
-            return f"<message><author {author_attr_str}/>{content}</message>"
+                    content_parts.append(ans)
+            # 如果内容为空,添加默认内容
+            if not content_parts:
+                content_parts.append(E.text("[转发消息]"))
+            # 构建 Satori 格式的转发节点
+            content_parts.insert(0, E.author(id=str(node.uin), name=node.name))
+            return E.message(content=content_parts)
+
         except Exception as e:
             logger.error(f"转换转发节点失败: {e}")
-            return ""
+            return E.text("")
 
     @classmethod
-    async def _convert_component_to_satori_static(cls, component) -> str:
-        """将单个消息组件转换为 Satori 格式"""
-        try:
-            if isinstance(component, Plain):
-                text = (
-                    component.text.replace("&", "&amp;")
-                    .replace("<", "&lt;")
-                    .replace(">", "&gt;")
-                )
-                return text
-            if isinstance(component, At):
-                if component.qq:
-                    return f'<at id="{component.qq}"/>'
-                if component.name:
-                    return f'<at name="{component.name}"/>'
-            elif isinstance(component, Image):
-                try:
-                    image_base64 = await component.convert_to_base64()
-                    if image_base64:
-                        return f'<img src="data:image/jpeg;base64,{image_base64}"/>'
-                except Exception as e:
-                    logger.error(f"图片转换为base64失败: {e}")
-            elif isinstance(component, File):
-                return f"""<file src="{component.file}" name="{component.name or "文件"}"/>"""
-            elif isinstance(component, Record):
-                try:
-                    record_base64 = await component.convert_to_base64()
-                    if record_base64:
-                        return f'<audio src="data:audio/wav;base64,{record_base64}"/>'
-                except Exception as e:
-                    logger.error(f"语音转换为base64失败: {e}")
-            elif isinstance(component, Reply):
-                return f'<reply id="{component.id}"/>'
-            elif isinstance(component, Video):
-                try:
-                    video_path_url = await component.convert_to_file_path()
-                    if video_path_url:
-                        return f'<video src="{video_path_url}"/>'
-                except Exception as e:
-                    logger.error(f"视频文件转换失败: {e}")
-            elif isinstance(component, Forward):
-                return f'<message id="{component.id}" forward/>'
-            return ""
-        except Exception as e:
-            logger.error(f"转换消息组件失败: {e}")
-            return ""
-
-    @classmethod
-    async def _convert_node_to_satori_static(cls, node: Node) -> str:
-        """将单个转发节点转换为 Satori 格式"""
-        try:
-            content_parts = []
-            if node.content:
-                for content_component in node.content:
-                    component_content = await cls._convert_component_to_satori_static(
-                        content_component,
-                    )
-                    if component_content:
-                        content_parts.append(component_content)
-            content = "".join(content_parts)
-            if not content.strip():
-                content = "[转发消息]"
-            author_attrs = []
-            if node.uin:
-                author_attrs.append(f'id="{node.uin}"')
-            if node.name:
-                author_attrs.append(f'name="{node.name}"')
-            author_attr_str = " ".join(author_attrs)
-            return f"<message><author {author_attr_str}/>{content}</message>"
-        except Exception as e:
-            logger.error(f"转换转发节点失败: {e}")
-            return ""
-
-    async def _convert_nodes_to_satori(self, nodes: Nodes) -> str:
+    async def _convert_nodes_to_satori(cls, nodes: Nodes) -> Element:
         """将多个转发节点转换为 Satori 格式的合并转发"""
         try:
             node_parts = []
             for node in nodes.nodes:
-                node_content = await self._convert_node_to_satori(node)
-                if node_content:
-                    node_parts.append(node_content)
-            if node_parts:
-                return f"<message forward>{''.join(node_parts)}</message>"
-            return ""
-        except Exception as e:
-            logger.error(f"转换合并转发消息失败: {e}")
-            return ""
+                node_content = await cls._convert_node_to_satori(node)
+                node_parts.append(node_content)
 
-    @classmethod
-    async def _convert_nodes_to_satori_static(cls, nodes: Nodes) -> str:
-        """将多个转发节点转换为 Satori 格式的合并转发"""
-        try:
-            node_parts = []
-            for node in nodes.nodes:
-                node_content = await cls._convert_node_to_satori_static(node)
-                if node_content:
-                    node_parts.append(node_content)
             if node_parts:
-                return f"<message forward>{''.join(node_parts)}</message>"
-            return ""
+                return E.message(forward=True, content=node_parts)
+            return E.text("")
+
         except Exception as e:
             logger.error(f"转换合并转发消息失败: {e}")
-            return ""
+            return E.text("")
