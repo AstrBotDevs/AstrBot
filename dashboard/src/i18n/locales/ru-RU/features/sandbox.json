@@ -30,8 +30,8 @@
     "noController": "No controller",
     "unknown": "Unknown",
     "none": "None",
-    "temporary": "Temporary sandbox",
-    "persistent": "Keep indefinitely"
+    "temporary": "Temporary",
+    "persistent": "Persistent"
   },
   "headers": {
     "sandbox": "Sandbox",
@@ -77,7 +77,7 @@
   "config": {
     "title": "Sandbox configuration",
     "idleTimeout": "Idle timeout (seconds)",
-    "idleTimeoutHint": "Temporary sandboxes can be cleaned after this idle duration. Empty or 0 disables idle cleanup.",
+    "idleTimeoutHint": "With the temporary policy, sandboxes can be cleaned after this idle duration. Empty or 0 disables idle cleanup.",
     "expiresAt": "Fixed expiration time",
     "expiresAtHint": "Optional. The sandbox can be cleaned after this time."
   },

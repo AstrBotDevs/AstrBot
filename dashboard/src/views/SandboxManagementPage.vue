@@ -56,7 +56,7 @@
 
             <template #item.provider="{ item }">
               <div class="d-flex flex-column ga-1 py-2">
-                <v-chip size="small" color="primary" variant="tonal">{{ item.provider || tm('labels.unknown') }}</v-chip>
+                <v-chip size="small" color="primary" variant="tonal" class="provider-chip">{{ item.provider || tm('labels.unknown') }}</v-chip>
                 <span class="text-caption text-medium-emphasis">{{ item.booter_type || tm('labels.unknown') }}</span>
               </div>
             </template>
@@ -352,11 +352,11 @@ const providerOptions = [
 ]
 
 const headers = computed(() => [
-  { title: tm('headers.sandbox'), key: 'identity', sortable: false },
-  { title: tm('headers.provider'), key: 'provider', sortable: false },
-  { title: tm('headers.lease'), key: 'lease', sortable: false },
-  { title: tm('headers.lastUsed'), key: 'last_used', sortable: false },
-  { title: tm('headers.actions'), key: 'actions', sortable: false, align: 'end' as const, width: 720 }
+  { title: tm('headers.sandbox'), key: 'identity', sortable: false, width: '22%' },
+  { title: tm('headers.provider'), key: 'provider', sortable: false, width: '14%' },
+  { title: tm('headers.lease'), key: 'lease', sortable: false, width: '12%' },
+  { title: tm('headers.lastUsed'), key: 'last_used', sortable: false, width: '18%' },
+  { title: tm('headers.actions'), key: 'actions', sortable: false, align: 'end' as const, width: 520 }
 ])
 
 const providerCount = computed(() => new Set(sandboxes.value.map((item) => item.provider || item.booter_type || 'unknown')).size)
@@ -652,6 +652,7 @@ onMounted(loadSandboxes)
 .sandbox-table-shell {
   border: 1px solid rgba(var(--v-theme-outline), 0.16);
   overflow-x: auto;
+  max-width: calc(100% - 32px);
 }
 
 .sandbox-actions-cell {
@@ -659,8 +660,14 @@ onMounted(loadSandboxes)
   flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 4px;
-  min-width: 690px;
+  min-width: 500px;
   padding-block: 8px;
+}
+
+.provider-chip {
+  align-self: flex-start;
+  width: fit-content;
+  min-width: 0;
 }
 
 .connect-info {

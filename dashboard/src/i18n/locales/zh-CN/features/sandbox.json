@@ -30,8 +30,8 @@
     "noController": "无控制者",
     "unknown": "未知",
     "none": "无",
-    "temporary": "临时沙盒",
-    "persistent": "长期保留"
+    "temporary": "临时",
+    "persistent": "持久"
   },
   "headers": {
     "sandbox": "沙盒",
@@ -77,7 +77,7 @@
   "config": {
     "title": "沙盒配置",
     "idleTimeout": "空闲超时（秒）",
-    "idleTimeoutHint": "临时沙盒在空闲达到该时间后可被清理，0 或空表示不启用空闲清理。",
+    "idleTimeoutHint": "临时策略下，沙盒在空闲达到该时间后可被清理，0 或空表示不启用空闲清理。",
     "expiresAt": "固定过期时间",
     "expiresAtHint": "可选。到达该时间后沙盒可被清理。"
   },
