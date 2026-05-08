@@ -20,6 +20,13 @@ class FakeContext:
         return self._config
 
 
+def _clear_cua_session_state(computer_client, session_id: str) -> None:
+    computer_client.session_booter.pop(session_id, None)
+    state = getattr(computer_client, "cua_idle_state", {}).pop(session_id, None)
+    if state is not None and not state.task.done():
+        state.task.cancel()
+
+
 class FakeShell:
     def __init__(self):
         self.commands = []
@@ -267,6 +274,7 @@ def test_cua_default_config_matches_booter_defaults():
     assert sandbox_defaults["cua_image"] == CUA_DEFAULT_CONFIG["image"]
     assert sandbox_defaults["cua_os_type"] == CUA_DEFAULT_CONFIG["os_type"]
     assert sandbox_defaults["cua_ttl"] == CUA_DEFAULT_CONFIG["ttl"]
+    assert sandbox_defaults["cua_idle_timeout"] == 0
     assert (
         sandbox_defaults["cua_telemetry_enabled"]
         == CUA_DEFAULT_CONFIG["telemetry_enabled"]
@@ -365,6 +373,189 @@ async def test_get_booter_shuts_down_client_when_skill_sync_fails(monkeypatch):
 
     assert len(shutdowns) == 1
     assert "cua-sync-fail" not in computer_client.session_booter
+
+
+@pytest.mark.asyncio
+async def test_cua_idle_timeout_shuts_down_session_proactively(monkeypatch):
+    from astrbot.core.computer import computer_client
+
+    shutdowns = []
+
+    class FakeCuaBooter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def boot(self, session_id: str):
+            self.session_id = session_id
+
+        async def available(self):
+            return True
+
+        async def shutdown(self):
+            shutdowns.append(self.session_id)
+
+    monkeypatch.setattr(
+        computer_client, "_sync_skills_to_sandbox", lambda booter: asyncio.sleep(0)
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.booters.cua.CuaBooter",
+        FakeCuaBooter,
+        raising=False,
+    )
+    _clear_cua_session_state(computer_client, "cua-idle-expire")
+
+    ctx = FakeContext(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "cua",
+                    "cua_idle_timeout": 0.1,
+                },
+            }
+        }
+    )
+
+    booter = await computer_client.get_booter(ctx, "cua-idle-expire")
+    await asyncio.sleep(0.2)
+
+    assert shutdowns == [booter.session_id]
+    assert "cua-idle-expire" not in computer_client.session_booter
+
+
+@pytest.mark.asyncio
+async def test_cua_idle_timeout_refreshes_on_reuse(monkeypatch):
+    from astrbot.core.computer import computer_client
+
+    shutdowns = []
+
+    class FakeCuaBooter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def boot(self, session_id: str):
+            self.session_id = session_id
+
+        async def available(self):
+            return True
+
+        async def shutdown(self):
+            shutdowns.append(self.session_id)
+
+    monkeypatch.setattr(
+        computer_client, "_sync_skills_to_sandbox", lambda booter: asyncio.sleep(0)
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.booters.cua.CuaBooter",
+        FakeCuaBooter,
+        raising=False,
+    )
+    _clear_cua_session_state(computer_client, "cua-idle-refresh")
+
+    ctx = FakeContext(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "cua",
+                    "cua_idle_timeout": 0.2,
+                },
+            }
+        }
+    )
+
+    booter1 = await computer_client.get_booter(ctx, "cua-idle-refresh")
+    await asyncio.sleep(0.05)
+    booter2 = await computer_client.get_booter(ctx, "cua-idle-refresh")
+    await asyncio.sleep(0.05)
+
+    assert booter2 is booter1
+    assert shutdowns == []
+
+    await asyncio.sleep(0.25)
+
+    assert shutdowns == [booter1.session_id]
+    assert "cua-idle-refresh" not in computer_client.session_booter
+
+
+@pytest.mark.asyncio
+async def test_cua_idle_timeout_zero_disables_proactive_shutdown(monkeypatch):
+    from astrbot.core.computer import computer_client
+
+    shutdowns = []
+
+    class FakeCuaBooter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def boot(self, session_id: str):
+            self.session_id = session_id
+
+        async def available(self):
+            return True
+
+        async def shutdown(self):
+            shutdowns.append(self.session_id)
+
+    monkeypatch.setattr(
+        computer_client, "_sync_skills_to_sandbox", lambda booter: asyncio.sleep(0)
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.booters.cua.CuaBooter",
+        FakeCuaBooter,
+        raising=False,
+    )
+    _clear_cua_session_state(computer_client, "cua-idle-disabled")
+
+    ctx = FakeContext(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "cua",
+                    "cua_idle_timeout": 0,
+                },
+            }
+        }
+    )
+
+    await computer_client.get_booter(ctx, "cua-idle-disabled")
+    await asyncio.sleep(0.05)
+
+    assert shutdowns == []
+    assert "cua-idle-disabled" in computer_client.session_booter
+    assert "cua-idle-disabled" not in computer_client.cua_idle_state
+
+
+@pytest.mark.asyncio
+async def test_non_cua_booter_does_not_schedule_idle_cleanup(monkeypatch):
+    from astrbot.core.computer import computer_client
+
+    class FakeShipyardBooter:
+        async def available(self):
+            return True
+
+    _clear_cua_session_state(computer_client, "shipyard-session")
+    computer_client.session_booter["shipyard-session"] = FakeShipyardBooter()
+
+    ctx = FakeContext(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "shipyard",
+                    "shipyard_endpoint": "http://localhost:8080",
+                    "shipyard_access_token": "token",
+                    "cua_idle_timeout": 0.01,
+                },
+            }
+        }
+    )
+
+    booter = await computer_client.get_booter(ctx, "shipyard-session")
+
+    assert isinstance(booter, FakeShipyardBooter)
+    assert "shipyard-session" not in computer_client.cua_idle_state
 
 
 @pytest.mark.asyncio

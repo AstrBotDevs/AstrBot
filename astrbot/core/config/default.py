@@ -179,6 +179,7 @@ DEFAULT_CONFIG = {
             "cua_image": CUA_DEFAULT_CONFIG["image"],
             "cua_os_type": CUA_DEFAULT_CONFIG["os_type"],
             "cua_ttl": CUA_DEFAULT_CONFIG["ttl"],
+            "cua_idle_timeout": 0,
             "cua_telemetry_enabled": CUA_DEFAULT_CONFIG["telemetry_enabled"],
             "cua_local": CUA_DEFAULT_CONFIG["local"],
             "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
