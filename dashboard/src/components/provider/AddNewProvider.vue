@@ -1,5 +1,5 @@
 <template>
-    <v-dialog v-model="showDialog" max-width="1100px" min-height="95%">
+    <v-dialog v-model="showDialog" max-width="1000px" >
         <v-card :title="tm('dialogs.addProvider.title')">
             <v-card-text style="overflow-y: auto;">
                 <v-tabs v-model="activeProviderTab" grow>
@@ -73,6 +73,8 @@
 import { useModuleI18n } from '@/i18n/composables';
 import { getProviderIcon, getProviderDescription } from '@/utils/providerUtils';
 
+const AVAILABLE_PROVIDER_TABS = ['agent_runner', 'speech_to_text', 'text_to_speech', 'embedding', 'rerank'];
+
 export default {
     name: 'AddNewProvider',
     props: {
@@ -83,6 +85,10 @@ export default {
         metadata: {
             type: Object,
             default: () => ({})
+        },
+        currentProviderType: {
+            type: String,
+            default: 'agent_runner'
         }
     },
     emits: ['update:show', 'select-template'],
@@ -92,7 +98,7 @@ export default {
     },
     data() {
         return {
-            activeProviderTab: 'chat_completion'
+            activeProviderTab: 'agent_runner'
         };
     },
     computed: {
@@ -105,7 +111,25 @@ export default {
             }
         },
     },
+    watch: {
+        show(value) {
+            if (value) {
+                this.syncActiveProviderTab();
+            }
+        },
+        currentProviderType() {
+            if (this.showDialog) {
+                this.syncActiveProviderTab();
+            }
+        }
+    },
     methods: {
+        syncActiveProviderTab() {
+            this.activeProviderTab = AVAILABLE_PROVIDER_TABS.includes(this.currentProviderType)
+                ? this.currentProviderType
+                : 'agent_runner';
+        },
+
         closeDialog() {
             this.showDialog = false;
         },

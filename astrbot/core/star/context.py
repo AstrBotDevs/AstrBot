@@ -36,6 +36,7 @@ from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
 )
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
+from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..exceptions import ProviderNotFoundError
 from .filter.command import CommandFilter
@@ -48,6 +49,9 @@ logger = logging.getLogger("astrbot")
 if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
 
+WebApiHandler = Callable[..., Awaitable[Any]]
+RegisteredWebApi = tuple[str, WebApiHandler, list[str], str]
+
 
 class PlatformManagerProtocol(Protocol):
     platform_insts: list[Platform]
@@ -56,7 +60,7 @@ class PlatformManagerProtocol(Protocol):
 class Context:
     """暴露给插件的接口上下文。"""
 
-    registered_web_apis: list = []
+    registered_web_apis: list[RegisteredWebApi] = []
 
     # 向后兼容的变量
     _register_tasks: list[Awaitable] = []
@@ -107,6 +111,7 @@ class Context:
         chat_provider_id: str,
         prompt: str | None = None,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
         contexts: list[Message] | None = None,
@@ -120,6 +125,7 @@ class Context:
             chat_provider_id: The chat provider ID to use.
             prompt: The prompt to send to the LLM, if `contexts` and `prompt` are both provided, `prompt` will be appended as the last user message
             image_urls: List of image URLs to include in the prompt, if `contexts` and `prompt` are both provided, `image_urls` will be appended to the last user message
+            audio_urls: List of audio URLs or local paths to include in the prompt, if `contexts` and `prompt` are both provided, `audio_urls` will be appended to the last user message
             tools: ToolSet of tools available to the LLM
             system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
             contexts: context messages for the LLM
@@ -135,6 +141,7 @@ class Context:
         llm_resp = await prov.text_chat(
             prompt=prompt,
             image_urls=image_urls,
+            audio_urls=audio_urls,
             func_tool=tools,
             contexts=contexts,
             system_prompt=system_prompt,
@@ -149,6 +156,7 @@ class Context:
         chat_provider_id: str,
         prompt: str | None = None,
         image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
         contexts: list[Message] | None = None,
@@ -165,6 +173,7 @@ class Context:
             chat_provider_id: The chat provider ID to use.
             prompt: The prompt to send to the LLM, if `contexts` and `prompt` are both provided, `prompt` will be appended as the last user message
             image_urls: List of image URLs to include in the prompt, if `contexts` and `prompt` are both provided, `image_urls` will be appended to the last user message
+            audio_urls: List of audio URLs or local paths to include in the prompt, if `contexts` and `prompt` are both provided, `audio_urls` will be appended to the last user message
             tools: ToolSet of tools available to the LLM
             system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
             contexts: context messages for the LLM
@@ -207,6 +216,7 @@ class Context:
         request = ProviderRequest(
             prompt=prompt,
             image_urls=image_urls or [],
+            audio_urls=audio_urls or [],
             func_tool=tools,
             contexts=context_,
             system_prompt=system_prompt or "",
@@ -226,6 +236,13 @@ class Context:
             for k, v in kwargs.items()
             if k not in ["stream", "agent_hooks", "agent_context"]
         }
+        if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
+            other_kwargs.setdefault(
+                "tool_result_overflow_dir", get_astrbot_system_tmp_path()
+            )
+            other_kwargs.setdefault(
+                "read_tool", request.func_tool.get_tool("astrbot_file_read_tool")
+            )
 
         await agent_runner.reset(
             provider=prov,
@@ -480,7 +497,7 @@ class Context:
                     _parts.append(part)
                     if part in flags and i + 1 < len(module_part):
                         _parts.append(module_part[i + 1])
-                        module_part.append("main")
+                        _parts.append("main")
                         break
                 tool.handler_module_path = ".".join(_parts)
                 module_path = tool.handler_module_path
@@ -498,8 +515,8 @@ class Context:
     def register_web_api(
         self,
         route: str,
-        view_handler: Awaitable,
-        methods: list,
+        view_handler: WebApiHandler,
+        methods: list[str],
         desc: str,
     ) -> None:
         """注册 Web API。

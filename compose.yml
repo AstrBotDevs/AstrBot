@@ -1,15 +1,17 @@
-# 当接入 QQ NapCat 时，请使用这个 compose 文件一键部署: https://github.com/NapNeko/NapCat-Docker/blob/main/compose/astrbot.yml
+version: '3.8'
+
+# When connecting to OneBot v11 Napcat, please use this compose file for one-click deployment: https://github.com/NapNeko/NapCat-Docker/blob/main/compose/astrbot.yml
 
 services:
   astrbot:
     image: soulter/astrbot:latest
     container_name: astrbot
     restart: always
-    ports: # mappings description: https://github.com/AstrBotDevs/AstrBot/issues/497
-      - "6185:6185" # 必选，AstrBot WebUI 端口
-      - "6199:6199" # 可选, QQ 个人号 WebSocket 端口
-      # - "6195:6195" # 可选, 企业微信 Webhook 端口
-      # - "6196:6196" # 可选, QQ 官方接口 Webhook 端口
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "6185:6185" # AstrBot WebUI
+      - "6199:6199" # Optional. OneBot v11 Napcat Websocket Port
     environment:
       - TZ=Asia/Shanghai
     volumes:

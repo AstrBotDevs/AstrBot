@@ -15,7 +15,7 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 {
   "token": {
     "description": "Bot Token",
-    "type": "string",
+    "type": "string"
   },
   "sub_config": {
     "description": "Test nested configuration",
@@ -55,6 +55,10 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 - `editor_language`: Optional. The code language for the code editor, defaults to `json`.
 - `editor_theme`: Optional. The theme for the code editor. Options are `vs-light` (default) and `vs-dark`.
 - `_special`: Optional. Used to call AstrBot's visualization features for provider selection, persona selection, knowledge base selection, etc. See details below.
+
+### Configuration Internationalization (Optional)
+
+Configuration `description`, `hint`, and select `labels` can follow the WebUI language. See [Plugin Internationalization](./plugin-i18n).
 
 When the code editor is enabled, it looks like this:
 

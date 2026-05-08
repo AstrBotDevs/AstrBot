@@ -3,7 +3,6 @@
     <v-container fluid class="dashboard-shell pa-4 pa-md-6">
       <div class="dashboard-header">
         <div class="dashboard-header-main">
-          <div class="dashboard-eyebrow">{{ tm('header.eyebrow') }}</div>
           <div class="d-flex align-center flex-wrap" style="gap: 8px;">
             <h1 class="dashboard-title">{{ tm('page.title') }}</h1>
             <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>
@@ -23,21 +22,6 @@
             {{ tm('actions.create') }}
           </v-btn>
         </div>
-      </div>
-
-      <div class="dashboard-overview-grid">
-        <section
-          v-for="card in overviewCards"
-          :key="card.label"
-          class="dashboard-card dashboard-overview-card"
-        >
-          <div class="dashboard-card-icon">
-            <v-icon size="18">{{ card.icon }}</v-icon>
-          </div>
-          <div class="dashboard-card-label">{{ card.label }}</div>
-          <div class="dashboard-card-value">{{ card.value }}</div>
-          <div class="dashboard-card-note">{{ card.note }}</div>
-        </section>
       </div>
 
       <div class="dashboard-section-head">
@@ -136,18 +120,31 @@
                 </td>
                 <td class="actions-col">
                   <div class="table-actions">
-                    <v-switch
-                      v-model="item.enabled"
-                      inset
-                      density="compact"
-                      hide-details
-                      color="primary"
-                      class="mt-0"
-                      @change="toggleJob(item)"
-                    />
-                    <v-btn size="small" variant="text" color="error" @click="deleteJob(item)">
-                      {{ tm('actions.delete') }}
-                    </v-btn>
+                    <div class="table-actions-toggle">
+                      <v-switch
+                        v-model="item.enabled"
+                        inset
+                        density="compact"
+                        hide-details
+                        color="primary"
+                        class="table-actions-switch mt-0"
+                        @change="toggleJob(item)"
+                      />
+                    </div>
+                    <div class="table-actions-buttons">
+                      <v-btn
+                        v-if="item.job_type === 'active_agent'"
+                        size="small"
+                        variant="text"
+                        color="primary"
+                        @click="openEdit(item)"
+                      >
+                        {{ tm('actions.edit') }}
+                      </v-btn>
+                      <v-btn size="small" variant="text" color="error" @click="deleteJob(item)">
+                        {{ tm('actions.delete') }}
+                      </v-btn>
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -162,7 +159,7 @@
 
       <v-dialog v-model="createDialog" max-width="640">
         <v-card class="dashboard-dialog-card">
-          <v-card-title class="text-h6 pt-5 px-5">{{ tm('form.title') }}</v-card-title>
+          <v-card-title class="text-h6 pt-5 px-5">{{ dialogTitle }}</v-card-title>
           <v-card-subtitle class="px-5 text-body-2 text-medium-emphasis">
             {{ tm('form.chatHint') }}
           </v-card-subtitle>
@@ -206,8 +203,8 @@
           </v-card-text>
           <v-card-actions class="justify-end px-5 pb-5">
             <v-btn variant="text" @click="createDialog = false">{{ tm('actions.cancel') }}</v-btn>
-            <v-btn variant="tonal" color="primary" :loading="creating" @click="createJob">
-              {{ tm('actions.submit') }}
+            <v-btn variant="tonal" color="primary" :loading="creating" @click="submitJob">
+              {{ dialogSubmitText }}
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -231,6 +228,7 @@ const jobs = ref<any[]>([])
 const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([])
 const createDialog = ref(false)
 const creating = ref(false)
+const editingJobId = ref('')
 const newJob = ref({
   run_once: false,
   name: '',
@@ -247,10 +245,6 @@ const snackbar = ref({ show: false, message: '', color: 'success' })
 const proactivePlatformText = computed(() =>
   proactivePlatforms.value.map((p) => `${p.display_name || p.name}(${p.id})`).join(' / ')
 )
-
-const enabledJobsCount = computed(() => jobs.value.filter((job) => job.enabled).length)
-const runOnceCount = computed(() => jobs.value.filter((job) => job.run_once).length)
-const recurringCount = computed(() => jobs.value.filter((job) => !job.run_once).length)
 
 const sortedJobs = computed(() =>
   [...jobs.value].sort((a, b) => {
@@ -271,20 +265,9 @@ const sortedJobs = computed(() =>
   })
 )
 
-const overviewCards = computed(() => [
-  {
-    label: tm('overview.totalTasks'),
-    value: String(jobs.value.length),
-    note: tm('overview.totalTasksNote'),
-    icon: 'mdi-calendar-multiple'
-  },
-  {
-    label: tm('overview.enabledTasks'),
-    value: String(enabledJobsCount.value),
-    note: tm('overview.enabledTasksNote'),
-    icon: 'mdi-check-circle-outline'
-  }
-])
+const isEditing = computed(() => !!editingJobId.value)
+const dialogTitle = computed(() => tm(isEditing.value ? 'form.editTitle' : 'form.title'))
+const dialogSubmitText = computed(() => tm(isEditing.value ? 'actions.save' : 'actions.submit'))
 
 function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
   snackbar.value = { show: true, message, color }
@@ -394,8 +377,24 @@ async function deleteJob(job: any) {
 }
 
 function openCreate() {
+  editingJobId.value = ''
   resetNewJob()
   createDialog.value = true
+}
+
+function toDatetimeLocalValue(value: any): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const offset = date.getTimezoneOffset()
+  const local = new Date(date.getTime() - offset * 60_000)
+  return local.toISOString().slice(0, 16)
+}
+
+function toIsoDatetime(value: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toISOString()
 }
 
 function resetNewJob() {
@@ -409,6 +408,21 @@ function resetNewJob() {
     timezone: '',
     enabled: true
   }
+}
+
+function openEdit(job: any) {
+  editingJobId.value = job.job_id
+  newJob.value = {
+    run_once: !!job.run_once,
+    name: job.name || '',
+    note: job.note || job.description || '',
+    cron_expression: job.cron_expression || '',
+    run_at: toDatetimeLocalValue(job.run_at),
+    session: job.session || job?.payload?.session || '',
+    timezone: job.timezone || '',
+    enabled: job.enabled !== false
+  }
+  createDialog.value = true
 }
 
 async function createJob() {
@@ -431,10 +445,15 @@ async function createJob() {
 
   creating.value = true
   try {
-    const res = await axios.post('/api/cron/jobs', { ...newJob.value })
+    const payload = {
+      ...newJob.value,
+      run_at: newJob.value.run_once ? toIsoDatetime(newJob.value.run_at) : ''
+    }
+    const res = await axios.post('/api/cron/jobs', payload)
     if (res.data.status === 'ok') {
       toast(tm('messages.createSuccess'))
       createDialog.value = false
+      editingJobId.value = ''
       resetNewJob()
       await loadJobs()
     } else {
@@ -445,6 +464,59 @@ async function createJob() {
   } finally {
     creating.value = false
   }
+}
+
+async function updateJob() {
+  if (!editingJobId.value) {
+    return
+  }
+  if (!newJob.value.session) {
+    toast(tm('messages.sessionRequired'), 'warning')
+    return
+  }
+  if (!newJob.value.note) {
+    toast(tm('messages.noteRequired'), 'warning')
+    return
+  }
+  if (!newJob.value.run_once && !newJob.value.cron_expression) {
+    toast(tm('messages.cronRequired'), 'warning')
+    return
+  }
+  if (newJob.value.run_once && !newJob.value.run_at) {
+    toast(tm('messages.runAtRequired'), 'warning')
+    return
+  }
+
+  creating.value = true
+  try {
+    const payload = {
+      ...newJob.value,
+      run_at: newJob.value.run_once ? toIsoDatetime(newJob.value.run_at) : '',
+      description: newJob.value.note
+    }
+    const res = await axios.patch(`/api/cron/jobs/${editingJobId.value}`, payload)
+    if (res.data.status === 'ok') {
+      toast(tm('messages.updateSuccess'))
+      createDialog.value = false
+      editingJobId.value = ''
+      resetNewJob()
+      await loadJobs()
+    } else {
+      toast(res.data.message || tm('messages.updateFailed'), 'error')
+    }
+  } catch (e: any) {
+    toast(e?.response?.data?.message || tm('messages.updateFailed'), 'error')
+  } finally {
+    creating.value = false
+  }
+}
+
+async function submitJob() {
+  if (isEditing.value) {
+    await updateJob()
+    return
+  }
+  await createJob()
 }
 
 onMounted(() => {
@@ -513,7 +585,7 @@ onMounted(() => {
 }
 
 .task-table .col-actions {
-  width: 170px;
+  width: 220px;
 }
 
 .task-table th {
@@ -571,15 +643,34 @@ onMounted(() => {
 }
 
 .actions-col {
-  width: 170px;
+  width: 220px;
 }
 
 .table-actions {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  min-width: 190px;
+}
+
+.table-actions-toggle {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+}
+
+.table-actions-switch {
+  flex: 0 0 auto;
+}
+
+.cron-page :deep(.table-actions-switch .v-selection-control) {
+  min-width: auto;
+}
+
+.table-actions-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
   gap: 10px;
-  min-width: 140px;
 }
 
 .state-panel {
@@ -594,12 +685,13 @@ onMounted(() => {
   font-size: 14px;
 }
 
-.cron-page :deep(.dashboard-overview-grid) {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 @media (max-width: 900px) {
   .table-actions {
+    justify-items: start;
+  }
+
+  .table-actions-buttons,
+  .table-actions-toggle {
     justify-content: flex-start;
   }
 }

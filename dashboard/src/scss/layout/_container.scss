@@ -2,16 +2,11 @@ html {
   overflow-y: auto;
 }
 .v-main {
-  margin-right: 20px;
+  margin: 0;
 }
 
 .top-header {
   border-bottom: 1px solid rgba(var(--v-theme-borderLight), 0.5);
-}
-@media (max-width: 1279px) {
-  .v-main {
-    margin: 0 10px;
-  }
 }
 .spacer {
   padding: 100px 0;
@@ -84,14 +79,6 @@ $sizes: (
 // font family
 
 body {
-  .Poppins {
-    font-family: 'Poppins', $cjk-sans-fallback, sans-serif !important;
-  }
-
-  .Inter {
-    font-family: 'Inter', $cjk-sans-fallback, sans-serif !important;
-  }
-
   .Outfit {
     font-family: 'Outfit', $cjk-sans-fallback, sans-serif !important;
   }

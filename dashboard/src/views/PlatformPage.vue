@@ -4,7 +4,7 @@
       <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-8">
         <div>
           <h1 class="text-h1 font-weight-bold mb-2 d-flex align-center">
-            <v-icon color="black" class="me-2">mdi-robot</v-icon>{{ tm('title') }}
+            <v-icon class="me-2">mdi-robot</v-icon>{{ tm('title') }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-4">
             {{ tm('subtitle') }}
@@ -27,6 +27,7 @@
         <v-row v-else>
           <v-col v-for="(platform, index) in config_data.platform || []" :key="index" cols="12" md="6" lg="4" xl="3">
             <item-card :item="platform" title-field="id" enabled-field="enable"
+              variant="outlined"
               :bglogo="getPlatformIcon(platform.type || platform.id)" @toggle-enabled="platformStatusChange"
               @delete="deletePlatform" @edit="editPlatform">
               <template #item-details="{ item }">
@@ -241,6 +242,7 @@ import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
 } from '@/utils/confirmDialog';
+import { copyToClipboard } from '@/utils/clipboard';
 
 export default {
   name: 'PlatformPage',
@@ -608,10 +610,10 @@ export default {
 
     async copyWebhookUrl(webhookUuid) {
       const url = this.getWebhookUrl(webhookUuid);
-      try {
-        await navigator.clipboard.writeText(url);
+      const ok = await copyToClipboard(url);
+      if (ok) {
         this.showSuccess(this.tm('webhookCopied'));
-      } catch (err) {
+      } else {
         this.showError(this.tm('webhookCopyFailed'));
       }
     }

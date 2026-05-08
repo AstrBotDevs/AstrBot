@@ -253,7 +253,7 @@ async def test_ensure_vec_db_clears_stale_init_error(
     mock_vec_db.close = AsyncMock()
 
     with patch(
-        "astrbot.core.knowledge_base.kb_helper.FaissVecDB",
+        "astrbot.core.db.vec_db.faiss_impl.vec_db.FaissVecDB",
         return_value=mock_vec_db,
     ):
         # Execute _ensure_vec_db

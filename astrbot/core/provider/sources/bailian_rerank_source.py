@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import aiohttp
 
@@ -88,8 +89,6 @@ class BailianRerankProvider(RerankProvider):
         normalized_model = self.model.strip().lower()
         normalized_top_n = top_n if top_n is not None and top_n > 0 else None
 
-        # qwen3-rerank follows a model-specific payload:
-        # query/documents/top_n/instruct should be at the top level.
         if normalized_model == self.QWEN3_RERANK_MODEL:
             payload = {
                 "model": self.model,
@@ -107,8 +106,7 @@ class BailianRerankProvider(RerankProvider):
                 )
             return payload
 
-        base = {"model": self.model, "input": {"query": query, "documents": documents}}
-
+        payload_input = {"query": query, "documents": documents}
         params = {
             k: v
             for k, v in [
@@ -118,6 +116,7 @@ class BailianRerankProvider(RerankProvider):
             if v is not None
         }
 
+        base: dict[str, Any] = {"model": self.model, "input": payload_input}
         if params:
             base["parameters"] = params
 
@@ -136,14 +135,23 @@ class BailianRerankProvider(RerankProvider):
             BailianAPIError: API返回错误
             KeyError: 结果缺少必要字段
         """
-        # 检查响应状态
-        if data.get("code", "200") != "200":
-            raise BailianAPIError(
-                f"百炼 API 错误: {data.get('code')} – {data.get('message', '')}"
-            )
+        is_compatible_api = "compatible-api" in self.base_url
 
-        # 兼容旧版 API (output.results) 和新版 compatible API (results)
-        results = (data.get("output") or {}).get("results") or data.get("results") or []
+        if is_compatible_api:
+            code = data.get("code")
+            if code:
+                raise BailianAPIError(
+                    f"百炼 API 错误: {code} – {data.get('message', '')}"
+                )
+            results = data.get("results", [])
+        else:
+            code = data.get("code", "200")
+            if code != "200":
+                raise BailianAPIError(
+                    f"百炼 API 错误: {code} – {data.get('message', '')}"
+                )
+            results = data.get("output", {}).get("results", [])
+
         if not results:
             logger.warning(f"百炼 Rerank 返回空结果: {data}")
             return []

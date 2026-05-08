@@ -3,8 +3,7 @@ import { router } from '@/router';
 import axios from 'axios';
 import { createLoginProof, type LoginChallenge } from '@/utils/authLoginProof';
 
-export const useAuthStore = defineStore({
-  id: 'auth',
+export const useAuthStore = defineStore("auth", {
   state: () => ({
     // @ts-ignore
     username: '',
@@ -91,6 +90,7 @@ export const useAuthStore = defineStore({
       localStorage.removeItem('token');
       localStorage.removeItem('change_pwd_hint');
       localStorage.removeItem('legacy_pwd_hint');
+      void axios.post('/api/auth/logout').catch(() => undefined);
       router.push('/auth/login');
     },
     has_token(): boolean {

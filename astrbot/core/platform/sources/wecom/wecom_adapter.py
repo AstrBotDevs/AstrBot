@@ -1,9 +1,12 @@
 import asyncio
 import os
 import sys
+import time
 import uuid
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, cast
+from urllib.parse import unquote
 
 import quart
 from requests import Response
@@ -14,7 +17,7 @@ from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.messages import BaseMessage
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Image, Plain, Record
+from astrbot.api.message_components import File, Image, Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -37,6 +40,27 @@ if sys.version_info >= (3, 12):
     from typing import override
 else:
     from typing_extensions import override
+
+
+def _extract_wecom_media_filename(disposition: str | None) -> str | None:
+    if not disposition:
+        return None
+
+    for part in disposition.split(";"):
+        token = part.strip()
+        token_lower = token.lower()
+        if token_lower.startswith("filename*="):
+            value = token.split("=", 1)[1].strip().strip('"')
+            if value.lower().startswith("utf-8''"):
+                value = value[7:]
+            filename = Path(unquote(value).replace("\\", "/")).name
+            return filename or None
+        if token_lower.startswith("filename="):
+            value = token.split("=", 1)[1].strip().strip('"')
+            filename = Path(value.replace("\\", "/")).name
+            return filename or None
+
+    return None
 
 
 class WecomServer:
@@ -140,6 +164,8 @@ class WecomServer:
 
 @register_platform_adapter("wecom", "wecom 适配器", support_streaming_message=False)
 class WecomPlatformAdapter(Platform):
+    WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS = 15
+
     def __init__(
         self,
         platform_config: dict,
@@ -148,7 +174,6 @@ class WecomPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settingss = platform_settings
-        self.client_self_id = uuid.uuid4().hex[:8]
         self.api_base_url = platform_config.get(
             "api_base_url",
             "https://qyapi.weixin.qq.com/cgi-bin/",
@@ -167,6 +192,7 @@ class WecomPlatformAdapter(Platform):
 
         self.server = WecomServer(self._event_queue, self.config)
         self.agent_id: str | None = None
+        self._wechat_kf_seen_text_messages: dict[str, float] = {}
 
         self.client = WeChatClient(
             self.config["corpid"].strip(),
@@ -210,6 +236,28 @@ class WecomPlatformAdapter(Platform):
             await self.convert_message(msg)
 
         self.server.callback = callback
+
+    def _is_duplicate_wechat_kf_text_message(self, session_id: str, text: str) -> bool:
+        normalized_text = text.strip()
+        if not normalized_text:
+            return False
+
+        now = time.monotonic()
+        expired_keys = [
+            key
+            for key, expires_at in self._wechat_kf_seen_text_messages.items()
+            if expires_at <= now
+        ]
+        for key in expired_keys:
+            self._wechat_kf_seen_text_messages.pop(key, None)
+
+        dedup_key = f"{session_id}:{normalized_text}"
+        if dedup_key in self._wechat_kf_seen_text_messages:
+            return True
+        self._wechat_kf_seen_text_messages[dedup_key] = (
+            now + self.WECHAT_KF_TEXT_CONTENT_DEDUP_TTL_SECONDS
+        )
+        return False
 
     @override
     async def send_by_session(
@@ -391,6 +439,13 @@ class WecomPlatformAdapter(Platform):
         abm.message_str = ""
         if msgtype == "text":
             text = msg.get("text", {}).get("content", "").strip()
+            if self._is_duplicate_wechat_kf_text_message(abm.session_id, text):
+                logger.debug(
+                    "忽略 15 秒内重复微信客服文本消息 session_id=%s text=%s",
+                    abm.session_id,
+                    text,
+                )
+                return None
             abm.message = [Plain(text=text)]
             abm.message_str = text
         elif msgtype == "image":
@@ -427,6 +482,29 @@ class WecomPlatformAdapter(Platform):
                 return
 
             abm.message = [Record(file=path_wav, url=path_wav)]
+        elif msgtype == "file":
+            media_id = msg.get("file", {}).get("media_id", "")
+            if not media_id:
+                logger.warning(f"微信客服文件消息缺少 media_id: {msg}")
+                return
+
+            resp: Response = await asyncio.get_running_loop().run_in_executor(
+                None,
+                self.client.media.download,
+                media_id,
+            )
+
+            file_name = (
+                _extract_wecom_media_filename(
+                    resp.headers.get("Content-Disposition"),
+                )
+                or f"weixinkefu_{media_id}.bin"
+            )
+            temp_dir = Path(get_astrbot_temp_path())
+            file_path = temp_dir / f"weixinkefu_{uuid.uuid4().hex}_{file_name}"
+            file_path.write_bytes(resp.content)
+
+            abm.message = [File(name=file_name, file=str(file_path))]
         else:
             logger.warning(f"未实现的微信客服消息事件: {msg}")
             return

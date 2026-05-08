@@ -121,6 +121,14 @@
                     "description": "API-ключ BoCha",
                     "hint": "Можно добавить несколько ключей для ротации."
                 },
+                "websearch_brave_key": {
+                    "description": "API-ключ Brave Search",
+                    "hint": "Можно добавить несколько ключей для ротации."
+                },
+                "websearch_firecrawl_key": {
+                    "description": "API-ключ Firecrawl",
+                    "hint": "Можно добавить несколько ключей для ротации."
+                },
                 "websearch_baidu_app_builder_key": {
                     "description": "API-ключ Baidu Qianfan APP Builder",
                     "hint": "Ссылка: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -148,11 +156,11 @@
         },
         "agent_computer_use": {
             "description": "Использование компьютера (Agent Computer Use)",
-            "hint": "Позволяет AstrBot получать доступ к вашему компьютеру или песочнице для выполнения сложных задач. См. [Режим песочницы](https://docs.astrbot.app/use/astrbot-agent-sandbox.html), [Навыки](https://docs.astrbot.app/use/skills.html)",
+            "hint": "Позволяет AstrBot получать доступ к вашему компьютеру или песочнице для выполнения сложных задач. Подробнее: [Использование компьютера](https://docs.astrbot.app/use/computer.html).",
             "provider_settings": {
                 "computer_use_runtime": {
                     "description": "Среда выполнения (Runtime)",
-                    "hint": "'sandbox' означает запуск в изолированной среде, 'local' — локально на вашем ПК, 'none' — отключено. Если навыки загружены, выбор 'none' сделает их недоступными для агента."
+                    "hint": "Среда, к которой разрешён доступ Agent: `local` — локальная среда компьютера, `sandbox` — изолированная песочница, `none` — запретить доступ к любым средам."
                 },
                 "computer_use_require_admin": {
                     "description": "Требовать права администратора AstrBot",
@@ -177,6 +185,30 @@
                     "shipyard_neo_ttl": {
                         "description": "TTL песочницы Shipyard Neo",
                         "hint": "Время жизни песочницы в секундах."
+                    },
+                    "cua_image": {
+                        "description": "Образ CUA",
+                        "hint": "Образ или тип ОС песочницы CUA. По умолчанию linux. Поддерживаемые значения зависят от установленного CUA SDK."
+                    },
+                    "cua_os_type": {
+                        "description": "Тип ОС CUA",
+                        "hint": "Тип операционной системы песочницы CUA. По умолчанию linux."
+                    },
+                    "cua_idle_timeout": {
+                        "description": "Таймаут простоя CUA",
+                        "hint": "Таймаут простоя сессии песочницы CUA в секундах. Если значение больше 0, AstrBot автоматически завершит неактивную песочницу CUA после указанного времени бездействия; 0 отключает автоочистку."
+                    },
+                    "cua_telemetry_enabled": {
+                        "description": "Телеметрия CUA",
+                        "hint": "Разрешить CUA SDK отправлять телеметрию. По умолчанию выключено."
+                    },
+                    "cua_local": {
+                        "description": "Локальная песочница CUA",
+                        "hint": "Предпочитать локальную песочницу CUA. Включено по умолчанию, чтобы не требовать CUA_API_KEY для облачных песочниц. Отключите для использования облачных песочниц CUA."
+                    },
+                    "cua_api_key": {
+                        "description": "CUA API Key",
+                        "hint": "API key для облачной песочницы CUA. Требуется только если локальная песочница отключена. Также можно передать через переменную окружения CUA_API_KEY."
                     },
                     "shipyard_endpoint": {
                         "description": "Эндпоинт Shipyard API",
@@ -240,6 +272,10 @@
                 "llm_compress_provider_id": {
                     "description": "Модель для сжатия контекста",
                     "hint": "Если не выбрано, произойдет откат к стратегии удаления сообщений."
+                },
+                "fallback_max_context_tokens": {
+                    "description": "Запасной размер окна контекста",
+                    "hint": "Если max_context_tokens равен 0 и модель отсутствует во встроенных метаданных, используется это значение. По умолчанию: 128000."
                 }
             }
         },
@@ -275,6 +311,10 @@
                 "show_tool_call_result": {
                     "description": "Выводить результаты работы инструментов",
                     "hint": "Работает только при включенном статусе вызова функций. Показывает макс. 70 символов."
+                },
+                "buffer_intermediate_messages": {
+                    "description": "Объединять промежуточные сообщения Agent",
+                    "hint": "Если включено, промежуточный текст, созданный во время многошаговых вызовов инструментов в непотоковом режиме, будет буферизован и отправлен одним объединенным ответом после завершения Agent."
                 },
                 "sanitize_context_by_modalities": {
                     "description": "Очистка истории по модальностям",
@@ -372,7 +412,7 @@
             },
             "appid": {
                 "description": "ID приложения",
-                "hint": "Обязательно для QQ Official Bot. См. документацию."
+                "hint": "Обязательно. App ID текущей платформы сообщений. См. документацию по интеграции платформы."
             },
             "callback_server_host": {
                 "description": "Хост callback-сервера",
@@ -385,6 +425,10 @@
             "discord_activity_name": {
                 "description": "Название активности Discord",
                 "hint": "Статус бота в Discord. Оставьте пустым для отключения."
+            },
+            "discord_allow_bot_messages": {
+                "description": "Разрешить сообщения от ботов",
+                "hint": "Если включено, AstrBot будет получать сообщения от других Discord-ботов. Полезно для взаимодействия между ботами (например, пересылка сообщений). По умолчанию отключено."
             },
             "discord_command_register": {
                 "description": "Регистрировать слэш-команды Discord",
@@ -551,6 +595,18 @@
             "telegram_token": {
                 "description": "Токен бота",
                 "hint": "Если вы находитесь в материковом Китае, установите прокси или измените api_base в разделе «Другие настройки»."
+            },
+            "mattermost_url": {
+                "description": "URL Mattermost",
+                "hint": "Адрес сервиса Mattermost, например https://chat.example.com."
+            },
+            "mattermost_bot_token": {
+                "description": "Bot Token Mattermost",
+                "hint": "Токен доступа, созданный после добавления bot-аккаунта в Mattermost."
+            },
+            "mattermost_reconnect_delay": {
+                "description": "Задержка переподключения Mattermost",
+                "hint": "Сколько секунд ждать перед переподключением после разрыва WebSocket. По умолчанию 5 секунд."
             },
             "type": {
                 "description": "Тип адаптера"
@@ -1028,6 +1084,10 @@
                 "description": "Внешний адрес для Callback API",
                 "hint": "Используется для сервисов, требующих обратных выливов (например, в песочнице)."
             },
+            "disable_metrics": {
+                "description": "Отключить анонимную статистику",
+                "hint": "После отключения AstrBot не будет отправлять анонимные данные об использовании."
+            },
             "dashboard": {
                 "ssl": {
                     "enable": {
@@ -1076,7 +1136,11 @@
             },
             "rerank_api_base": {
                 "description": "Base URL API модели Rerank",
-                "hint": "AstrBot добавляет /v1/rerank к URL запроса."
+                "hint": "Полный URL запроса формируется путём добавления суффикса к Base URL (по умолчанию /v1/rerank)."
+            },
+            "rerank_api_suffix": {
+                "description": "Суффикс пути API",
+                "hint": "Суффикс пути, добавляемый к base_url, например /v1/rerank. Оставьте пустым, чтобы не добавлять."
             },
             "rerank_api_key": {
                 "description": "API Key",
@@ -1093,6 +1157,24 @@
                 "description": "Описание задачи для Rerank",
                 "hint": "Эффективно только для моделей qwen3-rerank. Рекомендуется писать на английском."
             },
+            "nvidia_rerank_api_base": {
+                "description": "Базовый URL API"
+            },
+            "nvidia_rerank_api_key": {
+                "description": "API-ключ"
+            },
+            "nvidia_rerank_model": {
+                "description": "Название модели Rerank",
+                "hint": "Укажите название модели в соответствии с документацией NVIDIA."
+            },
+            "nvidia_rerank_model_endpoint": {
+                "description": "Пользовательский endpoint модели",
+                "hint": "Пользовательский суффикс URL endpoint, по умолчанию /reranking."
+            },
+            "nvidia_rerank_truncate": {
+                "description": "Стратегия усечения текста",
+                "hint": "Определяет, следует ли усекать входной текст, если он слишком длинный и не помещается в максимальную длину контекста модели."
+            },
             "launch_model_if_not_running": {
                 "description": "Автозапуск модели",
                 "hint": "Если модель не запущена в Xinference, попытаться запустить её автоматически. Рекомендуется отключать в продакшене."
@@ -1103,6 +1185,7 @@
                 "labels": [
                     "Текст",
                     "Изображение",
+                    "Аудио",
                     "Инструменты"
                 ]
             },
@@ -1475,6 +1558,10 @@
             "whisper_hint": {
                 "description": "Заметки по локальному развертыванию Whisper",
                 "hint": "Перед включением установите openai-whisper и ffmpeg."
+            },
+            "whisper_device": {
+                "description": "Устройство инференса",
+                "hint": "Устройство для инференса Whisper. На Apple Silicon можно выбрать mps; в остальных средах рекомендуется cpu. Если выбран mps, но он недоступен, AstrBot автоматически переключится на cpu."
             },
             "id": {
                 "description": "ID провайдера"

@@ -44,39 +44,41 @@
       <v-slide-y-transition mode="out-in">
         <div v-if="(selectedConfigID || isSystemConfig) && fetched" :key="configContentKey" class="config-content" style="width: 100%;">
           <!-- 可视化编辑 -->
-          <AstrBotCoreConfigWrapper 
-            :metadata="metadata" 
+          <AstrBotCoreConfigWrapper
+            :metadata="metadata"
             :config_data="config_data"
             :search-keyword="configSearchKeyword"
           />
-
-          <v-tooltip :text="tm('actions.save')" location="left">
-            <template v-slot:activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
-                color="darkprimary" @click="updateConfig">
-              </v-btn>
-            </template>
-          </v-tooltip>
-
-          <v-tooltip :text="tm('codeEditor.title')" location="left">
-            <template v-slot:activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
-                @click="configToString(); codeEditorDialog = true">
-              </v-btn>
-            </template>
-          </v-tooltip>
-
-          <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
-            <template v-slot:activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-chat-processing" size="x-large" 
-                style="position: fixed; right: 52px; bottom: 196px;" color="secondary"
-                @click="openTestChat">
-              </v-btn>
-            </template>
-          </v-tooltip>
-
         </div>
       </v-slide-y-transition>
+
+      <!-- 浮动按钮放在 transition 外部 -->
+      <template v-if="(selectedConfigID || isSystemConfig) && fetched">
+        <v-tooltip :text="tm('actions.save')" location="left">
+          <template v-slot:activator="{ props }">
+            <v-btn v-bind="props" icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
+              color="darkprimary" @click="updateConfig">
+            </v-btn>
+          </template>
+        </v-tooltip>
+
+        <v-tooltip :text="tm('codeEditor.title')" location="left">
+          <template v-slot:activator="{ props }">
+            <v-btn v-bind="props" icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
+              @click="configToString(); codeEditorDialog = true">
+            </v-btn>
+          </template>
+        </v-tooltip>
+
+        <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
+          <template v-slot:activator="{ props }">
+            <v-btn v-bind="props" icon="mdi-chat-processing" size="x-large"
+              style="position: fixed; right: 52px; bottom: 196px;" color="secondary"
+              @click="openTestChat">
+            </v-btn>
+          </template>
+        </v-tooltip>
+      </template>
 
     </div>
   </div>

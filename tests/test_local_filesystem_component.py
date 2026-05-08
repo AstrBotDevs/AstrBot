@@ -9,8 +9,6 @@ from astrbot.core.computer.booters.local import LocalFileSystemComponent
 
 def _allow_tmp_root(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(local_booter, "get_astrbot_root", lambda: str(tmp_path))
-    monkeypatch.setattr(local_booter, "get_astrbot_data_path", lambda: str(tmp_path))
-    monkeypatch.setattr(local_booter, "get_astrbot_temp_path", lambda: str(tmp_path))
 
 
 def test_local_file_system_component_prefers_utf8_before_windows_locale(
@@ -27,7 +25,7 @@ def test_local_file_system_component_prefers_utf8_before_windows_locale(
 
     skill_path = tmp_path / "skills" / "demo.txt"
     skill_path.parent.mkdir(parents=True, exist_ok=True)
-    skill_path.write_bytes("技能内容".encode("utf-8"))
+    skill_path.write_bytes("技能内容".encode())
 
     result = asyncio.run(LocalFileSystemComponent().read_file(str(skill_path)))
 
