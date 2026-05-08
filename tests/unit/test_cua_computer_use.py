@@ -547,6 +547,92 @@ async def test_get_booter_rejects_busy_explicit_sandbox_for_shell_use(
 
 
 @pytest.mark.asyncio
+async def test_get_booter_uses_selected_running_sandbox_instead_of_default(
+    monkeypatch,
+    tmp_path,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+
+    class FakeBooter:
+        def __init__(self, sandbox_id: str):
+            self.sandbox_id = sandbox_id
+
+        async def available(self):
+            return True
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-default",
+        sandbox_name="default",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        is_default=True,
+    )
+    registry.upsert_sandbox(
+        sandbox_id="sb-selected",
+        sandbox_name="selected",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+    )
+    registry.set_current_sandbox_id("session-a", "sb-selected")
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+    computer_client.session_booter["sb-default"] = FakeBooter("sb-default")
+    computer_client.session_booter["sb-selected"] = FakeBooter("sb-selected")
+
+    booter = await computer_client.get_booter(
+        FakeContext(
+            {
+                "provider_settings": {
+                    "computer_use_runtime": "sandbox",
+                    "sandbox": {"booter": "cua"},
+                }
+            }
+        ),
+        "session-a",
+    )
+
+    assert booter.sandbox_id == "sb-selected"
+
+
+@pytest.mark.asyncio
+async def test_switch_current_rejects_non_running_sandbox(monkeypatch, tmp_path):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-stale",
+        sandbox_name="stale",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+    )
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+
+    with pytest.raises(RuntimeError, match="not running"):
+        computer_client.switch_current_cua_sandbox("session-a", "sb-stale")
+
+    assert registry.get_current_sandbox_id("session-a") is None
+
+
+@pytest.mark.asyncio
 async def test_busy_sandbox_screenshot_is_allowed_without_taking_control(
     monkeypatch, tmp_path
 ):
@@ -936,6 +1022,53 @@ async def test_managed_cua_boot_logs_lifecycle_details(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_booter_serializes_concurrent_default_boot(monkeypatch, tmp_path):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+
+    boot_started = asyncio.Event()
+    release_boot = asyncio.Event()
+    boots = []
+
+    class FakeBooter:
+        def __init__(self, sandbox_id: str):
+            self.sandbox_id = sandbox_id
+
+        async def available(self):
+            return True
+
+    async def fake_boot_managed(ctx, session_id, sandbox_id, cua_kwargs):
+        boots.append(sandbox_id)
+        boot_started.set()
+        await release_boot.wait()
+        return FakeBooter(sandbox_id)
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    monkeypatch.setattr(computer_client, "_boot_managed_cua_sandbox", fake_boot_managed)
+    computer_client.session_booter.clear()
+
+    ctx = FakeContext(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "cua"},
+            }
+        }
+    )
+    task_one = asyncio.create_task(computer_client.get_booter(ctx, "session-a"))
+    await boot_started.wait()
+    task_two = asyncio.create_task(computer_client.get_booter(ctx, "session-a"))
+    await asyncio.sleep(0)
+    release_boot.set()
+
+    booter_one, booter_two = await asyncio.gather(task_one, task_two)
+
+    assert booter_one is booter_two
+    assert len(boots) == 1
+
+
+@pytest.mark.asyncio
 async def test_get_booter_shuts_down_client_when_skill_sync_fails(monkeypatch):
     from astrbot.core.computer import computer_client
     from astrbot.core.computer.cua_registry import CuaSandboxRegistry
@@ -1036,6 +1169,48 @@ async def test_cua_idle_timeout_shuts_down_idle_sandbox_after_lease_release(
 
     assert shutdowns == [booter.session_id]
     assert booter.sandbox_id not in computer_client.session_booter
+    assert registry.get_sandbox(booter.sandbox_id) is None
+
+
+@pytest.mark.asyncio
+async def test_cua_idle_timeout_marks_persistent_sandbox_stopped_after_lease_release(
+    monkeypatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+
+    shutdowns = []
+
+    class FakeBooter:
+        async def shutdown(self):
+            shutdowns.append("sb-persistent")
+
+    registry = CuaSandboxRegistry(storage_path=Path("/tmp/cua-idle-persistent.json"))
+    registry.upsert_sandbox(
+        sandbox_id="sb-persistent",
+        sandbox_name="persistent",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        retention_policy="persistent",
+        idle_timeout=0.05,
+    )
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+    computer_client.session_booter["sb-persistent"] = FakeBooter()
+
+    computer_client._schedule_cua_idle_cleanup("sb-persistent", 0.05)
+    await asyncio.sleep(0.1)
+
+    record = registry.get_sandbox("sb-persistent")
+    assert shutdowns == ["sb-persistent"]
+    assert record is not None
+    assert record["status"] == "stopped"
+    assert "sb-persistent" not in computer_client.session_booter
 
 
 @pytest.mark.asyncio

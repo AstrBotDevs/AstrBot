@@ -154,6 +154,15 @@ class CuaSandboxRegistry:
             record["retention_policy"] = retention_policy
         return deepcopy(record)
 
+    def update_sandbox_status(
+        self, sandbox_id: str, status: str
+    ) -> dict[str, Any] | None:
+        record = self._payload["sandboxes"].get(sandbox_id)
+        if record is None:
+            return None
+        record["status"] = status
+        return deepcopy(record)
+
     def acquire_lease(
         self,
         *,

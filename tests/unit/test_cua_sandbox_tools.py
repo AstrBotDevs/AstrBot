@@ -29,6 +29,9 @@ def _wrapper(session_id: str = "session-a", role: str = "admin"):
         unified_msg_origin = session_id
         role = event_role
 
+        def get_sender_id(self):
+            return session_id
+
         async def send(self, message):
             return None
 
@@ -73,6 +76,13 @@ async def test_non_admin_can_list_and_switch_existing_sandbox(monkeypatch, tmp_p
         is_default=True,
     )
     monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+
+    class FakeBooter:
+        async def available(self):
+            return True
+
+    computer_client.session_booter["sb-default"] = FakeBooter()
 
     user_context = _wrapper("webchat:FriendMessage:user", role="member")
     list_result = json.loads(await CuaListSandboxesTool().call(user_context))
@@ -217,6 +227,58 @@ async def test_cua_screenshot_sandbox_observes_busy_sandbox_without_takeover(
     assert isinstance(result, mcp.types.CallToolResult)
     assert record["controller_session_id"] == "session-a"
     assert record["last_used_at"] != 1.0
+
+
+@pytest.mark.asyncio
+async def test_non_admin_cannot_takeover_or_screenshot_other_sandbox(
+    monkeypatch,
+    tmp_path: Path,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.booters.cua import CuaGUIComponent
+    from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+    from astrbot.core.tools.computer_tools.cua_sandbox import (
+        CuaScreenshotSandboxTool,
+        CuaTakeoverSandboxTool,
+    )
+
+    class FakeSandbox:
+        async def screenshot(self):
+            return {"base64": base64.b64encode(_PNG_BYTES).decode()}
+
+    class FakeBooter:
+        gui = CuaGUIComponent(FakeSandbox())
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-other",
+        sandbox_name="other",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() + 60,
+        connect_info={"name": "other", "local": True},
+    )
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+    computer_client.session_booter["sb-other"] = FakeBooter()
+
+    user_context = _wrapper("session-b", role="member")
+    takeover_result = await CuaTakeoverSandboxTool().call(
+        user_context, sandbox_id="sb-other"
+    )
+    screenshot_result = await CuaScreenshotSandboxTool().call(
+        user_context, sandbox_id="sb-other", send_to_user=False
+    )
+
+    assert "permission" in str(takeover_result).lower()
+    assert "permission" in str(screenshot_result).lower()
+    assert registry.get_sandbox("sb-other")["controller_session_id"] == "session-a"
 
 
 def test_cua_sandbox_tools_are_registered_as_builtin_tools():

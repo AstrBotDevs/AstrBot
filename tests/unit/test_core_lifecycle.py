@@ -942,6 +942,31 @@ class TestAstrBotCoreLifecycleRestart:
             mock_thread.assert_called_once()
             mock_thread.return_value.start.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_restart_cleans_up_managed_cua_sandboxes(
+        self, mock_log_broker, mock_db
+    ):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock()
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+        lifecycle.astrbot_updator = MagicMock()
+
+        with (
+            patch("astrbot.core.core_lifecycle.threading.Thread"),
+            patch(
+                "astrbot.core.core_lifecycle.cleanup_managed_cua_sandboxes",
+                new_callable=AsyncMock,
+            ) as cleanup,
+        ):
+            await lifecycle.restart()
+
+        cleanup.assert_awaited_once()
+
 
 class TestAstrBotCoreLifecycleLoadPipelineScheduler:
     """Tests for AstrBotCoreLifecycle.load_pipeline_scheduler method."""

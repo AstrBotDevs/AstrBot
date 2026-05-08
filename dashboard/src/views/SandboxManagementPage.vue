@@ -85,7 +85,7 @@
                   {{ tm('actions.console') }}
                   <v-tooltip activator="parent" location="top">{{ tm('tooltips.console') }}</v-tooltip>
                 </v-btn>
-                <v-btn size="small" variant="tonal" :disabled="!isCua(item) || !hasController(item)" @click="releaseSandbox(item)">{{ tm('actions.release') }}</v-btn>
+                <v-btn size="small" variant="tonal" :disabled="!canReleaseFromDashboard(item)" @click="releaseSandbox(item)">{{ tm('actions.release') }}</v-btn>
                 <v-btn size="small" variant="tonal" :disabled="!isCua(item)" @click="screenshotSandbox(item)">{{ tm('actions.screenshot') }}</v-btn>
                 <v-btn size="small" color="error" variant="tonal" :disabled="!isCua(item)" @click="openDestroyConfirm(item)">{{ tm('actions.destroy') }}</v-btn>
               </div>
@@ -375,6 +375,10 @@ function hasController(item: SandboxRecord) {
   return !!item.controller_session_id
 }
 
+function canReleaseFromDashboard(item: SandboxRecord) {
+  return isCua(item) && item.controller_session_id === 'dashboard'
+}
+
 function formatTime(value?: number | null) {
   if (!value) return '-'
   return new Date(value * 1000).toLocaleString()
@@ -517,6 +521,7 @@ async function confirmDestroySandbox() {
 
 async function screenshotSandbox(item: SandboxRecord) {
   const data = await postAction('/api/sandboxes/screenshot', { sandbox_id: item.sandbox_id })
+  if (!data) return
   const screenshot = data?.screenshot
   const legacyResult = data?.result
   const mimeType = screenshot?.mime_type || legacyResult?.mime_type || 'image/png'
@@ -567,7 +572,7 @@ function quoteForShell(value: string) {
 
 function buildConsoleShellCommand(command: string, cwd: string) {
   const prefix = cwd && cwd !== '~' ? `cd ${quoteForShell(cwd)} && ` : ''
-  return `${prefix}${command}; printf '\n__ASTRBOT_CWD__%s\n' "$PWD"`
+  return `${prefix}{ ${command}; __astrbot_status=$?; }; printf '\n__ASTRBOT_CWD__%s\n' "$PWD"; exit $__astrbot_status`
 }
 
 function parseConsoleShellResult(stdout: string, fallbackCwd: string) {

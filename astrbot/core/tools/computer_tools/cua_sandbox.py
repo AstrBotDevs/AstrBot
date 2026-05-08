@@ -226,6 +226,8 @@ class CuaTakeoverSandboxTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         sandbox_id: str,
     ) -> ToolExecResult:
+        if err := check_admin_permission(context, "Taking over CUA sandboxes"):
+            return err
         try:
             sandbox = takeover_cua_sandbox(_session_id(context), sandbox_id)
             return _to_json({"success": True, "sandbox": sandbox})
@@ -294,6 +296,8 @@ class CuaScreenshotSandboxTool(FunctionTool):
         send_to_user: bool = True,
         return_image_to_llm: bool = True,
     ) -> ToolExecResult:
+        if err := check_admin_permission(context, "Taking CUA sandbox screenshots"):
+            return err
         try:
             booter = await get_cua_sandbox_observer_booter_by_id(sandbox_id)
             gui = getattr(booter, "gui", None)
