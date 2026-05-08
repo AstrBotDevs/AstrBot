@@ -4,3 +4,5 @@ venv/
 node_modules/
 .vitepress/cache
 *dist
+scripts/deploy-cli.sh
+scripts/deploy-cli.ps1
