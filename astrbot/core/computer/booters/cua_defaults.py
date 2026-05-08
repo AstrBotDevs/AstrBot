@@ -2,6 +2,7 @@ CUA_DEFAULT_CONFIG = {
     "image": "linux",
     "os_type": "linux",
     "ttl": 3600,
+    "idle_timeout": 0,
     "telemetry_enabled": False,
     "local": True,
     "api_key": "",

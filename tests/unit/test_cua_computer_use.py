@@ -273,8 +273,8 @@ def test_cua_default_config_matches_booter_defaults():
     assert booter.api_key == CUA_DEFAULT_CONFIG["api_key"]
     assert sandbox_defaults["cua_image"] == CUA_DEFAULT_CONFIG["image"]
     assert sandbox_defaults["cua_os_type"] == CUA_DEFAULT_CONFIG["os_type"]
-    assert sandbox_defaults["cua_ttl"] == CUA_DEFAULT_CONFIG["ttl"]
-    assert sandbox_defaults["cua_idle_timeout"] == 0
+    assert "cua_ttl" not in sandbox_defaults
+    assert sandbox_defaults["cua_idle_timeout"] == CUA_DEFAULT_CONFIG["idle_timeout"]
     assert (
         sandbox_defaults["cua_telemetry_enabled"]
         == CUA_DEFAULT_CONFIG["telemetry_enabled"]
@@ -1383,7 +1383,8 @@ def test_cua_is_exposed_in_sandbox_config_metadata():
     assert "CUA" in booter["labels"]
     assert "provider_settings.sandbox.cua_image" in items
     assert "provider_settings.sandbox.cua_os_type" in items
-    assert "provider_settings.sandbox.cua_ttl" in items
+    assert "provider_settings.sandbox.cua_ttl" not in items
+    assert "provider_settings.sandbox.cua_idle_timeout" in items
     assert "provider_settings.sandbox.cua_telemetry_enabled" in items
     assert "provider_settings.sandbox.cua_local" in items
     assert "provider_settings.sandbox.cua_api_key" in items

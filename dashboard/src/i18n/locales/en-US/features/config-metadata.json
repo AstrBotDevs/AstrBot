@@ -194,9 +194,9 @@
             "description": "CUA OS Type",
             "hint": "CUA sandbox operating system type. Defaults to linux."
           },
-          "cua_ttl": {
-            "description": "CUA Sandbox TTL",
-            "hint": "CUA sandbox time-to-live in seconds. Actual behavior depends on the installed CUA SDK."
+          "cua_idle_timeout": {
+            "description": "CUA Idle Timeout",
+            "hint": "Idle timeout for CUA sandbox sessions in seconds. When greater than 0, AstrBot proactively shuts down an idle CUA sandbox after that amount of inactivity; 0 disables it."
           },
           "cua_telemetry_enabled": {
             "description": "CUA Telemetry",
