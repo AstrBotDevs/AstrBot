@@ -33,13 +33,20 @@ class FakeProvider:
         self.shutdowns.append(booter.sandbox_id)
 
 
+class FailingProvider(FakeProvider):
+    async def create_booter(self, context, session_id, sandbox_id, config):
+        self.boots.append((session_id, sandbox_id, config))
+        raise RuntimeError("boot failed")
+
+
 class FakeBooter:
-    def __init__(self, sandbox_id: str, provider: FakeProvider):
+    def __init__(self, sandbox_id: str, provider: FakeProvider, available: bool = True):
         self.sandbox_id = sandbox_id
         self.provider = provider
+        self._available = available
 
     async def available(self):
-        return True
+        return self._available
 
     async def shutdown(self):
         self.provider.shutdowns.append(self.sandbox_id)
@@ -137,3 +144,108 @@ async def test_sandbox_manager_destroy_prunes_boot_lock(tmp_path):
     await manager.destroy_sandbox("session-a", "sb-lock")
 
     assert "sb-lock" not in manager.boot_locks
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_cleans_registry_when_default_boot_fails(tmp_path):
+    provider = FailingProvider()
+    registry = SandboxRegistry(storage_path=tmp_path / "registry.json")
+    manager = SandboxManager(registry=registry, providers={"fake": provider})
+
+    with pytest.raises(RuntimeError, match="boot failed"):
+        await manager.get_or_create_booter(FakeContext(), "session-a", "fake")
+
+    assert registry.list_sandboxes() == []
+    assert registry.default_sandbox_id is None
+    assert manager.session_booter == {}
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_ignores_default_for_other_provider(tmp_path):
+    manager, registry, provider = _manager(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="neo-default",
+        sandbox_name="neo",
+        booter_type="shipyard_neo",
+        provider="shipyard_neo",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-neo",
+        owner_session_id="session-neo",
+        connect_info={},
+        is_default=True,
+    )
+
+    booter = await manager.get_or_create_booter(FakeContext(), "session-a", "fake")
+
+    assert booter.sandbox_id != "neo-default"
+    assert registry.get_sandbox(booter.sandbox_id)["provider"] == "fake"
+    assert provider.boots == [("session-a", booter.sandbox_id, {"image": "fake"})]
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_reports_unsupported_provider_on_destroy(tmp_path):
+    manager, registry, provider = _manager(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="neo",
+        sandbox_name="neo",
+        booter_type="shipyard_neo",
+        provider="shipyard_neo",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-neo",
+        owner_session_id="session-neo",
+        connect_info={},
+    )
+    manager.session_booter["neo"] = FakeBooter("neo", provider)
+
+    with pytest.raises(RuntimeError, match="Provider shipyard_neo is not supported"):
+        await manager.destroy_sandbox("session-a", "neo")
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_marks_unknown_record_running_after_boot(tmp_path):
+    manager, registry, provider = _manager(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="existing",
+        sandbox_name="existing",
+        booter_type="fake",
+        provider="fake",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        is_default=True,
+        status="unknown",
+    )
+
+    await manager.get_or_create_booter(FakeContext(), "session-a", "fake")
+
+    assert registry.get_sandbox("existing")["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_recreates_unavailable_cached_default_booter(tmp_path):
+    manager, registry, provider = _manager(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="existing",
+        sandbox_name="existing",
+        booter_type="fake",
+        provider="fake",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        is_default=True,
+    )
+    manager.session_booter["existing"] = FakeBooter(
+        "existing", provider, available=False
+    )
+
+    booter = await manager.get_or_create_booter(FakeContext(), "session-a", "fake")
+
+    assert booter is manager.session_booter["existing"]
+    assert booter._available is True
+    assert provider.boots == [("session-a", "existing", {"image": "fake"})]

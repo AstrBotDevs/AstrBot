@@ -93,6 +93,34 @@ def test_sandbox_registry_reconcile_startup_clears_managed_leases(tmp_path):
     assert registry.get_sandbox("external")["controller_session_id"] == "session-b"
 
 
+def test_sandbox_registry_load_only_clears_managed_leases(tmp_path):
+    storage_path = tmp_path / "sandbox_registry.json"
+    registry = SandboxRegistry(storage_path=storage_path)
+    _upsert(
+        registry,
+        "managed",
+        controller_user_id="user-a",
+        controller_session_id="session-a",
+        lease_expires_at=999,
+    )
+    _upsert(
+        registry,
+        "external",
+        managed=False,
+        created_by_astrbot=False,
+        controller_user_id="user-b",
+        controller_session_id="session-b",
+        lease_expires_at=999,
+    )
+    registry.save()
+
+    restored = SandboxRegistry(storage_path=storage_path)
+    restored.load()
+
+    assert restored.get_sandbox("managed")["controller_session_id"] is None
+    assert restored.get_sandbox("external")["controller_session_id"] == "session-b"
+
+
 def test_sandbox_registry_load_recovers_from_corrupted_json(tmp_path):
     storage_path = tmp_path / "sandbox_registry.json"
     storage_path.write_text("{not-json", encoding="utf-8")

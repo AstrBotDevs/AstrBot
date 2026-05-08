@@ -251,6 +251,8 @@ class SandboxRegistry:
         self._payload.update(payload)
         sandboxes = self._payload.get("sandboxes", {})
         for record in sandboxes.values():
+            if not record.get("managed"):
+                continue
             record["controller_user_id"] = None
             record["controller_session_id"] = None
             record["lease_expires_at"] = None

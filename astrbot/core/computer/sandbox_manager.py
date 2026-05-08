@@ -91,6 +91,23 @@ class SandboxManager:
     def new_sandbox_id(self, provider_id: str) -> str:
         return f"{provider_id}-{uuid.uuid4().hex[:12]}"
 
+    def get_provider(self, provider_id: str) -> SandboxProvider:
+        provider = self.providers.get(provider_id)
+        if provider is None:
+            raise RuntimeError(f"Provider {provider_id} is not supported")
+        return provider
+
+    def get_default_sandbox_id(self, provider_id: str) -> str | None:
+        default_sandbox_id = self.registry.default_sandbox_id
+        if default_sandbox_id:
+            record = self.registry.get_sandbox(default_sandbox_id)
+            if record and record.get("provider") == provider_id:
+                return default_sandbox_id
+        for record in self.registry.list_sandboxes():
+            if record.get("managed") and record.get("provider") == provider_id:
+                return record["sandbox_id"]
+        return None
+
     async def booter_available(self, booter: ComputerBooter) -> bool:
         available = getattr(booter, "available", None)
         if available is None:
@@ -134,11 +151,21 @@ class SandboxManager:
     async def get_or_create_booter(
         self, context: Context, session_id: str, provider_id: str
     ) -> ComputerBooter:
-        provider = self.providers[provider_id]
+        provider = self.get_provider(provider_id)
         create_config = provider.build_create_config(context, session_id)
 
         current_sandbox_id = self.registry.get_current_sandbox_id(session_id)
-        if current_sandbox_id and current_sandbox_id in self.session_booter:
+        current_record = (
+            self.registry.get_sandbox(current_sandbox_id)
+            if current_sandbox_id
+            else None
+        )
+        if (
+            current_sandbox_id
+            and current_record
+            and current_record.get("provider") == provider_id
+            and current_sandbox_id in self.session_booter
+        ):
             if not self.acquire_lease(current_sandbox_id, session_id):
                 raise RuntimeError(f"Sandbox {current_sandbox_id} is busy")
             booter = self.session_booter[current_sandbox_id]
@@ -154,7 +181,7 @@ class SandboxManager:
                 return booter
             self.session_booter.pop(current_sandbox_id, None)
 
-        target_sandbox_id = self.registry.default_sandbox_id
+        target_sandbox_id = self.get_default_sandbox_id(provider_id)
         if target_sandbox_id is None:
             target_sandbox_id = self.new_sandbox_id(provider_id)
             record = self.registry.upsert_sandbox(
@@ -191,7 +218,10 @@ class SandboxManager:
                     continue
 
                 if target_sandbox_id in self.session_booter:
-                    break
+                    booter = self.session_booter[target_sandbox_id]
+                    if await self.booter_available(booter):
+                        break
+                    self.session_booter.pop(target_sandbox_id, None)
 
                 if not self.acquire_lease(target_sandbox_id, session_id):
                     target_sandbox_id = self._upsert_new_sandbox_record(
@@ -199,9 +229,15 @@ class SandboxManager:
                     )
                     continue
 
-                client = await provider.create_booter(
-                    context, session_id, target_sandbox_id, create_config
-                )
+                try:
+                    client = await provider.create_booter(
+                        context, session_id, target_sandbox_id, create_config
+                    )
+                except Exception:
+                    self.registry.delete_sandbox(target_sandbox_id)
+                    self.drop_boot_lock(target_sandbox_id)
+                    self.save_registry()
+                    raise
                 setattr(client, "sandbox_id", target_sandbox_id)
                 self.session_booter[target_sandbox_id] = client
                 break
@@ -209,6 +245,7 @@ class SandboxManager:
             break
 
         self.registry.touch_sandbox(target_sandbox_id)
+        self.registry.update_sandbox_status(target_sandbox_id, "running")
         self.registry.set_current_sandbox_id(session_id, target_sandbox_id)
         self.save_registry()
         self.schedule_idle_cleanup(
@@ -224,7 +261,7 @@ class SandboxManager:
         provider_id: str,
         sandbox_name: str | None = None,
     ) -> dict:
-        provider = self.providers[provider_id]
+        provider = self.get_provider(provider_id)
         create_config = provider.build_create_config(context, session_id)
         config = context.get_config(umo=session_id)
         sandbox_id = self.new_sandbox_id(provider_id)
@@ -252,6 +289,7 @@ class SandboxManager:
         setattr(client, "sandbox_id", sandbox_id)
         self.session_booter[sandbox_id] = client
         self.registry.touch_sandbox(sandbox_id)
+        self.registry.update_sandbox_status(sandbox_id, "running")
         self.save_registry()
         self.schedule_idle_cleanup(sandbox_id, idle_timeout)
         return self.registry.get_sandbox(sandbox_id) or record
@@ -414,7 +452,7 @@ class SandboxManager:
             raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
         booter = self.session_booter.pop(sandbox_id, None)
         if booter is not None:
-            await self.providers[record.get("provider", "")].destroy_booter(
+            await self.get_provider(record.get("provider", "")).destroy_booter(
                 booter, record
             )
         self.clear_idle_state(sandbox_id)
@@ -457,7 +495,7 @@ class SandboxManager:
             booter = self.session_booter.pop(sandbox_id, None)
             if booter is not None:
                 try:
-                    await self.providers[record.get("provider", "")].destroy_booter(
+                    await self.get_provider(record.get("provider", "")).destroy_booter(
                         booter, record
                     )
                 except Exception as shutdown_err:
@@ -521,9 +559,9 @@ class SandboxManager:
                 booter = self.session_booter.pop(sandbox_id, None)
                 if booter is not None:
                     try:
-                        await self.providers[record.get("provider", "")].destroy_booter(
-                            booter, record
-                        )
+                        await self.get_provider(
+                            record.get("provider", "")
+                        ).destroy_booter(booter, record)
                     except Exception as shutdown_err:
                         logger.warning(
                             "[Computer] Failed to shutdown idle sandbox %s: %s",
