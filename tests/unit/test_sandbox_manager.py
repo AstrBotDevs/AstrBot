@@ -17,6 +17,7 @@ class FakeContext:
 
 class FakeProvider:
     provider_id = "fake"
+    capabilities = {"create", "destroy"}
 
     def __init__(self):
         self.boots = []
@@ -27,6 +28,9 @@ class FakeProvider:
 
     def build_connect_info(self, sandbox_name, config):
         return {"kind": "fake", "name": sandbox_name}
+
+    def update_connect_info(self, record, *, sandbox_name):
+        return {"kind": "fake", "display": sandbox_name}
 
     def get_idle_timeout(self, context, session_id):
         return 7.0
@@ -110,7 +114,37 @@ async def test_sandbox_manager_creates_default_and_current_sandbox(tmp_path):
         "name": booter.sandbox_id,
     }
     assert registry.get_sandbox(booter.sandbox_id)["idle_timeout"] == 7.0
+    assert registry.get_sandbox(booter.sandbox_id)["capabilities"] == [
+        "create",
+        "destroy",
+    ]
     assert provider.boots == [("session-a", booter.sandbox_id, {"image": "fake"})]
+
+
+def test_sandbox_manager_renames_with_provider_owned_connect_info(tmp_path):
+    manager, registry, provider = _manager(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="target",
+        sandbox_name="old",
+        booter_type="fake",
+        provider="fake",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"kind": "fake", "name": "old"},
+    )
+
+    updated = manager.update_sandbox_config(
+        "target",
+        sandbox_name="new",
+        idle_timeout=None,
+        expires_at=None,
+        retention_policy="temporary",
+    )
+
+    assert updated["sandbox_name"] == "new"
+    assert updated["connect_info"] == {"kind": "fake", "display": "new"}
 
 
 @pytest.mark.asyncio

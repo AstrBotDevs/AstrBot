@@ -20,6 +20,7 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
 
 class CuaSandboxProvider:
     provider_id = "cua"
+    capabilities = {"create", "destroy", "shell", "screenshot"}
 
     def __init__(self, boot_hook: BootHook | None = None) -> None:
         self._boot_hook = boot_hook
@@ -36,6 +37,11 @@ class CuaSandboxProvider:
             "image": config.get("image"),
             "os_type": config.get("os_type"),
         }
+
+    def update_connect_info(self, record: dict, *, sandbox_name: str) -> dict:
+        connect_info = dict(record.get("connect_info") or {})
+        connect_info["name"] = sandbox_name
+        return connect_info
 
     def get_idle_timeout(self, context: Context, session_id: str) -> float:
         config = context.get_config(umo=session_id)

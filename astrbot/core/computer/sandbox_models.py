@@ -37,6 +37,7 @@ class SandboxRecord:
     retention_policy: SandboxRetentionPolicy = SandboxRetentionPolicy.TEMPORARY
     status: SandboxStatus = SandboxStatus.RUNNING
     connect_info: dict[str, Any] = field(default_factory=dict)
+    capabilities: list[str] = field(default_factory=list)
     labels: dict[str, Any] = field(default_factory=dict)
     notes: str | None = None
 
@@ -73,6 +74,9 @@ class SandboxRecord:
             ),
             status=SandboxStatus(data.get("status", SandboxStatus.RUNNING)),
             connect_info=dict(data.get("connect_info") or {}),
+            capabilities=sorted(
+                str(item) for item in data.get("capabilities", []) if item
+            ),
             labels=dict(data.get("labels") or {}),
             notes=data.get("notes"),
         )
@@ -97,6 +101,7 @@ class SandboxRecord:
             "retention_policy": self.retention_policy.value,
             "status": self.status.value,
             "connect_info": dict(self.connect_info),
+            "capabilities": list(self.capabilities),
             "labels": dict(self.labels),
             "notes": self.notes,
         }

@@ -72,6 +72,9 @@ class SandboxManager:
             "owner_user_id": session_id,
             "owner_session_id": session_id,
             "connect_info": connect_info,
+            "capabilities": sorted(
+                getattr(self.get_provider(provider_id), "capabilities", set())
+            ),
             "is_default": is_default,
             "idle_timeout": idle_timeout,
         }
@@ -86,7 +89,7 @@ class SandboxManager:
         return provider
 
     def get_default_sandbox_id(self, provider_id: str) -> str | None:
-        default_sandbox_id = self.registry.default_sandbox_id
+        default_sandbox_id = self.registry.get_default_sandbox_id(provider_id)
         if default_sandbox_id:
             record = self.registry.get_sandbox(default_sandbox_id)
             if record and record.get("provider") == provider_id:
@@ -335,9 +338,16 @@ class SandboxManager:
         return self.registry.get_sandbox(sandbox_id) or sandbox
 
     def list_sandboxes(self) -> list[dict]:
-        return [
-            record for record in self.registry.list_sandboxes() if record.get("managed")
-        ]
+        records = []
+        for record in self.registry.list_sandboxes():
+            if not record.get("managed"):
+                continue
+            provider = self.providers.get(record.get("provider"))
+            record["capabilities"] = sorted(
+                getattr(provider, "capabilities", set()) if provider else []
+            )
+            records.append(record)
+        return records
 
     def set_default_sandbox(self, sandbox_id: str) -> dict:
         record = self.registry.get_sandbox(sandbox_id)
@@ -371,6 +381,12 @@ class SandboxManager:
         }
         if sandbox_name is not None:
             updates["sandbox_name"] = sandbox_name
+            provider = self.providers.get(record.get("provider", ""))
+            if provider is not None:
+                updates["connect_info"] = provider.update_connect_info(
+                    record,
+                    sandbox_name=sandbox_name.strip(),
+                )
         updated = self.registry.update_sandbox_config(sandbox_id, **updates)
         if retention_policy == "persistent" or not idle_timeout:
             self.clear_idle_state(sandbox_id)

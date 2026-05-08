@@ -16,6 +16,7 @@ _UNSET = object()
 def _default_registry_payload() -> dict[str, Any]:
     return {
         "default_sandbox_id": None,
+        "default_sandbox_ids": {},
         "sandboxes": {},
         "session_current": {},
     }
@@ -32,6 +33,16 @@ class SandboxRegistry:
     def default_sandbox_id(self) -> str | None:
         return self._payload["default_sandbox_id"]
 
+    def get_default_sandbox_id(self, provider: str) -> str | None:
+        sandbox_id = self._payload.get("default_sandbox_ids", {}).get(provider)
+        if sandbox_id and sandbox_id in self._payload["sandboxes"]:
+            return sandbox_id
+        if self._payload["default_sandbox_id"]:
+            record = self.get_sandbox(self._payload["default_sandbox_id"])
+            if record and record.get("provider") == provider:
+                return self._payload["default_sandbox_id"]
+        return None
+
     def get_sandbox(self, sandbox_id: str) -> dict[str, Any] | None:
         record = self._payload["sandboxes"].get(sandbox_id)
         return deepcopy(record) if record is not None else None
@@ -45,7 +56,21 @@ class SandboxRegistry:
             self._payload["sandboxes"][old_default]["is_default"] = False
         self._payload["default_sandbox_id"] = sandbox_id
         if sandbox_id and sandbox_id in self._payload["sandboxes"]:
-            self._payload["sandboxes"][sandbox_id]["is_default"] = True
+            record = self._payload["sandboxes"][sandbox_id]
+            provider = record.get("provider")
+            if provider:
+                old_provider_default = self._payload.setdefault(
+                    "default_sandbox_ids", {}
+                ).get(provider)
+                if (
+                    old_provider_default
+                    and old_provider_default in self._payload["sandboxes"]
+                ):
+                    self._payload["sandboxes"][old_provider_default]["is_default"] = (
+                        False
+                    )
+                self._payload["default_sandbox_ids"][provider] = sandbox_id
+            record["is_default"] = True
 
     def get_current_sandbox_id(self, session_id: str) -> str | None:
         return self._payload["session_current"].get(session_id)
@@ -78,6 +103,7 @@ class SandboxRegistry:
         controller_session_id: str | None | object = _UNSET,
         lease_expires_at: float | None | object = _UNSET,
         labels: dict[str, Any] | None | object = _UNSET,
+        capabilities: list[str] | set[str] | None | object = _UNSET,
         notes: str | None | object = _UNSET,
     ) -> dict[str, Any]:
         record = self._payload["sandboxes"].get(sandbox_id, {})
@@ -105,6 +131,7 @@ class SandboxRegistry:
             "status": "running",
             "is_default": False,
             "labels": {},
+            "capabilities": [],
             "notes": None,
         }
         updates = {
@@ -118,6 +145,9 @@ class SandboxRegistry:
             "status": status,
             "is_default": is_default,
             "labels": deepcopy(labels) if labels is not _UNSET else _UNSET,
+            "capabilities": sorted(capabilities)
+            if capabilities is not _UNSET
+            else _UNSET,
             "notes": notes,
         }
         for field_name, default_value in defaults.items():
@@ -136,7 +166,15 @@ class SandboxRegistry:
 
     def delete_sandbox(self, sandbox_id: str) -> None:
         was_default = self._payload["default_sandbox_id"] == sandbox_id
-        self._payload["sandboxes"].pop(sandbox_id, None)
+        deleted = self._payload["sandboxes"].pop(sandbox_id, None)
+        if deleted:
+            provider = deleted.get("provider")
+            if (
+                provider
+                and self._payload.get("default_sandbox_ids", {}).get(provider)
+                == sandbox_id
+            ):
+                self._payload["default_sandbox_ids"].pop(provider, None)
         if was_default:
             self._payload["default_sandbox_id"] = None
             for candidate_id, candidate in self._payload["sandboxes"].items():
@@ -165,6 +203,7 @@ class SandboxRegistry:
         sandbox_id: str,
         *,
         sandbox_name: str | object = _UNSET,
+        connect_info: dict[str, Any] | object = _UNSET,
         idle_timeout: int | float | None | object = _UNSET,
         expires_at: int | float | None | object = _UNSET,
         retention_policy: str | object = _UNSET,
@@ -177,9 +216,8 @@ class SandboxRegistry:
             if not name:
                 raise ValueError("sandbox_name must be a non-empty string")
             record["sandbox_name"] = name
-            connect_info = dict(record.get("connect_info") or {})
-            connect_info["name"] = name
-            record["connect_info"] = connect_info
+        if connect_info is not _UNSET:
+            record["connect_info"] = deepcopy(connect_info)
         if idle_timeout is not _UNSET:
             record["idle_timeout"] = idle_timeout
         if expires_at is not _UNSET:
@@ -303,5 +341,18 @@ class SandboxRegistry:
             record["lease_expires_at"] = None
             valid_sandboxes[record["sandbox_id"]] = record
         self._payload["sandboxes"] = valid_sandboxes
+        defaults = self._payload.get("default_sandbox_ids", {})
+        self._payload["default_sandbox_ids"] = {
+            provider: sandbox_id
+            for provider, sandbox_id in defaults.items()
+            if sandbox_id in valid_sandboxes
+            and valid_sandboxes[sandbox_id].get("provider") == provider
+        }
+        if not self._payload["default_sandbox_ids"]:
+            for sandbox_id, record in valid_sandboxes.items():
+                if record.get("is_default"):
+                    self._payload["default_sandbox_ids"][record["provider"]] = (
+                        sandbox_id
+                    )
         if self._payload["default_sandbox_id"] not in valid_sandboxes:
             self._payload["default_sandbox_id"] = None

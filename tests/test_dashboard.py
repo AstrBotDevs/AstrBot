@@ -817,7 +817,14 @@ async def test_sandbox_dashboard_api_lists_provider_neutral_sandboxes(
     sandboxes = data["data"]["sandboxes"]
     assert [sandbox["sandbox_id"] for sandbox in sandboxes] == ["sb-cua", "sb-neo"]
     assert sandboxes[0]["provider"] == "cua"
+    assert sandboxes[0]["capabilities"] == [
+        "create",
+        "destroy",
+        "screenshot",
+        "shell",
+    ]
     assert sandboxes[1]["booter_type"] == "shipyard_neo"
+    assert sandboxes[1]["capabilities"] == []
 
 
 @pytest.mark.asyncio
@@ -1007,7 +1014,7 @@ async def test_sandbox_dashboard_api_sets_default_and_updates_config(
     assert config_data["status"] == "ok"
     sandbox = registry.get_sandbox("sb-b")
     assert sandbox["sandbox_name"] == "Renamed Sandbox"
-    assert sandbox["connect_info"]["name"] == "Renamed Sandbox"
+    assert sandbox["connect_info"]["name"] == "Sandbox B"
     assert sandbox["retention_policy"] == "persistent"
     assert sandbox["idle_timeout"] is None
     assert sandbox["expires_at"] is None

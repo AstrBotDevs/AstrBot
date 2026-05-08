@@ -81,13 +81,13 @@
                 <v-btn size="small" variant="tonal" @click="openDetails(item)">{{ tm('actions.inspect') }}</v-btn>
                 <v-btn size="small" color="amber" variant="tonal" :disabled="item.is_default" @click="setDefaultSandbox(item)">{{ tm('actions.setDefault') }}</v-btn>
                 <v-btn size="small" variant="tonal" @click="openConfig(item)">{{ tm('actions.configure') }}</v-btn>
-                <v-btn size="small" color="primary" variant="tonal" :disabled="!isCua(item)" @click="openConsole(item)">
+                <v-btn size="small" color="primary" variant="tonal" :disabled="!hasCapability(item, 'shell')" @click="openConsole(item)">
                   {{ tm('actions.console') }}
                   <v-tooltip activator="parent" location="top">{{ tm('tooltips.console') }}</v-tooltip>
                 </v-btn>
                 <v-btn size="small" variant="tonal" :disabled="!canReleaseFromDashboard(item)" @click="releaseSandbox(item)">{{ tm('actions.release') }}</v-btn>
-                <v-btn size="small" variant="tonal" :disabled="!isCua(item)" @click="screenshotSandbox(item)">{{ tm('actions.screenshot') }}</v-btn>
-                <v-btn size="small" color="error" variant="tonal" :disabled="!isCua(item)" @click="openDestroyConfirm(item)">{{ tm('actions.destroy') }}</v-btn>
+                <v-btn size="small" variant="tonal" :disabled="!hasCapability(item, 'screenshot')" @click="screenshotSandbox(item)">{{ tm('actions.screenshot') }}</v-btn>
+                <v-btn size="small" color="error" variant="tonal" :disabled="!hasCapability(item, 'destroy')" @click="openDestroyConfirm(item)">{{ tm('actions.destroy') }}</v-btn>
               </div>
             </template>
 
@@ -304,6 +304,7 @@ type SandboxRecord = {
   retention_policy?: string | null
   status?: string
   connect_info?: Record<string, unknown>
+  capabilities?: string[]
 }
 
 type ConsoleHistoryEntry = {
@@ -379,6 +380,10 @@ function requiredSandboxNameRule(value: string) {
 
 function isCua(item: SandboxRecord) {
   return item.provider === 'cua' || item.booter_type === 'cua'
+}
+
+function hasCapability(item: SandboxRecord, capability: string) {
+  return item.capabilities?.includes(capability) ?? false
 }
 
 function hasController(item: SandboxRecord) {

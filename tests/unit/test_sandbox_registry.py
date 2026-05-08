@@ -44,6 +44,21 @@ def test_sandbox_registry_delete_default_promotes_another_managed_sandbox(tmp_pa
     assert registry.get_sandbox("sb-next")["is_default"] is True
 
 
+def test_sandbox_registry_tracks_default_per_provider(tmp_path):
+    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
+    _upsert(registry, "cua-default", provider="cua", is_default=True)
+    _upsert(registry, "neo-default", provider="shipyard_neo", is_default=True)
+
+    assert registry.get_default_sandbox_id("cua") == "cua-default"
+    assert registry.get_default_sandbox_id("shipyard_neo") == "neo-default"
+    assert registry.default_sandbox_id == "neo-default"
+
+    registry.delete_sandbox("neo-default")
+
+    assert registry.get_default_sandbox_id("shipyard_neo") is None
+    assert registry.get_default_sandbox_id("cua") == "cua-default"
+
+
 def test_sandbox_registry_acquires_releases_and_takes_over_lease(tmp_path):
     registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
     _upsert(registry, "sb-1")

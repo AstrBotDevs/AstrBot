@@ -27,6 +27,7 @@ def test_sandbox_record_round_trips_current_api_fields():
         "retention_policy": "persistent",
         "status": "running",
         "connect_info": {"name": "worker"},
+        "capabilities": ["create", "destroy"],
         "labels": {"team": "qa"},
         "notes": "hello",
     }

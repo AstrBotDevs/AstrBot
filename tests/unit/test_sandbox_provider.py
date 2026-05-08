@@ -39,6 +39,27 @@ def test_cua_sandbox_provider_builds_config_from_runtime_settings():
     assert config["api_key"] == "sk-test"
 
 
+def test_cua_sandbox_provider_declares_dashboard_capabilities():
+    from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
+
+    provider = CuaSandboxProvider()
+
+    assert provider.capabilities == {"create", "destroy", "shell", "screenshot"}
+
+
+def test_cua_sandbox_provider_updates_connect_info_name():
+    from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
+
+    provider = CuaSandboxProvider()
+
+    connect_info = provider.update_connect_info(
+        {"connect_info": {"name": "old", "local": True, "image": "linux"}},
+        sandbox_name="new",
+    )
+
+    assert connect_info == {"name": "new", "local": True, "image": "linux"}
+
+
 @pytest.mark.asyncio
 async def test_cua_sandbox_provider_creates_booter_and_syncs_skills(monkeypatch):
     from astrbot.core.computer import cua_sandbox_provider
