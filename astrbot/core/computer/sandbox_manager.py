@@ -230,7 +230,16 @@ class SandboxManager:
 
                 if target_sandbox_id in self.session_booter:
                     booter = self.session_booter[target_sandbox_id]
-                    if await self.booter_available(booter):
+                    try:
+                        is_available = await self.booter_available(booter)
+                    except Exception:
+                        self.registry.release_lease(target_sandbox_id)
+                        self.registry.update_sandbox_status(
+                            target_sandbox_id, "unknown"
+                        )
+                        self.save_registry()
+                        raise
+                    if is_available:
                         break
                     self.session_booter.pop(target_sandbox_id, None)
 
@@ -408,6 +417,22 @@ class SandboxManager:
         self.save_registry()
         return self.registry.get_sandbox(sandbox_id) or record
 
+    async def switch_current_sandbox_checked(
+        self, session_id: str, sandbox_id: str
+    ) -> dict:
+        record = self.registry.get_sandbox(sandbox_id)
+        if record is None or not record.get("managed"):
+            raise RuntimeError(f"Sandbox {sandbox_id} not found")
+        booter = self.session_booter.get(sandbox_id)
+        if booter is None:
+            raise RuntimeError(f"Sandbox {sandbox_id} is not running")
+        if not await self.booter_available(booter):
+            self.session_booter.pop(sandbox_id, None)
+            self.registry.update_sandbox_status(sandbox_id, "unknown")
+            self.save_registry()
+            raise RuntimeError(f"Sandbox {sandbox_id} is not running")
+        return self.switch_current_sandbox(session_id, sandbox_id)
+
     def get_current_sandbox(self, session_id: str) -> dict:
         sandbox_id = self.registry.get_current_sandbox_id(session_id)
         return {
@@ -510,7 +535,17 @@ class SandboxManager:
                     sandbox_id,
                 )
                 continue
-            provider = self.get_provider(record.get("provider", ""))
+            try:
+                provider = self.get_provider(record.get("provider", ""))
+            except RuntimeError as provider_error:
+                self.registry.update_sandbox_status(sandbox_id, "unknown")
+                self.save_registry()
+                logger.warning(
+                    "[Computer] Skip managed sandbox cleanup for unsupported provider: sandbox_id=%s error=%s",
+                    sandbox_id,
+                    provider_error,
+                )
+                continue
             booter = self.session_booter.get(sandbox_id)
             if booter is not None:
                 try:

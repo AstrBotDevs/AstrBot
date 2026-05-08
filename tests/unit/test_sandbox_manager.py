@@ -141,6 +141,29 @@ def test_sandbox_manager_switch_releases_previous_current_lease(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_sandbox_manager_checked_switch_rejects_unavailable_booter(tmp_path):
+    manager, registry, provider = _manager(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="target",
+        sandbox_name="target",
+        booter_type="fake",
+        provider="fake",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+    )
+    manager.session_booter["target"] = FakeBooter("target", provider, available=False)
+
+    with pytest.raises(RuntimeError, match="not running"):
+        await manager.switch_current_sandbox_checked("session-a", "target")
+
+    assert registry.get_current_sandbox_id("session-a") is None
+    assert registry.get_sandbox("target")["controller_session_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_sandbox_manager_destroy_prunes_boot_lock(tmp_path):
     manager, registry, provider = _manager(tmp_path)
     registry.upsert_sandbox(
@@ -360,6 +383,66 @@ async def test_sandbox_manager_releases_lease_when_availability_check_fails(tmp_
         await manager.get_or_create_booter(FakeContext(), "session-a", "fake")
 
     assert registry.get_sandbox("current")["controller_session_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_releases_target_lease_when_availability_check_fails(
+    tmp_path,
+):
+    manager, registry, provider = _manager(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="target",
+        sandbox_name="target",
+        booter_type="fake",
+        provider="fake",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        is_default=True,
+    )
+    manager.session_booter["target"] = FakeBooter(
+        "target", provider, available_error=RuntimeError("availability failed")
+    )
+
+    with pytest.raises(RuntimeError, match="availability failed"):
+        await manager.get_or_create_booter(FakeContext(), "session-a", "fake")
+
+    assert registry.get_sandbox("target")["controller_session_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_cleanup_continues_after_unsupported_provider(tmp_path):
+    manager, registry, provider = _manager(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="neo",
+        sandbox_name="neo",
+        booter_type="shipyard_neo",
+        provider="shipyard_neo",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-neo",
+        owner_session_id="session-neo",
+        connect_info={},
+    )
+    registry.upsert_sandbox(
+        sandbox_id="fake",
+        sandbox_name="fake",
+        booter_type="fake",
+        provider="fake",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+    )
+    manager.session_booter["fake"] = FakeBooter("fake", provider)
+
+    await manager.cleanup_managed_sandboxes()
+
+    assert registry.get_sandbox("neo")["status"] == "unknown"
+    assert registry.get_sandbox("fake") is None
 
 
 @pytest.mark.asyncio

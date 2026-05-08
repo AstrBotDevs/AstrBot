@@ -20,7 +20,7 @@ from astrbot.core.computer.computer_client import (
     get_current_cua_sandbox,
     list_cua_sandboxes,
     release_current_cua_sandbox,
-    switch_current_cua_sandbox,
+    switch_current_cua_sandbox_checked,
     takeover_cua_sandbox,
 )
 from astrbot.core.message.message_event_result import MessageChain
@@ -169,7 +169,9 @@ class CuaSwitchSandboxTool(FunctionTool):
         sandbox_id: str,
     ) -> ToolExecResult:
         try:
-            sandbox = switch_current_cua_sandbox(_session_id(context), sandbox_id)
+            sandbox = await switch_current_cua_sandbox_checked(
+                _session_id(context), sandbox_id
+            )
             return _to_json({"success": True, "sandbox": sandbox})
         except Exception as e:
             return f"Error switching CUA sandbox: {_exception_detail(e)}"

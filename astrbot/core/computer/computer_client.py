@@ -353,9 +353,19 @@ def switch_current_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
     return sandbox_manager.switch_current_sandbox(session_id, sandbox_id)
 
 
+async def switch_current_cua_sandbox_checked(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.switch_current_sandbox_checked(session_id, sandbox_id)
+
+
 def switch_current_sandbox(session_id: str, sandbox_id: str) -> dict:
     _sync_sandbox_manager_refs()
     return sandbox_manager.switch_current_sandbox(session_id, sandbox_id)
+
+
+async def switch_current_sandbox_checked(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.switch_current_sandbox_checked(session_id, sandbox_id)
 
 
 def release_current_cua_sandbox(

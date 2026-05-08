@@ -19,7 +19,7 @@ from astrbot.core.computer.computer_client import (
     list_sandboxes,
     release_current_sandbox,
     set_default_sandbox,
-    switch_current_sandbox,
+    switch_current_sandbox_checked,
     takeover_sandbox,
     update_sandbox_config,
 )
@@ -111,7 +111,9 @@ class SandboxRoute(Route):
         if not sandbox_id:
             return Response().error("sandbox_id is required.").__dict__
         try:
-            sandbox = switch_current_sandbox(_session_id(data), str(sandbox_id))
+            sandbox = await switch_current_sandbox_checked(
+                _session_id(data), str(sandbox_id)
+            )
             return Response().ok({"sandbox": sandbox}).__dict__
         except Exception as e:
             return Response().error(str(e)).__dict__
