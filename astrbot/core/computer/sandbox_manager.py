@@ -181,9 +181,11 @@ class SandboxManager:
                 return booter
             self.session_booter.pop(current_sandbox_id, None)
 
+        created_target_record = False
         target_sandbox_id = self.get_default_sandbox_id(provider_id)
         if target_sandbox_id is None:
             target_sandbox_id = self.new_sandbox_id(provider_id)
+            created_target_record = True
             record = self.registry.upsert_sandbox(
                 **self.build_record_payload(
                     sandbox_id=target_sandbox_id,
@@ -206,6 +208,7 @@ class SandboxManager:
             target_sandbox_id = self._upsert_new_sandbox_record(
                 context, session_id, provider_id, create_config
             )
+            created_target_record = True
 
         while True:
             async with self._sandbox_boot_lock(target_sandbox_id):
@@ -215,6 +218,7 @@ class SandboxManager:
                     target_sandbox_id = self._upsert_new_sandbox_record(
                         context, session_id, provider_id, create_config
                     )
+                    created_target_record = True
                     continue
 
                 if target_sandbox_id in self.session_booter:
@@ -227,6 +231,7 @@ class SandboxManager:
                     target_sandbox_id = self._upsert_new_sandbox_record(
                         context, session_id, provider_id, create_config
                     )
+                    created_target_record = True
                     continue
 
                 try:
@@ -234,7 +239,13 @@ class SandboxManager:
                         context, session_id, target_sandbox_id, create_config
                     )
                 except Exception:
-                    self.registry.delete_sandbox(target_sandbox_id)
+                    if created_target_record:
+                        self.registry.delete_sandbox(target_sandbox_id)
+                    else:
+                        self.registry.release_lease(target_sandbox_id)
+                        self.registry.update_sandbox_status(
+                            target_sandbox_id, "unknown"
+                        )
                     self.drop_boot_lock(target_sandbox_id)
                     self.save_registry()
                     raise
@@ -450,11 +461,10 @@ class SandboxManager:
             and self.sandbox_has_active_lease(sandbox_id)
         ):
             raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
+        provider = self.get_provider(record.get("provider", ""))
         booter = self.session_booter.pop(sandbox_id, None)
         if booter is not None:
-            await self.get_provider(record.get("provider", "")).destroy_booter(
-                booter, record
-            )
+            await provider.destroy_booter(booter, record)
         self.clear_idle_state(sandbox_id)
         self.registry.delete_sandbox(sandbox_id)
         self.drop_boot_lock(sandbox_id)
@@ -556,18 +566,22 @@ class SandboxManager:
                             expires_at=current_expires_at, task=state.task
                         )
                         continue
-                booter = self.session_booter.pop(sandbox_id, None)
+                booter = self.session_booter.get(sandbox_id)
                 if booter is not None:
                     try:
-                        await self.get_provider(
-                            record.get("provider", "")
-                        ).destroy_booter(booter, record)
+                        provider = self.get_provider(record.get("provider", ""))
+                        self.session_booter.pop(sandbox_id, None)
+                        await provider.destroy_booter(booter, record)
                     except Exception as shutdown_err:
+                        self.session_booter[sandbox_id] = booter
+                        self.registry.update_sandbox_status(sandbox_id, "unknown")
+                        self.save_registry()
                         logger.warning(
                             "[Computer] Failed to shutdown idle sandbox %s: %s",
                             sandbox_id,
                             shutdown_err,
                         )
+                        return
                 if record.get("retention_policy") == "persistent":
                     self.registry.update_sandbox_status(sandbox_id, "stopped")
                 else:

@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from astrbot.core.computer.sandbox_manager import SandboxManager
+from astrbot.core.computer.sandbox_manager import SandboxIdleState, SandboxManager
 from astrbot.core.computer.sandbox_registry import SandboxRegistry
 
 
@@ -37,6 +37,12 @@ class FailingProvider(FakeProvider):
     async def create_booter(self, context, session_id, sandbox_id, config):
         self.boots.append((session_id, sandbox_id, config))
         raise RuntimeError("boot failed")
+
+
+class FailingDestroyProvider(FakeProvider):
+    async def destroy_booter(self, booter, record):
+        self.shutdowns.append(booter.sandbox_id)
+        raise RuntimeError("shutdown failed")
 
 
 class FakeBooter:
@@ -161,6 +167,36 @@ async def test_sandbox_manager_cleans_registry_when_default_boot_fails(tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_sandbox_manager_preserves_existing_record_when_boot_fails(tmp_path):
+    provider = FailingProvider()
+    registry = SandboxRegistry(storage_path=tmp_path / "registry.json")
+    manager = SandboxManager(registry=registry, providers={"fake": provider})
+    registry.upsert_sandbox(
+        sandbox_id="existing",
+        sandbox_name="existing",
+        booter_type="fake",
+        provider="fake",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        is_default=True,
+        retention_policy="persistent",
+        status="unknown",
+    )
+
+    with pytest.raises(RuntimeError, match="boot failed"):
+        await manager.get_or_create_booter(FakeContext(), "session-a", "fake")
+
+    record = registry.get_sandbox("existing")
+    assert record is not None
+    assert record["status"] == "unknown"
+    assert record["controller_session_id"] is None
+    assert registry.default_sandbox_id == "existing"
+
+
+@pytest.mark.asyncio
 async def test_sandbox_manager_ignores_default_for_other_provider(tmp_path):
     manager, registry, provider = _manager(tmp_path)
     registry.upsert_sandbox(
@@ -201,6 +237,44 @@ async def test_sandbox_manager_reports_unsupported_provider_on_destroy(tmp_path)
 
     with pytest.raises(RuntimeError, match="Provider shipyard_neo is not supported"):
         await manager.destroy_sandbox("session-a", "neo")
+
+    assert manager.session_booter["neo"].sandbox_id == "neo"
+    assert registry.get_sandbox("neo") is not None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_keeps_record_when_idle_shutdown_fails(tmp_path):
+    provider = FailingDestroyProvider()
+    registry = SandboxRegistry(storage_path=tmp_path / "registry.json")
+    manager = SandboxManager(registry=registry, providers={"fake": provider})
+    registry.upsert_sandbox(
+        sandbox_id="idle",
+        sandbox_name="idle",
+        booter_type="fake",
+        provider="fake",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        idle_timeout=0.001,
+        last_used_at=time.time() - 10,
+    )
+    manager.session_booter["idle"] = FakeBooter("idle", provider)
+    expires_at = time.monotonic()
+    marker_task = asyncio.create_task(asyncio.sleep(0))
+    manager.idle_state["idle"] = SandboxIdleState(
+        expires_at=expires_at,
+        task=marker_task,
+    )
+
+    await manager._expire_when_idle("idle", 0.001, expires_at)
+    await marker_task
+
+    record = registry.get_sandbox("idle")
+    assert record is not None
+    assert record["status"] == "unknown"
+    assert manager.session_booter["idle"].sandbox_id == "idle"
 
 
 @pytest.mark.asyncio
