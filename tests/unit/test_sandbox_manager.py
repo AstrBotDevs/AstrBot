@@ -25,6 +25,12 @@ class FakeProvider:
     def build_create_config(self, context, session_id):
         return {"image": "fake"}
 
+    def build_connect_info(self, sandbox_name, config):
+        return {"kind": "fake", "name": sandbox_name}
+
+    def get_idle_timeout(self, context, session_id):
+        return 7.0
+
     async def create_booter(self, context, session_id, sandbox_id, config):
         self.boots.append((session_id, sandbox_id, config))
         return FakeBooter(sandbox_id, self)
@@ -99,6 +105,11 @@ async def test_sandbox_manager_creates_default_and_current_sandbox(tmp_path):
 
     assert booter.sandbox_id == registry.default_sandbox_id
     assert registry.get_current_sandbox_id("session-a") == booter.sandbox_id
+    assert registry.get_sandbox(booter.sandbox_id)["connect_info"] == {
+        "kind": "fake",
+        "name": booter.sandbox_id,
+    }
+    assert registry.get_sandbox(booter.sandbox_id)["idle_timeout"] == 7.0
     assert provider.boots == [("session-a", booter.sandbox_id, {"image": "fake"})]
 
 

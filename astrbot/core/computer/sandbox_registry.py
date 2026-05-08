@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from astrbot.api import logger
+from astrbot.core.computer.sandbox_models import SandboxRecord
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 _UNSET = object()
@@ -104,6 +105,7 @@ class SandboxRegistry:
                 "notes": notes,
             }
         )
+        record = SandboxRecord.from_dict(record).to_dict()
         self._payload["sandboxes"][sandbox_id] = record
         if is_default or (managed and self._payload["default_sandbox_id"] is None):
             self.set_default_sandbox_id(sandbox_id)
@@ -250,9 +252,24 @@ class SandboxRegistry:
         self._payload = _default_registry_payload()
         self._payload.update(payload)
         sandboxes = self._payload.get("sandboxes", {})
+        valid_sandboxes = {}
         for record in sandboxes.values():
+            try:
+                normalized = SandboxRecord.from_dict(record).to_dict()
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning(
+                    "[Computer] Skip invalid sandbox registry record: %s",
+                    exc,
+                )
+                continue
+            record = normalized
             if not record.get("managed"):
+                valid_sandboxes[record["sandbox_id"]] = record
                 continue
             record["controller_user_id"] = None
             record["controller_session_id"] = None
             record["lease_expires_at"] = None
+            valid_sandboxes[record["sandbox_id"]] = record
+        self._payload["sandboxes"] = valid_sandboxes
+        if self._payload["default_sandbox_id"] not in valid_sandboxes:
+            self._payload["default_sandbox_id"] = None

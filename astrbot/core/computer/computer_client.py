@@ -10,6 +10,7 @@ from pathlib import Path
 
 from astrbot.api import logger
 from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
 from astrbot.core.computer.sandbox_manager import SANDBOX_LEASE_SECONDS, SandboxManager
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
 from astrbot.core.star.context import Context
@@ -38,29 +39,7 @@ class _CUAIdleState:
 cua_idle_state: dict[str, _CUAIdleState] = {}
 
 
-class _ComputerClientCuaProvider:
-    provider_id = "cua"
-
-    def build_create_config(self, context: Context, session_id: str) -> dict:
-        from .booters.cua import build_cua_booter_kwargs
-
-        config = context.get_config(umo=session_id)
-        sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-        return build_cua_booter_kwargs(sandbox_cfg)
-
-    async def create_booter(
-        self, context: Context, session_id: str, sandbox_id: str, config: dict
-    ) -> ComputerBooter:
-        return await _boot_managed_cua_sandbox(context, session_id, sandbox_id, config)
-
-    async def destroy_booter(self, booter: ComputerBooter, record: dict) -> None:
-        await booter.shutdown()
-
-
-sandbox_manager = SandboxManager(
-    registry=cua_registry,
-    providers={"cua": _ComputerClientCuaProvider()},
-)
+sandbox_manager: SandboxManager
 
 
 def _sync_sandbox_manager_refs() -> None:
@@ -68,9 +47,6 @@ def _sync_sandbox_manager_refs() -> None:
     sandbox_manager.session_booter = session_booter
     sandbox_manager.idle_state = cua_idle_state
     sandbox_manager.boot_locks = _cua_boot_locks
-
-
-_sync_sandbox_manager_refs()
 
 
 def _save_cua_registry() -> None:
@@ -182,6 +158,22 @@ async def _boot_managed_cua_sandbox(
         int((time.monotonic() - started_at) * 1000),
     )
     return client
+
+
+async def _boot_managed_cua_sandbox_hook(
+    context: Context,
+    session_id: str,
+    sandbox_id: str,
+    cua_kwargs: dict,
+) -> ComputerBooter:
+    return await _boot_managed_cua_sandbox(context, session_id, sandbox_id, cua_kwargs)
+
+
+sandbox_manager = SandboxManager(
+    registry=cua_registry,
+    providers={"cua": CuaSandboxProvider(boot_hook=_boot_managed_cua_sandbox_hook)},
+)
+_sync_sandbox_manager_refs()
 
 
 def _new_managed_cua_sandbox_id() -> str:

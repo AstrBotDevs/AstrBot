@@ -50,13 +50,8 @@ class SandboxManager:
         self.boot_locks.pop(sandbox_id, None)
 
     def get_idle_timeout(self, config: dict, provider_id: str) -> float:
-        sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-        value = sandbox_cfg.get(f"{provider_id}_idle_timeout", 0)
-        try:
-            timeout = float(value)
-        except (TypeError, ValueError):
-            return 0.0
-        return max(timeout, 0.0)
+        _ = config, provider_id
+        return 0.0
 
     def build_record_payload(
         self,
@@ -67,8 +62,10 @@ class SandboxManager:
         provider_id: str,
         config: dict,
         idle_timeout: float,
+        connect_info: dict,
         is_default: bool = False,
     ) -> dict:
+        _ = config
         return {
             "sandbox_id": sandbox_id,
             "sandbox_name": sandbox_name,
@@ -78,12 +75,7 @@ class SandboxManager:
             "created_by_astrbot": True,
             "owner_user_id": session_id,
             "owner_session_id": session_id,
-            "connect_info": {
-                "name": sandbox_name,
-                "local": config.get("local", True),
-                "image": config.get("image"),
-                "os_type": config.get("os_type"),
-            },
+            "connect_info": connect_info,
             "is_default": is_default,
             "idle_timeout": idle_timeout,
         }
@@ -153,6 +145,7 @@ class SandboxManager:
     ) -> ComputerBooter:
         provider = self.get_provider(provider_id)
         create_config = provider.build_create_config(context, session_id)
+        idle_timeout = provider.get_idle_timeout(context, session_id)
 
         current_sandbox_id = self.registry.get_current_sandbox_id(session_id)
         current_record = (
@@ -186,9 +179,7 @@ class SandboxManager:
                 self.save_registry()
                 self.schedule_idle_cleanup(
                     current_sandbox_id,
-                    self.get_idle_timeout(
-                        context.get_config(umo=session_id), provider_id
-                    ),
+                    idle_timeout,
                 )
                 return booter
             self.session_booter.pop(current_sandbox_id, None)
@@ -205,8 +196,9 @@ class SandboxManager:
                     session_id=session_id,
                     provider_id=provider_id,
                     config=create_config,
-                    idle_timeout=self.get_idle_timeout(
-                        context.get_config(umo=session_id), provider_id
+                    idle_timeout=idle_timeout,
+                    connect_info=provider.build_connect_info(
+                        target_sandbox_id, create_config
                     ),
                     is_default=True,
                 )
@@ -285,7 +277,7 @@ class SandboxManager:
         self.save_registry()
         self.schedule_idle_cleanup(
             target_sandbox_id,
-            self.get_idle_timeout(context.get_config(umo=session_id), provider_id),
+            idle_timeout,
         )
         return self.session_booter[target_sandbox_id]
 
@@ -298,10 +290,9 @@ class SandboxManager:
     ) -> dict:
         provider = self.get_provider(provider_id)
         create_config = provider.build_create_config(context, session_id)
-        config = context.get_config(umo=session_id)
         sandbox_id = self.new_sandbox_id(provider_id)
         sandbox_name = sandbox_name or sandbox_id
-        idle_timeout = self.get_idle_timeout(config, provider_id)
+        idle_timeout = provider.get_idle_timeout(context, session_id)
         record = self.registry.upsert_sandbox(
             **self.build_record_payload(
                 sandbox_id=sandbox_id,
@@ -310,6 +301,7 @@ class SandboxManager:
                 provider_id=provider_id,
                 config=create_config,
                 idle_timeout=idle_timeout,
+                connect_info=provider.build_connect_info(sandbox_name, create_config),
             )
         )
         try:
@@ -391,6 +383,7 @@ class SandboxManager:
     def _upsert_new_sandbox_record(
         self, context: Context, session_id: str, provider_id: str, create_config: dict
     ) -> str:
+        provider = self.get_provider(provider_id)
         sandbox_id = self.new_sandbox_id(provider_id)
         self.registry.upsert_sandbox(
             **self.build_record_payload(
@@ -399,9 +392,8 @@ class SandboxManager:
                 session_id=session_id,
                 provider_id=provider_id,
                 config=create_config,
-                idle_timeout=self.get_idle_timeout(
-                    context.get_config(umo=session_id), provider_id
-                ),
+                idle_timeout=provider.get_idle_timeout(context, session_id),
+                connect_info=provider.build_connect_info(sandbox_id, create_config),
             )
         )
         self.save_registry()
