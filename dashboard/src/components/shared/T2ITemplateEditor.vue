@@ -243,10 +243,12 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { useToast } from '@/utils/toast'
 import axios from 'axios'
 
 const { t } = useI18n()
 const { tm } = useModuleI18n('core.shared')
+const toast = useToast()
 
 // --- 响应式数据 ---
 const dialog = ref(false)
@@ -448,8 +450,9 @@ const saveTemplate = async () => {
       })
     }
   } catch (error) {
-    console.error('保存模板失败:', error)
-    // 可以在此添加错误提示
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error('保存模板失败:', msg)
+    toast.error(msg)
   } finally {
     saveLoading.value = false
   }
@@ -461,7 +464,9 @@ const setActiveTemplate = async (name) => {
     await axios.post('/api/t2i/templates/set_active', { name })
     activeTemplate.value = name
   } catch (error) {
-    console.error(`应用模板 '${name}' 失败:`, error)
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error(`应用模板 '${name}' 失败:`, msg)
+    toast.error(msg)
   } finally {
     applyLoading.value = false
   }
@@ -482,7 +487,9 @@ const confirmDelete = async () => {
     await loadInitialData()
     selectedTemplate.value = 'base'
   } catch (error) {
-    console.error(`删除模板 '${selectedTemplate.value}' 失败:`, error)
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error(`删除模板失败:`, msg)
+    toast.error(msg)
   } finally {
     saveLoading.value = false
   }
@@ -500,7 +507,9 @@ const confirmReset = async () => {
         await setActiveTemplate('base')
     }
   } catch (error) {
-    console.error('重置模板失败:', error)
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error('重置模板失败:', msg)
+    toast.error(msg)
   } finally {
     resetLoading.value = false
   }

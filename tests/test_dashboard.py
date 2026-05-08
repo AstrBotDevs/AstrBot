@@ -1026,7 +1026,7 @@ async def test_t2i_set_active_template_syncs_all_configs(
             "/api/t2i/templates/create",
             json={
                 "name": template_name,
-                "content": "<html><body>{{ content }}</body></html>",
+                "content": "<html><body>{{ text }}</body></html>",
             },
             headers=authenticated_header,
         )
@@ -1093,7 +1093,7 @@ async def test_t2i_reset_default_template_syncs_all_configs(
             "/api/t2i/templates/create",
             json={
                 "name": template_name,
-                "content": "<html><body>{{ content }} reset</body></html>",
+                "content": "<html><body>{{ text }} reset</body></html>",
             },
             headers=authenticated_header,
         )
@@ -1166,7 +1166,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
             "/api/t2i/templates/create",
             json={
                 "name": template_name,
-                "content": "<html><body>{{ content }} v1</body></html>",
+                "content": "<html><body>{{ text }} v1</body></html>",
             },
             headers=authenticated_header,
         )
@@ -1187,7 +1187,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
 
         response = await test_client.put(
             f"/api/t2i/templates/{template_name}",
-            json={"content": "<html><body>{{ content }} v2</body></html>"},
+            json={"content": "<html><body>{{ text }} v2</body></html>"},
             headers=authenticated_header,
         )
         assert response.status_code == 200
