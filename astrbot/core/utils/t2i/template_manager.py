@@ -23,11 +23,13 @@ _VAR_RE = re.compile(r"\{\{\s*(\w+)\s*(\|[^}]*)?\}\}")
 def validate_template_content(content: str, *, strict: bool = False) -> None:
     for label, pattern in _SSTI_BLACKLIST:
         if pattern.search(content):
+            logger.warning(f"SSTI validation blocked template: matched rule [{label}]")
             raise ValueError(f"Template contains forbidden pattern ({label}).")
     if strict:
         for m in _VAR_RE.finditer(content):
             var = m.group(1)
             if var not in _ALLOWED_VARS:
+                logger.warning(f"SSTI validation blocked template: unauthorized variable '{var}'")
                 raise ValueError(
                     f"Unauthorized Jinja2 variable '{var}'; "
                     f"allowed: {', '.join(sorted(_ALLOWED_VARS))}."
