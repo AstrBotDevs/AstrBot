@@ -125,7 +125,7 @@
       </div>
     </v-navigation-drawer>
 
-    <v-dialog v-model="consoleOpen" max-width="1040" persistent>
+    <v-dialog v-model="consoleOpen" max-width="1040">
       <v-card v-if="consoleSandbox" class="console-dialog-card">
         <v-card-text class="pa-4">
         <div class="d-flex align-center justify-space-between mb-2">
