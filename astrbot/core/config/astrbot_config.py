@@ -58,7 +58,7 @@ class AstrBotConfig(dict):
             conf_str = f.read()
             # Handle UTF-8 BOM if present
             conf_str = conf_str.removeprefix("\ufeff")
-            conf = json.loads(conf_str)
+            conf = json.loads(conf_str) if conf_str.strip() else {}
 
         # 检查配置完整性,并插入
         has_new = self.check_config_integrity(default_config, conf)

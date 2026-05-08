@@ -15,13 +15,9 @@ class ProviderOpenRouter(ProviderOpenAIOfficial):
         custom_headers = provider_config.get("custom_headers", {})
         if not isinstance(custom_headers, dict):
             custom_headers = {}
-        custom_headers["HTTP-Referer"] = (
-            "https://github.com/AstrBotDevs/AstrBot"
-        )
+        custom_headers["HTTP-Referer"] = "https://github.com/AstrBotDevs/AstrBot"
         custom_headers["X-OpenRouter-Title"] = "AstrBot"
-        custom_headers["X-OpenRouter-Categories"] = (
-            "general-chat,personal-agent"
-        )
+        custom_headers["X-OpenRouter-Categories"] = "general-chat,personal-agent"
         provider_config["custom_headers"] = custom_headers
         super().__init__(provider_config, provider_settings)
         self.reasoning_key = "reasoning"

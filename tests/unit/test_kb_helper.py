@@ -113,6 +113,9 @@ def mock_rerank_provider():
         def __init__(self) -> None:
             pass
 
+        async def rerank(self, query: str, documents: list[str], top_k: int = 10) -> list[dict]:
+            return [{"index": i, "score": 1.0, "document": doc} for i, doc in enumerate(documents[:top_k])]
+
         async def rerank_score(self, query: str, documents: list[str]) -> list[float]:
             return [1.0] * len(documents)
 
@@ -648,6 +651,16 @@ async def test_delete_chunk_delegates_to_vec_db(
     from astrbot.core.knowledge_base.kb_helper import KBHelper
 
     mock_kb_db.get_kb_by_id = AsyncMock(return_value=helper_kwargs["kb"])
+    mock_session = MagicMock()
+    mock_session.begin = MagicMock()
+    mock_session.begin.return_value.__aenter__ = AsyncMock()
+    mock_session.begin.return_value.__aexit__ = AsyncMock()
+    mock_session.refresh = AsyncMock()
+    mock_db_ctx = MagicMock()
+    mock_db_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_db_ctx.__aexit__ = AsyncMock()
+    mock_kb_db.get_db.return_value = mock_db_ctx
+
     helper = KBHelper(**helper_kwargs)
     helper.vec_db = mock_vec_db
 
@@ -875,7 +888,7 @@ async def test_clean_and_rechunk_skips_when_not_enabled(
     )
 
     assert result == ["chunk a", "chunk b"]
-    mock_chunker.chunk.assert_awaited_once_with("some text")
+    mock_chunker.chunk.assert_awaited_once_with("some text", chunk_size=512, chunk_overlap=50)
 
 
 @pytest.mark.asyncio

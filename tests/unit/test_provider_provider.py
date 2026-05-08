@@ -153,7 +153,9 @@ class TestProvider:
 
     def test_get_models(self):
         p = _ConcreteProvider(provider_config={"type": "test"}, provider_settings={})
-        models = p.get_models()
+        import asyncio
+
+        models = asyncio.run(p.get_models())
         assert models == ["model-a", "model-b"]
 
     def test_text_chat(self):
@@ -200,7 +202,9 @@ class TestProvider:
             {"role": "assistant", "content": "hi"},
             {"role": "user", "content": "how are you"},
         ]
-        p.pop_record(ctx)
+        import asyncio
+
+        asyncio.run(p.pop_record(ctx))
         assert len(ctx) == 2
         assert ctx[0]["role"] == "system"
         assert ctx[1]["role"] == "user"
@@ -212,7 +216,9 @@ class TestProvider:
             {"role": "user", "content": "first"},
             {"role": "assistant", "content": "reply"},
         ]
-        p.pop_record(ctx)
+        import asyncio
+
+        asyncio.run(p.pop_record(ctx))
         # Both should be popped
         assert len(ctx) == 0
 
@@ -226,7 +232,9 @@ class TestProvider:
             {"role": "assistant", "content": "a2"},
             {"role": "user", "content": "u3"},
         ]
-        p.pop_record(ctx)
+        import asyncio
+
+        asyncio.run(p.pop_record(ctx))
         assert len(ctx) == 4
         # system kept + last 3 non-system (u2, a2, u3) → but pop_record removes first 2 non-system
         assert ctx[0] == {"role": "system", "content": "sys"}
@@ -263,6 +271,7 @@ class TestProvider:
     def test_ensure_message_to_dicts_converts_message_objects(self):
         p = _ConcreteProvider(provider_config={}, provider_settings={})
         msg = MagicMock(spec=Message)
+        msg.role = "user"
         msg.model_dump.return_value = {"role": "user", "content": "from pydantic"}
         result = p._ensure_message_to_dicts([msg])
         assert result == [{"role": "user", "content": "from pydantic"}]
@@ -347,7 +356,12 @@ class TestTTSProvider:
             await text_queue.put(None)
             await p.get_audio_stream(text_queue, audio_queue)
 
-        asyncio.run(run_stream())
+        with patch("aiofiles.open") as mock_aio_open:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = b"fake_audio_data"
+            mock_aio_open.return_value.__aenter__.return_value = mock_file
+            asyncio.run(run_stream())
+
         result = asyncio.run(audio_queue.get())
         assert result is not None
         text_part, audio_data = result

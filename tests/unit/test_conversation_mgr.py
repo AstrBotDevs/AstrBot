@@ -621,18 +621,18 @@ class TestConversationManagerAddMessagePair:
         conv_v2 = _make_conv_v2(content=[])
         mock_db.get_conversation_by_id.return_value = conv_v2
 
-        user_msg = UserMessageSegment(content="hello")
-        assistant_msg = AssistantMessageSegment(content="world")
+        user_msg = MagicMock(spec=UserMessageSegment)
+        user_msg.role = "user"
+        user_msg.model_dump.return_value = {"role": "user", "content": "hello"}
 
-        with (
-            patch.object(user_msg, "model_dump", return_value={"role": "user", "content": "hello"}),
-            patch.object(
-                assistant_msg,
-                "model_dump",
-                return_value={"role": "assistant", "content": "world"},
-            ),
-        ):
-            await mgr.add_message_pair("c1", user_msg, assistant_msg)
+        assistant_msg = MagicMock(spec=AssistantMessageSegment)
+        assistant_msg.role = "assistant"
+        assistant_msg.model_dump.return_value = {
+            "role": "assistant",
+            "content": "world",
+        }
+
+        await mgr.add_message_pair("c1", user_msg, assistant_msg)
 
         mock_db.update_conversation.assert_awaited_once_with(
             cid="c1",
@@ -752,7 +752,7 @@ class TestConversationManagerGetHumanReadableContext:
 
         contexts, _ = await mgr.get_human_readable_context("origin:1", "c1")
 
-        assert "Assistant: [函数调用]" in contexts[0]
+        assert "Assistant: [函数调用]" in contexts[1]
 
 
 class TestConversationManagerTriggerSessionDeleted:

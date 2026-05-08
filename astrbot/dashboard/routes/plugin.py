@@ -96,6 +96,7 @@ class PluginPage:
     title: str
     entry_file: str = _PLUGIN_PAGE_ENTRY_FILE_NAME
 
+
 PLUGIN_ROUTE_DEFINITIONS = (
     ("/plugin/get", "GET", "get_plugins", True),
     ("/plugin/detail", "GET", "get_plugin_detail", True),

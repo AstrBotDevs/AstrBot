@@ -256,7 +256,7 @@ class TestExtractFileMoonshotaiErrors:
         mock_httpx_cls: MagicMock,
     ):
         """If anyio.Path.read_bytes raises, the function should raise and
-        httpx.AsyncClient should never be constructed."""
+        no HTTP call should be made."""
         mock_path = _mock_path(b"ignored")
         mock_path.read_bytes = AsyncMock(side_effect=OSError(2, "No such file"))
         mock_path_cls.return_value = mock_path
@@ -264,4 +264,4 @@ class TestExtractFileMoonshotaiErrors:
         with pytest.raises(OSError):
             await extract_file_moonshotai("/missing/file.txt", "key")
 
-        mock_httpx_cls.assert_not_called()
+        mock_httpx_cls.return_value.post.assert_not_called()

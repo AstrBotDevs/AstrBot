@@ -50,16 +50,22 @@ class TestAddBasicJobEdgeCases:
     async def test_add_basic_job_with_interval_seconds(self, cron_manager, mock_db):
         """interval_seconds can be used instead of cron_expression."""
         cron_manager._started = True
-        job = CronJob(job_id="interval-job", name="Interval", job_type="basic")
+        job = CronJob(
+            job_id="interval-job",
+            name="Interval",
+            job_type="basic",
+            payload={"interval_seconds": 300},
+        )
         mock_db.create_cron_job.return_value = job
 
         handler = MagicMock()
-        result = await cron_manager.add_basic_job(
-            name="Interval",
-            interval_seconds=300,
-            handler=handler,
-            description="Every 5 min",
-        )
+        with patch.object(cron_manager, "_get_next_run_time", return_value=None):
+            result = await cron_manager.add_basic_job(
+                name="Interval",
+                interval_seconds=300,
+                handler=handler,
+                description="Every 5 min",
+            )
 
         assert result == job
         mock_db.create_cron_job.assert_called_once()
@@ -94,17 +100,24 @@ class TestAddBasicJobEdgeCases:
     async def test_add_basic_job_payload_passed_through(self, cron_manager, mock_db):
         """User-supplied payload is forwarded to create_cron_job."""
         cron_manager._started = True
-        job = CronJob(job_id="payload-job", name="Payload", job_type="basic")
+        job = CronJob(
+            job_id="payload-job",
+            name="Payload",
+            job_type="basic",
+            cron_expression="0 9 * * *",
+            payload={"custom_key": "custom_value"},
+        )
         mock_db.create_cron_job.return_value = job
 
         handler = MagicMock()
         user_payload = {"custom_key": "custom_value"}
-        await cron_manager.add_basic_job(
-            name="Payload",
-            cron_expression="0 9 * * *",
-            handler=handler,
-            payload=user_payload,
-        )
+        with patch.object(cron_manager, "_get_next_run_time", return_value=None):
+            await cron_manager.add_basic_job(
+                name="Payload",
+                cron_expression="0 9 * * *",
+                handler=handler,
+                payload=user_payload,
+            )
 
         call_payload = mock_db.create_cron_job.call_args.kwargs["payload"]
         assert call_payload["custom_key"] == "custom_value"

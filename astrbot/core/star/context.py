@@ -60,7 +60,7 @@ class PlatformManagerProtocol(Protocol):
 class Context:
     """暴露给插件的接口上下文。"""
 
-    registered_web_apis: list[RegisteredWebApi] = []
+    _registered_web_apis: list[RegisteredWebApi] = []
 
     # 向后兼容的变量
     _register_tasks: list[Awaitable] = []
@@ -530,11 +530,11 @@ class Context:
         Note:
             如果相同路由和方法已注册，会替换现有的 API。
         """
-        for idx, api in enumerate(self.registered_web_apis):
+        for idx, api in enumerate(self._registered_web_apis):
             if api[0] == route and methods == api[2]:
-                self.registered_web_apis[idx] = (route, view_handler, methods, desc)
+                self._registered_web_apis[idx] = (route, view_handler, methods, desc)
                 return
-        self.registered_web_apis.append((route, view_handler, methods, desc))
+        self._registered_web_apis.append((route, view_handler, methods, desc))
 
     """
     以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。

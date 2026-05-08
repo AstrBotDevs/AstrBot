@@ -15,7 +15,9 @@ try:
     from dashscope.aigc.multimodal_conversation import (
         MultiModalConversation,
     )
-except ImportError:  # pragma: no cover - older dashscope versions without Qwen TTS support
+except (
+    ImportError
+):  # pragma: no cover - older dashscope versions without Qwen TTS support
     pass
 
 from astrbot.core.provider.entities import ProviderType

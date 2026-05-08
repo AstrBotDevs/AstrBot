@@ -12,6 +12,7 @@ from pydantic import (
     model_validator,
 )
 from pydantic_core import core_schema
+from typing_extensions import Self
 
 ContentPartT = TypeVar("ContentPartT", bound="ContentPart")
 
@@ -65,7 +66,7 @@ class ContentPart(BaseModel):
         # for subclasses, use the default schema
         return handler(source_type)
 
-    def mark_as_temp(self: ContentPartT) -> ContentPartT:
+    def mark_as_temp(self) -> Self:
         """Mark this content part as provider-facing only, not persisted."""
         self._no_save = True
         return self

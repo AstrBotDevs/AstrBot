@@ -70,14 +70,14 @@ class TestGetConf:
         mock_sp.get.return_value = {conf_id: {"path": "abconf_uuid-abc.json", "name": "test"}}
         mock_conf = MagicMock()
         acm.confs[conf_id] = mock_conf
-        conf = acm.get_conf("qq:group:456")
+        conf = acm.get_conf("qq:GroupMessage:456")
         assert conf is mock_conf
 
     def test_get_conf_fallback_when_mapped_not_loaded(self, acm, mock_ucr, mock_sp, mock_default_config):
         conf_id = "uuid-missing"
         mock_ucr.get_conf_id_for_umop.return_value = conf_id
         mock_sp.get.return_value = {conf_id: {"path": "nope.json", "name": "x"}}
-        conf = acm.get_conf("qq:group:789")
+        conf = acm.get_conf("qq:GroupMessage:789")
         assert conf is mock_default_config
 
 
@@ -86,14 +86,14 @@ class TestGetConfInfo:
 
     def test_get_conf_info_returns_default_when_unmapped(self, acm, mock_ucr):
         mock_ucr.get_conf_id_for_umop.return_value = None
-        info = acm.get_conf_info("qq:group:1")
+        info = acm.get_conf_info("qq:GroupMessage:1")
         assert info["id"] == "default"
 
     def test_get_conf_info_returns_mapped_meta(self, acm, mock_ucr, mock_sp):
         conf_id = "uuid-mapped"
         mock_ucr.get_conf_id_for_umop.return_value = conf_id
         mock_sp.get.return_value = {conf_id: {"path": "cfg.json", "name": "MyCfg"}}
-        info = acm.get_conf_info("qq:group:2")
+        info = acm.get_conf_info("qq:GroupMessage:2")
         assert info["id"] == conf_id
         assert info["path"] == "cfg.json"
         assert "umop" not in info
@@ -232,7 +232,7 @@ class TestG:
         fake_conf = MagicMock()
         fake_conf.get.return_value = 42
         acm.get_conf = MagicMock(return_value=fake_conf)
-        val = acm.g(umo="qq:group:1", key="some.setting")
+        val = acm.g(umo="qq:GroupMessage:1", key="some.setting")
         assert val == 42
         fake_conf.get.assert_called_with("some.setting", None)
 

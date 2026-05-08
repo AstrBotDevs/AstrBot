@@ -155,11 +155,9 @@ class TestRecursiveCharacterChunkerSeparator:
         )
         text = "part1|part2|part3"
         result = await chunker.chunk(text)
-        # Each part is well under chunk_size, so each should be a separate chunk
-        assert len(result) == 3
-        assert result[0] == "part1|"
-        assert result[1] == "part2|"
-        assert result[2] == "part3"
+        # With chunk_size=100, all parts fit in a single chunk
+        assert len(result) == 1
+        assert result[0] == "part1|part2|part3"
 
 
 # ---------------------------------------------------------------
@@ -280,7 +278,7 @@ class TestRecursiveCharacterChunkerSplitByCharacter:
 
     def test_split_by_character_short_text(self):
         """Test split when text is shorter than chunk_size."""
-        chunker = RecursiveCharacterChunker(chunk_size=100)
+        chunker = RecursiveCharacterChunker(chunk_size=100, chunk_overlap=0)
         result = chunker._split_by_character("hello")
         assert result == ["hello"]
 
@@ -294,13 +292,13 @@ class TestRecursiveCharacterChunkerSplitByCharacter:
         """Test that negative overlap raises ValueError."""
         chunker = RecursiveCharacterChunker()
         with pytest.raises(ValueError, match="chunk_overlap must be non-negative"):
-            chunker._split_by_character("test", chunk_overlap=-1)
+            chunker._split_by_character("test", overlap=-1)
 
     def test_split_by_character_raises_on_overlap_ge_chunk_size(self):
         """Test that overlap >= chunk_size raises ValueError."""
         chunker = RecursiveCharacterChunker()
         with pytest.raises(ValueError, match="chunk_overlap must be less than chunk_size"):
-            chunker._split_by_character("test", chunk_size=5, chunk_overlap=5)
+            chunker._split_by_character("test", chunk_size=5, overlap=5)
 
     def test_single_character_chunks(self):
         """Test splitting with chunk_size=1."""

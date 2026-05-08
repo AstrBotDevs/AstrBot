@@ -196,7 +196,7 @@ class TestDecorateLlmReq:
         star.ltm = MagicMock()
         star.ltm_enabled = MagicMock(return_value=False)
         await star.decorate_llm_req(event, req)
-        star.ltm.on_req_llm.assert_not_awaited()
+        star.ltm.on_req_llm.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_decorate_llm_req_skips_when_ltm_none(self, star):
@@ -226,7 +226,7 @@ class TestRecordLlmResp:
         star.ltm = MagicMock()
         star.ltm_enabled = MagicMock(return_value=False)
         await star.record_llm_resp_to_ltm(event, resp)
-        star.ltm.after_req_llm.assert_not_awaited()
+        star.ltm.after_req_llm.assert_not_called()
 
 
 class TestAfterMessageSent:
@@ -250,7 +250,7 @@ class TestAfterMessageSent:
         star.ltm = MagicMock()
         star.ltm_enabled = MagicMock(return_value=True)
         await star.after_message_sent(event)
-        star.ltm.remove_session.assert_not_awaited()
+        star.ltm.remove_session.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_after_message_sent_skips_when_ltm_disabled(self, star):
@@ -258,7 +258,7 @@ class TestAfterMessageSent:
         star.ltm = MagicMock()
         star.ltm_enabled = MagicMock(return_value=False)
         await star.after_message_sent(event)
-        star.ltm.remove_session.assert_not_awaited()
+        star.ltm.remove_session.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_after_message_sent_skips_when_ltm_none(self, star):

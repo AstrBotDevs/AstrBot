@@ -1,10 +1,10 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
+from typing import Any
 
 from astrbot.builtin_stars.web_searcher.provider_constants import (
     DEFAULT_WEB_SEARCH_PROVIDER,
-    WEB_SEARCH_PROVIDER_OPTIONS,
 )
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path

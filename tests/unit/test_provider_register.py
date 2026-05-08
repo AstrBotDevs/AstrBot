@@ -165,6 +165,9 @@ class TestRegisterProviderAdapter:
         assert provider_cls_map["dup_provider"].cls_type is FirstProvider
 
     def test_multiple_registrations(self):
+        before_map = len(provider_cls_map)
+        before_reg = len(provider_registry)
+
         @register_provider_adapter("p1", "First provider")
         class P1:
             pass
@@ -173,10 +176,10 @@ class TestRegisterProviderAdapter:
         class P2:
             pass
 
-        assert len(provider_cls_map) == 2
+        assert len(provider_cls_map) == before_map + 2
         assert provider_cls_map["p1"].cls_type is P1
         assert provider_cls_map["p2"].cls_type is P2
-        assert len(provider_registry) >= 2
+        assert len(provider_registry) == before_reg + 2
 
     def test_decorator_returns_the_class(self):
         @register_provider_adapter("return_test", "Check return")

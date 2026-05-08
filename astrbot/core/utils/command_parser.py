@@ -7,7 +7,7 @@ class CommandTokens:
         self.len = 0
 
     def get(self, idx: int) -> str | None:
-        if idx >= self.len:
+        if idx < 0 or idx >= self.len:
             return None
         return self.tokens[idx].strip()
 

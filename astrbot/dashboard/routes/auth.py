@@ -114,9 +114,12 @@ class AuthRoute(Route):
 
         login_verified = False
         if isinstance(req_password, str):
-            login_verified = req_username == stored_username and verify_dashboard_password(
-                stored_password,
-                req_password,
+            login_verified = (
+                req_username == stored_username
+                and verify_dashboard_password(
+                    stored_password,
+                    req_password,
+                )
             )
         elif isinstance(req_challenge_id, str) and isinstance(req_password_proof, str):
             challenge_nonce = self._consume_login_challenge(req_challenge_id)

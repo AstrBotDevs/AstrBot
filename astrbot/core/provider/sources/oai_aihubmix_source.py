@@ -10,4 +10,7 @@ from .openai_source import ProviderOpenAIOfficial
 class ProviderAIHubMix(ProviderOpenAIOfficial):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
-        self.client._custom_headers = {**self.client._custom_headers, "APP-Code": "KRLC5702"}
+        self.client._custom_headers = {
+            **self.client._custom_headers,
+            "APP-Code": "KRLC5702",
+        }

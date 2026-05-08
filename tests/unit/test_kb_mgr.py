@@ -49,6 +49,8 @@ def mock_kb_db():
     """Create a mock KBSQLiteDatabase."""
     db = MagicMock()
     db.get_db = MagicMock()
+    db.initialize = AsyncMock()
+    db.migrate_to_v1 = AsyncMock()
     db.list_kbs = AsyncMock(return_value=[])
     db.get_kb_by_id = AsyncMock()
     return db
@@ -74,7 +76,7 @@ def mock_db_context(mock_session):
     """Create a mock async context manager for get_db()."""
     ctx = MagicMock()
     ctx.__aenter__ = AsyncMock(return_value=mock_session)
-    ctx.__aexit__ = AsyncMock()
+    ctx.__aexit__ = AsyncMock(return_value=None)
     return ctx
 
 
@@ -137,13 +139,13 @@ async def test_manager_initialize_creates_db_and_loads_kbs(
             return_value=mock_kb_db,
         ) as mock_db_cls,
         patch(
-            "astrbot.core.knowledge_base.kb_mgr.RetrievalManager",
+            "astrbot.core.knowledge_base.retrieval.manager.RetrievalManager",
         ) as mock_retrieval_cls,
         patch(
-            "astrbot.core.knowledge_base.kb_mgr.SparseRetriever",
+            "astrbot.core.knowledge_base.retrieval.sparse_retriever.SparseRetriever",
         ),
         patch(
-            "astrbot.core.knowledge_base.kb_mgr.RankFusion",
+            "astrbot.core.knowledge_base.retrieval.rank_fusion.RankFusion",
         ),
     ):
         mock_retrieval = MagicMock()

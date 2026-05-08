@@ -111,10 +111,12 @@ class TestIsConnectionError:
         for exc in (
             httpx.HTTPStatusError("err", request=request, response=response),
             httpx.InvalidURL("invalid"),
-            httpx.DecodingError,
         ):
             instance = exc("msg") if isinstance(exc, type) else exc
             assert is_connection_error(instance) is False
+
+    def test_httpx_decoding_error_is_treated_as_connection_error(self):
+        assert is_connection_error(httpx.DecodingError("msg")) is True
 
     def test_cause_chain_unwraps_to_network_error(self):
         inner = httpx.ConnectError("inner")

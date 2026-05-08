@@ -7,7 +7,6 @@ import platform
 import re
 import socket
 import ssl
-from collections.abc import Callable
 from datetime import datetime
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path

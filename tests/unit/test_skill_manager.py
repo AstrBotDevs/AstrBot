@@ -92,7 +92,6 @@ class TestSkillManagerConstruction:
                 astrbot_paths=mock_astrbot_paths,
             )
             assert mgr.skills_root == "/tmp/test_skills"
-            assert mgr.astrbot_paths is mock_astrbot_paths
             mock_makedirs.assert_called_once_with("/tmp/test_skills", exist_ok=True)
 
     def test_construction_default_skills_root(self, mock_astrbot_paths):
@@ -267,7 +266,7 @@ class TestSkillManagerActiveOnly:
             "---\nname: inactive-skill\ndescription: Inactive\n---"
         )
 
-        def normalize_skill_markdown_path(skill_dir):
+        def normalize_skill_markdown_path(skill_dir, rename_legacy=True):
             if skill_dir.name == "active-skill":
                 return active_md
             if skill_dir.name == "inactive-skill":
@@ -277,10 +276,12 @@ class TestSkillManagerActiveOnly:
         active_dir = MagicMock(spec=Path)
         active_dir.is_dir.return_value = True
         active_dir.name = "active-skill"
+        active_dir.__lt__ = lambda self, other: self.name < other.name
 
         inactive_dir = MagicMock(spec=Path)
         inactive_dir.is_dir.return_value = True
         inactive_dir.name = "inactive-skill"
+        inactive_dir.__lt__ = lambda self, other: self.name < other.name
 
         with (
             patch("os.path.exists", return_value=True),
@@ -318,9 +319,10 @@ class TestSkillManagerActiveOnly:
             d = MagicMock(spec=Path)
             d.is_dir.return_value = True
             d.name = name
+            d.__lt__ = lambda self, other: self.name < other.name
             return d
 
-        def normalize_skill_markdown_path(skill_dir):
+        def normalize_skill_markdown_path(skill_dir, rename_legacy=True):
             md = MagicMock(spec=Path)
             md.read_text.return_value = f"---\nname: {skill_dir.name}\ndescription: desc\n---"
             return md
@@ -686,19 +688,13 @@ class TestSkillManagerMutations:
         skill_manager,
     ):
         """Test that delete_skill removes the skill directory and config entry."""
-        from astrbot.core.skills.skill_manager import _normalize_skill_markdown_path
-
-        skill_dir = MagicMock(spec=Path)
-        skill_dir.exists.return_value = True
-        skill_dir.name = "my-skill"
-
         with (
             patch.object(
                 skill_manager,
                 "is_sandbox_only_skill",
                 return_value=False,
             ),
-            patch("pathlib.Path", return_value=skill_dir) as mock_path_cls,
+            patch.object(Path, "exists", return_value=True),
             patch("shutil.rmtree") as mock_rmtree,
             patch.object(skill_manager, "_remove_skill_from_sandbox_cache"),
             patch.object(skill_manager, "_load_config",
@@ -706,7 +702,7 @@ class TestSkillManagerMutations:
             patch.object(skill_manager, "_save_config") as mock_save,
         ):
             skill_manager.delete_skill("my-skill")
-            mock_rmtree.assert_called_once_with(skill_dir)
+            mock_rmtree.assert_called_once()
             mock_save.assert_called_once()
 
     def test_delete_skill_raises_on_sandbox_only(

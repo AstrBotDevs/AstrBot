@@ -244,6 +244,7 @@ class TestValidateImportableName:
 class TestLoad:
     """PluginManager.load() behavior."""
 
+    @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
     @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
     async def test_load_returns_true_when_no_plugins(
@@ -256,6 +257,7 @@ class TestLoad:
         assert success is True
         assert error is None
 
+    @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
     @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
     async def test_load_returns_false_when_modules_is_none(
@@ -268,6 +270,7 @@ class TestLoad:
         assert success is False
         assert "未找到" in error
 
+    @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
     @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
     async def test_load_handles_import_failure(
@@ -297,6 +300,7 @@ class TestLoad:
         assert success is False
         assert "broken_plugin" in plugin_manager.failed_plugin_dict
 
+    @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
     @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
     async def test_load_calls_sync_command_configs(
@@ -317,11 +321,12 @@ class TestLoad:
 class TestInstallPlugin:
     """PluginManager.install_plugin() behavior."""
 
+    @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
     @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
-    @patch("astrbot.core.star.star_manager.Metric")
+    @patch("astrbot.core.star.star_manager.Metric.upload", new_callable=AsyncMock)
     async def test_install_plugin_success(
-        self, mock_metric, mock_sync, mock_sp_get, plugin_manager, mock_context
+        self, mock_metric_upload, mock_sync, mock_sp_get, plugin_manager, mock_context
     ):
         """install_plugin installs and loads a plugin successfully."""
         mock_sp_get.return_value = []
@@ -354,11 +359,12 @@ class TestInstallPlugin:
         assert result["repo"] == "https://github.com/test/test_repo"
         assert result["name"] == "test_plugin"
 
+    @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
     @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
-    @patch("astrbot.core.star.star_manager.Metric")
+    @patch("astrbot.core.star.star_manager.Metric.upload", new_callable=AsyncMock)
     async def test_install_plugin_raises_when_load_fails(
-        self, mock_metric, mock_sync, mock_sp_get, plugin_manager
+        self, mock_metric_upload, mock_sync, mock_sp_get, plugin_manager
     ):
         """install_plugin raises when load() returns failure."""
         mock_sp_get.return_value = []
@@ -382,11 +388,12 @@ class TestInstallPlugin:
                 "https://github.com/test/test_repo"
             )
 
+    @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.sp.global_get")
     @patch("astrbot.core.star.star_manager.sync_command_configs", new_callable=AsyncMock)
-    @patch("astrbot.core.star.star_manager.Metric")
+    @patch("astrbot.core.star.star_manager.Metric.upload", new_callable=AsyncMock)
     async def test_install_plugin_raises_when_dir_exists(
-        self, mock_metric, mock_sync, mock_sp_get, plugin_manager
+        self, mock_metric_upload, mock_sync, mock_sp_get, plugin_manager
     ):
         """install_plugin raises when the target directory already exists."""
         mock_sp_get.return_value = []
@@ -396,12 +403,8 @@ class TestInstallPlugin:
         plugin_manager.updator.format_name = MagicMock(return_value="test_repo")
 
         with (
-            patch("astrbot.core.star.star_manager.anyio.Path") as mock_path,
+            patch("os.path.exists", return_value=True),
         ):
-            mock_path_instance = MagicMock()
-            mock_path.return_value = mock_path_instance
-            mock_path_instance.exists = AsyncMock(return_value=True)
-
             with pytest.raises(Exception, match="已存在"):
                 await plugin_manager.install_plugin(
                     "https://github.com/test/test_repo"
@@ -416,6 +419,7 @@ class TestInstallPlugin:
 class TestUninstallPlugin:
     """PluginManager.uninstall_plugin() behavior."""
 
+    @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.remove_dir")
     @patch("astrbot.core.star.star_manager.unregister_platform_adapters_by_module")
     async def test_uninstall_plugin_success(
@@ -444,6 +448,7 @@ class TestUninstallPlugin:
         )
         mock_remove_dir.assert_called_once()
 
+    @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.remove_dir")
     async def test_uninstall_plugin_raises_when_not_found(
         self, mock_remove_dir, plugin_manager, mock_context
@@ -453,6 +458,7 @@ class TestUninstallPlugin:
         with pytest.raises(Exception, match="插件不存在"):
             await plugin_manager.uninstall_plugin("nonexistent")
 
+    @pytest.mark.asyncio
     @patch("astrbot.core.star.star_manager.remove_dir")
     async def test_uninstall_plugin_raises_for_reserved(
         self, mock_remove_dir, plugin_manager, mock_context
@@ -524,6 +530,7 @@ class TestLoadPluginMetadata:
 class TestReloadFailedPlugin:
     """PluginManager.reload_failed_plugin() behavior."""
 
+    @pytest.mark.asyncio
     async def test_returns_false_when_not_in_failed_dict(self, plugin_manager):
         """reload_failed_plugin returns (False, msg) when dir not in failed dict."""
         result = await plugin_manager.reload_failed_plugin("unknown")

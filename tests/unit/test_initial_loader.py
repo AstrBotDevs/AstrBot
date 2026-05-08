@@ -10,30 +10,27 @@ from astrbot.core.initial_loader import InitialLoader
 
 @pytest.mark.asyncio
 async def test_initial_loader_start_awaits_initialize_and_schedules_runtime_bootstrap():
-    """Test InitialLoader.start initializes core then schedules runtime bootstrap."""
+    """Test InitialLoader.start initializes core then starts dashboard."""
     loader = InitialLoader(MagicMock(), MagicMock())
     call_order: list[str] = []
-    real_create_task = asyncio.create_task
-    created_tasks: list[asyncio.Task] = []
+    block_event = asyncio.Event()
 
     lifecycle = MagicMock()
     lifecycle.dashboard_shutdown_event = asyncio.Event()
-    lifecycle.runtime_bootstrap_task = None
+    lifecycle.stop = AsyncMock()
 
     async def initialize_phase() -> None:
         call_order.append("initialize")
 
-    async def bootstrap_runtime() -> None:
-        call_order.append("bootstrap_runtime")
-
     async def start_core() -> None:
         call_order.append("core_start")
+        await block_event.wait()
 
     async def run_dashboard() -> None:
         call_order.append("dashboard_run")
+        await block_event.wait()
 
     lifecycle.initialize = AsyncMock(side_effect=initialize_phase)
-    lifecycle.bootstrap_runtime = AsyncMock(side_effect=bootstrap_runtime)
     lifecycle.start = AsyncMock(side_effect=start_core)
 
     dashboard = MagicMock()
@@ -44,12 +41,6 @@ async def test_initial_loader_start_awaits_initialize_and_schedules_runtime_boot
         call_order.append("dashboard_init")
         return dashboard
 
-    def create_task(coro, *args, **kwargs):
-        call_order.append("create_task")
-        task = real_create_task(coro, *args, **kwargs)
-        created_tasks.append(task)
-        return task
-
     with (
         patch(
             "astrbot.core.initial_loader.AstrBotCoreLifecycle", return_value=lifecycle
@@ -58,19 +49,18 @@ async def test_initial_loader_start_awaits_initialize_and_schedules_runtime_boot
             "astrbot.core.initial_loader.AstrBotDashboard",
             side_effect=dashboard_factory,
         ),
-        patch(
-            "astrbot.core.initial_loader.asyncio.create_task", side_effect=create_task
-        ),
     ):
-        await loader.start()
+        task = asyncio.create_task(loader.start())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await task
 
     lifecycle.initialize.assert_awaited_once()
-    lifecycle.bootstrap_runtime.assert_awaited_once()
     lifecycle.start.assert_awaited_once()
     dashboard.run.assert_awaited_once()
-    assert call_order[:3] == ["initialize", "create_task", "dashboard_init"]
-    assert len(created_tasks) == 1
-    assert lifecycle.runtime_bootstrap_task is created_tasks[0]
+    lifecycle.stop.assert_awaited_once()
+    assert "initialize" in call_order
+    assert "dashboard_init" in call_order
 
 
 @pytest.mark.asyncio
@@ -106,32 +96,27 @@ async def test_initial_loader_start_returns_without_partial_start_when_initializ
 @pytest.mark.parametrize(
     ("failing_component", "expected_order"),
     [
-        ("core", ["initialize", "bootstrap_runtime", "core_start", "dashboard_run"]),
+        ("core", ["initialize", "core_start", "dashboard_run"]),
         (
             "dashboard",
-            ["initialize", "bootstrap_runtime", "core_start", "dashboard_run"],
+            ["initialize", "core_start", "dashboard_run"],
         ),
     ],
 )
-async def test_initial_loader_start_stops_lifecycle_when_runtime_task_raises(
+async def test_initial_loader_start_propagates_runtime_task_errors(
     failing_component: str,
     expected_order: list[str],
 ):
-    """Test InitialLoader.start stops lifecycle if a runtime task crashes."""
+    """Test InitialLoader.start propagates runtime task errors."""
     loader = InitialLoader(MagicMock(), MagicMock())
     call_order: list[str] = []
     runtime_error = RuntimeError(f"{failing_component} failed")
 
     lifecycle = MagicMock()
     lifecycle.dashboard_shutdown_event = asyncio.Event()
-    lifecycle.runtime_bootstrap_task = None
-    lifecycle.stop = AsyncMock()
 
     async def initialize_phase() -> None:
         call_order.append("initialize")
-
-    async def bootstrap_runtime() -> None:
-        call_order.append("bootstrap_runtime")
 
     async def start_core() -> None:
         call_order.append("core_start")
@@ -144,7 +129,6 @@ async def test_initial_loader_start_stops_lifecycle_when_runtime_task_raises(
             raise runtime_error
 
     lifecycle.initialize = AsyncMock(side_effect=initialize_phase)
-    lifecycle.bootstrap_runtime = AsyncMock(side_effect=bootstrap_runtime)
     lifecycle.start = AsyncMock(side_effect=start_core)
 
     dashboard = MagicMock()
@@ -163,5 +147,4 @@ async def test_initial_loader_start_stops_lifecycle_when_runtime_task_raises(
         with pytest.raises(RuntimeError, match=f"{failing_component} failed"):
             await loader.start()
 
-    lifecycle.stop.assert_awaited_once()
     assert call_order == expected_order

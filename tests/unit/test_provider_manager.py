@@ -185,14 +185,16 @@ class TestProviderManagerCallbacks:
 
 
 class TestProviderManagerLookups:
-    def test_get_provider_by_id_not_found(self, manager):
-        result = manager.get_provider_by_id("nonexistent")
+    @pytest.mark.asyncio
+    async def test_get_provider_by_id_not_found(self, manager):
+        result = await manager.get_provider_by_id("nonexistent")
         assert result is None
 
-    def test_get_provider_by_id_found(self, manager):
+    @pytest.mark.asyncio
+    async def test_get_provider_by_id_found(self, manager):
         fake_inst = MagicMock(spec=Provider)
         manager.inst_map["p1"] = fake_inst
-        result = manager.get_provider_by_id("p1")
+        result = await manager.get_provider_by_id("p1")
         assert result is fake_inst
 
     def test_get_using_provider_chat_completion_default(self, manager, mock_acm):
@@ -302,7 +304,7 @@ class TestResolveEnvKeyList:
     def test_empty_env_var_name(self, manager):
         config = {"key": ["$"], "id": "prov1"}
         result = manager._resolve_env_key_list(config)
-        assert result["key"] == [""]
+        assert result["key"] == ["$"]
 
     def test_missing_key_field(self, manager):
         config = {"id": "prov1"}

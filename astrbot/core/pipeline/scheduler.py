@@ -67,6 +67,9 @@ class PipelineScheduler:
                             f"阶段 {stage.__class__.__name__} 已终止事件传播｡",
                         )
                         break
+
+                if event.is_stopped():
+                    break
             else:
                 # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
                 # 简单地等待它执行完成, 然后继续执行下一个阶段

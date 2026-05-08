@@ -19,8 +19,8 @@ from astrbot.core.computer.olayer import (
     PythonComponent,
     ShellComponent,
 )
+
 from .shell_background import build_detached_shell_command
-from .shipyard_search_file_util import search_files_via_shell
 
 try:
     from shipyard_neo import BayClient

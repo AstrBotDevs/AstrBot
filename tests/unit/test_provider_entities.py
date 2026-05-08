@@ -190,7 +190,7 @@ class TestProviderRequest:
         assert req.audio_urls == []
         assert req.contexts == []
         assert req.func_tool is None
-        assert req.system_prompt is None
+        assert req.system_prompt == ""
         assert req.conversation is None
         assert req.tool_calls_result is None
         assert req.model is None
@@ -332,7 +332,10 @@ class TestProviderRequest:
 
     def test_assemble_context_with_extra_user_content(self):
         extra_part = MagicMock(spec=ContentPart)
-        extra_part.model_dump.return_value = {"type": "text", "text": "extra instruction"}
+        extra_part.model_dump_for_context.return_value = {
+            "type": "text",
+            "text": "extra instruction",
+        }
         req = ProviderRequest(
             prompt="translate this",
             extra_user_content_parts=[extra_part],

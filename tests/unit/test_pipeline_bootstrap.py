@@ -91,8 +91,8 @@ class TestEnsureBuiltinStagesRegistered:
             ensure_builtin_stages_registered()
             ensure_builtin_stages_registered()
 
-        # Should only import on first call
-        mock_import.assert_called_once()
+        # First call imports all 9 modules; second call is a no-op
+        assert mock_import.call_count == len(_BUILTIN_STAGE_MODULES)
 
     @patch("astrbot.core.pipeline.bootstrap.registered_stages", new=[])
     def test_global_flag_set_after_import(self):
@@ -208,12 +208,16 @@ class TestEnsureBuiltinStagesRegistered:
             parts = mod_path.split(".")
             # For modules like astrbot.core.pipeline.process_stage.stage
             # the stage name is found in the penultimate segment
-            if parts[-2] in ("process_stage", "respond"):
-                # Special cases: ProcessStage, RespondStage
+            if parts[-2] in ("process_stage", "respond", "rate_limit_check", "preprocess_stage"):
+                # Special cases: ProcessStage, RespondStage, RateLimitStage, PreProcessStage
                 if parts[-2] == "process_stage":
                     derived_names.add("ProcessStage")
                 elif parts[-2] == "respond":
                     derived_names.add("RespondStage")
+                elif parts[-2] == "rate_limit_check":
+                    derived_names.add("RateLimitStage")
+                elif parts[-2] == "preprocess_stage":
+                    derived_names.add("PreProcessStage")
                 else:
                     derived_names.add(f"{parts[-2].title().replace('_', '')}Stage")
             else:
@@ -226,10 +230,24 @@ class TestEnsureBuiltinStagesRegistered:
     @patch("astrbot.core.pipeline.bootstrap.registered_stages", new=[])
     def test_real_registration_smoke(self):
         """Smoke test: calling ensure_builtin_stages_registered with actual modules."""
+        import sys
         import astrbot.core.pipeline.bootstrap as bootstrap_mod
+        from astrbot.core.pipeline import stage as stage_mod
+
+        # Remove cached stage modules so @register_stage runs again
+        # Do NOT remove astrbot.core.pipeline.stage itself, or bootstrap's
+        # registered_stages reference will dangle.
+        for mod in list(sys.modules.keys()):
+            if (
+                mod.startswith("astrbot.core.pipeline.")
+                and mod.endswith(".stage")
+                and mod != "astrbot.core.pipeline.stage"
+            ):
+                del sys.modules[mod]
+        stage_mod.registered_stages.clear()
 
         bootstrap_mod._builtin_stages_registered = False
-        bootstrap_mod.registered_stages.clear()
+        bootstrap_mod.registered_stages = stage_mod.registered_stages
 
         # This should import the actual modules
         ensure_builtin_stages_registered()

@@ -9,6 +9,9 @@ import pytest
 
 from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.provider import Provider
+
+pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
@@ -87,7 +90,10 @@ class TestCfg:
 
     def test_cfg_handles_missing_max_cnt(self, ltm, mock_context, mock_event):
         mock_context.get_config.return_value = {
-            "provider_ltm_settings": {},
+            "provider_ltm_settings": {
+                "image_caption": False,
+                "active_reply": {"enable": False, "method": "possibility_reply", "possibility_reply": 0.0},
+            },
             "provider_settings": {"image_caption_prompt": "x"},
         }
         result = ltm.cfg(mock_event)
@@ -99,7 +105,7 @@ class TestGetImageCaption:
     """Image caption fetching."""
 
     async def test_get_image_caption_uses_using_provider(self, ltm, mock_context):
-        mock_provider = AsyncMock()
+        mock_provider = AsyncMock(spec=Provider)
         mock_provider.text_chat = AsyncMock(return_value=MagicMock(completion_text="a cat"))
         mock_context.get_using_provider.return_value = mock_provider
         mock_context.get_provider_by_id.return_value = None
@@ -109,7 +115,7 @@ class TestGetImageCaption:
         mock_provider.text_chat.assert_awaited_once()
 
     async def test_get_image_caption_uses_provider_by_id(self, ltm, mock_context):
-        mock_provider = AsyncMock()
+        mock_provider = AsyncMock(spec=Provider)
         mock_provider.text_chat = AsyncMock(return_value=MagicMock(completion_text="a dog"))
         mock_context.get_provider_by_id.return_value = mock_provider
 
@@ -172,7 +178,7 @@ class TestHandleMessage:
 
         mock_event.get_messages.return_value = [
             Plain(text="Hello "),
-            Image(url="http://img.jpg"),
+            Image(file="http://img.jpg"),
             Plain(text="world"),
         ]
         mock_event.get_message_type.return_value = MessageType.GROUP_MESSAGE

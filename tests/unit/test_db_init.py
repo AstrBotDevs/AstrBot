@@ -18,7 +18,9 @@ class TestBaseDatabaseAbstract:
 
     def test_is_abstract_class(self):
         """BaseDatabase uses ABCMeta and cannot be directly instantiated."""
-        assert isinstance(BaseDatabase, ABC)
+        from abc import ABCMeta
+
+        assert isinstance(BaseDatabase, ABCMeta)
         with pytest.raises(TypeError, match="abstract"):
             BaseDatabase()
 
@@ -37,7 +39,7 @@ class TestBaseDatabaseAbstract:
         assert "create_conversation" in abs_methods
         assert "insert_platform_stats" in abs_methods
         assert "insert_persona" in abs_methods
-        assert "insert_api_key" in abs_methods  # kept as create_api_key is the actual name
+        assert "create_api_key" in abs_methods
         # Deprecated methods are still abstract
         assert "get_base_stats" in abs_methods
         assert "get_total_message_count" in abs_methods

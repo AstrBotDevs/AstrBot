@@ -24,6 +24,7 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 from .base import ComputerBooter
+from .bwrap import _decode_shell_output
 
 _BLOCKED_COMMAND_PATTERNS = [
     " rm -rf ",

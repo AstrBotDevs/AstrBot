@@ -96,8 +96,9 @@ class TestGetUsingProvider:
 
     def test_returns_provider_when_found(self, context, mock_dependencies):
         """get_using_provider returns the provider from provider_manager."""
-        mock_provider = MagicMock()
-        mock_provider.__class__.__name__ = "Provider"
+        from astrbot.core.provider.provider import Provider
+
+        mock_provider = MagicMock(spec=Provider)
         mock_dependencies["provider_manager"].get_using_provider.return_value = (
             mock_provider
         )
@@ -209,6 +210,8 @@ class TestRegisterCommands:
 
     def test_registers_regex_command(self, context):
         """register_commands with use_regex=True adds a RegexFilter."""
+        star_handlers_registry.clear()
+
         async def fake_handler():
             pass
 
@@ -235,6 +238,8 @@ class TestRegisterCommands:
 
     def test_registers_command_with_ignore_prefix(self, context):
         """register_commands with use_regex=False adds a CommandFilter."""
+        star_handlers_registry.clear()
+
         async def fake_handler():
             pass
 
@@ -361,6 +366,14 @@ class TestAddLLMTools:
         new_tool.__module__ = "new.module"
 
         mock_dependencies["provider_manager"].llm_tools.func_list = [old_tool]
+
+        def _remove_func(name: str) -> None:
+            mock_dependencies["provider_manager"].llm_tools.func_list = [
+                t for t in mock_dependencies["provider_manager"].llm_tools.func_list
+                if t.name != name
+            ]
+
+        mock_dependencies["provider_manager"].llm_tools.remove_func.side_effect = _remove_func
         context.add_llm_tools(new_tool)
 
         assert old_tool not in mock_dependencies["provider_manager"].llm_tools.func_list
@@ -443,6 +456,7 @@ class TestRegisterTask:
 class TestResetRuntimeRegistrations:
     """Context.reset_runtime_registrations() behavior."""
 
+    @pytest.mark.skip(reason="reset_runtime_registrations was removed from Context")
     def test_clears_web_apis_and_tasks(self, context):
         """reset_runtime_registrations clears both containers."""
         async def handler():

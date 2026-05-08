@@ -16,7 +16,6 @@ import yaml
 
 from astrbot.core.utils.astrbot_path import (
     AstrbotPaths,
-    astrbot_paths,
     get_astrbot_data_path,
     get_astrbot_plugin_path,
     get_astrbot_skills_path,
@@ -345,7 +344,9 @@ class SkillManager:
             self.plugins_root = plugins_root or get_astrbot_plugin_path()
             data_path = Path(get_astrbot_data_path())
             self.config_path = str(data_path / SKILLS_CONFIG_FILENAME)
-            self.sandbox_skills_cache_path = str(data_path / SANDBOX_SKILLS_CACHE_FILENAME)
+            self.sandbox_skills_cache_path = str(
+                data_path / SANDBOX_SKILLS_CACHE_FILENAME
+            )
         os.makedirs(self.skills_root, exist_ok=True)
 
     def _iter_plugin_skill_dirs(self) -> list[tuple[str, str, Path]]:

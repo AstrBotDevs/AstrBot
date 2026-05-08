@@ -10,12 +10,21 @@ from astrbot.core.pipeline.process_stage.stage import ProcessStage
 from astrbot.core.provider.entities import ProviderRequest
 
 
+@pytest.fixture(autouse=True)
+def _reload_stage_module():
+    """Reload the stage module to avoid stale imports from test_pipeline_bootstrap."""
+    import importlib
+    import astrbot.core.pipeline.process_stage.stage as stage_mod
+    importlib.reload(stage_mod)
+    globals()["ProcessStage"] = stage_mod.ProcessStage
+
+
 @pytest.fixture
 def mock_context():
     """Create a mock PipelineContext."""
     ctx = MagicMock()
     ctx.astrbot_config = {
-        "provider_settings": {"enable": True, "wake_prefix": ""},
+        "provider_settings": {"enable": True, "wake_prefix": "", "agent_runner_type": "local"},
         "wake_prefix": ["bot"],
     }
     ctx.plugin_manager = MagicMock()
@@ -41,11 +50,15 @@ def stage(mock_context):
     """Create a ProcessStage with mocked sub-stages."""
     stage = ProcessStage()
 
+    async def _empty_async_gen(_event):
+        if False:
+            yield None
+
     stage.agent_sub_stage = MagicMock()
-    stage.agent_sub_stage.process = AsyncMock()
+    stage.agent_sub_stage.process = _empty_async_gen
 
     stage.star_request_sub_stage = MagicMock()
-    stage.star_request_sub_stage.process = AsyncMock()
+    stage.star_request_sub_stage.process = _empty_async_gen
 
     stage.ctx = mock_context
     stage.config = mock_context.astrbot_config
@@ -62,9 +75,19 @@ class TestProcessStageInitialize:
         """Verify initialize sets ctx, config, plugin_manager."""
         stage = ProcessStage()
         with (
-            patch.object(stage, "agent_sub_stage") as mock_agent,
-            patch.object(stage, "star_request_sub_stage") as mock_star,
+            patch(
+                "astrbot.core.pipeline.process_stage.stage.AgentRequestSubStage",
+            ) as mock_agent_cls,
+            patch(
+                "astrbot.core.pipeline.process_stage.stage.StarRequestSubStage",
+            ) as mock_star_cls,
         ):
+            mock_agent = MagicMock()
+            mock_agent.initialize = AsyncMock()
+            mock_agent_cls.return_value = mock_agent
+            mock_star = MagicMock()
+            mock_star.initialize = AsyncMock()
+            mock_star_cls.return_value = mock_star
             await stage.initialize(mock_context)
 
         assert stage.ctx is mock_context
@@ -75,7 +98,21 @@ class TestProcessStageInitialize:
     async def test_initialize_creates_sub_stages(self, mock_context):
         """Verify initialize creates and initializes sub-stages."""
         stage = ProcessStage()
-        await stage.initialize(mock_context)
+        with (
+            patch(
+                "astrbot.core.pipeline.process_stage.stage.AgentRequestSubStage",
+            ) as mock_agent_cls,
+            patch(
+                "astrbot.core.pipeline.process_stage.stage.StarRequestSubStage",
+            ) as mock_star_cls,
+        ):
+            mock_agent = MagicMock()
+            mock_agent.initialize = AsyncMock()
+            mock_agent_cls.return_value = mock_agent
+            mock_star = MagicMock()
+            mock_star.initialize = AsyncMock()
+            mock_star_cls.return_value = mock_star
+            await stage.initialize(mock_context)
 
         assert hasattr(stage, "agent_sub_stage")
         assert hasattr(stage, "star_request_sub_stage")
@@ -87,16 +124,44 @@ class TestProcessStageInitialize:
         """Verify sdk_plugin_bridge is set when plugin_manager has it."""
         mock_context.plugin_manager.context.sdk_plugin_bridge = MagicMock()
         stage = ProcessStage()
-        await stage.initialize(mock_context)
+        with (
+            patch(
+                "astrbot.core.pipeline.process_stage.stage.AgentRequestSubStage",
+            ) as mock_agent_cls,
+            patch(
+                "astrbot.core.pipeline.process_stage.stage.StarRequestSubStage",
+            ) as mock_star_cls,
+        ):
+            mock_agent = MagicMock()
+            mock_agent.initialize = AsyncMock()
+            mock_agent_cls.return_value = mock_agent
+            mock_star = MagicMock()
+            mock_star.initialize = AsyncMock()
+            mock_star_cls.return_value = mock_star
+            await stage.initialize(mock_context)
 
         assert stage.sdk_plugin_bridge is mock_context.plugin_manager.context.sdk_plugin_bridge
 
     @pytest.mark.asyncio
     async def test_initialize_sdk_plugin_bridge_absent(self, mock_context):
-        """Verify sdk_plugin_bridge is None when plugin_manager has no context attr."""
-        mock_context.plugin_manager = MagicMock(spec=[])  # no context attribute
+        """Verify sdk_plugin_bridge is None when plugin_manager context has no sdk_plugin_bridge."""
+        mock_context.plugin_manager.context = MagicMock(spec=[])
         stage = ProcessStage()
-        await stage.initialize(mock_context)
+        with (
+            patch(
+                "astrbot.core.pipeline.process_stage.stage.AgentRequestSubStage",
+            ) as mock_agent_cls,
+            patch(
+                "astrbot.core.pipeline.process_stage.stage.StarRequestSubStage",
+            ) as mock_star_cls,
+        ):
+            mock_agent = MagicMock()
+            mock_agent.initialize = AsyncMock()
+            mock_agent_cls.return_value = mock_agent
+            mock_star = MagicMock()
+            mock_star.initialize = AsyncMock()
+            mock_star_cls.return_value = mock_star
+            await stage.initialize(mock_context)
 
         assert stage.sdk_plugin_bridge is None
 
@@ -115,20 +180,30 @@ class TestProcessStageProcess:
     async def test_process_no_activated_handlers_and_no_sdk_bridge(
         self, stage, mock_event,
     ):
-        """When activated_handlers is None and no sdk bridge, skip handler path."""
+        """When activated_handlers is None and no sdk bridge, LLM path is reached."""
         mock_event.get_extra.return_value = None
         stage.sdk_plugin_bridge = None
+        mock_event.call_llm = False  # should_call_llm = not call_llm = True
 
+        agent_calls = []
+
+        async def agent_gen(_event):
+            agent_calls.append(_event)
+            if False:
+                yield None
+
+        stage.agent_sub_stage.process = agent_gen
         results = await self._collect(stage.process(mock_event))
 
-        assert results == []  # provider enabled, should still reach agent_sub_stage
-        stage.agent_sub_stage.process.assert_awaited_once()
+        assert len(agent_calls) == 1
+        assert results == []
 
     @pytest.mark.asyncio
     async def test_process_activated_handlers_with_provider_request(
         self, stage, mock_event,
     ):
         """When star_request yields a ProviderRequest, agent_sub_stage is called."""
+        mock_event.get_extra.return_value = [MagicMock()]
         pr = ProviderRequest(prompt="hello")
 
         async def star_gen(_event):
@@ -136,18 +211,17 @@ class TestProcessStageProcess:
 
         stage.star_request_sub_stage.process = star_gen
 
-        agent_called = False
+        agent_calls = []
 
         async def agent_gen(_event):
-            nonlocal agent_called
-            agent_called = True
+            agent_calls.append(_event)
             yield None
 
         stage.agent_sub_stage.process = agent_gen
 
         results = await self._collect(stage.process(mock_event))
 
-        assert agent_called is True
+        assert len(agent_calls) == 1
         mock_event.set_extra.assert_any_call("provider_request", pr)
         assert len(results) >= 1
 
@@ -156,6 +230,8 @@ class TestProcessStageProcess:
         self, stage, mock_event,
     ):
         """When star_request yields a non-ProviderRequest, yield directly."""
+        mock_event.get_extra.return_value = [MagicMock()]
+
         async def star_gen(_event):
             yield "some_other_result"
 
@@ -171,6 +247,7 @@ class TestProcessStageProcess:
         self, stage, mock_event,
     ):
         """When agent_sub_stage yields nothing, should still yield once."""
+        mock_event.get_extra.return_value = [MagicMock()]
         pr = ProviderRequest(prompt="hi")
 
         async def star_gen(_event):
@@ -246,18 +323,19 @@ class TestProcessStageProcess:
     async def test_process_llm_triggered(self, stage, mock_event):
         """When all conditions met, agent_sub_stage is called for LLM."""
         stage.sdk_plugin_bridge = None
-        agent_called = False
+        mock_event.call_llm = False  # should_call_llm = not call_llm = True
+
+        agent_calls = []
 
         async def agent_gen(_event):
-            nonlocal agent_called
-            agent_called = True
+            agent_calls.append(_event)
             yield None
 
         stage.agent_sub_stage.process = agent_gen
 
         results = await self._collect(stage.process(mock_event))
 
-        assert agent_called is True
+        assert len(agent_calls) == 1
         assert len(results) >= 1
 
     @pytest.mark.asyncio
@@ -295,6 +373,9 @@ class TestProcessStageProcess:
         """When sdk_plugin_bridge has get_effective_* methods, they are used."""
         mock_bridge = MagicMock()
         mock_bridge.get_effective_should_call_llm.return_value = False
+        mock_bridge.dispatch_message = AsyncMock(
+            return_value=MagicMock(sent_message=False, stopped=False),
+        )
         stage.sdk_plugin_bridge = mock_bridge
 
         await self._collect(stage.process(mock_event))
@@ -308,6 +389,8 @@ class TestProcessStageProcess:
         self, stage, mock_event,
     ):
         """When event is stopped after star_request processing, stop propagation."""
+        mock_event.get_extra.return_value = [MagicMock()]
+
         async def star_gen(_event):
             yield ProviderRequest(prompt="test")
 
