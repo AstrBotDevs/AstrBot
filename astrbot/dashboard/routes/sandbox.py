@@ -43,7 +43,9 @@ def _session_id(data: dict[str, Any]) -> str:
 
 def _terminal_command(command: str) -> str:
     quoted = shlex.quote(command)
-    return f"TERM=xterm-256color COLUMNS=160 LINES=40 script -q -c {quoted} /dev/null"
+    return (
+        f"TERM=xterm-256color COLUMNS=160 LINES=40 script -q -e -c {quoted} /dev/null"
+    )
 
 
 class SandboxRoute(Route):

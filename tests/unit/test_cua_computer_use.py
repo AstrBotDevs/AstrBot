@@ -1069,6 +1069,84 @@ async def test_get_booter_serializes_concurrent_default_boot(monkeypatch, tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_get_booter_does_not_share_default_boot_across_concurrent_sessions(
+    monkeypatch,
+    tmp_path,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+
+    boot_started = asyncio.Event()
+    release_boot = asyncio.Event()
+    boots = []
+
+    class FakeBooter:
+        def __init__(self, sandbox_id: str):
+            self.sandbox_id = sandbox_id
+
+        async def available(self):
+            return True
+
+    async def fake_boot_managed(ctx, session_id, sandbox_id, cua_kwargs):
+        boots.append((session_id, sandbox_id))
+        boot_started.set()
+        await release_boot.wait()
+        return FakeBooter(sandbox_id)
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    monkeypatch.setattr(computer_client, "_boot_managed_cua_sandbox", fake_boot_managed)
+    computer_client.session_booter.clear()
+
+    ctx = FakeContext(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "cua"},
+            }
+        }
+    )
+    task_one = asyncio.create_task(computer_client.get_booter(ctx, "session-a"))
+    await boot_started.wait()
+    task_two = asyncio.create_task(computer_client.get_booter(ctx, "session-b"))
+    await asyncio.sleep(0)
+    release_boot.set()
+
+    booter_one, booter_two = await asyncio.gather(task_one, task_two)
+
+    assert booter_one is not booter_two
+    assert booter_one.sandbox_id != booter_two.sandbox_id
+    assert len(boots) == 2
+
+
+def test_release_current_cua_sandbox_clears_session_current(monkeypatch, tmp_path):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-current",
+        sandbox_name="current",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() + 60,
+        connect_info={},
+    )
+    registry.set_current_sandbox_id("session-a", "sb-current")
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+
+    computer_client.release_current_cua_sandbox("session-a")
+
+    assert registry.get_current_sandbox_id("session-a") is None
+
+
+@pytest.mark.asyncio
 async def test_get_booter_shuts_down_client_when_skill_sync_fails(monkeypatch):
     from astrbot.core.computer import computer_client
     from astrbot.core.computer.cua_registry import CuaSandboxRegistry

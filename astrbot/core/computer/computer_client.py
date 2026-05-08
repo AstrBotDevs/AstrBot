@@ -330,15 +330,55 @@ async def _get_or_create_cua_booter(
         )
         _save_cua_registry()
 
-    async with _cua_boot_lock(target_sandbox_id):
-        if target_sandbox_id not in session_booter:
+    while True:
+        async with _cua_boot_lock(target_sandbox_id):
+            if target_sandbox_id in session_booter and not _acquire_cua_sandbox_lease(
+                target_sandbox_id, session_id
+            ):
+                target_sandbox_id = _new_managed_cua_sandbox_id()
+                cua_registry.upsert_sandbox(
+                    **_build_cua_sandbox_record_payload(
+                        sandbox_id=target_sandbox_id,
+                        sandbox_name=target_sandbox_id,
+                        session_id=session_id,
+                        cua_kwargs=cua_kwargs,
+                        idle_timeout=_get_cua_idle_timeout(
+                            context.get_config(umo=session_id)
+                        ),
+                    )
+                )
+                _save_cua_registry()
+                continue
+
+            if target_sandbox_id in session_booter:
+                break
+
+            if target_sandbox_id not in session_booter:
+                if not _acquire_cua_sandbox_lease(target_sandbox_id, session_id):
+                    target_sandbox_id = _new_managed_cua_sandbox_id()
+                    cua_registry.upsert_sandbox(
+                        **_build_cua_sandbox_record_payload(
+                            sandbox_id=target_sandbox_id,
+                            sandbox_name=target_sandbox_id,
+                            session_id=session_id,
+                            cua_kwargs=cua_kwargs,
+                            idle_timeout=_get_cua_idle_timeout(
+                                context.get_config(umo=session_id)
+                            ),
+                        )
+                    )
+                    _save_cua_registry()
+                    continue
+
             client = await _boot_managed_cua_sandbox(
                 context, session_id, target_sandbox_id, cua_kwargs
             )
             setattr(client, "sandbox_id", target_sandbox_id)
             session_booter[target_sandbox_id] = client
+            break
 
-    _acquire_cua_sandbox_lease(target_sandbox_id, session_id)
+        break
+
     cua_registry.touch_sandbox(target_sandbox_id)
     cua_registry.set_current_sandbox_id(session_id, target_sandbox_id)
     _save_cua_registry()
@@ -518,6 +558,8 @@ def release_current_cua_sandbox(
             f"Sandbox {target_sandbox_id} is controlled by another session"
         )
     released = cua_registry.release_lease(target_sandbox_id) or record
+    if cua_registry.get_current_sandbox_id(session_id) == target_sandbox_id:
+        cua_registry.set_current_sandbox_id(session_id, None)
     _save_cua_registry()
     return released
 

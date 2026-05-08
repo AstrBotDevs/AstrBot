@@ -1121,7 +1121,7 @@ async def test_sandbox_dashboard_api_shell_executes_without_taking_over(
     data = await response.get_json()
 
     assert data["status"] == "ok"
-    assert "script -q -c pwd /dev/null" in data["data"]["result"]["stdout"]
+    assert "script -q -e -c pwd /dev/null" in data["data"]["result"]["stdout"]
     assert data["data"]["result"]["exit_code"] == 0
     assert data["data"]["result"]["timeout"] == 12
     assert registry.get_sandbox("sb-cua")["controller_session_id"] == "chat-session"
