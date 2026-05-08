@@ -69,16 +69,16 @@ class SandboxRegistry:
         owner_session_id: str | None,
         connect_info: dict[str, Any],
         is_default: bool = False,
-        status: str = "running",
-        idle_timeout: int | float | None = None,
-        expires_at: float | None = None,
-        retention_policy: str = "temporary",
-        last_used_at: float | None = None,
-        controller_user_id: str | None = None,
-        controller_session_id: str | None = None,
-        lease_expires_at: float | None = None,
-        labels: dict[str, Any] | None = None,
-        notes: str | None = None,
+        status: str | object = _UNSET,
+        idle_timeout: int | float | None | object = _UNSET,
+        expires_at: float | None | object = _UNSET,
+        retention_policy: str | object = _UNSET,
+        last_used_at: float | None | object = _UNSET,
+        controller_user_id: str | None | object = _UNSET,
+        controller_session_id: str | None | object = _UNSET,
+        lease_expires_at: float | None | object = _UNSET,
+        labels: dict[str, Any] | None | object = _UNSET,
+        notes: str | None | object = _UNSET,
     ) -> dict[str, Any]:
         record = self._payload["sandboxes"].get(sandbox_id, {})
         record.update(
@@ -92,19 +92,39 @@ class SandboxRegistry:
                 "is_default": is_default,
                 "owner_user_id": owner_user_id,
                 "owner_session_id": owner_session_id,
-                "controller_user_id": controller_user_id,
-                "controller_session_id": controller_session_id,
-                "lease_expires_at": lease_expires_at,
-                "last_used_at": last_used_at,
-                "idle_timeout": idle_timeout,
-                "expires_at": expires_at,
-                "retention_policy": retention_policy,
-                "status": status,
                 "connect_info": deepcopy(connect_info),
-                "labels": deepcopy(labels) if labels is not None else {},
-                "notes": notes,
             }
         )
+        defaults = {
+            "controller_user_id": None,
+            "controller_session_id": None,
+            "lease_expires_at": None,
+            "last_used_at": None,
+            "idle_timeout": None,
+            "expires_at": None,
+            "retention_policy": "temporary",
+            "status": "running",
+            "labels": {},
+            "notes": None,
+        }
+        updates = {
+            "controller_user_id": controller_user_id,
+            "controller_session_id": controller_session_id,
+            "lease_expires_at": lease_expires_at,
+            "last_used_at": last_used_at,
+            "idle_timeout": idle_timeout,
+            "expires_at": expires_at,
+            "retention_policy": retention_policy,
+            "status": status,
+            "labels": deepcopy(labels) if labels is not _UNSET else _UNSET,
+            "notes": notes,
+        }
+        for field_name, default_value in defaults.items():
+            value = updates[field_name]
+            if value is _UNSET:
+                record.setdefault(field_name, deepcopy(default_value))
+            else:
+                record[field_name] = value
         record = SandboxRecord.from_dict(record).to_dict()
         self._payload["sandboxes"][sandbox_id] = record
         if is_default or (managed and self._payload["default_sandbox_id"] is None):

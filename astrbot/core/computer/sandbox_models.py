@@ -40,13 +40,23 @@ class SandboxRecord:
     labels: dict[str, Any] = field(default_factory=dict)
     notes: str | None = None
 
+    @staticmethod
+    def _required_string(data: dict[str, Any], field_name: str) -> str:
+        value = data[field_name]
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name} must be a non-empty string")
+        value = value.strip()
+        if not value:
+            raise ValueError(f"{field_name} must be a non-empty string")
+        return value
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SandboxRecord:
         return cls(
-            sandbox_id=str(data["sandbox_id"]),
-            sandbox_name=str(data["sandbox_name"]),
-            booter_type=str(data["booter_type"]),
-            provider=str(data["provider"]),
+            sandbox_id=cls._required_string(data, "sandbox_id"),
+            sandbox_name=cls._required_string(data, "sandbox_name"),
+            booter_type=cls._required_string(data, "booter_type"),
+            provider=cls._required_string(data, "provider"),
             managed=bool(data["managed"]),
             created_by_astrbot=bool(data["created_by_astrbot"]),
             is_default=bool(data.get("is_default", False)),

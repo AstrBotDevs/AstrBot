@@ -146,3 +146,29 @@ def test_sandbox_registry_updates_config_and_status(tmp_path):
     assert record["expires_at"] == 200
     assert record["retention_policy"] == "persistent"
     assert record["status"] == "stopped"
+
+
+def test_sandbox_registry_upsert_preserves_runtime_fields_when_omitted(tmp_path):
+    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
+    _upsert(
+        registry,
+        "sb-1",
+        controller_user_id="user-a",
+        controller_session_id="session-a",
+        lease_expires_at=200,
+        last_used_at=100,
+        idle_timeout=30,
+        status="unknown",
+    )
+
+    _upsert(registry, "sb-1", sandbox_name="renamed", connect_info={"name": "renamed"})
+
+    record = registry.get_sandbox("sb-1")
+    assert record["sandbox_name"] == "renamed"
+    assert record["connect_info"] == {"name": "renamed"}
+    assert record["controller_user_id"] == "user-a"
+    assert record["controller_session_id"] == "session-a"
+    assert record["lease_expires_at"] == 200
+    assert record["last_used_at"] == 100
+    assert record["idle_timeout"] == 30
+    assert record["status"] == "unknown"

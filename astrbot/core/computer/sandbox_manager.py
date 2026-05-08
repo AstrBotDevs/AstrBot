@@ -49,10 +49,6 @@ class SandboxManager:
     def drop_boot_lock(self, sandbox_id: str) -> None:
         self.boot_locks.pop(sandbox_id, None)
 
-    def get_idle_timeout(self, config: dict, provider_id: str) -> float:
-        _ = config, provider_id
-        return 0.0
-
     def build_record_payload(
         self,
         *,

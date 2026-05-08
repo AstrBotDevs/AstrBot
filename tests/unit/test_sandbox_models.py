@@ -1,3 +1,5 @@
+import pytest
+
 from astrbot.core.computer.sandbox_models import (
     SandboxRecord,
     SandboxRetentionPolicy,
@@ -81,3 +83,28 @@ def test_sandbox_record_detects_active_control_lease():
     assert record.is_controlled_by("session-a", now=100.0) is True
     assert record.is_controlled_by("session-b", now=100.0) is False
     assert record.has_active_lease(now=201.0) is False
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("sandbox_id", None),
+        ("sandbox_id", ""),
+        ("sandbox_name", "   "),
+        ("booter_type", None),
+        ("provider", ""),
+    ],
+)
+def test_sandbox_record_rejects_empty_required_string_fields(field, value):
+    payload = {
+        "sandbox_id": "sb-1",
+        "sandbox_name": "worker",
+        "booter_type": "cua",
+        "provider": "cua",
+        "managed": True,
+        "created_by_astrbot": True,
+    }
+    payload[field] = value
+
+    with pytest.raises(ValueError, match=field):
+        SandboxRecord.from_dict(payload)
