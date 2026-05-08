@@ -203,6 +203,7 @@
             v-model="configSandboxName"
             :label="tm('config.name')"
             variant="outlined"
+            :rules="[requiredSandboxNameRule]"
             class="mb-2"
           />
           <v-radio-group v-model="configRetentionPolicy" :label="tm('fields.retentionPolicy')" inline>
@@ -233,7 +234,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="configDialog = false">{{ tm('actions.cancel') }}</v-btn>
-          <v-btn color="primary" :loading="savingConfig" @click="saveConfig">{{ tm('actions.save') }}</v-btn>
+          <v-btn color="primary" :loading="savingConfig" :disabled="!canSaveConfig" @click="saveConfig">{{ tm('actions.save') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -366,9 +367,14 @@ const headers = computed(() => [
 const providerCount = computed(() => new Set(sandboxes.value.map((item) => item.provider || item.booter_type || 'unknown')).size)
 const busyCount = computed(() => sandboxes.value.filter((item) => !!item.controller_session_id).length)
 const defaultSandbox = computed(() => sandboxes.value.find((item) => item.is_default))
+const canSaveConfig = computed(() => configSandboxName.value.trim().length > 0)
 
 function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
   snackbar.value = { show: true, message, color }
+}
+
+function requiredSandboxNameRule(value: string) {
+  return !!value?.trim() || tm('config.nameRequired')
 }
 
 function isCua(item: SandboxRecord) {
@@ -471,7 +477,7 @@ function setDefaultSandbox(item: SandboxRecord) {
 }
 
 async function saveConfig() {
-  if (!configSandbox.value) return
+  if (!configSandbox.value || !canSaveConfig.value) return
   savingConfig.value = true
   try {
     const persistent = configRetentionPolicy.value === 'persistent'

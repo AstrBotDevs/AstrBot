@@ -77,6 +77,7 @@
   "config": {
     "title": "沙盒配置",
     "name": "沙盒名称",
+    "nameRequired": "沙盒名称不能为空",
     "idleTimeout": "空闲超时（秒）",
     "idleTimeoutHint": "临时策略下，沙盒在空闲达到该时间后可被清理，0 或空表示不启用空闲清理。",
     "expiresAt": "固定过期时间",
