@@ -6,6 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from astrbot.api import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 _UNSET = object()
@@ -226,8 +227,17 @@ class CuaSandboxRegistry:
         if not self.storage_path.exists():
             self._payload = _default_registry_payload()
             return
-        with self.storage_path.open("r", encoding="utf-8") as f:
-            payload = json.load(f)
+        try:
+            with self.storage_path.open("r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning(
+                "[Computer] Failed to load CUA sandbox registry %s: %s",
+                self.storage_path,
+                exc,
+            )
+            self._payload = _default_registry_payload()
+            return
         self._payload = _default_registry_payload()
         self._payload.update(payload)
         sandboxes = self._payload.get("sandboxes", {})

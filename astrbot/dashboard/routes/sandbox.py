@@ -117,10 +117,11 @@ class SandboxRoute(Route):
         data = await request.json
         if not isinstance(data, dict):
             data = {}
+        sandbox_id = data.get("sandbox_id")
         try:
             sandbox = release_current_cua_sandbox(
                 _session_id(data),
-                str(data["sandbox_id"]) if data.get("sandbox_id") else None,
+                str(sandbox_id) if sandbox_id else None,
             )
             return Response().ok({"sandbox": sandbox}).__dict__
         except Exception as e:
@@ -222,9 +223,10 @@ class SandboxRoute(Route):
                 return (
                     Response().error("Target sandbox does not support shell.").__dict__
                 )
+            cwd = data.get("cwd")
             result = await shell.exec(
                 _terminal_command(command),
-                cwd=str(data["cwd"]) if data.get("cwd") else None,
+                cwd=str(cwd) if cwd else None,
                 timeout=int(data.get("timeout") or 300),
                 background=bool(data.get("background", False)),
             )

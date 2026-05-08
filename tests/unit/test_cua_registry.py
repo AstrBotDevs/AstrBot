@@ -133,6 +133,17 @@ def test_registry_persists_and_reloads_state(tmp_path: Path):
     assert restored.get_sandbox("sb-1")["sandbox_name"] == "default-sandbox"
 
 
+def test_registry_load_recovers_from_corrupted_json(tmp_path: Path):
+    storage_path = tmp_path / "sandbox_registry.json"
+    storage_path.write_text("{not-json", encoding="utf-8")
+
+    registry = CuaSandboxRegistry(storage_path=storage_path)
+    registry.load()
+
+    assert registry.default_sandbox_id is None
+    assert registry.list_sandboxes() == []
+
+
 def test_registry_load_clears_stale_control_lease_state(tmp_path: Path):
     storage_path = tmp_path / "sandbox_registry.json"
     registry = CuaSandboxRegistry(storage_path=storage_path)

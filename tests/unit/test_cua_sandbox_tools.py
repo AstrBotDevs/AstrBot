@@ -312,6 +312,86 @@ async def test_copy_file_between_sandboxes_uses_temp_relay_and_cleans_up(
 
 
 @pytest.mark.asyncio
+async def test_copy_file_between_sandboxes_closes_relay_file_descriptor(
+    monkeypatch,
+    tmp_path: Path,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+    from astrbot.core.tools.computer_tools import cua_sandbox as sandbox_tools
+    from astrbot.core.tools.computer_tools.cua_sandbox import (
+        CuaCopyFileBetweenSandboxesTool,
+    )
+
+    class SourceBooter:
+        async def available(self):
+            return True
+
+        async def download_file(self, remote_path: str, local_path: str):
+            Path(local_path).write_text("relay-content", encoding="utf-8")
+
+    class TargetBooter:
+        async def available(self):
+            return True
+
+        async def upload_file(self, path: str, file_name: str) -> dict:
+            return {"success": True, "file_path": file_name}
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "registry.json")
+    for sandbox_id in ("sb-source", "sb-target"):
+        registry.upsert_sandbox(
+            sandbox_id=sandbox_id,
+            sandbox_name=sandbox_id,
+            booter_type="cua",
+            provider="cua",
+            managed=True,
+            created_by_astrbot=True,
+            owner_user_id="session-a",
+            owner_session_id="session-a",
+            controller_user_id="session-a" if sandbox_id == "sb-target" else None,
+            controller_session_id="session-a" if sandbox_id == "sb-target" else None,
+            lease_expires_at=time.time() + 60 if sandbox_id == "sb-target" else None,
+            connect_info={"name": sandbox_id, "local": True},
+        )
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+    computer_client.session_booter["sb-source"] = SourceBooter()
+    computer_client.session_booter["sb-target"] = TargetBooter()
+    monkeypatch.setattr(sandbox_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    closed = []
+    original_mkstemp = computer_client.tempfile.mkstemp
+    original_close = computer_client.os.close
+
+    def tracked_mkstemp(*args, **kwargs):
+        fd, path = original_mkstemp(*args, **kwargs)
+        closed.append(False)
+
+        def tracked_close(close_fd):
+            if close_fd == fd:
+                closed[0] = True
+            return original_close(close_fd)
+
+        monkeypatch.setattr(computer_client.os, "close", tracked_close)
+        return fd, path
+
+    monkeypatch.setattr(computer_client.tempfile, "mkstemp", tracked_mkstemp)
+
+    result = json.loads(
+        await CuaCopyFileBetweenSandboxesTool().call(
+            _wrapper("session-a"),
+            source_sandbox_id="sb-source",
+            source_path="/tmp/input.txt",
+            target_sandbox_id="sb-target",
+            target_path="/tmp/output.txt",
+        )
+    )
+
+    assert result["success"] is True
+    assert closed == [True]
+
+
+@pytest.mark.asyncio
 async def test_copy_file_between_sandboxes_cleans_temp_file_on_upload_failure(
     monkeypatch,
     tmp_path: Path,
