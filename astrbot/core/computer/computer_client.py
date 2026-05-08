@@ -258,6 +258,7 @@ def set_default_sandbox(sandbox_id: str) -> dict:
 def update_cua_sandbox_config(
     sandbox_id: str,
     *,
+    sandbox_name: str | None = None,
     idle_timeout: int | float | None,
     expires_at: int | float | None,
     retention_policy: str,
@@ -265,6 +266,7 @@ def update_cua_sandbox_config(
     _sync_sandbox_manager_refs()
     return sandbox_manager.update_sandbox_config(
         sandbox_id,
+        sandbox_name=sandbox_name,
         idle_timeout=idle_timeout,
         expires_at=expires_at,
         retention_policy=retention_policy,
@@ -274,6 +276,7 @@ def update_cua_sandbox_config(
 def update_sandbox_config(
     sandbox_id: str,
     *,
+    sandbox_name: str | None = None,
     idle_timeout: int | float | None,
     expires_at: int | float | None,
     retention_policy: str,
@@ -281,6 +284,7 @@ def update_sandbox_config(
     _sync_sandbox_manager_refs()
     return sandbox_manager.update_sandbox_config(
         sandbox_id,
+        sandbox_name=sandbox_name,
         idle_timeout=idle_timeout,
         expires_at=expires_at,
         retention_policy=retention_policy,

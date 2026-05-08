@@ -199,9 +199,12 @@
       <v-card>
         <v-card-title>{{ tm('config.title') }}</v-card-title>
         <v-card-text>
-          <div class="text-body-2 text-medium-emphasis mb-4">
-            {{ configSandbox?.sandbox_name || configSandbox?.sandbox_id }}
-          </div>
+          <v-text-field
+            v-model="configSandboxName"
+            :label="tm('config.name')"
+            variant="outlined"
+            class="mb-2"
+          />
           <v-radio-group v-model="configRetentionPolicy" :label="tm('fields.retentionPolicy')" inline>
             <v-radio :label="tm('labels.temporary')" value="temporary" />
             <v-radio :label="tm('labels.persistent')" value="persistent" />
@@ -325,6 +328,7 @@ const configSandbox = ref<SandboxRecord | null>(null)
 const configRetentionPolicy = ref('temporary')
 const configIdleTimeout = ref<number | null>(null)
 const configExpiresAt = ref('')
+const configSandboxName = ref('')
 const createName = ref('')
 const createProvider = ref('cua')
 const screenshotDialog = ref(false)
@@ -407,6 +411,7 @@ function openDetails(item: SandboxRecord) {
 
 function openConfig(item: SandboxRecord) {
   configSandbox.value = item
+  configSandboxName.value = item.sandbox_name || item.sandbox_id
   configRetentionPolicy.value = item.retention_policy === 'persistent' ? 'persistent' : 'temporary'
   configIdleTimeout.value = item.idle_timeout ?? null
   configExpiresAt.value = toDateTimeLocal(item.expires_at)
@@ -472,6 +477,7 @@ async function saveConfig() {
     const persistent = configRetentionPolicy.value === 'persistent'
     const data = await postAction('/api/sandboxes/config/update', {
       sandbox_id: configSandbox.value.sandbox_id,
+      sandbox_name: configSandboxName.value.trim(),
       retention_policy: configRetentionPolicy.value,
       idle_timeout: persistent ? null : configIdleTimeout.value,
       expires_at: persistent ? null : fromDateTimeLocal(configExpiresAt.value)

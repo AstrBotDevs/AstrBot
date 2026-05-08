@@ -161,6 +161,7 @@ class SandboxRegistry:
         self,
         sandbox_id: str,
         *,
+        sandbox_name: str | object = _UNSET,
         idle_timeout: int | float | None | object = _UNSET,
         expires_at: int | float | None | object = _UNSET,
         retention_policy: str | object = _UNSET,
@@ -168,6 +169,14 @@ class SandboxRegistry:
         record = self._payload["sandboxes"].get(sandbox_id)
         if record is None:
             return None
+        if sandbox_name is not _UNSET:
+            name = str(sandbox_name).strip()
+            if not name:
+                raise ValueError("sandbox_name must be a non-empty string")
+            record["sandbox_name"] = name
+            connect_info = dict(record.get("connect_info") or {})
+            connect_info["name"] = name
+            record["connect_info"] = connect_info
         if idle_timeout is not _UNSET:
             record["idle_timeout"] = idle_timeout
         if expires_at is not _UNSET:

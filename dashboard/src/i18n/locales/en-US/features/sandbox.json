@@ -76,6 +76,7 @@
   },
   "config": {
     "title": "Sandbox configuration",
+    "name": "Sandbox name",
     "idleTimeout": "Idle timeout (seconds)",
     "idleTimeoutHint": "With the temporary policy, sandboxes can be cleaned after this idle duration. Empty or 0 disables idle cleanup.",
     "expiresAt": "Fixed expiration time",

@@ -946,7 +946,7 @@ async def test_sandbox_dashboard_api_create_uses_runtime_provider_payload(
 
 
 @pytest.mark.asyncio
-async def test_sandbox_dashboard_api_sets_default_and_updates_retention(
+async def test_sandbox_dashboard_api_sets_default_and_updates_config(
     app: Quart,
     authenticated_header: dict,
     monkeypatch: pytest.MonkeyPatch,
@@ -1000,11 +1000,14 @@ async def test_sandbox_dashboard_api_sets_default_and_updates_retention(
             "retention_policy": "persistent",
             "idle_timeout": None,
             "expires_at": None,
+            "sandbox_name": "Renamed Sandbox",
         },
     )
     config_data = await config_response.get_json()
     assert config_data["status"] == "ok"
     sandbox = registry.get_sandbox("sb-b")
+    assert sandbox["sandbox_name"] == "Renamed Sandbox"
+    assert sandbox["connect_info"]["name"] == "Renamed Sandbox"
     assert sandbox["retention_policy"] == "persistent"
     assert sandbox["idle_timeout"] is None
     assert sandbox["expires_at"] is None

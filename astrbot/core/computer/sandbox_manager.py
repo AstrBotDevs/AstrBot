@@ -351,6 +351,7 @@ class SandboxManager:
         self,
         sandbox_id: str,
         *,
+        sandbox_name: str | None = None,
         idle_timeout: int | float | None,
         expires_at: int | float | None,
         retention_policy: str,
@@ -363,12 +364,14 @@ class SandboxManager:
         if retention_policy == "persistent":
             idle_timeout = None
             expires_at = None
-        updated = self.registry.update_sandbox_config(
-            sandbox_id,
-            idle_timeout=idle_timeout,
-            expires_at=expires_at,
-            retention_policy=retention_policy,
-        )
+        updates = {
+            "idle_timeout": idle_timeout,
+            "expires_at": expires_at,
+            "retention_policy": retention_policy,
+        }
+        if sandbox_name is not None:
+            updates["sandbox_name"] = sandbox_name
+        updated = self.registry.update_sandbox_config(sandbox_id, **updates)
         if retention_policy == "persistent" or not idle_timeout:
             self.clear_idle_state(sandbox_id)
         else:

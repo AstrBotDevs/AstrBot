@@ -289,6 +289,7 @@ class SandboxRoute(Route):
         try:
             sandbox = update_sandbox_config(
                 str(sandbox_id),
+                sandbox_name=data.get("sandbox_name"),
                 idle_timeout=data.get("idle_timeout"),
                 expires_at=data.get("expires_at"),
                 retention_policy=str(data.get("retention_policy") or "temporary"),
