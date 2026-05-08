@@ -229,7 +229,7 @@ async def _apply_kb(
     config: MainAgentBuildConfig,
 ) -> None:
     if not config.kb_agentic_mode:
-        if req.prompt is None:
+        if req.prompt is None or not req.prompt.strip():
             return
         try:
             kb_result = await retrieve_knowledge_base(
