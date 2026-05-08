@@ -241,6 +241,18 @@ async def create_cua_sandbox(
     )
 
 
+async def create_sandbox(
+    context: Context,
+    session_id: str,
+    provider: str = "cua",
+    sandbox_name: str | None = None,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.create_sandbox(
+        context, session_id, provider, sandbox_name
+    )
+
+
 async def create_cua_sandbox_uncontrolled(
     context: Context,
     session_id: str,
@@ -252,7 +264,24 @@ async def create_cua_sandbox_uncontrolled(
     )
 
 
+async def create_sandbox_uncontrolled(
+    context: Context,
+    session_id: str,
+    provider: str = "cua",
+    sandbox_name: str | None = None,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.create_sandbox_uncontrolled(
+        context, session_id, provider, sandbox_name
+    )
+
+
 def list_cua_sandboxes() -> list[dict]:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.list_sandboxes()
+
+
+def list_sandboxes() -> list[dict]:
     _sync_sandbox_manager_refs()
     return sandbox_manager.list_sandboxes()
 
@@ -262,7 +291,28 @@ def set_default_cua_sandbox(sandbox_id: str) -> dict:
     return sandbox_manager.set_default_sandbox(sandbox_id)
 
 
+def set_default_sandbox(sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.set_default_sandbox(sandbox_id)
+
+
 def update_cua_sandbox_config(
+    sandbox_id: str,
+    *,
+    idle_timeout: int | float | None,
+    expires_at: int | float | None,
+    retention_policy: str,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.update_sandbox_config(
+        sandbox_id,
+        idle_timeout=idle_timeout,
+        expires_at=expires_at,
+        retention_policy=retention_policy,
+    )
+
+
+def update_sandbox_config(
     sandbox_id: str,
     *,
     idle_timeout: int | float | None,
@@ -293,7 +343,17 @@ def get_current_cua_sandbox(session_id: str) -> dict:
     return sandbox_manager.get_current_sandbox(session_id)
 
 
+def get_current_sandbox(session_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.get_current_sandbox(session_id)
+
+
 def switch_current_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.switch_current_sandbox(session_id, sandbox_id)
+
+
+def switch_current_sandbox(session_id: str, sandbox_id: str) -> dict:
     _sync_sandbox_manager_refs()
     return sandbox_manager.switch_current_sandbox(session_id, sandbox_id)
 
@@ -306,7 +366,20 @@ def release_current_cua_sandbox(
     return sandbox_manager.release_current_sandbox(session_id, sandbox_id)
 
 
+def release_current_sandbox(
+    session_id: str,
+    sandbox_id: str | None = None,
+) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.release_current_sandbox(session_id, sandbox_id)
+
+
 def takeover_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.takeover_sandbox(session_id, sandbox_id)
+
+
+def takeover_sandbox(session_id: str, sandbox_id: str) -> dict:
     _sync_sandbox_manager_refs()
     return sandbox_manager.takeover_sandbox(session_id, sandbox_id)
 
@@ -316,7 +389,17 @@ async def destroy_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
     return await sandbox_manager.destroy_sandbox(session_id, sandbox_id)
 
 
+async def destroy_sandbox(session_id: str, sandbox_id: str) -> dict:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.destroy_sandbox(session_id, sandbox_id)
+
+
 async def get_cua_sandbox_observer_booter_by_id(sandbox_id: str) -> ComputerBooter:
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.get_observer_booter_by_id(sandbox_id)
+
+
+async def get_sandbox_observer_booter_by_id(sandbox_id: str) -> ComputerBooter:
     _sync_sandbox_manager_refs()
     return await sandbox_manager.get_observer_booter_by_id(sandbox_id)
 

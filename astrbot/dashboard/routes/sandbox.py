@@ -11,17 +11,17 @@ from quart import request
 
 from astrbot.core import logger
 from astrbot.core.computer.computer_client import (
-    create_cua_sandbox,
-    create_cua_sandbox_uncontrolled,
-    destroy_cua_sandbox,
-    get_cua_sandbox_observer_booter_by_id,
-    get_current_cua_sandbox,
-    list_cua_sandboxes,
-    release_current_cua_sandbox,
-    set_default_cua_sandbox,
-    switch_current_cua_sandbox,
-    takeover_cua_sandbox,
-    update_cua_sandbox_config,
+    create_sandbox,
+    create_sandbox_uncontrolled,
+    destroy_sandbox,
+    get_current_sandbox,
+    get_sandbox_observer_booter_by_id,
+    list_sandboxes,
+    release_current_sandbox,
+    set_default_sandbox,
+    switch_current_sandbox,
+    takeover_sandbox,
+    update_sandbox_config,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -75,13 +75,13 @@ class SandboxRoute(Route):
         self.register_routes()
 
     async def list_sandboxes(self):
-        return Response().ok({"sandboxes": list_cua_sandboxes()}).__dict__
+        return Response().ok({"sandboxes": list_sandboxes()}).__dict__
 
     async def get_current(self):
         session_id = (
             request.args.get("session_id") or request.args.get("umo") or "dashboard"
         )
-        return Response().ok(get_current_cua_sandbox(str(session_id))).__dict__
+        return Response().ok(get_current_sandbox(str(session_id))).__dict__
 
     async def create_sandbox(self):
         data = await request.json
@@ -93,9 +93,10 @@ class SandboxRoute(Route):
                 Response().error(f"Provider {provider} is not supported yet.").__dict__
             )
         try:
-            sandbox = await create_cua_sandbox_uncontrolled(
+            sandbox = await create_sandbox_uncontrolled(
                 _DashboardSandboxContext(self.config),
                 _session_id(data),
+                provider,
                 sandbox_name=data.get("sandbox_name"),
             )
             return Response().ok({"sandbox": sandbox}).__dict__
@@ -110,7 +111,7 @@ class SandboxRoute(Route):
         if not sandbox_id:
             return Response().error("sandbox_id is required.").__dict__
         try:
-            sandbox = switch_current_cua_sandbox(_session_id(data), str(sandbox_id))
+            sandbox = switch_current_sandbox(_session_id(data), str(sandbox_id))
             return Response().ok({"sandbox": sandbox}).__dict__
         except Exception as e:
             return Response().error(str(e)).__dict__
@@ -121,7 +122,7 @@ class SandboxRoute(Route):
             data = {}
         sandbox_id = data.get("sandbox_id")
         try:
-            sandbox = release_current_cua_sandbox(
+            sandbox = release_current_sandbox(
                 _session_id(data),
                 str(sandbox_id) if sandbox_id else None,
             )
@@ -137,7 +138,7 @@ class SandboxRoute(Route):
         if not sandbox_id:
             return Response().error("sandbox_id is required.").__dict__
         try:
-            sandbox = takeover_cua_sandbox(_session_id(data), str(sandbox_id))
+            sandbox = takeover_sandbox(_session_id(data), str(sandbox_id))
             return Response().ok({"sandbox": sandbox}).__dict__
         except Exception as e:
             return Response().error(str(e)).__dict__
@@ -150,7 +151,7 @@ class SandboxRoute(Route):
         if not sandbox_id:
             return Response().error("sandbox_id is required.").__dict__
         try:
-            sandbox = await destroy_cua_sandbox(_session_id(data), str(sandbox_id))
+            sandbox = await destroy_sandbox(_session_id(data), str(sandbox_id))
             return Response().ok({"sandbox": sandbox}).__dict__
         except Exception as e:
             return Response().error(str(e)).__dict__
@@ -163,7 +164,7 @@ class SandboxRoute(Route):
         if not sandbox_id:
             return Response().error("sandbox_id is required.").__dict__
         try:
-            booter = await get_cua_sandbox_observer_booter_by_id(str(sandbox_id))
+            booter = await get_sandbox_observer_booter_by_id(str(sandbox_id))
             gui = getattr(booter, "gui", None)
             if gui is None:
                 return (
@@ -219,7 +220,7 @@ class SandboxRoute(Route):
                 bool(data.get("background", False)),
                 command[:500],
             )
-            booter = await get_cua_sandbox_observer_booter_by_id(str(sandbox_id))
+            booter = await get_sandbox_observer_booter_by_id(str(sandbox_id))
             shell = getattr(booter, "shell", None)
             if shell is None:
                 return (
@@ -253,9 +254,10 @@ class SandboxRoute(Route):
 
     async def ensure_default(self):
         try:
-            sandbox = await create_cua_sandbox(
+            sandbox = await create_sandbox(
                 _DashboardSandboxContext(self.config),
                 "dashboard",
+                "cua",
                 sandbox_name="default-cua",
             )
             return Response().ok({"sandbox": sandbox}).__dict__
@@ -270,7 +272,7 @@ class SandboxRoute(Route):
         if not sandbox_id:
             return Response().error("sandbox_id is required.").__dict__
         try:
-            sandbox = set_default_cua_sandbox(str(sandbox_id))
+            sandbox = set_default_sandbox(str(sandbox_id))
             return Response().ok({"sandbox": sandbox}).__dict__
         except Exception as e:
             return Response().error(str(e)).__dict__
@@ -283,7 +285,7 @@ class SandboxRoute(Route):
         if not sandbox_id:
             return Response().error("sandbox_id is required.").__dict__
         try:
-            sandbox = update_cua_sandbox_config(
+            sandbox = update_sandbox_config(
                 str(sandbox_id),
                 idle_timeout=data.get("idle_timeout"),
                 expires_at=data.get("expires_at"),
