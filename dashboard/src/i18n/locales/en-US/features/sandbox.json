@@ -21,7 +21,7 @@
     "total": "Managed sandboxes",
     "providers": "Providers",
     "busy": "Busy leases",
-    "default": "Default sandbox"
+    "default": "Provider defaults"
   },
   "labels": {
     "default": "Default",

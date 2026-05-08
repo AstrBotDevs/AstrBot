@@ -59,6 +59,37 @@ def test_sandbox_registry_tracks_default_per_provider(tmp_path):
     assert registry.get_default_sandbox_id("cua") == "cua-default"
 
 
+def test_sandbox_registry_setting_default_keeps_other_provider_default_marker(
+    tmp_path,
+):
+    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
+    _upsert(registry, "cua-default", provider="cua", is_default=True)
+    _upsert(registry, "neo-default", provider="shipyard_neo")
+
+    registry.set_default_sandbox_id("neo-default")
+
+    assert registry.get_default_sandbox_id("cua") == "cua-default"
+    assert registry.get_default_sandbox_id("shipyard_neo") == "neo-default"
+    assert registry.get_sandbox("cua-default")["is_default"] is True
+    assert registry.get_sandbox("neo-default")["is_default"] is True
+
+
+def test_sandbox_registry_delete_provider_default_promotes_same_provider(
+    tmp_path,
+):
+    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
+    _upsert(registry, "cua-default", provider="cua", is_default=True)
+    _upsert(registry, "neo-default", provider="shipyard_neo", is_default=True)
+    _upsert(registry, "neo-next", provider="shipyard_neo")
+
+    registry.delete_sandbox("neo-default")
+
+    assert registry.get_default_sandbox_id("cua") == "cua-default"
+    assert registry.get_sandbox("cua-default")["is_default"] is True
+    assert registry.get_default_sandbox_id("shipyard_neo") == "neo-next"
+    assert registry.get_sandbox("neo-next")["is_default"] is True
+
+
 def test_sandbox_registry_acquires_releases_and_takes_over_lease(tmp_path):
     registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
     _upsert(registry, "sb-1")

@@ -52,8 +52,6 @@ class SandboxRegistry:
 
     def set_default_sandbox_id(self, sandbox_id: str | None) -> None:
         old_default = self._payload["default_sandbox_id"]
-        if old_default and old_default in self._payload["sandboxes"]:
-            self._payload["sandboxes"][old_default]["is_default"] = False
         self._payload["default_sandbox_id"] = sandbox_id
         if sandbox_id and sandbox_id in self._payload["sandboxes"]:
             record = self._payload["sandboxes"][sandbox_id]
@@ -71,6 +69,8 @@ class SandboxRegistry:
                     )
                 self._payload["default_sandbox_ids"][provider] = sandbox_id
             record["is_default"] = True
+        elif old_default and old_default in self._payload["sandboxes"]:
+            self._payload["sandboxes"][old_default]["is_default"] = False
 
     def get_current_sandbox_id(self, session_id: str) -> str | None:
         return self._payload["session_current"].get(session_id)
@@ -175,6 +175,13 @@ class SandboxRegistry:
                 == sandbox_id
             ):
                 self._payload["default_sandbox_ids"].pop(provider, None)
+                for candidate_id, candidate in self._payload["sandboxes"].items():
+                    if (
+                        candidate.get("managed")
+                        and candidate.get("provider") == provider
+                    ):
+                        self.set_default_sandbox_id(candidate_id)
+                        break
         if was_default:
             self._payload["default_sandbox_id"] = None
             for candidate_id, candidate in self._payload["sandboxes"].items():

@@ -21,7 +21,7 @@
     "total": "托管沙盒",
     "providers": "Provider 数量",
     "busy": "占用租约",
-    "default": "默认沙盒"
+    "default": "Provider 默认"
   },
   "labels": {
     "default": "默认",

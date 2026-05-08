@@ -996,7 +996,7 @@ async def test_sandbox_dashboard_api_sets_default_and_updates_config(
     default_data = await default_response.get_json()
     assert default_data["status"] == "ok"
     assert registry.default_sandbox_id == "sb-b"
-    assert registry.get_sandbox("sb-a")["is_default"] is False
+    assert registry.get_sandbox("sb-a")["is_default"] is True
     assert registry.get_sandbox("sb-b")["is_default"] is True
 
     config_response = await client.post(

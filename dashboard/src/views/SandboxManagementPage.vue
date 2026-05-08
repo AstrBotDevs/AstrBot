@@ -31,7 +31,7 @@
         </div>
         <div class="metric-block">
           <span>{{ tm('metrics.default') }}</span>
-          <strong>{{ defaultSandbox?.sandbox_name || tm('labels.none') }}</strong>
+          <strong>{{ defaultCount }}</strong>
         </div>
       </section>
 
@@ -367,7 +367,7 @@ const headers = computed(() => [
 
 const providerCount = computed(() => new Set(sandboxes.value.map((item) => item.provider || item.booter_type || 'unknown')).size)
 const busyCount = computed(() => sandboxes.value.filter((item) => !!item.controller_session_id).length)
-const defaultSandbox = computed(() => sandboxes.value.find((item) => item.is_default))
+const defaultCount = computed(() => sandboxes.value.filter((item) => item.is_default).length)
 const canSaveConfig = computed(() => configSandboxName.value.trim().length > 0)
 
 function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
