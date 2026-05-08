@@ -178,7 +178,6 @@ DEFAULT_CONFIG = {
             "shipyard_neo_ttl": 3600,
             "cua_image": CUA_DEFAULT_CONFIG["image"],
             "cua_os_type": CUA_DEFAULT_CONFIG["os_type"],
-            "cua_ttl": CUA_DEFAULT_CONFIG["ttl"],
             "cua_idle_timeout": 0,
             "cua_telemetry_enabled": CUA_DEFAULT_CONFIG["telemetry_enabled"],
             "cua_local": CUA_DEFAULT_CONFIG["local"],
@@ -3343,15 +3342,6 @@ CONFIG_METADATA_3 = {
                         "options": ["linux", "macos", "windows", "android"],
                         "labels": ["Linux", "macOS", "Windows", "Android"],
                         "hint": "CUA 沙箱操作系统类型，默认 linux。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
-                        },
-                    },
-                    "provider_settings.sandbox.cua_ttl": {
-                        "description": "CUA Sandbox TTL",
-                        "type": "int",
-                        "hint": "CUA 沙箱生存时间（秒）。当前作为会话配置保存，具体生效取决于 CUA SDK。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "cua",
