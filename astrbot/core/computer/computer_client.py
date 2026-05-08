@@ -1,6 +1,8 @@
+import asyncio
 import json
 import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -17,7 +19,66 @@ from .booters.local import LocalBooter
 
 session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None
+cua_last_used_at: dict[str, float] = {}
+cua_idle_cleanup_tasks: dict[str, asyncio.Task] = {}
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
+
+
+def _get_cua_idle_timeout(config: dict) -> float:
+    sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
+    value = sandbox_cfg.get("cua_idle_timeout", 0)
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(timeout, 0.0)
+
+
+def _clear_cua_idle_state(session_id: str) -> None:
+    task = cua_idle_cleanup_tasks.pop(session_id, None)
+    if task is not None:
+        task.cancel()
+
+
+def _schedule_cua_idle_cleanup(session_id: str, timeout: float) -> None:
+    _clear_cua_idle_state(session_id)
+    if timeout <= 0:
+        cua_last_used_at.pop(session_id, None)
+        return
+    cua_last_used_at[session_id] = time.monotonic()
+
+    async def _expire_when_idle() -> None:
+        current_task = asyncio.current_task()
+        try:
+            while True:
+                last_used_at = cua_last_used_at.get(session_id)
+                if last_used_at is None:
+                    return
+                remaining = timeout - (time.monotonic() - last_used_at)
+                if remaining <= 0:
+                    booter = session_booter.get(session_id)
+                    if booter is not None:
+                        try:
+                            await booter.shutdown()
+                        except Exception as shutdown_err:
+                            logger.warning(
+                                "[Computer] Failed to shutdown idle CUA sandbox for session %s: %s",
+                                session_id,
+                                shutdown_err,
+                            )
+                        finally:
+                            session_booter.pop(session_id, None)
+                    return
+                await asyncio.sleep(remaining)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            task = cua_idle_cleanup_tasks.get(session_id)
+            if task is current_task:
+                cua_last_used_at.pop(session_id, None)
+                cua_idle_cleanup_tasks.pop(session_id, None)
+
+    cua_idle_cleanup_tasks[session_id] = asyncio.create_task(_expire_when_idle())
 
 
 def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
@@ -486,6 +547,7 @@ async def get_booter(
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
     booter_type = sandbox_cfg.get("booter", "shipyard_neo")
+    cua_idle_timeout = _get_cua_idle_timeout(config) if booter_type == "cua" else 0.0
 
     if session_id in session_booter:
         booter = session_booter[session_id]
@@ -506,6 +568,7 @@ async def get_booter(
                     session_id,
                     shutdown_err,
                 )
+            _clear_cua_idle_state(session_id)
             session_booter.pop(session_id, None)
     if session_id not in session_booter:
         uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
@@ -579,9 +642,12 @@ async def get_booter(
                     session_id,
                     shutdown_error,
                 )
+            _clear_cua_idle_state(session_id)
             raise e
 
         session_booter[session_id] = client
+    if booter_type == "cua":
+        _schedule_cua_idle_cleanup(session_id, cua_idle_timeout)
     return session_booter[session_id]
 
 
