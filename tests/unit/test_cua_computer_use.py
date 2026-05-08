@@ -1726,6 +1726,55 @@ async def test_non_cua_booter_does_not_schedule_idle_cleanup(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_cua_observer_booter_schedules_configured_idle_cleanup(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+
+    class FakeBooter:
+        async def available(self):
+            return True
+
+    registry = CuaSandboxRegistry(storage_path=tmp_path / "observer-registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-observer-timeout",
+        sandbox_name="observer-timeout",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "observer-timeout", "local": True},
+    )
+    registry.set_current_sandbox_id("session-a", "sb-observer-timeout")
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+    computer_client.cua_idle_state.clear()
+    computer_client.session_booter["sb-observer-timeout"] = FakeBooter()
+
+    ctx = FakeContext(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "cua",
+                    "cua_idle_timeout": 0.2,
+                },
+            }
+        }
+    )
+
+    await computer_client.get_cua_observer_booter(ctx, "session-a")
+
+    state = computer_client.cua_idle_state.get("sb-observer-timeout")
+    assert state is not None
+    assert state.task.done() is False
+    computer_client._clear_cua_idle_state("sb-observer-timeout")
+
+
+@pytest.mark.asyncio
 async def test_cua_components_map_sdk_results(tmp_path):
     from astrbot.core.computer.booters.cua import (
         CuaFileSystemComponent,

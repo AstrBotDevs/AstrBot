@@ -54,9 +54,9 @@ def _save_cua_registry() -> None:
     sandbox_manager.save_registry()
 
 
-def _get_cua_idle_timeout(config: dict) -> float:
+def _get_cua_idle_timeout(context: Context, session_id: str) -> float:
     _sync_sandbox_manager_refs()
-    return sandbox_manager.get_idle_timeout(config, "cua")
+    return sandbox_manager.providers["cua"].get_idle_timeout(context, session_id)
 
 
 def _clear_cua_idle_state(sandbox_id: str) -> None:
@@ -174,39 +174,6 @@ sandbox_manager = SandboxManager(
     providers={"cua": CuaSandboxProvider(boot_hook=_boot_managed_cua_sandbox_hook)},
 )
 _sync_sandbox_manager_refs()
-
-
-def _new_managed_cua_sandbox_id() -> str:
-    return f"cua-{uuid.uuid4().hex[:12]}"
-
-
-def _build_cua_sandbox_record_payload(
-    *,
-    sandbox_id: str,
-    sandbox_name: str,
-    session_id: str,
-    cua_kwargs: dict,
-    idle_timeout: float,
-    is_default: bool = False,
-) -> dict:
-    return {
-        "sandbox_id": sandbox_id,
-        "sandbox_name": sandbox_name,
-        "booter_type": "cua",
-        "provider": "cua",
-        "managed": True,
-        "created_by_astrbot": True,
-        "owner_user_id": session_id,
-        "owner_session_id": session_id,
-        "connect_info": {
-            "name": sandbox_name,
-            "local": cua_kwargs.get("local", True),
-            "image": cua_kwargs.get("image"),
-            "os_type": cua_kwargs.get("os_type"),
-        },
-        "is_default": is_default,
-        "idle_timeout": idle_timeout,
-    }
 
 
 async def _get_or_create_cua_booter(
@@ -471,7 +438,10 @@ async def get_cua_observer_booter(context: Context, session_id: str) -> Computer
         current_sandbox_id = getattr(booter, "sandbox_id", current_sandbox_id)
     cua_registry.touch_sandbox(current_sandbox_id)
     _save_cua_registry()
-    _schedule_cua_idle_cleanup(current_sandbox_id, _get_cua_idle_timeout(config))
+    _schedule_cua_idle_cleanup(
+        current_sandbox_id,
+        _get_cua_idle_timeout(context, session_id),
+    )
     return booter
 
 
