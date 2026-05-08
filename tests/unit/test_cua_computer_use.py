@@ -22,8 +22,9 @@ class FakeContext:
 
 def _clear_cua_session_state(computer_client, session_id: str) -> None:
     computer_client.session_booter.pop(session_id, None)
-    getattr(computer_client, "cua_idle_cleanup_tasks", {}).pop(session_id, None)
-    getattr(computer_client, "cua_last_used_at", {}).pop(session_id, None)
+    state = getattr(computer_client, "cua_idle_state", {}).pop(session_id, None)
+    if state is not None and not state.task.done():
+        state.task.cancel()
 
 
 class FakeShell:
@@ -388,14 +389,14 @@ async def test_cua_idle_timeout_shuts_down_session_proactively(monkeypatch):
                 "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "cua",
-                    "cua_idle_timeout": 0.01,
+                    "cua_idle_timeout": 0.1,
                 },
             }
         }
     )
 
     booter = await computer_client.get_booter(ctx, "cua-idle-expire")
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.2)
 
     assert shutdowns == [booter.session_id]
     assert "cua-idle-expire" not in computer_client.session_booter
@@ -436,21 +437,21 @@ async def test_cua_idle_timeout_refreshes_on_reuse(monkeypatch):
                 "computer_use_runtime": "sandbox",
                 "sandbox": {
                     "booter": "cua",
-                    "cua_idle_timeout": 0.05,
+                    "cua_idle_timeout": 0.2,
                 },
             }
         }
     )
 
     booter1 = await computer_client.get_booter(ctx, "cua-idle-refresh")
-    await asyncio.sleep(0.02)
+    await asyncio.sleep(0.05)
     booter2 = await computer_client.get_booter(ctx, "cua-idle-refresh")
-    await asyncio.sleep(0.02)
+    await asyncio.sleep(0.05)
 
     assert booter2 is booter1
     assert shutdowns == []
 
-    await asyncio.sleep(0.06)
+    await asyncio.sleep(0.25)
 
     assert shutdowns == [booter1.session_id]
     assert "cua-idle-refresh" not in computer_client.session_booter
@@ -502,6 +503,7 @@ async def test_cua_idle_timeout_zero_disables_proactive_shutdown(monkeypatch):
 
     assert shutdowns == []
     assert "cua-idle-disabled" in computer_client.session_booter
+    assert "cua-idle-disabled" not in computer_client.cua_idle_state
 
 
 @pytest.mark.asyncio
@@ -532,8 +534,7 @@ async def test_non_cua_booter_does_not_schedule_idle_cleanup(monkeypatch):
     booter = await computer_client.get_booter(ctx, "shipyard-session")
 
     assert isinstance(booter, FakeShipyardBooter)
-    assert "shipyard-session" not in computer_client.cua_idle_cleanup_tasks
-    assert "shipyard-session" not in computer_client.cua_last_used_at
+    assert "shipyard-session" not in computer_client.cua_idle_state
 
 
 @pytest.mark.asyncio
