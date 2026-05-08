@@ -172,3 +172,14 @@ def test_sandbox_registry_upsert_preserves_runtime_fields_when_omitted(tmp_path)
     assert record["last_used_at"] == 100
     assert record["idle_timeout"] == 30
     assert record["status"] == "unknown"
+
+
+def test_sandbox_registry_upsert_preserves_default_marker_when_omitted(tmp_path):
+    registry = SandboxRegistry(storage_path=tmp_path / "sandbox_registry.json")
+    _upsert(registry, "sb-1", is_default=True)
+
+    _upsert(registry, "sb-1", sandbox_name="renamed")
+
+    record = registry.get_sandbox("sb-1")
+    assert registry.default_sandbox_id == "sb-1"
+    assert record["is_default"] is True

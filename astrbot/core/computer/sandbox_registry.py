@@ -68,7 +68,7 @@ class SandboxRegistry:
         owner_user_id: str | None,
         owner_session_id: str | None,
         connect_info: dict[str, Any],
-        is_default: bool = False,
+        is_default: bool | object = _UNSET,
         status: str | object = _UNSET,
         idle_timeout: int | float | None | object = _UNSET,
         expires_at: float | None | object = _UNSET,
@@ -89,7 +89,6 @@ class SandboxRegistry:
                 "provider": provider,
                 "managed": managed,
                 "created_by_astrbot": created_by_astrbot,
-                "is_default": is_default,
                 "owner_user_id": owner_user_id,
                 "owner_session_id": owner_session_id,
                 "connect_info": deepcopy(connect_info),
@@ -104,6 +103,7 @@ class SandboxRegistry:
             "expires_at": None,
             "retention_policy": "temporary",
             "status": "running",
+            "is_default": False,
             "labels": {},
             "notes": None,
         }
@@ -116,6 +116,7 @@ class SandboxRegistry:
             "expires_at": expires_at,
             "retention_policy": retention_policy,
             "status": status,
+            "is_default": is_default,
             "labels": deepcopy(labels) if labels is not _UNSET else _UNSET,
             "notes": notes,
         }
@@ -127,7 +128,9 @@ class SandboxRegistry:
                 record[field_name] = value
         record = SandboxRecord.from_dict(record).to_dict()
         self._payload["sandboxes"][sandbox_id] = record
-        if is_default or (managed and self._payload["default_sandbox_id"] is None):
+        if is_default is True or (
+            managed and self._payload["default_sandbox_id"] is None
+        ):
             self.set_default_sandbox_id(sandbox_id)
         return deepcopy(record)
 
