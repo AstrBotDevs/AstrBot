@@ -217,6 +217,103 @@ class SandboxManager:
         )
         return self.session_booter[target_sandbox_id]
 
+    async def create_sandbox_uncontrolled(
+        self,
+        context: Context,
+        session_id: str,
+        provider_id: str,
+        sandbox_name: str | None = None,
+    ) -> dict:
+        provider = self.providers[provider_id]
+        create_config = provider.build_create_config(context, session_id)
+        config = context.get_config(umo=session_id)
+        sandbox_id = self.new_sandbox_id(provider_id)
+        sandbox_name = sandbox_name or sandbox_id
+        idle_timeout = self.get_idle_timeout(config, provider_id)
+        record = self.registry.upsert_sandbox(
+            **self.build_record_payload(
+                sandbox_id=sandbox_id,
+                sandbox_name=sandbox_name,
+                session_id=session_id,
+                provider_id=provider_id,
+                config=create_config,
+                idle_timeout=idle_timeout,
+            )
+        )
+        try:
+            client = await provider.create_booter(
+                context, session_id, sandbox_id, create_config
+            )
+        except Exception:
+            self.registry.delete_sandbox(sandbox_id)
+            self.drop_boot_lock(sandbox_id)
+            self.save_registry()
+            raise
+        setattr(client, "sandbox_id", sandbox_id)
+        self.session_booter[sandbox_id] = client
+        self.registry.touch_sandbox(sandbox_id)
+        self.save_registry()
+        self.schedule_idle_cleanup(sandbox_id, idle_timeout)
+        return self.registry.get_sandbox(sandbox_id) or record
+
+    async def create_sandbox(
+        self,
+        context: Context,
+        session_id: str,
+        provider_id: str,
+        sandbox_name: str | None = None,
+    ) -> dict:
+        sandbox = await self.create_sandbox_uncontrolled(
+            context, session_id, provider_id, sandbox_name
+        )
+        sandbox_id = sandbox["sandbox_id"]
+        self.acquire_lease(sandbox_id, session_id)
+        self.registry.set_current_sandbox_id(session_id, sandbox_id)
+        self.save_registry()
+        return self.registry.get_sandbox(sandbox_id) or sandbox
+
+    def list_sandboxes(self) -> list[dict]:
+        return [
+            record for record in self.registry.list_sandboxes() if record.get("managed")
+        ]
+
+    def set_default_sandbox(self, sandbox_id: str) -> dict:
+        record = self.registry.get_sandbox(sandbox_id)
+        if record is None or not record.get("managed"):
+            raise RuntimeError(f"Sandbox {sandbox_id} not found")
+        self.registry.set_default_sandbox_id(sandbox_id)
+        self.save_registry()
+        return self.registry.get_sandbox(sandbox_id) or record
+
+    def update_sandbox_config(
+        self,
+        sandbox_id: str,
+        *,
+        idle_timeout: int | float | None,
+        expires_at: int | float | None,
+        retention_policy: str,
+    ) -> dict:
+        record = self.registry.get_sandbox(sandbox_id)
+        if record is None or not record.get("managed"):
+            raise RuntimeError(f"Sandbox {sandbox_id} not found")
+        if retention_policy not in {"temporary", "persistent"}:
+            raise RuntimeError("retention_policy must be temporary or persistent")
+        if retention_policy == "persistent":
+            idle_timeout = None
+            expires_at = None
+        updated = self.registry.update_sandbox_config(
+            sandbox_id,
+            idle_timeout=idle_timeout,
+            expires_at=expires_at,
+            retention_policy=retention_policy,
+        )
+        if retention_policy == "persistent" or not idle_timeout:
+            self.clear_idle_state(sandbox_id)
+        else:
+            self.schedule_idle_cleanup(sandbox_id, float(idle_timeout))
+        self.save_registry()
+        return updated or record
+
     def _upsert_new_sandbox_record(
         self, context: Context, session_id: str, provider_id: str, create_config: dict
     ) -> str:
@@ -255,6 +352,55 @@ class SandboxManager:
         self.save_registry()
         return self.registry.get_sandbox(sandbox_id) or record
 
+    def get_current_sandbox(self, session_id: str) -> dict:
+        sandbox_id = self.registry.get_current_sandbox_id(session_id)
+        return {
+            "current_sandbox_id": sandbox_id,
+            "sandbox": self.registry.get_sandbox(sandbox_id) if sandbox_id else None,
+        }
+
+    def release_current_sandbox(
+        self, session_id: str, sandbox_id: str | None = None
+    ) -> dict:
+        target_sandbox_id = sandbox_id or self.registry.get_current_sandbox_id(
+            session_id
+        )
+        if target_sandbox_id is None:
+            raise RuntimeError("No current sandbox")
+        record = self.registry.get_sandbox(target_sandbox_id)
+        if record is None:
+            raise RuntimeError(f"Sandbox {target_sandbox_id} not found")
+        controller_session_id = record.get("controller_session_id")
+        if (
+            controller_session_id
+            and controller_session_id != session_id
+            and self.sandbox_has_active_lease(target_sandbox_id)
+        ):
+            raise RuntimeError(
+                f"Sandbox {target_sandbox_id} is controlled by another session"
+            )
+        released = self.registry.release_lease(target_sandbox_id) or record
+        if self.registry.get_current_sandbox_id(session_id) == target_sandbox_id:
+            self.registry.set_current_sandbox_id(session_id, None)
+        self.save_registry()
+        return released
+
+    def takeover_sandbox(self, session_id: str, sandbox_id: str) -> dict:
+        record = self.registry.get_sandbox(sandbox_id)
+        if record is None or not record.get("managed"):
+            raise RuntimeError(f"Sandbox {sandbox_id} not found")
+        updated = (
+            self.registry.takeover_lease(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                user_id=session_id,
+                ttl=SANDBOX_LEASE_SECONDS,
+            )
+            or record
+        )
+        self.save_registry()
+        return updated
+
     async def destroy_sandbox(self, session_id: str, sandbox_id: str) -> dict:
         record = self.registry.get_sandbox(sandbox_id)
         if record is None or not record.get("managed"):
@@ -276,6 +422,54 @@ class SandboxManager:
         self.drop_boot_lock(sandbox_id)
         self.save_registry()
         return record
+
+    async def get_observer_booter_by_id(self, sandbox_id: str) -> ComputerBooter:
+        record = self.registry.get_sandbox(sandbox_id)
+        if record is None or not record.get("managed"):
+            raise RuntimeError(f"Sandbox {sandbox_id} not found")
+        booter = self.session_booter.get(sandbox_id)
+        if booter is None or not await self.booter_available(booter):
+            raise RuntimeError(f"Sandbox {sandbox_id} is not running")
+        self.registry.touch_sandbox(sandbox_id)
+        self.save_registry()
+        idle_timeout = record.get("idle_timeout") or 0
+        self.schedule_idle_cleanup(sandbox_id, float(idle_timeout))
+        return booter
+
+    async def reconcile_on_startup(self) -> None:
+        self.registry.load()
+        self.registry.reconcile_startup()
+        self.session_booter.clear()
+        for sandbox_id in list(self.idle_state):
+            self.clear_idle_state(sandbox_id)
+        self.registry.save()
+
+    async def cleanup_managed_sandboxes(self) -> None:
+        managed_records = self.list_sandboxes()
+        for record in managed_records:
+            sandbox_id = record["sandbox_id"]
+            if record.get("retention_policy") == "persistent":
+                logger.info(
+                    "[Computer] Preserve persistent sandbox during shutdown: sandbox_id=%s",
+                    sandbox_id,
+                )
+                continue
+            booter = self.session_booter.pop(sandbox_id, None)
+            if booter is not None:
+                try:
+                    await self.providers[record.get("provider", "")].destroy_booter(
+                        booter, record
+                    )
+                except Exception as shutdown_err:
+                    logger.warning(
+                        "[Computer] Failed to shutdown managed sandbox %s: %s",
+                        sandbox_id,
+                        shutdown_err,
+                    )
+            self.clear_idle_state(sandbox_id)
+            self.registry.delete_sandbox(sandbox_id)
+            self.drop_boot_lock(sandbox_id)
+        self.registry.save()
 
     def clear_idle_state(self, sandbox_id: str) -> None:
         state = self.idle_state.pop(sandbox_id, None)

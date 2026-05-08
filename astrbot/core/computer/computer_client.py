@@ -10,6 +10,7 @@ from pathlib import Path
 
 from astrbot.api import logger
 from astrbot.core.computer.cua_registry import CuaSandboxRegistry
+from astrbot.core.computer.sandbox_manager import SANDBOX_LEASE_SECONDS, SandboxManager
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
 from astrbot.core.star.context import Context
 from astrbot.core.utils.astrbot_path import (
@@ -24,7 +25,7 @@ session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
 cua_registry = CuaSandboxRegistry()
-CUA_LEASE_SECONDS = 300
+CUA_LEASE_SECONDS = SANDBOX_LEASE_SECONDS
 _cua_boot_locks: dict[str, asyncio.Lock] = {}
 
 
@@ -37,157 +38,94 @@ class _CUAIdleState:
 cua_idle_state: dict[str, _CUAIdleState] = {}
 
 
+class _ComputerClientCuaProvider:
+    provider_id = "cua"
+
+    def build_create_config(self, context: Context, session_id: str) -> dict:
+        from .booters.cua import build_cua_booter_kwargs
+
+        config = context.get_config(umo=session_id)
+        sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
+        return build_cua_booter_kwargs(sandbox_cfg)
+
+    async def create_booter(
+        self, context: Context, session_id: str, sandbox_id: str, config: dict
+    ) -> ComputerBooter:
+        return await _boot_managed_cua_sandbox(context, session_id, sandbox_id, config)
+
+    async def destroy_booter(self, booter: ComputerBooter, record: dict) -> None:
+        await booter.shutdown()
+
+
+sandbox_manager = SandboxManager(
+    registry=cua_registry,
+    providers={"cua": _ComputerClientCuaProvider()},
+)
+
+
+def _sync_sandbox_manager_refs() -> None:
+    sandbox_manager.registry = cua_registry
+    sandbox_manager.session_booter = session_booter
+    sandbox_manager.idle_state = cua_idle_state
+    sandbox_manager.boot_locks = _cua_boot_locks
+
+
+_sync_sandbox_manager_refs()
+
+
 def _save_cua_registry() -> None:
-    try:
-        cua_registry.save()
-    except Exception as exc:
-        logger.warning("[Computer] Failed to save CUA sandbox registry: %s", exc)
+    _sync_sandbox_manager_refs()
+    sandbox_manager.save_registry()
 
 
 def _get_cua_idle_timeout(config: dict) -> float:
-    sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-    value = sandbox_cfg.get("cua_idle_timeout", 0)
-    try:
-        timeout = float(value)
-    except (TypeError, ValueError):
-        return 0.0
-    return max(timeout, 0.0)
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.get_idle_timeout(config, "cua")
 
 
 def _clear_cua_idle_state(sandbox_id: str) -> None:
-    state = cua_idle_state.pop(sandbox_id, None)
-    if state is not None and not state.task.done():
-        state.task.cancel()
+    _sync_sandbox_manager_refs()
+    sandbox_manager.clear_idle_state(sandbox_id)
 
 
 def _cua_boot_lock(sandbox_id: str) -> asyncio.Lock:
-    lock = _cua_boot_locks.get(sandbox_id)
-    if lock is None:
-        lock = asyncio.Lock()
-        _cua_boot_locks[sandbox_id] = lock
-    return lock
+    _sync_sandbox_manager_refs()
+    return sandbox_manager._sandbox_boot_lock(sandbox_id)
 
 
 def _drop_cua_boot_lock(sandbox_id: str) -> None:
-    _cua_boot_locks.pop(sandbox_id, None)
+    _sync_sandbox_manager_refs()
+    sandbox_manager.drop_boot_lock(sandbox_id)
 
 
 def _schedule_cua_idle_cleanup(sandbox_id: str, timeout: float) -> None:
-    _clear_cua_idle_state(sandbox_id)
-    if timeout <= 0:
-        return
-    cua_registry.touch_sandbox(sandbox_id)
-    initial_expires_at = time.monotonic() + timeout
-
-    async def _expire_when_idle() -> None:
-        current_expires_at = initial_expires_at
-        try:
-            while True:
-                remaining = current_expires_at - time.monotonic()
-                if remaining > 0:
-                    await asyncio.sleep(remaining)
-
-                state = cua_idle_state.get(sandbox_id)
-                if state is None or state.expires_at != current_expires_at:
-                    return
-
-                record = cua_registry.get_sandbox(sandbox_id)
-                if record is None:
-                    session_booter.pop(sandbox_id, None)
-                    return
-
-                if _cua_sandbox_has_active_lease(sandbox_id):
-                    current_expires_at = time.monotonic() + timeout
-                    cua_idle_state[sandbox_id] = _CUAIdleState(
-                        expires_at=current_expires_at, task=state.task
-                    )
-                    continue
-
-                last_used_at = record.get("last_used_at")
-                if last_used_at is not None:
-                    idle_remaining = timeout - (time.time() - float(last_used_at))
-                    if idle_remaining > 0:
-                        current_expires_at = time.monotonic() + idle_remaining
-                        cua_idle_state[sandbox_id] = _CUAIdleState(
-                            expires_at=current_expires_at, task=state.task
-                        )
-                        continue
-
-                booter = session_booter.get(sandbox_id)
-                if booter is not None:
-                    try:
-                        await booter.shutdown()
-                    except Exception as shutdown_err:
-                        logger.warning(
-                            "[Computer] Failed to shutdown idle CUA sandbox for session %s: %s",
-                            sandbox_id,
-                            shutdown_err,
-                        )
-                    finally:
-                        session_booter.pop(sandbox_id, None)
-                if record.get("retention_policy") == "persistent":
-                    cua_registry.update_sandbox_status(sandbox_id, "stopped")
-                else:
-                    cua_registry.delete_sandbox(sandbox_id)
-                    _drop_cua_boot_lock(sandbox_id)
-                _save_cua_registry()
-                return
-        except asyncio.CancelledError:
-            raise
-        finally:
-            state = cua_idle_state.get(sandbox_id)
-            if state is not None and state.expires_at == current_expires_at:
-                cua_idle_state.pop(sandbox_id, None)
-
-    task = asyncio.create_task(_expire_when_idle())
-    cua_idle_state[sandbox_id] = _CUAIdleState(expires_at=initial_expires_at, task=task)
+    _sync_sandbox_manager_refs()
+    sandbox_manager.schedule_idle_cleanup(sandbox_id, timeout)
 
 
 def _cua_sandbox_has_active_lease(sandbox_id: str) -> bool:
-    record = cua_registry.get_sandbox(sandbox_id)
-    if record is None:
-        return False
-    lease_expires_at = record.get("lease_expires_at")
-    controller_session_id = record.get("controller_session_id")
-    return bool(
-        controller_session_id and lease_expires_at and lease_expires_at > time.time()
-    )
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.sandbox_has_active_lease(sandbox_id)
 
 
 def _cua_sandbox_controlled_by_other_session(sandbox_id: str, session_id: str) -> bool:
-    record = cua_registry.get_sandbox(sandbox_id)
-    if record is None:
-        return False
-    lease_expires_at = record.get("lease_expires_at")
-    controller_session_id = record.get("controller_session_id")
-    if not controller_session_id or controller_session_id == session_id:
-        return False
-    return bool(lease_expires_at and lease_expires_at > time.time())
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.sandbox_controlled_by_other_session(sandbox_id, session_id)
 
 
 def _acquire_cua_sandbox_lease(sandbox_id: str, session_id: str) -> bool:
-    return cua_registry.acquire_lease(
-        sandbox_id=sandbox_id,
-        session_id=session_id,
-        user_id=session_id,
-        ttl=CUA_LEASE_SECONDS,
-    )
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.acquire_lease(sandbox_id, session_id)
 
 
 async def _booter_available(booter: ComputerBooter) -> bool:
-    available = getattr(booter, "available", None)
-    if available is None:
-        return True
-    return await available()
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.booter_available(booter)
 
 
 def renew_cua_sandbox_lease(sandbox_id: str, session_id: str, *, ttl: float) -> bool:
-    return cua_registry.acquire_lease(
-        sandbox_id=sandbox_id,
-        session_id=session_id,
-        user_id=session_id,
-        ttl=ttl,
-    )
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.acquire_lease(sandbox_id, session_id, ttl=ttl)
 
 
 async def _boot_managed_cua_sandbox(
@@ -282,115 +220,14 @@ def _build_cua_sandbox_record_payload(
 async def _get_or_create_cua_booter(
     context: Context, session_id: str, sandbox_cfg: dict
 ) -> ComputerBooter:
-    from .booters.cua import build_cua_booter_kwargs
-
-    cua_kwargs = build_cua_booter_kwargs(sandbox_cfg)
+    _sync_sandbox_manager_refs()
+    _ = sandbox_cfg
+    config = sandbox_manager.providers["cua"].build_create_config(context, session_id)
     logger.info(
-        f"[Computer] CUA config: image={cua_kwargs['image']}, "
-        f"os_type={cua_kwargs['os_type']}, ttl={cua_kwargs['ttl']}"
+        f"[Computer] CUA config: image={config['image']}, "
+        f"os_type={config['os_type']}, ttl={config['ttl']}"
     )
-    current_sandbox_id = cua_registry.get_current_sandbox_id(session_id)
-    if current_sandbox_id and current_sandbox_id in session_booter:
-        if not _acquire_cua_sandbox_lease(current_sandbox_id, session_id):
-            raise RuntimeError(f"Sandbox {current_sandbox_id} is busy")
-        booter = session_booter[current_sandbox_id]
-        if await _booter_available(booter):
-            cua_registry.touch_sandbox(current_sandbox_id)
-            _save_cua_registry()
-            _schedule_cua_idle_cleanup(
-                current_sandbox_id,
-                _get_cua_idle_timeout(context.get_config(umo=session_id)),
-            )
-            return booter
-        session_booter.pop(current_sandbox_id, None)
-
-    target_sandbox_id = cua_registry.default_sandbox_id
-    if target_sandbox_id is None:
-        target_sandbox_id = _new_managed_cua_sandbox_id()
-        record = cua_registry.upsert_sandbox(
-            **_build_cua_sandbox_record_payload(
-                sandbox_id=target_sandbox_id,
-                sandbox_name=target_sandbox_id,
-                session_id=session_id,
-                cua_kwargs=cua_kwargs,
-                idle_timeout=_get_cua_idle_timeout(context.get_config(umo=session_id)),
-                is_default=True,
-            )
-        )
-        cua_registry.set_default_sandbox_id(record["sandbox_id"])
-        _save_cua_registry()
-
-    if _cua_sandbox_has_active_lease(
-        target_sandbox_id
-    ) and _cua_sandbox_controlled_by_other_session(target_sandbox_id, session_id):
-        target_sandbox_id = _new_managed_cua_sandbox_id()
-        cua_registry.upsert_sandbox(
-            **_build_cua_sandbox_record_payload(
-                sandbox_id=target_sandbox_id,
-                sandbox_name=target_sandbox_id,
-                session_id=session_id,
-                cua_kwargs=cua_kwargs,
-                idle_timeout=_get_cua_idle_timeout(context.get_config(umo=session_id)),
-            )
-        )
-        _save_cua_registry()
-
-    while True:
-        async with _cua_boot_lock(target_sandbox_id):
-            if target_sandbox_id in session_booter and not _acquire_cua_sandbox_lease(
-                target_sandbox_id, session_id
-            ):
-                target_sandbox_id = _new_managed_cua_sandbox_id()
-                cua_registry.upsert_sandbox(
-                    **_build_cua_sandbox_record_payload(
-                        sandbox_id=target_sandbox_id,
-                        sandbox_name=target_sandbox_id,
-                        session_id=session_id,
-                        cua_kwargs=cua_kwargs,
-                        idle_timeout=_get_cua_idle_timeout(
-                            context.get_config(umo=session_id)
-                        ),
-                    )
-                )
-                _save_cua_registry()
-                continue
-
-            if target_sandbox_id in session_booter:
-                break
-
-            if target_sandbox_id not in session_booter:
-                if not _acquire_cua_sandbox_lease(target_sandbox_id, session_id):
-                    target_sandbox_id = _new_managed_cua_sandbox_id()
-                    cua_registry.upsert_sandbox(
-                        **_build_cua_sandbox_record_payload(
-                            sandbox_id=target_sandbox_id,
-                            sandbox_name=target_sandbox_id,
-                            session_id=session_id,
-                            cua_kwargs=cua_kwargs,
-                            idle_timeout=_get_cua_idle_timeout(
-                                context.get_config(umo=session_id)
-                            ),
-                        )
-                    )
-                    _save_cua_registry()
-                    continue
-
-            client = await _boot_managed_cua_sandbox(
-                context, session_id, target_sandbox_id, cua_kwargs
-            )
-            setattr(client, "sandbox_id", target_sandbox_id)
-            session_booter[target_sandbox_id] = client
-            break
-
-        break
-
-    cua_registry.touch_sandbox(target_sandbox_id)
-    cua_registry.set_current_sandbox_id(session_id, target_sandbox_id)
-    _save_cua_registry()
-    _schedule_cua_idle_cleanup(
-        target_sandbox_id, _get_cua_idle_timeout(context.get_config(umo=session_id))
-    )
-    return session_booter[target_sandbox_id]
+    return await sandbox_manager.get_or_create_booter(context, session_id, "cua")
 
 
 async def create_cua_sandbox(
@@ -398,12 +235,10 @@ async def create_cua_sandbox(
     session_id: str,
     sandbox_name: str | None = None,
 ) -> dict:
-    sandbox = await create_cua_sandbox_uncontrolled(context, session_id, sandbox_name)
-    sandbox_id = sandbox["sandbox_id"]
-    _acquire_cua_sandbox_lease(sandbox_id, session_id)
-    cua_registry.set_current_sandbox_id(session_id, sandbox_id)
-    _save_cua_registry()
-    return cua_registry.get_sandbox(sandbox_id) or sandbox
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.create_sandbox(
+        context, session_id, "cua", sandbox_name
+    )
 
 
 async def create_cua_sandbox_uncontrolled(
@@ -411,50 +246,20 @@ async def create_cua_sandbox_uncontrolled(
     session_id: str,
     sandbox_name: str | None = None,
 ) -> dict:
-    from .booters.cua import build_cua_booter_kwargs
-
-    config = context.get_config(umo=session_id)
-    sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-    cua_kwargs = build_cua_booter_kwargs(sandbox_cfg)
-    sandbox_id = _new_managed_cua_sandbox_id()
-    sandbox_name = sandbox_name or sandbox_id
-    idle_timeout = _get_cua_idle_timeout(config)
-    record = cua_registry.upsert_sandbox(
-        **_build_cua_sandbox_record_payload(
-            sandbox_id=sandbox_id,
-            sandbox_name=sandbox_name,
-            session_id=session_id,
-            cua_kwargs=cua_kwargs,
-            idle_timeout=idle_timeout,
-        )
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.create_sandbox_uncontrolled(
+        context, session_id, "cua", sandbox_name
     )
-    try:
-        client = await _boot_managed_cua_sandbox(
-            context, session_id, sandbox_id, cua_kwargs
-        )
-    except Exception:
-        cua_registry.delete_sandbox(sandbox_id)
-        _save_cua_registry()
-        raise
-    setattr(client, "sandbox_id", sandbox_id)
-    session_booter[sandbox_id] = client
-    cua_registry.touch_sandbox(sandbox_id)
-    _save_cua_registry()
-    _schedule_cua_idle_cleanup(sandbox_id, idle_timeout)
-    return cua_registry.get_sandbox(sandbox_id) or record
 
 
 def list_cua_sandboxes() -> list[dict]:
-    return [record for record in cua_registry.list_sandboxes() if record.get("managed")]
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.list_sandboxes()
 
 
 def set_default_cua_sandbox(sandbox_id: str) -> dict:
-    record = cua_registry.get_sandbox(sandbox_id)
-    if record is None or not record.get("managed"):
-        raise RuntimeError(f"Sandbox {sandbox_id} not found")
-    cua_registry.set_default_sandbox_id(sandbox_id)
-    _save_cua_registry()
-    return cua_registry.get_sandbox(sandbox_id) or record
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.set_default_sandbox(sandbox_id)
 
 
 def update_cua_sandbox_config(
@@ -464,167 +269,56 @@ def update_cua_sandbox_config(
     expires_at: int | float | None,
     retention_policy: str,
 ) -> dict:
-    record = cua_registry.get_sandbox(sandbox_id)
-    if record is None or not record.get("managed"):
-        raise RuntimeError(f"Sandbox {sandbox_id} not found")
-    if retention_policy not in {"temporary", "persistent"}:
-        raise RuntimeError("retention_policy must be temporary or persistent")
-    if retention_policy == "persistent":
-        idle_timeout = None
-        expires_at = None
-    updated = cua_registry.update_sandbox_config(
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.update_sandbox_config(
         sandbox_id,
         idle_timeout=idle_timeout,
         expires_at=expires_at,
         retention_policy=retention_policy,
     )
-    if retention_policy == "persistent" or not idle_timeout:
-        _clear_cua_idle_state(sandbox_id)
-    else:
-        _schedule_cua_idle_cleanup(sandbox_id, float(idle_timeout))
-    _save_cua_registry()
-    return updated or record
 
 
 async def reconcile_cua_sandboxes_on_startup() -> None:
-    cua_registry.load()
-    cua_registry.reconcile_startup()
-    session_booter.clear()
-    for sandbox_id in list(cua_idle_state):
-        _clear_cua_idle_state(sandbox_id)
-    cua_registry.save()
+    _sync_sandbox_manager_refs()
+    await sandbox_manager.reconcile_on_startup()
 
 
 async def cleanup_managed_cua_sandboxes() -> None:
-    managed_records = list_cua_sandboxes()
-    for record in managed_records:
-        sandbox_id = record["sandbox_id"]
-        if record.get("retention_policy") == "persistent":
-            logger.info(
-                "[Computer] Preserve persistent CUA sandbox during shutdown: sandbox_id=%s",
-                sandbox_id,
-            )
-            continue
-        booter = session_booter.pop(sandbox_id, None)
-        if booter is not None:
-            try:
-                await booter.shutdown()
-            except Exception as shutdown_err:
-                logger.warning(
-                    "[Computer] Failed to shutdown managed CUA sandbox %s: %s",
-                    sandbox_id,
-                    shutdown_err,
-                )
-        _clear_cua_idle_state(sandbox_id)
-        cua_registry.delete_sandbox(sandbox_id)
-        _drop_cua_boot_lock(sandbox_id)
-    cua_registry.save()
+    _sync_sandbox_manager_refs()
+    await sandbox_manager.cleanup_managed_sandboxes()
 
 
 def get_current_cua_sandbox(session_id: str) -> dict:
-    sandbox_id = cua_registry.get_current_sandbox_id(session_id)
-    return {
-        "current_sandbox_id": sandbox_id,
-        "sandbox": cua_registry.get_sandbox(sandbox_id) if sandbox_id else None,
-    }
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.get_current_sandbox(session_id)
 
 
 def switch_current_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
-    record = cua_registry.get_sandbox(sandbox_id)
-    if record is None or not record.get("managed"):
-        raise RuntimeError(f"Sandbox {sandbox_id} not found")
-    booter = session_booter.get(sandbox_id)
-    if booter is None:
-        raise RuntimeError(f"Sandbox {sandbox_id} is not running")
-    if not _acquire_cua_sandbox_lease(sandbox_id, session_id):
-        raise RuntimeError(f"Sandbox {sandbox_id} is busy")
-    previous_sandbox_id = cua_registry.get_current_sandbox_id(session_id)
-    if previous_sandbox_id and previous_sandbox_id != sandbox_id:
-        previous = cua_registry.get_sandbox(previous_sandbox_id)
-        if previous and previous.get("controller_session_id") == session_id:
-            cua_registry.release_lease(previous_sandbox_id)
-    cua_registry.set_current_sandbox_id(session_id, sandbox_id)
-    cua_registry.touch_sandbox(sandbox_id)
-    _save_cua_registry()
-    return cua_registry.get_sandbox(sandbox_id) or record
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.switch_current_sandbox(session_id, sandbox_id)
 
 
 def release_current_cua_sandbox(
     session_id: str,
     sandbox_id: str | None = None,
 ) -> dict:
-    target_sandbox_id = sandbox_id or cua_registry.get_current_sandbox_id(session_id)
-    if target_sandbox_id is None:
-        raise RuntimeError("No current CUA sandbox")
-    record = cua_registry.get_sandbox(target_sandbox_id)
-    if record is None:
-        raise RuntimeError(f"Sandbox {target_sandbox_id} not found")
-    controller_session_id = record.get("controller_session_id")
-    if (
-        controller_session_id
-        and controller_session_id != session_id
-        and _cua_sandbox_has_active_lease(target_sandbox_id)
-    ):
-        raise RuntimeError(
-            f"Sandbox {target_sandbox_id} is controlled by another session"
-        )
-    released = cua_registry.release_lease(target_sandbox_id) or record
-    if cua_registry.get_current_sandbox_id(session_id) == target_sandbox_id:
-        cua_registry.set_current_sandbox_id(session_id, None)
-    _save_cua_registry()
-    return released
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.release_current_sandbox(session_id, sandbox_id)
 
 
 def takeover_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
-    record = cua_registry.get_sandbox(sandbox_id)
-    if record is None or not record.get("managed"):
-        raise RuntimeError(f"Sandbox {sandbox_id} not found")
-    updated = (
-        cua_registry.takeover_lease(
-            sandbox_id=sandbox_id,
-            session_id=session_id,
-            user_id=session_id,
-            ttl=CUA_LEASE_SECONDS,
-        )
-        or record
-    )
-    _save_cua_registry()
-    return updated
+    _sync_sandbox_manager_refs()
+    return sandbox_manager.takeover_sandbox(session_id, sandbox_id)
 
 
 async def destroy_cua_sandbox(session_id: str, sandbox_id: str) -> dict:
-    record = cua_registry.get_sandbox(sandbox_id)
-    if record is None or not record.get("managed"):
-        raise RuntimeError(f"Sandbox {sandbox_id} not found")
-    controller_session_id = record.get("controller_session_id")
-    if (
-        controller_session_id
-        and controller_session_id != session_id
-        and _cua_sandbox_has_active_lease(sandbox_id)
-    ):
-        raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
-    booter = session_booter.pop(sandbox_id, None)
-    if booter is not None:
-        await booter.shutdown()
-    _clear_cua_idle_state(sandbox_id)
-    cua_registry.delete_sandbox(sandbox_id)
-    _drop_cua_boot_lock(sandbox_id)
-    _save_cua_registry()
-    return record
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.destroy_sandbox(session_id, sandbox_id)
 
 
 async def get_cua_sandbox_observer_booter_by_id(sandbox_id: str) -> ComputerBooter:
-    record = cua_registry.get_sandbox(sandbox_id)
-    if record is None or not record.get("managed"):
-        raise RuntimeError(f"Sandbox {sandbox_id} not found")
-    booter = session_booter.get(sandbox_id)
-    if booter is None or not await _booter_available(booter):
-        raise RuntimeError(f"Sandbox {sandbox_id} is not running")
-    cua_registry.touch_sandbox(sandbox_id)
-    _save_cua_registry()
-    idle_timeout = record.get("idle_timeout") or 0
-    _schedule_cua_idle_cleanup(sandbox_id, float(idle_timeout))
-    return booter
+    _sync_sandbox_manager_refs()
+    return await sandbox_manager.get_observer_booter_by_id(sandbox_id)
 
 
 async def copy_file_between_cua_sandboxes(

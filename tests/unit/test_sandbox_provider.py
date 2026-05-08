@@ -42,6 +42,7 @@ def test_cua_sandbox_provider_builds_config_from_runtime_settings():
 @pytest.mark.asyncio
 async def test_cua_sandbox_provider_creates_booter_and_syncs_skills(monkeypatch):
     from astrbot.core.computer import cua_sandbox_provider
+    from astrbot.core.computer.booters import cua as cua_booter
     from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
 
     synced = []
@@ -56,7 +57,7 @@ async def test_cua_sandbox_provider_creates_booter_and_syncs_skills(monkeypatch)
         async def available(self):
             return True
 
-    monkeypatch.setattr(cua_sandbox_provider, "CuaBooter", FakeCuaBooter)
+    monkeypatch.setattr(cua_booter, "CuaBooter", FakeCuaBooter)
     monkeypatch.setattr(
         cua_sandbox_provider,
         "_sync_skills_to_sandbox",
@@ -78,6 +79,7 @@ async def test_cua_sandbox_provider_creates_booter_and_syncs_skills(monkeypatch)
 @pytest.mark.asyncio
 async def test_cua_sandbox_provider_shuts_down_when_skill_sync_fails(monkeypatch):
     from astrbot.core.computer import cua_sandbox_provider
+    from astrbot.core.computer.booters import cua as cua_booter
     from astrbot.core.computer.cua_sandbox_provider import CuaSandboxProvider
 
     shutdowns = []
@@ -92,9 +94,7 @@ async def test_cua_sandbox_provider_shuts_down_when_skill_sync_fails(monkeypatch
     async def fail_sync(booter):
         raise RuntimeError("sync failed")
 
-    monkeypatch.setattr(
-        cua_sandbox_provider, "CuaBooter", lambda **kwargs: FakeCuaBooter()
-    )
+    monkeypatch.setattr(cua_booter, "CuaBooter", lambda **kwargs: FakeCuaBooter())
     monkeypatch.setattr(cua_sandbox_provider, "_sync_skills_to_sandbox", fail_sync)
 
     with pytest.raises(RuntimeError, match="sync failed"):

@@ -4,8 +4,8 @@ import time
 import uuid
 
 from astrbot.api import logger
+from astrbot.core.computer.booters import cua as cua_booter
 from astrbot.core.computer.booters.base import ComputerBooter
-from astrbot.core.computer.booters.cua import CuaBooter, build_cua_booter_kwargs
 from astrbot.core.star.context import Context
 
 
@@ -21,7 +21,7 @@ class CuaSandboxProvider:
     def build_create_config(self, context: Context, session_id: str) -> dict:
         config = context.get_config(umo=session_id)
         sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-        return build_cua_booter_kwargs(sandbox_cfg)
+        return cua_booter.build_cua_booter_kwargs(sandbox_cfg)
 
     async def create_booter(
         self,
@@ -31,7 +31,7 @@ class CuaSandboxProvider:
         config: dict,
     ) -> ComputerBooter:
         uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
-        client = CuaBooter(**config)
+        client = cua_booter.CuaBooter(**config)
         started_at = time.monotonic()
         logger.info(
             "[Computer] CUA managed sandbox boot start: sandbox_id=%s session_id=%s boot_session_id=%s image=%s os_type=%s local=%s ttl=%s",
