@@ -1991,7 +1991,7 @@ async def test_cua_boot_cleans_up_sandbox_when_component_setup_fails(monkeypatch
     monkeypatch.setattr("builtins.__import__", fake_import)
     monkeypatch.setattr(cua_booter, "CuaShellComponent", BrokenShellComponent)
 
-    booter = cua_booter.CuaBooter()
+    booter = cua_booter.CuaBooter(local=False)
 
     with pytest.raises(RuntimeError, match="component setup failed"):
         await booter.boot("session")
