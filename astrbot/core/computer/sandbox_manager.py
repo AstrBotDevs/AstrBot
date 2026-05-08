@@ -160,6 +160,11 @@ class SandboxManager:
             if current_sandbox_id
             else None
         )
+        if current_sandbox_id and (
+            current_record is None or current_record.get("provider") != provider_id
+        ):
+            self.registry.set_current_sandbox_id(session_id, None)
+            self.save_registry()
         if (
             current_sandbox_id
             and current_record
@@ -335,7 +340,8 @@ class SandboxManager:
             context, session_id, provider_id, sandbox_name
         )
         sandbox_id = sandbox["sandbox_id"]
-        self.acquire_lease(sandbox_id, session_id)
+        if not self.acquire_lease(sandbox_id, session_id):
+            raise RuntimeError(f"Sandbox {sandbox_id} is busy")
         self.registry.set_current_sandbox_id(session_id, sandbox_id)
         self.save_registry()
         return self.registry.get_sandbox(sandbox_id) or sandbox
@@ -519,7 +525,18 @@ class SandboxManager:
         if record is None or not record.get("managed"):
             raise RuntimeError(f"Sandbox {sandbox_id} not found")
         booter = self.session_booter.get(sandbox_id)
-        if booter is None or not await self.booter_available(booter):
+        if booter is None:
+            raise RuntimeError(f"Sandbox {sandbox_id} is not running")
+        try:
+            is_available = await self.booter_available(booter)
+        except Exception:
+            self.registry.update_sandbox_status(sandbox_id, "unknown")
+            self.save_registry()
+            raise
+        if not is_available:
+            self.session_booter.pop(sandbox_id, None)
+            self.registry.update_sandbox_status(sandbox_id, "unknown")
+            self.save_registry()
             raise RuntimeError(f"Sandbox {sandbox_id} is not running")
         self.registry.touch_sandbox(sandbox_id)
         self.save_registry()

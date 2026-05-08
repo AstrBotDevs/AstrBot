@@ -45,6 +45,17 @@ class FailingDestroyProvider(FakeProvider):
         raise RuntimeError("shutdown failed")
 
 
+class PreleasedProvider(FakeProvider):
+    async def create_booter(self, context, session_id, sandbox_id, config):
+        context.registry.takeover_lease(
+            sandbox_id=sandbox_id,
+            session_id="other-session",
+            user_id="other-session",
+            ttl=60,
+        )
+        return await super().create_booter(context, session_id, sandbox_id, config)
+
+
 class FakeBooter:
     def __init__(
         self,
@@ -74,6 +85,12 @@ def _manager(tmp_path):
     return manager, registry, provider
 
 
+class RegistryContext(FakeContext):
+    def __init__(self, registry: SandboxRegistry):
+        super().__init__()
+        self.registry = registry
+
+
 @pytest.mark.asyncio
 async def test_sandbox_manager_creates_default_and_current_sandbox(tmp_path):
     manager, registry, provider = _manager(tmp_path)
@@ -83,6 +100,21 @@ async def test_sandbox_manager_creates_default_and_current_sandbox(tmp_path):
     assert booter.sandbox_id == registry.default_sandbox_id
     assert registry.get_current_sandbox_id("session-a") == booter.sandbox_id
     assert provider.boots == [("session-a", booter.sandbox_id, {"image": "fake"})]
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_create_sandbox_requires_control_lease(tmp_path):
+    provider = PreleasedProvider()
+    registry = SandboxRegistry(storage_path=tmp_path / "registry.json")
+    manager = SandboxManager(registry=registry, providers={"fake": provider})
+
+    with pytest.raises(RuntimeError, match="busy"):
+        await manager.create_sandbox(RegistryContext(registry), "session-a", "fake")
+
+    records = registry.list_sandboxes()
+    assert len(records) == 1
+    assert records[0]["controller_session_id"] == "other-session"
+    assert registry.get_current_sandbox_id("session-a") is None
 
 
 @pytest.mark.asyncio
@@ -161,6 +193,63 @@ async def test_sandbox_manager_checked_switch_rejects_unavailable_booter(tmp_pat
 
     assert registry.get_current_sandbox_id("session-a") is None
     assert registry.get_sandbox("target")["controller_session_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_observer_marks_unknown_on_availability_error(tmp_path):
+    manager, registry, provider = _manager(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="target",
+        sandbox_name="target",
+        booter_type="fake",
+        provider="fake",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+    )
+    manager.session_booter["target"] = FakeBooter(
+        "target", provider, available_error=RuntimeError("availability failed")
+    )
+
+    with pytest.raises(RuntimeError, match="availability failed"):
+        await manager.get_observer_booter_by_id("target")
+
+    assert registry.get_sandbox("target")["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_clears_stale_current_before_fallback(tmp_path):
+    manager, registry, provider = _manager(tmp_path)
+    registry.set_current_sandbox_id("session-a", "missing")
+
+    booter = await manager.get_or_create_booter(FakeContext(), "session-a", "fake")
+
+    assert registry.get_current_sandbox_id("session-a") == booter.sandbox_id
+    assert booter.sandbox_id != "missing"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_manager_clears_wrong_provider_current_before_fallback(tmp_path):
+    manager, registry, provider = _manager(tmp_path)
+    registry.upsert_sandbox(
+        sandbox_id="neo-current",
+        sandbox_name="neo",
+        booter_type="shipyard_neo",
+        provider="shipyard_neo",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-neo",
+        owner_session_id="session-neo",
+        connect_info={},
+    )
+    registry.set_current_sandbox_id("session-a", "neo-current")
+
+    booter = await manager.get_or_create_booter(FakeContext(), "session-a", "fake")
+
+    assert registry.get_current_sandbox_id("session-a") == booter.sandbox_id
+    assert booter.sandbox_id != "neo-current"
 
 
 @pytest.mark.asyncio
