@@ -1031,6 +1031,7 @@ def test_cua_is_exposed_in_sandbox_config_metadata():
     assert "provider_settings.sandbox.cua_image" in items
     assert "provider_settings.sandbox.cua_os_type" in items
     assert "provider_settings.sandbox.cua_ttl" in items
+    assert "provider_settings.sandbox.cua_idle_timeout" in items
     assert "provider_settings.sandbox.cua_telemetry_enabled" in items
     assert "provider_settings.sandbox.cua_local" in items
     assert "provider_settings.sandbox.cua_api_key" in items
