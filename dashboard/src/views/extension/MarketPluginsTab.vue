@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
@@ -39,8 +39,6 @@ const {
   extension_config,
   pluginMarketData,
   loadingDialog,
-  showPluginInfoDialog,
-  selectedPlugin,
   curr_namespace,
   updatingAll,
   readmeDialog,
@@ -80,13 +78,11 @@ const {
   sortBy,
   sortOrder,
   randomPluginNames,
-  showRandomPlugins,
   marketCategoryFilter,
   marketCategoryItems,
   normalizeStr,
   toPinyinText,
   toInitials,
-  plugin_handler_info_headers,
   pluginHeaders,
   filteredExtensions,
   filteredPlugins,
@@ -96,7 +92,6 @@ const {
   randomPlugins,
   shufflePlugins,
   refreshRandomPlugins,
-  toggleRandomPluginsVisibility,
   displayItemsPerPage,
   totalPages,
   paginatedPlugins,
@@ -125,6 +120,7 @@ const {
   reloadPlugin,
   viewReadme,
   viewChangelog,
+  openInstallDialog,
   handleInstallPlugin,
   confirmDangerInstall,
   cancelDangerInstall,
@@ -177,19 +173,26 @@ const marketCategorySelectItems = computed(() =>
     value: item.value,
   })),
 );
+
+const openMarketPluginDetail = (plugin) => {
+  if (!plugin?.name) return;
+  router.push({
+    name: "ExtensionDetails",
+    params: { pluginId: plugin.name },
+    hash: "#market",
+  });
+};
 </script>
 
 <template>
-  <div v-show="activeTab === 'market'">
+  <v-tab-item v-show="activeTab === 'market'">
     <div class="mb-6 pt-4 pb-4">
       <div class="d-flex align-center" style="gap: 12px">
         <div class="d-flex align-center" style="gap: 12px; min-width: 0">
-          <h2 class="text-h2 mb-0">
-            {{ tm("tabs.market") }}
-          </h2>
+          <h2 class="text-h2 mb-0">{{ tm("tabs.market") }}</h2>
 
           <v-tooltip location="top" :text="tm('market.sourceManagement')">
-            <template #activator="{ props }">
+            <template v-slot:activator="{ props }">
               <v-btn
                 v-bind="props"
                 variant="tonal"
@@ -198,32 +201,18 @@ const marketCategorySelectItems = computed(() =>
                 class="text-none px-2"
                 @click="openSourceManagerDialog"
               >
-                <v-icon size="18" class="mr-1"> mdi-source-branch </v-icon>
+                <v-icon size="18" class="mr-1">mdi-source-branch</v-icon>
                 <span class="text-truncate" style="max-width: 180px">
                   {{ currentSourceName }}
                 </span>
               </v-btn>
             </template>
           </v-tooltip>
-
-          <v-btn
-            color="primary"
-            variant="tonal"
-            rounded="md"
-            class="text-none px-2"
-            :prepend-icon="showRandomPlugins ? 'mdi-eye-off' : 'mdi-eye'"
-            @click="toggleRandomPluginsVisibility"
-          >
-            {{
-              showRandomPlugins
-                ? tm("market.hideRandomPlugins")
-                : tm("market.showRandomPlugins")
-            }}
-          </v-btn>
         </div>
 
         <v-text-field
           :model-value="marketSearch"
+          @update:model-value="marketSearch = normalizeTextInput($event)"
           class="ml-auto"
           density="compact"
           :label="tm('search.marketPlaceholder')"
@@ -234,15 +223,15 @@ const marketCategorySelectItems = computed(() =>
           hide-details
           single-line
           style="width: 340px; min-width: 220px; max-width: 340px"
-          @update:model-value="marketSearch = normalizeTextInput($event)"
-        />
+        >
+        </v-text-field>
       </div>
 
       <div
         class="d-flex align-center text-caption text-medium-emphasis mt-2"
         style="color: grey; line-height: 1.4"
       >
-        <v-icon size="16" class="mr-1"> mdi-alert-outline </v-icon>
+        <v-icon size="16" class="mr-1">mdi-alert-outline</v-icon>
         <span>{{ tm("market.sourceSafetyWarning") }}</span>
       </div>
     </div>
@@ -251,7 +240,7 @@ const marketCategorySelectItems = computed(() =>
 
     <!-- FAB Button -->
     <v-tooltip :text="tm('market.installPlugin')" location="left">
-      <template #activator="{ props }">
+      <template v-slot:activator="{ props }">
         <button
           v-bind="props"
           type="button"
@@ -263,16 +252,16 @@ const marketCategorySelectItems = computed(() =>
             z-index: 10000;
             border-radius: 16px;
           "
-          @click="dialog = true"
+          @click="openInstallDialog"
         >
-          <span class="v-btn__overlay" />
-          <span class="v-btn__underlay" />
+          <span class="v-btn__overlay"></span>
+          <span class="v-btn__underlay"></span>
           <span class="v-btn__content" data-no-activator="">
             <i
               class="mdi-plus mdi v-icon notranslate v-theme--PurpleThemeDark v-icon--size-default"
               aria-hidden="true"
               style="font-size: 32px"
-            />
+            ></i>
           </span>
         </button>
       </template>
@@ -290,9 +279,9 @@ const marketCategorySelectItems = computed(() =>
           <v-btn
             icon
             variant="text"
+            @click="refreshPluginMarket"
             :loading="loading_ || refreshingMarket"
             :disabled="loading_ || refreshingMarket"
-            @click="refreshPluginMarket"
           >
             <v-icon>mdi-refresh</v-icon>
           </v-btn>
@@ -311,7 +300,7 @@ const marketCategorySelectItems = computed(() =>
             hide-details
             class="market-filter-control"
             :menu-props="{ openOnHover: true, closeOnContentClick: false }"
-          />
+          ></v-select>
 
           <PluginSortControl
             v-model="sortBy"
@@ -326,7 +315,7 @@ const marketCategorySelectItems = computed(() =>
         </div>
       </div>
 
-      <v-row style="min-height: 26rem" density="compact">
+      <v-row style="min-height: 26rem" dense>
         <v-col
           v-for="plugin in paginatedPlugins"
           :key="plugin.name"
@@ -340,21 +329,22 @@ const marketCategorySelectItems = computed(() =>
             :default-plugin-icon="defaultPluginIcon"
             :show-plugin-full-name="showPluginFullName"
             @install="handleInstallPlugin"
+            @open="openMarketPluginDetail"
           />
         </v-col>
       </v-row>
 
-      <div v-if="totalPages > 1" class="d-flex justify-center mt-4">
+      <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
         <v-pagination
           v-model="currentPage"
           :length="totalPages"
           :total-visible="7"
           size="small"
-        />
+        ></v-pagination>
       </div>
 
       <v-expand-transition>
-        <div v-if="showRandomPlugins">
+        <div v-if="randomPlugins.length > 0">
           <div
             class="d-flex align-center mb-2 mt-4"
             style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
@@ -373,7 +363,7 @@ const marketCategorySelectItems = computed(() =>
             </v-btn>
           </div>
 
-          <v-row class="mb-6" density="compact">
+          <v-row class="mb-6" dense>
             <v-col
               v-for="plugin in randomPlugins"
               :key="`random-${plugin.name}`"
@@ -387,13 +377,14 @@ const marketCategorySelectItems = computed(() =>
                 :default-plugin-icon="defaultPluginIcon"
                 :show-plugin-full-name="showPluginFullName"
                 @install="handleInstallPlugin"
+                @open="openMarketPluginDetail"
               />
             </v-col>
           </v-row>
         </div>
       </v-expand-transition>
     </div>
-  </div>
+  </v-tab-item>
 </template>
 
 <style scoped>
@@ -402,10 +393,10 @@ const marketCategorySelectItems = computed(() =>
   max-width: 220px;
 }
 
-.market-filter-control ::v-deep(.v-field__input),
-.market-filter-control ::v-deep(.v-field-label),
-.market-filter-control ::v-deep(.v-select__selection-text),
-.market-filter-control ::v-deep(.v-field__prepend-inner) {
+.market-filter-control :deep(.v-field__input),
+.market-filter-control :deep(.v-field-label),
+.market-filter-control :deep(.v-select__selection-text),
+.market-filter-control :deep(.v-field__prepend-inner) {
   font-size: 0.875rem;
 }
 </style>

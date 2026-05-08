@@ -33,6 +33,11 @@ param_schema = {
             "description": "Whether to suppress the output of the code execution.",
             "default": False,
         },
+        "timeout": {
+            "type": "integer",
+            "description": "Optional timeout in seconds for code execution.",
+            "default": 30,
+        },
     },
     "required": ["code"],
 }
@@ -78,11 +83,12 @@ class PythonTool(FunctionTool):
     description: str = f"Run codes in an IPython shell. Current OS: {_OS_NAME}."
     parameters: dict = field(default_factory=lambda: param_schema)
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         code: str,
         silent: bool = False,
+        timeout: int = 30,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
@@ -90,8 +96,17 @@ class PythonTool(FunctionTool):
             context.context.context,
             context.context.event.unified_msg_origin,
         )
+        effective_timeout = (
+            min(timeout, context.tool_call_timeout)
+            if timeout > 0
+            else context.tool_call_timeout
+        )
         try:
-            result = await sb.python.exec(code, silent=silent)
+            result = await sb.python.exec(
+                code,
+                timeout=effective_timeout,
+                silent=silent,
+            )
             return await handle_result(result, context.context.event)
         except Exception as e:
             return f"Error executing code: {e!s}"
@@ -108,17 +123,27 @@ class LocalPythonTool(FunctionTool):
 
     parameters: dict = field(default_factory=lambda: param_schema)
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         code: str,
         silent: bool = False,
+        timeout: int = 30,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
         sb = get_local_booter()
+        effective_timeout = (
+            min(timeout, context.tool_call_timeout)
+            if timeout > 0
+            else context.tool_call_timeout
+        )
         try:
-            result = await sb.python.exec(code, silent=silent)
+            result = await sb.python.exec(
+                code,
+                timeout=effective_timeout,
+                silent=silent,
+            )
             return await handle_result(result, context.context.event)
         except Exception as e:
             return f"Error executing code: {e!s}"

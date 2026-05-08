@@ -44,7 +44,6 @@ class KnowledgeBaseManager:
             from .retrieval.sparse_retriever import SparseRetriever
 
             logger.info("正在初始化知识库模块...")
-
             # 初始化数据库
             await self._init_kb_database()
 

@@ -278,9 +278,10 @@ class CronJobManager:
                 "description": job.description,
                 "note": note,
                 "run_started_at": start_time.isoformat(),
-                "run_at": job.payload.get("run_at")
-                if isinstance(job.payload, dict)
-                else None,
+                "run_at": (
+                    job.payload.get("run_at") if isinstance(job.payload, dict) else None
+                ),
+                "session": session_str,
             },
             "cron_payload": payload,
         }

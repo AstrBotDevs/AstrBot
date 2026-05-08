@@ -18,6 +18,9 @@ export const useCommonStore = defineStore("common", {
     log_cache_max_len: 1000,
     // Backend start time
     startTime: -1,
+    astrbotVersion: "",
+    dashboardVersion: "",
+
     // Plugin market data cache
     pluginMarketData: [],
   }),
@@ -179,6 +182,21 @@ export const useCommonStore = defineStore("common", {
       return this.startTime;
     },
 
+    setAstrBotVersion(version, dashboardVersion = "") {
+      this.astrbotVersion = String(version || "").replace(/^v/i, "");
+      this.dashboardVersion = String(dashboardVersion || "");
+    },
+
+    async fetchAstrBotVersion(force = false) {
+      if (!force && this.astrbotVersion) {
+        return this.astrbotVersion;
+      }
+      const res = await axios.get("/api/stat/version");
+      const data = res.data?.data || {};
+      this.setAstrBotVersion(data.version, data.dashboard_version);
+      return this.astrbotVersion;
+    },
+
     getStartTime() {
       if (this.startTime !== -1) {
         return this.startTime;
@@ -210,8 +228,10 @@ export const useCommonStore = defineStore("common", {
           for (const key in res.data.data) {
             const pluginData = res.data.data[key];
             data.push({
+              ...pluginData,
               name: pluginData.name || key,
               desc: pluginData.desc,
+              short_desc: pluginData?.short_desc ? pluginData.short_desc : "",
               author: pluginData.author,
               repo: pluginData.repo,
               installed: false,
@@ -222,9 +242,16 @@ export const useCommonStore = defineStore("common", {
               pinned: pluginData?.pinned ? pluginData.pinned : false,
               stars: pluginData?.stars ? pluginData.stars : 0,
               updated_at: pluginData?.updated_at ? pluginData.updated_at : "",
+              download_url: pluginData?.download_url
+                ? pluginData.download_url
+                : "",
               display_name: pluginData?.display_name
                 ? pluginData.display_name
                 : "",
+              i18n:
+                pluginData?.i18n && typeof pluginData.i18n === "object"
+                  ? pluginData.i18n
+                  : {},
               astrbot_version: pluginData?.astrbot_version
                 ? pluginData.astrbot_version
                 : "",

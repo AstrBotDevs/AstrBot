@@ -49,6 +49,7 @@
               :item="platform"
               title-field="id"
               enabled-field="enable"
+              variant="outlined"
               :bglogo="getPlatformIcon(platform.type || platform.id)"
               @toggle-enabled="platformStatusChange"
               @delete="deletePlatform"

@@ -3,8 +3,8 @@
     class="persona-card"
     :class="{ dragging: isDragging }"
     rounded="lg"
-    elevation="1"
-    hover
+    variant="outlined"
+    elevation="0"
     draggable="true"
     @click="$emit('view')"
     @dragstart="handleDragStart"
@@ -209,9 +209,15 @@ export default defineComponent({
 
 <style scoped>
 .persona-card {
+  background: rgb(var(--v-theme-surface));
   height: 100%;
   cursor: grab;
-  transition: all 0.2s ease;
+  transition: background-color 0.16s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.persona-card:hover,
+.persona-card:focus-within {
+  background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
 .persona-card:active {

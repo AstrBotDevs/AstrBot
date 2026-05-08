@@ -19,12 +19,8 @@
             :key="option.value"
             @click="addEntry(option.value)"
           >
-            <v-list-item-title>{{
-              translateIfKey(option.label)
-            }}</v-list-item-title>
-            <v-list-item-subtitle v-if="option.hint">
-              {{ translateIfKey(option.hint) }}
-            </v-list-item-subtitle>
+            <v-list-item-title>{{ option.label }}</v-list-item-title>
+            <v-list-item-subtitle v-if="option.hint">{{ option.hint }}</v-list-item-subtitle>
           </v-list-item>
         </v-list>
       </v-menu>
@@ -68,18 +64,9 @@
             }}</v-icon>
           </v-btn>
           <div class="d-flex flex-column">
-            <v-list-item-title class="property-name">
-              {{ templateLabel(entry.__template_key) }}
-            </v-list-item-title>
-            <v-list-item-subtitle
-              v-if="getTemplate(entry)?.hint || getTemplate(entry)?.description"
-              class="property-hint"
-            >
-              {{
-                translateIfKey(
-                  getTemplate(entry)?.hint || getTemplate(entry)?.description,
-                )
-              }}
+            <v-list-item-title class="property-name">{{ templateLabel(entry.__template_key) }}</v-list-item-title>
+            <v-list-item-subtitle class="property-hint" v-if="getTemplate(entry)?.hint || getTemplate(entry)?.description">
+              {{ templateText(entry.__template_key, 'hint', getTemplate(entry)?.hint || getTemplate(entry)?.description) }}
             </v-list-item-subtitle>
           </div>
         </div>
@@ -121,13 +108,10 @@
               >
                 <div class="config-section mb-2">
                   <v-list-item-title class="config-title">
-                    {{ translateIfKey(itemMeta?.description) || itemKey }}
+                    {{ templateItemText(entry.__template_key, itemKey, 'description', itemMeta?.description) || itemKey }}
                   </v-list-item-title>
-                  <v-list-item-subtitle
-                    v-if="itemMeta?.hint"
-                    class="config-hint"
-                  >
-                    {{ translateIfKey(itemMeta.hint) }}
+                  <v-list-item-subtitle class="config-hint" v-if="itemMeta?.hint">
+                    {{ templateItemText(entry.__template_key, itemKey, 'hint', itemMeta.hint) }}
                   </v-list-item-subtitle>
                 </div>
                 <div
@@ -143,12 +127,10 @@
                       <v-col cols="12" sm="6" class="property-info">
                         <v-list-item density="compact">
                           <v-list-item-title class="property-name">
-                            {{
-                              translateIfKey(childMeta?.description) || childKey
-                            }}
+                            {{ templateItemText(entry.__template_key, `${itemKey}.${childKey}`, 'description', childMeta?.description) || childKey }}
                           </v-list-item-title>
                           <v-list-item-subtitle class="property-hint">
-                            {{ translateIfKey(childMeta?.hint) }}
+                            {{ templateItemText(entry.__template_key, `${itemKey}.${childKey}`, 'hint', childMeta?.hint) }}
                           </v-list-item-subtitle>
                         </v-list-item>
                       </v-col>
@@ -156,6 +138,9 @@
                         <ConfigItemRenderer
                           v-model="entry[itemKey][childKey]"
                           :item-meta="childMeta"
+                          :plugin-name="pluginName"
+                          :plugin-i18n="pluginI18n"
+                          :config-key="templateItemPath(entry.__template_key, `${itemKey}.${childKey}`)"
                         />
                       </v-col>
                     </v-row>
@@ -183,16 +168,11 @@
                   <v-col cols="12" sm="6" class="property-info">
                     <v-list-item density="compact">
                       <v-list-item-title class="property-name">
-                        <span v-if="itemMeta?.description"
-                          >{{ translateIfKey(itemMeta?.description) }}
-                          <span class="property-key"
-                            >({{ itemKey }})</span
-                          ></span
-                        >
+                        <span v-if="itemMeta?.description">{{ templateItemText(entry.__template_key, itemKey, 'description', itemMeta?.description) }} <span class="property-key">({{ itemKey }})</span></span>
                         <span v-else>{{ itemKey }}</span>
                       </v-list-item-title>
                       <v-list-item-subtitle class="property-hint">
-                        {{ translateIfKey(itemMeta?.hint) }}
+                        {{ templateItemText(entry.__template_key, itemKey, 'hint', itemMeta?.hint) }}
                       </v-list-item-subtitle>
                     </v-list-item>
                   </v-col>
@@ -200,6 +180,9 @@
                     <ConfigItemRenderer
                       v-model="entry[itemKey]"
                       :item-meta="itemMeta"
+                      :plugin-name="pluginName"
+                      :plugin-i18n="pluginI18n"
+                      :config-key="templateItemPath(entry.__template_key, itemKey)"
                     />
                   </v-col>
                 </v-row>
@@ -225,7 +208,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import ConfigItemRenderer from "./ConfigItemRenderer.vue";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { useI18n } from "@/i18n/composables";
+import { useConfigTextResolver } from "@/composables/useConfigTextResolver";
 
 interface TemplateMetaItem {
   type?: string;
@@ -261,18 +245,24 @@ const props = withDefaults(
   defineProps<{
     modelValue?: ConfigEntry[];
     templates?: Record<string, TemplateMeta>;
+    pluginName?: string;
+    pluginI18n?: Record<string, unknown>;
+    configPath?: string;
   }>(),
   {
     modelValue: () => [],
     templates: () => ({}),
-  },
+    pluginName: "",
+    pluginI18n: () => ({}),
+    configPath: "",
+  }
 );
 
 const emit = defineEmits<{
   (e: "update:modelValue", value: ConfigEntry[]): void;
 }>();
 const { t } = useI18n();
-const { tm, getRaw } = useModuleI18n("features/config-metadata");
+const { resolveConfigText } = useConfigTextResolver(props);
 
 const expandedEntries = ref<Record<number, boolean>>({});
 
@@ -300,21 +290,31 @@ const defaultValueMap = {
 
 const templateOptions = computed(() => {
   return Object.entries(props.templates || {}).map(([value, meta]) => ({
-    label: meta?.name || value,
+    label: templateText(value, 'name', meta?.name || value),
     value,
-    hint: meta?.hint || meta?.description || "",
+    hint: templateText(value, 'hint', meta?.hint || meta?.description || '')
   }));
 });
 
 function templateLabel(key: string | null | undefined): string {
-  if (!key)
-    return t("core.common.templateList.unknownTemplate") || "未指定模板";
-  return translateIfKey(props.templates?.[key]?.name || key) as string;
+  if (!key) return t("core.common.templateList.unknownTemplate") || "未指定模板";
+  return templateText(key, 'name', props.templates?.[key]?.name || key);
 }
 
-function translateIfKey(value: unknown): unknown {
-  if (!value || typeof value !== "string") return value;
-  return getRaw(value) ? tm(value) : value;
+function templatePath(templateKey: string): string {
+  return props.configPath ? `${props.configPath}.templates.${templateKey}` : `templates.${templateKey}`;
+}
+
+function templateItemPath(templateKey: string, itemPath: string): string {
+  return `${templatePath(templateKey)}.${itemPath}`;
+}
+
+function templateText(templateKey: string, attr: string, fallback: unknown): string {
+  return String(resolveConfigText(templatePath(templateKey), attr, fallback) || '');
+}
+
+function templateItemText(templateKey: string, itemPath: string, attr: string, fallback: unknown): string {
+  return String(resolveConfigText(templateItemPath(templateKey, itemPath), attr, fallback) || '');
 }
 
 function buildDefaults(itemsMeta: Record<string, TemplateMetaItem> = {}): Record<string, unknown> {

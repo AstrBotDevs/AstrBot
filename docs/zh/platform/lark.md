@@ -68,7 +68,7 @@
 ### `webhook` 将事件发送至开发者服务器方式
 
 > [!TIP]
-> 为了更好地使用这种方式，请先参考 [统一 Webhook 模式](/zh/use/unified-webhook.md#如何使用统一-webhook-模式) 做好相关配置。
+> 为了更好地使用这种方式，请先参考 [统一 Webhook 模式](/use/unified-webhook.html) 做好相关配置。
 
 在点击 `保存` 后，机器人卡片会显示「查看 Webhook 链接」，点击查看，复制回调 URL。
 

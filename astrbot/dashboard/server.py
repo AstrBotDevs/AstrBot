@@ -22,6 +22,8 @@ from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
 from quart.typing import ResponseReturnValue
 from quart_cors import cors
+from werkzeug.exceptions import MethodNotAllowed, NotFound
+from werkzeug.routing import Map, Rule
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -31,6 +33,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
 
+from .plugin_page_auth import PluginPageAuth
 from .routes import (
     ApiKeyRoute,
     AuthRoute,
@@ -61,6 +64,7 @@ from .routes import (
     UpdateRoute,
 )
 from .routes.api_key import ALL_OPEN_API_SCOPES
+from .routes.auth import DASHBOARD_JWT_COOKIE_NAME
 from .routes.route import is_runtime_request_ready, runtime_loading_response
 
 # Static assets shipped inside the wheel (built during `hatch build`).
@@ -101,6 +105,43 @@ APP: Quart
 _ENV_PLACEHOLDER_RE = re.compile(
     r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*))?\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))",
 )
+
+
+def _normalize_plugin_api_route(route: str) -> str:
+    route = route.strip()
+    if not route.startswith("/"):
+        route = f"/{route}"
+    return route
+
+
+def _match_registered_web_api(registered_web_apis, subpath: str, method: str):
+    request_path = f"/{subpath.lstrip('/')}"
+    request_method = method.upper()
+
+    for route, view_handler, methods, _ in registered_web_apis:
+        allowed_methods = [item.upper() for item in methods]
+        if request_method not in allowed_methods:
+            continue
+
+        url_map = Map(
+            [
+                Rule(
+                    _normalize_plugin_api_route(route),
+                    endpoint="plugin_api",
+                    methods=allowed_methods,
+                ),
+            ]
+        )
+        try:
+            _, path_values = url_map.bind("").match(
+                request_path,
+                method=request_method,
+            )
+        except (MethodNotAllowed, NotFound):
+            continue
+        return view_handler, path_values
+
+    return None
 
 
 def _parse_env_bool(value: str | None, default: bool) -> bool:
@@ -178,7 +219,6 @@ class AstrBotDashboard:
         self.context = RouteContext(self.config, self.app)
 
         self._init_routes(db)
-        self._init_plugin_route_index()
         self._init_jwt_secret()
 
     def _check_webui_enabled(self) -> bool:
@@ -342,23 +382,6 @@ class AstrBotDashboard:
             methods=["GET", "POST"],
         )
 
-    def _init_plugin_route_index(self):
-        """将插件路由索引,避免 O(n) 查找"""
-        self._plugin_route_map: dict[tuple[str, str], Callable] = {}
-        star_context = self.core_lifecycle.star_context
-        if star_context is None:
-            return
-        if star_context._registered_web_apis is None:
-            star_context._registered_web_apis = []
-        for (
-            route,
-            handler,
-            methods,
-            _,
-        ) in star_context._registered_web_apis:
-            for method in methods:
-                self._plugin_route_map[(route, method)] = handler
-
     def _init_jwt_secret(self):
         dashboard_cfg = self.config.setdefault("dashboard", {})
         if not dashboard_cfg.get("jwt_secret"):
@@ -411,6 +434,23 @@ class AstrBotDashboard:
             )
         return None
 
+    async def srv_plug_route(self, subpath, *args, **kwargs):
+        """插件路由"""
+        registered_web_apis = self.core_lifecycle.star_context._registered_web_apis
+        matched_api = _match_registered_web_api(
+            registered_web_apis,
+            subpath,
+            request.method,
+        )
+        if matched_api:
+            view_handler, path_values = matched_api
+            try:
+                return await view_handler(*args, **{**kwargs, **path_values})
+            except Exception:
+                logger.exception("插件 Web API 执行异常")
+                return jsonify(Response().error("插件 Web API 执行异常").to_json())
+        return jsonify(Response().error("未找到该路由").to_json())
+
     async def auth_middleware(self):
         # 放行CORS预检请求
         if request.method == "OPTIONS":
@@ -457,7 +497,15 @@ class AstrBotDashboard:
                 return guard_resp
             return None
 
-        if any(request.path.startswith(p) for p in self.ALLOWED_ENDPOINT_PREFIXES):
+        allowed_endpoints = [
+            "/api/auth/login",
+            "/api/auth/logout",
+            "/api/file",
+            "/api/platform/webhook",
+            "/api/stat/start-time",
+            "/api/backup/download",  # 备份下载使用 URL 参数传递 token
+        ]
+        if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             guard_resp = self._maybe_runtime_guard(
                 request.path,
                 include_failure_details=False,
@@ -465,19 +513,30 @@ class AstrBotDashboard:
             if guard_resp is not None:
                 return guard_resp
             return None
-
-        token = request.headers.get("Authorization")
+        is_plugin_page_path = PluginPageAuth.is_protected_path(request.path)
+        token = self._extract_dashboard_jwt()
+        if not token and is_plugin_page_path:
+            token = PluginPageAuth.extract_asset_token()
         if not token:
-            return self._unauthorized("未授权")
-
+            r = jsonify(Response().error("未授权").to_json())
+            r.status_code = 401
+            return r
         try:
-            payload = jwt.decode(
-                token.removeprefix("Bearer "),
-                self._jwt_secret,
-                algorithms=["HS256"],
-                options={"require": ["username"]},
-            )
-            g.username = payload["username"]
+            payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
+            if PluginPageAuth.is_asset_token(
+                payload
+            ) and not PluginPageAuth.is_scope_valid(
+                payload,
+                request.path,
+            ):
+                r = jsonify(Response().error("Token 无效").to_json())
+                r.status_code = 401
+                return r
+
+            username = payload.get("username")
+            if not isinstance(username, str) or not username.strip():
+                raise jwt.InvalidTokenError("missing username in token payload")
+            g.username = username
         except jwt.ExpiredSignatureError:
             return self._unauthorized("Token 过期")
         except jwt.PyJWTError:
@@ -493,23 +552,18 @@ class AstrBotDashboard:
         r.status_code = 401
         return r
 
-    def _get_plugin_handler(self, subpath: str, method: str) -> Callable | None:
-        handler = self._plugin_route_map.get((f"/{subpath}", method))
-        if handler is not None:
-            return handler
-        self._init_plugin_route_index()
-        return self._plugin_route_map.get((f"/{subpath}", method))
+    @staticmethod
+    def _extract_dashboard_jwt() -> str | None:
+        auth_header = request.headers.get("Authorization", "").strip()
+        if auth_header.startswith("Bearer "):
+            token = auth_header.removeprefix("Bearer ").strip()
+            if token:
+                return token
 
-    async def srv_plug_route(self, subpath: str, *args, **kwargs):
-        handler = self._get_plugin_handler(subpath, request.method)
-        if not handler:
-            return jsonify(Response().error("未找到该路由").to_json())
-
-        try:
-            return await handler(*args, **kwargs)
-        except Exception:
-            logger.exception("插件 Web API 执行异常")
-            return jsonify(Response().error("插件 Web API 执行异常").to_json())
+        cookie_token = request.cookies.get(DASHBOARD_JWT_COOKIE_NAME, "").strip()
+        if cookie_token:
+            return cookie_token
+        return None
 
     @staticmethod
     def _extract_raw_api_key() -> str | None:

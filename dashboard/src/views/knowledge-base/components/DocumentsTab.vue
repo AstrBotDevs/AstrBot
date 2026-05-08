@@ -5,7 +5,7 @@
       <v-btn
         prepend-icon="mdi-upload"
         color="primary"
-        variant="elevated"
+        variant="outlined"
         @click="showUploadDialog = true"
       >
         {{ t("documents.upload") }}
@@ -23,7 +23,7 @@
     </div>
 
     <!-- 文档列表 -->
-    <v-card elevation="2">
+    <v-card variant="outlined">
       <v-data-table
         :headers="headers"
         :items="documents"
@@ -110,8 +110,6 @@
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="closeUploadDialog" />
         </v-card-title>
-
-        <v-divider />
 
         <v-tabs v-model="uploadMode" grow class="mb-4">
           <v-tab value="file">
@@ -364,8 +362,6 @@
           </div>
         </v-card-text>
 
-        <v-divider />
-
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn
@@ -407,7 +403,6 @@
             {{ t("documents.deleteWarning") }}
           </v-alert>
         </v-card-text>
-        <v-divider />
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn variant="text" @click="showDeleteDialog = false"> 取消 </v-btn>

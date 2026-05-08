@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from "vue";
+import { ref, computed, watch, onBeforeUnmount, onMounted } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "@/utils/request";
 import Logo from "@/components/shared/Logo.vue";
+import { md5 } from "js-md5";
 import { useAuthStore } from "@/stores/auth";
 import { useCommonStore } from "@/stores/common";
 import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
@@ -12,15 +13,19 @@ import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
 import { router } from "@/router";
 import { useRoute } from "vue-router";
+import { useTheme } from "vuetify";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
+import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 
 enableKatex();
 enableMermaid();
 
 const customizer = useCustomizerStore();
+const commonStore = useCommonStore();
+const theme = useTheme();
 const authStore = useAuthStore();
 const { t } = useI18n();
 
@@ -43,6 +48,7 @@ const changeLanguage = async (langCode: string) => {
 
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
+const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
 const dialog = ref(false);
 const accountWarning = ref(false);
 const updateStatusDialog = ref(false);
@@ -61,6 +67,9 @@ const dashboardCurrentVersion = ref("");
 const releases = ref([]);
 const updatingDashboardLoading = ref(false);
 const installLoading = ref(false);
+const status = ref("");
+const version = ref("");
+const mainMenuOpen = ref(false);
 const isDesktopReleaseMode = ref(
   typeof window !== "undefined" && !!window.astrbotDesktop?.isDesktop,
 );
@@ -71,6 +80,10 @@ const desktopUpdateHasNewVersion = ref(false);
 const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
+
+const isChatPath = computed(
+  () => route.path === "/chat" || route.path.startsWith("/chat/"),
+);
 
 const getAppUpdaterBridge = (): NonNullable<
   Window["astrbotAppUpdater"]
@@ -309,6 +322,7 @@ const isPreRelease = (version: string) => {
 // 退出登录
 function handleLogout() {
   if (confirm(t("core.common.dialog.confirmMessage"))) {
+    axios.post("/api/auth/logout").catch(() => undefined);
     authStore.logout();
   }
 }
@@ -319,11 +333,17 @@ async function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
+  const passwordHash = password.value ? md5(password.value) : "";
+  const newPasswordHash = newPassword.value ? md5(newPassword.value) : "";
+  const confirmPasswordHash = confirmPassword.value
+    ? md5(confirmPassword.value)
+    : "";
+
   axios
     .post("/api/auth/account/edit", {
-      password: password.value,
-      new_password: newPassword.value,
-      confirm_password: confirmPassword.value,
+      password: passwordHash,
+      new_password: newPasswordHash,
+      confirm_password: confirmPasswordHash,
       new_username: newUsername.value ? newUsername.value : username,
     })
     .then((res) => {
@@ -365,6 +385,10 @@ function getVersion() {
     .then((res) => {
       botCurrVersion.value = "v" + res.data.data.version;
       dashboardCurrentVersion.value = res.data.data?.dashboard_version;
+      commonStore.setAstrBotVersion(
+        res.data.data.version,
+        res.data.data?.dashboard_version,
+      );
       const change_pwd_hint = res.data.data?.change_pwd_hint;
       if (change_pwd_hint) {
         dialog.value = true;
@@ -472,6 +496,7 @@ function updateDashboard() {
 // 修改：使用状态管理切换主题
 function toggleTheme() {
   customizer.TOGGLE_DARK_MODE();
+  theme.global.name.value = customizer.uiTheme;
 }
 
 function autoSwitchTheme() {
@@ -520,12 +545,32 @@ function handleLogoClick() {
 getVersion();
 checkUpdate();
 
-const commonStore = useCommonStore();
 commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 onBeforeUnmount(() => {
   commonStore.closeEventSourcet();
+});
+
+onMounted(async () => {
+  const runtimeInfo = await getDesktopRuntimeInfo();
+  isDesktopReleaseMode.value = runtimeInfo.isDesktopRuntime;
+  if (isDesktopReleaseMode.value) {
+    dashboardHasNewVersion.value = false;
+  }
+
+  // 初次加载时保存当前路由
+  if (typeof window !== "undefined") {
+    if (isChatPath.value) {
+      const parts = route.fullPath.split("/");
+      const sessionId = parts[2];
+      if (sessionId) {
+        sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
+      }
+    } else {
+      sessionStorage.setItem(LAST_BOT_ROUTE_KEY, route.fullPath);
+    }
+  }
 });
 
 // 视图模式切换
@@ -627,7 +672,7 @@ const isChristmas = computed(() => {
         class="logo-container"
         :class="{
           'mobile-logo': $vuetify.display.xs,
-          'chat-mode-logo': customizer.viewMode === 'chat',
+          'chat-mode-logo': customizer.viewMode === 'chat' || isChatPath,
         }"
         @click="handleLogoClick"
       >
@@ -680,7 +725,7 @@ const isChristmas = computed(() => {
       </div>
 
       <!-- 功能菜单 -->
-      <StyledMenu offset="12" location="bottom end">
+      <StyledMenu v-model="mainMenuOpen" offset="12" location="bottom end">
         <template #activator="{ props: activatorProps }">
           <v-btn
             v-bind="activatorProps"

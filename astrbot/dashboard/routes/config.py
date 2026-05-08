@@ -267,6 +267,8 @@ def save_config(
     """验证并保存配置"""
     errors = None
     logger.info(f"Saving config, is_core={is_core}")
+
+    # Snapshot old Computer config for change detection
     if is_core:
         _log_computer_config_changes(dict(config), post_config)
     try:
@@ -1337,7 +1339,7 @@ class ConfigRoute(Route):
         }
 
     async def _get_plugin_config(self, plugin_name: str):
-        ret: dict = {"metadata": None, "config": None}
+        ret: dict = {"metadata": None, "config": None, "i18n": {}}
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:
                 if not plugin_md.config:
@@ -1350,6 +1352,7 @@ class ConfigRoute(Route):
                         "items": plugin_md.config.schema,
                     },
                 }
+                ret["i18n"] = plugin_md.i18n
                 break
         return ret
 

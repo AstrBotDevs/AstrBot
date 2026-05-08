@@ -77,16 +77,10 @@
                     hide-details
                   />
                 </template>
-
-                <v-list-item-title>{{ plugin.name }}</v-list-item-title>
+                <v-list-item-title>{{ pluginDisplayName(plugin) }}</v-list-item-title>
                 <v-list-item-subtitle>
-                  {{ plugin.desc || tm("pluginSetSelector.noDescription") }}
-                  <v-chip
-                    v-if="!plugin.activated"
-                    size="x-small"
-                    color="grey"
-                    class="ml-1"
-                  >
+                  {{ pluginDescription(plugin) || tm("pluginSetSelector.noDescription") }}
+                  <v-chip v-if="!plugin.activated" size="x-small" color="grey" class="ml-1">
                     {{ tm("pluginSetSelector.notActivated") }}
                   </v-chip>
                 </v-list-item-subtitle>
@@ -126,6 +120,7 @@
 import { ref, computed, watch } from "vue";
 import axios from "@/utils/request";
 import { useModuleI18n } from "@/i18n/composables";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const props = defineProps({
   modelValue: {
@@ -144,6 +139,7 @@ const props = defineProps({
 
 const emit = defineEmits(["update:modelValue"]);
 const { tm } = useModuleI18n("core.shared");
+const { pluginName, pluginDesc } = usePluginI18n();
 
 interface PluginEntry {
   name: string;
@@ -157,6 +153,9 @@ const pluginList = ref<PluginEntry[]>([]);
 const loading = ref(false);
 const selectionMode = ref("custom"); // 'all', 'none', 'custom'
 const selectedPlugins = ref<string[]>([]);
+
+const pluginDisplayName = (plugin) => pluginName(plugin) || plugin.name
+const pluginDescription = (plugin) => pluginDesc(plugin)
 
 // 判断是否为"所有插件"模式
 const isAllPlugins = computed(() => {

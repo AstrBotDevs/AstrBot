@@ -181,6 +181,7 @@
                 <v-list-item-title>{{ entry.model }}</v-list-item-title>
                 <v-list-item-subtitle
                   class="provider-model-subtitle d-flex align-center ga-1"
+
                 >
                   <span>{{ entry.model }}</span>
                   <v-icon
@@ -356,6 +357,7 @@ const isProviderTesting = (providerId) =>
 
 .provider-models-actions {
   margin-left: auto;
+
   display: flex;
   align-items: center;
   gap: 6px;

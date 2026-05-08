@@ -2,8 +2,10 @@
 import { ref, computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const { tm } = useModuleI18n("features/extension");
+const { pluginShortDesc } = usePluginI18n();
 
 const props = defineProps({
   plugin: {
@@ -20,7 +22,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["install"]);
+const emit = defineEmits(["install", "open"]);
 
 const normalizePlatformList = (platforms) => {
   if (!Array.isArray(platforms)) return [];
@@ -31,13 +33,28 @@ const platformDisplayList = computed(() =>
   normalizePlatformList(props.plugin?.support_platforms),
 );
 
+const cardDescription = computed(() =>
+  pluginShortDesc(props.plugin, props.plugin?.short_desc || props.plugin?.desc || ""),
+);
+
 const handleInstall = (plugin) => {
   emit("install", plugin);
 };
+
+const handleOpen = () => {
+  emit("open", props.plugin);
+};
+
 </script>
 
 <template>
-  <v-card class="rounded-lg d-flex flex-column plugin-card" elevation="0">
+  <v-card
+    class="rounded-lg d-flex flex-column plugin-card"
+    variant="outlined"
+    elevation="0"
+    :ripple="false"
+    @click="handleOpen"
+  >
     <v-card-text class="plugin-card-content">
       <div class="plugin-cover">
         <img
@@ -66,6 +83,15 @@ const handleInstall = (plugin) => {
             class="market-recommended-chip"
           >
             {{ tm("market.recommended") }}
+          </v-chip>
+          <v-chip
+            v-if="plugin?.astrbot_compatible === false"
+            color="error"
+            size="x-small"
+            label
+            class="market-incompatible-chip"
+          >
+            {{ tm("status.incompatible") }}
           </v-chip>
         </div>
 
@@ -125,27 +151,7 @@ const handleInstall = (plugin) => {
         </div>
 
         <div class="text-caption plugin-description">
-          {{ plugin.desc }}
-        </div>
-
-        <div
-          v-if="plugin.astrbot_version || platformDisplayList.length"
-          class="plugin-badges"
-        >
-          <v-chip
-            v-if="plugin.astrbot_version"
-            size="x-small"
-            color="secondary"
-            variant="outlined"
-            style="height: 20px"
-          >
-            AstrBot: {{ plugin.astrbot_version }}
-          </v-chip>
-          <PluginPlatformChip
-            :platforms="plugin.support_platforms"
-            size="x-small"
-            :chip-style="{ height: '20px' }"
-          />
+          {{ cardDescription }}
         </div>
 
         <div class="plugin-stats" />
@@ -156,45 +162,26 @@ const handleInstall = (plugin) => {
       style="gap: 6px; padding: 8px 12px; padding-top: 0"
       @click.stop
     >
-      <v-chip
-        v-for="tag in plugin.tags?.slice(0, 2)"
-        :key="tag"
-        :color="tag === 'danger' ? 'error' : 'primary'"
-        label
-        size="x-small"
-        style="height: 20px"
+      <div
+        v-if="platformDisplayList.length || (plugin.tags && plugin.tags.length)"
+        class="plugin-badges"
       >
-        {{ tag === "danger" ? tm("tags.danger") : tag }}
-      </v-chip>
-      <v-menu
-        v-if="plugin.tags && plugin.tags.length > 2"
-        open-on-hover
-        offset-y
-      >
-        <template #activator="{ props: menuProps }">
-          <v-chip
-            v-bind="menuProps"
-            color="grey"
-            label
-            size="x-small"
-            style="height: 20px; cursor: pointer"
-          >
-            +{{ plugin.tags.length - 2 }}
-          </v-chip>
-        </template>
-        <v-list density="compact">
-          <v-list-item v-for="tag in plugin.tags.slice(2)" :key="tag">
-            <v-chip
-              :color="tag === 'danger' ? 'error' : 'primary'"
-              label
-              size="small"
-            >
-              {{ tag === "danger" ? tm("tags.danger") : tag }}
-            </v-chip>
-          </v-list-item>
-        </v-list>
-      </v-menu>
-      <v-spacer />
+        <v-chip
+          v-for="tag in plugin.tags"
+          :key="tag"
+          :color="tag === 'danger' ? 'error' : 'primary'"
+          label
+          size="x-small"
+        >
+          {{ tag === "danger" ? tm("tags.danger") : tag }}
+        </v-chip>
+        <PluginPlatformChip
+          :platforms="plugin.support_platforms"
+          size="x-small"
+          :chip-style="{ height: '20px' }"
+        />
+      </div>
+      <v-spacer></v-spacer>
       <v-btn
         v-if="plugin?.repo"
         color="secondary"
@@ -235,6 +222,22 @@ const handleInstall = (plugin) => {
 </template>
 
 <style scoped>
+.plugin-card {
+  background: rgb(var(--v-theme-surface));
+  cursor: pointer;
+  transition: background-color 0.16s ease;
+}
+
+.plugin-card:hover,
+.plugin-card:focus-within {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+
+.plugin-card :deep(.v-card__overlay),
+.plugin-card :deep(.v-ripple__container) {
+  display: none;
+}
+
 .plugin-card-content {
   padding: 12px;
   padding-bottom: 8px;
@@ -283,6 +286,12 @@ const handleInstall = (plugin) => {
   height: 20px;
 }
 
+.market-incompatible-chip {
+  flex-shrink: 0;
+  font-weight: 700;
+  height: 20px;
+}
+
 .plugin-title {
   line-height: 1.3;
   font-size: 1rem;
@@ -304,11 +313,11 @@ const handleInstall = (plugin) => {
   flex: 1;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
-  min-height: calc(1.3em * 3);
-  max-height: calc(1.3em * 3);
+  min-height: calc(1.3em * 2);
+  max-height: calc(1.3em * 2);
 }
 
 .plugin-badges {

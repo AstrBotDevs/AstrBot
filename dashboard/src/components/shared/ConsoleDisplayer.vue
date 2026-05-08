@@ -27,16 +27,7 @@
       ></v-btn>
     </div>
 
-    <div
-      id="term"
-      style="
-        background-color: #1e1e1e;
-        padding: 16px;
-        border-radius: 8px;
-        overflow-y: auto;
-        height: 100%;
-      "
-    ></div>
+    <div id="term" class="console-term"></div>
   </div>
 </template>
 
@@ -47,10 +38,7 @@ import { EventSourcePolyfill } from "event-source-polyfill";
 
 declare module "event-source-polyfill" {
   export class EventSourcePolyfill {
-    constructor(
-      url: string,
-      options?: Record<string, unknown>,
-    );
+    constructor(url: string, options?: Record<string, unknown>);
     onopen: (() => void) | null;
     onmessage: ((event: MessageEvent) => void) | null;
     onerror: ((event: { status?: number }) => void) | null;
@@ -152,12 +140,16 @@ export default {
 
       const token = localStorage.getItem("token");
 
-      this.eventSource = new EventSourcePolyfill(resolveApiUrl("/api/live-log"), {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : "",
+      this.eventSource = new EventSourcePolyfill(
+        resolveApiUrl("/api/live-log"),
+        {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+          heartbeatTimeout: 300000,
+          withCredentials: true,
         },
-        heartbeatTimeout: 300000,
-      });
+      );
 
       this.eventSource.onopen = () => {
         console.info("日志流连接成功！");
@@ -194,7 +186,9 @@ export default {
         }
 
         if (this.retryAttempts >= this.maxRetryAttempts) {
-          console.error("❌ 已达到最大重试次数，停止重连。请刷新页面重试。");
+          console.error(
+            "❌ 已达到最大重试次数，停止重连。请刷新页面重试。",
+          );
           return;
         }
 
@@ -318,6 +312,38 @@ export default {
       this.isFullscreen = !!document.fullscreenElement;
     },
 
+    appendLogContent(element: HTMLElement, log: string) {
+      const levelMatch = log.match(
+        /\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/,
+      );
+      if (!levelMatch) {
+        element.innerText = `${log}`;
+        return;
+      }
+
+      const levelStart = levelMatch.index!;
+      const levelEnd = levelStart + levelMatch[0].length;
+      const prefix = log.slice(0, levelStart).trimEnd();
+      const message = log.slice(levelEnd).trimStart();
+
+      const prefixSpan = document.createElement("span");
+      prefixSpan.className = "console-log-prefix";
+      prefixSpan.innerText = prefix;
+
+      const levelSpan = document.createElement("span");
+      levelSpan.className = "console-log-level";
+      levelSpan.innerText = levelMatch[0];
+
+      const messageSpan = document.createElement("span");
+      messageSpan.className = "console-log-message";
+      messageSpan.innerText = message;
+
+      element.classList.add("console-log-line--structured");
+      element.appendChild(prefixSpan);
+      element.appendChild(levelSpan);
+      element.appendChild(messageSpan);
+    },
+
     printLog(log: string) {
       const ele = document.getElementById("term");
       if (!ele) {
@@ -336,7 +362,7 @@ export default {
 
       span.style = style;
       span.classList.add("console-log-line", "fade-in");
-      span.innerText = `${log}`;
+      this.appendLogContent(span, log);
       ele.appendChild(span);
       if (this.autoScroll) {
         ele.scrollTop = ele.scrollHeight;
@@ -364,7 +390,14 @@ export default {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
-  margin-left: 20px;
+}
+
+.console-term {
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
 }
 
 .fullscreen-btn {
@@ -373,12 +406,35 @@ export default {
 
 :deep(.console-log-line) {
   display: block;
-  margin-bottom: 2px;
+  margin: 0 0 2px;
   font-family:
     SFMono-Regular, Menlo, Monaco, Consolas, var(--astrbot-font-cjk-mono),
     monospace;
   font-size: 12px;
   white-space: pre-wrap;
+}
+
+:deep(.console-log-line--structured) {
+  display: grid;
+  grid-template-columns: max-content 10ch minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
+  white-space: normal;
+}
+
+:deep(.console-log-prefix),
+:deep(.console-log-level),
+:deep(.console-log-message) {
+  min-width: 0;
+  white-space: pre-wrap;
+}
+
+:deep(.console-log-level) {
+  font-variant-numeric: tabular-nums;
+}
+
+:deep(.console-log-message) {
+  overflow-wrap: anywhere;
 }
 
 :deep(.fade-in) {

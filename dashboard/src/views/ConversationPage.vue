@@ -776,28 +776,68 @@ export default defineComponent({
 
     // 将对话历史转换为 MessageList 组件期望的格式
     formattedMessages() {
-      return this.conversationHistory.map((msg) => {
-        console.info("处理消息:", msg.role, msg.content);
-
-        // 将消息内容转换为 MessagePart[] 格式
-        const messageParts = this.convertContentToMessageParts(msg.content);
-
-        if (msg.role === "user") {
-          return {
-            content: {
-              type: "user",
-              message: messageParts,
-            },
-          };
-        } else {
-          return {
-            content: {
-              type: "bot",
-              message: messageParts,
-            },
-          };
+      // 按 tool_call_id 索引 tool 角色消息的执行结果
+      const toolResultsById: Record<string, unknown> = {};
+      for (const msg of this.conversationHistory) {
+        if (msg.role === "tool" && (msg as Record<string, unknown>).tool_call_id) {
+          toolResultsById[(msg as Record<string, unknown>).tool_call_id as string] = msg.content;
         }
-      });
+      }
+
+      return this.conversationHistory
+        // tool / system 等非聊天角色不直接渲染为气泡，避免大文本走 markdown 路径卡死页面
+        .filter((msg) => msg.role === "user" || msg.role === "assistant")
+        .map((msg) => {
+          console.info("处理消息:", msg.role, msg.content);
+
+          const messageParts = this.convertContentToMessageParts(msg.content)
+            // 丢弃 convertContentToMessageParts 兜底插入的空 plain，避免 assistant 仅有工具调用时渲染空气泡
+            .filter(
+              (part) =>
+                part.type !== "plain" || (part.text && part.text.trim()),
+            );
+
+          // 把 OpenAI 风格的 assistant.tool_calls 转成 MessageList 已支持的 tool_call part
+          if (
+            msg.role === "assistant" &&
+            Array.isArray((msg as Record<string, unknown>).tool_calls) &&
+            ((msg as Record<string, unknown>).tool_calls as unknown[]).length
+          ) {
+            const toolCalls = ((msg as Record<string, unknown>).tool_calls as unknown[]).map(
+              (tc: unknown) => {
+                const tcObj = tc as Record<string, unknown>;
+                const fn = (tcObj.function || {}) as Record<string, unknown>;
+                return {
+                  id: tcObj.id,
+                  name: (fn.name || tcObj.name) as string,
+                  args: (fn.arguments ?? tcObj.arguments) as string,
+                  result:
+                    toolResultsById[tcObj.id as string],
+                  // 历史回放无真实耗时数据：
+                  // ts: 0  → ToolCallCard.toolCallDuration 在 startTime<=0 时早退，跳过时长显示
+                  // finished_ts: 1 → MessageList.toolCallStatusText 视为已完成（避免误显示"运行中"）
+                  ts: 0,
+                  finished_ts: 1,
+                };
+              },
+            );
+            messageParts.push({
+              type: "tool_call",
+              tool_calls: toolCalls,
+            } as unknown as MessageContentPart);
+          }
+
+          const finalParts = messageParts.length
+            ? messageParts
+            : [{ type: "plain", text: "" }];
+
+          return {
+            content: {
+              type: msg.role === "user" ? "user" : "bot",
+              message: finalParts,
+            },
+          };
+        });
     },
   },
 
@@ -1477,6 +1517,18 @@ export default defineComponent({
   padding: 8px;
   border-radius: 8px;
   background-color: #f9f9f9;
+}
+
+/* 让 ToolCallCard 内部的 args/result 自然展开，由外层容器统一滚动，避免双滚动条 */
+.conversation-messages-container .detail-json,
+.conversation-messages-container .detail-result {
+    max-height: none;
+    overflow: visible;
+}
+
+/* 历史回放无真实状态数据，隐藏 IPython 工具的"已完成"标签，与其它工具卡片保持一致 */
+.conversation-messages-container .tool-call-inline-status {
+    display: none;
 }
 
 /* 暗色模式下的聊天消息容器 */

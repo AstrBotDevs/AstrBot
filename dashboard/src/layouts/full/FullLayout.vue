@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from "vue-router";
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import axios from "@/utils/request";
 import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
 import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
@@ -9,33 +9,41 @@ import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import Chat from "@/components/chat/Chat.vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
+import { useCommonStore } from "@/stores/common";
 import { useI18n } from "@/i18n/composables";
 
 const FIRST_NOTICE_SEEN_KEY = "astrbot:first_notice_seen:v1";
 
 const customizer = useCustomizerStore();
+const commonStore = useCommonStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
+const isCurrentChatRoute = computed(
+  () => route.path === "/chat" || route.path.startsWith("/chat/"),
+);
+const shouldMountChat = ref(isCurrentChatRoute.value);
 
-const isChatPage = computed(() => {
-  return route.path.startsWith("/chat");
-});
-
-const showSidebar = computed(() => {
-  return customizer.viewMode === "bot";
-});
-
-const showChatPage = computed(() => {
-  return customizer.viewMode === "chat";
-});
+const showSidebar = computed(() => !isCurrentChatRoute.value);
 
 const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
 const showFirstNoticeDialog = ref(false);
 
+watch(isCurrentChatRoute, (isChatRoute) => {
+  if (isChatRoute) {
+    shouldMountChat.value = true;
+  }
+});
+
 const checkMigration = async (): Promise<boolean> => {
   try {
     const response = await axios.get("/api/stat/version");
+    if (response.data.status === "ok") {
+      commonStore.setAstrBotVersion(
+        response.data.data?.version,
+        response.data.data?.dashboard_version,
+      );
+    }
     if (response.data.status === "ok" && response.data.data.need_migration) {
       if (
         migrationDialog.value &&
@@ -43,7 +51,7 @@ const checkMigration = async (): Promise<boolean> => {
       ) {
         const result = await migrationDialog.value.open();
         if (result.success) {
-          console.info("Migration completed successfully:", result.message);
+          console.log("Migration completed successfully:", result.message);
           window.location.reload();
         }
       }
@@ -120,34 +128,35 @@ onMounted(() => {
       <VerticalSidebarVue v-if="showSidebar" />
       <v-main
         :style="{
-          height: showChatPage ? 'calc(100vh - 55px)' : undefined,
-          overflow: showChatPage ? 'hidden' : undefined,
+          height: isCurrentChatRoute ? 'calc(100vh - 55px)' : undefined,
+          overflow: isCurrentChatRoute ? 'hidden' : undefined,
         }"
       >
         <v-container
           fluid
           class="page-wrapper"
-          :class="{ 'chat-mode-container': showChatPage }"
+          :class="{ 'chat-mode-container': isCurrentChatRoute }"
           :style="{
-            height: showChatPage ? '100%' : 'calc(100% - 8px)',
-            padding: isChatPage || showChatPage ? '0' : undefined,
-            minHeight: showChatPage ? 'unset' : undefined,
+            height: isCurrentChatRoute ? '100%' : 'calc(100% - 8px)',
+            padding: isCurrentChatRoute ? '0' : undefined,
+            minHeight: isCurrentChatRoute ? 'unset' : undefined,
           }"
         >
           <div
             :style="{
               height: '100%',
               width: '100%',
-              overflow: showChatPage ? 'hidden' : undefined,
+              overflow: isCurrentChatRoute ? 'hidden' : undefined,
             }"
           >
             <div
-              v-if="showChatPage"
+              v-if="shouldMountChat"
+              v-show="isCurrentChatRoute"
               style="height: 100%; width: 100%; overflow: hidden"
             >
-              <Chat />
+              <Chat :active="isCurrentChatRoute" />
             </div>
-            <RouterView v-else />
+            <RouterView v-if="!isCurrentChatRoute" />
           </div>
         </v-container>
       </v-main>

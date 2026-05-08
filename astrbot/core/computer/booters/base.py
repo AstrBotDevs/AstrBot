@@ -50,9 +50,15 @@ class ComputerBooter(abc.ABC):
 
     async def boot(self, session_id: str) -> None: ...
 
-    @abc.abstractmethod
-    async def shutdown(self) -> None:
-        raise NotImplementedError("Subclass must implement shutdown method")
+    async def shutdown(self, **kwargs) -> None:
+        """Shut down the computer sandbox.
+
+        Subclasses may accept extra keyword arguments for
+        type-specific cleanup (e.g. ``delete_sandbox`` for
+        ShipyardNeoBooter).  The default implementation ignores
+        them.
+        """
+        ...
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to the computer.

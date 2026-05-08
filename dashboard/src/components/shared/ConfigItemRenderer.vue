@@ -124,10 +124,14 @@
       />
     </div>
 
-    <v-combobox
+    <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
       :model-value="modelValue"
-      :items="itemMeta.options"
+      @update:model-value="val => { emitUpdate(val); listSearchText = '' }"
+      v-model:search="listSearchText"
+      :items="listSelectItems"
+      item-title="title"
+      item-value="value"
       :disabled="itemMeta?.readonly"
       density="compact"
       variant="outlined"
@@ -135,7 +139,6 @@
       hide-details
       chips
       multiple
-      @update:model-value="emitUpdate"
     />
 
     <v-select
@@ -192,7 +195,7 @@
     >
       <v-slider
         v-if="itemMeta?.slider"
-        :model-value="toNumber(modelValue)"
+        :model-value="toNumber(numericTemp ?? modelValue)"
         :min="itemMeta?.slider?.min ?? 0"
         :max="itemMeta?.slider?.max ?? 100"
         :step="itemMeta?.slider?.step ?? 1"
@@ -200,11 +203,12 @@
         density="compact"
         hide-details
         style="flex: 1"
-        @update:model-value="(val) => emitUpdate(toNumber(val))"
+        @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
+        @end="numericTemp = null"
       />
       <v-text-field
         :model-value="numericTemp ?? modelValue"
-        @update:model-value="(val) => (numericTemp = val)"
+        @update:model-value="val => (numericTemp = val)"
         @blur="
           () => {
             if (numericTemp != null) {
@@ -259,13 +263,16 @@
       />
     </div>
 
-    <div v-else-if="itemMeta?.type === 'dict'" class="config-field">
-      <ObjectEditor
-        :model-value="modelValue"
-        :item-meta="itemMeta"
-        @update:model-value="emitUpdate"
-      />
-    </div>
+    <ObjectEditor
+      v-else-if="itemMeta?.type === 'dict'"
+      :model-value="modelValue"
+      :item-meta="itemMeta"
+      :plugin-name="pluginName"
+      :plugin-i18n="pluginI18n"
+      :config-key="configKey"
+      @update:model-value="emitUpdate"
+      class="config-field"
+    />
 
     <v-text-field
       v-else
@@ -280,7 +287,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, type PropType } from "vue";
+import { ref, computed, type PropType } from "vue";
 
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import ListConfigItem from "./ListConfigItem.vue";
@@ -292,6 +299,7 @@ import KnowledgeBaseSelector from "./KnowledgeBaseSelector.vue";
 import PluginSetSelector from "./PluginSetSelector.vue";
 import T2ITemplateEditor from "./T2ITemplateEditor.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 interface SliderConfig {
   min: number;
@@ -316,6 +324,9 @@ interface ItemMeta {
   [key: string]: unknown;
 }
 
+const numericTemp = ref<number | null>(null);
+const listSearchText = ref("");
+
 const props = defineProps({
   modelValue: {
     type: [String, Number, Boolean, Array, Object],
@@ -328,6 +339,10 @@ const props = defineProps({
   pluginName: {
     type: String,
     default: "",
+  },
+  pluginI18n: {
+    type: Object,
+    default: () => ({}),
   },
   configKey: {
     type: String,
@@ -350,12 +365,17 @@ const emit = defineEmits([
 ]);
 const { t } = useI18n();
 const { getRaw } = useModuleI18n("features/config-metadata");
-
-const numericTemp = ref<number | null>(null);
+const { configText } = usePluginI18n();
 
 function emitUpdate(val: unknown) {
   emit("update:modelValue", val);
 }
+
+const listSelectItems = computed(() =>
+  props.itemMeta?.type === "list" && props.itemMeta?.options
+    ? getSelectItems(props.itemMeta)
+    : [],
+);
 
 function toNumber(val: unknown): number {
   const n = parseFloat(String(val));
@@ -368,6 +388,22 @@ function getLabel(itemMeta: ItemMeta, index: number, option: unknown): string {
 }
 
 function getTranslatedLabels(itemMeta: ItemMeta): string[] | null {
+  if (
+    props.pluginName &&
+    props.configKey &&
+    props.pluginI18n &&
+    Object.keys(props.pluginI18n).length > 0
+  ) {
+    const translatedLabels = configText(
+      props.pluginI18n,
+      props.configKey,
+      "labels",
+      null,
+    );
+    if (Array.isArray(translatedLabels)) {
+      return translatedLabels as string[];
+    }
+  }
   if (!itemMeta?.labels) return null;
   if (typeof itemMeta.labels === "string") {
     const translatedLabels = getRaw(itemMeta.labels);
@@ -465,5 +501,14 @@ function getSpecialSubtype(value: string | undefined): string {
 
 ::v-deep(.v-field__input) {
   font-size: 14px;
+}
+
+:deep(.config-field input[type="number"]::-webkit-inner-spin-button),
+:deep(.config-field input[type="number"]::-webkit-outer-spin-button) {
+  -webkit-appearance: none;
+}
+
+:deep(.config-field input[type="number"]) {
+  -moz-appearance: textfield;
 }
 </style>

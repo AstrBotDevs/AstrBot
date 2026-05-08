@@ -99,6 +99,7 @@ export const useAuthStore = defineStore("auth", {
       localStorage.removeItem("token");
       localStorage.removeItem("change_pwd_hint");
       localStorage.removeItem("legacy_pwd_hint");
+      void axios.post("/api/auth/logout").catch(() => undefined);
       router.push("/auth/login");
     },
     has_token(): boolean {

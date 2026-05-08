@@ -141,10 +141,13 @@ class LocalPythonComponent(PythonComponent):
                     check=False,
                     timeout=timeout,
                     capture_output=True,
-                    text=True,
                 )
-                stdout = "" if silent else result.stdout
-                stderr = result.stderr if result.returncode != 0 else ""
+                stdout = "" if silent else _decode_shell_output(result.stdout)
+                stderr = (
+                    _decode_shell_output(result.stderr)
+                    if result.returncode != 0
+                    else ""
+                )
                 return {
                     "data": {
                         "output": {"text": stdout, "images": []},

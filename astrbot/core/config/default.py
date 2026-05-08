@@ -1,7 +1,6 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
-from typing import Any, TypedDict
 
 from astrbot.builtin_stars.web_searcher.provider_constants import (
     DEFAULT_WEB_SEARCH_PROVIDER,
@@ -10,7 +9,7 @@ from astrbot.builtin_stars.web_searcher.provider_constants import (
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.23.6"
+VERSION = "4.24.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -115,6 +114,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "websearch_tavily_key": [],
         "websearch_bocha_key": [],
         "websearch_baidu_app_builder_key": "",
+        "websearch_firecrawl_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -294,26 +294,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
     "kb_agentic_mode": False,
     "disable_builtin_commands": False,
+    "disable_metrics": False,
 }
 
-
-class ChatProviderTemplate(TypedDict):
-    id: str
-    provider_source_id: str
-    model: str
-    modalities: list
-    custom_extra_body: dict[str, Any]
-    max_context_tokens: int
-
-
-CHAT_PROVIDER_TEMPLATE = {
-    "id": "",
-    "provide_source_id": "",
-    "model": "",
-    "modalities": [],
-    "custom_extra_body": {},
-    "max_context_tokens": 0,
-}
 
 """
 AstrBot v3 时代的配置元数据，目前仅承担以下功能：
@@ -1940,13 +1923,13 @@ CONFIG_METADATA_2: Any = {
                         "options": ["text", "image", "audio", "tool_use"],
                         "labels": ["文本", "图像", "音频", "工具使用"],
                         "render_type": "checkbox",
-                        "hint": "模型支持的模态。如所填写的模型不支持图像，请取消勾选图像。",
+                        "hint": "模型支持的模态及能力。",
                     },
                     "custom_headers": {
-                        "description": "自定义添加请求头",
+                        "description": "自定义请求头",
                         "type": "dict",
                         "items": {},
-                        "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。",
+                        "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。",
                     },
                     "ollama_disable_thinking": {
                         "description": "关闭思考模式",
@@ -1957,7 +1940,7 @@ CONFIG_METADATA_2: Any = {
                         "description": "自定义请求体参数",
                         "type": "dict",
                         "items": {},
-                        "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
+                        "hint": "用于在请求时添加额外的参数，如 temperature, top_p, max_tokens, reasoning_effort 等。",
                         "template_schema": {
                             "temperature": {
                                 "name": "Temperature",
@@ -2594,7 +2577,7 @@ CONFIG_METADATA_2: Any = {
                     "max_context_tokens": {
                         "description": "模型上下文窗口大小",
                         "type": "int",
-                        "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有），也可手动修改。",
+                        "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有）",
                     },
                     "dify_api_key": {
                         "description": "API Key",
@@ -2905,6 +2888,11 @@ CONFIG_METADATA_2: Any = {
             },
             "callback_api_base": {
                 "type": "string",
+            },
+            "disable_metrics": {
+                "description": "禁用匿名使用统计",
+                "type": "bool",
+                "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。",
             },
             "log_level": {
                 "type": "string",
@@ -3225,6 +3213,7 @@ CONFIG_METADATA_3 = {
                         "hint": "参考：https://console.bce.baidu.com/iam/#/iam/apikey/list",
                         "condition": {
                             "provider_settings.websearch_provider": "baidu_ai_search",
+                            "provider_settings.web_search": True,
                         },
                     },
                     "provider_settings.web_search_link": {
@@ -3508,6 +3497,14 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
+                    "provider_settings.fallback_max_context_tokens": {
+                        "description": "上下文窗口兜底值",
+                        "type": "int",
+                        "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
                 },
                 "condition": {
                     "provider_settings.agent_runner_type": "local",
@@ -3633,11 +3630,6 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "hint": "如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat，则需要 /chat 才会触发 LLM 请求",
                     },
-                    "provider_settings.prompt_prefix": {
-                        "description": "用户提示词",
-                        "type": "string",
-                        "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
-                    },
                     "provider_settings.image_compress_enabled": {
                         "description": "启用图片压缩",
                         "type": "bool",
@@ -3660,6 +3652,12 @@ CONFIG_METADATA_3 = {
                             "provider_settings.image_compress_enabled": True,
                         },
                         "slider": {"min": 1, "max": 100, "step": 1},
+                    },
+                    "provider_settings.prompt_prefix": {
+                        "description": "用户提示词",
+                        "type": "string",
+                        "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
+                        "collapsed": True,
                     },
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",

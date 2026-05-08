@@ -1,8 +1,9 @@
+import asyncio
 import datetime
 import secrets
 
 import jwt
-from quart import request
+from quart import current_app, jsonify, make_response, request
 
 from astrbot import logger
 from astrbot.core import DEMO_MODE
@@ -18,6 +19,9 @@ from astrbot.core.utils.auth_password import (
 
 from .route import Response, Route, RouteContext
 
+DASHBOARD_JWT_COOKIE_NAME = "astrbot_dashboard_jwt"
+DASHBOARD_JWT_COOKIE_MAX_AGE = 7 * 24 * 60 * 60
+
 
 class AuthRoute(Route):
     def __init__(self, context: RouteContext) -> None:
@@ -26,6 +30,7 @@ class AuthRoute(Route):
         self.routes = {
             "/auth/login/challenge": ("POST", self.login_challenge),
             "/auth/login": ("POST", self.login),
+            "/auth/logout": ("POST", self.logout),
             "/auth/account/edit": ("POST", self.edit_account),
         }
         self.register_routes()
@@ -137,18 +142,19 @@ class AuthRoute(Route):
                 )
                 legacy_pwd_hint = True
 
-            return (
-                Response()
-                .ok(
-                    {
-                        "token": self.generate_jwt(stored_username),
-                        "username": stored_username,
-                        "change_pwd_hint": change_pwd_hint,
-                        "legacy_pwd_hint": legacy_pwd_hint,
-                    },
-                )
-                .__dict__
+            token = self.generate_jwt(stored_username)
+            payload = Response().ok(
+                {
+                    "token": token,
+                    "username": stored_username,
+                    "change_pwd_hint": change_pwd_hint,
+                    "legacy_pwd_hint": legacy_pwd_hint,
+                },
             )
+            response = await make_response(jsonify(payload.__dict__))
+            self._set_dashboard_jwt_cookie(response, token)
+            return response
+        await asyncio.sleep(3)
         return Response().error("User not found or incorrect password").__dict__
 
     def _prune_login_challenges(self) -> None:
@@ -168,6 +174,13 @@ class AuthRoute(Route):
             return None
         nonce = challenge.get("nonce")
         return nonce if isinstance(nonce, str) else None
+
+    async def logout(self):
+        response = await make_response(
+            jsonify(Response().ok(None, "已退出登录").__dict__)
+        )
+        self._clear_dashboard_jwt_cookie(response)
+        return response
 
     async def edit_account(self):
         if DEMO_MODE:
@@ -224,3 +237,34 @@ class AuthRoute(Route):
             raise ValueError("JWT secret is not set in the cmd_config.")
         token = jwt.encode(payload, jwt_token, algorithm="HS256")
         return token
+
+    @staticmethod
+    def _use_secure_dashboard_jwt_cookie() -> bool:
+        return bool(
+            current_app.config.get(
+                "DASHBOARD_JWT_COOKIE_SECURE",
+                not current_app.debug and not current_app.testing,
+            )
+        )
+
+    @staticmethod
+    def _set_dashboard_jwt_cookie(response, token: str) -> None:
+        response.set_cookie(
+            DASHBOARD_JWT_COOKIE_NAME,
+            token,
+            max_age=DASHBOARD_JWT_COOKIE_MAX_AGE,
+            httponly=True,
+            samesite="Strict",
+            secure=AuthRoute._use_secure_dashboard_jwt_cookie(),
+            path="/",
+        )
+
+    @staticmethod
+    def _clear_dashboard_jwt_cookie(response) -> None:
+        response.delete_cookie(
+            DASHBOARD_JWT_COOKIE_NAME,
+            httponly=True,
+            samesite="Strict",
+            secure=AuthRoute._use_secure_dashboard_jwt_cookie(),
+            path="/",
+        )

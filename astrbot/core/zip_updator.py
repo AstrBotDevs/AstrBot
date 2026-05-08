@@ -9,7 +9,7 @@ import certifi
 import httpx
 
 from astrbot.core import logger
-from astrbot.core.utils.io import on_error
+from astrbot.core.utils.io import ensure_dir, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
 
@@ -53,13 +53,10 @@ class RepoZipUpdator:
         return body[:max_len] + "...[truncated]"
 
     async def _download_file(
-        self,
-        url: str,
-        path: str,
-        timeout: float = 1800.0,
+        self, url: str, path: str, timeout: float = 1800.0
     ) -> None:
         target_path = Path(path)
-        target_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_dir(target_path.parent)
 
         try:
             async with self._create_httpx_client(timeout=timeout) as client:
@@ -75,8 +72,8 @@ class RepoZipUpdator:
             raise
 
     async def fetch_release_info(self, url: str, latest: bool = True) -> list:
-        """请求版本信息｡
-        返回一个列表,每个元素是一个字典,包含版本号､发布时间､更新内容､commit hash等信息｡
+        """请求版本信息。
+        返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
         """
         try:
             async with self._create_httpx_client() as client:
@@ -114,8 +111,8 @@ class RepoZipUpdator:
         return ret
 
     def github_api_release_parser(self, releases: list) -> list:
-        """解析 GitHub API 返回的 releases 信息｡
-        返回一个列表,每个元素是一个字典,包含版本号､发布时间､更新内容､commit hash等信息｡
+        """解析 GitHub API 返回的 releases 信息。
+        返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
         """
         ret = []
         for release in releases:
@@ -140,16 +137,6 @@ class RepoZipUpdator:
         """Semver 版本比较"""
         return VersionComparator.compare_version(v1, v2)
 
-    def _is_prerelease_version(self, version: str) -> bool:
-        """Check if a version string is a prerelease version."""
-        return bool(
-            re.search(
-                r"[\-_.]?(alpha|beta|rc|dev)[\-_.]?\d*$",
-                version,
-                re.IGNORECASE,
-            ),
-        )
-
     async def check_update(
         self,
         url: str,
@@ -158,16 +145,13 @@ class RepoZipUpdator:
     ) -> ReleaseInfo | None:
         update_data = await self.fetch_release_info(url)
 
-        # Check if current version is a prerelease
-        current_is_prerelease = self._is_prerelease_version(current_version)
-
         sel_release_data = None
         if consider_prerelease:
             tag_name = update_data[0]["tag_name"]
             sel_release_data = update_data[0]
         else:
             for data in update_data:
-                # Skip prerelease versions when not considering them
+                # 跳过带有 alpha、beta 等预发布标签的版本
                 if re.search(
                     r"[\-_.]?(alpha|beta|rc|dev)[\-_.]?\d*$",
                     data["tag_name"],
@@ -182,13 +166,6 @@ class RepoZipUpdator:
             logger.error("未找到合适的发布版本")
             return None
 
-        # If current version is a prerelease and we're comparing against stable,
-        # check if current version is already newer than the latest stable
-        if current_is_prerelease and not self._is_prerelease_version(tag_name):
-            if self.compare_version(current_version, tag_name) >= 0:
-                # Current prerelease version is >= latest stable, no update needed
-                return None
-
         if self.compare_version(current_version, tag_name) >= 0:
             return None
         return ReleaseInfo(
@@ -198,10 +175,7 @@ class RepoZipUpdator:
         )
 
     async def download_from_repo_url(
-        self,
-        target_path: str,
-        repo_url: str,
-        proxy="",
+        self, target_path: str, repo_url: str, proxy=""
     ) -> None:
         author, repo, branch = self.parse_github_url(repo_url)
 
@@ -218,11 +192,11 @@ class RepoZipUpdator:
                 releases = await self.fetch_release_info(url=release_url)
             except Exception as e:
                 logger.warning(
-                    f"获取 {author}/{repo} 的 GitHub Releases 失败: {e},将尝试下载默认分支",
+                    f"获取 {author}/{repo} 的 GitHub Releases 失败: {e}，将尝试下载默认分支",
                 )
                 releases = []
             if not releases:
-                # 如果没有最新版本,下载默认分支
+                # 如果没有最新版本，下载默认分支
                 logger.info(f"正在从默认分支下载 {author}/{repo}")
                 release_url = (
                     f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
@@ -234,15 +208,15 @@ class RepoZipUpdator:
             proxy = proxy.rstrip("/")
             release_url = f"{proxy}/{release_url}"
             logger.info(
-                f"检查到设置了镜像站,将使用镜像站下载 {author}/{repo} 仓库源码: {release_url}",
+                f"检查到设置了镜像站，将使用镜像站下载 {author}/{repo} 仓库源码: {release_url}",
             )
 
         await self._download_file(release_url, target_path + ".zip")
 
     def parse_github_url(self, url: str):
-        """使用正则表达式解析 GitHub 仓库 URL,支持 `.git` 后缀和 `tree/branch` 结构
+        """使用正则表达式解析 GitHub 仓库 URL，支持 `.git` 后缀和 `tree/branch` 结构
         Returns:
-            tuple[str, str, str]: 返回作者名､仓库名和分支名
+            tuple[str, str, str]: 返回作者名、仓库名和分支名
         Raises:
             ValueError: 如果 URL 格式不正确
         """
@@ -259,31 +233,88 @@ class RepoZipUpdator:
 
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
         """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
-        os.makedirs(target_dir, exist_ok=True)
-        update_dir = ""
+        ensure_dir(target_dir)
         with zipfile.ZipFile(zip_path, "r") as z:
-            update_dir = z.namelist()[0]
+            update_dir = self._resolve_archive_root_dir(z.namelist())
             z.extractall(target_dir)
         logger.debug(f"解压文件完成: {zip_path}")
 
-        files = os.listdir(os.path.join(target_dir, update_dir))
+        self._finalize_extracted_archive(zip_path, target_dir, update_dir)
+
+    @staticmethod
+    def _resolve_archive_root_dir(entries: list[str]) -> str:
+        normalized_entries = [os.path.normpath(entry) for entry in entries]
+        portable_entries = [entry.replace("\\", "/") for entry in normalized_entries]
+        root_candidates: list[str] = []
+
+        for raw_entry, normalized_entry, portable_entry in zip(
+            entries, normalized_entries, portable_entries
+        ):
+            if normalized_entry == ".":
+                continue
+
+            has_children = any(
+                other_entry != portable_entry
+                and other_entry.startswith(f"{portable_entry}/")
+                for other_entry in portable_entries
+            )
+            if raw_entry.endswith(("/", "\\")) or has_children:
+                root_candidates.append(normalized_entry)
+                continue
+
+            parent_portable, _, _ = portable_entry.rpartition("/")
+            if not parent_portable:
+                return ""
+            root_candidates.append(parent_portable.replace("/", os.sep))
+
+        if not root_candidates:
+            return ""
+        return os.path.commonpath(root_candidates)
+
+    def _finalize_extracted_archive(
+        self,
+        zip_path: str,
+        target_dir: str,
+        update_dir: str,
+    ) -> None:
+        target_root_path = os.path.normpath(target_dir)
+
+        def _join_under_root(root: str, *parts: str) -> str:
+            path = os.path.normpath(os.path.join(root, *parts))
+            try:
+                if os.path.commonpath([root, path]) != root:
+                    raise ValueError("path escapes root directory")
+            except ValueError as exc:
+                raise ValueError("path escapes root directory") from exc
+            return path
+
+        if not update_dir:
+            try:
+                os.remove(zip_path)
+            except Exception:
+                logger.warning(f"删除更新文件失败，可以手动删除 {zip_path}")
+            return
+
+        update_root_path = _join_under_root(target_root_path, update_dir)
+
+        files = os.listdir(update_root_path)
         for f in files:
-            if os.path.isdir(os.path.join(target_dir, update_dir, f)):
-                if os.path.exists(os.path.join(target_dir, f)):
-                    shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
-            elif os.path.exists(os.path.join(target_dir, f)):
-                os.remove(os.path.join(target_dir, f))
-            shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
+            update_item_path = _join_under_root(update_root_path, f)
+            target_item_path = _join_under_root(target_root_path, f)
+            if os.path.isdir(update_item_path):
+                if os.path.exists(target_item_path):
+                    shutil.rmtree(target_item_path, onerror=on_error)
+            elif os.path.exists(target_item_path):
+                os.remove(target_item_path)
+            shutil.move(update_item_path, target_root_path)
 
         try:
-            logger.debug(
-                f"删除临时更新文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}",
-            )
-            shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
+            logger.debug(f"删除临时更新文件: {zip_path} 和 {update_root_path}")
+            shutil.rmtree(update_root_path, onerror=on_error)
             os.remove(zip_path)
-        except BaseException:
+        except Exception:
             logger.warning(
-                f"删除更新文件失败,可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}",
+                f"删除更新文件失败，可以手动删除 {zip_path} 和 {update_root_path}"
             )
 
     def format_name(self, name: str) -> str:
