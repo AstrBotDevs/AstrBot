@@ -1,7 +1,19 @@
+from . import cua_sandbox
 from .cua import (
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
     CuaScreenshotTool,
+)
+from .cua_sandbox import (
+    CuaCopyFileBetweenSandboxesTool,
+    CuaCreateSandboxTool,
+    CuaDestroySandboxTool,
+    CuaGetCurrentSandboxTool,
+    CuaListSandboxesTool,
+    CuaReleaseSandboxTool,
+    CuaScreenshotSandboxTool,
+    CuaSwitchSandboxTool,
+    CuaTakeoverSandboxTool,
 )
 from .fs import (
     FileDownloadTool,
@@ -37,9 +49,18 @@ __all__ = [
     "BrowserExecTool",
     "CreateSkillCandidateTool",
     "CreateSkillPayloadTool",
+    "CuaCopyFileBetweenSandboxesTool",
+    "CuaCreateSandboxTool",
+    "CuaDestroySandboxTool",
+    "CuaGetCurrentSandboxTool",
     "CuaKeyboardTypeTool",
+    "CuaListSandboxesTool",
     "CuaMouseClickTool",
+    "CuaReleaseSandboxTool",
     "CuaScreenshotTool",
+    "CuaScreenshotSandboxTool",
+    "CuaSwitchSandboxTool",
+    "CuaTakeoverSandboxTool",
     "EvaluateSkillCandidateTool",
     "ExecuteShellTool",
     "FileDownloadTool",
@@ -60,4 +81,5 @@ __all__ = [
     "SyncSkillReleaseTool",
     "normalize_umo_for_workspace",
     "check_admin_permission",
+    "cua_sandbox",
 ]

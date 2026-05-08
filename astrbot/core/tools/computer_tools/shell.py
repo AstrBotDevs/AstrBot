@@ -1,16 +1,24 @@
+import asyncio
 import json
 import os
 import shlex
+import time
 import uuid
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from astrbot.api import FunctionTool
+from astrbot.core import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.computer.computer_client import get_booter
+from astrbot.core.computer.computer_client import (
+    CUA_LEASE_SECONDS,
+    get_booter,
+    renew_cua_sandbox_lease,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..registry import builtin_tool
@@ -19,6 +27,8 @@ from .util import check_admin_permission, is_local_runtime, workspace_root
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
 }
+LEASE_KEEPALIVE_INTERVAL_SECONDS = 15.0
+LEASE_KEEPALIVE_BUFFER_SECONDS = 5.0
 
 
 def _quote_redirect_path(path: str, *, local_runtime: bool) -> str:
@@ -45,6 +55,64 @@ def _redirect_background_stdout_command(
     local_runtime: bool,
 ) -> str:
     return f"({command}) > {_quote_redirect_path(output_path, local_runtime=local_runtime)} 2>&1"
+
+
+@asynccontextmanager
+async def _keep_shell_lease_alive(
+    booter: Any,
+    *,
+    session_id: str,
+    timeout: int | None,
+):
+    sandbox_id = getattr(booter, "sandbox_id", None)
+    if not sandbox_id:
+        yield
+        return
+
+    effective_timeout = float(timeout or 300)
+    deadline = time.time() + effective_timeout + LEASE_KEEPALIVE_BUFFER_SECONDS
+    initial_ttl = min(
+        CUA_LEASE_SECONDS, effective_timeout + LEASE_KEEPALIVE_BUFFER_SECONDS
+    )
+    renew_cua_sandbox_lease(
+        sandbox_id,
+        session_id,
+        ttl=initial_ttl,
+    )
+
+    stop_event = asyncio.Event()
+
+    async def _keepalive() -> None:
+        try:
+            while not stop_event.is_set():
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    return
+                wait_for = min(LEASE_KEEPALIVE_INTERVAL_SECONDS, remaining)
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=wait_for)
+                    return
+                except asyncio.TimeoutError:
+                    renew_cua_sandbox_lease(
+                        sandbox_id,
+                        session_id,
+                        ttl=min(CUA_LEASE_SECONDS, max(remaining, 0.0)),
+                    )
+        except asyncio.CancelledError:
+            raise
+
+    task = asyncio.create_task(_keepalive())
+    try:
+        yield
+    finally:
+        stop_event.set()
+        await task
+        final_remaining = max(deadline - time.time(), 0.0)
+        renew_cua_sandbox_lease(
+            sandbox_id,
+            session_id,
+            ttl=min(CUA_LEASE_SECONDS, final_remaining),
+        )
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
@@ -92,10 +160,13 @@ class ExecuteShellTool(FunctionTool):
         if permission_error := check_admin_permission(context, "Shell execution"):
             return permission_error
 
+        session_id = context.context.event.unified_msg_origin
         sb = await get_booter(
             context.context.context,
-            context.context.event.unified_msg_origin,
+            session_id,
         )
+        sandbox_id = getattr(sb, "sandbox_id", None)
+        started_at = time.monotonic()
         try:
             cwd: str | None = None
             if is_local_runtime(context):
@@ -107,6 +178,14 @@ class ExecuteShellTool(FunctionTool):
 
             env = dict(env or {})
             effective_background = background and not _is_self_detached_command(command)
+            logger.info(
+                "[Computer] Sandbox shell exec start: session_id=%s sandbox_id=%s background=%s timeout=%s command=%r",
+                session_id,
+                sandbox_id,
+                effective_background,
+                timeout,
+                command[:500],
+            )
 
             stdout_file: str | None = None
             if effective_background:
@@ -120,12 +199,26 @@ class ExecuteShellTool(FunctionTool):
                     local_runtime=local_runtime,
                 )
 
-            result = await sb.shell.exec(
-                command,
-                cwd=cwd,
-                background=effective_background,
-                env=env,
-                timeout=timeout or 300,
+            async with _keep_shell_lease_alive(
+                sb,
+                session_id=session_id,
+                timeout=timeout,
+            ):
+                result = await sb.shell.exec(
+                    command,
+                    cwd=cwd,
+                    background=effective_background,
+                    env=env,
+                    timeout=timeout or 300,
+                )
+            logger.info(
+                "[Computer] Sandbox shell exec done: session_id=%s sandbox_id=%s exit_code=%s elapsed_ms=%d stdout_len=%d stderr_len=%d",
+                session_id,
+                sandbox_id,
+                result.get("exit_code", result.get("returncode")),
+                int((time.monotonic() - started_at) * 1000),
+                len(str(result.get("stdout", "") or "")),
+                len(str(result.get("stderr", "") or "")),
             )
             if stdout_file:
                 result["stdout"] = (
@@ -134,6 +227,14 @@ class ExecuteShellTool(FunctionTool):
                 )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
+            logger.warning(
+                "[Computer] Sandbox shell exec failed: session_id=%s sandbox_id=%s elapsed_ms=%d error=%s",
+                session_id,
+                sandbox_id,
+                int((time.monotonic() - started_at) * 1000),
+                str(e) or type(e).__name__,
+                exc_info=True,
+            )
             detail = str(e) or type(e).__name__
             return f"Error executing command: {detail}"
 

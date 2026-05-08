@@ -14,6 +14,7 @@ from .open_api import OpenApiRoute
 from .persona import PersonaRoute
 from .platform import PlatformRoute
 from .plugin import PluginRoute
+from .sandbox import SandboxRoute
 from .session_management import SessionManagementRoute
 from .skills import SkillsRoute
 from .stat import StatRoute
@@ -39,6 +40,7 @@ __all__ = [
     "PersonaRoute",
     "PlatformRoute",
     "PluginRoute",
+    "SandboxRoute",
     "SessionManagementRoute",
     "StatRoute",
     "StaticFileRoute",

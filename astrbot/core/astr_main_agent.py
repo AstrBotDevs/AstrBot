@@ -52,9 +52,18 @@ from astrbot.core.tools.computer_tools import (
     BrowserExecTool,
     CreateSkillCandidateTool,
     CreateSkillPayloadTool,
+    CuaCopyFileBetweenSandboxesTool,
+    CuaCreateSandboxTool,
+    CuaDestroySandboxTool,
+    CuaGetCurrentSandboxTool,
     CuaKeyboardTypeTool,
+    CuaListSandboxesTool,
     CuaMouseClickTool,
+    CuaReleaseSandboxTool,
+    CuaScreenshotSandboxTool,
     CuaScreenshotTool,
+    CuaSwitchSandboxTool,
+    CuaTakeoverSandboxTool,
     EvaluateSkillCandidateTool,
     ExecuteShellTool,
     FileDownloadTool,
@@ -1076,6 +1085,17 @@ def _apply_sandbox_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaListSandboxesTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaGetCurrentSandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaCreateSandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaSwitchSandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaReleaseSandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaTakeoverSandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaDestroySandboxTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotSandboxTool))
+        req.func_tool.add_tool(
+            tool_mgr.get_builtin_tool(CuaCopyFileBetweenSandboxesTool)
+        )
 
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 

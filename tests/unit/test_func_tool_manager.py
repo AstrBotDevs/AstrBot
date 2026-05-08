@@ -1,8 +1,11 @@
+import asyncio
 import json
+import time
 
 import pytest
 
 from astrbot.core import sp
+from astrbot.core.computer.cua_registry import CuaSandboxRegistry
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.tools.computer_tools.shell import ExecuteShellTool
 from astrbot.core.tools.message_tools import SendMessageToUserTool
@@ -63,7 +66,11 @@ async def test_execute_shell_defaults_to_foreground(monkeypatch):
             return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
 
     class FakeBooter:
+        sandbox_id = "sb-shell"
         shell = FakeShell()
+
+        async def available(self):
+            return True
 
     class FakeConfig:
         def get_config(self, umo):
@@ -94,6 +101,64 @@ async def test_execute_shell_defaults_to_foreground(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_execute_shell_logs_execution_details(monkeypatch):
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+
+    log_messages = []
+
+    class FakeShell:
+        async def exec(
+            self, command, cwd=None, background=False, env=None, timeout=None
+        ):
+            return {"success": True, "stdout": "ok", "stderr": "", "exit_code": 0}
+
+    class FakeBooter:
+        shell = FakeShell()
+        sandbox_id = "sb-log"
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {"provider_settings": {"computer_use_runtime": "sandbox"}}
+
+    class FakeEvent:
+        unified_msg_origin = "umo-log"
+        role = "admin"
+
+    class FakeAstrContext:
+        context = FakeConfig()
+        event = FakeEvent()
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+
+    async def fake_get_booter(context, session_id):
+        return FakeBooter()
+
+    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(
+        shell_tools.logger,
+        "info",
+        lambda message, *args, **kwargs: log_messages.append(message % args),
+    )
+
+    await ExecuteShellTool().call(FakeWrapper(), command="pwd", timeout=12)
+
+    assert any(
+        "Sandbox shell exec start" in message
+        and "session_id=umo-log" in message
+        and "sandbox_id=sb-log" in message
+        and "command='pwd'" in message
+        for message in log_messages
+    )
+    assert any(
+        "Sandbox shell exec done" in message
+        and "exit_code=0" in message
+        and "elapsed_ms=" in message
+        for message in log_messages
+    )
+
+
+@pytest.mark.asyncio
 async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
     from astrbot.core.tools.computer_tools import shell as shell_tools
 
@@ -109,6 +174,9 @@ async def test_execute_shell_uses_fresh_default_env_per_call(monkeypatch):
 
     class FakeBooter:
         shell = FakeShell()
+
+        async def available(self):
+            return True
 
     class FakeConfig:
         def get_config(self, umo):
@@ -273,6 +341,161 @@ async def test_execute_shell_recognizes_commented_background_command(monkeypatch
 
     assert json.loads(result)["success"] is True
     assert calls == [{"command": command, "background": False}]
+
+
+@pytest.mark.asyncio
+async def test_execute_shell_refreshes_lease_during_long_running_command(monkeypatch):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+
+    class FakeShell:
+        async def exec(
+            self, command, cwd=None, background=False, env=None, timeout=None
+        ):
+            await asyncio.sleep(0.05)
+            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
+
+    class FakeBooter:
+        shell = FakeShell()
+
+    registry = CuaSandboxRegistry(storage_path="/tmp/test-shell-lease-registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-shell",
+        sandbox_name="shell-sandbox",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-a",
+        owner_session_id="umo",
+        controller_user_id="user-a",
+        controller_session_id="umo",
+        lease_expires_at=time.time() + 60,
+        connect_info={"name": "shell-sandbox", "local": True},
+    )
+    registry.set_current_sandbox_id("umo", "sb-shell")
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+    computer_client.session_booter["sb-shell"] = FakeBooter()
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {
+                "provider_settings": {
+                    "computer_use_runtime": "sandbox",
+                    "sandbox": {"booter": "cua"},
+                }
+            }
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        context = FakeConfig()
+        event = FakeEvent()
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+        tool_call_timeout = 120
+
+    monkeypatch.setattr(shell_tools, "LEASE_KEEPALIVE_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(shell_tools, "LEASE_KEEPALIVE_BUFFER_SECONDS", 1)
+
+    before = registry.get_sandbox("sb-shell")["lease_expires_at"]
+    await ExecuteShellTool().call(FakeWrapper(), command="ps aux", timeout=30)
+    after = registry.get_sandbox("sb-shell")["lease_expires_at"]
+
+    assert after is not None
+    assert after > before
+
+
+@pytest.mark.asyncio
+async def test_execute_shell_keepalive_does_not_extend_indefinitely_on_failure(
+    monkeypatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+
+    class FakeShell:
+        async def exec(
+            self, command, cwd=None, background=False, env=None, timeout=None
+        ):
+            await asyncio.sleep(0.03)
+            return {"success": True, "stdout": "", "stderr": "", "exit_code": 0}
+
+    class FakeBooter:
+        sandbox_id = "sb-shell"
+        shell = FakeShell()
+
+        async def available(self):
+            return True
+
+    registry = CuaSandboxRegistry(storage_path="/tmp/test-shell-deadline-registry.json")
+    registry.upsert_sandbox(
+        sandbox_id="sb-shell",
+        sandbox_name="shell-sandbox",
+        booter_type="cua",
+        provider="cua",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-a",
+        owner_session_id="umo",
+        controller_user_id="user-a",
+        controller_session_id="umo",
+        lease_expires_at=time.time() + 60,
+        connect_info={"name": "shell-sandbox", "local": True},
+    )
+    registry.set_current_sandbox_id("umo", "sb-shell")
+    monkeypatch.setattr(computer_client, "cua_registry", registry)
+    computer_client.session_booter.clear()
+    computer_client.session_booter["sb-shell"] = FakeBooter()
+
+    fake_now = {"value": 1000.0}
+
+    def now():
+        return fake_now["value"]
+
+    monkeypatch.setattr(shell_tools.time, "time", now)
+    monkeypatch.setattr(computer_client.time, "time", now)
+    monkeypatch.setattr(shell_tools, "LEASE_KEEPALIVE_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setattr(shell_tools, "LEASE_KEEPALIVE_BUFFER_SECONDS", 1)
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {
+                "provider_settings": {
+                    "computer_use_runtime": "sandbox",
+                    "sandbox": {"booter": "cua"},
+                }
+            }
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "admin"
+
+    class FakeAstrContext:
+        context = FakeConfig()
+        event = FakeEvent()
+
+    class FakeWrapper:
+        context = FakeAstrContext()
+        tool_call_timeout = 10
+
+    async def advance_time(*args, **kwargs):
+        fake_now["value"] += 2.0
+        await asyncio.sleep(0)
+        raise RuntimeError("command failed")
+
+    computer_client.session_booter["sb-shell"].shell.exec = advance_time
+
+    result = await ExecuteShellTool().call(
+        FakeWrapper(), command="apt update", timeout=5
+    )
+    lease_expires_at = registry.get_sandbox("sb-shell")["lease_expires_at"]
+
+    assert result == "Error executing command: command failed"
+    assert lease_expires_at <= 1000.0 + 5 + shell_tools.LEASE_KEEPALIVE_BUFFER_SECONDS
 
 
 @pytest.mark.parametrize(

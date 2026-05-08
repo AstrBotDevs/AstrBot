@@ -1688,6 +1688,30 @@ class TestApplySandboxTools:
         assert "send_to_user=true" in req.system_prompt
         assert "focused and empty or safe to append" in req.system_prompt
 
+    def test_apply_sandbox_tools_with_cua_adds_lifecycle_tools(self, mock_context):
+        """Test that CUA sandbox lifecycle tools are visible to the agent."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={"booter": "cua"},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert req.func_tool is not None
+        tool_names = req.func_tool.names()
+        assert "astrbot_list_sandboxes" in tool_names
+        assert "astrbot_get_current_sandbox" in tool_names
+        assert "astrbot_create_sandbox" in tool_names
+        assert "astrbot_switch_sandbox" in tool_names
+        assert "astrbot_release_sandbox" in tool_names
+        assert "astrbot_takeover_sandbox" in tool_names
+        assert "astrbot_destroy_sandbox" in tool_names
+        assert "astrbot_screenshot_sandbox" in tool_names
+        assert "astrbot_copy_file_between_sandboxes" in tool_names
+
     def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
         """Test sandbox tools with shipyard booter configuration."""
         module = ama

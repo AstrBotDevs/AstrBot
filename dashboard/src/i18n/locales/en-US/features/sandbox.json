@@ -1,0 +1,103 @@
+{
+  "title": "Sandbox Management",
+  "subtitle": "Inspect and operate managed sandboxes across providers.",
+  "actions": {
+    "create": "Create",
+    "refresh": "Refresh",
+    "inspect": "Inspect",
+    "setDefault": "Set default",
+    "configure": "Configure",
+    "switch": "Switch",
+    "takeover": "Take over",
+    "console": "Console",
+    "release": "Release",
+    "screenshot": "Screenshot",
+    "destroy": "Destroy",
+    "cancel": "Cancel",
+    "close": "Close",
+    "save": "Save"
+  },
+  "metrics": {
+    "total": "Managed sandboxes",
+    "providers": "Providers",
+    "busy": "Busy leases",
+    "default": "Default sandbox"
+  },
+  "labels": {
+    "default": "Default",
+    "busy": "Busy",
+    "available": "Available",
+    "noController": "No controller",
+    "unknown": "Unknown",
+    "none": "None",
+    "temporary": "Temporary sandbox",
+    "persistent": "Keep indefinitely"
+  },
+  "headers": {
+    "sandbox": "Sandbox",
+    "provider": "Provider",
+    "lease": "Lease",
+    "lastUsed": "Last used",
+    "actions": "Actions"
+  },
+  "fields": {
+    "provider": "Provider",
+    "booterType": "Booter type",
+    "status": "Status",
+    "owner": "Owner session",
+    "controller": "Controller session",
+    "retentionPolicy": "Retention policy",
+    "leaseExpires": "Lease expires",
+    "idleTimeout": "Idle timeout",
+    "expiresAt": "Expires at",
+    "connectInfo": "Connection info"
+  },
+  "empty": {
+    "title": "No managed sandboxes",
+    "subtitle": "Create a managed sandbox or wait for a provider to register one."
+  },
+  "create": {
+    "title": "Create sandbox",
+    "name": "Sandbox name",
+    "providerHint": "This provider is visible in the dashboard model but creation is not wired in this phase."
+  },
+  "screenshot": {
+    "title": "Sandbox screenshot",
+    "noPreview": "Screenshot captured. Preview rendering will be added later."
+  },
+  "console": {
+    "title": "Sandbox console",
+    "notice": "The console does not take over or release the lease, but commands directly affect this sandbox environment.",
+    "command": "Shell command",
+    "run": "Run command",
+    "output": "Command output",
+    "empty": "No commands executed yet.",
+    "running": "Running..."
+  },
+  "config": {
+    "title": "Sandbox configuration",
+    "idleTimeout": "Idle timeout (seconds)",
+    "idleTimeoutHint": "Temporary sandboxes can be cleaned after this idle duration. Empty or 0 disables idle cleanup.",
+    "expiresAt": "Fixed expiration time",
+    "expiresAtHint": "Optional. The sandbox can be cleaned after this time."
+  },
+  "tooltips": {
+    "takeover": "Bind the current dashboard session to this sandbox and obtain control. If another controller exists, control is transferred.",
+    "console": "Open a shell console without changing the sandbox lease."
+  },
+  "destroyConfirm": {
+    "title": "Destroy sandbox?",
+    "message": "Destroy {name}? This shuts down the sandbox and removes its managed record."
+  },
+  "messages": {
+    "loadFailed": "Failed to load sandboxes.",
+    "operationFailed": "Sandbox operation failed.",
+    "created": "Sandbox created.",
+    "defaultSet": "Default sandbox updated.",
+    "configSaved": "Sandbox configuration saved.",
+    "released": "Lease released.",
+    "takeover": "Current session now controls this sandbox.",
+    "destroyed": "Sandbox destroyed.",
+    "screenshot": "Screenshot captured."
+  }
+}

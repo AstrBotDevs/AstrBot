@@ -1,0 +1,103 @@
+{
+  "title": "沙盒管理",
+  "subtitle": "统一查看和操作不同 provider 的托管沙盒。",
+  "actions": {
+    "create": "创建",
+    "refresh": "刷新",
+    "inspect": "查看",
+    "setDefault": "设为默认",
+    "configure": "配置",
+    "switch": "切换",
+    "takeover": "接管",
+    "console": "控制台",
+    "release": "释放",
+    "screenshot": "截图",
+    "destroy": "销毁",
+    "cancel": "取消",
+    "close": "关闭",
+    "save": "保存"
+  },
+  "metrics": {
+    "total": "托管沙盒",
+    "providers": "Provider 数量",
+    "busy": "占用租约",
+    "default": "默认沙盒"
+  },
+  "labels": {
+    "default": "默认",
+    "busy": "占用中",
+    "available": "可用",
+    "noController": "无控制者",
+    "unknown": "未知",
+    "none": "无",
+    "temporary": "临时沙盒",
+    "persistent": "长期保留"
+  },
+  "headers": {
+    "sandbox": "沙盒",
+    "provider": "Provider",
+    "lease": "租约",
+    "lastUsed": "最后使用",
+    "actions": "操作"
+  },
+  "fields": {
+    "provider": "Provider",
+    "booterType": "Booter 类型",
+    "status": "状态",
+    "owner": "所属会话",
+    "controller": "控制会话",
+    "retentionPolicy": "保留策略",
+    "leaseExpires": "租约过期",
+    "idleTimeout": "空闲超时",
+    "expiresAt": "过期时间",
+    "connectInfo": "连接信息"
+  },
+  "empty": {
+    "title": "暂无托管沙盒",
+    "subtitle": "可以创建新的托管沙盒，或等待 provider 注册可管理的沙盒。"
+  },
+  "create": {
+    "title": "创建沙盒",
+    "name": "沙盒名称",
+    "providerHint": "该 provider 已纳入通用页面模型，但本阶段尚未接入创建能力。"
+  },
+  "screenshot": {
+    "title": "沙盒截图",
+    "noPreview": "截图已完成。预览渲染将在后续补齐。"
+  },
+  "console": {
+    "title": "沙盒控制台",
+    "notice": "控制台不会接管或释放租约，但命令会直接影响该沙盒环境。",
+    "command": "Shell 命令",
+    "run": "执行命令",
+    "output": "执行结果",
+    "empty": "尚未执行命令。",
+    "running": "执行中..."
+  },
+  "config": {
+    "title": "沙盒配置",
+    "idleTimeout": "空闲超时（秒）",
+    "idleTimeoutHint": "临时沙盒在空闲达到该时间后可被清理，0 或空表示不启用空闲清理。",
+    "expiresAt": "固定过期时间",
+    "expiresAtHint": "可选。到达该时间后沙盒可被清理。"
+  },
+  "tooltips": {
+    "takeover": "将当前 dashboard 会话绑定到这个沙盒并获得控制权；如果已有控制者，会转移控制权。",
+    "console": "打开命令行控制台，不改变沙盒占用状态。"
+  },
+  "destroyConfirm": {
+    "title": "确认销毁沙盒",
+    "message": "确定要销毁 {name} 吗？该操作会关闭沙盒并移除托管记录。"
+  },
+  "messages": {
+    "loadFailed": "加载沙盒失败。",
+    "operationFailed": "沙盒操作失败。",
+    "created": "沙盒已创建。",
+    "defaultSet": "默认沙盒已更新。",
+    "configSaved": "沙盒配置已保存。",
+    "released": "租约已释放。",
+    "takeover": "当前会话已接管此沙盒。",
+    "destroyed": "沙盒已销毁。",
+    "screenshot": "截图已完成。"
+  }
+}
