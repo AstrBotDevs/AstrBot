@@ -1,0 +1,351 @@
+from __future__ import annotations
+
+import asyncio
+import time
+import uuid
+from dataclasses import dataclass
+
+from astrbot.api import logger
+from astrbot.core.computer.booters.base import ComputerBooter
+from astrbot.core.computer.sandbox_provider import SandboxProvider
+from astrbot.core.computer.sandbox_registry import SandboxRegistry
+from astrbot.core.star.context import Context
+
+SANDBOX_LEASE_SECONDS = 300
+
+
+@dataclass(slots=True)
+class SandboxIdleState:
+    expires_at: float
+    task: asyncio.Task
+
+
+class SandboxManager:
+    def __init__(
+        self,
+        *,
+        registry: SandboxRegistry,
+        providers: dict[str, SandboxProvider],
+    ) -> None:
+        self.registry = registry
+        self.providers = providers
+        self.session_booter: dict[str, ComputerBooter] = {}
+        self.idle_state: dict[str, SandboxIdleState] = {}
+        self.boot_locks: dict[str, asyncio.Lock] = {}
+
+    def save_registry(self) -> None:
+        try:
+            self.registry.save()
+        except Exception as exc:
+            logger.warning("[Computer] Failed to save sandbox registry: %s", exc)
+
+    def _sandbox_boot_lock(self, sandbox_id: str) -> asyncio.Lock:
+        lock = self.boot_locks.get(sandbox_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self.boot_locks[sandbox_id] = lock
+        return lock
+
+    def drop_boot_lock(self, sandbox_id: str) -> None:
+        self.boot_locks.pop(sandbox_id, None)
+
+    def get_idle_timeout(self, config: dict, provider_id: str) -> float:
+        sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
+        value = sandbox_cfg.get(f"{provider_id}_idle_timeout", 0)
+        try:
+            timeout = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(timeout, 0.0)
+
+    def build_record_payload(
+        self,
+        *,
+        sandbox_id: str,
+        sandbox_name: str,
+        session_id: str,
+        provider_id: str,
+        config: dict,
+        idle_timeout: float,
+        is_default: bool = False,
+    ) -> dict:
+        return {
+            "sandbox_id": sandbox_id,
+            "sandbox_name": sandbox_name,
+            "booter_type": provider_id,
+            "provider": provider_id,
+            "managed": True,
+            "created_by_astrbot": True,
+            "owner_user_id": session_id,
+            "owner_session_id": session_id,
+            "connect_info": {
+                "name": sandbox_name,
+                "local": config.get("local", True),
+                "image": config.get("image"),
+                "os_type": config.get("os_type"),
+            },
+            "is_default": is_default,
+            "idle_timeout": idle_timeout,
+        }
+
+    def new_sandbox_id(self, provider_id: str) -> str:
+        return f"{provider_id}-{uuid.uuid4().hex[:12]}"
+
+    async def booter_available(self, booter: ComputerBooter) -> bool:
+        available = getattr(booter, "available", None)
+        if available is None:
+            return True
+        return await available()
+
+    def acquire_lease(
+        self, sandbox_id: str, session_id: str, *, ttl: float | None = None
+    ) -> bool:
+        return self.registry.acquire_lease(
+            sandbox_id=sandbox_id,
+            session_id=session_id,
+            user_id=session_id,
+            ttl=SANDBOX_LEASE_SECONDS if ttl is None else ttl,
+        )
+
+    def sandbox_has_active_lease(self, sandbox_id: str) -> bool:
+        record = self.registry.get_sandbox(sandbox_id)
+        if record is None:
+            return False
+        lease_expires_at = record.get("lease_expires_at")
+        controller_session_id = record.get("controller_session_id")
+        return bool(
+            controller_session_id
+            and lease_expires_at
+            and lease_expires_at > time.time()
+        )
+
+    def sandbox_controlled_by_other_session(
+        self, sandbox_id: str, session_id: str
+    ) -> bool:
+        record = self.registry.get_sandbox(sandbox_id)
+        if record is None:
+            return False
+        lease_expires_at = record.get("lease_expires_at")
+        controller_session_id = record.get("controller_session_id")
+        if not controller_session_id or controller_session_id == session_id:
+            return False
+        return bool(lease_expires_at and lease_expires_at > time.time())
+
+    async def get_or_create_booter(
+        self, context: Context, session_id: str, provider_id: str
+    ) -> ComputerBooter:
+        provider = self.providers[provider_id]
+        create_config = provider.build_create_config(context, session_id)
+
+        current_sandbox_id = self.registry.get_current_sandbox_id(session_id)
+        if current_sandbox_id and current_sandbox_id in self.session_booter:
+            if not self.acquire_lease(current_sandbox_id, session_id):
+                raise RuntimeError(f"Sandbox {current_sandbox_id} is busy")
+            booter = self.session_booter[current_sandbox_id]
+            if await self.booter_available(booter):
+                self.registry.touch_sandbox(current_sandbox_id)
+                self.save_registry()
+                self.schedule_idle_cleanup(
+                    current_sandbox_id,
+                    self.get_idle_timeout(
+                        context.get_config(umo=session_id), provider_id
+                    ),
+                )
+                return booter
+            self.session_booter.pop(current_sandbox_id, None)
+
+        target_sandbox_id = self.registry.default_sandbox_id
+        if target_sandbox_id is None:
+            target_sandbox_id = self.new_sandbox_id(provider_id)
+            record = self.registry.upsert_sandbox(
+                **self.build_record_payload(
+                    sandbox_id=target_sandbox_id,
+                    sandbox_name=target_sandbox_id,
+                    session_id=session_id,
+                    provider_id=provider_id,
+                    config=create_config,
+                    idle_timeout=self.get_idle_timeout(
+                        context.get_config(umo=session_id), provider_id
+                    ),
+                    is_default=True,
+                )
+            )
+            self.registry.set_default_sandbox_id(record["sandbox_id"])
+            self.save_registry()
+
+        if self.sandbox_has_active_lease(
+            target_sandbox_id
+        ) and self.sandbox_controlled_by_other_session(target_sandbox_id, session_id):
+            target_sandbox_id = self._upsert_new_sandbox_record(
+                context, session_id, provider_id, create_config
+            )
+
+        while True:
+            async with self._sandbox_boot_lock(target_sandbox_id):
+                if target_sandbox_id in self.session_booter and not self.acquire_lease(
+                    target_sandbox_id, session_id
+                ):
+                    target_sandbox_id = self._upsert_new_sandbox_record(
+                        context, session_id, provider_id, create_config
+                    )
+                    continue
+
+                if target_sandbox_id in self.session_booter:
+                    break
+
+                if not self.acquire_lease(target_sandbox_id, session_id):
+                    target_sandbox_id = self._upsert_new_sandbox_record(
+                        context, session_id, provider_id, create_config
+                    )
+                    continue
+
+                client = await provider.create_booter(
+                    context, session_id, target_sandbox_id, create_config
+                )
+                setattr(client, "sandbox_id", target_sandbox_id)
+                self.session_booter[target_sandbox_id] = client
+                break
+
+            break
+
+        self.registry.touch_sandbox(target_sandbox_id)
+        self.registry.set_current_sandbox_id(session_id, target_sandbox_id)
+        self.save_registry()
+        self.schedule_idle_cleanup(
+            target_sandbox_id,
+            self.get_idle_timeout(context.get_config(umo=session_id), provider_id),
+        )
+        return self.session_booter[target_sandbox_id]
+
+    def _upsert_new_sandbox_record(
+        self, context: Context, session_id: str, provider_id: str, create_config: dict
+    ) -> str:
+        sandbox_id = self.new_sandbox_id(provider_id)
+        self.registry.upsert_sandbox(
+            **self.build_record_payload(
+                sandbox_id=sandbox_id,
+                sandbox_name=sandbox_id,
+                session_id=session_id,
+                provider_id=provider_id,
+                config=create_config,
+                idle_timeout=self.get_idle_timeout(
+                    context.get_config(umo=session_id), provider_id
+                ),
+            )
+        )
+        self.save_registry()
+        return sandbox_id
+
+    def switch_current_sandbox(self, session_id: str, sandbox_id: str) -> dict:
+        record = self.registry.get_sandbox(sandbox_id)
+        if record is None or not record.get("managed"):
+            raise RuntimeError(f"Sandbox {sandbox_id} not found")
+        booter = self.session_booter.get(sandbox_id)
+        if booter is None:
+            raise RuntimeError(f"Sandbox {sandbox_id} is not running")
+        if not self.acquire_lease(sandbox_id, session_id):
+            raise RuntimeError(f"Sandbox {sandbox_id} is busy")
+        previous_sandbox_id = self.registry.get_current_sandbox_id(session_id)
+        if previous_sandbox_id and previous_sandbox_id != sandbox_id:
+            previous = self.registry.get_sandbox(previous_sandbox_id)
+            if previous and previous.get("controller_session_id") == session_id:
+                self.registry.release_lease(previous_sandbox_id)
+        self.registry.set_current_sandbox_id(session_id, sandbox_id)
+        self.registry.touch_sandbox(sandbox_id)
+        self.save_registry()
+        return self.registry.get_sandbox(sandbox_id) or record
+
+    async def destroy_sandbox(self, session_id: str, sandbox_id: str) -> dict:
+        record = self.registry.get_sandbox(sandbox_id)
+        if record is None or not record.get("managed"):
+            raise RuntimeError(f"Sandbox {sandbox_id} not found")
+        controller_session_id = record.get("controller_session_id")
+        if (
+            controller_session_id
+            and controller_session_id != session_id
+            and self.sandbox_has_active_lease(sandbox_id)
+        ):
+            raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
+        booter = self.session_booter.pop(sandbox_id, None)
+        if booter is not None:
+            await self.providers[record.get("provider", "")].destroy_booter(
+                booter, record
+            )
+        self.clear_idle_state(sandbox_id)
+        self.registry.delete_sandbox(sandbox_id)
+        self.drop_boot_lock(sandbox_id)
+        self.save_registry()
+        return record
+
+    def clear_idle_state(self, sandbox_id: str) -> None:
+        state = self.idle_state.pop(sandbox_id, None)
+        if state is not None and not state.task.done():
+            state.task.cancel()
+
+    def schedule_idle_cleanup(self, sandbox_id: str, timeout: float) -> None:
+        self.clear_idle_state(sandbox_id)
+        if timeout <= 0:
+            return
+        self.registry.touch_sandbox(sandbox_id)
+        expires_at = time.monotonic() + timeout
+        task = asyncio.create_task(
+            self._expire_when_idle(sandbox_id, timeout, expires_at)
+        )
+        self.idle_state[sandbox_id] = SandboxIdleState(expires_at=expires_at, task=task)
+
+    async def _expire_when_idle(
+        self, sandbox_id: str, timeout: float, initial_expires_at: float
+    ) -> None:
+        current_expires_at = initial_expires_at
+        try:
+            while True:
+                remaining = current_expires_at - time.monotonic()
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+                state = self.idle_state.get(sandbox_id)
+                if state is None or state.expires_at != current_expires_at:
+                    return
+                record = self.registry.get_sandbox(sandbox_id)
+                if record is None:
+                    self.session_booter.pop(sandbox_id, None)
+                    return
+                if self.sandbox_has_active_lease(sandbox_id):
+                    current_expires_at = time.monotonic() + timeout
+                    self.idle_state[sandbox_id] = SandboxIdleState(
+                        expires_at=current_expires_at, task=state.task
+                    )
+                    continue
+                last_used_at = record.get("last_used_at")
+                if last_used_at is not None:
+                    idle_remaining = timeout - (time.time() - float(last_used_at))
+                    if idle_remaining > 0:
+                        current_expires_at = time.monotonic() + idle_remaining
+                        self.idle_state[sandbox_id] = SandboxIdleState(
+                            expires_at=current_expires_at, task=state.task
+                        )
+                        continue
+                booter = self.session_booter.pop(sandbox_id, None)
+                if booter is not None:
+                    try:
+                        await self.providers[record.get("provider", "")].destroy_booter(
+                            booter, record
+                        )
+                    except Exception as shutdown_err:
+                        logger.warning(
+                            "[Computer] Failed to shutdown idle sandbox %s: %s",
+                            sandbox_id,
+                            shutdown_err,
+                        )
+                if record.get("retention_policy") == "persistent":
+                    self.registry.update_sandbox_status(sandbox_id, "stopped")
+                else:
+                    self.registry.delete_sandbox(sandbox_id)
+                    self.drop_boot_lock(sandbox_id)
+                self.save_registry()
+                return
+        except asyncio.CancelledError:
+            raise
+        finally:
+            state = self.idle_state.get(sandbox_id)
+            if state is not None and state.expires_at == current_expires_at:
+                self.idle_state.pop(sandbox_id, None)
