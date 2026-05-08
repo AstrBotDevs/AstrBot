@@ -90,7 +90,7 @@
       "passwordHint": "At least 12 characters, including uppercase, lowercase letters, and digits",
       "confirmPasswordHint": "Please enter new password again to confirm",
       "usernameHint": "Leave blank to keep current username",
-      "defaultCredentials": "The default username and password are astrbot. Please change them immediately after logging in to ensure security."
+      "defaultCredentials": "The default username is astrbot. An initial password is generated on first startup and shown in the console."
     },
     "validation": {
       "passwordRequired": "Please enter password",

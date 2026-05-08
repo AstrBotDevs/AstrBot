@@ -90,7 +90,7 @@
       "passwordHint": "长度至少 12 位，且包含大写字母、小写字母和数字",
       "confirmPasswordHint": "请再次输入新密码以确认",
       "usernameHint": "留空表示不修改用户名",
-      "defaultCredentials": "默认用户名和密码为 astrbot，请在登录后立即修改以确保安全。"
+      "defaultCredentials": "默认用户名为 astrbot，初始密码会在首次启动时自动生成并显示在控制台中。"
     },
     "validation": {
       "passwordRequired": "请输入密码",
