@@ -12,8 +12,18 @@ logger = logging.getLogger("astrbot")
 _ALLOWED_VARS = frozenset({"text", "version", "shiki_runtime"})
 
 _SSTI_BLACKLIST: list[tuple[str, re.Pattern]] = [
-    ("dunder_chain", re.compile(r"__\s*(class|globals|init|mro|base|bases|subclasses|reduce|getitem|builtins|import|self|func|code|reduce_ex)__")),
-    ("dangerous_builtins", re.compile(r"\b(import\s+(?!url)|os\.\w+|subprocess\.|\.popen\(|eval\(|exec\()")),
+    (
+        "dunder_chain",
+        re.compile(
+            r"__\s*(class|globals|init|mro|base|bases|subclasses|reduce|getitem|builtins|import|self|func|code|reduce_ex)__"
+        ),
+    ),
+    (
+        "dangerous_builtins",
+        re.compile(
+            r"\b(import\s+(?!url)|os\.\w+|subprocess\.|\.popen\(|eval\(|exec\()"
+        ),
+    ),
     ("flask_context", re.compile(r"\{\{.*?\b(config|request|session|g)\b.*?\}\}")),
 ]
 
@@ -29,7 +39,9 @@ def validate_template_content(content: str, *, strict: bool = False) -> None:
         for m in _VAR_RE.finditer(content):
             var = m.group(1)
             if var not in _ALLOWED_VARS:
-                logger.warning(f"SSTI validation blocked template: unauthorized variable '{var}'")
+                logger.warning(
+                    f"SSTI validation blocked template: unauthorized variable '{var}'"
+                )
                 raise ValueError(
                     f"Unauthorized Jinja2 variable '{var}'; "
                     f"allowed: {', '.join(sorted(_ALLOWED_VARS))}."
