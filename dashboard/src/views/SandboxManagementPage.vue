@@ -156,7 +156,8 @@
               <div class="terminal-command"><span class="terminal-prompt">{{ displayConsoleCwd(entry.cwd) }} $</span> {{ entry.command }}</div>
               <pre v-if="entry.stdout" class="terminal-stdout">{{ entry.stdout }}</pre>
               <pre v-if="entry.stderr" class="terminal-stderr">{{ entry.stderr }}</pre>
-              <div class="terminal-exit">exit_code: {{ entry.exitCode }}</div>
+              <div class="terminal-running" v-if="entry.running">{{ tm('console.running') }}</div>
+              <div v-else class="terminal-exit">exit_code: {{ entry.exitCode }}</div>
             </div>
           </div>
           <div class="terminal-input-row" @click="focusConsoleInput">
@@ -314,6 +315,7 @@ type ConsoleHistoryEntry = {
   stdout: string
   stderr: string
   exitCode: unknown
+  running?: boolean
 }
 
 const { tm } = useModuleI18n('features/sandbox')
@@ -551,32 +553,47 @@ async function runConsoleCommand() {
   if (consoleRunning.value || !consoleSandbox.value || !consoleCommand.value.trim()) return
   const command = consoleCommand.value.trim()
   const cwd = consoleCwd.value
+  const sandboxId = consoleSandbox.value.sandbox_id
+  const entry: ConsoleHistoryEntry = {
+    id: ++consoleEntryId,
+    cwd,
+    command,
+    stdout: '',
+    stderr: '',
+    exitCode: '-',
+    running: true
+  }
+  consoleHistory.value.push(entry)
+  consoleHistoryBySandbox.value[sandboxId] = consoleHistory.value
+  consoleCommand.value = ''
+  await scrollConsoleToBottom()
   consoleRunning.value = true
   try {
     const shellCommand = buildConsoleShellCommand(command, cwd)
     const data = await postAction('/api/sandboxes/shell', {
-      sandbox_id: consoleSandbox.value.sandbox_id,
+      sandbox_id: sandboxId,
       command: shellCommand,
       timeout: 300
     })
     if (data?.result) {
       const { stdout, nextCwd } = parseConsoleShellResult(String(data.result.stdout ?? ''), cwd)
-      consoleHistory.value.push({
-        id: ++consoleEntryId,
-        cwd,
-        command,
-        stdout,
-        stderr: String(data.result.stderr ?? ''),
-        exitCode: data.result.exit_code ?? data.result.returncode ?? '-'
-      })
-      consoleHistoryBySandbox.value[consoleSandbox.value.sandbox_id] = consoleHistory.value
+      entry.stdout = stdout
+      entry.stderr = String(data.result.stderr ?? '')
+      entry.exitCode = data.result.exit_code ?? data.result.returncode ?? '-'
+      entry.running = false
+      consoleHistoryBySandbox.value[sandboxId] = consoleHistory.value
       consoleCwd.value = nextCwd
-      consoleCwdBySandbox.value[consoleSandbox.value.sandbox_id] = nextCwd
-      consoleCommand.value = ''
+      consoleCwdBySandbox.value[sandboxId] = nextCwd
       await scrollConsoleToBottom()
       focusConsoleInput()
+    } else {
+      entry.running = false
     }
+  } catch (e: any) {
+    entry.stderr = e?.message || String(e)
+    entry.running = false
   } finally {
+    entry.running = false
     consoleRunning.value = false
     await nextTick()
     focusConsoleInput()
