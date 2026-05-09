@@ -299,10 +299,14 @@ class MySandboxProvider:
     tool_names = set()
 
     def build_create_config(self, context, session_id):
+        config = context.get_config(umo=session_id)
+        sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
         plugin_cfg = getattr(self, "plugin_config", None) or {}
         return {
-            "endpoint_url": plugin_cfg.get("demo_endpoint", ""),
-            "ttl": plugin_cfg.get("demo_ttl", 3600),
+            "endpoint_url": sandbox_cfg.get(
+                "demo_endpoint", plugin_cfg.get("demo_endpoint", "")
+            ),
+            "ttl": sandbox_cfg.get("demo_ttl", plugin_cfg.get("demo_ttl", 3600)),
         }
 
     def build_connect_info(self, sandbox_name, config):
@@ -352,6 +356,8 @@ All runtime-specific config belongs to the plugin schema, for example:
 ```
 
 That schema will be stored under `data/config/<plugin_name>_config.json` and passed to the plugin constructor as `config`.
+
+If your provider needs session-level or legacy overrides from `provider_settings.sandbox`, read them in `build_create_config()` as overrides on top of the plugin config. Do not add runtime-specific fields to core config metadata.
 
 ### 4. Expose optional runtime tools through `tool_names`
 

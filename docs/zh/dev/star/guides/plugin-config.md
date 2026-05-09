@@ -298,10 +298,14 @@ class MySandboxProvider:
     tool_names = set()
 
     def build_create_config(self, context, session_id):
+        config = context.get_config(umo=session_id)
+        sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
         plugin_cfg = getattr(self, "plugin_config", None) or {}
         return {
-            "endpoint_url": plugin_cfg.get("demo_endpoint", ""),
-            "ttl": plugin_cfg.get("demo_ttl", 3600),
+            "endpoint_url": sandbox_cfg.get(
+                "demo_endpoint", plugin_cfg.get("demo_endpoint", "")
+            ),
+            "ttl": sandbox_cfg.get("demo_ttl", plugin_cfg.get("demo_ttl", 3600)),
         }
 
     def build_connect_info(self, sandbox_name, config):
@@ -351,6 +355,8 @@ Core 只保留通用选择项：
 ```
 
 这个 schema 会持久化到 `data/config/<plugin_name>_config.json`，并在插件实例化时作为 `config` 传入。
+
+如果 provider 需要从 `provider_settings.sandbox` 读取会话级或历史兼容覆盖项，请在 `build_create_config()` 中把它们作为插件配置之上的 override 处理。不要把 runtime 专属字段新增到 core 的配置 metadata 中。
 
 ### 4. 通过 `tool_names` 暴露可选 runtime 工具
 
