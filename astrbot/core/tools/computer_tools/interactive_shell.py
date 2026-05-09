@@ -47,11 +47,6 @@ def _session_to_dict(session) -> dict[str, Any]:
     }
 
 
-# =============================================================================
-# Tool 1: astrbot_inta_shell_start
-# =============================================================================
-
-
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class InteractiveShellStartTool(FunctionTool):
@@ -62,7 +57,6 @@ class InteractiveShellStartTool(FunctionTool):
         "(e.g., npm init, python REPL, git add -p, interactive installers). "
         "Returns a session_id that must be used for subsequent send/read/stop operations. "
         "Note: This tool does NOT support full TTY programs like vim or nano. "
-        "On Windows, UTF-8 encoding is automatically configured for Unicode support."
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -74,7 +68,6 @@ class InteractiveShellStartTool(FunctionTool):
                         "The interactive command to start. "
                         "For programs with non-interactive alternatives, prefer those instead "
                         "(e.g., use 'npm init -y' instead of 'npm init' when possible). "
-                        "On Windows cmd.exe, UTF-8 code page (65001) is automatically set."
                     ),
                 },
                 "env": {
@@ -148,11 +141,6 @@ class InteractiveShellStartTool(FunctionTool):
                 },
                 ensure_ascii=False,
             )
-
-
-# =============================================================================
-# Tool 2: astrbot_inta_shell_send
-# =============================================================================
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
@@ -234,11 +222,6 @@ class InteractiveShellSendTool(FunctionTool):
                 {"success": False, "error": f"Failed to send input: {e}"},
                 ensure_ascii=False,
             )
-
-
-# =============================================================================
-# Tool 3: astrbot_inta_shell_read
-# =============================================================================
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
@@ -332,11 +315,6 @@ class InteractiveShellReadTool(FunctionTool):
             )
 
 
-# =============================================================================
-# Tool 4: astrbot_inta_shell_stop
-# =============================================================================
-
-
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class InteractiveShellStopTool(FunctionTool):
@@ -410,11 +388,6 @@ class InteractiveShellStopTool(FunctionTool):
                 {"success": False, "error": f"Failed to terminate session: {e}"},
                 ensure_ascii=False,
             )
-
-
-# =============================================================================
-# Tool 5: astrbot_inta_shell_list
-# =============================================================================
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
