@@ -31,12 +31,17 @@
         "unknown": "未知",
         "none": "无",
         "temporary": "临时",
-        "persistent": "持久"
+        "persistent": "持久",
+        "creating": "创建中",
+        "running": "运行中",
+        "error": "异常",
+        "stopping": "销毁中",
+        "stopped": "已停止"
     },
     "headers": {
         "sandbox": "沙盒",
         "provider": "Provider",
-        "lease": "状态",
+        "status": "状态",
         "lastUsed": "最后使用",
         "actions": "操作"
     },

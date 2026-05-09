@@ -31,12 +31,17 @@
         "unknown": "Unknown",
         "none": "None",
         "temporary": "Temporary",
-        "persistent": "Persistent"
+        "persistent": "Persistent",
+        "creating": "Creating",
+        "running": "Running",
+        "error": "Error",
+        "stopping": "Stopping",
+        "stopped": "Stopped"
     },
     "headers": {
         "sandbox": "Sandbox",
         "provider": "Provider",
-        "lease": "Status",
+        "status": "Status",
         "lastUsed": "Last used",
         "actions": "Actions"
     },
