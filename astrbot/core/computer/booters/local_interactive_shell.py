@@ -39,6 +39,7 @@ class _LocalInteractiveSession:
     last_activity: float = field(default_factory=time.time)
     read_threads: list[threading.Thread] = field(default_factory=list)
     stop_reading: threading.Event = field(default_factory=threading.Event)
+    created_at: float = field(default_factory=time.time)
 
 
 class LocalInteractiveShellComponent(InteractiveShellComponent):
@@ -57,6 +58,8 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
         self._sessions: dict[str, _LocalInteractiveSession] = {}
         self._session_lock = threading.Lock()
         self._cleanup_task: asyncio.Task | None = None
+        self._max_sessions = 10
+        self._session_timeout_seconds = 1800  # 30 minutes
 
     async def _ensure_cleanup_task(self) -> None:
         """Ensure the periodic cleanup task is running."""
@@ -64,11 +67,12 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
             self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def _cleanup_loop(self) -> None:
-        """Periodically clean up terminated sessions."""
+        """Periodically clean up terminated and idle sessions."""
         while True:
             try:
                 await asyncio.sleep(60)  # Check every minute
                 self._cleanup_terminated()
+                self._cleanup_idle_sessions()
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -76,20 +80,56 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
 
     def _cleanup_terminated(self) -> None:
         """Remove sessions for processes that have exited."""
+        to_remove: list[tuple[str, _LocalInteractiveSession]] = []
         with self._session_lock:
-            to_remove = []
             for session_id, session in self._sessions.items():
                 if session.process.poll() is not None:
-                    session.stop_reading.set()
-                    for t in session.read_threads:
-                        if t.is_alive():
-                            t.join(timeout=1.0)
-                    to_remove.append(session_id)
-            for session_id in to_remove:
-                del self._sessions[session_id]
+                    to_remove.append((session_id, session))
+
+        # Stop reading and join threads outside the lock to avoid blocking
+        for session_id, session in to_remove:
+            session.stop_reading.set()
+            for t in session.read_threads:
+                if t.is_alive():
+                    t.join(timeout=1.0)
+
+        with self._session_lock:
+            for session_id, _ in to_remove:
+                self._sessions.pop(session_id, None)
                 logger.info(
                     "[InteractiveShell] Cleaned up terminated session: %s", session_id
                 )
+
+    def _cleanup_idle_sessions(self) -> None:
+        """Terminate sessions that have been idle for too long."""
+        now = time.time()
+        to_remove: list[tuple[str, _LocalInteractiveSession]] = []
+        with self._session_lock:
+            for session_id, session in self._sessions.items():
+                if session.process.poll() is None:  # Still running
+                    idle_time = now - session.last_activity
+                    if idle_time > self._session_timeout_seconds:
+                        to_remove.append((session_id, session))
+
+        for session_id, session in to_remove:
+            logger.warning(
+                "[InteractiveShell] Session %s idle for %.0fs, forcing termination",
+                session_id,
+                self._session_timeout_seconds,
+            )
+            session.stop_reading.set()
+            try:
+                session.process.kill()
+                session.process.wait(timeout=2.0)
+            except Exception:
+                pass
+            for t in session.read_threads:
+                if t.is_alive():
+                    t.join(timeout=1.0)
+
+        with self._session_lock:
+            for session_id, _ in to_remove:
+                self._sessions.pop(session_id, None)
 
     def _start_reader_threads(self, session: _LocalInteractiveSession) -> None:
         """Start background threads to read process output (binary mode)."""
@@ -139,6 +179,13 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
         await self._ensure_cleanup_task()
 
         def _start() -> _LocalInteractiveSession:
+            with self._session_lock:
+                if len(self._sessions) >= self._max_sessions:
+                    raise RuntimeError(
+                        f"Maximum number of interactive sessions ({self._max_sessions}) reached. "
+                        f"Please stop some sessions before starting new ones."
+                    )
+
             run_env = os.environ.copy()
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
@@ -190,6 +237,8 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
             command=command,
             pid=session.process.pid,
             state=InteractiveSessionState.RUNNING,
+            created_at=session.created_at,
+            last_activity=session.last_activity,
         )
 
     async def send(
@@ -249,7 +298,8 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                         session.stderr_buffer.clear()
 
                 # Decode chunks
-                for chunk in (stdout_chunk, stderr_chunk):
+                chunks = [(stdout_chunk, False), (stderr_chunk, True)]
+                for chunk, is_stderr in chunks:
                     if not chunk:
                         continue
 
@@ -264,10 +314,10 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                         # Put back overflow
                         overflow = text[take:].encode("utf-8", errors="replace")
                         with session.lock:
-                            if chunk is stdout_chunk:
-                                session.stdout_buffer[:0] = overflow
-                            else:
+                            if is_stderr:
                                 session.stderr_buffer[:0] = overflow
+                            else:
+                                session.stdout_buffer[:0] = overflow
                         chars_collected += take
                         has_data = True
                         break
@@ -348,6 +398,9 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                     try:
                         exit_code = proc.wait(timeout=2.0)
                     except subprocess.TimeoutExpired:
+                        exit_code = None
+                    # Force-set exit code if process is still alive after kill
+                    if proc.poll() is None:
                         exit_code = -9
 
             for pipe in [proc.stdin, proc.stdout, proc.stderr]:
@@ -376,6 +429,8 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                 pid=proc.pid,
                 state=InteractiveSessionState.TERMINATED,
                 exit_code=exit_code,
+                created_at=session.created_at,
+                last_activity=session.last_activity,
             )
 
         return await asyncio.to_thread(_terminate)
@@ -404,6 +459,8 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                     pid=proc.pid,
                     state=state,
                     exit_code=exit_code,
+                    created_at=session.created_at,
+                    last_activity=session.last_activity,
                 )
 
         return await asyncio.to_thread(_get)
@@ -431,6 +488,8 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                             pid=proc.pid,
                             state=state,
                             exit_code=exit_code,
+                            created_at=session.created_at,
+                            last_activity=session.last_activity,
                         )
                     )
             return result

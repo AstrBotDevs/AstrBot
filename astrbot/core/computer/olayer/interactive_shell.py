@@ -51,6 +51,12 @@ class InteractiveSession:
     error_message: str | None = None
     """Error message if state is ERROR."""
 
+    created_at: float | None = None
+    """Timestamp when the session was created (time.time())."""
+
+    last_activity: float | None = None
+    """Timestamp of the last activity (send/read) on this session."""
+
 
 class InteractiveShellComponent(Protocol):
     """Protocol for interactive shell operations.

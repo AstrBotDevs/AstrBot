@@ -14,6 +14,7 @@ Tools:
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Any
@@ -41,13 +42,9 @@ def _session_to_dict(session) -> dict[str, Any]:
         "state": session.state.value,
         "exit_code": session.exit_code,
         "error_message": session.error_message,
+        "created_at": session.created_at,
+        "last_activity": session.last_activity,
     }
-
-
-def _get_interactive_shell(context: ContextWrapper[AstrAgentContext]):
-    """Get the interactive shell component from the current booter."""
-    # Note: get_booter is async, callers must await it
-    pass
 
 
 # =============================================================================
@@ -128,8 +125,6 @@ class InteractiveShellStartTool(FunctionTool):
             session = await ish.start(command, cwd=cwd, env=env)
 
             # Give the process a moment to produce initial output
-            import asyncio
-
             await asyncio.sleep(0.3)
             initial_output = await ish.read(session.session_id, timeout=2.0)
 
