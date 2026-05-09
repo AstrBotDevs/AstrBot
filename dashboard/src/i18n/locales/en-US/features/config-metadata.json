@@ -1071,6 +1071,10 @@
         "description": "Trace Log Max Size (MB)",
         "hint": "Rotate when exceeding this size; default 20MB."
       },
+      "trace_log_format": {
+        "description": "Trace Log Format",
+        "hint": "\"prefixed\" adds a timestamp prefix (default), suitable for human reading; \"jsonl\" outputs pure JSON Lines, one JSON object per line, for parsing by jq, Python json.loads, ELK, etc."
+      },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",
         "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`."
