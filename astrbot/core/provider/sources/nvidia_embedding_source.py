@@ -48,16 +48,10 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
                 "Accept": "application/json",
             }
             timeout = aiohttp.ClientTimeout(total=self.timeout)
-            if self.proxy:
-                self.client = aiohttp.ClientSession(
-                    headers=headers,
-                    timeout=timeout,
-                )
-            else:
-                self.client = aiohttp.ClientSession(
-                    headers=headers,
-                    timeout=timeout,
-                )
+            self.client = aiohttp.ClientSession(
+                headers=headers,
+                timeout=timeout,
+            )
         return self.client
 
     def _build_payload(self, text: str | list[str]) -> dict:
@@ -118,9 +112,9 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
 
         except aiohttp.ClientError as e:
             logger.error(f"[NVIDIA Embedding] Network error: {e}")
-            raise Exception(f"Network error: {e}") from e
+            raise
         except Exception as e:
-            logger.error(f"[NVIDIA Embedding] Error: {e}")
+            logger.error(f"[NVIDIA Embedding] Error: {e}", exc_info=True)
             raise
 
     def get_dim(self) -> int:

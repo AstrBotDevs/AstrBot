@@ -47,7 +47,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             )
         return self.client
 
-    def _build_payload(self, text: str | list[str]) -> dict:
+    def _build_payload(self, text: list[str]) -> dict:
         payload = {
             "model": self.model,
             "input": text,
@@ -98,9 +98,9 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
 
         except aiohttp.ClientError as e:
             logger.error(f"[Ollama Embedding] Network error: {e}")
-            raise Exception(f"Network error: {e}") from e
+            raise
         except Exception as e:
-            logger.error(f"[Ollama Embedding] Error: {e}")
+            logger.error(f"[Ollama Embedding] Error: {e}", exc_info=True)
             raise
 
     def get_dim(self) -> int:
