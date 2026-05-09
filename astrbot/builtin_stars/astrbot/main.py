@@ -177,6 +177,13 @@ class Main(star.Star):
                     )
 
                     prompt = event.message_str
+                    image_urls = []
+                    for comp in event.message_obj.message:
+                        if isinstance(comp, Image):
+                            try:
+                                image_urls.append(await comp.convert_to_file_path())
+                            except BaseException as e:
+                                logger.error(f"主动回复处理图片失败: {e}")
 
                     if not conv:
                         logger.error("未找到对话，无法主动回复")
@@ -185,6 +192,7 @@ class Main(star.Star):
                     yield event.request_llm(
                         prompt=prompt,
                         session_id=event.session_id,
+                        image_urls=image_urls,
                         conversation=conv,
                     )
                 except BaseException as e:
