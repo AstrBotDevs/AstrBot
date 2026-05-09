@@ -12,6 +12,8 @@ from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
+DEFAULT_TIMBER_WEIGHT = '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}]'
+
 
 @register_provider_adapter(
     "minimax_tts_api",
@@ -37,12 +39,12 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "minimax-is-timber-weight",
             False,
         )
-        self.timber_weight: list[dict[str, str | int]] = json.loads(
-            provider_config.get(
-                "minimax-timber-weight",
-                '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}]',
-            ),
+        timber_weight = (
+            provider_config.get("minimax-timber-weight") or DEFAULT_TIMBER_WEIGHT
         )
+        if isinstance(timber_weight, str) and not timber_weight.strip():
+            timber_weight = DEFAULT_TIMBER_WEIGHT
+        self.timber_weight: list[dict[str, str | int]] = json.loads(timber_weight)
 
         self.voice_setting: dict = {
             "speed": provider_config.get("minimax-voice-speed", 1.0),
