@@ -257,7 +257,7 @@ curr_cid = await conv_mgr.get_curr_conversation_id(uid)
 conversation = await conv_mgr.get_conversation(uid, curr_cid)  # Conversation
 ```
 
-::: details Conversation 类型定义
+::: details Conversation Type Definition
 
 ```py
 @dataclass
@@ -438,7 +438,7 @@ persona_mgr = self.context.persona_manager
 - **Returns**  
   `Personality` – Default persona object in v3 format
 
-::: details Persona / Personality 类型定义
+::: details Persona / Personality Type Definition
 
 ```py
 

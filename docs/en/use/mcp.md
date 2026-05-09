@@ -99,4 +99,4 @@ That's it.
 Reference links:
 
 1. Learn how to use MCP here: [Model Context Protocol](https://modelcontextprotocol.io/introduction)
-2. Get commonly used MCP servers here: [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers/blob/main/README-zh.md#what-is-mcp), [Model Context Protocol servers](https://github.com/modelcontextprotocol/servers), [MCP.so](https://mcp.so)
+2. Get commonly used MCP servers here: [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers/blob/main/README.md#what-is-mcp), [Model Context Protocol servers](https://github.com/modelcontextprotocol/servers), [MCP.so](https://mcp.so)
