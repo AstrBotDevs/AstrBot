@@ -481,3 +481,436 @@ class TestLongTermMemoryIntegration:
         assert remaining[0] == "[user50/14:00]: msg50"
         assert remaining[-1] == "[user99/14:00]: msg99"
         assert ltm._raw_cursor[umo] == 0  # 所有剩余条目在 cursor 之前被清除后归零
+
+
+# =============================================================================
+# 多轮累积
+# =============================================================================
+
+class TestMultiRoundAccumulation:
+    """验证多轮对话中 contexts 累积行为。"""
+
+    @pytest.fixture
+    def mock_event(self):
+        from unittest.mock import MagicMock
+        from astrbot.api.event import AstrMessageEvent
+        from astrbot.api.platform import MessageType
+        event = MagicMock(spec=AstrMessageEvent)
+        event.unified_msg_origin = "group_123"
+        event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+        event.message_obj = MagicMock()
+        event.message_obj.sender.nickname = "小明"
+        event.get_extra.return_value = -1
+        return event
+
+    @pytest.fixture
+    def ltm(self):
+        from unittest.mock import MagicMock
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "image_caption_prompt": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                               "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        return LongTermMemory(MagicMock(), ctx)
+
+    @pytest.mark.asyncio
+    async def test_three_rounds_contexts_grow(self, ltm, mock_event):
+        """三轮 @bot 对话后 contexts 累积 3 条 user + 3 条 assistant（含 prompt）。"""
+        from unittest.mock import MagicMock
+        from astrbot.api.provider import ProviderRequest, LLMResponse
+        from astrbot.api.message_components import Plain
+
+        for user_text, bot_text in [
+            ("@bot 你好", "你好呀~"),
+            ("@bot 1+1", "等于2"),
+            ("@bot 再见", "拜拜~"),
+        ]:
+            def _get_extra(key, default=None):
+                if key == "_ltm_raw_idx":
+                    return len(ltm.raw_records["group_123"])
+                return default
+            mock_event.get_extra = _get_extra
+            comp = Plain(text=user_text)
+            mock_event.get_messages.return_value = [comp]
+
+            await ltm.handle_message(mock_event)
+
+            req = ProviderRequest()
+            await ltm.on_req_llm(mock_event, req)
+            assert req.conversation is None
+
+            mock_run_ctx = MagicMock(messages=[])
+            resp = LLMResponse(role="assistant", completion_text=bot_text)
+            await ltm.on_agent_done(mock_event, mock_run_ctx, resp)
+
+        ctxs = ltm.contexts["group_123"]
+        roles = [c["role"] for c in ctxs]
+        # on_agent_done 从 cursor 起构建（含 @bot prompt） → user 段也进 contexts
+        assert roles == ["user", "assistant", "user", "assistant", "user", "assistant"]
+        assert "你好呀~" in ctxs[1]["content"]
+        assert "等于2" in ctxs[3]["content"]
+        assert "拜拜~" in ctxs[5]["content"]
+
+    @pytest.mark.asyncio
+    async def test_contexts_only_appended_never_rebuilt(self, ltm, mock_event):
+        """验证 contexts 是追加式，不会被重建。"""
+        from unittest.mock import MagicMock
+        from astrbot.api.provider import ProviderRequest, LLMResponse
+        from astrbot.api.message_components import Plain
+
+        # Round 1
+        def _get_extra_r1(key, default=None):
+            return 0 if key == "_ltm_raw_idx" else default
+        mock_event.get_extra = _get_extra_r1
+        mock_event.get_messages.return_value = [Plain(text="@bot hi")]
+        await ltm.handle_message(mock_event)
+        req = ProviderRequest()
+        await ltm.on_req_llm(mock_event, req)
+        await ltm.on_agent_done(
+            mock_event,
+            MagicMock(messages=[]),
+            LLMResponse(role="assistant", completion_text="hello"),
+        )
+        ctx_after_r1 = list(ltm.contexts["group_123"])
+        assert len(ctx_after_r1) >= 1  # 至少有 assistant
+
+        # Round 2
+        def _get_extra_r2(key, default=None):
+            return 2 if key == "_ltm_raw_idx" else default
+        mock_event.get_extra = _get_extra_r2
+        mock_event.get_messages.return_value = [Plain(text="@bot again")]
+        await ltm.handle_message(mock_event)
+        req = ProviderRequest()
+        await ltm.on_req_llm(mock_event, req)
+        await ltm.on_agent_done(
+            mock_event,
+            MagicMock(messages=[]),
+            LLMResponse(role="assistant", completion_text="world"),
+        )
+        ctx_after_r2 = list(ltm.contexts["group_123"])
+        # 旧条目保留，新条目追加
+        assert len(ctx_after_r2) >= len(ctx_after_r1)
+        assert ctx_after_r2[:len(ctx_after_r1)] == ctx_after_r1
+
+
+# =============================================================================
+# on_agent_done 工具链
+# =============================================================================
+
+class TestAgentDoneToolChains:
+    """验证 on_agent_done 正确记录工具调用链。"""
+
+    @pytest.fixture
+    def mock_event(self):
+        from unittest.mock import MagicMock
+        from astrbot.api.event import AstrMessageEvent
+        from astrbot.api.platform import MessageType
+        event = MagicMock(spec=AstrMessageEvent)
+        event.unified_msg_origin = "group_123"
+        event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+        event.message_obj = MagicMock()
+        event.message_obj.sender.nickname = "小明"
+        event.get_extra.return_value = 0
+        event.get_messages.return_value = [MagicMock()]
+        return event
+
+    @pytest.fixture
+    def ltm(self):
+        from unittest.mock import MagicMock
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "image_caption_prompt": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                               "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        return LongTermMemory(MagicMock(), ctx)
+
+    @pytest.mark.asyncio
+    async def test_tool_call_recorded_in_raw(self, ltm, mock_event):
+        """工具调用被记录到 contexts 中的 assistant(tool_calls) + tool 消息。"""
+        from astrbot.api.provider import LLMResponse
+        from astrbot.api.message_components import Plain
+
+        mock_event.get_messages.return_value = [Plain(text="@bot weather")]
+        await ltm.handle_message(mock_event)
+
+        from unittest.mock import MagicMock
+        tc_msg = MagicMock()
+        tc_msg.role = "assistant"
+        tc_msg.tool_calls = [{"id": "c1", "function": {"name": "weather", "arguments": '{"city":"bj"}'}}]
+        tool_msg = MagicMock()
+        tool_msg.role = "tool"
+        tool_msg.tool_call_id = "c1"
+        tool_msg.content = "sunny"
+
+        run_ctx = MagicMock()
+        run_ctx.messages = [tc_msg, tool_msg]
+        resp = LLMResponse(role="assistant", completion_text="今天晴天")
+
+        await ltm.on_agent_done(mock_event, run_ctx, resp)
+
+        # on_agent_done 构建 contexts 后 trim raw_records，检查 contexts
+        ctxs = ltm.contexts["group_123"]
+        roles = [c["role"] for c in ctxs]
+        has_tool_call = any(c.get("tool_calls") for c in ctxs if c["role"] == "assistant")
+        has_tool_result = any(c["role"] == "tool" for c in ctxs)
+        has_final_asst = any(
+            c["role"] == "assistant" and c.get("content") == "今天晴天"
+            for c in ctxs
+        )
+        assert has_tool_call, f"expected assistant with tool_calls in contexts"
+        assert has_tool_result, f"expected tool message in contexts"
+        assert has_final_asst, f"expected final assistant text in contexts"
+
+    @pytest.mark.asyncio
+    async def test_tool_call_no_final_text(self, ltm, mock_event):
+        """工具调用后没有最终文本回复时 contexts 有 tool_calls 但没有最终 assistant 文本。"""
+        from astrbot.api.provider import LLMResponse
+        from astrbot.api.message_components import Plain
+
+        mock_event.get_messages.return_value = [Plain(text="@bot task")]
+        await ltm.handle_message(mock_event)
+
+        from unittest.mock import MagicMock
+        tc_msg = MagicMock()
+        tc_msg.role = "assistant"
+        tc_msg.tool_calls = [{"id": "c2", "function": {"name": "calc", "arguments": "{}"}}]
+
+        run_ctx = MagicMock()
+        run_ctx.messages = [tc_msg]
+        resp = LLMResponse(role="assistant")  # 无 completion_text
+
+        await ltm.on_agent_done(mock_event, run_ctx, resp)
+
+        ctxs = ltm.contexts["group_123"]
+        has_tool_call = any(c.get("tool_calls") for c in ctxs if c["role"] == "assistant")
+        has_final_text = any(
+            c["role"] == "assistant" and c.get("content")
+            for c in ctxs
+        )
+        assert has_tool_call
+        assert not has_final_text
+
+
+# =============================================================================
+# 极端数据
+# =============================================================================
+
+class TestExtremeData:
+    """边界和极端输入。"""
+
+    @pytest.fixture
+    def ltm(self):
+        from unittest.mock import MagicMock
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "image_caption_prompt": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                               "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        return LongTermMemory(MagicMock(), ctx)
+
+    def test_emoji_and_unicode_user_segment(self):
+        """emoji 和 Unicode 在 user 段中正确处理。"""
+        lines = [
+            "[小明/14:30]: 😂😂😂 哈哈哈哈",
+            "[小红/14:31]: 你好世界 🌍 ！",
+            "[小刚/14:32]: 日本語テスト \u3067\u3059",
+        ]
+        result = _build_segments(lines)
+        assert len(result) == 1
+        assert result[0]["role"] == "user"
+        assert "😂😂😂" in result[0]["content"]
+        assert "🌍" in result[0]["content"]
+        assert "日本語テスト" in result[0]["content"]
+
+    def test_mixed_image_at_plain(self):
+        """Image + At + Plain 混合行。"""
+        # 模拟 handle_message 构建的 raw line
+        raw_lines = [
+            "[小明/14:30]:  hi [Image: 一只猫] [At: 小红] ok",
+            "[小红/14:31]: 收到",
+        ]
+        result = _build_segments(raw_lines)
+        assert len(result) == 1
+        assert "[Image: 一只猫]" in result[0]["content"]
+        assert "[At: 小红]" in result[0]["content"]
+        assert "ok" in result[0]["content"]
+
+    def test_max_raw_bytes_triggers_cursor_trim(self, ltm):
+        """MAX_RAW_BYTES 超限时淘汰已消费条目。"""
+        umo = "big_group"
+        # 塞入 60KB 已消费 + 10KB 未消费
+        consumed = "x" * 6000  # ~6KB per line
+        for i in range(10):
+            ltm.raw_records[umo].append(consumed + f" consumed{i}")
+            ltm._raw_cursor[umo] += 1
+        unconsumed = "y" * 1000  # ~1KB per line
+        for i in range(10):
+            ltm.raw_records[umo].append(unconsumed + f" unconsumed{i}")
+
+        ltm._trim_raw_records(umo)
+
+        remaining = list(ltm.raw_records[umo])
+        assert len(remaining) > 0
+        assert all("unconsumed" in s or "consumed" in s for s in remaining)
+        # cursor 归零（所有已消费全部清掉）
+        assert ltm._raw_cursor[umo] == 0
+
+
+# =============================================================================
+# Persona begin_dialogs 前置保留
+# =============================================================================
+
+class TestPersonaBeginDialogs:
+    """验证 req.contexts 已有内容时 LTM 前置保留。"""
+
+    @pytest.fixture
+    def mock_event(self):
+        from unittest.mock import MagicMock
+        from astrbot.api.event import AstrMessageEvent
+        from astrbot.api.platform import MessageType
+        event = MagicMock(spec=AstrMessageEvent)
+        event.unified_msg_origin = "group_123"
+        event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+        event.message_obj = MagicMock()
+        event.message_obj.sender.nickname = "小明"
+        event.get_extra.return_value = 0
+        event.get_messages.return_value = [MagicMock()]
+        return event
+
+    @pytest.fixture
+    def ltm(self):
+        from unittest.mock import MagicMock
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "image_caption_prompt": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                               "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        return LongTermMemory(MagicMock(), ctx)
+
+    @pytest.mark.asyncio
+    async def test_existing_contexts_preserved(self, ltm, mock_event):
+        """Persona 注入的 begin_dialogs 在 contexts 之前。"""
+        from astrbot.api.provider import ProviderRequest
+        from astrbot.api.message_components import Plain
+
+        mock_event.get_messages.return_value = [Plain(text="@bot hi")]
+        await ltm.handle_message(mock_event)
+
+        # 模拟 Persona 已注入的内容
+        persona_dialogs = [
+            {"role": "system", "content": "sample-only"},
+            {"role": "user", "content": "sample-only"},
+            {"role": "assistant", "content": "sample-only"},
+        ]
+        req = ProviderRequest(contexts=persona_dialogs)
+        await ltm.on_req_llm(mock_event, req)
+
+        # Persona 内容在 LTM 内容之前
+        assert req.contexts[:3] == persona_dialogs
+
+
+# =============================================================================
+# 并发安全
+# =============================================================================
+
+class TestConcurrentSafety:
+    """验证 asyncio.Lock 下的并发安全性。"""
+
+    @pytest.fixture
+    def mock_event_factory(self):
+        from unittest.mock import MagicMock
+        from astrbot.api.event import AstrMessageEvent
+        from astrbot.api.platform import MessageType
+
+        def _make(umo="group_123", raw_idx=0, text="hi"):
+            event = MagicMock(spec=AstrMessageEvent)
+            event.unified_msg_origin = umo
+            event.get_message_type.return_value = MessageType.GROUP_MESSAGE
+            event.message_obj = MagicMock()
+            event.message_obj.sender.nickname = "小明"
+
+            def _ge(key, default=None):
+                return raw_idx if key == "_ltm_raw_idx" else default
+            event.get_extra = _ge
+            from astrbot.api.message_components import Plain
+            event.get_messages.return_value = [Plain(text=text)]
+            return event
+        return _make
+
+    @pytest.fixture
+    def ltm(self):
+        from unittest.mock import MagicMock
+        from astrbot.builtin_stars.astrbot.long_term_memory import LongTermMemory
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "provider_ltm_settings": {
+                "image_caption": False, "image_caption_provider_id": "",
+                "image_caption_prompt": "",
+                "active_reply": {"enable": False, "method": "possibility_reply",
+                               "possibility_reply": 0.0, "prompt": "", "whitelist": []},
+            },
+            "provider_settings": {"image_caption_prompt": ""},
+        }
+        return LongTermMemory(MagicMock(), ctx)
+
+    @pytest.mark.asyncio
+    async def test_concurrent_handle_same_umo(self, ltm, mock_event_factory):
+        """同一群并发 handle_message 不会丢失消息。"""
+        import asyncio
+
+        texts = ["msg1", "msg2", "msg3", "msg4", "msg5"]
+        tasks = [
+            ltm.handle_message(mock_event_factory(raw_idx=i, text=t))
+            for i, t in enumerate(texts)
+        ]
+        await asyncio.gather(*tasks)
+
+        raw = list(ltm.raw_records["group_123"])
+        assert len(raw) == 5
+        for t in texts:
+            assert any(t in s for s in raw)
+
+    @pytest.mark.asyncio
+    async def test_concurrent_handle_keeps_lock_integrity(self, ltm, mock_event_factory):
+        """并发 handle 后 raw_records 无交错损坏。"""
+        import asyncio
+
+        async def record_with_delay(text, delay=0):
+            await asyncio.sleep(delay)
+            await ltm.handle_message(
+                mock_event_factory(raw_idx=0, text=text)
+            )
+
+        await asyncio.gather(
+            record_with_delay("a", 0.01),
+            record_with_delay("b", 0.02),
+            record_with_delay("c", 0.0),
+        )
+
+        raw = list(ltm.raw_records["group_123"])
+        assert len(raw) == 3
+        assert all(any(t in s for s in raw) for t in ["a", "b", "c"])
