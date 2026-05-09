@@ -193,7 +193,7 @@ class TakeoverSandboxTool(FunctionTool):
             return permission_error
         session_id = context.context.event.unified_msg_origin
         try:
-            sandbox = sandbox_manager.takeover_sandbox(session_id, sandbox_id)
+            sandbox = await sandbox_manager.takeover_sandbox(session_id, sandbox_id)
         except Exception as e:
             detail = str(e) or type(e).__name__
             return f"Error taking over sandbox: {detail}"

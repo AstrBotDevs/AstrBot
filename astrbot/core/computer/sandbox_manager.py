@@ -275,7 +275,10 @@ class SandboxManager:
                 break
 
         await self._finalize_created_booter(
-            provider, target_sandbox_id, session_id=session_id, idle_timeout=idle_timeout
+            provider,
+            target_sandbox_id,
+            session_id=session_id,
+            idle_timeout=idle_timeout,
         )
         await self._invoke_sandbox_created_hook(provider, target_sandbox_id)
         return self.session_booter[target_sandbox_id]
@@ -313,19 +316,39 @@ class SandboxManager:
     async def _invoke_sandbox_created_hook(
         self, provider: SandboxProvider, sandbox_id: str
     ) -> None:
-        """Invoke provider's on_sandbox_created hook if present."""
+        """Invoke provider's on_sandbox_created hook if present.
+
+        Each sandbox only fires the hook once, guarded by a persistent flag in
+        the registry record so that dashboard-created sandboxes still receive
+        the hook when they are first leased via switch/takeover.
+
+        The flag is only set on success so that a transient hook failure can
+        be retried on the next lease operation.
+        """
+        record = self.registry.get_sandbox(sandbox_id) or {}
+        if record.get("created_hook_fired"):
+            return
         if not hasattr(provider, "on_sandbox_created"):
+            # Mark as fired even when the hook is absent so we don't keep
+            # re-checking on every subsequent lease operation.
+            raw = self.registry._payload["sandboxes"].get(sandbox_id)
+            if raw is not None:
+                raw["created_hook_fired"] = True
+                await self.save_registry_async()
             return
         try:
-            await provider.on_sandbox_created(
-                self.registry.get_sandbox(sandbox_id) or {}
-            )
+            await provider.on_sandbox_created(record)
         except Exception as hook_err:
             logger.warning(
                 "[Computer] on_sandbox_created hook failed for %s: %s",
                 sandbox_id,
                 hook_err,
             )
+            return
+        raw = self.registry._payload["sandboxes"].get(sandbox_id)
+        if raw is not None:
+            raw["created_hook_fired"] = True
+            await self.save_registry_async()
 
     async def create_sandbox_uncontrolled(
         self,
@@ -347,7 +370,9 @@ class SandboxManager:
                     session_id=session_id,
                     provider_id=provider_id,
                     idle_timeout=idle_timeout,
-                    connect_info=provider.build_connect_info(sandbox_name, create_config),
+                    connect_info=provider.build_connect_info(
+                        sandbox_name, create_config
+                    ),
                 )
             )
             try:
@@ -382,6 +407,13 @@ class SandboxManager:
         self.registry.set_current_sandbox_id(session_id, sandbox_id)
         await self.save_registry_async()
         provider = self.get_provider(sandbox.get("provider", ""))
+        # Reset idle cleanup after lease acquisition.  The uncontrolled
+        # creation path already schedules cleanup, but a slow skill-sync or
+        # short idle_timeout could let the timer expire before the lease is
+        # acquired.  Re-scheduling here guarantees a full idle window.
+        idle_timeout = sandbox.get("idle_timeout") or 0
+        if idle_timeout:
+            self.schedule_idle_cleanup(sandbox_id, float(idle_timeout))
         await self._invoke_sandbox_created_hook(provider, sandbox_id)
         return self.registry.get_sandbox(sandbox_id) or sandbox
 
@@ -462,9 +494,12 @@ class SandboxManager:
             raise RuntimeError(f"Sandbox {sandbox_id} is not running")
         if not self.acquire_lease(sandbox_id, session_id):
             raise RuntimeError(f"Sandbox {sandbox_id} is busy")
-        return await self._set_current_sandbox_after_lease(
+        result = await self._set_current_sandbox_after_lease(
             session_id, sandbox_id, record
         )
+        provider = self.get_provider(record.get("provider", ""))
+        await self._invoke_sandbox_created_hook(provider, sandbox_id)
+        return result
 
     async def _set_current_sandbox_after_lease(
         self, session_id: str, sandbox_id: str, record: dict
@@ -527,7 +562,7 @@ class SandboxManager:
         self.save_registry()
         return released
 
-    def takeover_sandbox(self, session_id: str, sandbox_id: str) -> dict:
+    async def takeover_sandbox(self, session_id: str, sandbox_id: str) -> dict:
         record = self.registry.get_sandbox(sandbox_id)
         if record is None or not record.get("managed"):
             raise RuntimeError(f"Sandbox {sandbox_id} not found")
@@ -542,6 +577,8 @@ class SandboxManager:
         )
         self.registry.set_current_sandbox_id(session_id, sandbox_id)
         self.save_registry()
+        provider = self.get_provider(record.get("provider", ""))
+        await self._invoke_sandbox_created_hook(provider, sandbox_id)
         return updated
 
     async def destroy_sandbox(self, session_id: str, sandbox_id: str) -> dict:
@@ -607,6 +644,8 @@ class SandboxManager:
         await self.save_registry_async()
         idle_timeout = record.get("idle_timeout") or 0
         self.schedule_idle_cleanup(sandbox_id, float(idle_timeout))
+        provider = self.get_provider(record.get("provider", ""))
+        await self._invoke_sandbox_created_hook(provider, sandbox_id)
         return booter
 
     async def reconcile_on_startup(self) -> None:

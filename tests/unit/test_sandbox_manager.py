@@ -148,7 +148,7 @@ async def test_manager_switches_releases_takes_over_and_destroys(tmp_path):
     )
     assert switched["controller_session_id"] == "session-a"
 
-    taken = manager.takeover_sandbox("session-b", created["sandbox_id"])
+    taken = await manager.takeover_sandbox("session-b", created["sandbox_id"])
     assert taken["controller_session_id"] == "session-b"
 
     destroyed = await manager.destroy_sandbox("session-b", created["sandbox_id"])
@@ -161,7 +161,7 @@ async def test_manager_switches_releases_takes_over_and_destroys(tmp_path):
 async def test_manager_force_releases_other_session_lease(tmp_path):
     manager, _provider = _manager(tmp_path)
     created = await manager.create_sandbox(None, "session-a", "generic", "Named")
-    taken = manager.takeover_sandbox("session-b", created["sandbox_id"])
+    taken = await manager.takeover_sandbox("session-b", created["sandbox_id"])
     manager.registry.set_current_sandbox_id("session-b", created["sandbox_id"])
 
     released = manager.force_release_sandbox(created["sandbox_id"])

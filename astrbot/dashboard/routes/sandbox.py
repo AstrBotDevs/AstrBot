@@ -134,7 +134,7 @@ class SandboxRoute(Route):
 
     async def takeover_sandbox(self, sandbox_id: str):
         try:
-            sandbox = computer_client.sandbox_manager.takeover_sandbox(
+            sandbox = await computer_client.sandbox_manager.takeover_sandbox(
                 self._session_id(), sandbox_id
             )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
