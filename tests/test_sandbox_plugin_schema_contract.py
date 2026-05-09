@@ -15,11 +15,10 @@ def _require_plugin_files(*relative_paths: str) -> None:
 
 
 def _load_schema(plugin_name: str) -> dict:
-    return json.loads(
-        (ROOT / "data/plugins" / plugin_name / "_conf_schema.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    schema_path = ROOT / "data/plugins" / plugin_name / "_conf_schema.json"
+    if not schema_path.is_file():
+        pytest.skip(f"sandbox plugin schema is not present: {schema_path}")
+    return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
 def test_cua_schema_defaults_match_documented_hints():
