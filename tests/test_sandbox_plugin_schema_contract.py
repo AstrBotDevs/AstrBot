@@ -3,6 +3,7 @@ from pathlib import Path
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from data.plugins.astrbot_sandbox_cua.provider import CuaSandboxProvider
+from data.plugins.astrbot_sandbox_cua.tools.cua import CuaScreenshotTool
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -91,3 +92,20 @@ def test_existing_plugin_config_keeps_saved_values_when_schema_defaults_change(t
 
     assert config["flag"] is False
     assert config["ttl"] == 0
+
+
+def test_cua_screenshot_tool_does_not_send_to_user_by_default():
+    tool = CuaScreenshotTool()
+
+    send_to_user = tool.parameters["properties"]["send_to_user"]["default"]
+    return_image_to_llm = tool.parameters["properties"]["return_image_to_llm"]["default"]
+
+    assert send_to_user is False
+    assert return_image_to_llm is True
+
+
+def test_cua_screenshot_tool_can_send_result_to_user_when_requested():
+    tool = CuaScreenshotTool()
+
+    assert tool.parameters["properties"]["send_to_user"]["description"]
+    assert tool.parameters["properties"]["return_image_to_llm"]["default"] is True

@@ -13,6 +13,11 @@ Follow these rules:
 
 SANDBOX_MODE_PROMPT = (
     "You have access to a sandboxed environment and can execute shell commands and Python code securely."
+    " You can manage sandbox lifecycle, including listing sandboxes, checking the current sandbox, creating a new sandbox, switching sandboxes, releasing a lease, taking over a sandbox, destroying a sandbox, capturing a screenshot from a specific sandbox, and copying files between sandboxes."
+    " You can create a new sandbox when the user explicitly asks for a fresh or separate environment."
+    " When working with GUI-capable sandboxes, take screenshots for your own verification when needed,"
+    " but do not send screenshots to the user unless explicitly requested."
+    " If the user asks for a visible GUI result or asks you to show the outcome, send one final result screenshot to the user to show the outcome."
     # "Your have extended skills library, such as PDF processing, image generation, data analysis, etc. "
     # "Before handling complex tasks, please retrieve and review the documentation in the in /app/skills/ directory. "
     # "If the current task matches the description of a specific skill, prioritize following the workflow defined by that skill."

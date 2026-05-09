@@ -31,15 +31,24 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
+    CopyFileBetweenSandboxesTool,
+    CreateSandboxTool,
+    DestroySandboxTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
     FileReadTool,
     FileUploadTool,
     FileWriteTool,
+    GetCurrentSandboxTool,
     GrepTool,
+    ListSandboxesTool,
     LocalPythonTool,
     PythonTool,
+    ReleaseSandboxTool,
+    ScreenshotSandboxTool,
+    SwitchSandboxTool,
+    TakeoverSandboxTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -191,6 +200,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         booter = "" if booter is None else str(booter).lower()
         if runtime == "sandbox":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
+            list_sandboxes_tool = tool_mgr.get_builtin_tool(ListSandboxesTool)
+            get_current_sandbox_tool = tool_mgr.get_builtin_tool(GetCurrentSandboxTool)
+            create_sandbox_tool = tool_mgr.get_builtin_tool(CreateSandboxTool)
+            switch_sandbox_tool = tool_mgr.get_builtin_tool(SwitchSandboxTool)
+            release_sandbox_tool = tool_mgr.get_builtin_tool(ReleaseSandboxTool)
+            takeover_sandbox_tool = tool_mgr.get_builtin_tool(TakeoverSandboxTool)
+            destroy_sandbox_tool = tool_mgr.get_builtin_tool(DestroySandboxTool)
+            screenshot_sandbox_tool = tool_mgr.get_builtin_tool(ScreenshotSandboxTool)
+            copy_between_sandboxes_tool = tool_mgr.get_builtin_tool(
+                CopyFileBetweenSandboxesTool
+            )
             python_tool = tool_mgr.get_builtin_tool(PythonTool)
             upload_tool = tool_mgr.get_builtin_tool(FileUploadTool)
             download_tool = tool_mgr.get_builtin_tool(FileDownloadTool)
@@ -200,6 +220,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             grep_tool = tool_mgr.get_builtin_tool(GrepTool)
             tools = {
                 shell_tool.name: shell_tool,
+                list_sandboxes_tool.name: list_sandboxes_tool,
+                get_current_sandbox_tool.name: get_current_sandbox_tool,
+                create_sandbox_tool.name: create_sandbox_tool,
+                switch_sandbox_tool.name: switch_sandbox_tool,
+                release_sandbox_tool.name: release_sandbox_tool,
+                takeover_sandbox_tool.name: takeover_sandbox_tool,
+                destroy_sandbox_tool.name: destroy_sandbox_tool,
+                screenshot_sandbox_tool.name: screenshot_sandbox_tool,
+                copy_between_sandboxes_tool.name: copy_between_sandboxes_tool,
                 python_tool.name: python_tool,
                 upload_tool.name: upload_tool,
                 download_tool.name: download_tool,

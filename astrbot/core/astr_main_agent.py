@@ -47,15 +47,24 @@ from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.computer_tools import (
+    CopyFileBetweenSandboxesTool,
+    CreateSandboxTool,
+    DestroySandboxTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
     FileReadTool,
     FileUploadTool,
     FileWriteTool,
+    GetCurrentSandboxTool,
     GrepTool,
+    ListSandboxesTool,
     LocalPythonTool,
     PythonTool,
+    ReleaseSandboxTool,
+    ScreenshotSandboxTool,
+    SwitchSandboxTool,
+    TakeoverSandboxTool,
     normalize_umo_for_workspace,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
@@ -977,6 +986,15 @@ def _apply_sandbox_tools(
 
     tool_mgr = llm_tools
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSandboxesTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetCurrentSandboxTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSandboxTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(SwitchSandboxTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ReleaseSandboxTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(TakeoverSandboxTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(DestroySandboxTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ScreenshotSandboxTool))
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(CopyFileBetweenSandboxesTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(PythonTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileUploadTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileDownloadTool))

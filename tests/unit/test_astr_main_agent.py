@@ -1625,6 +1625,15 @@ class TestApplySandboxTools:
         assert "astrbot_execute_ipython" in tool_names
         assert "astrbot_upload_file" in tool_names
         assert "astrbot_download_file" in tool_names
+        assert "astrbot_create_sandbox" in tool_names
+        assert "astrbot_list_sandboxes" in tool_names
+        assert "astrbot_get_current_sandbox" in tool_names
+        assert "astrbot_switch_sandbox" in tool_names
+        assert "astrbot_release_sandbox" in tool_names
+        assert "astrbot_takeover_sandbox" in tool_names
+        assert "astrbot_destroy_sandbox" in tool_names
+        assert "astrbot_screenshot_sandbox" in tool_names
+        assert "astrbot_copy_file_between_sandboxes" in tool_names
 
     def test_apply_sandbox_tools_adds_sandbox_prompt(self, mock_context):
         """Test that sandbox mode prompt is added to system_prompt."""
@@ -1639,6 +1648,7 @@ class TestApplySandboxTools:
         module._apply_sandbox_tools(config, req, "session-123")
 
         assert "sandboxed environment" in req.system_prompt
+        assert "do not send screenshots to the user unless explicitly requested" in req.system_prompt
 
     def test_apply_sandbox_tools_preserves_existing_toolset(self, mock_context):
         """Test that existing tools are preserved when adding sandbox tools."""
@@ -1688,3 +1698,39 @@ class TestApplySandboxTools:
 
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
+        assert "create a new sandbox" in req.system_prompt
+        assert "do not send screenshots to the user unless explicitly requested" in req.system_prompt
+        assert "send one final result screenshot to the user" in req.system_prompt
+
+    def test_handoff_runtime_computer_tools_include_sandbox_lifecycle_tools(self):
+        tool_mgr = MagicMock()
+
+        class NamedTool:
+            def __init__(self, name):
+                self.name = name
+                self.active = True
+
+        def get_builtin_tool(cls, **kwargs):
+            del kwargs
+            return cls()
+
+        tool_mgr.get_builtin_tool.side_effect = get_builtin_tool
+        tool_mgr.get_func.side_effect = lambda name: NamedTool(name)
+
+        with patch(
+            "astrbot.core.computer.computer_client.get_sandbox_provider_info",
+            return_value={"tool_names": []},
+        ):
+            tools = ama.FunctionToolExecutor._get_runtime_computer_tools(
+                "sandbox", tool_mgr, "cua"
+            )
+
+        assert "astrbot_create_sandbox" in tools
+        assert "astrbot_list_sandboxes" in tools
+        assert "astrbot_get_current_sandbox" in tools
+        assert "astrbot_switch_sandbox" in tools
+        assert "astrbot_release_sandbox" in tools
+        assert "astrbot_takeover_sandbox" in tools
+        assert "astrbot_destroy_sandbox" in tools
+        assert "astrbot_screenshot_sandbox" in tools
+        assert "astrbot_copy_file_between_sandboxes" in tools

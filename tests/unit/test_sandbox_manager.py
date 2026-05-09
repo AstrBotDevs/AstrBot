@@ -115,6 +115,15 @@ async def test_manager_switches_releases_takes_over_and_destroys(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_manager_blocks_observer_booter_access_from_other_session(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+
+    with pytest.raises(RuntimeError, match="controlled by another session"):
+        await manager.get_observer_booter_by_id(created["sandbox_id"], "session-b")
+
+
+@pytest.mark.asyncio
 async def test_manager_idle_cleanup_removes_temporary_sandbox(tmp_path):
     provider = FakeProvider()
     provider.idle_timeout = 0.01
