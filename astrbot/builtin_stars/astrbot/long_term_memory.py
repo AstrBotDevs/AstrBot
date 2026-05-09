@@ -1,7 +1,9 @@
+import asyncio
 import datetime
+import json
 import random
 import uuid
-from collections import defaultdict
+from collections import defaultdict, deque
 
 from astrbot import logger
 from astrbot.api import star
@@ -12,24 +14,48 @@ from astrbot.api.provider import LLMResponse, Provider, ProviderRequest
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 """
-聊天记忆增强
+聊天记忆增强 (LTM v2)
 """
+
+# === 常量 ===
+
+CHATROOM_SYSTEM_NOTE = (
+    "You are now in a chatroom. "
+    "Chat history messages below use the format '[username/time]: content'. "
+    "Messages from yourself are prefixed with '<BOT/time>:'.\n"
+)
+
+MAX_MSGS_PER_USER_SEGMENT = 50
+MAX_CHARS_PER_USER_SEGMENT = 3000
+MAX_RAW_BYTES = 500_000  # 500KB / 群
+
+TOOL_CALL_PREFIX = "<T:CALL>"
+TOOL_RES_PREFIX = "<T:RES"
+BOT_MARKER = "<BOT/"
 
 
 class LongTermMemory:
     def __init__(self, acm: AstrBotConfigManager, context: star.Context) -> None:
         self.acm = acm
         self.context = context
-        self.session_chats = defaultdict(list)
-        """记录群成员的群聊记录"""
+
+        self._lock = asyncio.Lock()
+
+        self.raw_records: dict[str, deque[str]] = defaultdict(deque)
+        """群聊原始记录。deque 支持 O(1) popleft。"""
+
+        self._raw_cursor: dict[str, int] = defaultdict(int)
+        """raw_records 中已消费到 contexts 的位置（指向下一条未消费的索引）。"""
+
+        self.contexts: dict[str, list[dict]] = defaultdict(list)
+        """累积累积态 LLM 上下文。由 ContextManager 修改后保留。"""
+
+    # =========================================================================
+    # 配置
+    # =========================================================================
 
     def cfg(self, event: AstrMessageEvent):
         cfg = self.context.get_config(umo=event.unified_msg_origin)
-        try:
-            max_cnt = int(cfg["provider_ltm_settings"]["group_message_max_cnt"])
-        except BaseException as e:
-            logger.error(e)
-            max_cnt = 300
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
         image_caption_provider_id = cfg["provider_ltm_settings"].get(
             "image_caption_provider_id"
@@ -43,8 +69,7 @@ class LongTermMemory:
         ar_possibility = active_reply["possibility_reply"]
         ar_prompt = active_reply.get("prompt", "")
         ar_whitelist = active_reply.get("whitelist", [])
-        ret = {
-            "max_cnt": max_cnt,
+        return {
             "image_caption": image_caption,
             "image_caption_prompt": image_caption_prompt,
             "image_caption_provider_id": image_caption_provider_id,
@@ -54,14 +79,10 @@ class LongTermMemory:
             "ar_prompt": ar_prompt,
             "ar_whitelist": ar_whitelist,
         }
-        return ret
 
-    async def remove_session(self, event: AstrMessageEvent) -> int:
-        cnt = 0
-        if event.unified_msg_origin in self.session_chats:
-            cnt = len(self.session_chats[event.unified_msg_origin])
-            del self.session_chats[event.unified_msg_origin]
-        return cnt
+    # =========================================================================
+    # 图片描述
+    # =========================================================================
 
     async def get_image_caption(
         self,
@@ -85,17 +106,18 @@ class LongTermMemory:
         )
         return response.completion_text
 
+    # =========================================================================
+    # 主动回复判断
+    # =========================================================================
+
     async def need_active_reply(self, event: AstrMessageEvent) -> bool:
         cfg = self.cfg(event)
         if not cfg["enable_active_reply"]:
             return False
         if event.get_message_type() != MessageType.GROUP_MESSAGE:
             return False
-
         if event.is_at_or_wake_command:
-            # if the message is a command, let it pass
             return False
-
         if cfg["ar_whitelist"] and (
             event.unified_msg_origin not in cfg["ar_whitelist"]
             and (
@@ -103,21 +125,43 @@ class LongTermMemory:
             )
         ):
             return False
-
         match cfg["ar_method"]:
             case "possibility_reply":
                 trig = random.random() < cfg["ar_possibility"]
                 return trig
-
         return False
 
+    # =========================================================================
+    # 会话清理
+    # =========================================================================
+
+    async def remove_session(self, event: AstrMessageEvent) -> int:
+        """清理指定群的全部 LTM 状态。返回被清理的 raw_records 条数。"""
+        umo = event.unified_msg_origin
+        cnt = len(self.raw_records.get(umo, deque()))
+        self.raw_records.pop(umo, None)
+        self.contexts.pop(umo, None)
+        self._raw_cursor.pop(umo, None)
+        return cnt
+
+    # =========================================================================
+    # 消息记录 (on_message 调用)
+    # =========================================================================
+
     async def handle_message(self, event: AstrMessageEvent) -> None:
-        """仅支持群聊"""
-        if event.get_message_type() == MessageType.GROUP_MESSAGE:
+        """仅记录原始消息到 raw_records，不构建 contexts。"""
+        if event.get_message_type() != MessageType.GROUP_MESSAGE:
+            return
+
+        async with self._lock:
+            umo = event.unified_msg_origin
+
+            # 记录写入前索引 → on_req_llm 精确排除（issue #1, #9）
+            raw_idx = len(self.raw_records[umo])
+            event.set_extra("_ltm_raw_idx", raw_idx)
+
             datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
-
             parts = [f"[{event.message_obj.sender.nickname}/{datetime_str}]: "]
-
             cfg = self.cfg(event)
 
             for comp in event.get_messages():
@@ -143,46 +187,252 @@ class LongTermMemory:
                     parts.append(f" [At: {comp.name}]")
 
             final_message = "".join(parts)
-            logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
-            self.session_chats[event.unified_msg_origin].append(final_message)
-            if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:
-                self.session_chats[event.unified_msg_origin].pop(0)
+            logger.debug(f"ltm | {umo} | {final_message}")
+            self.raw_records[umo].append(final_message)
+
+    # =========================================================================
+    # LLM 请求前（on_llm_request 钩子 → decorate_llm_req 调用）
+    # =========================================================================
 
     async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
-        """当触发 LLM 请求前，调用此方法修改 req"""
-        if event.unified_msg_origin not in self.session_chats:
+        """增量构建 contexts 并注入到 req。ContextManager 由 agent runner 自动调用。"""
+        umo = event.unified_msg_origin
+        if umo not in self.raw_records:
             return
 
-        chats_str = "\n---\n".join(self.session_chats[event.unified_msg_origin])
+        prompt_idx = event.get_extra("_ltm_raw_idx", -1)
+        if prompt_idx < 0:
+            return
 
-        cfg = self.cfg(event)
-        if cfg["enable_active_reply"]:
-            prompt = req.prompt
-            req.prompt = (
-                f"You are now in a chatroom. The chat history is as follows:\n{chats_str}"
-                f"\nNow, a new message is coming: `{prompt}`. "
-                "Please react to it. Only output your response and do not output any other information. "
-                "You MUST use the SAME language as the chatroom is using."
-            )
-            req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
-        else:
-            req.system_prompt += (
-                "You are now in a chatroom. The chat history is as follows: \n"
-            )
-            req.system_prompt += chats_str
+        async with self._lock:
+            raw_list = list(self.raw_records[umo])
+            cursor = self._raw_cursor[umo]
+            new_raw = raw_list[cursor:prompt_idx] if prompt_idx > cursor else []
 
-    async def after_req_llm(
-        self, event: AstrMessageEvent, llm_resp: LLMResponse
+            if new_raw:
+                new_segs = _build_segments(new_raw)
+                self.contexts[umo].extend(new_segs)
+                self._raw_cursor[umo] = prompt_idx
+
+        # 前置保留 Persona 已注入的 begin_dialogs（河狸 issue A）
+        existing_contexts = req.contexts or []
+        req.contexts = existing_contexts + self.contexts[umo]
+        req.conversation = None
+        req.system_prompt += CHATROOM_SYSTEM_NOTE
+
+    # =========================================================================
+    # Agent 完成后（on_agent_done 钩子 → main.py 调用）
+    # =========================================================================
+
+    async def on_agent_done(
+        self,
+        event: AstrMessageEvent,
+        run_context,  # ContextWrapper
+        resp: LLMResponse,
     ) -> None:
-        if event.unified_msg_origin not in self.session_chats:
+        """记录工具链 + bot 回复到 raw_records，闭合段，裁剪。"""
+        umo = event.unified_msg_origin
+        if umo not in self.raw_records:
             return
 
-        if llm_resp.completion_text:
-            final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {llm_resp.completion_text}"
-            logger.debug(
-                f"Recorded AI response: {event.unified_msg_origin} | {final_message}"
-            )
-            self.session_chats[event.unified_msg_origin].append(final_message)
-            cfg = self.cfg(event)
-            if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:
-                self.session_chats[event.unified_msg_origin].pop(0)
+        async with self._lock:
+            time_str = datetime.datetime.now().strftime("%H:%M:%S")
+
+            # 1. 提取工具链 → raw_records
+            for msg in run_context.messages:
+                if msg.role == "assistant" and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        tc_dict = tc if isinstance(tc, dict) else tc.model_dump()
+                        call_entry = {
+                            "id": tc_dict["id"],
+                            "name": tc_dict["function"]["name"],
+                            "args": (
+                                json.loads(tc_dict["function"]["arguments"])
+                                if isinstance(tc_dict["function"]["arguments"], str)
+                                else tc_dict["function"]["arguments"]
+                            ),
+                        }
+                        self.raw_records[umo].append(
+                            f"<T:CALL>{json.dumps(call_entry, ensure_ascii=False)}</T:CALL>"
+                        )
+                elif msg.role == "tool":
+                    content = (
+                        msg.content
+                        if isinstance(msg.content, str)
+                        else str(msg.content)
+                    )
+                    self.raw_records[umo].append(
+                        f"<T:RES id={msg.tool_call_id}>{content}</T:RES>"
+                    )
+
+            # 最终文本回复
+            if resp and resp.completion_text:
+                self.raw_records[umo].append(
+                    f"<BOT/{time_str}>: {resp.completion_text}"
+                )
+
+            # 2. 构建本轮全部未消费 raw 为 contexts 段（跳过 prompt，issue #16）
+            raw_list = list(self.raw_records[umo])
+            cursor = self._raw_cursor[umo]
+            remaining = raw_list[cursor + 1:]  # cursor 在 prompt_idx，跳过 prompt
+            if remaining:
+                new_segs = _build_segments(remaining)
+                self.contexts[umo].extend(new_segs)
+                self._raw_cursor[umo] = len(raw_list)
+
+            # 3. 裁剪 raw_records
+            self._trim_raw_records(umo)
+
+    # =========================================================================
+    # 裁剪
+    # =========================================================================
+
+    def _trim_raw_records(self, umo: str) -> None:
+        """仅淘汰 cursor 之前的条目。cursor 之后的绝不碰（issue #2）。"""
+        dq = self.raw_records[umo]
+        cursor = self._raw_cursor[umo]
+
+        # 1. 无条件清除 cursor 之前的条目（已消费）
+        while dq and cursor > 0:
+            dq.popleft()
+            cursor -= 1
+        self._raw_cursor[umo] = cursor
+
+        # 2. 按大小继续从前面淘汰（限制极端情况的总内存）
+        total = sum(len(s.encode()) for s in dq)
+        while total > MAX_RAW_BYTES and dq and cursor > 0:
+            removed = dq.popleft()
+            total -= len(removed.encode())
+            cursor -= 1
+        self._raw_cursor[umo] = max(0, cursor)
+
+
+# =============================================================================
+# _build_segments — 从 raw lines 构建 OpenAI 格式 contexts 段
+# =============================================================================
+
+def _build_segments(raw_lines: list[str]) -> list[dict]:
+    """从 raw strings 构建 OpenAI 格式 contexts 段。
+
+    规则：
+    1. <T:CALL>json</T:CALL> → 连续多条合并为一个 assistant(tool_calls)
+    2. <T:RES id=xxx>content</T:RES> → tool 消息，tool_call_id 配对
+    3. <BOT/时间>: content → assistant（纯文本）
+    4. 其它行 → user（合并为段，段内裁剪 MAX_MSGS/MAX_CHARS）
+    """
+    if not raw_lines:
+        return []
+
+    segments: list[dict] = []
+    user_buf: list[str] = []
+    tool_calls_buf: list[dict] = []
+
+    def flush_user():
+        if not user_buf:
+            return
+        truncated = _truncate_user_segment(user_buf)
+        segments.append({"role": "user", "content": "\n".join(truncated)})
+        user_buf.clear()
+
+    def flush_tool_calls():
+        if not tool_calls_buf:
+            return
+        segments.append(
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": tool_calls_buf.copy(),
+            }
+        )
+        tool_calls_buf.clear()
+
+    for line in raw_lines:
+        if line.startswith(TOOL_CALL_PREFIX):
+            flush_user()
+            tc_data = _parse_tool_call(line)
+            if tc_data:
+                tool_calls_buf.append(tc_data)
+        elif line.startswith(TOOL_RES_PREFIX):
+            flush_user()
+            flush_tool_calls()
+            tool_msg = _parse_tool_result(line)
+            if tool_msg:
+                segments.append(tool_msg)
+        elif line.startswith(BOT_MARKER):
+            flush_user()
+            flush_tool_calls()
+            content = _extract_bot_content(line)
+            if content:
+                segments.append({"role": "assistant", "content": content})
+        else:
+            user_buf.append(line)
+
+    flush_user()
+    flush_tool_calls()
+    return segments
+
+
+# =============================================================================
+# 解析 helper
+# =============================================================================
+
+def _parse_tool_call(line: str) -> dict | None:
+    """<T:CALL>{"id":"x","name":"f","args":{...}}</T:CALL> → tool_call dict"""
+    inner = _extract_tag_content(line, TOOL_CALL_PREFIX, "</T:CALL>")
+    if not inner:
+        return None
+    tc = json.loads(inner)
+    return {
+        "id": tc["id"],
+        "type": "function",
+        "function": {
+            "name": tc["name"],
+            "arguments": json.dumps(tc["args"], ensure_ascii=False),
+        },
+    }
+
+
+def _parse_tool_result(line: str) -> dict | None:
+    """<T:RES id=xxx>content</T:RES> → {"role":"tool", ...}"""
+    rest = line[len(TOOL_RES_PREFIX):].strip()
+    gt = rest.find(">")
+    if gt == -1:
+        return None
+    id_part = rest[:gt]
+    content = rest[gt + 1:]
+    if content.endswith("</T:RES>"):
+        content = content[:-len("</T:RES>")]
+    if not id_part.startswith("id="):
+        return None
+    tc_id = id_part[3:]
+    return {"role": "tool", "tool_call_id": tc_id, "content": content}
+
+
+def _extract_bot_content(line: str) -> str | None:
+    """<BOT/HH:MM:SS>: content → content"""
+    idx = line.find(">: ")
+    if idx == -1:
+        return None
+    return line[idx + 3:].strip()
+
+
+def _extract_tag_content(line: str, start_tag: str, end_tag: str) -> str | None:
+    """<TAG>content</TAG> → content"""
+    if not line.endswith(end_tag):
+        return None
+    return line[len(start_tag):-len(end_tag)].strip()
+
+
+def _truncate_user_segment(lines: list[str]) -> list[str]:
+    """段内裁剪：保留最近 N 条，不超字符上限。从段内最早的消息开始丢弃。"""
+    result: list[str] = []
+    total = 0
+    for line in reversed(lines):
+        if len(result) >= MAX_MSGS_PER_USER_SEGMENT:
+            break
+        if total + len(line) > MAX_CHARS_PER_USER_SEGMENT and result:
+            break
+        result.append(line)
+        total += len(line) + 1  # +1 for \n
+    result.reverse()
+    return result
