@@ -118,7 +118,6 @@ const handleClick = (event) => {
   align-items: center;
   display: flex;
   gap: 4px;
-  opacity: 0;
   pointer-events: none;
   transition: opacity 0.16s ease;
 }
