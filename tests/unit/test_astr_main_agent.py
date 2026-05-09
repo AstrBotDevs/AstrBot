@@ -89,6 +89,22 @@ def mock_conversation():
     return conv
 
 
+def test_provider_supports_modality_requires_explicit_list():
+    provider = MagicMock(spec=Provider)
+
+    provider.provider_config = {"modalities": ["text", "image"]}
+    assert ama._provider_supports_modality(provider, "image")
+
+    provider.provider_config = {"modalities": ["text"]}
+    assert not ama._provider_supports_modality(provider, "image")
+
+    provider.provider_config = {}
+    assert not ama._provider_supports_modality(provider, "image")
+
+    provider.provider_config = {"modalities": "image"}
+    assert not ama._provider_supports_modality(provider, "image")
+
+
 @pytest.fixture
 def sample_config():
     """Create a sample MainAgentBuildConfig."""

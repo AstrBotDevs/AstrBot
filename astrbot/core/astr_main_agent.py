@@ -1178,7 +1178,7 @@ def _get_fallback_chat_providers(
 
 def _provider_supports_modality(provider: Provider, modality: str) -> bool:
     modalities = provider.provider_config.get("modalities", None)
-    return not isinstance(modalities, list) or modality in modalities
+    return isinstance(modalities, list) and modality in modalities
 
 
 def _select_image_chat_provider(
