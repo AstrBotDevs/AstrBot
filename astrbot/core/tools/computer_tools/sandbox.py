@@ -35,7 +35,7 @@ def _current_provider_id(context: ContextWrapper[AstrAgentContext]) -> str:
 @dataclass
 class ListSandboxesTool(FunctionTool):
     name: str = "astrbot_list_sandboxes"
-    description: str = "List all managed sandboxes."
+    description: str = "List all managed sandboxes. Use this before creating a new sandbox when you need to find a reusable or default sandbox."
     parameters: dict = field(
         default_factory=lambda: {"type": "object", "properties": {}}
     )
@@ -49,7 +49,7 @@ class ListSandboxesTool(FunctionTool):
 @dataclass
 class GetCurrentSandboxTool(FunctionTool):
     name: str = "astrbot_get_current_sandbox"
-    description: str = "Get the current sandbox bound to this session."
+    description: str = "Get the current sandbox bound to this session. Use this before creating a new sandbox so you can reuse the current one when possible."
     parameters: dict = field(
         default_factory=lambda: {"type": "object", "properties": {}}
     )
@@ -65,7 +65,8 @@ class CreateSandboxTool(FunctionTool):
     name: str = "astrbot_create_sandbox"
     description: str = (
         "Create a new managed sandbox for the current sandbox provider and switch the current session to it. "
-        "Use this when the user explicitly wants a fresh sandbox or a separate environment."
+        "This is a last resort: first check the current sandbox, then list sandboxes and prefer reusing the current sandbox, an idle default sandbox, or another reusable sandbox. "
+        "Use this when the user explicitly wants a fresh sandbox or a separate environment, or when no existing sandbox can be reused safely."
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -111,9 +112,7 @@ class CreateSandboxTool(FunctionTool):
 @dataclass
 class SwitchSandboxTool(FunctionTool):
     name: str = "astrbot_switch_sandbox"
-    description: str = (
-        "Switch this session to an existing running sandbox by sandbox_id."
-    )
+    description: str = "Switch this session to an existing running sandbox by sandbox_id. Use this after listing sandboxes when you want to reuse an existing sandbox instead of creating a new one."
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",

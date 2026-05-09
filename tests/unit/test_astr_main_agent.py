@@ -1715,7 +1715,10 @@ class TestApplySandboxTools:
 
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
-        assert "create a new sandbox" in req.system_prompt
+        assert "check the current sandbox first" in req.system_prompt
+        assert "list sandboxes and prefer reusing" in req.system_prompt
+        assert "idle default sandbox" in req.system_prompt
+        assert "fresh or separate environment" in req.system_prompt
         assert "send screenshots to the user to show progress" in req.system_prompt
         assert "especially after each meaningful GUI step" in req.system_prompt
 
