@@ -441,7 +441,14 @@ class ProviderOpenAIOfficial(Provider):
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
-        return create_proxy_client("OpenAI", proxy)
+        httpx_module: Any = httpx
+        try:
+            from openai import _base_client as openai_base_client
+
+            httpx_module = getattr(openai_base_client, "httpx", httpx)
+        except ImportError:
+            pass
+        return create_proxy_client("OpenAI", proxy, httpx_module=httpx_module)
 
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
@@ -671,9 +678,9 @@ class ProviderOpenAIOfficial(Provider):
             reasoning = self._extract_reasoning_content(chunk)
             _y = False
             llm_response.id = chunk.id
-            llm_response.reasoning_content = ""
+            llm_response.reasoning_content = None
             llm_response.completion_text = ""
-            if reasoning:
+            if reasoning is not None:
                 llm_response.reasoning_content = reasoning
                 _y = True
             if delta and delta.content:
@@ -701,22 +708,28 @@ class ProviderOpenAIOfficial(Provider):
     def _extract_reasoning_content(
         self,
         completion: ChatCompletion | ChatCompletionChunk,
-    ) -> str:
+    ) -> str | None:
         """Extract reasoning content from OpenAI ChatCompletion if available."""
-        reasoning_text = ""
+
+        def _get_reasoning_attr(obj: Any) -> str | None:
+            fields_set = getattr(obj, "model_fields_set", None)
+            if isinstance(fields_set, set) and self.reasoning_key in fields_set:
+                attr = getattr(obj, self.reasoning_key, "")
+                return "" if attr is None else str(attr)
+            attr = getattr(obj, self.reasoning_key, None)
+            return None if attr is None else str(attr)
+
         if not completion.choices:
-            return reasoning_text
+            return None
         if isinstance(completion, ChatCompletion):
             choice = completion.choices[0]
-            reasoning_attr = getattr(choice.message, self.reasoning_key, None)
-            if reasoning_attr:
-                reasoning_text = str(reasoning_attr)
+            reasoning_attr = _get_reasoning_attr(choice.message)
         elif isinstance(completion, ChatCompletionChunk):
             delta = completion.choices[0].delta
-            reasoning_attr = getattr(delta, self.reasoning_key, None)
-            if reasoning_attr:
-                reasoning_text = str(reasoning_attr)
-        return reasoning_text
+            reasoning_attr = _get_reasoning_attr(delta)
+        else:
+            return None
+        return reasoning_attr
 
     def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
         ptd = getattr(usage, "prompt_tokens_details", None)
@@ -859,7 +872,9 @@ class ProviderOpenAIOfficial(Provider):
 
         # parse the reasoning content if any
         # the priority is higher than the <think> tag extraction
-        llm_response.reasoning_content = self._extract_reasoning_content(completion)
+        reasoning_content = self._extract_reasoning_content(completion)
+        if reasoning_content is not None:
+            llm_response.reasoning_content = reasoning_content
 
         # parse tool calls if any
         if choice.message.tool_calls and tools is not None:
@@ -906,7 +921,7 @@ class ProviderOpenAIOfficial(Provider):
                 "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
             )
         has_text_output = bool((llm_response.completion_text or "").strip())
-        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
         if (
             not has_text_output
             and not has_reasoning_output
@@ -982,23 +997,38 @@ class ProviderOpenAIOfficial(Provider):
         """Finally convert the payload. Such as think part conversion, tool inject."""
         model = payloads.get("model", "").lower()
         is_gemini = "gemini" in model
-
+        deepseek_reasoning_models = {"deepseek-v4-pro", "deepseek-v4-flash"}
+        is_deepseek_v4_reasoning = (
+            model in deepseek_reasoning_models
+            or "api.deepseek.com" in self.client.base_url.host
+        )
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
             ):
                 reasoning_content = ""
+                reasoning_content_present = False
                 new_content = []  # not including think part
                 for part in message["content"]:
                     if part.get("type") == "think":
+                        reasoning_content_present = True
                         reasoning_content += str(part.get("think"))
                     else:
                         new_content.append(part)
                 # Some providers (Grok, etc.) reject empty content lists.
                 # When all parts were think blocks, fall back to None.
                 message["content"] = new_content or None
-                if reasoning_content:
+                if reasoning_content_present:
                     message["reasoning_content"] = reasoning_content
+
+            if (
+                message.get("role") == "assistant"
+                and is_deepseek_v4_reasoning
+                and "reasoning_content" not in message
+            ):
+                # DeepSeek v4 reasoning models require the field on assistant
+                # history messages, even when the reasoning content is empty.
+                message["reasoning_content"] = ""
 
             # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
             # 纯文本会触发 400 Invalid argument，需要包一层 JSON。
@@ -1046,7 +1076,7 @@ class ProviderOpenAIOfficial(Provider):
                     image_fallback_used,
                 )
             raise e
-        if "maximum context length" in str(e):
+        if "maximum context length" in str(e) or "context length" in str(e).lower():
             logger.warning(
                 f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}",
             )

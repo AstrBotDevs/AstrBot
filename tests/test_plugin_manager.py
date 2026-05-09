@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from pathlib import Path
 from typing import Any, cast
@@ -36,6 +37,7 @@ def _write_local_test_plugin(plugin_path: Path, repo_url: str):
         "version": "1.0.0",
         "author": "AstrBot Team",
         "desc": "Local test plugin",
+        "short_desc": "Local test short description",
     }
     with open(plugin_path / "metadata.yaml", "w", encoding="utf-8") as f:
         yaml.dump(metadata, f)
@@ -50,6 +52,94 @@ def _write_requirements(plugin_path: Path):
     """Creates a requirements.txt file."""
     with open(plugin_path / "requirements.txt", "w", encoding="utf-8") as f:
         f.write("networkx\n")
+
+
+def test_load_plugin_i18n_reads_locale_files(tmp_path: Path):
+    plugin_path = tmp_path / "plugin"
+    i18n_path = plugin_path / ".astrbot-plugin" / "i18n"
+    i18n_path.mkdir(parents=True)
+    (i18n_path / "zh-CN.json").write_text(
+        json.dumps({"metadata": {"desc": "中文描述"}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (i18n_path / "en-US.json").write_text(
+        json.dumps({"metadata": {"desc": "English description"}}),
+        encoding="utf-8",
+    )
+    (i18n_path / "README.md").write_text("ignored", encoding="utf-8")
+
+    assert PluginManager._load_plugin_i18n(str(plugin_path)) == {
+        "zh-CN": {"metadata": {"desc": "中文描述"}},
+        "en-US": {"metadata": {"desc": "English description"}},
+    }
+
+
+def test_load_plugin_i18n_ignores_legacy_directories(tmp_path: Path):
+    plugin_path = tmp_path / "plugin"
+    hidden_legacy_i18n_path = plugin_path / ".i18n"
+    legacy_i18n_path = plugin_path / "i18n"
+    hidden_legacy_i18n_path.mkdir(parents=True)
+    legacy_i18n_path.mkdir()
+    (hidden_legacy_i18n_path / "zh-CN.json").write_text(
+        json.dumps({"metadata": {"desc": "隐藏旧目录"}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (legacy_i18n_path / "zh-CN.json").write_text(
+        json.dumps({"metadata": {"desc": "中文描述"}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    assert PluginManager._load_plugin_i18n(str(plugin_path)) == {}
+
+
+def test_load_plugin_metadata_includes_i18n(tmp_path: Path):
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    i18n_path = plugin_path / ".astrbot-plugin" / "i18n"
+    i18n_path.mkdir(parents=True)
+    (i18n_path / "zh-CN.json").write_text(
+        json.dumps({"metadata": {"display_name": "你好世界"}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert metadata is not None
+    assert metadata.short_desc == "Local test short description"
+    assert metadata.pages == []
+    assert metadata.i18n == {"zh-CN": {"metadata": {"display_name": "你好世界"}}}
+
+
+def test_load_plugin_metadata_includes_pages(tmp_path: Path):
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    metadata_path = plugin_path / "metadata.yaml"
+    metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+    metadata["pages"] = [{"name": "dashboard", "title": "Dashboard"}]
+    metadata_path.write_text(yaml.dump(metadata), encoding="utf-8")
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.pages == [{"name": "dashboard", "title": "Dashboard"}]
+
+
+def test_loaded_metadata_can_copy_i18n_into_existing_star_metadata(tmp_path: Path):
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    i18n_path = plugin_path / ".astrbot-plugin" / "i18n"
+    i18n_path.mkdir(parents=True)
+    (i18n_path / "zh-CN.json").write_text(
+        json.dumps({"metadata": {"desc": "中文描述"}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    existing_metadata = star_manager_module.StarMetadata(name="old")
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    existing_metadata.i18n = loaded_metadata.i18n
+    assert existing_metadata.i18n == {"zh-CN": {"metadata": {"desc": "中文描述"}}}
 
 
 def _clear_module_cache():
@@ -868,8 +958,8 @@ async def test_update_plugin_dependency_install_flow(
     events = []
     _mock_missing_requirements(monkeypatch, {"networkx"})
 
-    async def mock_update(plugin, proxy=""):
-        del proxy
+    async def mock_update(plugin, proxy="", download_url=""):
+        del proxy, download_url
         events.append(("update", plugin.name))
 
     monkeypatch.setattr(plugin_manager_pm.updator, "update", mock_update)

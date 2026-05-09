@@ -43,6 +43,8 @@
         "viewInfo": "Детали",
         "viewDocs": "Документация",
         "viewRepo": "Репозиторий",
+        "openPages": "Pages",
+        "openPage": "Открыть",
         "close": "Закрыть",
         "save": "Сохранить",
         "saveAndClose": "Сохранить и закрыть",
@@ -52,6 +54,8 @@
         "selectFile": "Выбрать файл",
         "refresh": "Обновить",
         "updateAll": "Обновить все",
+        "pin": "Закрепить",
+        "unpin": "Открепить",
         "deleteSource": "Удалить источник",
         "reshuffle": "Мне повезет!"
     },
@@ -61,7 +65,8 @@
         "system": "Системный",
         "loading": "Загрузка...",
         "installed": "Установлен",
-        "unknown": "Неизвестно"
+        "unknown": "Неизвестно",
+        "incompatible": "Несовместимо"
     },
     "tooltips": {
         "enable": "Включить",
@@ -91,7 +96,40 @@
     },
     "empty": {
         "noPlugins": "Плагины не найдены",
-        "noPluginsDesc": "Попробуйте установить новые плагины или включите отображение системных."
+        "noPluginsDesc": "Попробуйте установить новые плагины или изменить поиск."
+    },
+    "detail": {
+        "contents": "Обработчики плагина",
+        "noContents": "Нет обработчиков",
+        "notFound": "Плагин не найден",
+        "docsTitle": "Документация",
+        "docsEmpty": "Документация отсутствует",
+        "changelogTitle": "Журнал изменений",
+        "changelogEmpty": "Журнал изменений отсутствует",
+        "handlerGroups": {
+            "page": "Pages",
+            "skill": "Skills",
+            "command": "Команды / группы команд",
+            "llm_tool": "LLM-инструменты",
+            "listener": "Слушатели событий",
+            "hook": "Хуки",
+            "commands": "Команды / группы команд",
+            "hooks": "Хуки",
+            "functionTools": "Функциональные инструменты",
+            "eventListeners": "Слушатели событий"
+        },
+        "info": {
+            "title": "Информация",
+            "version": "Версия",
+            "author": "Автор",
+            "category": "Категория",
+            "stars": "Звезды",
+            "tags": "Теги",
+            "astrbotVersion": "Требуемая версия AstrBot",
+            "supportPlatforms": "Поддерживаемые платформы",
+            "authorWebsite": "Сайт автора",
+            "repository": "Репозиторий"
+        }
     },
     "market": {
         "recommended": "🥳 Рекомендуем",
@@ -129,8 +167,6 @@
         "sourceExists": "Этот источник уже есть в списке",
         "installPlugin": "Установить плагин",
         "randomPlugins": "🎲 Случайные плагины",
-        "showRandomPlugins": "Показать случайные",
-        "hideRandomPlugins": "Скрыть случайные",
         "sourceSafetyWarning": "Даже при использовании источников по умолчанию мы не можем гарантировать 100% безопасность и стабильность сторонних плагинов. Пожалуйста, будьте внимательны."
     },
     "sort": {
@@ -143,8 +179,7 @@
         "updated": "Дате обновления",
         "updateStatus": "Статусу обновления",
         "ascending": "По возрастанию",
-        "descending": "По убыванию",
-        "pinUpdatesOnTop": "Обновления сверху"
+        "descending": "По убыванию"
     },
     "tags": {
         "danger": "Опасно"
@@ -174,7 +209,16 @@
             "title": "Установка плагина",
             "fromFile": "Из файла",
             "fromUrl": "По ссылке",
-            "supportPlatformsCount": "Поддерживает платформ: {count}"
+            "supportPlatformsCount": "Поддерживает платформ: {count}",
+            "sectionTitle": "Установка",
+            "downloadSource": "Пакет плагина будет установлен из:",
+            "githubSecurityWarning": "AstrBot не может гарантировать безопасность плагинов, загруженных с GitHub. Устанавливайте только если доверяете источнику плагина."
+        },
+        "update": {
+            "title": "Обновление плагина",
+            "sectionTitle": "Обновление",
+            "downloadSource": "Пакет обновления будет установлен из:",
+            "confirm": "Подтвердить обновление"
         },
         "danger_warning": {
             "title": "Внимание!",
@@ -222,6 +266,7 @@
         "supportedFormats": "Поддерживаются файлы плагинов в формате .zip",
         "updateAllSuccess": "Все плагины успешно обновлены",
         "updateAllFailed": "Ошибок при обновлении: {failed} из {total}:",
+        "noUpdatesAvailable": "Нет плагинов с доступными обновлениями",
         "fillSourceNameAndUrl": "Пожалуйста, введите имя и адрес источника",
         "invalidUrl": "Введите корректный URL",
         "enterJsonUrl": "Введите URL, возвращающий список плагинов в формате JSON"
@@ -326,8 +371,20 @@
         "sourceLocalOnly": "Локальный навык",
         "sourceSandboxOnly": "Предустановленный Sandbox навык",
         "sourceBoth": "Локальный + Sandbox",
+        "sourcePlugin": "Плагин: {plugin}",
         "sandboxDiscoveryPending": "Предустановленные Sandbox навыки не найдены. Запустите сессию Sandbox хотя бы один раз.",
-        "sandboxPresetReadonly": "Предустановленные навыки Sandbox доступны только для чтения и не могут быть удалены здесь."
+        "sandboxPresetReadonly": "Предустановленные навыки Sandbox доступны только для чтения и не могут быть удалены здесь.",
+        "pluginReadonly": "Навыки из плагинов управляются плагином и не могут быть удалены или скачаны здесь.",
+        "openEditor": "Просмотр/правка",
+        "editorTitle": "Редактировать навык",
+        "editorLoadFailed": "Не удалось открыть файл навыка",
+        "editorSaveFailed": "Не удалось сохранить файл навыка",
+        "editorSaveSuccess": "Сохранено",
+        "saveFile": "Сохранить файл",
+        "readonly": "Только чтение",
+        "unsaved": "Не сохранено",
+        "noFileSelected": "Файл не выбран",
+        "discardChanges": "В файле есть несохраненные изменения. Отменить их?"
     },
     "card": {
         "actions": {

@@ -269,6 +269,8 @@ async def on_waiting_llm(self, event: AstrMessageEvent):
 
 #### LLM 请求时
 
+> 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
+
 在 AstrBot 默认的执行流程中，在调用 LLM 前，会触发 `on_llm_request` 钩子。
 
 可以获取到 `ProviderRequest` 对象，可以对其进行修改。
@@ -282,11 +284,45 @@ from astrbot.api.provider import ProviderRequest
 @filter.on_llm_request()
 async def my_custom_hook_1(self, event: AstrMessageEvent, req: ProviderRequest): # 请注意有三个参数
     print(req) # 打印请求的文本
-    req.system_prompt += "自定义 system_prompt"
+    req.system_prompt += "自定义 system_prompt" # 如果有其他替代方法，不建议使用此种方式来追加每轮对话都会改变的提示词，否则会破坏缓存，大大增加价格（约增加 7-20 倍的价格）。
+    req.extra_user_content_parts.append(...)
 
 ```
 
-> 这里不能使用 yield 来发送消息。如需发送，请直接使用 `event.send()` 方法。
+> [!WARNING]
+> **关于提示词的追加**
+>
+> `req.system_prompt += ...` 适合追加稳定、长期有效的角色设定或全局规则。不建议把每轮都会变化的内容追加到 `system_prompt`，例如当前时间、好感度、状态栏、短期记忆片段、检索摘要等。这类写法会让系统提示词在每轮请求中变化，容易破坏模型服务端的提示词缓存，显著增加请求成本和首 token 延迟。
+>
+> 对于每轮都会变化、内容量中小的提示词，优先通过 `req.extra_user_content_parts` 追加。它会作为额外的用户消息内容块放在本轮用户输入之后，更适合承载"当前时间""角色好感度""本轮相关记忆片段"等动态上下文：
+>
+> ```python
+> from astrbot.core.agent.message import TextPart
+>
+> @filter.on_llm_request()
+> async def add_dynamic_prompt(self, event: AstrMessageEvent, req: ProviderRequest):
+>     req.extra_user_content_parts.append(
+>         TextPart(
+>             text=(
+>                 "<dynamic_context>\n"
+>                 "当前时间：2026-05-03 20:00\n"
+>                 "好感度：72\n"
+>                 "相关记忆：用户喜欢简洁直接的回答。\n"
+>                 "</dynamic_context>"
+>             )
+>         )
+>     )
+> ```
+>
+> 如果追加的内容只希望参与本轮 LLM 请求，不希望被持久化到会话历史中，可以调用 `.mark_as_temp()` 标记为临时内容（`>= v4.24.0`）：
+>
+> ```python
+> req.extra_user_content_parts.append(
+>     TextPart(text="<runtime_hint>这段提示只在本轮请求中生效。</runtime_hint>").mark_as_temp()
+> )
+> ```
+>
+> 对于长期记忆、知识库、外部系统查询等内容量较大或不一定每轮都需要的信息，不建议全部塞进提示词。可以优先注册为 `llm_tool`，让模型在需要时调用；也可以先在插件中检索出本轮真正相关的少量摘要，再放入 `extra_user_content_parts`。
 
 #### LLM 请求完成时
 

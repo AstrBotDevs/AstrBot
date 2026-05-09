@@ -53,6 +53,43 @@ git clone 插件仓库地址
 
 可以修改(或添加) `metadata.yaml` 文件中的 `display_name` 字段，作为插件在插件市场等场景中的展示名，以方便用户阅读。
 
+插件展示名和描述支持按 WebUI 语言显示，详见[插件国际化](./guides/plugin-i18n)。
+
+### 插件短描述（可选）
+
+你可以在 `metadata.yaml` 中新增 `short_desc` 字段，作为插件市场卡片上的短描述。它适合写成一句简短介绍；如果没有提供，卡片会回退显示 `desc`。
+
+```yaml
+short_desc: 一句话介绍你的插件。
+```
+
+### 随插件提供 Skills（可选）
+
+插件可以在自己的目录下提供 `skills/` 文件夹。AstrBot 加载插件后会自动把其中合法的 Skill 纳入 Skill Manager，来源会显示为对应插件。
+
+推荐一个插件包含多个 Skill 时使用以下结构：
+
+```text
+your_plugin/
+  metadata.yaml
+  main.py
+  skills/
+    web-search-helper/
+      SKILL.md
+    report-writer/
+      SKILL.md
+```
+
+如果 `skills/` 本身就是一个 Skill，也可以直接放置：
+
+```text
+your_plugin/
+  skills/
+    SKILL.md
+```
+
+这种情况下 Skill 名称会使用插件目录名。插件提供的 Skill 由插件管理，在 WebUI 的 Skills 页面中作为只读来源展示；可以启用或禁用，但不能从本地 Skills 页面删除或编辑。插件卸载或更新后，对应 Skill 会随插件文件变化。
+
 ### 声明支持平台（Optional）
 
 你可以在 `metadata.yaml` 中新增 `support_platforms` 字段（`list[str]`），声明插件支持的平台适配器。WebUI 插件页会展示该字段。

@@ -1,6 +1,8 @@
 import asyncio
+import json
 import ntpath
 import threading
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -1059,6 +1061,100 @@ def test_core_constraints_file_propagates_inner_conflict_without_fake_warning(
             raise conflict
 
     assert warning_logs == []
+
+
+@pytest.mark.asyncio
+async def test_install_adds_desktop_core_lock_constraints_for_packaged_runtime(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    lock_path = tmp_path / "runtime-core-lock.json"
+    lock_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "distributions": [
+                    {
+                        "name": "desktop-only-core",
+                        "version": "9.9.9",
+                        "top_level_modules": ["desktop_only_core"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CORE_LOCK_PATH", str(lock_path))
+
+    site_packages_path = tmp_path / "site-packages"
+    captured_constraints = []
+
+    async def capture_pip_args(self, args):
+        del self
+        constraints_path = args[args.index("-c") + 1]
+        captured_constraints.append(Path(constraints_path).read_text(encoding="utf-8"))
+        return 0
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", capture_pip_args)
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
+        lambda: str(site_packages_path),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._ensure_plugin_dependencies_preferred",
+        lambda path, requirements: None,
+    )
+
+    installer = PipInstaller("")
+    await installer.install(package_name="Cua")
+
+    assert captured_constraints
+    assert "desktop-only-core==9.9.9" in captured_constraints[0]
+
+
+def test_ensure_plugin_dependencies_preferred_skips_desktop_core_lock_modules(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    lock_path = tmp_path / "runtime-core-lock.json"
+    lock_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "distributions": [
+                    {
+                        "name": "openai",
+                        "version": "2.32.0",
+                        "top_level_modules": ["openai"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CORE_LOCK_PATH", str(lock_path))
+
+    preferred_calls = []
+
+    monkeypatch.setattr(
+        pip_installer_module,
+        "_collect_candidate_modules",
+        lambda requirements, site_packages_path: {"openai", "cua_agent"},
+    )
+    monkeypatch.setattr(
+        pip_installer_module,
+        "_ensure_preferred_modules",
+        lambda modules, site_packages_path: preferred_calls.append(modules),
+    )
+
+    pip_installer_module._ensure_plugin_dependencies_preferred(
+        str(tmp_path / "site-packages"),
+        {"Cua"},
+    )
+
+    assert preferred_calls == [{"cua_agent"}]
 
 
 def test_iter_requirement_lines_expands_nested_requirement_files(tmp_path):

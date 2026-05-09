@@ -9,7 +9,7 @@ import certifi
 import httpx
 
 from astrbot.core import logger
-from astrbot.core.utils.io import on_error
+from astrbot.core.utils.io import ensure_dir, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
 
@@ -56,7 +56,7 @@ class RepoZipUpdator:
         self, url: str, path: str, timeout: float = 1800.0
     ) -> None:
         target_path = Path(path)
-        target_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_dir(target_path.parent)
 
         try:
             async with self._create_httpx_client(timeout=timeout) as client:
@@ -233,31 +233,88 @@ class RepoZipUpdator:
 
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
         """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
-        os.makedirs(target_dir, exist_ok=True)
-        update_dir = ""
+        ensure_dir(target_dir)
         with zipfile.ZipFile(zip_path, "r") as z:
-            update_dir = z.namelist()[0]
+            update_dir = self._resolve_archive_root_dir(z.namelist())
             z.extractall(target_dir)
         logger.debug(f"解压文件完成: {zip_path}")
 
-        files = os.listdir(os.path.join(target_dir, update_dir))
+        self._finalize_extracted_archive(zip_path, target_dir, update_dir)
+
+    @staticmethod
+    def _resolve_archive_root_dir(entries: list[str]) -> str:
+        normalized_entries = [os.path.normpath(entry) for entry in entries]
+        portable_entries = [entry.replace("\\", "/") for entry in normalized_entries]
+        root_candidates: list[str] = []
+
+        for raw_entry, normalized_entry, portable_entry in zip(
+            entries, normalized_entries, portable_entries
+        ):
+            if normalized_entry == ".":
+                continue
+
+            has_children = any(
+                other_entry != portable_entry
+                and other_entry.startswith(f"{portable_entry}/")
+                for other_entry in portable_entries
+            )
+            if raw_entry.endswith(("/", "\\")) or has_children:
+                root_candidates.append(normalized_entry)
+                continue
+
+            parent_portable, _, _ = portable_entry.rpartition("/")
+            if not parent_portable:
+                return ""
+            root_candidates.append(parent_portable.replace("/", os.sep))
+
+        if not root_candidates:
+            return ""
+        return os.path.commonpath(root_candidates)
+
+    def _finalize_extracted_archive(
+        self,
+        zip_path: str,
+        target_dir: str,
+        update_dir: str,
+    ) -> None:
+        target_root_path = os.path.normpath(target_dir)
+
+        def _join_under_root(root: str, *parts: str) -> str:
+            path = os.path.normpath(os.path.join(root, *parts))
+            try:
+                if os.path.commonpath([root, path]) != root:
+                    raise ValueError("path escapes root directory")
+            except ValueError as exc:
+                raise ValueError("path escapes root directory") from exc
+            return path
+
+        if not update_dir:
+            try:
+                os.remove(zip_path)
+            except Exception:
+                logger.warning(f"删除更新文件失败，可以手动删除 {zip_path}")
+            return
+
+        update_root_path = _join_under_root(target_root_path, update_dir)
+
+        files = os.listdir(update_root_path)
         for f in files:
-            if os.path.isdir(os.path.join(target_dir, update_dir, f)):
-                if os.path.exists(os.path.join(target_dir, f)):
-                    shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
-            elif os.path.exists(os.path.join(target_dir, f)):
-                os.remove(os.path.join(target_dir, f))
-            shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
+            update_item_path = _join_under_root(update_root_path, f)
+            target_item_path = _join_under_root(target_root_path, f)
+            if os.path.isdir(update_item_path):
+                if os.path.exists(target_item_path):
+                    shutil.rmtree(target_item_path, onerror=on_error)
+            elif os.path.exists(target_item_path):
+                os.remove(target_item_path)
+            shutil.move(update_item_path, target_root_path)
 
         try:
-            logger.debug(
-                f"删除临时更新文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}",
-            )
-            shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
+            logger.debug(f"删除临时更新文件: {zip_path} 和 {update_root_path}")
+            shutil.rmtree(update_root_path, onerror=on_error)
             os.remove(zip_path)
-        except BaseException:
+        except Exception:
             logger.warning(
-                f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}",
+                f"删除更新文件失败，可以手动删除 {zip_path} 和 {update_root_path}"
             )
 
     def format_name(self, name: str) -> str:

@@ -36,8 +36,6 @@ class KnowledgeBaseManager:
     async def initialize(self) -> None:
         """初始化知识库模块"""
         try:
-            logger.info("正在初始化知识库模块...")
-
             # 初始化数据库
             await self._init_kb_database()
 
