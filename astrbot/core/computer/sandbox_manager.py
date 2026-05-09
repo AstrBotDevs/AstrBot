@@ -274,32 +274,53 @@ class SandboxManager:
                 self.session_booter[target_sandbox_id] = client
                 break
 
-        self.registry.touch_sandbox(target_sandbox_id)
-        self.registry.update_sandbox_status(target_sandbox_id, "running")
-        self.registry.set_current_sandbox_id(session_id, target_sandbox_id)
-        await self.save_registry_async()
-        self.schedule_idle_cleanup(target_sandbox_id, idle_timeout)
+        await self._finalize_created_booter(
+            provider, target_sandbox_id, session_id=session_id, idle_timeout=idle_timeout
+        )
+        return self.session_booter[target_sandbox_id]
 
-        # Auto-sync skills unless the provider opts out.
+    async def _finalize_created_booter(
+        self,
+        provider: SandboxProvider,
+        sandbox_id: str,
+        *,
+        session_id: str | None = None,
+        idle_timeout: float,
+    ) -> None:
+        """Common post-creation steps: persist, idle cleanup, skill sync, hooks."""
+        self.registry.touch_sandbox(sandbox_id)
+        self.registry.update_sandbox_status(sandbox_id, "running")
+        if session_id is not None:
+            self.registry.set_current_sandbox_id(session_id, sandbox_id)
+        await self.save_registry_async()
+        self.schedule_idle_cleanup(sandbox_id, idle_timeout)
+
+        # Auto-sync skills unless the provider opts out.  Best-effort: a sync
+        # failure is logged but does not destroy the already-created sandbox.
         if getattr(provider, "auto_sync_skills", True):
-            booter = self.session_booter[target_sandbox_id]
-            if hasattr(booter, "shell"):
-                await self._sync_skills_to_booter(booter)
+            booter = self.session_booter.get(sandbox_id)
+            if booter is not None and hasattr(booter, "shell"):
+                try:
+                    await self._sync_skills_to_booter(booter)
+                except Exception as sync_err:
+                    logger.warning(
+                        "[Computer] Auto skill sync failed for %s: %s",
+                        sandbox_id,
+                        sync_err,
+                    )
 
         # Optional lifecycle hook.
         if hasattr(provider, "on_sandbox_created"):
             try:
                 await provider.on_sandbox_created(
-                    self.registry.get_sandbox(target_sandbox_id) or {}
+                    self.registry.get_sandbox(sandbox_id) or {}
                 )
             except Exception as hook_err:
                 logger.warning(
                     "[Computer] on_sandbox_created hook failed for %s: %s",
-                    target_sandbox_id,
+                    sandbox_id,
                     hook_err,
                 )
-
-        return self.session_booter[target_sandbox_id]
 
     async def create_sandbox_uncontrolled(
         self,
@@ -335,10 +356,9 @@ class SandboxManager:
                 raise
             setattr(client, "sandbox_id", sandbox_id)
             self.session_booter[sandbox_id] = client
-            self.registry.touch_sandbox(sandbox_id)
-            self.registry.update_sandbox_status(sandbox_id, "running")
-            await self.save_registry_async()
-            self.schedule_idle_cleanup(sandbox_id, idle_timeout)
+            await self._finalize_created_booter(
+                provider, sandbox_id, session_id=None, idle_timeout=idle_timeout
+            )
             return self.registry.get_sandbox(sandbox_id) or record
 
     async def create_sandbox(

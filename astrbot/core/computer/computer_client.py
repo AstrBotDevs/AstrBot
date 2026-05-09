@@ -143,6 +143,13 @@ def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
                     )
             except RuntimeError:
                 pass  # no running event loop
+    try:
+        sandbox_manager.registry.save()
+    except Exception as exc:
+        logger.warning(
+            "[Computer] Failed to save registry after force-unregister: %s",
+            exc,
+        )
     logger.info(
         "Force-unregistered sandbox provider %s: sandboxes cleaned up",
         provider_id,
