@@ -374,10 +374,25 @@ class PluginRoute(Route):
             entry_path = page_dir / _PLUGIN_PAGE_ENTRY_FILE_NAME
             if not await aio_ospath.isfile(str(entry_path)):
                 continue
+            # 尝试从 index.html 的 <title> 标签中读取页面标题，避免使用文件夹名
+            page_title = page_name
+            try:
+                html_text = await self._read_plugin_page_text(entry_path)
+                title_match = re.search(
+                    r"<title[^>]*>(.*?)</title>",
+                    html_text,
+                    re.IGNORECASE | re.DOTALL,
+                )
+                if title_match:
+                    extracted = title_match.group(1).strip()
+                    if extracted:
+                        page_title = extracted
+            except (OSError, ValueError):
+                pass
             pages.append(
                 PluginPage(
                     name=page_name,
-                    title=page_name,
+                    title=page_title,
                     entry_file=_PLUGIN_PAGE_ENTRY_FILE_NAME,
                 )
             )
