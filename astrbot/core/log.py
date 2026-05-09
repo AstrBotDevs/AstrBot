@@ -300,6 +300,7 @@ class LogManager:
         max_mb: int | None,
         backup_count: int,
         trace: bool,
+        trace_format: str = "prefixed",
     ) -> int:
         os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
         rotation = f"{max_mb} MB" if max_mb and max_mb > 0 else None
@@ -307,10 +308,14 @@ class LogManager:
             backup_count if rotation and backup_count and backup_count > 0 else None
         )
         if trace:
+            if trace_format == "jsonl":
+                trace_format_str = "{message}"
+            else:
+                trace_format_str = "[{time:YYYY-MM-DD HH:mm:ss.SSS}] {message}"
             return _loguru.add(
                 file_path,
                 level="INFO",
-                format="[{time:YYYY-MM-DD HH:mm:ss.SSS}] {message}",
+                format=trace_format_str,
                 encoding="utf-8",
                 rotation=rotation,
                 retention=retention,
@@ -391,6 +396,7 @@ class LogManager:
         )
         path = config.get("trace_log_path")
         max_mb = config.get("trace_log_max_mb")
+        trace_format = config.get("trace_log_format", "prefixed")
         if "log_file" in config:
             legacy = config.get("log_file") or {}
             path = path or legacy.get("trace_path")
@@ -414,4 +420,5 @@ class LogManager:
             max_mb=max_mb,
             backup_count=3,
             trace=True,
+            trace_format=trace_format,
         )

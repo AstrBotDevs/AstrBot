@@ -279,6 +279,7 @@ DEFAULT_CONFIG = {
     "trace_log_enable": False,
     "trace_log_path": "logs/astrbot.trace.log",
     "trace_log_max_mb": 20,
+    "trace_log_format": "prefixed",
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
     "persona": [],  # deprecated
@@ -2960,6 +2961,11 @@ CONFIG_METADATA_2 = {
                 "type": "int",
                 "condition": {"trace_log_enable": True},
             },
+            "trace_log_format": {
+                "type": "string",
+                "options": ["prefixed", "jsonl"],
+                "condition": {"trace_log_enable": True},
+            },
             "t2i_strategy": {
                 "type": "string",
                 "options": ["remote", "local"],
@@ -4229,6 +4235,12 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "Trace 日志大小上限 (MB)",
                         "type": "int",
                         "hint": "超过大小后自动轮转，默认 20MB。",
+                    },
+                    "trace_log_format": {
+                        "description": "Trace 日志格式",
+                        "type": "string",
+                        "options": ["prefixed", "jsonl"],
+                        "hint": "\"prefixed\" 为带时间戳前缀的格式（默认）；\"jsonl\" 为纯 JSON Lines 格式，每行一个 JSON 对象，便于被 jq 等工具解析。",
                     },
                     "pip_install_arg": {
                         "description": "pip 安装额外参数",
