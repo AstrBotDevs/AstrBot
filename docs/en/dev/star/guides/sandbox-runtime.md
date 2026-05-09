@@ -57,6 +57,7 @@ AstrBot calls the provider whenever it needs to create, reuse, rename, or destro
 - `provider_id`
 - `capabilities`
 - `tool_names`
+- `system_prompt`
 - `build_create_config(context, session_id)`
 - `build_connect_info(sandbox_name, config)`
 - `update_connect_info(record, *, sandbox_name)`
@@ -71,6 +72,10 @@ class MySandboxProvider:
     provider_id = "demo"
     capabilities = {"shell", "python", "filesystem"}
     tool_names = set()
+    system_prompt = (
+        "When using this sandbox provider, follow its runtime-specific path, "
+        "GUI, browser, and lifecycle rules."
+    )
 
     def build_create_config(self, context, session_id):
         config = context.get_config(umo=session_id)
@@ -140,6 +145,8 @@ Common examples:
 - runtime-specific lifecycle helpers
 
 AstrBot uses `tool_names` when mounting tools in sandbox mode. Make sure the names match the tools you register in `main.py`.
+
+Use `system_prompt` for stable runtime-specific instructions that the model must see whenever this provider is active. Examples include file path rules, GUI screenshot workflow, browser automation constraints, or provider-specific skill lifecycle steps.
 
 ## 5. Try it locally
 

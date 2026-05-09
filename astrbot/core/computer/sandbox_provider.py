@@ -10,6 +10,7 @@ class SandboxProvider(Protocol):
     provider_id: str
     capabilities: set[str]
     tool_names: set[str]
+    system_prompt: str
 
     def build_create_config(self, context: Context, session_id: str) -> dict: ...
 

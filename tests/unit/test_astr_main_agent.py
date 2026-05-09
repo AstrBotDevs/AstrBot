@@ -1719,6 +1719,30 @@ class TestApplySandboxTools:
         assert "send screenshots to the user to show progress" in req.system_prompt
         assert "especially after each meaningful GUI step" in req.system_prompt
 
+    def test_apply_sandbox_tools_adds_provider_system_prompt(self, mock_context):
+        """Test that provider-specific sandbox prompt is added to system_prompt."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={"booter": "generic"},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
+
+        with patch(
+            "astrbot.core.computer.computer_client.get_sandbox_provider_info",
+            return_value={
+                "tool_names": [],
+                "system_prompt": "[Provider Rules]\nUse relative sandbox paths.",
+            },
+        ):
+            module._apply_sandbox_tools(config, req, "session-123")
+
+        assert req.system_prompt.startswith("Base prompt")
+        assert "sandboxed environment" in req.system_prompt
+        assert "[Provider Rules]" in req.system_prompt
+        assert "Use relative sandbox paths." in req.system_prompt
+
     def test_handoff_runtime_computer_tools_include_sandbox_lifecycle_tools(self):
         tool_mgr = MagicMock()
 

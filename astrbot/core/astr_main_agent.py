@@ -1002,16 +1002,18 @@ def _apply_sandbox_tools(
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    from astrbot.core.computer.computer_client import get_sandbox_provider_info
+    from astrbot.core.computer.sandbox_tool_binding import (
+        resolve_sandbox_provider_bindings,
+    )
 
-    provider_info = get_sandbox_provider_info(booter)
-    if provider_info:
-        for tool_name in provider_info.get("tool_names", []):
-            tool = tool_mgr.get_func(tool_name)
-            if tool and getattr(tool, "active", True):
-                req.func_tool.add_tool(tool)
+    provider_info, provider_tools = resolve_sandbox_provider_bindings(booter, tool_mgr)
+    for tool in provider_tools:
+        req.func_tool.add_tool(tool)
 
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
+    provider_system_prompt = (provider_info or {}).get("system_prompt", "").strip()
+    if provider_system_prompt:
+        req.system_prompt = f"{req.system_prompt or ''}\n{provider_system_prompt}\n"
 
 
 def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:

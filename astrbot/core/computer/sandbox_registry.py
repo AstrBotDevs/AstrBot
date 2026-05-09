@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from copy import deepcopy
@@ -327,9 +328,16 @@ class SandboxRegistry:
             self._payload.get("session_current") or {}
         )
 
-    def save(self) -> None:
+    def _write_payload(self, payload: dict[str, Any]) -> None:
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
         self.storage_path.write_text(
-            json.dumps(self._payload, ensure_ascii=False, indent=2, sort_keys=True),
+            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
             encoding="utf-8",
         )
+
+    def save(self) -> None:
+        self._write_payload(deepcopy(self._payload))
+
+    async def save_async(self) -> None:
+        payload = deepcopy(self._payload)
+        await asyncio.to_thread(self._write_payload, payload)

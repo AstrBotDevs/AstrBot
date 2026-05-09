@@ -1,4 +1,7 @@
 import json
+import threading
+
+import pytest
 
 from astrbot.core.computer.sandbox_registry import SandboxRegistry
 
@@ -100,3 +103,22 @@ def test_registry_saves_loads_and_reconciles_runtime_state(tmp_path):
 
     payload = json.loads((tmp_path / "sandbox_registry.json").read_text())
     assert "sandboxes" in payload
+
+
+@pytest.mark.asyncio
+async def test_registry_save_async_runs_save_in_worker_thread(tmp_path):
+    registry = _registry(tmp_path)
+    main_thread_id = threading.get_ident()
+    save_thread_id = None
+
+    def fake_write_payload(payload):
+        nonlocal save_thread_id
+        assert payload == registry._payload
+        save_thread_id = threading.get_ident()
+
+    registry._write_payload = fake_write_payload
+
+    await registry.save_async()
+
+    assert save_thread_id is not None
+    assert save_thread_id != main_thread_id

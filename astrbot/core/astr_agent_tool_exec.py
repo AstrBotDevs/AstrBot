@@ -20,6 +20,9 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
+from astrbot.core.computer.sandbox_tool_binding import (
+    resolve_sandbox_provider_bindings,
+)
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -237,14 +240,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
-            from astrbot.core.computer.computer_client import get_sandbox_provider_info
-
-            provider_info = get_sandbox_provider_info(booter)
-            if provider_info:
-                for tool_name in provider_info.get("tool_names", []):
-                    provider_tool = tool_mgr.get_func(tool_name)
-                    if provider_tool and getattr(provider_tool, "active", True):
-                        tools[provider_tool.name] = provider_tool
+            _provider_info, provider_tools = resolve_sandbox_provider_bindings(
+                booter, tool_mgr
+            )
+            for provider_tool in provider_tools:
+                tools[provider_tool.name] = provider_tool
             return tools
         if runtime == "local":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)

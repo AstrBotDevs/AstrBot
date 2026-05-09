@@ -271,6 +271,7 @@ async def test_sandbox_dashboard_lists_generic_providers(
             "provider_id": "dashboard-generic",
             "capabilities": ["filesystem", "shell"],
             "tool_names": ["dashboard_generic_tool"],
+            "system_prompt": "",
         }
     ]
 

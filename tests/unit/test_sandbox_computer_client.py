@@ -13,6 +13,7 @@ class FakeProvider:
     provider_id = "generic"
     capabilities = {"shell"}
     tool_names = {"generic_tool"}
+    system_prompt = "Use provider-specific sandbox rules."
 
     def build_create_config(self, context, session_id):
         return {}
@@ -72,6 +73,7 @@ async def test_registered_generic_provider_handles_booter(monkeypatch, tmp_path)
             "provider_id": "generic",
             "capabilities": ["shell"],
             "tool_names": ["generic_tool"],
+            "system_prompt": "Use provider-specific sandbox rules.",
         }
     ]
 
@@ -113,6 +115,7 @@ def test_register_provider_can_replace_when_requested(monkeypatch, tmp_path):
         "provider_id": "generic",
         "capabilities": ["keyboard", "mouse"],
         "tool_names": ["generic_tool"],
+        "system_prompt": "Use provider-specific sandbox rules.",
     }
 
 
@@ -190,11 +193,13 @@ def test_list_sandbox_providers_is_sorted(monkeypatch, tmp_path):
             "provider_id": "generic",
             "capabilities": ["shell"],
             "tool_names": ["generic_tool"],
+            "system_prompt": "Use provider-specific sandbox rules.",
         },
         {
             "provider_id": "other",
             "capabilities": ["filesystem", "python"],
             "tool_names": ["generic_tool"],
+            "system_prompt": "Use provider-specific sandbox rules.",
         },
     ]
 

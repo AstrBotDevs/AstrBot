@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 import pytest
 
@@ -16,6 +17,19 @@ class FakeBooter:
 
     async def shutdown(self):
         self.shutdown_calls += 1
+
+
+class SyncAvailableBooter:
+    def available(self):
+        return True
+
+
+class BoolAvailableBooter:
+    available = True
+
+
+class UnavailablePropertyBooter:
+    available = False
 
 
 class FakeProvider:
@@ -86,6 +100,35 @@ async def test_manager_creates_new_sandbox_when_default_busy(tmp_path):
 
     assert len(provider.created) == 2
     assert len(manager.list_sandboxes()) == 2
+
+
+@pytest.mark.asyncio
+async def test_manager_creates_new_sandbox_when_current_binding_is_busy(tmp_path):
+    manager, provider = _manager(tmp_path)
+
+    first = await manager.get_or_create_booter(None, "session-a", "generic")
+    first_sandbox_id = manager.get_current_sandbox("session-a")["current_sandbox_id"]
+    manager.registry.set_current_sandbox_id("session-b", first_sandbox_id)
+
+    second = await manager.get_or_create_booter(None, "session-b", "generic")
+
+    assert second is not first
+    assert len(provider.created) == 2
+    assert manager.get_current_sandbox("session-b")["current_sandbox_id"] != (
+        first_sandbox_id
+    )
+    first_record = manager.registry.get_sandbox(first_sandbox_id)
+    assert first_record["controller_session_id"] == "session-a"
+    assert first_record["lease_expires_at"] > time.time()
+
+
+@pytest.mark.asyncio
+async def test_manager_booter_available_accepts_sync_callable_and_property(tmp_path):
+    manager, _provider = _manager(tmp_path)
+
+    assert await manager.booter_available(SyncAvailableBooter()) is True
+    assert await manager.booter_available(BoolAvailableBooter()) is True
+    assert await manager.booter_available(UnavailablePropertyBooter()) is False
 
 
 @pytest.mark.asyncio

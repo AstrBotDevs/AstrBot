@@ -29,6 +29,7 @@ def _sandbox_provider_info(provider_id: str, provider: SandboxProvider) -> dict:
         "provider_id": provider_id,
         "capabilities": sorted(getattr(provider, "capabilities", set())),
         "tool_names": sorted(getattr(provider, "tool_names", set())),
+        "system_prompt": str(getattr(provider, "system_prompt", "") or ""),
     }
 
 
