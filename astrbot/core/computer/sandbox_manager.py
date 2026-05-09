@@ -277,6 +277,7 @@ class SandboxManager:
         await self._finalize_created_booter(
             provider, target_sandbox_id, session_id=session_id, idle_timeout=idle_timeout
         )
+        await self._invoke_sandbox_created_hook(provider, target_sandbox_id)
         return self.session_booter[target_sandbox_id]
 
     async def _finalize_created_booter(
@@ -309,18 +310,22 @@ class SandboxManager:
                         sync_err,
                     )
 
-        # Optional lifecycle hook.
-        if hasattr(provider, "on_sandbox_created"):
-            try:
-                await provider.on_sandbox_created(
-                    self.registry.get_sandbox(sandbox_id) or {}
-                )
-            except Exception as hook_err:
-                logger.warning(
-                    "[Computer] on_sandbox_created hook failed for %s: %s",
-                    sandbox_id,
-                    hook_err,
-                )
+    async def _invoke_sandbox_created_hook(
+        self, provider: SandboxProvider, sandbox_id: str
+    ) -> None:
+        """Invoke provider's on_sandbox_created hook if present."""
+        if not hasattr(provider, "on_sandbox_created"):
+            return
+        try:
+            await provider.on_sandbox_created(
+                self.registry.get_sandbox(sandbox_id) or {}
+            )
+        except Exception as hook_err:
+            logger.warning(
+                "[Computer] on_sandbox_created hook failed for %s: %s",
+                sandbox_id,
+                hook_err,
+            )
 
     async def create_sandbox_uncontrolled(
         self,
@@ -376,6 +381,8 @@ class SandboxManager:
             raise RuntimeError(f"Sandbox {sandbox_id} is busy")
         self.registry.set_current_sandbox_id(session_id, sandbox_id)
         await self.save_registry_async()
+        provider = self.get_provider(sandbox.get("provider", ""))
+        await self._invoke_sandbox_created_hook(provider, sandbox_id)
         return self.registry.get_sandbox(sandbox_id) or sandbox
 
     def list_sandboxes(self) -> list[dict]:
