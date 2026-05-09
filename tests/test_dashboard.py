@@ -372,6 +372,7 @@ async def test_sandbox_dashboard_create_does_not_auto_occupy_sandbox(
     assert response.status_code == 200
     assert data["status"] == "ok"
     assert data["data"]["sandbox"]["sandbox_name"] == "Named"
+    assert data["data"]["sandbox"]["status"] == "creating"
     assert data["data"]["sandbox"]["controller_session_id"] is None
     assert manager.get_current_sandbox("dashboard")["current_sandbox_id"] is None
 

@@ -307,6 +307,8 @@ class SandboxRegistry:
             record["lease_expires_at"] = None
             if record.get("status") == "running":
                 record["status"] = "unknown"
+            elif record.get("status") == "creating":
+                record["status"] = "error"
 
     def load(self) -> None:
         if not self.storage_path.exists():

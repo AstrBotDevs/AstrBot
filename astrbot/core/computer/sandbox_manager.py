@@ -34,6 +34,7 @@ class SandboxManager:
         self.session_booter: dict[str, ComputerBooter] = {}
         self.idle_state: dict[str, SandboxIdleState] = {}
         self.boot_locks: dict[str, asyncio.Lock] = {}
+        self.pending_boot_tasks: dict[str, asyncio.Task] = {}
 
     def save_registry(self) -> None:
         try:
@@ -56,6 +57,29 @@ class SandboxManager:
 
     def drop_boot_lock(self, sandbox_id: str) -> None:
         self.boot_locks.pop(sandbox_id, None)
+
+    async def cancel_pending_boot_task(self, sandbox_id: str) -> None:
+        task = self.pending_boot_tasks.pop(sandbox_id, None)
+        if task is None:
+            return
+        task.cancel()
+        try:
+            done, _pending = await asyncio.wait({task}, timeout=1)
+            if not done:
+                logger.warning(
+                    "[Computer] Timed out waiting for pending sandbox boot task cancellation: %s",
+                    sandbox_id,
+                )
+                return
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.warning(
+                "[Computer] Pending sandbox boot task ended with error for %s: %s",
+                sandbox_id,
+                exc,
+            )
 
     def get_provider(self, provider_id: str) -> SandboxProvider:
         provider = self.providers.get(provider_id)
@@ -399,6 +423,103 @@ class SandboxManager:
             )
             return self.registry.get_sandbox(sandbox_id) or record
 
+    async def create_sandbox_uncontrolled_deferred(
+        self,
+        context: Context,
+        session_id: str,
+        provider_id: str,
+        sandbox_name: str | None = None,
+    ) -> dict:
+        provider = self.get_provider(provider_id)
+        create_config = provider.build_create_config(context, session_id)
+        sandbox_id = self.new_sandbox_id(provider_id)
+        sandbox_name = sandbox_name or sandbox_id
+        idle_timeout = provider.get_idle_timeout(context, session_id)
+        async with self._sandbox_boot_lock(sandbox_id):
+            record = self.registry.upsert_sandbox(
+                **self.build_record_payload(
+                    sandbox_id=sandbox_id,
+                    sandbox_name=sandbox_name,
+                    session_id=session_id,
+                    provider_id=provider_id,
+                    idle_timeout=idle_timeout,
+                    connect_info=provider.build_connect_info(
+                        sandbox_name, create_config
+                    ),
+                    status=SandboxStatus.CREATING,
+                )
+            )
+            await self.save_registry_async()
+
+        task = asyncio.create_task(
+            self._boot_sandbox_uncontrolled_deferred(
+                context=context,
+                session_id=session_id,
+                provider=provider,
+                sandbox_id=sandbox_id,
+                create_config=create_config,
+                idle_timeout=idle_timeout,
+                record=record,
+            )
+        )
+        self.pending_boot_tasks[sandbox_id] = task
+
+        return self.registry.get_sandbox(sandbox_id) or record
+
+    async def _boot_sandbox_uncontrolled_deferred(
+        self,
+        *,
+        context: Context,
+        session_id: str,
+        provider: SandboxProvider,
+        sandbox_id: str,
+        create_config: dict,
+        idle_timeout: float,
+        record: dict,
+    ) -> None:
+        try:
+            async with self._sandbox_boot_lock(sandbox_id):
+                current = self.registry.get_sandbox(sandbox_id)
+                if current is None or current.get("status") != SandboxStatus.CREATING:
+                    return
+
+                try:
+                    client = await provider.create_booter(
+                        context, session_id, sandbox_id, create_config
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as boot_err:
+                    self.registry.update_sandbox_status(sandbox_id, SandboxStatus.ERROR)
+                    await self.save_registry_async()
+                    logger.warning(
+                        "[Computer] Deferred sandbox boot failed: sandbox_id=%s session_id=%s error=%s",
+                        sandbox_id,
+                        session_id,
+                        boot_err,
+                    )
+                    return
+
+                current = self.registry.get_sandbox(sandbox_id)
+                if current is None or current.get("status") != SandboxStatus.CREATING:
+                    try:
+                        await provider.destroy_booter(client, record)
+                    except Exception as destroy_err:
+                        logger.warning(
+                            "[Computer] Deferred sandbox cleanup failed after record removal: sandbox_id=%s error=%s",
+                            sandbox_id,
+                            destroy_err,
+                        )
+                    return
+
+                setattr(client, "sandbox_id", sandbox_id)
+                self.session_booter[sandbox_id] = client
+                await self._finalize_created_booter(
+                    provider, sandbox_id, session_id=None, idle_timeout=idle_timeout
+                )
+        finally:
+            self.pending_boot_tasks.pop(sandbox_id, None)
+
     async def create_sandbox(
         self,
         context: Context,
@@ -603,6 +724,7 @@ class SandboxManager:
         provider = self.get_provider(record.get("provider", ""))
         self.registry.update_sandbox_status(sandbox_id, SandboxStatus.STOPPING)
         await self.save_registry_async()
+        await self.cancel_pending_boot_task(sandbox_id)
         booter = self.session_booter.get(sandbox_id)
         if booter is not None:
             try:
@@ -683,6 +805,8 @@ class SandboxManager:
         return booter
 
     async def reconcile_on_startup(self) -> None:
+        for sandbox_id in list(self.pending_boot_tasks):
+            await self.cancel_pending_boot_task(sandbox_id)
         self.registry.load()
         self.registry.reconcile_startup()
         self.session_booter.clear()
@@ -691,6 +815,8 @@ class SandboxManager:
         await self.save_registry_async()
 
     async def cleanup_managed_sandboxes(self) -> None:
+        for sandbox_id in list(self.pending_boot_tasks):
+            await self.cancel_pending_boot_task(sandbox_id)
         managed_records = self.list_sandboxes()
         for record in managed_records:
             sandbox_id = record["sandbox_id"]

@@ -87,7 +87,7 @@ class SandboxRoute(Route):
             provider_id = str(data.get("provider_id") or "").strip()
             if not provider_id:
                 return jsonify(Response().error("provider_id is required").__dict__)
-            sandbox = await computer_client.sandbox_manager.create_sandbox_uncontrolled(
+            sandbox = await computer_client.sandbox_manager.create_sandbox_uncontrolled_deferred(
                 self.core_lifecycle.star_context,
                 self._session_id(),
                 provider_id,

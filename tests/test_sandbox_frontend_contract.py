@@ -55,7 +55,42 @@ def test_sandbox_management_page_release_is_not_limited_to_dashboard_controller(
     )
 
     assert "item.controller_session_id === 'dashboard'" not in content
-    assert "return !!item.controller_session_id" in content
+    assert "case 'release':" in content
+    assert "return status !== 'stopping' && !!item.controller_session_id" in content
+
+
+def test_sandbox_management_page_refreshes_list_after_immediate_create_success():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "const placeholder = { ...created, status: 'creating' as const }" in content
+    assert "upsertSandboxRecord(placeholder)" in content
+
+
+def test_sandbox_management_page_does_not_allow_configure_while_creating():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "case 'configure':" in content
+    assert "return status !== 'creating' && status !== 'stopping'" in content
+
+
+def test_sandbox_management_page_does_not_toast_running_after_create():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "toast(tm('messages.createReady'))" not in content
+
+
+def test_sandbox_management_page_splits_running_into_busy_and_available_labels():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "return hasController(item) ? 'busy' : 'available'" in content
 
 
 def test_sandbox_i18n_uses_status_and_idle_labels():
@@ -66,7 +101,7 @@ def test_sandbox_i18n_uses_status_and_idle_labels():
         encoding="utf-8"
     )
 
-    assert '"lease": "状态"' in zh
+    assert '"status": "状态"' in zh
     assert '"available": "空闲"' in zh
-    assert '"lease": "Status"' in en
+    assert '"status": "Status"' in en
     assert '"available": "Idle"' in en

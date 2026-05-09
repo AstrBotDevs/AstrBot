@@ -66,6 +66,21 @@ class FakeProvider:
         await booter.shutdown()
 
 
+class DeferredBootProvider(FakeProvider):
+    def __init__(self):
+        super().__init__()
+        self.boot_started = asyncio.Event()
+        self.allow_boot = asyncio.Event()
+        self.raise_on_boot = False
+
+    async def create_booter(self, context, session_id, sandbox_id, config):
+        self.boot_started.set()
+        await self.allow_boot.wait()
+        if self.raise_on_boot:
+            raise RuntimeError("boot failed")
+        return await super().create_booter(context, session_id, sandbox_id, config)
+
+
 def _manager(tmp_path, provider=None):
     provider = provider or FakeProvider()
     manager = SandboxManager(
@@ -89,6 +104,99 @@ async def test_manager_creates_default_sandbox_and_reuses_available_booter(tmp_p
     assert sandboxes[0]["provider"] == "generic"
     assert sandboxes[0]["capabilities"] == sorted(provider.capabilities)
     assert sandboxes[0]["tool_names"] == sorted(provider.tool_names)
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_returns_authoritative_registry_state(tmp_path):
+    manager, _provider = _manager(tmp_path)
+
+    sandbox = await manager.create_sandbox_uncontrolled(None, "session-a", "generic")
+
+    assert sandbox["status"] == "running"
+    assert sandbox == manager.registry.get_sandbox(sandbox["sandbox_id"])
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_deferred_returns_creating_then_running(tmp_path):
+    provider = DeferredBootProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    sandbox = await manager.create_sandbox_uncontrolled_deferred(
+        None, "session-a", "generic", "Named"
+    )
+
+    assert sandbox["status"] == "creating"
+    assert manager.session_booter == {}
+
+    await asyncio.wait_for(provider.boot_started.wait(), timeout=1)
+    assert manager.registry.get_sandbox(sandbox["sandbox_id"])["status"] == "creating"
+
+    provider.allow_boot.set()
+    for _ in range(20):
+        record = manager.registry.get_sandbox(sandbox["sandbox_id"])
+        if record and record["status"] == "running":
+            break
+        await asyncio.sleep(0)
+
+    assert manager.registry.get_sandbox(sandbox["sandbox_id"])["status"] == "running"
+    assert sandbox["sandbox_id"] in manager.session_booter
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_deferred_keeps_error_record_on_boot_failure(
+    tmp_path,
+):
+    provider = DeferredBootProvider()
+    provider.raise_on_boot = True
+    manager, _provider = _manager(tmp_path, provider)
+
+    sandbox = await manager.create_sandbox_uncontrolled_deferred(
+        None, "session-a", "generic", "Named"
+    )
+
+    await asyncio.wait_for(provider.boot_started.wait(), timeout=1)
+    provider.allow_boot.set()
+    for _ in range(20):
+        record = manager.registry.get_sandbox(sandbox["sandbox_id"])
+        if record and record["status"] == "error":
+            break
+        await asyncio.sleep(0)
+
+    record = manager.registry.get_sandbox(sandbox["sandbox_id"])
+    assert record is not None
+    assert record["status"] == "error"
+    assert sandbox["sandbox_id"] not in manager.session_booter
+
+
+@pytest.mark.asyncio
+async def test_destroy_sandbox_cancels_deferred_boot_task(tmp_path):
+    provider = DeferredBootProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    sandbox = await manager.create_sandbox_uncontrolled_deferred(
+        None, "session-a", "generic", "Named"
+    )
+
+    await asyncio.wait_for(provider.boot_started.wait(), timeout=1)
+
+    destroyed = await manager.destroy_sandbox("session-a", sandbox["sandbox_id"])
+
+    assert destroyed["sandbox_id"] == sandbox["sandbox_id"]
+    assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
+    assert sandbox["sandbox_id"] not in manager.session_booter
+    assert sandbox["sandbox_id"] not in manager.pending_boot_tasks
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_sets_current_sandbox_after_lease(tmp_path):
+    manager, _provider = _manager(tmp_path)
+
+    sandbox = await manager.create_sandbox(None, "session-a", "generic")
+
+    assert sandbox["status"] == "running"
+    assert manager.get_current_sandbox("session-a")["current_sandbox_id"] == sandbox[
+        "sandbox_id"
+    ]
 
 
 @pytest.mark.asyncio
