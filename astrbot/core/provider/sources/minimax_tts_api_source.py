@@ -37,16 +37,21 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "minimax-is-timber-weight",
             False,
         )
-        timber_weight_raw = provider_config.get(
-            "minimax-timber-weight",
-            '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}]',
-        )
-        try:
-            self.timber_weight = json.loads(timber_weight_raw)
-        except json.JSONDecodeError:
-            self.timber_weight = [
-                {"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}
-            ]
+        default_timber_weight = [
+            {"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}
+        ]
+        raw_timber_weight = provider_config.get("minimax-timber-weight", "")
+        if not raw_timber_weight:
+            self.timber_weight = default_timber_weight
+        else:
+            try:
+                self.timber_weight = json.loads(raw_timber_weight)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "MiniMax TTS 权重配置解析失败，将使用默认值。 raw_value: %s",
+                    raw_timber_weight,
+                )
+                self.timber_weight = default_timber_weight
 
         self.voice_setting: dict = {
             "speed": provider_config.get("minimax-voice-speed", 1.0),
