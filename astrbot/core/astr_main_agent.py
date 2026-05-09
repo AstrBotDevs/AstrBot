@@ -976,7 +976,6 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
 def _apply_sandbox_tools(
     config: MainAgentBuildConfig,
     req: ProviderRequest,
-    session_id: str,
 ) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
@@ -1315,7 +1314,7 @@ async def build_main_agent(
         _apply_llm_safety_mode(config, req)
 
     if config.computer_use_runtime == "sandbox":
-        _apply_sandbox_tools(config, req, req.session_id)
+        _apply_sandbox_tools(config, req)
     elif config.computer_use_runtime == "local":
         _apply_local_env_tools(req, plugin_context)
 

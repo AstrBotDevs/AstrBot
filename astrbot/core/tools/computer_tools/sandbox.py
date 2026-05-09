@@ -330,12 +330,14 @@ class CopyFileBetweenSandboxesTool(FunctionTool):
             temp_dir = Path(get_astrbot_temp_path()) / "sandbox_copy"
             temp_dir.mkdir(parents=True, exist_ok=True)
             local_path = temp_dir / f"{uuid.uuid4().hex}-{Path(target_path).name}"
-            await source.download_file(source_path, str(local_path))
-            upload_result = await target.upload_file(str(local_path), target_path)
             try:
-                local_path.unlink(missing_ok=True)
-            except OSError:
-                pass
+                await source.download_file(source_path, str(local_path))
+                upload_result = await target.upload_file(str(local_path), target_path)
+            finally:
+                try:
+                    local_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
             return _dump(
                 {
                     "source_sandbox_id": source_sandbox_id,

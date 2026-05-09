@@ -198,6 +198,8 @@ class SandboxManager:
                     self.schedule_idle_cleanup(current_sandbox_id, idle_timeout)
                     return booter
                 self.session_booter.pop(current_sandbox_id, None)
+                self.registry.release_lease(current_sandbox_id)
+                await self.save_registry_async()
 
         created_target_record = False
         target_sandbox_id = self.get_default_sandbox_id(provider_id)
@@ -271,7 +273,6 @@ class SandboxManager:
                 setattr(client, "sandbox_id", target_sandbox_id)
                 self.session_booter[target_sandbox_id] = client
                 break
-            break
 
         self.registry.touch_sandbox(target_sandbox_id)
         self.registry.update_sandbox_status(target_sandbox_id, "running")
@@ -292,32 +293,33 @@ class SandboxManager:
         sandbox_id = self.new_sandbox_id(provider_id)
         sandbox_name = sandbox_name or sandbox_id
         idle_timeout = provider.get_idle_timeout(context, session_id)
-        record = self.registry.upsert_sandbox(
-            **self.build_record_payload(
-                sandbox_id=sandbox_id,
-                sandbox_name=sandbox_name,
-                session_id=session_id,
-                provider_id=provider_id,
-                idle_timeout=idle_timeout,
-                connect_info=provider.build_connect_info(sandbox_name, create_config),
+        async with self._sandbox_boot_lock(sandbox_id):
+            record = self.registry.upsert_sandbox(
+                **self.build_record_payload(
+                    sandbox_id=sandbox_id,
+                    sandbox_name=sandbox_name,
+                    session_id=session_id,
+                    provider_id=provider_id,
+                    idle_timeout=idle_timeout,
+                    connect_info=provider.build_connect_info(sandbox_name, create_config),
+                )
             )
-        )
-        try:
-            client = await provider.create_booter(
-                context, session_id, sandbox_id, create_config
-            )
-        except Exception:
-            self.registry.delete_sandbox(sandbox_id)
-            self.drop_boot_lock(sandbox_id)
+            try:
+                client = await provider.create_booter(
+                    context, session_id, sandbox_id, create_config
+                )
+            except Exception:
+                self.registry.delete_sandbox(sandbox_id)
+                self.drop_boot_lock(sandbox_id)
+                await self.save_registry_async()
+                raise
+            setattr(client, "sandbox_id", sandbox_id)
+            self.session_booter[sandbox_id] = client
+            self.registry.touch_sandbox(sandbox_id)
+            self.registry.update_sandbox_status(sandbox_id, "running")
             await self.save_registry_async()
-            raise
-        setattr(client, "sandbox_id", sandbox_id)
-        self.session_booter[sandbox_id] = client
-        self.registry.touch_sandbox(sandbox_id)
-        self.registry.update_sandbox_status(sandbox_id, "running")
-        await self.save_registry_async()
-        self.schedule_idle_cleanup(sandbox_id, idle_timeout)
-        return self.registry.get_sandbox(sandbox_id) or record
+            self.schedule_idle_cleanup(sandbox_id, idle_timeout)
+            return self.registry.get_sandbox(sandbox_id) or record
 
     async def create_sandbox(
         self,
@@ -491,6 +493,7 @@ class SandboxManager:
             )
             or record
         )
+        self.registry.set_current_sandbox_id(session_id, sandbox_id)
         self.save_registry()
         return updated
 
@@ -508,8 +511,16 @@ class SandboxManager:
         provider = self.get_provider(record.get("provider", ""))
         booter = self.session_booter.get(sandbox_id)
         if booter is not None:
-            await provider.destroy_booter(booter, record)
-            self.session_booter.pop(sandbox_id, None)
+            try:
+                await provider.destroy_booter(booter, record)
+            except Exception as destroy_err:
+                logger.warning(
+                    "[Computer] destroy_booter failed for %s: %s",
+                    sandbox_id,
+                    destroy_err,
+                )
+            finally:
+                self.session_booter.pop(sandbox_id, None)
         self.clear_idle_state(sandbox_id)
         self.registry.delete_sandbox(sandbox_id)
         self.drop_boot_lock(sandbox_id)
@@ -650,7 +661,13 @@ class SandboxManager:
                             sandbox_id,
                             shutdown_err,
                         )
-                        return
+                        # Retry cleanup after the normal timeout instead of
+                        # leaving the sandbox without any scheduled cleanup.
+                        current_expires_at = time.monotonic() + timeout
+                        self.idle_state[sandbox_id] = SandboxIdleState(
+                            expires_at=current_expires_at, task=state.task
+                        )
+                        continue
                 if record.get("retention_policy") == "persistent":
                     self.registry.update_sandbox_status(sandbox_id, "stopped")
                 else:

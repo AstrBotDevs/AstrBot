@@ -510,7 +510,7 @@ async def sync_skills_to_active_sandboxes() -> None:
     )
     for sandbox_id, booter in active_booters:
         try:
-            if not await booter.available():
+            if not await sandbox_manager.booter_available(booter):
                 continue
             await _sync_skills_to_sandbox(booter)
         except Exception as e:

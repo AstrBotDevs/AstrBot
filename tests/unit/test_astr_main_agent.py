@@ -1620,7 +1620,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         assert req.func_tool is not None
         assert isinstance(req.func_tool, ToolSet)
@@ -1635,7 +1635,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         tool_names = req.func_tool.names()
         assert "astrbot_execute_shell" in tool_names
@@ -1662,7 +1662,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         assert "sandboxed environment" in req.system_prompt
         assert "send screenshots to the user to show progress" in req.system_prompt
@@ -1681,7 +1681,7 @@ class TestApplySandboxTools:
         existing_toolset.add_tool(existing_tool)
         req = ProviderRequest(prompt="Test", func_tool=existing_toolset)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         assert "existing_tool" in req.func_tool.names()
         assert "astrbot_execute_shell" in req.func_tool.names()
@@ -1696,7 +1696,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         assert req.system_prompt.startswith("Base prompt")
         assert "sandboxed environment" in req.system_prompt
@@ -1711,7 +1711,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
@@ -1736,7 +1736,7 @@ class TestApplySandboxTools:
                 "system_prompt": "[Provider Rules]\nUse relative sandbox paths.",
             },
         ):
-            module._apply_sandbox_tools(config, req, "session-123")
+            module._apply_sandbox_tools(config, req)
 
         assert req.system_prompt.startswith("Base prompt")
         assert "sandboxed environment" in req.system_prompt
