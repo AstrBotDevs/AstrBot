@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal, cast
 from urllib.parse import urlparse
 
+import httpx
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -82,13 +83,21 @@ class ProviderGoogleGenAI(Provider):
     def _init_client(self) -> None:
         """初始化Gemini客户端"""
         proxy = self.provider_config.get("proxy", "")
+        client_kwargs = {
+            "timeout": self.timeout,
+            "trust_env": True,
+        }
+        if proxy:
+            client_kwargs["proxy"] = proxy
         http_options = types.HttpOptions(
             base_url=self.api_base,
             timeout=self.timeout * 1000,  # 毫秒
         )
+        # issue #7564: Force google-genai to use httpx; its aiohttp error path can mask API errors.
+        self._httpx_async_client = httpx.AsyncClient(**client_kwargs)
+        http_options.httpx_async_client = self._httpx_async_client
         if proxy:
-            http_options.async_client_args = {"proxy": proxy}
-            logger.info(f"[Gemini] 使用代理: {proxy}")
+            logger.info("[Gemini] 使用代理")
         self.client = genai.Client(
             api_key=self.chosen_api_key,
             http_options=http_options,
@@ -117,12 +126,12 @@ class ProviderGoogleGenAI(Provider):
             if len(keys) > 0:
                 self.set_key(random.choice(keys))
                 logger.info(
-                    f"检测到 Key 异常({e.message})，正在尝试更换 API Key 重试... 当前 Key: {self.chosen_api_key[:12]}...",
+                    f"检测到 Key 异常({e.message})，正在尝试更换 API Key 重试...",
                 )
                 await asyncio.sleep(1)
                 return True
             logger.error(
-                f"检测到 Key 异常({e.message})，且已没有可用的 Key。 当前 Key: {self.chosen_api_key[:12]}...",
+                f"检测到 Key 异常({e.message})，且已没有可用的 Key。",
             )
             raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
 
@@ -1070,3 +1079,5 @@ class ProviderGoogleGenAI(Provider):
     async def terminate(self) -> None:
         if self.client:
             await self.client.aclose()
+        if self._httpx_async_client:
+            await self._httpx_async_client.aclose()
