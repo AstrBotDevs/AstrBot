@@ -381,6 +381,10 @@ class ProviderManager:
                 from .sources.openrouter_source import (
                     ProviderOpenRouter as ProviderOpenRouter,
                 )
+            case "astraflow_chat_completion":
+                from .sources.oai_astraflow_source import (
+                    ProviderAstraflow as ProviderAstraflow,
+                )
             case "anthropic_chat_completion":
                 from .sources.anthropic_source import (
                     ProviderAnthropic as ProviderAnthropic,
