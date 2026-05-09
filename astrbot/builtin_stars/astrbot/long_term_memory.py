@@ -271,10 +271,10 @@ class LongTermMemory:
                     f"<BOT/{time_str}>: {resp.completion_text}"
                 )
 
-            # 2. 构建本轮全部未消费 raw 为 contexts 段（跳过 prompt，issue #16）
+            # 2. 构建本轮全部未消费 raw 为 contexts 段（含 @bot prompt）
             raw_list = list(self.raw_records[umo])
             cursor = self._raw_cursor[umo]
-            remaining = raw_list[cursor + 1:]  # cursor 在 prompt_idx，跳过 prompt
+            remaining = raw_list[cursor:]  # 从 prompt_idx 开始，含 @bot 行
             if remaining:
                 new_segs = _build_segments(remaining)
                 self.contexts[umo].extend(new_segs)
