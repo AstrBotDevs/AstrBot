@@ -512,6 +512,7 @@ async def get_booter(
                 booter_type,
             )
         raise ValueError(f"Unknown booter type: {booter_type}")
+        raise ValueError(f"Unknown booter type: {booter_type}")
     return session_booter[session_id]
 
 
