@@ -323,32 +323,35 @@ class SandboxManager:
         the hook when they are first leased via switch/takeover.
 
         The flag is only set on success so that a transient hook failure can
-        be retried on the next lease operation.
+        be retried on the next lease operation.  The check-and-set is protected
+        by the sandbox boot lock to prevent duplicate triggers under concurrent
+        lease operations.
         """
-        record = self.registry.get_sandbox(sandbox_id) or {}
-        if record.get("created_hook_fired"):
-            return
-        if not hasattr(provider, "on_sandbox_created"):
-            # Mark as fired even when the hook is absent so we don't keep
-            # re-checking on every subsequent lease operation.
+        async with self._sandbox_boot_lock(sandbox_id):
+            record = self.registry.get_sandbox(sandbox_id) or {}
+            if record.get("created_hook_fired"):
+                return
+            if not hasattr(provider, "on_sandbox_created"):
+                # Mark as fired even when the hook is absent so we don't keep
+                # re-checking on every subsequent lease operation.
+                raw = self.registry._payload["sandboxes"].get(sandbox_id)
+                if raw is not None:
+                    raw["created_hook_fired"] = True
+                    await self.save_registry_async()
+                return
+            try:
+                await provider.on_sandbox_created(record)
+            except Exception as hook_err:
+                logger.warning(
+                    "[Computer] on_sandbox_created hook failed for %s: %s",
+                    sandbox_id,
+                    hook_err,
+                )
+                return
             raw = self.registry._payload["sandboxes"].get(sandbox_id)
             if raw is not None:
                 raw["created_hook_fired"] = True
                 await self.save_registry_async()
-            return
-        try:
-            await provider.on_sandbox_created(record)
-        except Exception as hook_err:
-            logger.warning(
-                "[Computer] on_sandbox_created hook failed for %s: %s",
-                sandbox_id,
-                hook_err,
-            )
-            return
-        raw = self.registry._payload["sandboxes"].get(sandbox_id)
-        if raw is not None:
-            raw["created_hook_fired"] = True
-            await self.save_registry_async()
 
     async def create_sandbox_uncontrolled(
         self,
@@ -644,8 +647,6 @@ class SandboxManager:
         await self.save_registry_async()
         idle_timeout = record.get("idle_timeout") or 0
         self.schedule_idle_cleanup(sandbox_id, float(idle_timeout))
-        provider = self.get_provider(record.get("provider", ""))
-        await self._invoke_sandbox_created_hook(provider, sandbox_id)
         return booter
 
     async def reconcile_on_startup(self) -> None:
