@@ -626,14 +626,20 @@ class SandboxManager:
         return record
 
     async def get_observer_booter_by_id(
-        self, sandbox_id: str, session_id: str | None = None
+        self,
+        sandbox_id: str,
+        session_id: str | None = None,
+        *,
+        require_lease: bool = True,
     ) -> ComputerBooter:
         record = self.registry.get_sandbox(sandbox_id)
         if record is None or not record.get("managed"):
             raise RuntimeError(f"Sandbox {sandbox_id} not found")
-        if session_id and self.sandbox_controlled_by_other_session(
-            sandbox_id, session_id
-        ):
+        controlled_by_other = bool(
+            session_id
+            and self.sandbox_controlled_by_other_session(sandbox_id, session_id)
+        )
+        if controlled_by_other and require_lease:
             raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
         booter = self.session_booter.get(sandbox_id)
         if booter is None:
@@ -643,10 +649,14 @@ class SandboxManager:
             self.registry.update_sandbox_status(sandbox_id, "unknown")
             await self.save_registry_async()
             raise RuntimeError(f"Sandbox {sandbox_id} is not running")
-        self.registry.touch_sandbox(sandbox_id)
-        await self.save_registry_async()
-        idle_timeout = record.get("idle_timeout") or 0
-        self.schedule_idle_cleanup(sandbox_id, float(idle_timeout))
+        # Only touch lifecycle when the caller actually holds the lease (or
+        # the sandbox is unclaimed).  Pure observer access must not reset
+        # idle timers for sandboxes controlled by other sessions.
+        if not controlled_by_other:
+            self.registry.touch_sandbox(sandbox_id)
+            await self.save_registry_async()
+            idle_timeout = record.get("idle_timeout") or 0
+            self.schedule_idle_cleanup(sandbox_id, float(idle_timeout))
         return booter
 
     async def reconcile_on_startup(self) -> None:

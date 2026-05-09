@@ -160,10 +160,8 @@ class SandboxRoute(Route):
             command = str(data.get("command") or "").strip()
             if not command:
                 return jsonify(Response().error("command is required").__dict__)
-            # Dashboard monitoring bypasses lease checks so admins can inspect
-            # any sandbox at any time.
             booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
-                sandbox_id, None
+                sandbox_id, self._session_id()
             )
             shell = getattr(booter, "shell", None)
             if shell is None:
@@ -187,10 +185,10 @@ class SandboxRoute(Route):
     async def capture_screenshot(self, sandbox_id: str):
         try:
             data = await request.get_json(silent=True) or {}
-            # Dashboard monitoring bypasses lease checks so admins can inspect
-            # any sandbox at any time.
+            # Dashboard screenshot is a read-only observer operation; it does
+            # not need a lease and must not reset the sandbox idle timer.
             booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
-                sandbox_id, None
+                sandbox_id, self._session_id(), require_lease=False
             )
             gui = getattr(booter, "gui", None)
             if gui is None:

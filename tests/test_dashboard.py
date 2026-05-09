@@ -621,14 +621,19 @@ async def test_sandbox_dashboard_captures_managed_sandbox_screenshot(
 
 
 @pytest.mark.asyncio
-async def test_sandbox_dashboard_screenshot_respects_session_ownership(
+async def test_sandbox_dashboard_screenshot_bypasses_lease_for_monitoring(
     app: Quart,
     authenticated_header: dict,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    """Dashboard screenshot is read-only observer access and must not need a lease."""
     from astrbot.core.computer import computer_client
     from astrbot.core.computer.sandbox_manager import SandboxManager
     from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeGui:
+        async def screenshot(self, path=None):
+            return {"mime_type": "image/png", "base64": "abc", "path": path}
 
     async def available():
         return True
@@ -652,7 +657,9 @@ async def test_sandbox_dashboard_screenshot_respects_session_ownership(
         lease_expires_at=9999999999,
         connect_info={"name": "Sandbox 1"},
     )
-    manager.session_booter["sandbox-1"] = SimpleNamespace(available=available)
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, gui=FakeGui()
+    )
 
     test_client = app.test_client()
     response = await test_client.post(
@@ -663,8 +670,8 @@ async def test_sandbox_dashboard_screenshot_respects_session_ownership(
     data = await response.get_json()
 
     assert response.status_code == 200
-    assert data["status"] == "error"
-    assert "controlled by another session" in data["message"]
+    assert data["status"] == "ok"
+    assert data["data"]["screenshot"]["base64"] == "abc"
 
 
 @pytest.mark.asyncio
