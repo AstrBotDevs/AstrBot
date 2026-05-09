@@ -51,7 +51,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.3
+        uses: pnpm/action-setup@v6.0.5
         with:
           version: 10.28.2
 

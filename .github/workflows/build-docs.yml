@@ -13,7 +13,7 @@ jobs:
       - name: checkout
         uses: actions/checkout@v6
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.3
+        uses: pnpm/action-setup@v6.0.5
         with:
           version: 10.28.2
       - name: Setup Node.js
