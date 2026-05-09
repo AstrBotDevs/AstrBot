@@ -42,6 +42,7 @@ class KBSQLiteDatabase:
             echo=False,
             pool_pre_ping=True,
             pool_recycle=3600,
+            connect_args={"timeout": 30},
         )
 
         # 创建会话工厂
@@ -68,15 +69,13 @@ class KBSQLiteDatabase:
         async with self.engine.begin() as conn:
             # 创建所有知识库相关表
             await conn.run_sync(BaseKBModel.metadata.create_all)
-
-            # 配置 SQLite 性能优化参数
+            # 配置 SQLite 参数以优化并发性能
             await conn.execute(text("PRAGMA journal_mode=WAL"))
             await conn.execute(text("PRAGMA synchronous=NORMAL"))
             await conn.execute(text("PRAGMA cache_size=20000"))
+            await conn.execute(text("PRAGMA busy_timeout=5000"))
+            await conn.execute(text("PRAGMA wal_autocheckpoint=500"))
             await conn.execute(text("PRAGMA temp_store=MEMORY"))
-            await conn.execute(text("PRAGMA mmap_size=134217728"))
-            await conn.execute(text("PRAGMA optimize"))
-            await conn.commit()
 
         self.inited = True
 

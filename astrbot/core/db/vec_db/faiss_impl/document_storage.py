@@ -59,6 +59,7 @@ class DocumentStorage:
     async def initialize(self) -> None:
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
         await self.connect()
+        await self._apply_pragma()
         async with self.engine.begin() as conn:  # type: ignore
             # Create tables using SQLModel
             await conn.run_sync(BaseDocModel.metadata.create_all)
@@ -197,12 +198,22 @@ class DocumentStorage:
                 self.DATABASE_URL,
                 echo=False,
                 future=True,
+                connect_args={"timeout": 30},
             )
             self.async_session_maker = sessionmaker(
                 self.engine,  # type: ignore
                 class_=AsyncSession,
                 expire_on_commit=False,
             )  # type: ignore
+
+    async def _apply_pragma(self) -> None:
+        """Apply SQLite PRAGMAs for performance and concurrency."""
+        async with self.engine.begin() as conn:
+            await conn.execute(text("PRAGMA journal_mode=WAL"))
+            await conn.execute(text("PRAGMA synchronous=NORMAL"))
+            await conn.execute(text("PRAGMA busy_timeout=5000"))
+            await conn.execute(text("PRAGMA wal_autocheckpoint=500"))
+            await conn.commit()
 
     @asynccontextmanager
     async def get_session(self):
