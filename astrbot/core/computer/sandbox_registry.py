@@ -330,10 +330,18 @@ class SandboxRegistry:
 
     def _write_payload(self, payload: dict[str, Any]) -> None:
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
-        self.storage_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8",
+        temp_path = self.storage_path.with_name(
+            f"{self.storage_path.name}.{time.time_ns()}.tmp"
         )
+        try:
+            temp_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            temp_path.replace(self.storage_path)
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
 
     def save(self) -> None:
         self._write_payload(deepcopy(self._payload))

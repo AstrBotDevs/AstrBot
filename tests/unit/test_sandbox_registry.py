@@ -1,5 +1,6 @@
 import json
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -122,3 +123,30 @@ async def test_registry_save_async_runs_save_in_worker_thread(tmp_path):
 
     assert save_thread_id is not None
     assert save_thread_id != main_thread_id
+
+
+def test_registry_write_payload_replaces_temp_file_atomically(tmp_path, monkeypatch):
+    registry = _registry(tmp_path)
+    payload = {
+        "default_sandbox_id": None,
+        "default_sandbox_ids": {},
+        "sandboxes": {"generic-1": {"sandbox_id": "generic-1"}},
+        "session_current": {},
+    }
+    replace_calls = []
+    original_replace = Path.replace
+
+    def track_replace(self, target):
+        replace_calls.append((Path(self), Path(target)))
+        return original_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", track_replace)
+
+    registry._write_payload(payload)
+
+    assert replace_calls
+    source_path, target_path = replace_calls[0]
+    assert source_path != target_path
+    assert target_path == registry.storage_path
+    assert source_path.parent == target_path.parent
+    assert json.loads(registry.storage_path.read_text(encoding="utf-8")) == payload

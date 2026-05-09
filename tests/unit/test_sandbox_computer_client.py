@@ -78,6 +78,64 @@ async def test_registered_generic_provider_handles_booter(monkeypatch, tmp_path)
     ]
 
 
+@pytest.mark.asyncio
+async def test_get_booter_ignores_legacy_module_session_cache(monkeypatch, tmp_path):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={provider.provider_id: provider},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    legacy_booter = FakeBooter()
+    expected_booter = FakeBooter()
+    computer_client.session_booter.clear()
+    computer_client.session_booter["session-a"] = legacy_booter
+
+    async def fake_get_or_create_booter(context, session_id, provider_id):
+        assert context is not None
+        assert session_id == "session-a"
+        assert provider_id == "generic"
+        return expected_booter
+
+    monkeypatch.setattr(manager, "get_or_create_booter", fake_get_or_create_booter)
+
+    booter = await computer_client.get_booter(FakeContext(), "session-a")
+
+    assert booter is expected_booter
+
+
+@pytest.mark.asyncio
+async def test_sync_skills_uses_active_manager_booters(monkeypatch, tmp_path):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    synced = []
+
+    async def fake_sync(booter):
+        synced.append(booter)
+
+    manager_booter = FakeBooter()
+    manager.session_booter["generic-1"] = manager_booter
+    computer_client.session_booter.clear()
+    monkeypatch.setattr(computer_client, "_sync_skills_to_sandbox", fake_sync)
+
+    await computer_client.sync_skills_to_active_sandboxes()
+
+    assert synced == [manager_booter]
+
+
 def test_register_provider_rejects_duplicate_by_default(monkeypatch, tmp_path):
     from astrbot.core.computer import computer_client
     from astrbot.core.computer.sandbox_manager import SandboxManager

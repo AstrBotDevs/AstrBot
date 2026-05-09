@@ -490,47 +490,33 @@ async def get_booter(
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
     booter_type = sandbox_cfg.get("booter", "")
 
-    if session_id in session_booter:
-        booter = session_booter[session_id]
-        if not await booter.available():
-            try:
-                await booter.shutdown()
-            except Exception as shutdown_err:
-                logger.warning(
-                    "[Computer] Error shutting down stale booter for session %s: %s",
-                    session_id,
-                    shutdown_err,
-                )
-            session_booter.pop(session_id, None)
-    if session_id not in session_booter:
-        logger.info(
-            f"[Computer] Initializing booter: type={booter_type}, session={session_id}"
+    logger.info(
+        f"[Computer] Initializing booter: type={booter_type}, session={session_id}"
+    )
+    if booter_type in sandbox_manager.providers:
+        return await sandbox_manager.get_or_create_booter(
+            context,
+            session_id,
+            booter_type,
         )
-        if booter_type in sandbox_manager.providers:
-            return await sandbox_manager.get_or_create_booter(
-                context,
-                session_id,
-                booter_type,
-            )
-        raise ValueError(f"Unknown booter type: {booter_type}")
-        raise ValueError(f"Unknown booter type: {booter_type}")
-    return session_booter[session_id]
+    raise ValueError(f"Unknown booter type: {booter_type}")
 
 
 async def sync_skills_to_active_sandboxes() -> None:
     """Best-effort skills synchronization for all active sandbox sessions."""
+    active_booters = list(sandbox_manager.session_booter.items())
     logger.info(
-        "[Computer] Syncing skills to %d active sandbox(es)", len(session_booter)
+        "[Computer] Syncing skills to %d active sandbox(es)", len(active_booters)
     )
-    for session_id, booter in list(session_booter.items()):
+    for sandbox_id, booter in active_booters:
         try:
             if not await booter.available():
                 continue
             await _sync_skills_to_sandbox(booter)
         except Exception as e:
             logger.warning(
-                "Failed to sync skills to sandbox for session %s: %s",
-                session_id,
+                "Failed to sync skills to sandbox for sandbox %s: %s",
+                sandbox_id,
                 e,
             )
 
