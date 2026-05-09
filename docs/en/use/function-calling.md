@@ -51,4 +51,4 @@ Below are some common tool calling demos:
 
 ## MCP
 
-Please refer to this documentation: [AstrBot - MCP](/use/mcp).
+Please refer to this documentation: [AstrBot - MCP](/en/use/mcp).
