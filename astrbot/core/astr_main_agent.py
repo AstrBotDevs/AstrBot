@@ -1199,8 +1199,6 @@ def _select_image_chat_provider(
             provider_id,
             fallback_id,
         )
-        if req.model:
-            req.model = None
         return fallback_provider
 
     logger.warning(
@@ -1438,7 +1436,12 @@ async def build_main_agent(
     fallback_providers = _get_fallback_chat_providers(
         provider, plugin_context, config.provider_settings
     )
-    provider = _select_image_chat_provider(provider, req, fallback_providers)
+    selected_provider = _select_image_chat_provider(provider, req, fallback_providers)
+    if selected_provider is not provider:
+        provider = selected_provider
+        if req.model:
+            req.model = None
+        fallback_providers = [p for p in fallback_providers if p is not provider]
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()

@@ -1118,6 +1118,7 @@ class TestBuildMainAgent:
         assert result.provider_request.image_urls == ["/tmp/image.jpg"]
         assert result.provider_request.model is None
         assert mock_runner.reset.call_args.kwargs["provider"] is image_provider
+        assert mock_runner.reset.call_args.kwargs["fallback_providers"] == []
 
     @pytest.mark.asyncio
     async def test_build_main_agent_keeps_text_provider_without_image_fallback(
