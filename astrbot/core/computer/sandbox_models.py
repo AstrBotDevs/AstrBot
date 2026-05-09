@@ -12,7 +12,10 @@ class SandboxRetentionPolicy(str, Enum):
 
 
 class SandboxStatus(str, Enum):
+    CREATING = "creating"
     RUNNING = "running"
+    ERROR = "error"
+    STOPPING = "stopping"
     STOPPED = "stopped"
     UNKNOWN = "unknown"
 

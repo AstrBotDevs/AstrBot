@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from astrbot.api import logger
 from astrbot.core.computer.booters.base import ComputerBooter
+from astrbot.core.computer.sandbox_models import SandboxStatus
 from astrbot.core.computer.sandbox_provider import SandboxProvider
 from astrbot.core.computer.sandbox_registry import SandboxRegistry
 from astrbot.core.star.context import Context
@@ -72,6 +73,7 @@ class SandboxManager:
         idle_timeout: float,
         connect_info: dict,
         is_default: bool = False,
+        status: str = SandboxStatus.RUNNING,
     ) -> dict:
         return {
             "sandbox_id": sandbox_id,
@@ -88,6 +90,7 @@ class SandboxManager:
             ),
             "is_default": is_default,
             "idle_timeout": idle_timeout,
+            "status": status,
         }
 
     def new_sandbox_id(self, provider_id: str) -> str:
@@ -293,7 +296,7 @@ class SandboxManager:
     ) -> None:
         """Common post-creation steps: persist, idle cleanup, skill sync, hooks."""
         self.registry.touch_sandbox(sandbox_id)
-        self.registry.update_sandbox_status(sandbox_id, "running")
+        self.registry.update_sandbox_status(sandbox_id, SandboxStatus.RUNNING)
         if session_id is not None:
             self.registry.set_current_sandbox_id(session_id, sandbox_id)
         await self.save_registry_async()
@@ -376,6 +379,7 @@ class SandboxManager:
                     connect_info=provider.build_connect_info(
                         sandbox_name, create_config
                     ),
+                    status=SandboxStatus.CREATING,
                 )
             )
             try:
@@ -383,6 +387,7 @@ class SandboxManager:
                     context, session_id, sandbox_id, create_config
                 )
             except Exception:
+                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.ERROR)
                 self.registry.delete_sandbox(sandbox_id)
                 self.drop_boot_lock(sandbox_id)
                 await self.save_registry_async()
@@ -596,6 +601,8 @@ class SandboxManager:
         ):
             raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
         provider = self.get_provider(record.get("provider", ""))
+        self.registry.update_sandbox_status(sandbox_id, SandboxStatus.STOPPING)
+        await self.save_registry_async()
         booter = self.session_booter.get(sandbox_id)
         if booter is not None:
             try:
@@ -609,7 +616,10 @@ class SandboxManager:
             finally:
                 self.session_booter.pop(sandbox_id, None)
         self.clear_idle_state(sandbox_id)
-        self.registry.delete_sandbox(sandbox_id)
+        if record.get("retention_policy") == "persistent":
+            self.registry.update_sandbox_status(sandbox_id, SandboxStatus.STOPPED)
+        else:
+            self.registry.delete_sandbox(sandbox_id)
         self.drop_boot_lock(sandbox_id)
         await self.save_registry_async()
 
@@ -642,13 +652,26 @@ class SandboxManager:
         if controlled_by_other and require_lease:
             raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
         booter = self.session_booter.get(sandbox_id)
+        status = record.get("status")
         if booter is None:
+            if status == SandboxStatus.CREATING:
+                raise RuntimeError(f"Sandbox {sandbox_id} is still being created")
+            if status == SandboxStatus.STOPPING:
+                raise RuntimeError(f"Sandbox {sandbox_id} is being destroyed")
+            if status == SandboxStatus.STOPPED:
+                raise RuntimeError(f"Sandbox {sandbox_id} has been destroyed")
+            if status == SandboxStatus.ERROR:
+                raise RuntimeError(
+                    f"Sandbox {sandbox_id} encountered an error during creation"
+                )
             raise RuntimeError(f"Sandbox {sandbox_id} is not running")
         if not await self.booter_available(booter):
             self.session_booter.pop(sandbox_id, None)
-            self.registry.update_sandbox_status(sandbox_id, "unknown")
+            self.registry.update_sandbox_status(sandbox_id, SandboxStatus.ERROR)
             await self.save_registry_async()
-            raise RuntimeError(f"Sandbox {sandbox_id} is not running")
+            raise RuntimeError(
+                f"Sandbox {sandbox_id} is unavailable (booter health check failed)"
+            )
         # Only touch lifecycle when the caller actually holds the lease (or
         # the sandbox is unclaimed).  Pure observer access must not reset
         # idle timers for sandboxes controlled by other sessions.
