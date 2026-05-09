@@ -9,10 +9,30 @@ Starting from version `v4.12.0`, AstrBot introduced the Agent sandbox environmen
 
 ## Enabling the Sandbox Environment
 
+Starting with the current version, concrete sandbox drivers such as `Shipyard Neo`, `Shipyard`, and `CUA` are shipped as **separate plugins**, not built into AstrBot Core by default.
+
+That means enabling sandbox mode always has two steps:
+
+1. Install the sandbox plugin you want to use
+2. Then select and configure that driver in the AstrBot WebUI
+
+If you only switch `Computer Use Runtime` to `sandbox` in the WebUI without installing a matching plugin first, AstrBot will not have that sandbox driver available.
+
 AstrBot currently supports the following sandbox drivers:
 
 - `Shipyard Neo` (recommended)
 - `Shipyard` (legacy option, still supported)
+- `CUA` (local or cloud computer-use sandbox, suitable for desktop interaction tasks)
+
+Example installation commands:
+
+```bash
+git clone https://github.com/zouyonghe/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
+git clone https://github.com/zouyonghe/astrbot_sandbox_shipyard.git data/plugins/astrbot_sandbox_shipyard
+git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astrbot_sandbox_cua
+```
+
+After installation, restart AstrBot or reload plugins from the plugin management page.
 
 In the current AstrBot console, go to **AI Settings** -> **Agent Computer Use** and select:
 
@@ -30,6 +50,18 @@ For `Shipyard Neo`, the workspace root is fixed at `/workspace`. When using file
 > [!TIP]
 > Browser capability is not available in every `Shipyard Neo` profile. AstrBot only mounts browser-related tools when the selected profile supports the `browser` capability. A typical example is `browser-python`.
 
+## CUA Runtime
+
+`CUA` is a sandbox runtime designed for computer-use scenarios. It can create Linux, macOS, Windows, Android, and other sandbox types through a unified Python SDK, and exposes interfaces such as shell, screenshot, mouse, keyboard, and filesystem.
+
+Before configuring the `CUA` driver in AstrBot, install the plugin first:
+
+```bash
+git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astrbot_sandbox_cua
+```
+
+Then restart AstrBot or reload plugins from the plugin management page.
+
 ## Performance Requirements
 
 AstrBot limits each sandbox instance to at most 1 CPU and 512 MB of memory.
@@ -39,6 +71,14 @@ We recommend that your host machine have at least 2 CPUs, 4 GB of memory, and sw
 ## Recommended: Use Shipyard Neo
 
 ### Deploy Shipyard Neo Separately (Recommended)
+
+Before configuring `Shipyard Neo` in AstrBot, install the plugin on the AstrBot side first:
+
+```bash
+git clone https://github.com/zouyonghe/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
+```
+
+Then restart AstrBot or reload plugins from the plugin management page.
 
 If you plan to use `Shipyard Neo` for the long term, it is generally better to **deploy it separately on a machine with more resources**, such as your homelab, a LAN server, or a dedicated cloud host, and then let AstrBot connect to Bay remotely.
 

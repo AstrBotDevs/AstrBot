@@ -20,13 +20,13 @@
     "metrics": {
         "total": "托管沙盒",
         "providers": "Provider 数量",
-        "busy": "占用租约",
+        "busy": "占用中",
         "default": "Provider 默认"
     },
     "labels": {
         "default": "默认",
         "busy": "占用中",
-        "available": "可用",
+        "available": "空闲",
         "noController": "无控制者",
         "unknown": "未知",
         "none": "无",
@@ -36,7 +36,7 @@
     "headers": {
         "sandbox": "沙盒",
         "provider": "Provider",
-        "lease": "租约",
+        "lease": "状态",
         "lastUsed": "最后使用",
         "actions": "操作"
     },
@@ -47,7 +47,7 @@
         "owner": "所属会话",
         "controller": "控制会话",
         "retentionPolicy": "保留策略",
-        "leaseExpires": "租约过期",
+        "leaseExpires": "占用过期",
         "idleTimeout": "空闲超时",
         "expiresAt": "过期时间",
         "connectInfo": "连接信息"
@@ -67,7 +67,7 @@
     },
     "console": {
         "title": "沙盒控制台",
-        "notice": "控制台不会接管或释放租约，但命令会直接影响该沙盒环境。",
+        "notice": "控制台不会改变沙盒的占用状态，但命令会直接影响该沙盒环境。",
         "command": "Shell 命令",
         "run": "执行命令",
         "output": "执行结果",

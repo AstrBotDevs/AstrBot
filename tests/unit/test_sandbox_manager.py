@@ -115,6 +115,21 @@ async def test_manager_switches_releases_takes_over_and_destroys(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_manager_force_releases_other_session_lease(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    taken = manager.takeover_sandbox("session-b", created["sandbox_id"])
+    manager.registry.set_current_sandbox_id("session-b", created["sandbox_id"])
+
+    released = manager.force_release_sandbox(created["sandbox_id"])
+
+    assert taken["controller_session_id"] == "session-b"
+    assert released["controller_session_id"] is None
+    assert released["lease_expires_at"] is None
+    assert manager.get_current_sandbox("session-b")["current_sandbox_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_manager_blocks_observer_booter_access_from_other_session(tmp_path):
     manager, _provider = _manager(tmp_path)
     created = await manager.create_sandbox(None, "session-a", "generic", "Named")

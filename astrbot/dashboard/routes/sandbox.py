@@ -116,9 +116,15 @@ class SandboxRoute(Route):
 
     async def release_current_sandbox(self):
         try:
-            sandbox = computer_client.sandbox_manager.release_current_sandbox(
-                self._session_id(), request.args.get("sandbox_id")
-            )
+            sandbox_id = request.args.get("sandbox_id")
+            if sandbox_id:
+                sandbox = computer_client.sandbox_manager.force_release_sandbox(
+                    sandbox_id
+                )
+            else:
+                sandbox = computer_client.sandbox_manager.release_current_sandbox(
+                    self._session_id()
+                )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())

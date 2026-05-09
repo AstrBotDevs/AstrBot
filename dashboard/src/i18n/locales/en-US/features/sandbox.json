@@ -20,13 +20,13 @@
     "metrics": {
         "total": "Managed sandboxes",
         "providers": "Providers",
-        "busy": "Busy leases",
+        "busy": "Occupied",
         "default": "Provider defaults"
     },
     "labels": {
         "default": "Default",
-        "busy": "Busy",
-        "available": "Available",
+        "busy": "Occupied",
+        "available": "Idle",
         "noController": "No controller",
         "unknown": "Unknown",
         "none": "None",
@@ -36,7 +36,7 @@
     "headers": {
         "sandbox": "Sandbox",
         "provider": "Provider",
-        "lease": "Lease",
+        "lease": "Status",
         "lastUsed": "Last used",
         "actions": "Actions"
     },
@@ -47,7 +47,7 @@
         "owner": "Owner session",
         "controller": "Controller session",
         "retentionPolicy": "Retention policy",
-        "leaseExpires": "Lease expires",
+        "leaseExpires": "Occupied until",
         "idleTimeout": "Idle timeout",
         "expiresAt": "Expires at",
         "connectInfo": "Connection info"
@@ -67,7 +67,7 @@
     },
     "console": {
         "title": "Sandbox console",
-        "notice": "The console does not take over or release the lease, but commands directly affect this sandbox environment.",
+        "notice": "The console does not change sandbox occupancy, but commands directly affect this sandbox environment.",
         "command": "Shell command",
         "run": "Run command",
         "output": "Command output",

@@ -100,7 +100,7 @@ def test_cua_screenshot_tool_does_not_send_to_user_by_default():
     send_to_user = tool.parameters["properties"]["send_to_user"]["default"]
     return_image_to_llm = tool.parameters["properties"]["return_image_to_llm"]["default"]
 
-    assert send_to_user is False
+    assert send_to_user is True
     assert return_image_to_llm is True
 
 

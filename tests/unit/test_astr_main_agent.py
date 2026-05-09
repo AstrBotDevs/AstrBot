@@ -1648,7 +1648,7 @@ class TestApplySandboxTools:
         module._apply_sandbox_tools(config, req, "session-123")
 
         assert "sandboxed environment" in req.system_prompt
-        assert "do not send screenshots to the user unless explicitly requested" in req.system_prompt
+        assert "send screenshots to the user to show progress" in req.system_prompt
 
     def test_apply_sandbox_tools_preserves_existing_toolset(self, mock_context):
         """Test that existing tools are preserved when adding sandbox tools."""
@@ -1699,8 +1699,8 @@ class TestApplySandboxTools:
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
         assert "create a new sandbox" in req.system_prompt
-        assert "do not send screenshots to the user unless explicitly requested" in req.system_prompt
-        assert "send one final result screenshot to the user" in req.system_prompt
+        assert "send screenshots to the user to show progress" in req.system_prompt
+        assert "especially after each meaningful GUI step" in req.system_prompt
 
     def test_handoff_runtime_computer_tools_include_sandbox_lifecycle_tools(self):
         tool_mgr = MagicMock()

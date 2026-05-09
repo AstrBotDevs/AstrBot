@@ -216,3 +216,54 @@ async def test_cleanup_registered_sandbox_manager(monkeypatch, tmp_path):
     await computer_client.cleanup_managed_sandboxes()
 
     assert manager.list_sandboxes() == []
+
+
+@pytest.mark.asyncio
+async def test_core_lifecycle_stop_cleans_up_temporary_managed_sandboxes(monkeypatch):
+    from types import SimpleNamespace
+
+    from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+
+    cleaned = []
+
+    async def fake_cleanup_managed_sandboxes():
+        cleaned.append("called")
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.cleanup_managed_sandboxes",
+        fake_cleanup_managed_sandboxes,
+    )
+
+    lifecycle = object.__new__(AstrBotCoreLifecycle)
+    lifecycle.temp_dir_cleaner = None
+    lifecycle.curr_tasks = []
+    lifecycle.cron_manager = None
+    lifecycle.provider_manager = SimpleNamespace(terminate=lambda: None)
+    lifecycle.platform_manager = SimpleNamespace(terminate=lambda: None)
+    lifecycle.kb_manager = SimpleNamespace(terminate=lambda: None)
+    lifecycle.dashboard_shutdown_event = SimpleNamespace(set=lambda: None)
+    lifecycle.plugin_manager = SimpleNamespace(
+        context=SimpleNamespace(get_all_stars=lambda: []),
+        _terminate_plugin=lambda plugin: None,
+    )
+
+    async def provider_terminate():
+        return None
+
+    async def platform_terminate():
+        return None
+
+    async def kb_terminate():
+        return None
+
+    async def terminate_plugin(plugin):
+        return None
+
+    lifecycle.provider_manager.terminate = provider_terminate
+    lifecycle.platform_manager.terminate = platform_terminate
+    lifecycle.kb_manager.terminate = kb_terminate
+    lifecycle.plugin_manager._terminate_plugin = terminate_plugin
+
+    await AstrBotCoreLifecycle.stop(lifecycle)
+
+    assert cleaned == ["called"]

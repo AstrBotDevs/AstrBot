@@ -9,11 +9,30 @@
 
 ## 启用沙盒环境
 
+从当前版本开始，`Shipyard Neo`、`Shipyard`、`CUA` 等具体沙箱驱动器都是**独立插件**，不会默认内置在 AstrBot Core 中。
+
+因此，启用沙盒环境时请先完成两步：
+
+1. 安装对应的沙箱插件
+2. 再在 AstrBot WebUI 中选择并配置对应驱动器
+
+如果只在 WebUI 中把 `Computer Use Runtime` 切到 `sandbox`，但没有先安装对应插件，那么 AstrBot 不会拥有对应的沙箱驱动器能力。
+
 目前，AstrBot 的沙盒环境驱动器支持：
 
 - `Shipyard Neo`（当前推荐）
 - `Shipyard`（旧方案，仍可继续使用）
 - `CUA`（本地或云端电脑使用沙盒，适合需要桌面操作的场景）
+
+推荐安装命令示例：
+
+```bash
+git clone https://github.com/zouyonghe/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
+git clone https://github.com/zouyonghe/astrbot_sandbox_shipyard.git data/plugins/astrbot_sandbox_shipyard
+git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astrbot_sandbox_cua
+```
+
+安装完成后，重启 AstrBot 或在插件管理页重新加载插件。
 
 在当前版本的 AstrBot 控制台中，可在“AI 配置” -> “Agent Computer Use”中选择：
 
@@ -47,6 +66,16 @@
 
 > [!NOTE]
 > CUA 是可选运行时，AstrBot 默认安装不会强制安装它。如果选择了 `CUA` 但当前 Python 环境没有安装 `cua` 包，启动沙盒时会提示安装缺失。
+
+### 先安装 CUA 插件
+
+在配置 `CUA` 驱动器之前，请先把插件安装到 AstrBot 的插件目录：
+
+```bash
+git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astrbot_sandbox_cua
+```
+
+然后重启 AstrBot，或在插件管理页重新加载插件。
 
 ### 安装 CUA 依赖
 
@@ -143,6 +172,14 @@ AstrBot 给每个沙盒环境限制最高 1 CPU 和 512 MB 内存。
 ## 推荐：使用 Shipyard Neo
 
 ### 单独部署 Shipyard Neo（推荐）
+
+在 AstrBot 侧配置 `Shipyard Neo` 之前，请先安装对应插件：
+
+```bash
+git clone https://github.com/zouyonghe/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
+```
+
+然后重启 AstrBot，或在插件管理页重新加载插件。
 
 如果您准备长期使用 `Shipyard Neo`，更推荐将它**单独部署在一台资源更充足的机器上**，例如您的 homelab、局域网服务器，或独立云主机，然后再让 AstrBot 远程接入 Bay。
 

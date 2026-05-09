@@ -87,7 +87,7 @@
                 </v-btn>
                 <v-btn size="small" variant="tonal" :disabled="!canReleaseFromDashboard(item)" @click="releaseSandbox(item)">{{ tm('actions.release') }}</v-btn>
                 <v-btn size="small" variant="tonal" :disabled="!hasCapability(item, 'screenshot')" @click="screenshotSandbox(item)">{{ tm('actions.screenshot') }}</v-btn>
-                <v-btn size="small" color="error" variant="tonal" :disabled="!hasCapability(item, 'destroy')" @click="openDestroyConfirm(item)">{{ tm('actions.destroy') }}</v-btn>
+                <v-btn size="small" color="error" variant="tonal" @click="openDestroyConfirm(item)">{{ tm('actions.destroy') }}</v-btn>
               </div>
             </template>
 
@@ -389,7 +389,7 @@ function hasController(item: SandboxRecord) {
 }
 
 function canReleaseFromDashboard(item: SandboxRecord) {
-  return item.controller_session_id === 'dashboard'
+  return !!item.controller_session_id
 }
 
 function formatTime(value?: number | null) {
@@ -543,7 +543,7 @@ function releaseSandbox(item: SandboxRecord) {
 
 function openConsole(item: SandboxRecord) {
   consoleSandbox.value = item
-  consoleHistory.value = consoleHistoryBySandbox.value[item.sandbox_id] || []
+  consoleHistory.value = [...(consoleHistoryBySandbox.value[item.sandbox_id] || [])]
   consoleCwd.value = consoleCwdBySandbox.value[item.sandbox_id] || '~'
   consoleOpen.value = true
   requestAnimationFrame(() => {
@@ -603,6 +603,7 @@ async function runConsoleCommand() {
     running: true
   }
   consoleHistory.value.push(entry)
+  consoleHistory.value = [...consoleHistory.value]
   consoleHistoryBySandbox.value[sandboxId] = consoleHistory.value
   consoleCommand.value = ''
   await scrollConsoleToBottom()
@@ -619,19 +620,24 @@ async function runConsoleCommand() {
       entry.stderr = normalizeTerminalOutput(String(data.result.stderr ?? ''))
       entry.exitCode = data.result.exit_code ?? data.result.returncode ?? '-'
       entry.running = false
+      consoleHistory.value = [...consoleHistory.value]
       consoleHistoryBySandbox.value[sandboxId] = consoleHistory.value
       consoleCwd.value = nextCwd
       consoleCwdBySandbox.value[sandboxId] = nextCwd
+      await nextTick()
       await scrollConsoleToBottom()
       focusConsoleInput()
     } else {
       entry.running = false
+      consoleHistory.value = [...consoleHistory.value]
     }
   } catch (e: any) {
     entry.stderr = e?.message || String(e)
     entry.running = false
+    consoleHistory.value = [...consoleHistory.value]
   } finally {
     entry.running = false
+    consoleHistory.value = [...consoleHistory.value]
     consoleRunning.value = false
     await nextTick()
     focusConsoleInput()

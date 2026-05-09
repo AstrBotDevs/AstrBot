@@ -19,6 +19,7 @@ from asyncio import Queue
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.computer import computer_client
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
@@ -367,6 +368,15 @@ class AstrBotCoreLifecycle:
 
         if self.cron_manager:
             await self.cron_manager.shutdown()
+
+        try:
+            await computer_client.cleanup_managed_sandboxes()
+        except Exception as e:
+            logger.warning(
+                "Managed sandbox cleanup during shutdown failed: %s",
+                e,
+                exc_info=True,
+            )
 
         for plugin in self.plugin_manager.context.get_all_stars():
             try:

@@ -447,6 +447,18 @@ class SandboxManager:
         self.save_registry()
         return released
 
+    def force_release_sandbox(self, sandbox_id: str) -> dict:
+        record = self.registry.get_sandbox(sandbox_id)
+        if record is None:
+            raise RuntimeError(f"Sandbox {sandbox_id} not found")
+        controller_session_id = record.get("controller_session_id")
+        released = self.registry.release_lease(sandbox_id) or record
+        if controller_session_id:
+            if self.registry.get_current_sandbox_id(controller_session_id) == sandbox_id:
+                self.registry.set_current_sandbox_id(controller_session_id, None)
+        self.save_registry()
+        return released
+
     def takeover_sandbox(self, session_id: str, sandbox_id: str) -> dict:
         record = self.registry.get_sandbox(sandbox_id)
         if record is None or not record.get("managed"):
