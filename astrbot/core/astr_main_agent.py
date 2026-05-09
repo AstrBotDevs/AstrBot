@@ -47,32 +47,15 @@ from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.computer_tools import (
-    AnnotateExecutionTool,
-    BrowserBatchExecTool,
-    BrowserExecTool,
-    CreateSkillCandidateTool,
-    CreateSkillPayloadTool,
-    CuaKeyboardTypeTool,
-    CuaMouseClickTool,
-    CuaScreenshotTool,
-    EvaluateSkillCandidateTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
     FileReadTool,
     FileUploadTool,
     FileWriteTool,
-    GetExecutionHistoryTool,
-    GetSkillPayloadTool,
     GrepTool,
-    ListSkillCandidatesTool,
-    ListSkillReleasesTool,
     LocalPythonTool,
-    PromoteSkillCandidateTool,
     PythonTool,
-    RollbackSkillReleaseTool,
-    RunBrowserSkillTool,
-    SyncSkillReleaseTool,
     normalize_umo_for_workspace,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
@@ -990,15 +973,7 @@ def _apply_sandbox_tools(
         req.func_tool = ToolSet()
     if req.system_prompt is None:
         req.system_prompt = ""
-    booter = config.sandbox_cfg.get("booter", "shipyard_neo")
-    if booter == "shipyard":
-        ep = config.sandbox_cfg.get("shipyard_endpoint", "")
-        at = config.sandbox_cfg.get("shipyard_access_token", "")
-        if not ep or not at:
-            logger.error("Shipyard sandbox configuration is incomplete.")
-            return
-        os.environ["SHIPYARD_ENDPOINT"] = ep
-        os.environ["SHIPYARD_ACCESS_TOKEN"] = at
+    booter = config.sandbox_cfg.get("booter", "")
 
     tool_mgr = llm_tools
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
@@ -1009,73 +984,14 @@ def _apply_sandbox_tools(
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    if booter == "shipyard_neo":
-        # Neo-specific path rule: filesystem tools operate relative to sandbox
-        # workspace root. Do not prepend "/workspace".
-        req.system_prompt += (
-            "\n[Shipyard Neo File Path Rule]\n"
-            "When using sandbox filesystem tools (upload/download/read/write/list/delete), "
-            "always pass paths relative to the sandbox workspace root. "
-            "Example: use `baidu_homepage.png` instead of `/workspace/baidu_homepage.png`.\n"
-        )
+    from astrbot.core.computer.computer_client import get_sandbox_provider_info
 
-        req.system_prompt += (
-            "\n[Neo Skill Lifecycle Workflow]\n"
-            "When user asks to create/update a reusable skill in Neo mode, use lifecycle tools instead of directly writing local skill folders.\n"
-            "Preferred sequence:\n"
-            "1) Use `astrbot_create_skill_payload` to store canonical payload content and get `payload_ref`.\n"
-            "2) Use `astrbot_create_skill_candidate` with `skill_key` + `source_execution_ids` (and optional `payload_ref`) to create a candidate.\n"
-            "3) Use `astrbot_promote_skill_candidate` to release: `stage=canary` for trial; `stage=stable` for production.\n"
-            "For stable release, set `sync_to_local=true` to sync `payload.skill_markdown` into local `SKILL.md`.\n"
-            "Do not treat ad-hoc generated files as reusable Neo skills unless they are captured via payload/candidate/release.\n"
-            "To update an existing skill, create a new payload/candidate and promote a new release version; avoid patching old local folders directly.\n"
-        )
-
-        # Determine sandbox capabilities from an already-booted session.
-        # If no session exists yet (first request), capabilities is None
-        # and we register all tools conservatively.
-        from astrbot.core.computer.computer_client import session_booter
-
-        sandbox_capabilities: list[str] | None = None
-        existing_booter = session_booter.get(session_id)
-        if existing_booter is not None:
-            sandbox_capabilities = getattr(existing_booter, "capabilities", None)
-
-        # Browser tools: only register if profile supports browser
-        # (or if capabilities are unknown because sandbox hasn't booted yet)
-        if sandbox_capabilities is None or "browser" in sandbox_capabilities:
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserExecTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserBatchExecTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(RunBrowserSkillTool))
-
-        # Neo-specific tools (always available for shipyard_neo)
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetExecutionHistoryTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnnotateExecutionTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillPayloadTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetSkillPayloadTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillCandidatesTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(EvaluateSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(PromoteSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillReleasesTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
-
-    if booter == "cua":
-        req.system_prompt += (
-            "\n[CUA Desktop Control]\n"
-            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
-            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
-            "After each visible step, call `astrbot_cua_screenshot` with "
-            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
-            "monitor progress. When typing, inspect the screenshot first and confirm "
-            "the target field is focused and empty or safe to append to. Use "
-            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
-            "for text input; use text=`\\n` for Enter.\n"
-        )
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
+    provider_info = get_sandbox_provider_info(booter)
+    if provider_info:
+        for tool_name in provider_info.get("tool_names", []):
+            tool = tool_mgr.get_func(tool_name)
+            if tool and getattr(tool, "active", True):
+                req.func_tool.add_tool(tool)
 
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 

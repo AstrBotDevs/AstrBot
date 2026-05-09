@@ -1,0 +1,102 @@
+import json
+
+from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+
+def _registry(tmp_path):
+    return SandboxRegistry(tmp_path / "sandbox_registry.json")
+
+
+def _upsert(registry, sandbox_id="generic-1", provider="generic"):
+    return registry.upsert_sandbox(
+        sandbox_id=sandbox_id,
+        sandbox_name=f"Sandbox {sandbox_id}",
+        booter_type=provider,
+        provider=provider,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="user-1",
+        owner_session_id="session-1",
+        connect_info={"name": sandbox_id},
+        capabilities={"shell", "python", "filesystem"},
+    )
+
+
+def test_registry_upserts_lists_and_deletes_sandboxes(tmp_path):
+    registry = _registry(tmp_path)
+
+    record = _upsert(registry)
+
+    assert record["sandbox_id"] == "generic-1"
+    assert record["capabilities"] == ["filesystem", "python", "shell"]
+    assert registry.get_sandbox("generic-1")["sandbox_name"] == "Sandbox generic-1"
+    assert [item["sandbox_id"] for item in registry.list_sandboxes()] == ["generic-1"]
+
+    registry.delete_sandbox("generic-1")
+
+    assert registry.get_sandbox("generic-1") is None
+    assert registry.list_sandboxes() == []
+
+
+def test_registry_tracks_provider_defaults_and_current_session(tmp_path):
+    registry = _registry(tmp_path)
+    _upsert(registry, "generic-1", provider="generic")
+    _upsert(registry, "other-1", provider="other")
+
+    registry.set_default_sandbox_id("generic-1")
+    registry.set_current_sandbox_id("session-a", "generic-1")
+
+    assert registry.get_default_sandbox_id("generic") == "generic-1"
+    assert registry.get_default_sandbox_id("other") is None
+    assert registry.get_current_sandbox_id("session-a") == "generic-1"
+
+    registry.delete_sandbox("generic-1")
+
+    assert registry.get_current_sandbox_id("session-a") is None
+
+
+def test_registry_acquires_releases_and_takes_over_leases(tmp_path):
+    registry = _registry(tmp_path)
+    _upsert(registry)
+
+    assert registry.acquire_lease(
+        sandbox_id="generic-1", session_id="session-a", user_id="user-a", ttl=60, now=10
+    )
+    assert not registry.acquire_lease(
+        sandbox_id="generic-1", session_id="session-b", user_id="user-b", ttl=60, now=20
+    )
+
+    released = registry.release_lease("generic-1")
+    assert released["controller_session_id"] is None
+    assert registry.acquire_lease(
+        sandbox_id="generic-1", session_id="session-b", user_id="user-b", ttl=60, now=20
+    )
+
+    taken = registry.takeover_lease(
+        sandbox_id="generic-1", session_id="session-c", user_id="user-c", ttl=60, now=30
+    )
+    assert taken["controller_session_id"] == "session-c"
+
+
+def test_registry_saves_loads_and_reconciles_runtime_state(tmp_path):
+    registry = _registry(tmp_path)
+    _upsert(registry)
+    registry.acquire_lease(
+        sandbox_id="generic-1", session_id="session-a", user_id="user-a", ttl=60, now=10
+    )
+    registry.set_current_sandbox_id("session-a", "generic-1")
+    registry.save()
+
+    loaded = _registry(tmp_path)
+    loaded.load()
+    assert loaded.get_sandbox("generic-1")["controller_session_id"] == "session-a"
+
+    loaded.reconcile_startup()
+
+    record = loaded.get_sandbox("generic-1")
+    assert record["status"] == "unknown"
+    assert record["controller_session_id"] is None
+    assert loaded.get_current_sandbox_id("session-a") is None
+
+    payload = json.loads((tmp_path / "sandbox_registry.json").read_text())
+    assert "sandboxes" in payload

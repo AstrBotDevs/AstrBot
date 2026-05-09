@@ -31,9 +31,6 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
-    CuaKeyboardTypeTool,
-    CuaMouseClickTool,
-    CuaScreenshotTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
@@ -211,17 +208,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
-            if booter == "cua":
-                screenshot_tool = tool_mgr.get_builtin_tool(CuaScreenshotTool)
-                mouse_click_tool = tool_mgr.get_builtin_tool(CuaMouseClickTool)
-                keyboard_type_tool = tool_mgr.get_builtin_tool(CuaKeyboardTypeTool)
-                tools.update(
-                    {
-                        screenshot_tool.name: screenshot_tool,
-                        mouse_click_tool.name: mouse_click_tool,
-                        keyboard_type_tool.name: keyboard_type_tool,
-                    }
-                )
+            from astrbot.core.computer.computer_client import get_sandbox_provider_info
+
+            provider_info = get_sandbox_provider_info(booter)
+            if provider_info:
+                for tool_name in provider_info.get("tool_names", []):
+                    provider_tool = tool_mgr.get_func(tool_name)
+                    if provider_tool and getattr(provider_tool, "active", True):
+                        tools[provider_tool.name] = provider_tool
             return tools
         if runtime == "local":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)

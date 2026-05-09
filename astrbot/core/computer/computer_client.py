@@ -1,5 +1,4 @@
 import json
-import os
 import shutil
 import uuid
 from pathlib import Path
@@ -14,10 +13,72 @@ from astrbot.core.utils.astrbot_path import (
 
 from .booters.base import ComputerBooter
 from .booters.local import LocalBooter
+from .sandbox_manager import SandboxManager
+from .sandbox_provider import SandboxProvider
+from .sandbox_registry import SandboxRegistry
 
 session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None
+sandbox_registry = SandboxRegistry()
+sandbox_manager = SandboxManager(registry=sandbox_registry, providers={})
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
+
+
+def _sandbox_provider_info(provider_id: str, provider: SandboxProvider) -> dict:
+    return {
+        "provider_id": provider_id,
+        "capabilities": sorted(getattr(provider, "capabilities", set())),
+        "tool_names": sorted(getattr(provider, "tool_names", set())),
+    }
+
+
+def _has_managed_sandboxes_for_provider(provider_id: str) -> bool:
+    return any(
+        record.get("managed") and record.get("provider") == provider_id
+        for record in sandbox_manager.registry.list_sandboxes()
+    )
+
+
+def register_sandbox_provider(
+    provider: SandboxProvider,
+    *,
+    replace: bool = False,
+) -> None:
+    """Register a plugin-provided sandbox runtime."""
+    if not provider.provider_id:
+        raise ValueError("Sandbox provider_id must be a non-empty string.")
+    if provider.provider_id in sandbox_manager.providers and not replace:
+        raise RuntimeError(
+            f"Sandbox provider {provider.provider_id} is already registered"
+        )
+    sandbox_manager.providers[provider.provider_id] = provider
+
+
+def unregister_sandbox_provider(provider_id: str, *, force: bool = False) -> None:
+    if not force and _has_managed_sandboxes_for_provider(provider_id):
+        raise RuntimeError(
+            f"Sandbox provider {provider_id} has active managed sandboxes; "
+            "destroy them or pass force=True before unregistering."
+        )
+    sandbox_manager.providers.pop(provider_id, None)
+
+
+def get_sandbox_provider_info(provider_id: str) -> dict | None:
+    provider = sandbox_manager.providers.get(provider_id)
+    if provider is None:
+        return None
+    return _sandbox_provider_info(provider_id, provider)
+
+
+def list_sandbox_providers() -> list[dict]:
+    return [
+        _sandbox_provider_info(provider_id, provider)
+        for provider_id, provider in sorted(sandbox_manager.providers.items())
+    ]
+
+
+async def cleanup_managed_sandboxes() -> None:
+    await sandbox_manager.cleanup_managed_sandboxes()
 
 
 def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
@@ -62,65 +123,6 @@ def _normalize_shell_exec_result(result: object) -> dict:
     if isinstance(result, dict):
         return result
     return {"exit_code": 0, "stdout": "", "stderr": ""}
-
-
-def _discover_bay_credentials(endpoint: str) -> str:
-    """Try to auto-discover Bay API key from credentials.json.
-
-    Search order:
-    1. BAY_DATA_DIR env var
-    2. Mono-repo relative path: ../pkgs/bay/ (dev layout)
-    3. Current working directory
-
-    Returns:
-        API key string, or empty string if not found.
-    """
-    candidates: list[Path] = []
-
-    # 1. BAY_DATA_DIR env var
-    bay_data_dir = os.environ.get("BAY_DATA_DIR")
-    if bay_data_dir:
-        candidates.append(Path(bay_data_dir) / "credentials.json")
-
-    # 2. Mono-repo layout: AstrBot/../pkgs/bay/credentials.json
-    astrbot_root = Path(__file__).resolve().parents[3]  # astrbot/core/computer/ → root
-    candidates.append(astrbot_root.parent / "pkgs" / "bay" / "credentials.json")
-
-    # 3. Current working directory
-    candidates.append(Path.cwd() / "credentials.json")
-
-    for cred_path in candidates:
-        if not cred_path.is_file():
-            continue
-        try:
-            data = json.loads(cred_path.read_text())
-            api_key = data.get("api_key", "")
-            if api_key:
-                # Optionally verify endpoint matches
-                cred_endpoint = data.get("endpoint", "")
-                if (
-                    cred_endpoint
-                    and endpoint
-                    and cred_endpoint.rstrip("/") != endpoint.rstrip("/")
-                ):
-                    logger.warning(
-                        "[Computer] credentials.json endpoint mismatch: "
-                        "file=%s, configured=%s — using key anyway",
-                        cred_endpoint,
-                        endpoint,
-                    )
-                masked_key = f"{api_key[:4]}..." if len(api_key) >= 6 else "redacted"
-                logger.info(
-                    "[Computer] Auto-discovered Bay API key from %s (prefix=%s)",
-                    cred_path,
-                    masked_key,
-                )
-                return api_key
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.debug("[Computer] Failed to read %s: %s", cred_path, exc)
-
-    logger.debug("[Computer] No Bay credentials.json found in search paths")
-    return ""
 
 
 def _build_python_exec_command(script: str) -> str:
@@ -485,21 +487,13 @@ async def get_booter(
         raise RuntimeError("Sandbox runtime is disabled by configuration.")
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-    booter_type = sandbox_cfg.get("booter", "shipyard_neo")
+    booter_type = sandbox_cfg.get("booter", "")
 
     if session_id in session_booter:
         booter = session_booter[session_id]
         if not await booter.available():
-            # Clean up old booter before rebuilding so sandbox resources
-            # on Bay (containers, volumes, networks) are not leaked.
-            # Only ShipyardNeoBooter supports delete_sandbox; other booters
-            # (local, boxlite, cua, etc.) are not backed by a remote sandbox
-            # manager and don't need it.
             try:
-                if booter_type == "shipyard_neo":
-                    await booter.shutdown(delete_sandbox=True)
-                else:
-                    await booter.shutdown()
+                await booter.shutdown()
             except Exception as shutdown_err:
                 logger.warning(
                     "[Computer] Error shutting down stale booter for session %s: %s",
@@ -508,80 +502,16 @@ async def get_booter(
                 )
             session_booter.pop(session_id, None)
     if session_id not in session_booter:
-        uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
         logger.info(
             f"[Computer] Initializing booter: type={booter_type}, session={session_id}"
         )
-        if booter_type == "shipyard":
-            from .booters.shipyard import ShipyardBooter
-
-            ep = sandbox_cfg.get("shipyard_endpoint", "")
-            token = sandbox_cfg.get("shipyard_access_token", "")
-            ttl = sandbox_cfg.get("shipyard_ttl", 3600)
-            max_sessions = sandbox_cfg.get("shipyard_max_sessions", 10)
-
-            client = ShipyardBooter(
-                endpoint_url=ep, access_token=token, ttl=ttl, session_num=max_sessions
+        if booter_type in sandbox_manager.providers:
+            return await sandbox_manager.get_or_create_booter(
+                context,
+                session_id,
+                booter_type,
             )
-        elif booter_type == "shipyard_neo":
-            from .booters.shipyard_neo import ShipyardNeoBooter
-
-            ep = sandbox_cfg.get("shipyard_neo_endpoint", "")
-            token = sandbox_cfg.get("shipyard_neo_access_token", "")
-            ttl = sandbox_cfg.get("shipyard_neo_ttl", 3600)
-            profile = sandbox_cfg.get("shipyard_neo_profile", "python-default")
-
-            # Auto-discover token from Bay's credentials.json if not configured
-            if not token:
-                token = _discover_bay_credentials(ep)
-
-            logger.info(
-                f"[Computer] Shipyard Neo config: endpoint={ep}, profile={profile}, ttl={ttl}"
-            )
-            client = ShipyardNeoBooter(
-                endpoint_url=ep,
-                access_token=token,
-                profile=profile,
-                ttl=ttl,
-            )
-        elif booter_type == "cua":
-            from .booters.cua import CuaBooter, build_cua_booter_kwargs
-
-            cua_kwargs = build_cua_booter_kwargs(sandbox_cfg)
-            logger.info(
-                f"[Computer] CUA config: image={cua_kwargs['image']}, "
-                f"os_type={cua_kwargs['os_type']}, ttl={cua_kwargs['ttl']}"
-            )
-            client = CuaBooter(**cua_kwargs)
-        elif booter_type == "boxlite":
-            from .booters.boxlite import BoxliteBooter
-
-            client = BoxliteBooter()
-        else:
-            raise ValueError(f"Unknown booter type: {booter_type}")
-
-        try:
-            await client.boot(uuid_str)
-            logger.info(
-                f"[Computer] Sandbox booted successfully: type={booter_type}, session={session_id}"
-            )
-            await _sync_skills_to_sandbox(client)
-        except Exception as e:
-            logger.error(f"Error booting sandbox for session {session_id}: {e}")
-            try:
-                if booter_type == "shipyard_neo":
-                    await client.shutdown(delete_sandbox=True)
-                else:
-                    await client.shutdown()
-            except Exception as shutdown_error:
-                logger.warning(
-                    "Failed to shutdown sandbox after boot error for session %s: %s",
-                    session_id,
-                    shutdown_error,
-                )
-            raise e
-
-        session_booter[session_id] = client
+        raise ValueError(f"Unknown booter type: {booter_type}")
     return session_booter[session_id]
 
 

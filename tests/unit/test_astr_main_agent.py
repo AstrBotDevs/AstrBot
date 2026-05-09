@@ -1,6 +1,5 @@
 """Tests for astr_main_agent module."""
 
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1640,100 +1639,6 @@ class TestApplySandboxTools:
         module._apply_sandbox_tools(config, req, "session-123")
 
         assert "sandboxed environment" in req.system_prompt
-
-    def test_apply_sandbox_tools_with_cua_adds_gui_guidance(self, mock_context):
-        """Test that CUA sandbox guidance nudges reliable GUI workflows."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={"booter": "cua"},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
-
-        module._apply_sandbox_tools(config, req, "session-123")
-
-        assert req.func_tool is not None
-        tool_names = req.func_tool.names()
-        assert "astrbot_cua_screenshot" in tool_names
-        assert "astrbot_cua_mouse_click" in tool_names
-        assert "astrbot_cua_keyboard_type" in tool_names
-        assert "astrbot_cua_key_press" not in tool_names
-
-        assert "Firefox" in req.system_prompt
-        assert "background=true" in req.system_prompt
-        assert 'firefox "https://example.com"' in req.system_prompt
-        assert "astrbot_cua_screenshot" in req.system_prompt
-        assert "astrbot_cua_key_press" not in req.system_prompt
-        assert "return_image_to_llm" in req.system_prompt
-        assert "astrbot_execute_shell" in req.system_prompt
-        assert "\\n" in req.system_prompt
-        assert "send_to_user=true" in req.system_prompt
-        assert "focused and empty or safe to append" in req.system_prompt
-
-    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
-        """Test sandbox tools with shipyard booter configuration."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "https://shipyard.example.com",
-                "shipyard_access_token": "test-token",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        monkeypatch.delenv("SHIPYARD_ENDPOINT", raising=False)
-        monkeypatch.delenv("SHIPYARD_ACCESS_TOKEN", raising=False)
-
-        module._apply_sandbox_tools(config, req, "session-123")
-
-        assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
-        assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
-
-    def test_apply_sandbox_tools_shipyard_missing_endpoint(self, mock_context):
-        """Test that shipyard config is skipped when endpoint is missing."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "",
-                "shipyard_access_token": "test-token",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123")
-
-        mock_logger.error.assert_called_once()
-        assert (
-            "Shipyard sandbox configuration is incomplete"
-            in mock_logger.error.call_args[0][0]
-        )
-
-    def test_apply_sandbox_tools_shipyard_missing_access_token(self, mock_context):
-        """Test that shipyard config is skipped when access token is missing."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "https://shipyard.example.com",
-                "shipyard_access_token": "",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123")
-
-        mock_logger.error.assert_called_once()
 
     def test_apply_sandbox_tools_preserves_existing_toolset(self, mock_context):
         """Test that existing tools are preserved when adding sandbox tools."""
