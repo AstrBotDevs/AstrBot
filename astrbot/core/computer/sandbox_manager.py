@@ -279,6 +279,26 @@ class SandboxManager:
         self.registry.set_current_sandbox_id(session_id, target_sandbox_id)
         await self.save_registry_async()
         self.schedule_idle_cleanup(target_sandbox_id, idle_timeout)
+
+        # Auto-sync skills unless the provider opts out.
+        if getattr(provider, "auto_sync_skills", True):
+            booter = self.session_booter[target_sandbox_id]
+            if hasattr(booter, "shell"):
+                await self._sync_skills_to_booter(booter)
+
+        # Optional lifecycle hook.
+        if hasattr(provider, "on_sandbox_created"):
+            try:
+                await provider.on_sandbox_created(
+                    self.registry.get_sandbox(target_sandbox_id) or {}
+                )
+            except Exception as hook_err:
+                logger.warning(
+                    "[Computer] on_sandbox_created hook failed for %s: %s",
+                    target_sandbox_id,
+                    hook_err,
+                )
+
         return self.session_booter[target_sandbox_id]
 
     async def create_sandbox_uncontrolled(
@@ -525,6 +545,17 @@ class SandboxManager:
         self.registry.delete_sandbox(sandbox_id)
         self.drop_boot_lock(sandbox_id)
         await self.save_registry_async()
+
+        if hasattr(provider, "on_sandbox_destroyed"):
+            try:
+                await provider.on_sandbox_destroyed(record)
+            except Exception as hook_err:
+                logger.warning(
+                    "[Computer] on_sandbox_destroyed hook failed for %s: %s",
+                    sandbox_id,
+                    hook_err,
+                )
+
         return record
 
     async def get_observer_booter_by_id(
@@ -569,31 +600,29 @@ class SandboxManager:
                     sandbox_id,
                 )
                 continue
+            provider = None
             try:
                 provider = self.get_provider(record.get("provider", ""))
             except RuntimeError as provider_error:
-                self.registry.update_sandbox_status(sandbox_id, "unknown")
-                await self.save_registry_async()
                 logger.warning(
-                    "[Computer] Skip managed sandbox cleanup for unsupported provider: sandbox_id=%s error=%s",
+                    "[Computer] Provider unavailable for sandbox %s: %s",
                     sandbox_id,
                     provider_error,
                 )
-                continue
             booter = self.session_booter.get(sandbox_id)
             if booter is not None:
-                try:
-                    await provider.destroy_booter(booter, record)
-                    self.session_booter.pop(sandbox_id, None)
-                except Exception as shutdown_err:
-                    self.registry.update_sandbox_status(sandbox_id, "unknown")
-                    await self.save_registry_async()
-                    logger.warning(
-                        "[Computer] Failed to shutdown managed sandbox %s: %s",
-                        sandbox_id,
-                        shutdown_err,
-                    )
-                    continue
+                if provider is not None:
+                    try:
+                        await provider.destroy_booter(booter, record)
+                    except Exception as shutdown_err:
+                        logger.warning(
+                            "[Computer] Failed to shutdown managed sandbox %s: %s",
+                            sandbox_id,
+                            shutdown_err,
+                        )
+                # Always pop the booter so memory is freed even when the
+                # provider has already been unregistered.
+                self.session_booter.pop(sandbox_id, None)
             self.clear_idle_state(sandbox_id)
             self.registry.delete_sandbox(sandbox_id)
             self.drop_boot_lock(sandbox_id)
@@ -681,3 +710,10 @@ class SandboxManager:
             state = self.idle_state.get(sandbox_id)
             if state is not None and state.expires_at == current_expires_at:
                 self.idle_state.pop(sandbox_id, None)
+
+    @staticmethod
+    async def _sync_skills_to_booter(booter: ComputerBooter) -> None:
+        """Delay-import wrapper to avoid circular imports."""
+        from astrbot.core.computer.computer_client import _sync_skills_to_sandbox
+
+        await _sync_skills_to_sandbox(booter)

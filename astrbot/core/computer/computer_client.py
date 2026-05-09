@@ -4,6 +4,8 @@ import uuid
 from pathlib import Path
 
 from astrbot.api import logger
+from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.provider.register import llm_tools
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
 from astrbot.core.star.context import Context
 from astrbot.core.utils.astrbot_path import (
@@ -22,6 +24,9 @@ local_booter: ComputerBooter | None = None
 sandbox_registry = SandboxRegistry()
 sandbox_manager = SandboxManager(registry=sandbox_registry, providers={})
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
+
+# Tracks tools registered per provider so core can remove them on unregister.
+_provider_tools: dict[str, list[FunctionTool]] = {}
 
 
 def _sandbox_provider_info(provider_id: str, provider: SandboxProvider) -> dict:
@@ -44,15 +49,43 @@ def register_sandbox_provider(
     provider: SandboxProvider,
     *,
     replace: bool = False,
+    tools: list[FunctionTool] | None = None,
 ) -> None:
-    """Register a plugin-provided sandbox runtime."""
+    """Register a plugin-provided sandbox runtime.
+
+    Args:
+        provider: The sandbox provider instance.
+        replace: If ``True``, replace an existing provider with the same ID.
+        tools: Optional list of provider-specific tools to register with the
+            global LLM tool manager. Core will automatically unregister these
+            tools when the provider is unregistered.
+    """
     if not provider.provider_id:
         raise ValueError("Sandbox provider_id must be a non-empty string.")
     if provider.provider_id in sandbox_manager.providers and not replace:
         raise RuntimeError(
             f"Sandbox provider {provider.provider_id} is already registered"
         )
+
+    # Clean up previous tools when replacing.
+    if replace and provider.provider_id in sandbox_manager.providers:
+        _unregister_provider_tools(provider.provider_id)
+
     sandbox_manager.providers[provider.provider_id] = provider
+
+    if tools:
+        registered: list[FunctionTool] = []
+        for tool in tools:
+            llm_tools.func_list.append(tool)
+            registered.append(tool)
+        _provider_tools[provider.provider_id] = registered
+        logger.info(
+            "Sandbox provider %s registered with %d tool(s)",
+            provider.provider_id,
+            len(registered),
+        )
+    else:
+        logger.info("Sandbox provider %s registered", provider.provider_id)
 
 
 def unregister_sandbox_provider(provider_id: str, *, force: bool = False) -> None:
@@ -61,7 +94,72 @@ def unregister_sandbox_provider(provider_id: str, *, force: bool = False) -> Non
             f"Sandbox provider {provider_id} has active managed sandboxes; "
             "destroy them or pass force=True before unregistering."
         )
+
+    if force:
+        # Synchronously clear registry and memory state for this provider's
+        # sandboxes.  Async destroy_booter is best-effort via background task.
+        _cleanup_provider_sandboxes_sync(provider_id)
+
+    _unregister_provider_tools(provider_id)
     sandbox_manager.providers.pop(provider_id, None)
+
+
+def _unregister_provider_tools(provider_id: str) -> None:
+    registered = _provider_tools.pop(provider_id, [])
+    for tool in registered:
+        llm_tools.remove_func(tool.name)
+    if registered:
+        logger.info(
+            "Unregistered %d tool(s) for sandbox provider %s",
+            len(registered),
+            provider_id,
+        )
+
+
+def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
+    """Synchronous cleanup of a provider's managed sandboxes on unregister.
+
+    Registry records and in-memory state are removed immediately.  If a booter
+    is alive and an event loop is running, an async destroy_booter task is
+    spawned as a best-effort cleanup.
+    """
+    import asyncio
+
+    for record in list(sandbox_manager.registry.list_sandboxes()):
+        if not record.get("managed") or record.get("provider") != provider_id:
+            continue
+        sandbox_id = record["sandbox_id"]
+        booter = sandbox_manager.session_booter.pop(sandbox_id, None)
+        sandbox_manager.clear_idle_state(sandbox_id)
+        sandbox_manager.registry.delete_sandbox(sandbox_id)
+        sandbox_manager.drop_boot_lock(sandbox_id)
+        if booter is not None:
+            try:
+                loop = asyncio.get_running_loop()
+                provider = sandbox_manager.providers.get(provider_id)
+                if provider is not None:
+                    loop.create_task(
+                        _safe_destroy_booter(provider, booter, record)
+                    )
+            except RuntimeError:
+                pass  # no running event loop
+    logger.info(
+        "Force-unregistered sandbox provider %s: sandboxes cleaned up",
+        provider_id,
+    )
+
+
+async def _safe_destroy_booter(
+    provider: SandboxProvider, booter: ComputerBooter, record: dict
+) -> None:
+    try:
+        await provider.destroy_booter(booter, record)
+    except Exception as exc:
+        logger.warning(
+            "Background destroy_booter failed for sandbox %s: %s",
+            record.get("sandbox_id"),
+            exc,
+        )
 
 
 def get_sandbox_provider_info(provider_id: str) -> dict | None:
