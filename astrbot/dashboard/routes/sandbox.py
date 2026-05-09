@@ -160,8 +160,10 @@ class SandboxRoute(Route):
             command = str(data.get("command") or "").strip()
             if not command:
                 return jsonify(Response().error("command is required").__dict__)
+            # Dashboard shell access is an administrative operation; it does
+            # not need a lease so admins can operate any sandbox at any time.
             booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
-                sandbox_id, self._session_id()
+                sandbox_id, self._session_id(), require_lease=False
             )
             shell = getattr(booter, "shell", None)
             if shell is None:

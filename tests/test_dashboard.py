@@ -520,14 +520,24 @@ async def test_sandbox_dashboard_runs_shell_in_managed_sandbox(
 
 
 @pytest.mark.asyncio
-async def test_sandbox_dashboard_shell_respects_session_ownership(
+async def test_sandbox_dashboard_shell_bypasses_lease_for_admin_access(
     app: Quart,
     authenticated_header: dict,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    """Dashboard shell is an administrative operation and must bypass lease."""
     from astrbot.core.computer import computer_client
     from astrbot.core.computer.sandbox_manager import SandboxManager
     from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeShell:
+        async def exec(self, command, cwd=None, env=None, timeout=300, shell=True):
+            return {
+                "command": command,
+                "stdout": "ok\n",
+                "stderr": "",
+                "exit_code": 0,
+            }
 
     async def available():
         return True
@@ -551,7 +561,9 @@ async def test_sandbox_dashboard_shell_respects_session_ownership(
         lease_expires_at=9999999999,
         connect_info={"name": "Sandbox 1"},
     )
-    manager.session_booter["sandbox-1"] = SimpleNamespace(available=available)
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, shell=FakeShell()
+    )
 
     test_client = app.test_client()
     response = await test_client.post(
@@ -562,8 +574,8 @@ async def test_sandbox_dashboard_shell_respects_session_ownership(
     data = await response.get_json()
 
     assert response.status_code == 200
-    assert data["status"] == "error"
-    assert "controlled by another session" in data["message"]
+    assert data["status"] == "ok"
+    assert data["data"]["result"]["stdout"] == "ok\n"
 
 
 @pytest.mark.asyncio
