@@ -1021,11 +1021,6 @@ def _apply_sandbox_tools(
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellStartTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellStopTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellSendTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellReadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(InteractiveShellListTool))
     if booter == "shipyard_neo":
         # Neo-specific path rule: filesystem tools operate relative to sandbox
         # workspace root. Do not prepend "/workspace".
