@@ -222,3 +222,159 @@ class ConfigPlugin(Star):
 您在发布不同版本更新 Schema 时，AstrBot 会递归检查 Schema 的配置项，自动为缺失的配置项添加默认值、移除不存在的配置项。
 
 需要注意的是，`default` 只会用于“新建配置文件”或“已有配置中缺失的字段”。如果某个字段已经存在于 `data/config/<plugin_name>_config.json` 中，那么后续即使您修改了 Schema 里的 `default`，AstrBot 也不会自动覆盖这个已保存的值。这是为了避免升级插件时意外覆盖用户已经手动修改过的配置。
+
+## 制作沙盒运行时插件
+
+从通用沙盒架构开始，`CUA`、`Shipyard`、`Shipyard Neo`、`Boxlite` 这类具体 runtime 应当作为**独立插件**实现，而不是继续硬编码在 AstrBot Core 中。
+
+推荐目录结构：
+
+```text
+data/plugins/<plugin_name>/
+  main.py
+  metadata.yaml
+  _conf_schema.json
+  provider.py
+  booters/
+  tools/
+```
+
+通常可以这样分工：
+
+- `main.py`：插件入口、provider 注册，以及可选的额外工具注册。
+- `provider.py`：sandbox provider 实现。
+- `booters/`：runtime 具体的 sandbox client / booter。
+- `tools/`：可选的 runtime 专属工具，例如截图、鼠标、键盘、浏览器或生命周期工具。
+- `_conf_schema.json`：在 WebUI 中展示的 provider 专属配置。
+
+### 1. 注册 sandbox provider
+
+在插件入口中，通过 core 暴露的通用接口注册和注销 provider：
+
+```python
+from astrbot.api.star import Context, Star, register
+from astrbot.core.computer.computer_client import (
+    register_sandbox_provider,
+    unregister_sandbox_provider,
+)
+
+from .provider import MySandboxProvider
+
+
+@register("astrbot_sandbox_demo", "AstrBot Team", "Demo sandbox provider", "0.1.0")
+class DemoSandboxPlugin(Star):
+    def __init__(self, context: Context, config=None) -> None:
+        super().__init__(context)
+        self.provider = MySandboxProvider()
+        self.provider.plugin_config = config or {}
+        register_sandbox_provider(self.provider, replace=True)
+
+    async def terminate(self) -> None:
+        unregister_sandbox_provider(self.provider.provider_id, force=True)
+```
+
+建议插件目录名、metadata `name`、实际注册名保持一致，并使用稳定、可导入的命名。
+
+### 2. 实现 provider 协议
+
+provider 需要实现 core 中定义的通用 sandbox 协议（`astrbot.core.computer.sandbox_provider.SandboxProvider`）。实践上至少要提供：
+
+- `provider_id`
+- `capabilities`
+- `tool_names`
+- `build_create_config(context, session_id)`
+- `build_connect_info(sandbox_name, config)`
+- `update_connect_info(record, *, sandbox_name)`
+- `get_idle_timeout(context, session_id)`
+- `create_booter(context, session_id, sandbox_id, config)`
+- `destroy_booter(booter, record)`
+
+示例骨架：
+
+```python
+class MySandboxProvider:
+    provider_id = "demo"
+    capabilities = {"shell", "python", "filesystem"}
+    tool_names = set()
+
+    def build_create_config(self, context, session_id):
+        plugin_cfg = getattr(self, "plugin_config", None) or {}
+        return {
+            "endpoint_url": plugin_cfg.get("demo_endpoint", ""),
+            "ttl": plugin_cfg.get("demo_ttl", 3600),
+        }
+
+    def build_connect_info(self, sandbox_name, config):
+        return {"name": sandbox_name, **config}
+
+    def update_connect_info(self, record, *, sandbox_name):
+        info = dict(record.get("connect_info") or {})
+        info["name"] = sandbox_name
+        return info
+
+    def get_idle_timeout(self, context, session_id):
+        return 0.0
+
+    async def create_booter(self, context, session_id, sandbox_id, config):
+        booter = MyBooter(**config)
+        await booter.boot(session_id)
+        return booter
+
+    async def destroy_booter(self, booter, record):
+        await booter.shutdown()
+```
+
+### 3. 把 runtime 专属配置放进 `_conf_schema.json`
+
+Core 只保留通用选择项：
+
+- `provider_settings.computer_use_runtime`
+- `provider_settings.sandbox.booter`
+
+所有 runtime 专属配置都应该放在插件自己的 schema 中，例如：
+
+```json
+{
+  "demo_endpoint": {
+    "description": "Demo API Endpoint",
+    "type": "string",
+    "default": "",
+    "hint": "API endpoint for the demo sandbox service."
+  },
+  "demo_ttl": {
+    "description": "Sandbox TTL",
+    "type": "int",
+    "default": 3600,
+    "hint": "Sandbox lifetime in seconds."
+  }
+}
+```
+
+这个 schema 会持久化到 `data/config/<plugin_name>_config.json`，并在插件实例化时作为 `config` 传入。
+
+### 4. 通过 `tool_names` 暴露可选 runtime 工具
+
+如果你的 runtime 除了通用 shell/python/filesystem 外，还提供额外工具，请在插件里注册这些工具，并把工具名放到 `tool_names` 中。
+
+常见例子：
+
+- 截图工具
+- 鼠标 / 键盘工具
+- 浏览器工具
+- runtime 专属生命周期工具
+
+Core 会根据 `tool_names` 自动在 sandbox mode 下挂载这些工具，因此不要在 core 中硬编码 provider 名称。
+
+### 5. 让 runtime 代码留在插件里，不回流 core
+
+制作沙盒插件时，请遵循下面这条边界：
+
+- 具体 runtime SDK import 放在插件仓库
+- provider 默认值和 schema 放在插件仓库
+- runtime 专属工具放在插件仓库
+- AstrBot Core 只负责通用注册、生命周期、持久化，以及 dashboard/API 表面
+
+如果不确定某段逻辑该放在 core 还是插件里，可以用这个经验规则：
+
+- 通用行为 -> core
+- 具体 runtime 行为 -> plugin

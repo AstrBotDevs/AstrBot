@@ -223,3 +223,159 @@ class ConfigPlugin(Star):
 When you update the Schema across different versions, AstrBot will recursively inspect the configuration items in the Schema, automatically adding default values for missing items and removing those that no longer exist.
 
 Note that `default` is only applied when creating a new config file or when a field is missing from an existing config. If a field already exists in `data/config/<plugin_name>_config.json`, changing the Schema `default` later will not overwrite that saved value. This is intentional so plugin upgrades do not silently replace user-edited settings.
+
+## Building a Sandbox Runtime Plugin
+
+Starting from the generic sandbox architecture, concrete runtimes such as `CUA`, `Shipyard`, `Shipyard Neo`, or `Boxlite` should be implemented as **separate plugins**, not hard-coded in AstrBot Core.
+
+Recommended structure:
+
+```text
+data/plugins/<plugin_name>/
+  main.py
+  metadata.yaml
+  _conf_schema.json
+  provider.py
+  booters/
+  tools/
+```
+
+Typical responsibilities are split like this:
+
+- `main.py`: plugin entrypoint, provider registration, and optional extra tool registration.
+- `provider.py`: sandbox provider implementation.
+- `booters/`: runtime-specific sandbox client / booter implementation.
+- `tools/`: optional runtime-specific tools, such as screenshot, mouse, keyboard, browser, or lifecycle helpers.
+- `_conf_schema.json`: provider-specific configuration shown in WebUI.
+
+### 1. Register the sandbox provider
+
+In your plugin entrypoint, register and unregister the provider through the generic sandbox APIs exposed by core:
+
+```python
+from astrbot.api.star import Context, Star, register
+from astrbot.core.computer.computer_client import (
+    register_sandbox_provider,
+    unregister_sandbox_provider,
+)
+
+from .provider import MySandboxProvider
+
+
+@register("astrbot_sandbox_demo", "AstrBot Team", "Demo sandbox provider", "0.1.0")
+class DemoSandboxPlugin(Star):
+    def __init__(self, context: Context, config=None) -> None:
+        super().__init__(context)
+        self.provider = MySandboxProvider()
+        self.provider.plugin_config = config or {}
+        register_sandbox_provider(self.provider, replace=True)
+
+    async def terminate(self) -> None:
+        unregister_sandbox_provider(self.provider.provider_id, force=True)
+```
+
+Use a stable plugin name, directory name, and metadata `name`, ideally all aligned.
+
+### 2. Implement the provider contract
+
+Your provider should implement the generic sandbox protocol from core (`astrbot.core.computer.sandbox_provider.SandboxProvider`). In practice, that means defining:
+
+- `provider_id`
+- `capabilities`
+- `tool_names`
+- `build_create_config(context, session_id)`
+- `build_connect_info(sandbox_name, config)`
+- `update_connect_info(record, *, sandbox_name)`
+- `get_idle_timeout(context, session_id)`
+- `create_booter(context, session_id, sandbox_id, config)`
+- `destroy_booter(booter, record)`
+
+Example skeleton:
+
+```python
+class MySandboxProvider:
+    provider_id = "demo"
+    capabilities = {"shell", "python", "filesystem"}
+    tool_names = set()
+
+    def build_create_config(self, context, session_id):
+        plugin_cfg = getattr(self, "plugin_config", None) or {}
+        return {
+            "endpoint_url": plugin_cfg.get("demo_endpoint", ""),
+            "ttl": plugin_cfg.get("demo_ttl", 3600),
+        }
+
+    def build_connect_info(self, sandbox_name, config):
+        return {"name": sandbox_name, **config}
+
+    def update_connect_info(self, record, *, sandbox_name):
+        info = dict(record.get("connect_info") or {})
+        info["name"] = sandbox_name
+        return info
+
+    def get_idle_timeout(self, context, session_id):
+        return 0.0
+
+    async def create_booter(self, context, session_id, sandbox_id, config):
+        booter = MyBooter(**config)
+        await booter.boot(session_id)
+        return booter
+
+    async def destroy_booter(self, booter, record):
+        await booter.shutdown()
+```
+
+### 3. Put runtime-specific config in `_conf_schema.json`
+
+Core only keeps the generic selector:
+
+- `provider_settings.computer_use_runtime`
+- `provider_settings.sandbox.booter`
+
+All runtime-specific config belongs to the plugin schema, for example:
+
+```json
+{
+  "demo_endpoint": {
+    "description": "Demo API Endpoint",
+    "type": "string",
+    "default": "",
+    "hint": "API endpoint for the demo sandbox service."
+  },
+  "demo_ttl": {
+    "description": "Sandbox TTL",
+    "type": "int",
+    "default": 3600,
+    "hint": "Sandbox lifetime in seconds."
+  }
+}
+```
+
+That schema will be stored under `data/config/<plugin_name>_config.json` and passed to the plugin constructor as `config`.
+
+### 4. Expose optional runtime tools through `tool_names`
+
+If your runtime adds extra tools beyond the generic shell/python/filesystem stack, register them in the plugin and list their names in `tool_names`.
+
+Typical examples:
+
+- screenshot tools
+- mouse / keyboard tools
+- browser tools
+- runtime-specific lifecycle helpers
+
+Core uses `tool_names` to mount those tools automatically in sandbox mode, so avoid hard-coding provider names in core.
+
+### 5. Keep runtime code out of core
+
+When building a sandbox plugin:
+
+- Put concrete runtime SDK imports in the plugin repo.
+- Put provider-specific defaults and config schema in the plugin repo.
+- Put runtime-specific tools in the plugin repo.
+- Keep AstrBot Core limited to generic sandbox registration, lifecycle, persistence, and dashboard/API surfaces.
+
+If you are unsure whether something belongs in core or a plugin, the rule of thumb is:
+
+- generic behavior -> core
+- concrete runtime behavior -> plugin
