@@ -37,7 +37,7 @@ After installation, restart AstrBot or reload plugins from the plugin management
 In the current AstrBot console, go to **AI Settings** -> **Agent Computer Use** and select:
 
 - `Computer Use Runtime` = `sandbox`
-- `Sandbox Driver` = `Shipyard Neo` or `Shipyard`
+- `Sandbox Driver` = `Shipyard Neo`, `Shipyard`, or `CUA`
 
 `Shipyard Neo` is now the default driver. It consists of Bay, Ship, and Gull:
 
@@ -61,6 +61,41 @@ git clone https://github.com/zouyonghe/astrbot_sandbox_cua.git data/plugins/astr
 ```
 
 Then restart AstrBot or reload plugins from the plugin management page.
+
+If you run AstrBot from source or inside a virtual environment, you also need to install the CUA Python dependency in the same Python environment used by AstrBot:
+
+```bash
+pip install cua
+```
+
+If you use `uv` to manage the AstrBot environment, run:
+
+```bash
+uv pip install cua
+```
+
+CUA also has runtime-specific prerequisites:
+
+- Local Linux containers usually require Docker.
+- Local Linux/Windows VMs usually require QEMU or the corresponding local CUA runtime.
+- macOS VMs usually depend on CUA/Lume-related runtimes.
+- Cloud CUA requires a valid CUA API key.
+
+For host requirements, image support, and local runtime installation details, refer to the [official CUA documentation](https://cua.ai/docs).
+
+After the dependency is installed, configure CUA in AstrBot WebUI:
+
+- `Computer Use Runtime` = `sandbox`
+- `Sandbox Driver` = `CUA`
+
+Common CUA settings include:
+
+- `CUA Image`: target image, for example `linux`, `macos`, `windows`, or `android`
+- `CUA OS Type`: OS type used by AstrBot for fallback decisions
+- `CUA Sandbox TTL`: sandbox lifetime in seconds
+- `CUA Telemetry Enabled`: whether CUA telemetry is enabled
+- `CUA Local Runtime`: whether to prefer local runtime
+- `CUA API Key`: only needed when using cloud runtime
 
 ## Performance Requirements
 

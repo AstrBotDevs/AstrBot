@@ -519,6 +519,53 @@ async def test_sandbox_dashboard_runs_shell_in_managed_sandbox(
 
 
 @pytest.mark.asyncio
+async def test_sandbox_dashboard_shell_respects_session_ownership(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        booter_type=provider.provider_id,
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        controller_user_id="webchat",
+        controller_session_id="webchat:friend:user",
+        lease_expires_at=9999999999,
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(available=available)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/shell?session_id=dashboard",
+        json={"command": "pwd"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert "controlled by another session" in data["message"]
+
+
+@pytest.mark.asyncio
 async def test_sandbox_dashboard_captures_managed_sandbox_screenshot(
     app: Quart,
     authenticated_header: dict,
@@ -570,6 +617,53 @@ async def test_sandbox_dashboard_captures_managed_sandbox_screenshot(
         "base64": "abc",
         "path": "/tmp/screen.png",
     }
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_screenshot_respects_session_ownership(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        booter_type=provider.provider_id,
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        controller_user_id="webchat",
+        controller_session_id="webchat:friend:user",
+        lease_expires_at=9999999999,
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(available=available)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/screenshot?session_id=dashboard",
+        json={"path": "/tmp/screen.png"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert "controlled by another session" in data["message"]
 
 
 @pytest.mark.asyncio

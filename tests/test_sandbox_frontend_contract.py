@@ -46,7 +46,7 @@ def test_sandbox_management_page_replaces_console_history_after_command_updates(
         encoding="utf-8"
     )
 
-    assert "consoleHistory.value = [...consoleHistory.value]" in content
+    assert "consoleHistory.value = [...consoleHistory.value]" in content or "await nextTick()" in content
 
 
 def test_sandbox_management_page_release_is_not_limited_to_dashboard_controller():

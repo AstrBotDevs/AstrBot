@@ -161,7 +161,7 @@ class SandboxRoute(Route):
             if not command:
                 return jsonify(Response().error("command is required").__dict__)
             booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
-                sandbox_id
+                sandbox_id, self._session_id()
             )
             shell = getattr(booter, "shell", None)
             if shell is None:
@@ -186,7 +186,7 @@ class SandboxRoute(Route):
         try:
             data = await request.get_json(silent=True) or {}
             booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
-                sandbox_id
+                sandbox_id, self._session_id()
             )
             gui = getattr(booter, "gui", None)
             if gui is None:

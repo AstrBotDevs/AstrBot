@@ -8,10 +8,10 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 ROOT = Path(__file__).resolve().parents[1]
 
 
-pytestmark = pytest.mark.skipif(
-    not (ROOT / "data/plugins/astrbot_sandbox_cua/provider.py").is_file(),
-    reason="sandbox plugin repository is not present in this checkout",
-)
+def _require_plugin_files(*relative_paths: str) -> None:
+    missing = [path for path in relative_paths if not (ROOT / path).is_file()]
+    if missing:
+        pytest.skip(f"sandbox plugin repository files are not present: {missing}")
 
 
 def _load_schema(plugin_name: str) -> dict:
@@ -63,6 +63,7 @@ def test_shipyard_neo_schema_is_localized_and_has_defaults():
 
 
 def test_cua_provider_falls_back_to_local_mode_without_api_key(monkeypatch):
+    _require_plugin_files("data/plugins/astrbot_sandbox_cua/provider.py")
     from data.plugins.astrbot_sandbox_cua.provider import CuaSandboxProvider
 
     monkeypatch.delenv("CUA_API_KEY", raising=False)
@@ -105,6 +106,7 @@ def test_existing_plugin_config_keeps_saved_values_when_schema_defaults_change(
 
 
 def test_cua_screenshot_tool_does_not_send_to_user_by_default():
+    _require_plugin_files("data/plugins/astrbot_sandbox_cua/tools/cua.py")
     from data.plugins.astrbot_sandbox_cua.tools.cua import CuaScreenshotTool
 
     tool = CuaScreenshotTool()
@@ -119,6 +121,7 @@ def test_cua_screenshot_tool_does_not_send_to_user_by_default():
 
 
 def test_cua_screenshot_tool_can_send_result_to_user_when_requested():
+    _require_plugin_files("data/plugins/astrbot_sandbox_cua/tools/cua.py")
     from data.plugins.astrbot_sandbox_cua.tools.cua import CuaScreenshotTool
 
     tool = CuaScreenshotTool()
