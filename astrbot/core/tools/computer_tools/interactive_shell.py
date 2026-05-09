@@ -61,7 +61,8 @@ class InteractiveShellStartTool(FunctionTool):
         "Use this for programs that require multi-turn interaction "
         "(e.g., npm init, python REPL, git add -p, interactive installers). "
         "Returns a session_id that must be used for subsequent send/read/stop operations. "
-        "Note: This tool does NOT support full TTY programs like vim or nano."
+        "Note: This tool does NOT support full TTY programs like vim or nano. "
+        "On Windows, UTF-8 encoding is automatically configured for Unicode support."
     )
     parameters: dict = field(
         default_factory=lambda: {
@@ -72,7 +73,8 @@ class InteractiveShellStartTool(FunctionTool):
                     "description": (
                         "The interactive command to start. "
                         "For programs with non-interactive alternatives, prefer those instead "
-                        "(e.g., use 'npm init -y' instead of 'npm init' when possible)."
+                        "(e.g., use 'npm init -y' instead of 'npm init' when possible). "
+                        "On Windows cmd.exe, UTF-8 code page (65001) is automatically set."
                     ),
                 },
                 "env": {

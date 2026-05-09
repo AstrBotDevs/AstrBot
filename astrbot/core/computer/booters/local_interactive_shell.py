@@ -191,6 +191,10 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                 run_env.update({str(k): str(v) for k, v in env.items()})
             working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
 
+            # Ensure UTF-8 mode on Windows for proper Unicode support
+            if sys.platform == "win32":
+                run_env["PYTHONIOENCODING"] = "utf-8"
+
             # Use binary mode for reliable cross-platform pipe behavior
             popen_kwargs: dict[str, Any] = {
                 "shell": shell,
@@ -203,10 +207,14 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                 "bufsize": 0,  # Unbuffered for immediate reading
             }
 
+            actual_command = command
             if sys.platform == "win32":
                 popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+                # For cmd.exe on Windows, prefix with chcp to set UTF-8 code page
+                if shell and actual_command.strip().lower().startswith("cmd"):
+                    actual_command = f"chcp 65001 >nul && {actual_command}"
 
-            proc = subprocess.Popen(command, **popen_kwargs)
+            proc = subprocess.Popen(actual_command, **popen_kwargs)
 
             session_id = str(uuid.uuid4())[:8]
             session = _LocalInteractiveSession(
@@ -307,6 +315,18 @@ class LocalInteractiveShellComponent(InteractiveShellComponent):
                         text = chunk.decode("utf-8", errors="replace")
                     except Exception:
                         text = chunk.decode("utf-8", errors="replace")
+
+                    # On Windows, also try system encoding if UTF-8 produces all replacement chars
+                    if sys.platform == "win32" and "\ufffd" in text and len(text) > 1:
+                        # All chars became replacement characters - try system code page
+                        for fallback_encoding in ("gbk", "gb18030", "cp936"):
+                            try:
+                                fallback_text = chunk.decode(fallback_encoding)
+                                if "\ufffd" not in fallback_text:
+                                    text = fallback_text
+                                    break
+                            except (UnicodeDecodeError, LookupError):
+                                continue
 
                     if max_chars and chars_collected + len(text) > max_chars:
                         take = max_chars - chars_collected
