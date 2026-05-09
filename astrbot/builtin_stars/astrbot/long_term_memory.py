@@ -381,7 +381,10 @@ def _parse_tool_call(line: str) -> dict | None:
     inner = _extract_tag_content(line, TOOL_CALL_PREFIX, "</T:CALL>")
     if not inner:
         return None
-    tc = json.loads(inner)
+    try:
+        tc = json.loads(inner)
+    except (json.JSONDecodeError, TypeError):
+        return None
     return {
         "id": tc["id"],
         "type": "function",
