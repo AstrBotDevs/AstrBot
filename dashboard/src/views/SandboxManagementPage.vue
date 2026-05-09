@@ -284,7 +284,7 @@
 </template>
 
 <script setup lang="ts">
-import axios from 'axios'
+import axios, { type AxiosRequestConfig } from 'axios'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useModuleI18n } from '@/i18n/composables'
 
@@ -380,10 +380,6 @@ function requiredSandboxNameRule(value: string) {
   return !!value?.trim() || tm('config.nameRequired')
 }
 
-function isCua(item: SandboxRecord) {
-  return item.provider === 'cua' || item.booter_type === 'cua'
-}
-
 function hasCapability(item: SandboxRecord, capability: string) {
   return item.capabilities?.includes(capability) ?? false
 }
@@ -393,7 +389,7 @@ function hasController(item: SandboxRecord) {
 }
 
 function canReleaseFromDashboard(item: SandboxRecord) {
-  return isCua(item) && item.controller_session_id === 'dashboard'
+  return item.controller_session_id === 'dashboard'
 }
 
 function formatTime(value?: number | null) {
@@ -434,7 +430,7 @@ function openConfig(item: SandboxRecord) {
 async function loadSandboxes() {
   loading.value = true
   try {
-    const res = await axios.get('/api/sandboxes')
+    const res = await axios.get('/api/sandbox')
     if (res.data.status === 'ok') {
       sandboxes.value = res.data.data?.sandboxes || []
     } else {
@@ -447,9 +443,27 @@ async function loadSandboxes() {
   }
 }
 
-async function postAction(path: string, payload: Record<string, unknown>, successMessage?: string) {
+function sandboxApiPath(item: SandboxRecord | string, suffix = '') {
+  const sandboxId = typeof item === 'string' ? item : item.sandbox_id
+  return `/api/sandbox/${encodeURIComponent(sandboxId)}${suffix}`
+}
+
+async function sandboxAction(
+  method: 'post' | 'patch' | 'delete',
+  path: string,
+  payload?: Record<string, unknown>,
+  successMessage?: string,
+  config: AxiosRequestConfig = {}
+) {
   try {
-    const res = await axios.post(path, payload)
+    let res
+    if (method === 'post') {
+      res = await axios.post(path, payload, config)
+    } else if (method === 'patch') {
+      res = await axios.patch(path, payload, config)
+    } else {
+      res = await axios.delete(path, { ...config, data: payload })
+    }
     if (res.data.status === 'ok') {
       if (successMessage) toast(successMessage)
       await loadSandboxes()
@@ -465,11 +479,16 @@ async function postAction(path: string, payload: Record<string, unknown>, succes
 async function createSandbox() {
   creating.value = true
   try {
-    const data = await postAction('/api/sandboxes/create', {
-      provider: createProvider.value,
-      sandbox_name: createName.value || undefined,
-      session_id: 'dashboard'
-    }, tm('messages.created'))
+    const data = await sandboxAction(
+      'post',
+      '/api/sandbox',
+      {
+        provider_id: createProvider.value,
+        sandbox_name: createName.value || undefined
+      },
+      tm('messages.created'),
+      { params: { session_id: 'dashboard' } }
+    )
     if (data) {
       createDialog.value = false
       createName.value = ''
@@ -480,7 +499,12 @@ async function createSandbox() {
 }
 
 function setDefaultSandbox(item: SandboxRecord) {
-  return postAction('/api/sandboxes/default/set', { sandbox_id: item.sandbox_id }, tm('messages.defaultSet'))
+  return sandboxAction(
+    'post',
+    sandboxApiPath(item, '/default'),
+    undefined,
+    tm('messages.defaultSet')
+  )
 }
 
 async function saveConfig() {
@@ -488,13 +512,17 @@ async function saveConfig() {
   savingConfig.value = true
   try {
     const persistent = configRetentionPolicy.value === 'persistent'
-    const data = await postAction('/api/sandboxes/config/update', {
-      sandbox_id: configSandbox.value.sandbox_id,
-      sandbox_name: configSandboxName.value.trim(),
-      retention_policy: configRetentionPolicy.value,
-      idle_timeout: persistent ? null : configIdleTimeout.value,
-      expires_at: persistent ? null : fromDateTimeLocal(configExpiresAt.value)
-    }, tm('messages.configSaved'))
+    const data = await sandboxAction(
+      'patch',
+      sandboxApiPath(configSandbox.value),
+      {
+        sandbox_name: configSandboxName.value.trim(),
+        retention_policy: configRetentionPolicy.value,
+        idle_timeout: persistent ? null : configIdleTimeout.value,
+        expires_at: persistent ? null : fromDateTimeLocal(configExpiresAt.value)
+      },
+      tm('messages.configSaved')
+    )
     if (data) configDialog.value = false
   } finally {
     savingConfig.value = false
@@ -502,7 +530,15 @@ async function saveConfig() {
 }
 
 function releaseSandbox(item: SandboxRecord) {
-  return postAction('/api/sandboxes/release', { session_id: 'dashboard', sandbox_id: item.sandbox_id }, tm('messages.released'))
+  return sandboxAction(
+    'delete',
+    '/api/sandbox/current',
+    undefined,
+    tm('messages.released'),
+    {
+      params: { session_id: 'dashboard', sandbox_id: item.sandbox_id }
+    }
+  )
 }
 
 function openConsole(item: SandboxRecord) {
@@ -525,10 +561,13 @@ async function confirmDestroySandbox() {
   if (!destroySandboxTarget.value) return
   destroying.value = true
   try {
-    const data = await postAction('/api/sandboxes/destroy', {
-      session_id: 'dashboard',
-      sandbox_id: destroySandboxTarget.value.sandbox_id
-    }, tm('messages.destroyed'))
+    const data = await sandboxAction(
+      'delete',
+      sandboxApiPath(destroySandboxTarget.value),
+      undefined,
+      tm('messages.destroyed'),
+      { params: { session_id: 'dashboard' } }
+    )
     if (data) {
       destroyDialog.value = false
       destroySandboxTarget.value = null
@@ -539,7 +578,7 @@ async function confirmDestroySandbox() {
 }
 
 async function screenshotSandbox(item: SandboxRecord) {
-  const data = await postAction('/api/sandboxes/screenshot', { sandbox_id: item.sandbox_id })
+  const data = await sandboxAction('post', sandboxApiPath(item, '/screenshot'))
   if (!data) return
   const screenshot = data?.screenshot
   const legacyResult = data?.result
@@ -570,8 +609,7 @@ async function runConsoleCommand() {
   consoleRunning.value = true
   try {
     const shellCommand = buildConsoleShellCommand(command, cwd)
-    const data = await postAction('/api/sandboxes/shell', {
-      sandbox_id: sandboxId,
+    const data = await sandboxAction('post', sandboxApiPath(sandboxId, '/shell'), {
       command: shellCommand,
       timeout: 300
     })

@@ -172,7 +172,7 @@
           },
           "shipyard_neo_endpoint": {
             "description": "Shipyard Neo API Endpoint",
-            "hint": "Bay API address, default http://127.0.0.1:8114."
+            "hint": "API address for the Bay / Shipyard Neo service."
           },
           "shipyard_neo_access_token": {
             "description": "Shipyard Neo Access Token",
@@ -184,7 +184,7 @@
           },
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox TTL",
-            "hint": "Sandbox time-to-live in seconds."
+            "hint": "Sandbox time-to-live in seconds. Default is 3600."
           },
           "cua_image": {
             "description": "CUA Image",
@@ -196,7 +196,7 @@
           },
           "cua_ttl": {
             "description": "CUA Sandbox TTL",
-            "hint": "CUA sandbox time-to-live in seconds. Actual behavior depends on the installed CUA SDK."
+            "hint": "CUA sandbox time-to-live in seconds. Default is 3600."
           },
           "cua_telemetry_enabled": {
             "description": "CUA Telemetry",
@@ -212,7 +212,7 @@
           },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
-            "hint": "API access address for Shipyard service."
+            "hint": "API address for the Shipyard service."
           },
           "shipyard_access_token": {
             "description": "Shipyard Access Token",
@@ -220,11 +220,11 @@
           },
           "shipyard_ttl": {
             "description": "Shipyard Session TTL",
-            "hint": "Session time-to-live in seconds."
+            "hint": "Session time-to-live in seconds. Default is 3600."
           },
           "shipyard_max_sessions": {
             "description": "Shipyard Max Sessions",
-            "hint": "Maximum number of Shipyard sessions an instance can handle."
+            "hint": "Maximum number of Shipyard sessions a single instance can handle. Default is 10."
           }
         }
       }

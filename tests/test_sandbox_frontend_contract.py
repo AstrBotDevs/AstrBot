@@ -22,3 +22,12 @@ def test_sidebar_includes_sandboxes_navigation():
 
     assert "core.navigation.sandboxes" in content
     assert "to: '/sandboxes'" in content
+
+
+def test_sandbox_management_page_uses_current_sandbox_api_prefix():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "/api/sandboxes" not in content
+    assert "/api/sandbox" in content

@@ -25,6 +25,9 @@ class SandboxRoute(Route):
             ("/sandbox", ("POST", self.create_sandbox)),
             ("/sandbox/<sandbox_id>/switch", ("POST", self.switch_sandbox)),
             ("/sandbox/<sandbox_id>/takeover", ("POST", self.takeover_sandbox)),
+            ("/sandbox/<sandbox_id>/default", ("POST", self.set_default_sandbox)),
+            ("/sandbox/<sandbox_id>/shell", ("POST", self.run_shell)),
+            ("/sandbox/<sandbox_id>/screenshot", ("POST", self.capture_screenshot)),
             ("/sandbox/<sandbox_id>", ("PATCH", self.update_sandbox)),
             ("/sandbox/<sandbox_id>", ("DELETE", self.destroy_sandbox)),
         ]
@@ -84,7 +87,7 @@ class SandboxRoute(Route):
             provider_id = str(data.get("provider_id") or "").strip()
             if not provider_id:
                 return jsonify(Response().error("provider_id is required").__dict__)
-            sandbox = await computer_client.sandbox_manager.create_sandbox(
+            sandbox = await computer_client.sandbox_manager.create_sandbox_uncontrolled(
                 self.core_lifecycle.star_context,
                 self._session_id(),
                 provider_id,
@@ -133,6 +136,65 @@ class SandboxRoute(Route):
             logger.error(traceback.format_exc())
             return jsonify(
                 Response().error(f"Failed to takeover sandbox: {e!s}").__dict__
+            )
+
+    async def set_default_sandbox(self, sandbox_id: str):
+        try:
+            sandbox = computer_client.sandbox_manager.set_default_sandbox(sandbox_id)
+            return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to set default sandbox: {e!s}").__dict__
+            )
+
+    async def run_shell(self, sandbox_id: str):
+        try:
+            data = await request.get_json(silent=True) or {}
+            command = str(data.get("command") or "").strip()
+            if not command:
+                return jsonify(Response().error("command is required").__dict__)
+            booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
+                sandbox_id
+            )
+            shell = getattr(booter, "shell", None)
+            if shell is None:
+                return jsonify(
+                    Response().error("Sandbox does not support shell.").__dict__
+                )
+            result = await shell.exec(
+                command,
+                cwd=data.get("cwd"),
+                env=data.get("env"),
+                timeout=data.get("timeout", 300),
+                shell=data.get("shell", True),
+            )
+            return jsonify(Response().ok(data={"result": result}).__dict__)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response().error(f"Failed to run sandbox shell: {e!s}").__dict__
+            )
+
+    async def capture_screenshot(self, sandbox_id: str):
+        try:
+            data = await request.get_json(silent=True) or {}
+            booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
+                sandbox_id
+            )
+            gui = getattr(booter, "gui", None)
+            if gui is None:
+                return jsonify(
+                    Response().error("Sandbox does not support screenshots.").__dict__
+                )
+            screenshot = await gui.screenshot(path=data.get("path"))
+            return jsonify(Response().ok(data={"screenshot": screenshot}).__dict__)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(
+                Response()
+                .error(f"Failed to capture sandbox screenshot: {e!s}")
+                .__dict__
             )
 
     async def update_sandbox(self, sandbox_id: str):
