@@ -1,11 +1,17 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from data.plugins.astrbot_sandbox_cua.provider import CuaSandboxProvider
-from data.plugins.astrbot_sandbox_cua.tools.cua import CuaScreenshotTool
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+pytestmark = pytest.mark.skipif(
+    not (ROOT / "data/plugins/astrbot_sandbox_cua/provider.py").is_file(),
+    reason="sandbox plugin repository is not present in this checkout",
+)
 
 
 def _load_schema(plugin_name: str) -> dict:
@@ -57,6 +63,8 @@ def test_shipyard_neo_schema_is_localized_and_has_defaults():
 
 
 def test_cua_provider_falls_back_to_local_mode_without_api_key(monkeypatch):
+    from data.plugins.astrbot_sandbox_cua.provider import CuaSandboxProvider
+
     monkeypatch.delenv("CUA_API_KEY", raising=False)
 
     class FakeContext:
@@ -78,7 +86,9 @@ def test_cua_provider_falls_back_to_local_mode_without_api_key(monkeypatch):
     assert config["api_key"] == ""
 
 
-def test_existing_plugin_config_keeps_saved_values_when_schema_defaults_change(tmp_path):
+def test_existing_plugin_config_keeps_saved_values_when_schema_defaults_change(
+    tmp_path,
+):
     config_path = tmp_path / "plugin_config.json"
     config_path.write_text('{"flag": false, "ttl": 0}', encoding="utf-8")
 
@@ -95,16 +105,22 @@ def test_existing_plugin_config_keeps_saved_values_when_schema_defaults_change(t
 
 
 def test_cua_screenshot_tool_does_not_send_to_user_by_default():
+    from data.plugins.astrbot_sandbox_cua.tools.cua import CuaScreenshotTool
+
     tool = CuaScreenshotTool()
 
     send_to_user = tool.parameters["properties"]["send_to_user"]["default"]
-    return_image_to_llm = tool.parameters["properties"]["return_image_to_llm"]["default"]
+    return_image_to_llm = tool.parameters["properties"]["return_image_to_llm"][
+        "default"
+    ]
 
     assert send_to_user is True
     assert return_image_to_llm is True
 
 
 def test_cua_screenshot_tool_can_send_result_to_user_when_requested():
+    from data.plugins.astrbot_sandbox_cua.tools.cua import CuaScreenshotTool
+
     tool = CuaScreenshotTool()
 
     assert tool.parameters["properties"]["send_to_user"]["description"]

@@ -454,7 +454,10 @@ class SandboxManager:
         controller_session_id = record.get("controller_session_id")
         released = self.registry.release_lease(sandbox_id) or record
         if controller_session_id:
-            if self.registry.get_current_sandbox_id(controller_session_id) == sandbox_id:
+            if (
+                self.registry.get_current_sandbox_id(controller_session_id)
+                == sandbox_id
+            ):
                 self.registry.set_current_sandbox_id(controller_session_id, None)
         self.save_registry()
         return released
@@ -503,7 +506,9 @@ class SandboxManager:
         record = self.registry.get_sandbox(sandbox_id)
         if record is None or not record.get("managed"):
             raise RuntimeError(f"Sandbox {sandbox_id} not found")
-        if session_id and self.sandbox_controlled_by_other_session(sandbox_id, session_id):
+        if session_id and self.sandbox_controlled_by_other_session(
+            sandbox_id, session_id
+        ):
             raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
         booter = self.session_booter.get(sandbox_id)
         if booter is None:

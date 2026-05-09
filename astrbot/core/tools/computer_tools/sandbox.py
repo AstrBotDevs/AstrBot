@@ -36,7 +36,9 @@ def _current_provider_id(context: ContextWrapper[AstrAgentContext]) -> str:
 class ListSandboxesTool(FunctionTool):
     name: str = "astrbot_list_sandboxes"
     description: str = "List all managed sandboxes."
-    parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}})
+    parameters: dict = field(
+        default_factory=lambda: {"type": "object", "properties": {}}
+    )
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
         del context
@@ -48,7 +50,9 @@ class ListSandboxesTool(FunctionTool):
 class GetCurrentSandboxTool(FunctionTool):
     name: str = "astrbot_get_current_sandbox"
     description: str = "Get the current sandbox bound to this session."
-    parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}})
+    parameters: dict = field(
+        default_factory=lambda: {"type": "object", "properties": {}}
+    )
 
     async def call(self, context: ContextWrapper[AstrAgentContext]) -> ToolExecResult:
         session_id = context.context.event.unified_msg_origin
@@ -107,7 +111,9 @@ class CreateSandboxTool(FunctionTool):
 @dataclass
 class SwitchSandboxTool(FunctionTool):
     name: str = "astrbot_switch_sandbox"
-    description: str = "Switch this session to an existing running sandbox by sandbox_id."
+    description: str = (
+        "Switch this session to an existing running sandbox by sandbox_id."
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -136,7 +142,9 @@ class SwitchSandboxTool(FunctionTool):
 @dataclass
 class ReleaseSandboxTool(FunctionTool):
     name: str = "astrbot_release_sandbox"
-    description: str = "Release the control lease for the current sandbox or a specified sandbox."
+    description: str = (
+        "Release the control lease for the current sandbox or a specified sandbox."
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -277,10 +285,22 @@ class CopyFileBetweenSandboxesTool(FunctionTool):
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "source_sandbox_id": {"type": "string", "description": "Source sandbox ID."},
-                "source_path": {"type": "string", "description": "Path in source sandbox."},
-                "target_sandbox_id": {"type": "string", "description": "Target sandbox ID."},
-                "target_path": {"type": "string", "description": "Destination path in target sandbox."},
+                "source_sandbox_id": {
+                    "type": "string",
+                    "description": "Source sandbox ID.",
+                },
+                "source_path": {
+                    "type": "string",
+                    "description": "Path in source sandbox.",
+                },
+                "target_sandbox_id": {
+                    "type": "string",
+                    "description": "Target sandbox ID.",
+                },
+                "target_path": {
+                    "type": "string",
+                    "description": "Destination path in target sandbox.",
+                },
             },
             "required": [
                 "source_sandbox_id",
