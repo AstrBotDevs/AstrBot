@@ -37,12 +37,16 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "minimax-is-timber-weight",
             False,
         )
-        self.timber_weight: list[dict[str, str | int]] = json.loads(
-            provider_config.get(
-                "minimax-timber-weight",
-                '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}]',
-            ),
+        timber_weight_raw = provider_config.get(
+            "minimax-timber-weight",
+            '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}]',
         )
+        try:
+            self.timber_weight = json.loads(timber_weight_raw)
+        except json.JSONDecodeError:
+            self.timber_weight = [
+                {"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}
+            ]
 
         self.voice_setting: dict = {
             "speed": provider_config.get("minimax-voice-speed", 1.0),
